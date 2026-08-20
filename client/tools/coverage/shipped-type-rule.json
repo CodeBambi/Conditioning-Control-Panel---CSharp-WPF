@@ -1,0 +1,75 @@
+{
+  "packet": "SP-121",
+  "boardRow": "client/docs/task-board.md:32",
+  "question": "Which SHIPPED types have ZERO executed lines? Not a percentage - a percentage answers a worse question, because a record whose synthesized Equals ran reports line-rate 0.5 while no behaviour was driven.",
+  "noThreshold": "This rule sets NO threshold, NO target and NO failing gate on the resulting count. A tolerance sized to a number just observed is exactly the size of the defect it will next hide.",
+  "shippedAssembly": "CcpClient.Desktop",
+  "shippedNamespaceRoot": "CcpClient.Desktop.",
+  "typeIdentity": {
+    "nestedTypes": "counted-separately",
+    "nestedTypesDefence": "A discriminated-union case that no test ever constructs (AiReply.Refused) is exactly the dead behaviour the board row asks about; folding it into a live parent would hide it behind the parent. This is the choice that makes the census BIGGER.",
+    "partialClasses": "one-type-coverage-unioned",
+    "partialClassesDefence": "A partial class emits one <class> entry per source file (App -> App.axaml + App.axaml.cs; DtrhLoom -> DtrhLoom.cs + the [GeneratedRegex] half under obj/). They are one type at runtime and one type to whoever wrote them, so a type is zero-execution only when EVERY entry bearing its name has zero covered lines.",
+    "partialClassesLimit": "A completely dead HALF of a live partial class is invisible to a type-level census. That is a method-level question and this census does not answer it."
+  },
+  "clauses": [
+    {
+      "id": "C1",
+      "kind": "keepOnlyPackage",
+      "package": "CcpClient.Desktop",
+      "defence": "The row asks about SHIPPED types, and CcpClient.Desktop is the assembly that gets published; CcpClient.Tests and CcpClient.HeadlessTests are not shipped, and an unexecuted test class is the floor's question (a test count), not this census's."
+    },
+    {
+      "id": "C2",
+      "kind": "anySegmentMatches",
+      "pattern": "^<",
+      "defence": "No C# identifier may begin with '<', so a dot-segment that does was emitted by the compiler and written by nobody: <>c, <>c__DisplayClassN_M, <Method>d__N, <<Method>b__N_M>d, <>c<TModel>, <Module>, <PrivateImplementationDetails>, and the [GeneratedRegex] tree including its nested RunnerFactory/Runner."
+    },
+    {
+      "id": "C3",
+      "kind": "finalSegmentMatches",
+      "pattern": "^XamlClosure_[0-9]+$",
+      "defence": "Avalonia's XAML compiler emits these nested classes for deferred content and no source file declares them; they are the only compiler-generated shape in this assembly that does not begin with '<'. Anchored at both ends so a type someone actually named XamlClosure_Registry survives."
+    }
+  ],
+  "rejectedClauses": [
+    {
+      "id": "R1",
+      "wouldHaveBeen": "exclude entries whose filename lies under obj/",
+      "refusedBecause": "CcpClient.Desktop.Features.Dtrh.DtrhLoom has an entry in obj/.../RegexGenerator.g.cs because [GeneratedRegex] (DtrhLoom.cs:32) puts half of that partial class there. Path is not evidence of authorship; name shape is. C2 already removes the four genuinely generated regex types by name."
+    },
+    {
+      "id": "R2",
+      "wouldHaveBeen": "exclude any name containing '<'",
+      "refusedBecause": "It would eat three types somebody wrote - Audio.OrphanSafePlayerFactory<TPlayer> (AudioSeams.cs:202), Persistence.PersistenceStore<TModel> (PersistenceStore.cs:83), Session.PacedSessionEffect<TFiring> (PacedSessionEffect.cs:50). Removing 367 instead of 364 looks tidier and hides three real answers; the per-segment form of C2 is strictly narrower."
+    }
+  ],
+  "valve": {
+    "id": "V1",
+    "kind": "keepAndFlagWhenOutsideNamespaceRoot",
+    "action": "KEEP and print under 'UNCLASSIFIED - the rule is incomplete'",
+    "defence": "An entry that survives C1-C3 but is not under CcpClient.Desktop.* was neither classified nor understood. It is NOT dropped: a future source generator inventing a new shape must appear as an unexplained row rather than silently joining the zero list or silently vanishing. Fail loud, never quiet."
+  },
+  "fixtures": [
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Haptics.HapticGate", "expect": "kept", "why": "an ordinary shipped type" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Haptics.HapticGateDecision.Allow", "expect": "kept", "why": "a nested DU case is its own row" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Persistence.PersistenceStore<TModel>", "expect": "kept", "why": "ANTI-WIDENING: 'contains <' would eat this authored generic (PersistenceStore.cs:83)" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Audio.OrphanSafePlayerFactory<TPlayer>", "expect": "kept", "why": "ANTI-WIDENING: authored generic (AudioSeams.cs:202)" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Session.PacedSessionEffect<TFiring>", "expect": "kept", "why": "ANTI-WIDENING: authored generic (PacedSessionEffect.cs:50)" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Features.Dtrh.DtrhLoom", "expect": "kept", "why": "ANTI-WIDENING: its second entry lives under obj/ and a path clause would discard it (DtrhLoom.cs:32)" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Views.XamlClosure_Registry", "expect": "kept", "why": "C3 BOUNDARY: an authored name beginning XamlClosure_ but not XamlClosure_<digits> must survive" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Views.MainWindow.XamlClosure_2Extras", "expect": "kept", "why": "C3 BOUNDARY: the pattern is anchored at both ends" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Views.MainWindow.<>c", "expect": "excluded-C2", "why": "lambda cache class" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Views.MainWindow.<>c__DisplayClass6_0", "expect": "excluded-C2", "why": "closure display class" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Persistence.PersistenceStore.<FlushAsync>d__47<TModel>", "expect": "excluded-C2", "why": "async state machine inside an authored generic" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Persistence.PersistenceStore.<>c<TModel>", "expect": "excluded-C2", "why": "generic lambda cache class" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Persistence.PersistenceStore.<>c__DisplayClass45_0.<<Save>b__0>d<TModel>", "expect": "excluded-C2", "why": "async lambda state machine nested in a display class" },
+    { "package": "CcpClient.Desktop", "name": "System.Text.RegularExpressions.Generated.<RegexGenerator_g>FE8FE1BC76332EDD6CA94C9E3AFDE1E300E7D04266495415B5824C0E934E2F1B5__SlugRegex_0.RunnerFactory.Runner", "expect": "excluded-C2", "why": "authored-LOOKING leaf segment, but an ancestor segment begins '<' - the per-segment scan is what catches it" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Views.MainWindow.XamlClosure_2", "expect": "excluded-C3", "why": "XamlIl deferred-content closure" },
+    { "package": "CcpClient.Desktop", "name": "CcpClient.Desktop.Features.Companion.CompanionWindow.XamlClosure_1", "expect": "excluded-C3", "why": "XamlIl deferred-content closure" },
+    { "package": "CcpClient.Tests", "name": "CcpClient.Tests.HapticGateTests", "expect": "excluded-C1", "why": "the test assembly is not shipped" },
+    { "package": "CcpClient.HeadlessTests", "name": "CcpClient.HeadlessTests.MainWindowVisualTreeTests", "expect": "excluded-C1", "why": "the headless test assembly is not shipped either" },
+    { "package": "CcpClient.Desktop", "name": "CompiledAvaloniaXaml.XamlIlContext", "expect": "flagged-V1", "why": "THE VALVE MUST BE EXECUTED CODE, not an unreached branch: an XamlIl runtime-support type inside the shipped assembly is outside CcpClient.Desktop.* and must be KEPT AND FLAGGED, never silently dropped" },
+    { "package": "CcpClient.Desktop", "name": "CompiledAvaloniaXaml.!AvaloniaResources", "expect": "flagged-V1", "why": "same valve, a shape beginning '!' rather than '<' and so passing C2 untouched - proof the valve catches shapes the clauses were never written for" }
+  ]
+}

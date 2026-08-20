@@ -1,0 +1,6 @@
+{
+  "packet": "SP-121-zero-execution-census",
+  "unit": 9,
+  "headless": 0,
+  "reason": "ExecutionCensusTests: the anti-widening rule guard over the fixture table, the three-authored-generics trap, C3 anchoring, the UNCLASSIFIED valve, the no-inline-shape-literal guard on census.mjs, and four facts on the committed census (arithmetic, clause agreement, determinism, stated blind spots)"
+}
