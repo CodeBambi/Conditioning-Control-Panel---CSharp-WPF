@@ -361,7 +361,7 @@ number, and it will not disappear into mine.**
 `client/tests/CcpClient.Tests/TrainerCardCensusTests.cs` (new, pure logic, no Avalonia runtime).
 
 The vacuity to avoid is already named in this repository's own words, at
-`client/tests/CcpClient.Tests/HapticSiteCensusTests.cs:11-14`, which I opened:
+`client/tests/CcpClient.Tests/HapticSiteCensusTests.cs:11-15`, which I opened:
 
 > *"A guard that only checked the document against itself would have passed on all four numbers. So
 > the document is the DATA and this file is the LOGIC ... the needle set and the file universe live
@@ -448,7 +448,7 @@ Built to that precedent, with no second convention invented for the same job:
 |---|---|---|
 | `client/docs/task-board.md:109` | **yes** | The Trainer Card row. Carries the SP-058 cross-reference AND the five directory counts R1-R5, and ends `Size L`. |
 | `client/docs/task-board.md:101` | **yes** | SP-058's row; names `GamificationBridge.cs +157` as found by a widened sweep and never ledger-named. |
-| `client/tests/CcpClient.Tests/HapticSiteCensusTests.cs:11-14` | **yes** | "A guard that only checked the document against itself would have passed on all four numbers"; document is DATA, test is LOGIC; set re-derived from shipping bytes every run. |
+| `client/tests/CcpClient.Tests/HapticSiteCensusTests.cs:11-15` | **yes** | "A guard that only checked the document against itself would have passed on all four numbers"; document is DATA, test is LOGIC; set re-derived from shipping bytes every run. |
 | `client/tests/CcpClient.Tests/HapticSiteCensusTests.cs:43-45` | **yes** | "The family: three directories, searched whole and recursively. NOT a file list — a file list is exactly how `VideoService.Browser.cs` and `BouncingTextService.cs` were missed twice." |
 | `docs/constitution.md:32` | **yes** | Read-only zones; `CCP.*` never imported — including "or status claims", which is why §1.1 X1 bars it as corroboration. |
 | `docs/constitution.md:36` | **yes** | "Windows AND Linux ... a Windows-only test never proves cross-platform support." |
@@ -459,3 +459,100 @@ Built to that precedent, with no second convention invented for the same job:
 | `client/src/CcpClient.Desktop/` directory listing | **yes** | The seven OS capabilities are structural: `Overlay`, `Input`, `Audio`, `Video`, `Pointer`, `Glyph`, `Haptics` are directories there. |
 | `client/docs/fyp-census.md` (whole) | **yes** | Read in full as the standard this packet is held to. |
 | Anything under `Services/Profile/`, `Views/Controls/`, `Resources/{cosmetics,banners,achievements}/`, or `GamificationBridge.cs` | **NO — deliberately not opened** | Surface content. Held until after this checkpoint so the method is fixed before the answer is known. Every claim about them in this plan is written as a CLAIM UNDER TEST, never as fact. |
+
+---
+
+## 12. Revision 2 — the plan-gate corrections, applied BEFORE mapping began
+
+Plan APPROVED at the gate; seven items returned. Items 6 and 7 were defects in my own artefacts and
+are fixed in place (`walk.mjs` now records and prints every symlink it declines to follow, because
+the previous comment promised a summary that did not exist; the `HapticSiteCensusTests.cs` citation
+is corrected from `:11-14` to `:11-15`, the line the quoted tail actually sits on). Items 1-5 change
+RULES, so they are written here rather than left in a message, and they bind the census.
+
+**One correction accepted about my own framing.** I called §3.1's anchor set a departure from SP-125.
+It is not: `spine-tasks/SP-125-fyp-census/plan.md:136` already read *"A type already in
+`client/src/**` exposes the required primitive"*. I opened that line to check. So §3.1 clarifies an
+existing rule and **adds** a constraint ("no new owner decision") rather than loosening one. The
+reasoning is stronger than I claimed: read narrowly, the rule would have contradicted this packet's
+own trap 1 and Step 4, because a finding about an already-ported consumer could never have reached
+the label column at all.
+
+### 12.1 (Item 1) The owner carve-out is a test on the CONTRACT, not on the row
+
+§4.2 listed "persistence" flatly and applied the carve-out per behaviour. For a surface that is
+largely persisted state, that reading owner-gates nearly every row and empties the inventory —
+**a refusal manufactured by my own rule rather than found in the code**, which is the opposite of
+this packet's purpose. `client/docs/capability-inventory.md:70` says **"*Expanding* sensors, derived
+data, persistence, networking, diagnostics, or telemetry"**, and the operative word is the one my
+§4.2 dropped.
+
+**The rule, restated and binding:**
+
+| Situation | Disposition |
+|---|---|
+| The behaviour **expands** the consent contract, the persistence contract, the network boundary or the entitlement boundary — a new sensor, a new class of stored data, a new destination bytes travel to, a new thing shared with another person | **OWNER-GATED.** Own flagged section, no size, no label implying the port may proceed. |
+| The behaviour **writes to a store the port already owns**, under a contract already in force | **SIZABLE.** Labelled COVERED / PARTIAL / GAP like any other row and counted in the inventory. |
+
+The distinction is stated in the census itself, not just here, so a reader can check which side each
+row landed on and why. The unit of the test is the **contract**, at surface level (§7), never the
+individual row.
+
+### 12.2 (Item 2) The verdict rule had two holes; both are closed
+
+Both were real. A row set of COVERED/PARTIAL with at least one OWNER-GATED and zero GAP satisfied
+none of my three clauses, so the verdict would have had to be *chosen* — precisely what a mechanical
+rule exists to prevent. And REFUSED and BUILDABLE-IN-PART could both fire.
+
+**Replacement rule, evaluated in this order, first match wins:**
+
+1. **BUILDABLE** iff every row is COVERED or PARTIAL and there are no OWNER-GATED rows.
+2. **BUILDABLE-IN-PART** iff a subset of rows is entirely COVERED/PARTIAL, that subset is
+   independently user-observable (a user could open it and use it), and every remaining row is
+   named in the residue with its label. **This clause fires whether the residue is GAP,
+   OWNER-GATED, or both.**
+3. **REFUSED** iff no such subset exists — i.e. every user-observable decomposition contains a GAP
+   or an OWNER-GATED row.
+
+**What an OWNER-GATED row does to the verdict, said plainly:** it behaves exactly like a GAP for
+verdict arithmetic — it cannot appear inside the buildable subset — but unlike a GAP it is **not the
+port's to close**, so it is reported in its own flagged section (§12.1) and never priced.
+**Clause 2 outranks clause 3 on overlap**, which is the ordering SP-125 reached in practice when it
+refused *and* named a separable unit: naming the buildable part is strictly more useful to the owner
+than a bare refusal, and losing it to a rule collision would be the census failing at its job.
+Where clause 2 fires with a large residue, the census says **BUILDABLE-IN-PART, and the residue is
+the headline.**
+
+### 12.3 (Item 3) "the same KIND of thing" is struck
+
+The soft phrase in §3.1(b) is replaced by the label table's operative test, which was always the
+real one: **the anchor must EXPOSE THE REQUIRED PRIMITIVE**, cited at an opened `client/src/**` line.
+"A shipped page exists" is not an anchor for a drag-and-drop wardrobe editor; a shipped control that
+takes a drag and produces a drop is. The census's anchor column carries this wording verbatim, and
+where the anchor exposes only part of the primitive the row is PARTIAL with the missing member
+named, never COVERED.
+
+### 12.4 (Item 4) The unreachable branch: kept, and the reason is stated in the file
+
+`PROMPT.md:98` words a missing reference tree as FAILS; I kept the precedent's shape, in which a
+**fully absent** `ConditioningControlPanel/` takes an unreachable branch that still enforces the
+document's whole shape. That tree is in-repo, so on this repository the branch is unreachable and
+the two readings agree on every real checkout.
+
+**Resolution: keep the precedent's shape, and say why IN the test file**, so the choice is visible
+to the next reader instead of inferred. The reason is that `HapticSiteCensusTests` and
+`FypCensusTests` both already carry that branch; a third census guard inventing a second convention
+for the same job would make the three disagree, and the packet's own instruction is to follow the
+precedent rather than invent. **The branch is not a skip**: it writes which branch was taken to test
+output, and it still fails a gutted census. Everything the FAILS wording is protecting against —
+a half-present tree, a missing census, an unfindable repo root — is already a hard failure.
+
+### 12.5 (Item 5) The threshold is pinned from bytes too
+
+§6 pinned the normalisation expression and the distinctness comparer. The **count of distinct
+categories that fires `honor_roll`** is the other half of the same silent bug class: a wrong
+threshold and a wrong comparer both make the badge fire at the wrong moment, and neither throws.
+So §6 gains a step: **the threshold literal is re-derived from the shipping bytes** in
+`TrainerCardCensusTests` alongside the normalisation expression, and the census states it as a
+number taken from an opened line. The same applies to `top_of_the_class`'s 90% bar and
+`held_back`'s fail-streak length wherever the walk finds them.
