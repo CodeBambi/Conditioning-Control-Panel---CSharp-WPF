@@ -33,6 +33,79 @@
       "expectedColor": "#141018",
       "tolerance": 8,
       "minPixelFraction": 0.8
+    },
+
+    // SP-122 — THE RACK. Every check below reads a real capture of the Studio rack's Flash Images
+    // row; every one has been shown FAILING on a real capture of the opposite state, and both
+    // fractions are recorded in spine-tasks/SP-122-rack-presentation/record.md.
+    //
+    // TOLERANCES ARE SIZED BELOW 10 ON PURPOSE, and this is the tolerance rule in its natural
+    // habitat. RadioButton.rack-row:pointerover is #FF241E2A (MainWindow.axaml:98-100), 11/10/11
+    // from the rack's #FF19141F ground, and the selected fill #FF2A2130 is 17/13/17 from that same
+    // ground. At the rail-door precedent of 24 the ground check would pass with the mouse merely
+    // RESTING on the row, and the fill check would pass on an unselected row. Measured, not
+    // supposed: the unselected strip scores 0.0000 against #2A2130 at tolerance 16 and 1.0000 at
+    // tolerance 20. The right precedent here is dashboard-background's 8, not rail-door's 24/32.
+    //
+    // The two #2A2130 checks go tighter still, to 4, because their nearest neighbour is the
+    // HOVERED row at only 6/3/6 away — RackPresentationTests.NoRackCheckAcceptsTheColourOfAnother-
+    // RackState asserts that separation mechanically, so widening any of these back reddens the
+    // floor and names both colours. It costs nothing: these regions are flat fills that measure
+    // 7605/7605 and 36/36 EXACT, with no antialiasing in them at all.
+    {
+      "name": "rack-row-unselected-ground",
+      "surface": "rack-row",
+      "state": "unselected",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.45, "y": 0.15, "w": 0.42, "h": 0.7 } },
+      "expectedColor": "#19141F",
+      "tolerance": 6,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "rack-row-selected-marker",
+      "surface": "rack-row",
+      "state": "selected",
+      "evidenceClass": "presentation-verified",
+      "kind": "border-color-band",
+      "region": { "band": "left", "thicknessPx": 3 },
+      "expectedColor": "#E066FF",
+      "tolerance": 8,
+      "minPixelFraction": 0.5
+    },
+    {
+      "name": "rack-row-selected-fill",
+      "surface": "rack-row",
+      "state": "selected",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.45, "y": 0.15, "w": 0.42, "h": 0.7 } },
+      "expectedColor": "#2A2130",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "rack-row-dot-armed",
+      "surface": "rack-row-dot",
+      "state": "armed",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 } },
+      "expectedColor": "#6B5B73",
+      "tolerance": 8,
+      "minPixelFraction": 0.5
+    },
+    {
+      "name": "rack-row-dot-off",
+      "surface": "rack-row-dot",
+      "state": "off",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.28, "y": 0.28, "w": 0.44, "h": 0.44 } },
+      "expectedColor": "#2A2130",
+      "tolerance": 4,
+      "minPixelFraction": 0.9
     }
   ]
 }
