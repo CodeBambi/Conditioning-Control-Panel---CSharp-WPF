@@ -302,3 +302,21 @@ have acted on it. Two of the four were killable by a single assertion once the c
 
 **If enumeration is not done, the survivor is UNCOVERED, not equivalent.** Uncovered is an honest
 gap; a false equivalence is a false belief, and it propagates.
+
+## The tolerance rule (adopted 2026-08-20, SP-115)
+
+**A tolerance sized to an observed error is exactly the size of the defect it will next hide.**
+
+SP-115's compositing oracle predicted one unit low in one channel. The lane refused to tune the
+model to the observation - the right instinct - and set a `+/-1` tolerance instead. But `+/-1`
+per channel is precisely what a one-unit-per-channel regression looks like, so the allowance
+would have passed the defect the check exists to catch, at every input nobody had verified.
+
+The residue turned out to be **the oracle's own arithmetic**: three roundings where the formula
+has one. Correcting it reproduced the measurement at 8 of 8 points and the tolerance was
+**deleted, not justified**.
+
+**Before accepting any tolerance, ask what defect is the same size as the allowance.** If the
+answer is one the check was written to catch, the tolerance is a hole. Prefer finding the model
+wrong over widening the window: a disagreement between a model and a measurement is evidence
+about the model at least as often as about the world.
