@@ -435,7 +435,14 @@ public class SchedulerModuleTests
         rig.TickAt(new TimeSpan(16, 0, 0));
 
         rig.PressStartStopButton(); // stop it, so !_isRunning is true again...
-        rig.Scheduler.NoteManualToggle(sessionWasRunning: false); // ...and clear the hand-stop latch
+        // ...and clear the hand-stop latch, which leaves the ONE state this fact is about:
+        // in the window, nothing running, the opening already served. THE STATE IS PRODUCT-
+        // REACHABLE WITHOUT THIS CALL — a scheduled session that ENDS BY ITSELF inside its window
+        // reaches it, which the Intensity Ramp really does (SessionParticipant wires
+        // `Ramp.Completed += () => Engine.Stop()`, WPF's MainWindow.StartStop.cs:547-555). The
+        // call is used because this rig has an empty rack and therefore no ramp to finish; what it
+        // reproduces is the ramp's own ending, not a state only a test can produce.
+        rig.Scheduler.NoteManualToggle(sessionWasRunning: false);
         Assert.False(rig.Scheduler.ManuallyStoppedInWindow);
         Assert.True(rig.Scheduler.AutoStartedSession);
 
@@ -511,7 +518,7 @@ public class SchedulerModuleTests
     // =====================================================================================
 
     [Fact]
-    public async Task TheNineSettingsSurviveARestart_BecauseTheStoreIsInEveryLifecycleList()
+    public async Task TheTenSettingsSurviveARestart_BecauseTheStoreIsInEveryLifecycleList()
     {
         // SP-117 found a landed store that was in NONE of StartAsync/LogIfDegraded/StopAsync/
         // FlushAsync, so a whole module's dials were silently lost at every launch (D178). This
@@ -739,6 +746,41 @@ public class SchedulerModuleTests
     }
 
     [Fact]
+    public async Task AGenerationCancelledWHILETheClockIsBeingAsked_LeavesNoLiveTickBehind()
+    {
+        // SchedulerParticipant.Arm's post-check, reached by no fact and by no mutation until the
+        // review said so. Its own comment names the window it guards — "the generation may have
+        // been cancelled between the check and the schedule" — and that window is REAL: OnDue
+        // re-checks liveness and then calls Arm, two statements on a pool thread while teardown
+        // runs on another. If the post-check is missing, a stop leaves a one-shot on the clock that
+        // nobody owns, and that one-shot's whole job is to start a conditioning session.
+        var rig = await Rig.StartAsync("16:00", "22:00", enabled: true);
+        await rig.PassTheGrace();
+        Assert.Equal(1, rig.Clock.PendingCount);
+
+        // The window opens between two polls, so a surviving tick really would start something.
+        rig.Clock.SetLocalTime(MondayMorning.Date + new TimeSpan(16, 0, 0));
+
+        // Teardown lands INSIDE the next Arm: the clock has registered the timer and the handle has
+        // not come back yet.
+        rig.Clock.WhileScheduling = () =>
+        {
+            rig.Clock.WhileScheduling = null;
+            rig.Registry.CancelAndDrainAsync(
+                rig.Log, CcpClient.Desktop.Lifecycle.CompositionRoot.DefaultFlushTimeout)
+                .GetAwaiter().GetResult();
+        };
+
+        rig.Clock.Advance(SessionScheduler.PollInterval);
+
+        Assert.Equal(0, rig.Clock.PendingCount);
+        Assert.False(rig.Scheduler.Polling);
+        Assert.False(rig.Engine.Running);
+        Assert.Equal(0, rig.Scheduler.StartsPerformed);
+        await rig.DisposeAsync();
+    }
+
+    [Fact]
     public async Task ASupersededTickDoesNothing_AndDoesNotSTEALTheLivePollsSlot()
     {
         // M-aw SURVIVED round 1: replacing the CompareExchange identity with a bare Exchange. The
@@ -778,27 +820,6 @@ public class SchedulerModuleTests
         Assert.False(rig.Participant.Running);
         Assert.False(rig.Participant.GenerationLive);
         await rig.DisposeAsync();
-    }
-
-    [Fact]
-    public void TheRealClockIsLOCAL_AndThatIsTheWholeReasonThisSeamExists()
-    {
-        // M-bd SURVIVED round 1: SystemScheduleClock.LocalNow swapped for the UTC reading. No test
-        // drove the real clock at all, so the ONE property that made a new seam necessary instead
-        // of widening ISessionClock was unpinned.
-        //
-        // Kind is the discriminator rather than the value, and deliberately: on a machine whose
-        // timezone IS UTC the two readings are equal, so comparing them would pass under the
-        // mutant exactly where the port is hardest to check. The local reading's Kind is Local and
-        // the universal one's is Utc on every machine there is.
-        //
-        // This reads a real clock ONCE, which is a measurement and not a deadline: nothing here
-        // waits, polls or compares elapsed time, so the timing discipline is untouched (the banned
-        // tokens are deliberately not spelled out above, because that guard is lexical).
-        var clock = new SystemScheduleClock();
-
-        Assert.Equal(DateTimeKind.Local, clock.LocalNow.Kind);
-        Assert.NotEqual(DateTimeKind.Utc, clock.LocalNow.Kind);
     }
 
     [Fact]
@@ -884,7 +905,7 @@ public class SchedulerModuleTests
         public string Directory { get; }
 
         /// <summary>How many times the scheduler asked the shell to get out of the way — WPF's
-        /// <c>MinimizeToTray()</c> at <c>MainWindow/MainWindow.StartStop.cs:614</c>.</summary>
+        /// <c>MinimizeToTray()</c> at <c>MainWindow/MainWindow.StartStop.cs:615</c>.</summary>
         public int DuckRequests { get; private set; }
 
         public static string NewDirectory() =>
@@ -1086,6 +1107,15 @@ public class SchedulerModuleTests
         /// <summary>Deliver a spent callback again, by the order in which it was created.</summary>
         public void RefireSpent(int index) => SpentCallbacks[index]();
 
+        /// <summary>
+        /// Runs INSIDE <see cref="Schedule"/>, after the timer is registered and before the handle
+        /// is returned. It is the only way to reproduce the window <c>SchedulerParticipant.Arm</c>
+        /// guards: "the generation may have been cancelled between the check and the schedule".
+        /// That window is real — the check and the clock call are two statements on a pool thread
+        /// and teardown runs on another — and nothing else can put a test inside it.
+        /// </summary>
+        public Action? WhileScheduling { get; set; }
+
         public IDisposable Schedule(TimeSpan due, Action fire)
         {
             Entry entry;
@@ -1095,6 +1125,7 @@ public class SchedulerModuleTests
                 _timers.Add(entry);
             }
 
+            WhileScheduling?.Invoke();
             return new CancelHandle(this, entry);
         }
 

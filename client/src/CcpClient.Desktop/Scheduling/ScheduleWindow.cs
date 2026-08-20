@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Scheduling;
 /// <para>It is a READING rather than a bare <c>bool</c> because this is the one module in the port
 /// whose predicate decides whether a conditioning session appears on someone's screen. WPF answers
 /// the same question and throws the working away into a <c>Debug</c> log line nobody reads
-/// (<c>MainWindow/MainWindow.StartStop.cs:692-693</c>). Carrying it lets the panel show the user
+/// (<c>MainWindow/MainWindow.StartStop.cs:694-695</c>). Carrying it lets the panel show the user
 /// what was really parsed out of their text — which is the whole of this port's answer to the
 /// <c>"8"</c> trap in <see cref="ScheduleWindow.Parse"/>.</para>
 /// </summary>
@@ -18,7 +18,7 @@ namespace CcpClient.Desktop.Scheduling;
 /// <param name="End">The parsed end, or the 22:00 fallback (<c>:673-677</c>).</param>
 /// <param name="StartFellBack">True when the start text did not parse and the fallback was used.</param>
 /// <param name="EndFellBack">True when the end text did not parse and the fallback was used.</param>
-/// <param name="Overnight">WPF's <c>endTime &lt; startTime</c> (<c>:682</c>) — the wrap branch.</param>
+/// <param name="Overnight">WPF's <c>endTime &lt; startTime</c> (<c>:683</c>) — the wrap branch.</param>
 /// <param name="InWindow">The verdict: what <c>IsInScheduledTimeWindow()</c> returns.</param>
 public readonly record struct ScheduleWindowReading(
     DayOfWeek Day,
@@ -37,7 +37,7 @@ public readonly record struct ScheduleWindowReading(
     public bool AnyFellBack => StartFellBack || EndFellBack;
 
     /// <summary>True when the parsed window can never contain any moment: WPF's strict
-    /// <c>&lt;</c> at <c>:682</c> sends <c>start == end</c> down the SAME-DAY branch, where the
+    /// <c>&lt;</c> at <c>:683</c> sends <c>start == end</c> down the SAME-DAY branch, where the
     /// test is <c>t &gt;= x &amp;&amp; t &lt; x</c>. An equal pair is an EMPTY window, never an
     /// all-day one.</summary>
     public bool Empty => Start == End;
@@ -68,13 +68,13 @@ public static class ScheduleWindow
     /// Evaluate the window against a LOCAL reading of the clock.
     ///
     /// <para><b>Clause order is upstream's, and the one difference is inert by construction.</b>
-    /// WPF returns at the day gate before it parses anything (<c>:661-665</c>); this method parses
+    /// WPF returns at the day gate before it parses anything (<c>:660-664</c>); this method parses
     /// anyway so the panel can report what the text means, and then conjoins
     /// <see cref="ScheduleWindowReading.DayActive"/> into the verdict — which is exactly
     /// <c>isDayActive ? inWindow : false</c>. Parsing has no side effects and cannot change
     /// <c>inWindow</c>, so the two are the same function.</para>
     /// </summary>
-    /// <param name="preset">The user's nine settings.</param>
+    /// <param name="preset">The user's ten settings.</param>
     /// <param name="localNow">The LOCAL wall clock — WPF's <c>DateTime.Now</c> (<c>:645</c>).
     /// Never <c>UtcNow</c>: a user who typed 16:00 meant their own clock.</param>
     public static ScheduleWindowReading Read(SchedulerPresetDocument preset, DateTime localNow)
@@ -89,11 +89,11 @@ public static class ScheduleWindow
 
         var timeOfDay = localNow.TimeOfDay;
 
-        // WPF :682. STRICT less-than, which is why an equal pair takes the same-day branch below
+        // WPF :683. STRICT less-than, which is why an equal pair takes the same-day branch below
         // and yields an EMPTY window rather than an all-day one.
         var overnight = end < start;
 
-        // WPF :684 and :689. Both branches are HALF-OPEN: the start boundary is in (>=) and the
+        // WPF :686 and :691. Both branches are HALF-OPEN: the start boundary is in (>=) and the
         // end boundary is out (<). At exactly `end` the window is closed, on either branch.
         var withinTimes = overnight
             ? timeOfDay >= start || timeOfDay < end

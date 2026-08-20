@@ -6,10 +6,19 @@ namespace CcpClient.Desktop.Scheduling;
 /// They live beside their consumer, as <see cref="Session.EffectReasonCodes"/> and
 /// <see cref="Tray.TrayReasonCodes"/> do.
 ///
-/// <para><b>Every code below except two is a REFUSAL, and that is the shape of this module.</b>
+/// <para><b>Every code below except one is a REFUSAL, and that is the shape of this module.</b>
 /// Thirteen ported rows describe what they did; this one mostly describes what it declined to do,
 /// because it is the only thing in the port that can start a conditioning session with nobody at
 /// the keyboard. A tick whose outcome could not be named would be a start nobody could audit.</para>
+///
+/// <para><b>Every code here is EMITTED by a path, and one was not.</b> SP-118 shipped a
+/// <c>scheduler-not-polling</c> code that nothing ever produced — the state it named is carried
+/// entirely by the dot's <c>Off</c> and by the panel's own "not watching the clock yet" line — and
+/// the review removed it. The capability contract's rule is that "codes are additive; new codes
+/// land with their consumer row", and a code with no consumer is exactly what that forbids.
+/// <see cref="SchedulerBalloonAbsent"/> is kept on the other side of that line deliberately: it
+/// names a DECLARED ABSENCE rather than a tick outcome, and it is cited from the code that would
+/// otherwise have sent the balloon.</para>
 /// </summary>
 public static class SchedulerReasonCodes
 {
@@ -50,19 +59,13 @@ public static class SchedulerReasonCodes
     /// </summary>
     public const string SchedulerStartRefusedBySession = "scheduler-start-refused-by-session";
 
-    /// <summary>The scheduler is not polling: the 60 s start-up grace has not elapsed yet, or the
-    /// participant has stopped. WPF's equivalents are the delayed
-    /// <c>_schedulerTimer.Start()</c> (<c>MainWindow.xaml.cs:624-635</c>) and
-    /// <c>_schedulerTimer?.Stop()</c> at close (<c>MainWindow.WindowChrome.cs:166</c>).</summary>
-    public const string SchedulerNotPolling = "scheduler-not-polling";
-
     /// <summary>
     /// The tray balloons WPF raises on an auto-start and an auto-stop
     /// (<c>MainWindow.StartStop.cs:616</c>, <c>:631</c>) are not sent by this build.
     /// <c>Tray/ShellTray</c> exposes no arbitrary-notification entry and <c>Tray/**</c> is outside
     /// SP-118's File Scope, so the absence is NAMED rather than faked. The minimize half IS
     /// ported: <see cref="Tray.ShellTray.Duck"/> is the port's landed analogue of
-    /// <c>MinimizeToTray()</c> (<c>:614</c>).
+    /// <c>MinimizeToTray()</c> (<c>:615</c>).
     /// </summary>
     public const string SchedulerBalloonAbsent = "scheduler-balloon-absent";
 }

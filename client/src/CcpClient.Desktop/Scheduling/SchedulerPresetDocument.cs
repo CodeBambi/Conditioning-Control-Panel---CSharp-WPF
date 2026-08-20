@@ -5,12 +5,12 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Scheduling;
 
 /// <summary>
-/// SP-118: the <b>Scheduler</b> row's persisted settings — WPF's nine, and exactly its nine.
+/// SP-118: the <b>Scheduler</b> row's persisted settings — WPF's ten, and exactly its ten.
 ///
 /// <para>The shipping editor is <c>Features/SchedulerFeatureControl.xaml</c>, hosted by the Studio
 /// rack at <c>Views/Controls/Studio/SchedulerRackPanel.xaml:92</c>, and it carries <b>an enable, a
-/// start time, an end time and seven day boxes</b> — nine controls, no more
-/// (<c>SchedulerFeatureControl.xaml.cs:41-51</c> loads exactly those nine). The other four
+/// start time, an end time and seven day boxes</b> — ten controls, no more
+/// (<c>SchedulerFeatureControl.xaml.cs:42-51</c> loads exactly those ten). The other four
 /// <c>Scheduler*</c> members on <c>AppSettings</c> (<c>SchedulerDurationMinutes</c>,
 /// <c>SchedulerMultiplier</c>, <c>SchedulerLinkAlpha</c>,
 /// <c>CCP.Core/Models/AppSettings.cs:2461-2478</c>) belong to the intensity RAMP and appear on no
@@ -21,7 +21,7 @@ namespace CcpClient.Desktop.Scheduling;
 /// (<c>AppSettings.cs:2510-2521</c>) with every day ticked (<c>:2525-2569</c>) and the feature OFF
 /// (<c>:2453</c>). The <c>16:00</c>/<c>22:00</c> literals in <c>SchedulerFeatureControl.xaml:47,56</c>
 /// are design-time text that <c>LoadFromSettings</c> overwrites from settings on <c>Loaded</c>
-/// (<c>.xaml.cs:42-43</c>), so no user ever sees them as values.</para>
+/// (<c>.xaml.cs:43-44</c>), so no user ever sees them as values.</para>
 ///
 /// <para><b>The times are STRINGS, deliberately, and that is behaviour rather than laziness.</b>
 /// Upstream stores what the user typed and parses it at every evaluation
@@ -48,11 +48,11 @@ public sealed class SchedulerPresetDocument
     public const bool DefaultEnabled = false;
 
     /// <summary>WPF's <c>_schedulerStartTime</c> default AND its setter's null-coalesce
-    /// (<c>AppSettings.cs:2510,2516</c>).</summary>
+    /// (<c>AppSettings.cs:2510,2514</c>).</summary>
     public const string DefaultStartTime = "00:00";
 
     /// <summary>WPF's <c>_schedulerEndTime</c> default AND its setter's null-coalesce
-    /// (<c>AppSettings.cs:2517,2523</c>).</summary>
+    /// (<c>AppSettings.cs:2517,2521</c>).</summary>
     public const string DefaultEndTime = "22:00";
 
     private string _startTime = DefaultStartTime;
@@ -64,8 +64,8 @@ public sealed class SchedulerPresetDocument
     public bool Enabled { get; set; } = DefaultEnabled;
 
     /// <summary>
-    /// WPF's <c>SchedulerStartTime</c> (<c>AppSettings.cs:2511-2516</c>), kept as typed text. The
-    /// null-coalesce is WPF's own (<c>:2515</c>) and it is the reason a <c>null</c> can never
+    /// WPF's <c>SchedulerStartTime</c> (<c>AppSettings.cs:2511-2515</c>), kept as typed text. The
+    /// null-coalesce is WPF's own (<c>:2514</c>) and it is the reason a <c>null</c> can never
     /// reach <see cref="TimeSpan.TryParse(string, out TimeSpan)"/>: only a non-null unparseable
     /// string can, which is the only way the 16:00 fallback is ever reachable.
     /// </summary>
@@ -76,8 +76,8 @@ public sealed class SchedulerPresetDocument
         set => _startTime = value ?? DefaultStartTime;
     }
 
-    /// <summary>WPF's <c>SchedulerEndTime</c> (<c>AppSettings.cs:2518-2523</c>), same shape, same
-    /// null-coalesce (<c>:2522</c>).</summary>
+    /// <summary>WPF's <c>SchedulerEndTime</c> (<c>AppSettings.cs:2518-2522</c>), same shape, same
+    /// null-coalesce (<c>:2521</c>).</summary>
     [AllowNull]
     public string EndTime
     {

@@ -13,9 +13,9 @@ namespace CcpClient.Desktop.Scheduling;
 /// "16:00" meaning the clock on their wall; <see cref="Session.ISessionClock.UtcNow"/> is
 /// deliberately UTC because a paced effect that read local time would fire twice, or not at all,
 /// at 02:00 on a daylight-saving transition. Handing the local reading to the session spine would
-/// make that defect merely a typo away, in twelve modules at once.</item>
+/// make that defect merely a typo away, in seventeen modules and presenters at once.</item>
 /// <item><b>The enumeration, done before the decision rather than after.</b>
-/// <c>grep -rn ISessionClock client/{src,tests}</c> answers with twelve module and presenter
+/// <c>grep -rn ISessionClock client/{src,tests}</c> answers with SEVENTEEN module and presenter
 /// consumers under <c>Effects/**</c>, the shared <see cref="Session.PacedSessionEffect{TFiring}"/>
 /// base, <c>CompositionRoot.SessionClockFactory</c>, <c>SessionParticipant</c>, and roughly two
 /// dozen hand-written implementations under <c>client/tests/**</c>. Adding a member is a change

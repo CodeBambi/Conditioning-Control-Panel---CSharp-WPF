@@ -43,6 +43,7 @@ const F = {
 const UNIT =
   "FullyQualifiedName~SchedulerWindowTests|" +
   "FullyQualifiedName~SchedulerModuleTests|" +
+  "FullyQualifiedName~SystemScheduleClockTests|" +
   "FullyQualifiedName~CompositionRootValidationTests|" +
   "FullyQualifiedName~IntegrationProofTests";
 
@@ -279,8 +280,8 @@ const MUTATIONS = [
         }` },
   { id: "M-ax", file: F.part, what: "the poll never re-arms", suite: "unit",
     find: `        Arm(SessionScheduler.PollInterval);
-        Scheduler.SetPolling(_running && _owner.IsLive(_generation));`,
-    replace: `        Scheduler.SetPolling(_running && _owner.IsLive(_generation));` },
+`,
+    replace: `` },
   { id: "M-ay", file: F.part, what: "stop leaves the pending one-shot alive", suite: "unit",
     find: `        Interlocked.Exchange(ref _pending, null)?.Dispose();
         Scheduler.SetPolling(false);
@@ -303,9 +304,58 @@ const MUTATIONS = [
     replace: `        _generation = _owner.Begin();` },
 
   // ---- the clock seam ----------------------------------------------------------------------
+  // Round 4 (the code review): rounds 1-3 mutated ONE line of the class that ships on every
+  // product path, which contradicted this packet's own claim to have mutated every line it added.
+  // The three below are the rest of it.
   { id: "M-bd", file: F.clock, what: "the real clock reads UTC instead of local", suite: "unit",
     find: `    public DateTime LocalNow => DateTime.Now;`,
     replace: `    public DateTime LocalNow => DateTime.UtcNow;` },
+  { id: "M-bq", file: F.clock, what: "a faulting callback is caught SILENTLY \— the worse half", suite: "unit",
+    find: `            onCallbackFault?.Invoke(ex);`,
+    replace: `            _ = ex;` },
+  { id: "M-br", file: F.clock, what: "NO containment at all \— the escaping exception kills the process", suite: "unit",
+    find: `        try
+        {
+            fire();
+        }
+        catch (Exception ex)
+        {
+            // Reported, not swallowed. And deliberately not re-thrown: there is nothing above this
+            // frame to catch it, so re-throwing is exactly the process kill this exists to prevent.
+            onCallbackFault?.Invoke(ex);
+        }`,
+    replace: `        fire();` },
+  { id: "M-bs", file: F.clock, what: "the negative-delay clamp dropped (Timer throws on the caller)", suite: "unit",
+    find: `        var ms = Math.Max(0, (long)due.TotalMilliseconds);`,
+    replace: `        var ms = (long)due.TotalMilliseconds;` },
+
+  // ---- the participant's two teardown windows (round 4, same review) -----------------------
+  { id: "M-bt", file: F.part, what: "Arm leaves the new one-shot up when the generation died mid-schedule", suite: "unit",
+    find: `        if (!_running || !_owner.IsLive(_generation))
+        {
+            Interlocked.Exchange(ref _pending, null)?.Dispose();
+            Scheduler.SetPolling(false);
+        }
+    }`,
+    replace: `        if (!_running && false)
+        {
+            Interlocked.Exchange(ref _pending, null)?.Dispose();
+            Scheduler.SetPolling(false);
+        }
+    }` },
+  { id: "M-bu", file: F.part, what: "the decision runs even though teardown began during Arm", suite: "unit",
+    find: `        var live = _running && _owner.IsLive(_generation);
+        Scheduler.SetPolling(live);
+        if (!live)
+        {
+            return;
+        }`,
+    replace: `        var live = _running && _owner.IsLive(_generation);
+        Scheduler.SetPolling(live);
+        if (!live && false)
+        {
+            return;
+        }` },
 
   // ---- the shell ---------------------------------------------------------------------------
   { id: "M-be", file: F.shell, what: "the START/STOP button never tells the scheduler", suite: "headless",

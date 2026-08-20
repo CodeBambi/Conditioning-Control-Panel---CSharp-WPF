@@ -310,7 +310,7 @@ public sealed class CompositionRoot
         // out is a persisted setting like any other, and teardown's head slot is the ONE place
         // the port guarantees it reaches disk.
         var session = participants.OfType<Session.SessionParticipant>().FirstOrDefault();
-        // SP-118: the scheduler's nine settings flush in the same slot. A day box a user unticked
+        // SP-118: the scheduler's ten settings flush in the same slot. A day box a user unticked
         // on the way out decides whether a session appears tomorrow, so it is the LAST setting the
         // port may lose (persistence contract §11).
         var scheduler = participants.OfType<Scheduling.SchedulerParticipant>().FirstOrDefault();

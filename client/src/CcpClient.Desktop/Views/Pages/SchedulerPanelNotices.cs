@@ -15,7 +15,7 @@ namespace CcpClient.Desktop.Views.Pages;
 ///
 /// <para>Upstream throws that working away — <c>App.Logger?.Debug("Scheduler: Current={Current},
 /// Start={Start}, End={End}, InWindow={InWindow}", …)</c>
-/// (<c>MainWindow/MainWindow.StartStop.cs:692-693</c>) and a <c>Warning</c> on each unparseable
+/// (<c>MainWindow/MainWindow.StartStop.cs:694-695</c>) and a <c>Warning</c> on each unparseable
 /// time (<c>:669</c>, <c>:675</c>). A user never sees either. The reading is shown here instead,
 /// which is this port's whole answer to the parse trap in
 /// <see cref="ScheduleWindow.Parse"/>: the predicate is upstream's, unchanged, and what the user
@@ -137,7 +137,7 @@ public static class SchedulerPanelNotices
     ///
     /// <para>On the PAGE rather than only in a record, on the precedent SP-111, SP-113, SP-115 and
     /// SP-117 set for a half-ported row. The minimize IS ported (<c>ShellTray.Duck</c>, upstream's
-    /// <c>MinimizeToTray()</c> at <c>MainWindow/MainWindow.StartStop.cs:614</c>); the two tray
+    /// <c>MinimizeToTray()</c> at <c>MainWindow/MainWindow.StartStop.cs:615</c>); the two tray
     /// balloons beside it (<c>:616</c>, <c>:631</c>) are not, because <c>ShellTray</c> exposes no
     /// entry for an arbitrary notification and <c>Tray/**</c> was outside SP-118's File Scope.</para>
     /// </summary>

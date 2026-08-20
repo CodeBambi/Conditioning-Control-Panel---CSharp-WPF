@@ -43,7 +43,7 @@ public sealed record SchedulerTickOutcome(
 /// under it.</b> Thirteen ported rows are modules INSIDE a session somebody started. This one runs
 /// while nothing is running and calls <see cref="SessionEngine.Start"/> (WPF's
 /// <c>StartEngine()</c>, <c>:618</c>) and <see cref="SessionEngine.Stop"/> (WPF's
-/// <c>StopEngine()</c>, <c>:628</c>). A defect here does not degrade an effect — it puts a
+/// <c>StopEngine()</c>, <c>:629</c>). A defect here does not degrade an effect — it puts a
 /// conditioning session on a user's screen unbidden, or refuses to end one.</para>
 ///
 /// <para><b>So the interesting half of this class is where it says NO</b>, and every clause below
@@ -101,7 +101,7 @@ public sealed class SessionScheduler
     private int _starts;
     private int _stops;
 
-    /// <param name="store">The nine persisted settings.</param>
+    /// <param name="store">The ten persisted settings.</param>
     /// <param name="engine">The REAL session. The scheduler owns it from outside; nothing else does.</param>
     /// <param name="clock">The LOCAL clock (<see cref="IScheduleClock"/>), never
     /// <see cref="ISessionClock"/>: the user typed a wall-clock time.</param>
@@ -129,7 +129,7 @@ public sealed class SessionScheduler
     /// <summary>
     /// Raised, as a PROJECTION on the UI thread, when the scheduler has just auto-started a
     /// session. The shell answers it with <see cref="Tray.ShellTray.Duck"/> — WPF's
-    /// <c>_trayIcon?.MinimizeToTray()</c> at <c>MainWindow/MainWindow.StartStop.cs:614</c>, which
+    /// <c>_trayIcon?.MinimizeToTray()</c> at <c>MainWindow/MainWindow.StartStop.cs:615</c>, which
     /// runs INSIDE the same <c>Dispatcher.Invoke</c> as the start.
     ///
     /// <para>Skip-until-bound: with no window there is nothing to minimize, and the session still
@@ -521,7 +521,7 @@ public sealed class SessionScheduler
         if (autoStartedNow)
         {
             // The projection: WPF minimizes to tray inside the same invoke as the start
-            // (:614). Posted, never inline — it touches a window.
+            // (:615). Posted, never inline — it touches a window.
             _signal.Post(() => AutoStarted?.Invoke());
         }
 

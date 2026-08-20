@@ -101,7 +101,7 @@ public class SchedulerRowHeadlessTests
     // =====================================================================================
 
     [AvaloniaFact]
-    public async Task TheSchedulerRowOpensAPanelWithUpstreamsNINEControlsAndNoMore()
+    public async Task TheSchedulerRowOpensAPanelWithUpstreamsTENControlsAndNoMore()
     {
         var boot = await BootAsync();
         var window = boot.Window;
@@ -111,8 +111,8 @@ public class SchedulerRowHeadlessTests
         Assert.True(panel.IsVisible);
         Assert.False(Descendant<StackPanel>(window, "RampModulePanel").IsVisible);
 
-        // Upstream's editor is nine controls: an enable, two times and seven days
-        // (Features/SchedulerFeatureControl.xaml.cs:41-51). Asserted as a SET rather than
+        // Upstream's editor is ten controls: an enable, two times and seven days
+        // (Features/SchedulerFeatureControl.xaml.cs:42-51). Asserted as a SET rather than
         // individually, so a tenth control cannot arrive without this fact noticing.
         var boxes = panel.GetVisualDescendants().OfType<CheckBox>().Select(c => c.Name ?? string.Empty).ToList();
         Assert.Equal(
@@ -352,7 +352,7 @@ public class SchedulerRowHeadlessTests
             () => $"content={startStop.Content}, running={window.Session.Engine.Running}");
 
         // And the shell got out of the way — WPF's MinimizeToTray() inside the same invoke as the
-        // start (MainWindow/MainWindow.StartStop.cs:614). The port NEVER hides it: the taskbar
+        // start (MainWindow/MainWindow.StartStop.cs:615). The port NEVER hides it: the taskbar
         // button survives, which is §12 D35's whole point.
         await CcpClient.Tests.TestWait.Until(
             () => window.ShellTray.IsDucked,

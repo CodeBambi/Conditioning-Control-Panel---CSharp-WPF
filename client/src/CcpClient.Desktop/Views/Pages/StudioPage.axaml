@@ -1397,8 +1397,8 @@
         </StackPanel>
 
         <!-- ================= Scheduler ================= -->
-        <!-- NINE CONTROLS, WHICH IS UPSTREAM'S NINE: an enable, two times and seven day boxes
-             (Features/SchedulerFeatureControl.xaml, loaded at .xaml.cs:41-51). The four other
+        <!-- TEN CONTROLS, WHICH IS UPSTREAM'S TEN: an enable, two times and seven day boxes
+             (Features/SchedulerFeatureControl.xaml, loaded at .xaml.cs:42-51). The four other
              Scheduler* settings on AppSettings (:2461-2478) belong to the intensity RAMP and are
              on no scheduler surface upstream either.
 

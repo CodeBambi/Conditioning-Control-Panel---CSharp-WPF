@@ -42,7 +42,7 @@ public sealed class SchedulerParticipant : IBackgroundParticipant
 
     /// <param name="infra">The participant infrastructure: the operation owner, the late-bound UI
     /// boundary and the log.</param>
-    /// <param name="dataDirectory">Where the nine settings live, beside every other document.</param>
+    /// <param name="dataDirectory">Where the ten settings live, beside every other document.</param>
     /// <param name="engine">The REAL session this scheduler owns from outside.</param>
     /// <param name="clock">The LOCAL clock. Defaults to the real one; a test injects a manual one so
     /// nothing in the suite waits sixty seconds on a wall clock.</param>
@@ -102,7 +102,7 @@ public sealed class SchedulerParticipant : IBackgroundParticipant
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Phase 3 loads the nine settings and arms the GRACE, and nothing else. WPF delays the
+    /// Phase 3 loads the ten settings and arms the GRACE, and nothing else. WPF delays the
     /// scheduler by 60 s for a reason it states at <c>MainWindow/MainWindow.xaml.cs:622-623</c> —
     /// "prevents issues when restarting after an update while in a scheduled time window" — which
     /// is the difference between a user relaunching mid-window and being conditioned the instant
@@ -206,7 +206,24 @@ public sealed class SchedulerParticipant : IBackgroundParticipant
         var firstTick = !Volatile.Read(ref _gracePassed);
         Volatile.Write(ref _gracePassed, true);
         Arm(SessionScheduler.PollInterval);
-        Scheduler.SetPolling(_running && _owner.IsLive(_generation));
+
+        // The SECOND liveness check, and it is not belt-and-braces. Arm is two statements plus a
+        // clock call, and teardown runs on another thread: the generation can be cancelled between
+        // the check above and this line — which is the very window Arm's own post-check guards.
+        // Arm tears the new one-shot back down there, but the DECISION below is what starts a
+        // conditioning session, so it must be refused too. Found by the fact that reproduces that
+        // window (AGenerationCancelledWHILETheClockIsBeingAsked…): without this the tick went on to
+        // start a session with the host already draining.
+        //
+        // WPF's ordering is untouched — the next tick is on the clock before any decision runs
+        // (MainWindow.xaml.cs:634-635) — and this is the port's analogue of upstream's own
+        // HasShutdownStarted refusal at :629.
+        var live = _running && _owner.IsLive(_generation);
+        Scheduler.SetPolling(live);
+        if (!live)
+        {
+            return;
+        }
 
         if (firstTick)
         {

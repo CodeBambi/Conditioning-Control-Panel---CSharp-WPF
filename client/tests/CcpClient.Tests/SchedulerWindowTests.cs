@@ -39,7 +39,7 @@ public class SchedulerWindowTests
     {
         var doc = Doc("16:00", "22:00");
 
-        // WPF :689 — `currentTime >= startTime && currentTime < endTime`.
+        // WPF :691 — `currentTime >= startTime && currentTime < endTime`.
         Assert.False(ScheduleWindow.Read(doc, At(new TimeSpan(15, 59, 59))).InWindow);
         Assert.True(ScheduleWindow.Read(doc, At(new TimeSpan(16, 0, 0))).InWindow);
         Assert.True(ScheduleWindow.Read(doc, At(new TimeSpan(21, 59, 59))).InWindow);
@@ -56,8 +56,8 @@ public class SchedulerWindowTests
     [Fact]
     public void TheOvernightWrapIsHalfOpenTOO_AndItsENDIsTheCLOSEDOne()
     {
-        // WPF :684 — `currentTime >= startTime || currentTime < endTime`, taken because
-        // endTime < startTime (:682).
+        // WPF :686 — `currentTime >= startTime || currentTime < endTime`, taken because
+        // endTime < startTime (:683).
         var doc = Doc("22:00", "02:00");
         Assert.True(ScheduleWindow.Read(doc, At(new TimeSpan(22, 0, 0))).Overnight);
 
@@ -78,7 +78,7 @@ public class SchedulerWindowTests
     public void AnEqualStartAndEnd_IsAnEMPTYWindow_NeverAWholeDay()
     {
         // The single most plausible "helpful" mistake in this predicate: reading start == end as
-        // "always on". WPF's `<` at :682 is STRICT, so an equal pair takes the SAME-DAY branch and
+        // "always on". WPF's `<` at :683 is STRICT, so an equal pair takes the SAME-DAY branch and
         // the test becomes `t >= x && t < x` — false for every t there is.
         var doc = Doc("10:00", "10:00");
         var reading = ScheduleWindow.Read(doc, At(new TimeSpan(10, 0, 0)));
@@ -248,14 +248,14 @@ public class SchedulerWindowTests
         Assert.False(ScheduleWindow.Read(doc, At(new TimeSpan(22, 0, 0))).InWindow);
 
         // The reading carries the real value, which is the whole of this port's mitigation: the
-        // panel shows "8.00:00:00" where upstream writes a Debug line nobody reads (:692-693).
+        // panel shows "8.00:00:00" where upstream writes a Debug line nobody reads (:694-695).
         Assert.Equal("8.00:00:00", reading.Start.ToString());
     }
 
     [Fact]
     public void ANullTimeCanNeverReachTheParser_BecauseTheDocumentCoalescesItFirst()
     {
-        // WPF's setters do this (CCP.Core/Models/AppSettings.cs:2515, :2522), which is why the
+        // WPF's setters do this (CCP.Core/Models/AppSettings.cs:2514, :2521), which is why the
         // 16:00 fallback is reachable ONLY through non-null text a user typed.
         var doc = new SchedulerPresetDocument { Enabled = true, StartTime = null, EndTime = null };
 
@@ -274,7 +274,7 @@ public class SchedulerWindowTests
     {
         // The defaults are the model's (AppSettings.cs:2453, :2510, :2517, :2525-2569), not the
         // markup's — SchedulerFeatureControl.xaml:47 shows "16:00" as design-time text that
-        // LoadFromSettings overwrites on Loaded (.xaml.cs:42-43).
+        // LoadFromSettings overwrites on Loaded (.xaml.cs:43-44).
         var doc = new SchedulerPresetDocument();
 
         Assert.False(doc.Enabled);

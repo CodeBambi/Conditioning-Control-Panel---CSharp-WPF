@@ -152,7 +152,7 @@ public partial class MainWindow : Window
         Session.Engine.Changed += OnSessionEngineChanged;
 
         // SP-118: WPF minimizes to tray inside the same invoke as a scheduled start
-        // (MainWindow/MainWindow.StartStop.cs:614). Duck is the port's landed analogue — the shell
+        // (MainWindow/MainWindow.StartStop.cs:615). Duck is the port's landed analogue — the shell
         // is minimized and a tray icon with the full menu goes up, and nothing is ever HIDDEN
         // (ShellTray, §12 D35). The event arrives already marshalled onto this thread.
         Scheduler.AutoStarted += () => ShellTray.Duck();
