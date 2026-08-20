@@ -1,4 +1,5 @@
 using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Haptics;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
 using CcpClient.Desktop.Session;
@@ -66,6 +67,7 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     private readonly IVideoClipPool _pool;
     private readonly IVideoSurface _surface;
     private readonly Random _random;
+    private readonly IHapticLimb? _haptics;
     private CapabilityState? _lastPlayback;
 
     /// <param name="owner">This module's operation owner: one generation per armed schedule.</param>
@@ -75,6 +77,10 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     /// <param name="pool">Where the clips come from.</param>
     /// <param name="surface">Where the pictures go.</param>
     /// <param name="random">The jitter's source; injected so a fact can pin the arithmetic.</param>
+    /// <param name="haptics">SP-126: the haptic limb. It hears the clip START once the surface has
+    /// confirmed the picture, and the clip STOP on every path that takes it back off — which is
+    /// where this module deliberately does better than the source it ports (see
+    /// <see cref="OnDisarmed"/>).</param>
     public MandatoryVideoEffect(
         AsyncOperationOwner owner,
         EffectSignal signal,
@@ -82,7 +88,8 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
         PersistenceStore<MandatoryVideoPresetDocument> preset,
         IVideoClipPool pool,
         IVideoSurface surface,
-        Random? random = null)
+        Random? random = null,
+        IHapticLimb? haptics = null)
         : base(owner, signal, clock, "mandatory-video")
     {
         ArgumentNullException.ThrowIfNull(preset);
@@ -92,6 +99,7 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
         _pool = pool;
         _surface = surface;
         _random = random ?? new Random();
+        _haptics = haptics;
     }
 
     /// <inheritdoc/>
@@ -288,6 +296,16 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
             // dot must stop claiming a picture on this frame rather than at the next repaint.
             RaiseChanged();
         }
+        else
+        {
+            // SP-126, census sites 6 and 7. Upstream raises the continuous video layer at
+            // VideoService.cs:2580 (LibVLC) and VideoService.Browser.cs:452 (the default engine),
+            // both immediately under its own "Playback is REAL from here: a window (and, on the
+            // LibVLC path, a registered media player) exists" (:2567-2576). So this belongs on the
+            // Available arm and nowhere else: a clip that was ASKED for and never appeared must not
+            // start a vibration a user cannot account for.
+            _haptics?.VideoStarted();
+        }
 
         Fired?.Invoke(firing.Event);
     }
@@ -295,8 +313,32 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     /// <summary>
     /// Stop the clip. Unconditional and first on the way down, the same rule the audio modules'
     /// teardown follows: a panic must be able to clear the screen even with a wedged UI thread.
+    ///
+    /// <para><b>SP-126 — THE HAPTIC STOP IS HERE AS WELL AS IN <see cref="OnClipEnded"/>, AND THAT
+    /// IS A DELIBERATE DIVERGENCE FROM THE SOURCE (D203).</b> Upstream's
+    /// <c>StopVideoBackgroundVibeAsync</c> has exactly one caller in the whole shipping tree —
+    /// <c>Services/Video/VideoService.cs:6580</c>, inside <c>Cleanup()</c> — while
+    /// <c>ForceCleanup()</c>, whose own comment says <i>"Panic key / stuck-timer / session-switch
+    /// teardown routes through ForceCleanup (not Cleanup)"</i> (<c>:1970-1971</c>), carries no
+    /// haptic reference at all. The start passes no auto-zero (<c>:2580</c> into
+    /// <c>Services/Haptics/HapticService.cs:848</c>), so the layer latches unbounded: <b>panic-key a
+    /// clip upstream and the toy keeps humming.</b> And the comment sitting three lines below the
+    /// stop asserts the opposite guarantee — <i>"Runs on every teardown path (natural end, skip,
+    /// panic, attention retry) because CloseAll is the single funnel for all of them"</i>
+    /// (<c>:6581-6583</c>) — which is why nobody caught it on a read.</para>
+    ///
+    /// <para>This path is the port's real teardown funnel: <c>Disarm()</c> reaches it
+    /// (<c>Session/OwnedSessionEffect.cs:220</c>), <c>SessionEngine.Stop()</c> disarms every module,
+    /// and the session participant's own stop calls that. It does NOT reach
+    /// <see cref="OnClipEnded"/>, because <c>Effects/VideoSurfacePresenter.cs</c> clears the ended
+    /// callback rather than invoking it — so a limb that stopped only there would repeat upstream's
+    /// defect exactly.</para>
     /// </summary>
-    protected override void OnDisarmed() => _surface.End();
+    protected override void OnDisarmed()
+    {
+        _surface.End();
+        _haptics?.VideoStopped();
+    }
 
     /// <summary>
     /// Narrow the arm result to what this row can honestly claim. THREE outcomes, and they are
@@ -372,6 +414,9 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     private void OnClipEnded()
     {
         RefreshSchedule();
+        // SP-126, census site 12: the natural end, the max-length cap, and the surface stopping
+        // holding the picture. The other half of the stop is OnDisarmed, and BOTH are needed.
+        _haptics?.VideoStopped();
         RaiseChanged();
     }
 }

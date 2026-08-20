@@ -1,4 +1,5 @@
 using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Haptics;
 using CcpClient.Desktop.Overlay;
 using CcpClient.Desktop.Session;
 
@@ -110,6 +111,7 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     private readonly Func<OverlayBounds?> _display;
     private readonly Func<FlashDraw> _draw;
     private readonly Random _random;
+    private readonly IHapticLimb? _haptics;
     private readonly List<IDisposable> _pending = [];
 
     /// <param name="clock">The session clock: the stagger, the lifetime and the topmost cadence all
@@ -124,6 +126,9 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     /// <param name="draw">The Visuals row's three dials, read once per flash (SP-117). Null means
     /// <see cref="FlashDraw.Defaults"/> — WPF's shipped numbers, which is what this presenter drew
     /// with before the dials existed.</param>
+    /// <param name="haptics">SP-126: the haptic limb, told once per PLACED IMAGE. Null is ABSENT
+    /// rather than silent — a build with no limb never reaches the sink at all, and the difference
+    /// between "no limb here" and "the limb decided nothing" must stay legible.</param>
     public FlashSurfacePresenter(
         ISessionClock clock,
         Action<Action> dispatch,
@@ -131,7 +136,8 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         IFlashFrameSource frames,
         Func<OverlayBounds?> display,
         Random? random = null,
-        Func<FlashDraw>? draw = null)
+        Func<FlashDraw>? draw = null,
+        IHapticLimb? haptics = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(dispatch);
@@ -144,17 +150,20 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         _display = display;
         _draw = draw ?? (static () => FlashDraw.Defaults);
         _random = random ?? new Random();
+        _haptics = haptics;
         _surfaces = new OverlaySurfaceSet(clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence);
     }
 
     /// <summary>The product composition: the real overlay backend for this platform, the GDI+
     /// frame source, and the OS's own primary display.</summary>
     public static FlashSurfacePresenter Product(
-        ISessionClock clock, Action<Action> dispatch, Random? random = null, Func<FlashDraw>? draw = null) =>
+        ISessionClock clock, Action<Action> dispatch, Random? random = null, Func<FlashDraw>? draw = null,
+        IHapticLimb? haptics = null) =>
         new(clock, dispatch, OverlayPresenceFactory.Create, new GdiPlusFlashFrameSource(),
             static () => OverlayDisplays.Enumerate() is [var primary, ..] ? primary.Bounds : null,
             random,
-            draw);
+            draw,
+            haptics);
 
     /// <summary>How many surfaces this presenter believes are on screen right now. Its OWN
     /// bookkeeping, never <see cref="IOverlayPresence.IsPresenting"/>.</summary>
@@ -296,6 +305,13 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         // failure OverlayInputNotPassingThrough exists to refuse (SP-100 divergence).
         var request = new OverlaySurfaceRequest(placement, draw.Opacity, ClickThrough: true);
         _surfaces.Place(slot, request, frame, draw.Lifetime);
+
+        // SP-126, census sites 1-3. WPF fires FlashDecayVibeAsync() from all THREE of
+        // SpawnFlashWindow's mutually exclusive spawn arms (FlashService.cs:1453, :1480, :1516) —
+        // one ladder per WINDOW, not one per flash — and each call replaces the ladder already
+        // running (HapticService.cs:774-776). AFTER the placement, because upstream's arms fire
+        // once the window exists, and because a decode that produced no pixels returned above.
+        _haptics?.FlashPlaced();
     }
 
     private sealed class PendingShow : IDisposable

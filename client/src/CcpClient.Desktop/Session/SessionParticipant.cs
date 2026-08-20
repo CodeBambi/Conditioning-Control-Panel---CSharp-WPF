@@ -1,6 +1,7 @@
-using CcpClient.Desktop.Audio;
+﻿using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Features.Dtrh;
+using CcpClient.Desktop.Haptics;
 using CcpClient.Desktop.Input;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
@@ -82,7 +83,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         Random? bubbleCountRandom = null,
         Func<InputBounds>? bubbleCountPlacement = null,
         IBubblePopSurface? bubblePopSurface = null,
-        IBouncingTextSurface? bouncingTextSurface = null)
+        IBouncingTextSurface? bouncingTextSurface = null,
+        IHapticLimb? haptics = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -226,7 +228,15 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // SP-117: the presenter now PULLS the Visuals row's three dials at the moment a flash is
         // shown, instead of drawing with three constants. A build with no document draws with
         // FlashDraw.Defaults, which are the same three numbers it used before.
-        _surface = surface ?? FlashSurfacePresenter.Product(sessionClock, Dispatch, draw: Visuals.Draw);
+        // SP-126: the haptic limb reaches FIVE statements in this composition and no others — the
+        // census's five port trigger points (client/docs/haptic-limb-census.md §3.1). It is OWNED by
+        // the app-scoped HapticParticipant, beside the sink it drives, and threaded here rather than
+        // constructed here: a session that built its own would be a SECOND sink the day a provider
+        // route is admitted, which is two clients against one server.
+        Haptics = haptics;
+
+        _surface = surface ?? FlashSurfacePresenter.Product(
+            sessionClock, Dispatch, draw: Visuals.Draw, haptics: haptics);
         _subliminalSurface = subliminalSurface ?? SubliminalSurfacePresenter.Product(sessionClock, Dispatch);
 
         // SP-105: the continuous module's surface. It takes the same clock as the other two, and
@@ -260,7 +270,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // SP-115: the per-pixel-alpha surface. Its cadence lives in the presenter for SP-106's
         // reason - a cadence that keeps a SURFACE correct is the surface's - and the module itself
         // takes no clock at all.
-        _bouncingTextSurface = bouncingTextSurface ?? BouncingTextSurfacePresenter.Product(sessionClock, Dispatch);
+        _bouncingTextSurface = bouncingTextSurface ?? BouncingTextSurfacePresenter.Product(sessionClock, Dispatch, haptics);
 
         Flash = new FlashImagesEffect(
             infra.OwnerFor("FlashImages"),
@@ -289,7 +299,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
             // Injectable for the same reason every other module's Random is: the SPACING is what a
             // fact has to make deterministic, and the arithmetic it is fed into must stay the
             // module's own rather than a number a test double re-derives.
-            videoRandom);
+            videoRandom,
+            haptics);
 
         Subliminals = new SubliminalsEffect(
             infra.OwnerFor("Subliminals"),
@@ -298,7 +309,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
             new SubliminalPhrasePool(_subliminalPreset),
             _subliminalPreset,
             random: null,
-            surface: _subliminalSurface);
+            surface: _subliminalSurface,
+            haptics: haptics);
 
         Spiral = new SpiralOverlayEffect(
             infra.OwnerFor("SpiralOverlay"),
@@ -631,6 +643,20 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// (<c>Views/Tabs/StudioTabView.xaml.cs:494-496</c>).</para>
     /// </summary>
     public VisualsDials Visuals { get; }
+
+    /// <summary>
+    /// SP-126: the haptic limb this session's five trigger points command, or null when none was
+    /// supplied.
+    ///
+    /// <para><b>It is NOT owned here.</b> The limb belongs to the app-scoped
+    /// <c>Haptics/HapticParticipant</c>, beside the sink it drives, because upstream's mixer is a
+    /// member of the app's own haptic service and outlives every session
+    /// (<c>ConditioningControlPanel/App.xaml.cs:2060</c>; zero hits for <c>App.Haptics</c> in
+    /// <c>MainWindow/MainWindow.StartStop.cs</c>). This property exists so the composition can be
+    /// ASSERTED rather than assumed: a root that quietly stopped passing the limb would leave every
+    /// module silent and look identical from outside.</para>
+    /// </summary>
+    public IHapticLimb? Haptics { get; }
 
     /// <summary>The Visuals row's persisted store, same reason as the others.</summary>
     public PersistenceStore<VisualsPresetDocument> VisualsPreset => _visualsPreset;

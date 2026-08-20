@@ -206,18 +206,32 @@ public sealed record HapticServerObservation(
 /// That is a named manual gate (<c>HapticSinkFactory.DeviceManualGate</c>) and no automated step on
 /// any platform discharges it.</para>
 ///
-/// <para><b>Nothing in this build sends anything to this sink.</b> Upstream drives it from
-/// THIRTEEN sites in three of the ported effect modules — every call that COMMANDS the sink, which
-/// is the enumeration a later packet has to work from:
-/// <c>Services/Flash/FlashService.cs:1453,1480,1516,1627,1915</c>;
-/// <c>Services/Video/VideoService.cs:2580,4585,4673,6580</c>;
-/// <c>Services/Subliminal/SubliminalService.cs:230,297,387,588</c>. Giving those modules a haptic
-/// limb is a later packet's work. A landed capability is not a working feature.</para>
+/// <para><b>SP-126: FIVE statements in the effect spine now COMMAND this sink</b>, through
+/// <see cref="IHapticLimb"/> and <see cref="HapticLimb"/> — a flash image placed, a clip really
+/// playing, a clip off the screen, a subliminal card shown, a bouncing word hitting an edge.
+/// Upstream drives haptics from <b>EIGHTEEN</b> sites in the whole
+/// <c>Services/{Flash,Video,Subliminal}</c> family; ten have a port trigger point and reach those
+/// five statements, eight are absent-by-decision. The enumeration, its method and every decision's
+/// quoted words are <c>client/docs/haptic-limb-census.md</c>, pinned by
+/// <c>HapticSiteCensusTests</c>, which re-derives the candidate set from the shipping bytes rather
+/// than trusting a figure typed into a comment. <b>This paragraph used to say THIRTEEN over three
+/// named files</b>, which was the count before the searched universe widened from a file list to
+/// the three directories — corrected at SP-120 and rewritten here at SP-126 (D202).</para>
 ///
-/// <para><b>Four more sites are ADJACENT and are deliberately not in the thirteen</b>, named here so
-/// nobody has to re-derive why: <c>VideoService.cs:2584</c> and <c>:6584</c> drive
-/// <c>App.Haptics.FunScript</c>, a script player this port has not ported at all; and
-/// <c>VideoService.cs:4567</c> and <c>:4680</c> subscribe to <c>ToyInput.ButtonPressed</c>, which is
+/// <para><b>Nothing is DELIVERED, and the reason is now one rung further out.</b> It is no longer
+/// that the modules are silent; it is that the limb has nothing to address.
+/// <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, so no server was ever asked, so no
+/// <see cref="HapticServerObservation"/> names a device, so <see cref="SetOutputsAsync"/> is never
+/// reached. <b>A landed capability is not a working feature</b>, and a limb commanding a sink with
+/// no device is a limb, not a feature.</para>
+///
+/// <para><b>Two of the eighteen are unported for a reason that is about a PROGRAM rather than a
+/// moment</b>, named here so nobody re-derives it: <c>VideoService.cs:2584</c> and <c>:6584</c> (and
+/// <c>VideoService.Browser.cs:453</c>) hand a <c>.funscript</c> sidecar to
+/// <c>App.Haptics.FunScript</c>,
+/// a script player this port has not ported at all. Two further lines nearby are NOT among the
+/// eighteen at all because they fail the outward-flow test: <c>VideoService.cs:4567</c> and
+/// <c>:4680</c> subscribe to <c>ToyInput.ButtonPressed</c>, which is
 /// haptic INPUT — the toy driving the app — and runs the opposite way through this seam. Settings
 /// reads (<c>FlashService.cs:1602-1607</c>, <c>VideoService.cs:4649-4651</c>,
 /// <c>SubliminalService.cs:584</c>) are not commands and are not counted.</para>

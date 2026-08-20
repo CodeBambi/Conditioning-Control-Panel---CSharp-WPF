@@ -1,5 +1,6 @@
-using CcpClient.Desktop.Capabilities;
+﻿using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Glyph;
+using CcpClient.Desktop.Haptics;
 using CcpClient.Desktop.Session;
 
 namespace CcpClient.Desktop.Effects;
@@ -82,6 +83,7 @@ public sealed class BouncingTextSurfacePresenter : IBouncingTextSurface, IDispos
     private readonly IGlyphTextSource _text;
     private readonly Func<(int X, int Y, int Width, int Height)?> _display;
     private readonly Func<Random> _randomFactory;
+    private readonly IHapticLimb? _haptics;
     private readonly object _gate = new();
 
     private IGlyphSurface? _surface;
@@ -108,7 +110,8 @@ public sealed class BouncingTextSurfacePresenter : IBouncingTextSurface, IDispos
         Func<IGlyphSurface> surfaceFactory,
         IGlyphTextSource text,
         Func<(int X, int Y, int Width, int Height)?> display,
-        Func<Random> randomFactory)
+        Func<Random> randomFactory,
+        IHapticLimb? haptics = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(dispatch);
@@ -122,16 +125,19 @@ public sealed class BouncingTextSurfacePresenter : IBouncingTextSurface, IDispos
         _text = text;
         _display = display;
         _randomFactory = randomFactory;
+        _haptics = haptics;
     }
 
     /// <summary>The product composition: the real per-pixel-alpha backend for this platform, the
     /// GDI+ rasteriser, and the OS's own primary display.</summary>
-    public static BouncingTextSurfacePresenter Product(ISessionClock clock, Action<Action> dispatch) =>
+    public static BouncingTextSurfacePresenter Product(
+        ISessionClock clock, Action<Action> dispatch, IHapticLimb? haptics = null) =>
         new(clock, dispatch, GlyphSurfaceFactory.Create, new GdiPlusGlyphTextSource(),
             static () => Overlay.OverlayDisplays.Enumerate() is [var primary, ..]
                 ? (primary.Bounds.X, primary.Bounds.Y, primary.Bounds.Width, primary.Bounds.Height)
                 : null,
-            static () => new Random());
+            static () => new Random(),
+            haptics);
 
     /// <inheritdoc/>
     public bool Showing
@@ -230,7 +236,8 @@ public sealed class BouncingTextSurfacePresenter : IBouncingTextSurface, IDispos
                 presentation,
                 display.Value,
                 word => _text.Measure(word, presentation),
-                _randomFactory());
+                _randomFactory(),
+                _haptics);
         }
 
         var placed = PlaceCurrent(firstPlacement: true);
