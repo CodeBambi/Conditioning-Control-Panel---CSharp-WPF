@@ -37,8 +37,12 @@ five are arithmetically exact.** I did not assume that interpretation: the first
 4 Trainer Card = 3.5% this feature.** Six of them are rack panels for three modules this port has
 already shipped. SP-125 found its named directory 42% foreign; this one is **96.5% foreign**. And
 the row names five directories while **missing the one the feature lives in**: the Trainer Card is
-twelve partial-class members of `MainWindow` (`MainWindow.Profile*.cs` = 3060 lines, plus
-Leaderboard 1855 and AchievementsTab 832), which is why a directory-shaped row could not see it.
+twelve partial-class members of `MainWindow`: the eight `MainWindow.Profile*.cs` (3060 lines),
+`MainWindow.Leaderboard.cs` (1451), `MainWindow.LeaderboardFx.cs` (404), `MainWindow.AchievementsTab.cs`
+(832), and — the twelfth, which an earlier draft of this record left out of its parenthetical and
+which appears in census §1.7 — `MainWindow.TabFxPresetsQuestsAchievements.cs` (831), a **shared** tab
+file covering FX presets, quests *and* achievements, so only partly this surface. Twelve partials is
+why a directory-shaped row could not see this feature at all.
 
 A wrong number gets corrected. A right number that means something else gets trusted — which is why
 this is the headline rather than a footnote.
@@ -85,7 +89,7 @@ verbatim.** The board row is right that the call is load-bearing and right that 
 normalises nothing (`GamificationBridge.cs:602` adds `e.Category` raw) into a **default**
 `HashSet<string>` (`AchievementProgress.cs:169`) — ordinal, case-sensitive. The two producers of that
 one deliberately source-agnostic event disagree: the intake normalises, and
-`QuizWindow.xaml.cs:542`'s `catDef?.Id ?? result.Category.ToString()` does not, its fallback being
+`QuizWindow.xaml.cs:540`'s `catDef?.Id ?? result.Category.ToString()` does not, its fallback being
 the PascalCase enum (`QuizCategory.cs:6-13`). `"sissy"` and `"Sissy"` would be two entries against
 `HonorRollCategories = 3`, so **`honor_roll` unlocks early, silently, and permanently** — the set is
 persisted to `achievements.json`.
@@ -149,13 +153,14 @@ The departure and its cause are stated in the test file's own summary, not only 
 
 ## 8. Floor
 
-Pin **2332 unit / 144 headless**. Declared delta **+19 unit / +0 headless**
-(`floor-delta.json`). Expected observed total **2351 / 144** — pin plus declared delta, which is the
+Pin **2332 unit / 144 headless**. Declared delta **+20 unit / +0 headless**
+(`floor-delta.json`). Expected observed total **2352 / 144** — pin plus declared delta, which is the
 expected reading for a lane and not a failure. `client/tests/floor/floor.json` was never edited.
 
-**Non-vacuity proved rather than asserted:** three drifts were seeded into the census document
-(`Views/Controls` 114→113, `registry-items` 79→60, `HonorRollCategories` 3→4) and exactly the three
-intended facts went red; the document was restored and all 19 pass.
+**Non-vacuity proved rather than asserted, twice.** Four drifts were seeded into the census document
+and each red exactly the intended fact: `Views/Controls` 114→113, `registry-items` 79→60,
+`HonorRollCategories` 3→4, and — at code review — `unnormalised-producer-line` 540→**542**, which is
+the precise citation defect review caught. The document was restored each time and all 20 pass.
 
 ## 9. What this does NOT prove
 

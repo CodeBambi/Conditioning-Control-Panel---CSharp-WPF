@@ -12,7 +12,7 @@ subsystem or an owner decision about what leaves the machine.
 
 **And the board row's evidence is wrong in a way that a wrong number would not have been.** Four of
 its five counts are arithmetically CORRECT (§1.2). The row is still misleading, because its
-headline number counts a directory that is **96.5% other people's features** (§1.3). A wrong number
+headline number counts a directory that is **96.5% other people's features** — 109 of its 113 (§1.3; 95.6% of the directory as it stands today, §9.5). A wrong number
 gets corrected; a right number that means something else gets trusted.
 
 ---
@@ -70,7 +70,7 @@ git diff --diff-filter=A --name-only 42286638c^1 42286638c -- ConditioningContro
 | root | **4** | `AdornedAvatar.xaml(.cs)`, `ProfilePrivacyPanel.xaml(.cs)` — **the only Trainer Card files in the number.** |
 
 **4 of 113 = 3.5%.** This is SP-125's `Services/Fyp/Online/` finding at more than double the
-severity — that one was 42% foreign, this one is **96.5% foreign**. A packet authored against "port
+severity — that one was 42% foreign, this one is **96.5% foreign** (109 of the 113 added; 109 of 114 = 95.6% of the directory today, §9.5). A packet authored against "port
 `Views/Controls/`" would port the AI companion surface, the settings pages, and three rack panels
 the port already has.
 
@@ -136,6 +136,7 @@ Roots walked recursively; the two counts agree in every tree (no untracked bytes
 |---|---|---|---|
 | `MainWindow/MainWindow.Profile*.cs` | 8 | 3060 | The card itself, the wardrobe host, the vat, the bubble |
 | `MainWindow/MainWindow.{Leaderboard,LeaderboardFx,AchievementsTab}.cs` | 3 | 2687 | Leaderboard + achievements tab |
+| `MainWindow/MainWindow.TabFxPresetsQuestsAchievements.cs` | 1 | 831 | The twelfth partial. **SHARED** — FX presets, quests AND achievements, so only partly this surface; counted here, never folded into §6.1 |
 | `Services/Profile/` | 3 | 968 | `CosmeticsCatalog` 406, `WardrobeCatalog` 431, `WardrobeStageGeometry` 131 |
 | `Services/Progression/` | 10 | 6574 | `AchievementService` 1130, `QuestService` 1338, `SkillTreeService` 983, `LeaderboardService` 771, … |
 | `Services/GamificationBridge.cs` | 1 | 648 | The consumer this packet's cross-reference is about |
@@ -199,7 +200,7 @@ persisted, nothing that awards.
 | C2 | grade % = `MaxScore > 0 ? Total/Max*100 : 0` | `IntakeHostService.cs:426` | `IntakeQuizRun.cs:142-143` | **PRESENT** |
 | C3 | perfect guard `MaxScore > 0 && pct >= bar` | `IntakeHostService.cs:434` | `IntakeQuizRun.cs:147-148` | **PRESENT** |
 | C4 | category normalisation | `IntakeHostService.cs:427-429` | `IntakeQuizRun.cs:153-154` | **PRESENT — verbatim** (§5.1) |
-| C5 | mantra credit `min(affirmed, 5)` | `IntakeHostService.cs:438` | `IntakeQuizRun.cs:158-159` | **PRESENT** |
+| C5 | mantra credit `min(affirmed, 5)` | `IntakeHostService.cs:451` | `IntakeQuizRun.cs:158-159` | **PRESENT** |
 | C6 | `QuizService.QuizCompleted` static event | `Services/Quiz/QuizService.cs:29` | — | **ABSENT** |
 | C7 | `QuizService.RaiseQuizCompleted(...)` | `Services/Quiz/QuizService.cs:32-35` | — | **ABSENT** — the port logs instead (`IntakeHostWindow.axaml.cs:541-543`) |
 | C8 | `QuizCompletedEventArgs` | `CCP.Core/Models/Quiz/QuizCompletedEventArgs.cs:6` | — | **ABSENT** |
@@ -210,7 +211,7 @@ persisted, nothing that awards.
 | C13 | `ProgressionData.QuizzesPassed` / `QuizFailStreak` | `GamificationBridge.cs:586-593` | — | **ABSENT** |
 | C14 | `AchievementProgress.PerfectedQuizCategories` | `CCP.Core/Models/AchievementProgress.cs:169` | — | **ABSENT** |
 | C15 | `Ach.TryUnlockExclusive(id)` | `GamificationBridge.cs:589,595,600,605` | — | **ABSENT** |
-| C16 | `Ach.MarkDirty()` | `GamificationBridge.cs:608` | — | **ABSENT** |
+| C16 | `Ach.MarkDirty()` | `GamificationBridge.cs:609` | — | **ABSENT** |
 
 **The board row's claim that SP-058 "computes and logs … but raises nothing" is VERIFIED.** The
 exact seam a next packet attaches to is `client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs:541-543`,
@@ -224,8 +225,8 @@ against its own stated baseline `0c9947a6` (v6.7.4) as well as today's tree:
 | Port comment | Claims | At `0c9947a6` that line is | Verdict |
 |---|---|---|---|
 | `IntakeQuizRun.cs:150` | normalisation at `:418-420` | `:418` blank, `:419-420` the raise call; normalisation is **`:415-417`** | **WRONG by 3** |
-|  `IntakeQuizRun.cs:145` | perfect guard at `:417` | `:417` is `: run.Niche.Trim().ToLowerInvariant();`; the guard is **`:422`** | **WRONG by 5** |
-| `IntakeQuizRun.cs:142-143` | grade at `:414` | `:414` **is** `var pct = …` | correct |
+| `IntakeQuizRun.cs:145` | perfect guard at `:417` | `:417` is `: run.Niche.Trim().ToLowerInvariant();`; the guard is **`:422`** | **WRONG by 5** |
+| `IntakeQuizRun.cs:141` | grade at `:414` | `:414` **is** `var pct = …` | correct |
 
 `client/src/**` was CLOSED to this packet, so these are reported, not fixed. Today the same members
 sit at `:427-429` and `:434`.
@@ -264,7 +265,7 @@ consumer normalises nothing and the set that holds the categories is case-sensit
 | The distinct set | `public HashSet<string> PerfectedQuizCategories { get; set; } = new();` — a **default** `HashSet<string>`, i.e. `EqualityComparer<string>.Default`: **ordinal, case-sensitive, whitespace-sensitive** | `CCP.Core/Models/AchievementProgress.cs:169` |
 | The consumer | `p.PerfectedQuizCategories.Add(e.Category)` — **the raw category, no trim, no case fold** | `Services/GamificationBridge.cs:602` |
 | Source A (intake) | `run.Niche.Trim().ToLowerInvariant()` — **normalised** | `Services/Quiz/IntakeHostService.cs:427-429` |
-| Source B (classic quiz) | `var categoryId = catDef?.Id ?? result.Category.ToString();` — **not normalised** | `Windows/QuizWindow.xaml.cs:542` |
+| Source B (classic quiz) | `var categoryId = catDef?.Id ?? result.Category.ToString();` — **not normalised** | `Windows/QuizWindow.xaml.cs:540` |
 
 **The two sources of one deliberately source-agnostic event disagree about normalisation.** Source
 B's fallback is `QuizCategory.ToString()`, and that enum is PascalCase — `Sissy`, `Bambi`,
@@ -327,6 +328,25 @@ is BUILDABLE-IN-PART and clause 3 is not reached.
 It is user-observable: a user completes a graded intake and the app records an award it did not
 record before.
 
+**THE THINNEST JOINT IN THIS DERIVATION, named rather than asserted.** Everything else in the
+verdict is mechanical — the labels come from the five-cell rule, and clauses 1-3 are applied in a
+fixed order. Clause 2's *"independently user-observable"* is the one predicate that is a judgement,
+and this unit sits close to its edge: **the award is written to a store that, by row B1, nothing in
+the port can render.** A user would see the effect only through whatever surface the next packet
+gives it, or by opening the file.
+
+Two things keep it on the right side of the line, and a reader is entitled to weigh them
+differently. (1) The alternative reading — that nothing is user-observable until the Trainer Card
+page exists — would make clause 2 unreachable for every unit of this surface and collapse the
+verdict to REFUSED by a definition rather than by the code, which is the failure mode plan §12.1 was
+amended to avoid. (2) An award ledger is the thing B4's "earn-it-to-wear-it" and the achievements
+tab both consume, so building it first is what makes the *next* row renderable rather than being a
+write into nowhere.
+
+**If the owner reads clause 2 more strictly, the verdict is REFUSED with exactly the same
+inventory** — §6.1 stays the first thing to build either way, and nothing else in this census moves.
+That is the honest bound on the one soft predicate here.
+
 ### 6.2 Named residue, so nothing is lost
 
 | Item | Disposition |
@@ -358,9 +378,18 @@ is on the sizable side. This section is not.
 `Dialogs/ProfilePrivacyDialog.xaml.cs` hosts `Views/Controls/ProfilePrivacyPanel.xaml.cs`, whose
 **11 toggles** (`:43-74`) govern Discord rich presence, online status, level display, achievement
 and level-up sharing, DM permission, profile picture sharing, real-avatar publication, and three
-Goon-Game sharing switches. The leaderboard itself POSTs and GETs against
-`https://codebambi-proxy.vercel.app` (`Services/Progression/LeaderboardService.cs:16`, requests at
-`:106` and `:174`), carrying `X-Client-Version` and a product user-agent (`:64-65`).
+Goon-Game sharing switches. The leaderboard itself makes **two GET requests and no POST** against
+`https://codebambi-proxy.vercel.app` (`Services/Progression/LeaderboardService.cs:16`): the board
+fetch at `:106`, whose URL carries the user's own `unified_id` (`:103-105`), and a display-name
+lookup at `:174` (`:173`). Both carry `X-Client-Version` and a product user-agent (`:64-65`).
+
+**Corrected at code review, and the correction sharpens the finding rather than softening it.** An
+earlier draft of this paragraph said "POSTs and GETs"; there is **no `PostAsync` anywhere in
+`LeaderboardService.cs`**, and no upload path appears in that service at all. What leaves the
+machine here is therefore an identifier, a display name and a version — not a score upload — and
+where the score submission happens is a question this census did not answer and does not guess at.
+The owner-flagged conclusion is unchanged: an identifier plus headers going to a remote endpoint is
+outbound identity, whatever the verb.
 
 Unlike SP-125's finding this is a **first-party** endpoint, not an unofficial third-party API, so
 the question is narrower — but it is still the port's first outbound identity-sharing surface, and
@@ -402,6 +431,12 @@ contract. **Q2 and Q3 are the gated pair**, and they are what §7.1 is about.
 - **The consumer enumeration (§4) is 16 members found by grep and by reading `GamificationBridge`'s
   quiz path.** A member reached by reflection, by a source generator, or through a data-bound XAML
   path would not appear.
+- **The 96.5% is NOT re-derived by any test.** It is `109/113` over the merge delta, and the delta
+  comes from `git diff --diff-filter=A` against one historical commit. The guard re-derives the
+  directory share instead — `109/114 = 95.6%`, pinned exactly in §9.5 — so a reader trusting a
+  machine-checked number should use that one. Both are stated with their denominator named because
+  they answer different questions: the row's claim was about the delta, the port's work is about the
+  directory.
 - **The delta interpretation in §1.2 rests on one merge commit.** I tested two candidate ranges and
   reported both; if the row's author used a third, the row's numbers might have meant something
   else again, and my directory totals would still stand because those are measured from the bytes.
@@ -461,3 +496,37 @@ editing this document can never shrink the search.
 | upstream-does-not-normalise | Windows/QuizWindow.xaml.cs |
 | distinct-set-comparer | default |
 | port-normalisation-matches | true |
+
+**The LINE NUMBERS the defect chain rests on, re-derived from the bytes on every run.** Added at
+code review. §9.4 originally pinned paths only, and the guard regex-matched the producer expression
+*anywhere in the file* — so the suite was green while three citations in this document were wrong,
+one of them the `:540` in §5.2 and D213. **A pin that cannot see the number it is protecting is not
+protecting it**, and this is the coverage gap that let a citation defect ride inside the packet whose
+own §4.1 grades someone else's comments for exactly that.
+
+| Key | Value |
+|---|---|
+| unnormalised-producer-line | 540 |
+| distinct-set-add-line | 602 |
+| normalising-producer-line | 429 |
+| unnormalised-producer-expression-occurrences | 4 |
+
+### 9.5 The split that carries the finding — pinned EXACTLY, not behind a threshold
+
+Added at code review. The published headline share was `109/113` over the **merge delta**, while the
+guard re-derived `109/114` over **today's directory** and then asserted only `> 0.90` — so the claim
+would have survived a drift all the way to 91%. Both numbers are now stated with their denominator
+named, and the re-derivable one is pinned to the tenth of a percent.
+
+| Key | Value |
+|---|---|
+| views-controls-total | 114 |
+| views-controls-foreign | 109 |
+| views-controls-trainer-card | 4 |
+| views-controls-foreign-share-percent | 95.6 |
+
+**`views-controls-foreign-share-percent` is `109/114` of the directory as it stands today, and every
+term in it is re-derived from the shipping bytes on every run.** The **96.5%** quoted in §1.3 and in
+D211 is the same ratio over the row's own denominator — `109/113` of the merge delta — which comes
+from `git diff --diff-filter=A` and is therefore historical: **no test re-derives it**, and §8 says
+so. The two numbers differ only because `HapticUiModels.cs` predates the merge.

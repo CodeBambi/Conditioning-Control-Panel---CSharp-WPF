@@ -121,17 +121,23 @@ public sealed class TrainerCardCensusTests
                       + CountFilesUnder(reference.Wpf, "Views/Controls/Studio");
 
         Assert.True(foreign < total, "the subtrees cannot exceed the tree that contains them");
+        // The share is pinned EXACTLY, not behind a threshold. Code review's point: a `> 0.90`
+        // assertion would have survived a drift from 95.6% all the way to 91%, and the share IS the
+        // claim. Every term below re-derives from the shipping bytes.
+        var declared = ParseKeyValueTable(reference.Census, "### 9.5");
+        Assert.Equal(declared["views-controls-total"], total.ToString());
+        Assert.Equal(declared["views-controls-foreign"], foreign.ToString());
 
-        var foreignShare = (double)foreign / total;
-        Assert.True(foreignShare > 0.90,
-            $"Views/Controls is {foreignShare:P1} other features; the census's claim that scoping this " +
-            "surface to that directory is wrong rests on that share staying overwhelming");
+        var sharePercent = Math.Round(foreign * 100.0 / total, 1);
+        Assert.Equal(declared["views-controls-foreign-share-percent"],
+            sharePercent.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
 
         // The four Trainer Card files are found by PREFIX over the directory, never as a list.
         var trainerCard = TopLevelNamesUnder(reference.Wpf, "Views/Controls")
             .Where(n => n.StartsWith("AdornedAvatar", StringComparison.Ordinal)
                         || n.StartsWith("ProfilePrivacyPanel", StringComparison.Ordinal))
             .ToList();
+        Assert.Equal(declared["views-controls-trainer-card"], trainerCard.Count.ToString());
         Assert.Equal(4, trainerCard.Count);
     }
 
@@ -247,6 +253,58 @@ public sealed class TrainerCardCensusTests
         var declared = ParseKeyValueTable(reference.Census, "### 9.4");
         Assert.Equal("true", declared["port-normalisation-matches"]);
     }
+    /// <summary>The fact the D213 chain actually rests on, added at code review.
+    ///
+    /// <para>§9.4 originally pinned PATHS only, and
+    /// <see cref="TheTwoRaiseSites_DisagreeAboutNormalising_AndTheDistinctSetIsOrdinal"/> matches the
+    /// producer expression ANYWHERE in the file. That is green whether the census cites the right
+    /// line or not — and it was not: three citations in the census were wrong, one of them the
+    /// unnormalised producer's own line in §5.2 and in D213, the most owner-facing number in the
+    /// packet. A pin that cannot see the number it is protecting is not protecting it.</para>
+    ///
+    /// <para><b>And this fact immediately earned itself.</b> The expression
+    /// <c>catDef?.Id ?? result.Category.ToString()</c> occurs FOUR times in <c>QuizWindow.xaml.cs</c>
+    /// — the history entry, a settings write, the raise path, and a session-text generator — so a
+    /// grep-written citation lands on the FIRST one and is wrong by 63 lines. The raise-path site is
+    /// therefore pinned STRUCTURALLY, as the line immediately above the file's single
+    /// <c>RaiseQuizCompleted</c> call, which is what the citation actually means and what survives
+    /// upstream drift.</para></summary>
+    [Fact]
+    public void TheDefectChainsLineNumbers_ReDeriveFromTheShippingBytes()
+    {
+        var reference = RequireReference();
+        var declared = ParseKeyValueTable(reference.Census, "### 9.4");
+
+        var quizWindow = ReadShippingFile(reference.Wpf, "Windows/QuizWindow.xaml.cs");
+        var bridge = ReadShippingFile(reference.Wpf, "Services/GamificationBridge.cs");
+        var intake = ReadShippingFile(reference.Wpf, "Services/Quiz/IntakeHostService.cs");
+
+        // "The raise" is well-defined: QuizWindow makes exactly one.
+        Assert.Equal(1, OccurrenceCount(quizWindow, @"QuizService\.RaiseQuizCompleted\("));
+        var raiseLine = LineNumberOf(quizWindow, @"QuizService\.RaiseQuizCompleted\(");
+
+        // The unnormalised producer is the line immediately above it.
+        var producerLine = raiseLine - 1;
+        Assert.Matches(@"var\s+categoryId\s*=\s*catDef\?\.Id\s*\?\?\s*result\.Category\.ToString\(\)",
+            LineAt(quizWindow, producerLine));
+        Assert.Equal(declared["unnormalised-producer-line"], producerLine.ToString());
+        Assert.DoesNotContain("ToLowerInvariant", LineAt(quizWindow, producerLine), StringComparison.Ordinal);
+
+        // The trap that produced the wrong citation, pinned so it cannot be forgotten: the bare
+        // expression is NOT unique in this file, and only one of its sites feeds the raise.
+        Assert.Equal(declared["unnormalised-producer-expression-occurrences"],
+            OccurrenceCount(quizWindow, @"catDef\?\.Id\s*\?\?\s*result\.Category\.ToString\(\)").ToString());
+
+        // The distinct-set add that takes the category raw.
+        var addLine = LineNumberOf(bridge, @"PerfectedQuizCategories\.Add\(e\.Category\)");
+        Assert.Equal(declared["distinct-set-add-line"], addLine.ToString());
+        Assert.Equal(1, OccurrenceCount(bridge, @"PerfectedQuizCategories\.Add\(e\.Category\)"));
+
+        // The normalising producer, so both halves of the asymmetry are pinned by number.
+        var normalisingLine = LineNumberOf(intake, Regex.Escape(NormalisationExpression));
+        Assert.Equal(declared["normalising-producer-line"], normalisingLine.ToString());
+    }
+
 
     // ---------------------------------------------------------------------------------------
     // Facts over the document's shape (legitimate: their subject IS the document)
@@ -612,6 +670,29 @@ public sealed class TrainerCardCensusTests
         return offenders;
     }
 
+
+    /// <summary>1-based line number of the first line matching <paramref name="pattern"/>, or 0.
+    /// Line-oriented on purpose: a citation is a line number, so the pin must be computed the way a
+    /// reader would check it.</summary>
+    private static int LineNumberOf(string text, string pattern)
+    {
+        var lines = text.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+            if (Regex.IsMatch(lines[i], pattern)) return i + 1;
+
+        return 0;
+    }
+
+    private static int OccurrenceCount(string text, string pattern) =>
+        text.Split('\n').Count(l => Regex.IsMatch(l, pattern));
+
+    /// <summary>The 1-based line, or empty when out of range. Empty never matches the producer
+    /// pattern, so an off-by-one in the structural pin fails rather than silently passing.</summary>
+    private static string LineAt(string text, int oneBasedLine)
+    {
+        var lines = text.Split('\n');
+        return oneBasedLine >= 1 && oneBasedLine <= lines.Length ? lines[oneBasedLine - 1] : string.Empty;
+    }
     private static string? ExtractOne(string text, string pattern)
     {
         var match = Regex.Match(text, pattern);
