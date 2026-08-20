@@ -3,8 +3,8 @@
 Branch `lane/SP-115-per-pixel-alpha`, base `f3c751c1`. Review Level 3. Plan checkpoint in `plan.md`,
 written **before the first product edit** and carrying the raw output of three OS probe rounds.
 
-**Floor:** pin **1938 unit / 117 headless**; observed **2041 unit / 121 headless**; declared
-**+103 unit / +4 headless** (`floor-delta.json`, confirmed by
+**Floor:** pin **1938 unit / 117 headless**; observed **2062 unit / 121 headless**; declared
+**+124 unit / +4 headless** (`floor-delta.json`, confirmed by
 `node client/tests/floor/sum-deltas.mjs --check --packets SP-115-per-pixel-alpha`). The floor run
 therefore REPORTS a violation against the shared pin, which is the expected lane shape: the pin is
 not this lane's to edit and the orchestrator sums the declared deltas at land.
@@ -163,7 +163,7 @@ ORDERING the OS did not already report, and nothing here is a headed capture.
 
 ---
 
-## 4. PROVING IT BITES — 72 mutations, four rounds, **40 caught, 32 survive**
+## 4. PROVING IT BITES — 72 mutations, five rounds, **49 caught, 23 survive**
 
 Every mutation was applied to the committed tree, the closed suite run, and the file restored with
 `git checkout --`; `git status` was clean after every round. Raw logs beside this record:
@@ -178,7 +178,61 @@ matching. **A second one:** round 3's `git checkout --` restored the COMMITTED v
 whose fix was still uncommitted, silently reverting it; the fix was re-applied and **committed before
 re-sweeping**, and the run that proves it is round 4.
 
-**The books:** 72 distinct mutations; **40 caught** (24 + 12 + 4); **32 survive**; 40 + 32 = 72.
+**The books:** 72 distinct mutations; **49 caught** (24 + 12 + 4 + 9); **23 survive**; 49 + 23 = 72.
+
+**Round 5 exists because code review returned REVISE and was right.** Nine survivors this record had
+classified as unreachable were reachable, and the reasons given for two of them were false. Round 5
+re-ran the ten they touched: **9 caught, 1 survives.** What changed is in §4.1.
+
+### 4.1 WHAT CODE REVIEW CAUGHT, AND IT WAS TEST DEPTH THREE TIMES
+
+**(a) The module had no test that ever constructed it.** `BouncingTextModuleTests` covers the
+motion, the raster and the presenter's cadence and reaches `BouncingTextEffect` only through a
+reflection tripwire and a colour parser. `Engage`, `Ready`, `ReleaseWork` and `WorkIsRunning` were
+entirely unpinned — **six survivors on their own** — and, worse, **two of this record's own headline
+claims were prose**: that `Ready` returns `Degraded`/`bouncing-text-transforms-absent` on every
+healthy run (the constant was referenced by no test at all), and that the dot's eighth meaning rests
+on `Running` rather than on `Showing`.
+
+**The excuse this record gave was false.** It said those survivors "need the full session rig, and
+the sweep's scope is the unit project only". Three sibling modules build exactly that rig in the same
+project (`SpiralOverlayEffectTests`, `BubblePopModuleTests`, `MandatoryVideoModuleTests`).
+`BouncingTextEffectTests` now does too, with a surface double that can be **SHOWING and NOT RUNNING**
+and **ENGAGED and NOT SHOWING**, because those are the two states the dot and the teardown turn on.
+M-bg, M-bj, M-bk, M-bl and M-bm are caught; M-bm no longer depends on the headless suite.
+
+**(b) M-bh was a FALSE EQUIVALENCE — the fifth in four waves, and mine.** This record claimed the
+module's invisible-opacity branch was redundant because the presenter checks it too. **The
+presenter's copy is reached only from the module's own last line**, i.e. *after* the null-surface
+gate and the unbound-signal gate. Delete the module's branch and an opacity-0 engage composed with no
+surface answers `effect-no-surface`, and one with an unbound signal answers `effect-no-ui-thread` —
+neither of which is the truth, and both of which are first-class states in the module's own
+constructor contract. **The claim is withdrawn**, and
+`OPACITYZEROIsDegradedTRANSPARENT_EvenWithNoSurfaceAndNoUiThread` asserts all three compositions.
+
+**(c) Three "could not be staged" survivors were reachable with instruments already shipped.**
+
+- **M-bn** — one line. `string.IsNullOrEmpty` does not catch whitespace, so `" "` goes through GDI+,
+  draws no glyph and comes back with no provable ink. `Assert.Null(Render(" ", …))` kills it.
+- **M-i** — the `glyph-uniform-alpha-mode` refusal is **this packet's central hazard in product
+  form**, and calling it unreachable was the worst of the three. It is staged now: a real surface
+  composites, is given uniform attributes **from outside the capability** with the probe's own
+  declaration, and is asked again. Both entry points are asserted, and they give **different**
+  refusals — `Present` names the mode, `Paint` reaches `UpdateLayeredWindow` and reports the OS's own
+  87 — and both are true.
+- **M-ac** — the record itself said this was "one more differential run and it is named here rather
+  than done", on the user-facing dial the product ships at 100. It is done: a second
+  composited-desktop capture at opacity 0.5, same frame, same bytes, only the multiplier changed.
+
+**And the half-opacity leg produced a finding of its own.** The prediction is **exact at three of
+four sampled points and one unit low in the red channel of the fourth** (predicts `0xD65E47`, the
+screen holds `0xD65E48`). The compositor rounds the per-pixel-times-constant product somewhere the
+model does not, and no reading of the documented formula reproduces it. **`CompositeOver` was
+deliberately NOT tuned to match** — fitting the oracle to a single observation would make it a copy
+of the data it is supposed to check. Exactness is asserted at constant 255, **within one unit** at
+128, and the residue is declared at the constant, in the model's own doc comment and here. The claim
+this leg exists for does not rest on it: the dial's arrival is proven by the half-opacity capture
+DIFFERING from the full-opacity one, which is tens of units, not one.
 
 ### THE SHARPEST FINDING — a real defect, in the most dangerous line in the packet
 
@@ -206,31 +260,33 @@ rewritten to say what it does.
 | M-bp | the pixel format becomes straight ARGB | the same file's facts, once the repair stopped hiding it |
 | M-af | the Linux refusal loses its manual gate | `TheLinuxRefusalNamesTheROUTE_…` (round 1's needle was wrong; re-run) |
 
-### The 32 survivors — every one classified, none papered over
+### The 23 survivors — every one classified, none papered over
 
-**Four are EQUIVALENT MUTANTS, with the measurement that makes them equivalent:**
+**Three are EQUIVALENT MUTANTS, with the measurement that makes them equivalent.** A fourth claim
+(M-bh) was made in the first draft, was FALSE, and is withdrawn above. All three below were
+independently enumerated by code review — every consumer of the mutated symbol named — and upheld:
 
 - **M-c** — `Scale(a, 255)` versus `a*255/255`. For every `a` in 0..255 both are exactly `a`
   (`(a·255+127)/255 = a` by integer division), and 255 is the only constant alpha any fact asserts.
   **Equivalent under the measured arm**, and the arm it is not equivalent under (constant < 255) is
   the same hole M-ac names.
-- **M-u** — the resize-in-move refusal. Removing it does not change the OUTCOME: a position-only ULW
-  does not resize, so `GetWindowRect` returns the original extents and the move is refused by the
-  rect confirmation with the same code. **Redundant with the rect check**, and kept because the two
-  read as different questions.
+- **M-u** — the resize-in-move refusal. Two consumers, both in `Win32GlyphSurface.MoveTo`. Removing
+  it does not change the reported OUTCOME: a position-only ULW does not resize, so `GetWindowRect`
+  returns the original extents and the move is refused by the rect confirmation with the same code.
+  **It is not a no-op, and the first draft's wording elided that**: the mutant still issues the
+  `UpdateLayeredWindow` and MOVES the window before refusing, so the surface ends up somewhere the
+  caller's own bookkeeping does not have it. Equivalent in the returned state, **not** equivalent on
+  screen — which is precisely why the guard is kept.
 - **M-z** — dropping `WS_EX_LAYERED` from the click-through re-assert word. The window is created
   layered and the style is never cleared, so the OR is a belt. **The sweep proves it is a belt.**
-- **M-bh** — the module skipping the invisible-opacity check. The presenter checks it too and returns
-  the same `Degraded` with the same code, so the module's copy is redundant.
+**Twenty are UNCOVERED, and each names why:**
 
-**Twenty-eight are UNCOVERED, and each names why:**
-
-- **M-i, M-m, M-n, M-o, M-p, M-t, M-w, M-y** — the geometry, style, visibility, foreground and
+- **M-m, M-n, M-o, M-p, M-t, M-w, M-y** — the geometry, style, visibility, foreground and
   swallowed-click refusals. Each guards a state that **did not occur on this machine and could not be
   staged**: a window that reports the wrong rectangle, loses a style bit it was given, refuses to
   hide, takes the foreground with `WS_EX_NOACTIVATE` set, or swallows a click with
   `WS_EX_TRANSPARENT` set. Every one of them is a real refusal with a real code and no reachable
-  input.
+  input. **This list used to begin with M-i and that was wrong** — see §4.1(c).
 - **M-j, M-k, M-l** — `Present` ignoring the content, z-order or routing refusal. The refusals never
   fire here, so ignoring them is invisible. **Covered from the other side**: M-s (PrintWindow always
   fails) reds 21 facts and M-ad (the window is not created layered) reds 26, which is what proves the
@@ -241,9 +297,6 @@ rewritten to say what it does.
   non-vacuous, and on a machine where the surface does own its point removing it changes no answer.
   The PROPERTY is covered from the harness side (`CatchesItsOwnPointWhenOpaque`, taken with the
   probe's own style write); the product's own leg has no fact.
-- **M-ac** — `SourceConstantAlpha` pinned at 255. **The sharpest uncovered one**: the opacity dial
-  would silently stop reaching the compositor. Closable by a second desktop capture at half opacity;
-  it is one more differential run and it is named here rather than done.
 - **M-ae** — the z-order predicate weakened. Isolating it needs a foreign topmost window that stays
   above the surface, which is a race rather than a fact — **the same residue SP-111 recorded as its
   M-ac**.
@@ -251,19 +304,15 @@ rewritten to say what it does.
   is appended to the same string, names it too, so the assertion still passes.
   **Redundant-by-appendix**, and the redundancy is the point: the gate is where a Linux implementer
   reads it.
-- **M-az, M-bg** — `Running` and `WorkIsRunning` dropping clauses. Isolating them needs `showing`
-  true while `lastFrameHeld` is false, and the retire-on-failure path makes that state unreachable —
-  **the same residue SP-111 named as its M-be**.
+- **M-az** — the PRESENTER's `Running` dropping its second and third clauses. `WorkIsRunning`
+  (M-bg) is now caught by the module lab, but the presenter's own property still needs `showing` true
+  while `lastFrameHeld` is false, and the retire-on-failure path makes that state unreachable from
+  outside — **the same residue SP-111 named as its M-be**. It is the ONE survivor round 5 did not
+  close, and it is the presenter's, not the module's.
 - **M-ba** — the frame timer not disposed on withdraw. Under the hand clock the next fire returns
   early because the surface is down, so the OUTCOME is identical; on the real
   `System.Threading.Timer` it is a **leak**, not a behaviour, and no fact in this suite can see a
   leak.
-- **M-bj, M-bk, M-bl, M-bm** — the module's `Ready` detail, its `ReleaseWork` guard, its UI-thread
-  check and its title. These need the full session rig, and **the sweep's scope is the unit project
-  only**. M-bm (the title dropping "motion half") **is** caught by the headless suite, which the
-  sweep does not run.
-- **M-bn** — the rasteriser returning an inkless frame. The surface refuses it anyway, with a
-  different code, and the presenter fact uses the probe source.
 - **M-bq, M-bs** — the rounding repair removed entirely, and its bound removed. Both are defensive
   against a GDI+ rounding artefact that **did not occur in any render this suite performs**, so
   neither can be observed. The bound's VALUE is what M-bp now proves is load-bearing.
@@ -346,7 +395,8 @@ three dials).
 
 **Tests — new:** `GlyphWindowProbe.cs`, `GlyphSurfaceObservations.cs`, `GlyphCapabilityTests.cs`,
 `GlyphAlphaDifferentialTests.cs`, `GlyphCoexistenceTests.cs`, `GlyphTextSourceTests.cs`,
-`BouncingTextModuleTests.cs`, plus four headless facts in `StudioRackHeadlessTests.cs`.
+`BouncingTextModuleTests.cs`, `BouncingTextEffectTests.cs` (the module lab, added at review), plus
+four headless facts in `StudioRackHeadlessTests.cs`.
 
 **Tests — changed (all strengthenings, 0 count change):** `RealDesktopCollectionGuardTests.cs`,
 `ContinuousEffectSpineTests.cs`, `SecondEffectSpineTests.cs`, `AudioModuleSpineTests.cs`.
@@ -369,8 +419,9 @@ three dials).
   driver, an exclusive-fullscreen swap chain or a physically dark monitor.
 - **Nothing measures cadence, order or timing.** Every frame advance is driven by hand.
 - **Nothing proves five surfaces coexist under CONTENTION** — see §3.
-- **The opacity dial's arrival at the compositor is uncovered** (M-ac): the request carries it and
-  nothing reads it back off a screen.
+- **The half-opacity composite is predicted to within one unit, not exactly** — measured, declared,
+  and the model deliberately left untuned. Only the constant-alpha values 255 and 128 have been read
+  off a screen at all; every other setting of the dial is arithmetic.
 - **Concurrency is single-threaded.** The presenter's gate is held across no capability call and the
   cadence is driven inline; two threads racing a frame against a teardown are not covered.
 - **The composite cost was not profiled.** A re-raster is a GDI+ text draw plus a full-buffer

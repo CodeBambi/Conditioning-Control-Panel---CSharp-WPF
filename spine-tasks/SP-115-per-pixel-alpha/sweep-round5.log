@@ -1,0 +1,13 @@
+SP-115 sweep, 10 mutation(s)
+M-i  CAUGHT  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Failed!  - Failed:     1, Passed:   262, Skipped:     0, Total:   263, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-ac  CAUGHT  client/src/CcpClient.Desktop/Glyph/Win32GlyphSurface.cs  Failed!  - Failed:     3, Passed:   260, Skipped:     0, Total:   263, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-az  SURVIVED  client/src/CcpClient.Desktop/Effects/BouncingTextSurfacePresenter.cs  Passed!  - Failed:     0, Passed:   263, Skipped:     0, Total:   263, Duration: 2 s - CcpClient.Tests.dll (net10.0)
+M-bg  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Failed!  - Failed:     1, Passed:   262, Skipped:     0, Total:   263, Duration: 2 s - CcpClient.Tests.dll (net10.0)
+M-bh  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Failed!  - Failed:     2, Passed:   261, Skipped:     0, Total:   263, Duration: 2 s - CcpClient.Tests.dll (net10.0)
+M-bj  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Failed!  - Failed:     1, Passed:   262, Skipped:     0, Total:   263, Duration: 2 s - CcpClient.Tests.dll (net10.0)
+M-bk  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Failed!  - Failed:     1, Passed:   262, Skipped:     0, Total:   263, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bl  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Failed!  - Failed:     1, Passed:   262, Skipped:     0, Total:   263, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bm  CAUGHT  client/src/CcpClient.Desktop/Effects/BouncingTextEffect.cs  Failed!  - Failed:     1, Passed:   262, Skipped:     0, Total:   263, Duration: 1 s - CcpClient.Tests.dll (net10.0)
+M-bn  CAUGHT  client/src/CcpClient.Desktop/Effects/GlyphTextSource.cs  Failed!  - Failed:     1, Passed:   262, Skipped:     0, Total:   263, Duration: 2 s - CcpClient.Tests.dll (net10.0)
+
+TOTAL 10: caught 9, survived 1, not-patched 0
