@@ -35,9 +35,12 @@ public sealed class FypCensusTests
     private static readonly string[] CensusParts = ["client", "docs", "fyp-census.md"];
     private static readonly string[] WpfRootParts = ["ConditioningControlPanel"];
 
-    /// <summary>The surface: one directory, searched whole and recursively. NOT a file list — a file
-    /// list is exactly how the board row arrived at 3 and how the haptic census lost
-    /// <c>VideoService.Browser.cs</c> twice.</summary>
+    /// <summary>The surface: one directory, searched whole and recursively, EVERY extension. NOT a file
+    /// list — a file list is exactly how the board row arrived at 3 and how the haptic census lost
+    /// <c>VideoService.Browser.cs</c> twice. The walk is <c>*</c> rather than <c>*.cs</c> on purpose: the
+    /// census counts this tree with <c>find -type f</c>, and a guard that counted only <c>.cs</c> would
+    /// let a <c>.json</c> or <c>.resx</c> land upstream and make the prose stale while staying green.
+    /// </summary>
     private static readonly string[] SurfaceDirectories = ["Services/Fyp"];
 
     /// <summary>The payload tree, counted the same way. The bytes stay owned by the legacy tree and
@@ -68,6 +71,21 @@ public sealed class FypCensusTests
     private const int ExpectedPayloadFiles = 8;
 
     private const int ExpectedConsumerFiles = 16;
+
+    /// <summary>
+    /// The privacy verdicts themselves, pinned. Counting the answers and checking they are non-blank
+    /// leaves Q3 free to flip YES to NO and stay green — and Q3 (does it leave the machine) and Q4
+    /// (which sensor, under whose consent) are the two OWNER-FLAGGED findings, which makes them the
+    /// part of this census a later edit is most likely to soften. <c>StartsWith</c> for the verdicts,
+    /// <c>Contains</c> for the sensor, both after markdown emphasis is stripped.
+    /// </summary>
+    private static readonly (string Id, bool StartsWith, string Needle)[] PrivacyVerdicts =
+    [
+        ("Q1", true, "YES"),
+        ("Q2", true, "NO"),
+        ("Q3", true, "YES"),
+        ("Q4", false, "webcam"),
+    ];
 
     /// <summary>The closed label vocabulary from the census's §3 decision rule.</summary>
     private static readonly string[] Labels = ["COVERED", "PARTIAL", "GAP", "OWNER-GATED"];
@@ -161,7 +179,22 @@ public sealed class FypCensusTests
 
         Assert.Empty(report.StructureProblems);
         Assert.Equal(4, report.PrivacyAnswers.Count);
-        Assert.All(report.PrivacyAnswers, a => Assert.False(string.IsNullOrWhiteSpace(a)));
+        Assert.All(report.PrivacyAnswers, a => Assert.False(string.IsNullOrWhiteSpace(a.Answer)));
+    }
+
+    /// <summary>
+    /// The two OWNER-FLAGGED answers are the most valuable thing in this census and the part a later
+    /// edit is most likely to soften, so the VERDICTS are pinned and not merely counted: Q3 cannot
+    /// stop saying the surface talks to the network, and Q4 cannot stop naming the webcam.
+    /// </summary>
+    [Fact]
+    public void ThePrivacyVerdictsThemselvesArePinned_NotJustTheirCount()
+    {
+        var report = RunAgainstRealRepo();
+        _output.WriteLine(report.Describe());
+
+        Assert.Empty(report.StructureProblems);
+        Assert.Empty(report.PrivacyViolations);
     }
 
     [Fact]
@@ -308,6 +341,40 @@ public sealed class FypCensusTests
         Assert.Contains("refuses to skip", ex.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>Softening the network answer is the specific edit this pin exists to catch: Q3 going
+    /// from YES to NO would quietly retire the owner-flagged third-party dependency.</summary>
+    [Fact]
+    public void SofteningTheNetworkPrivacyAnswerFailsTheGuard()
+    {
+        using var repo = new TempRepo();
+        SeedConsistentRepo(repo);
+        repo.ReplaceInFile(CensusRelativePath,
+            "| Q3 | leaves the machine? | YES | c |",
+            "| Q3 | leaves the machine? | NO | c |");
+
+        var report = Run(repo.Root);
+        _output.WriteLine(report.Describe());
+
+        Assert.NotEmpty(report.PrivacyViolations);
+        Assert.Contains("Q3", string.Join(" ", report.PrivacyViolations), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DroppingTheSensorNameFromTheConsentAnswerFailsTheGuard()
+    {
+        using var repo = new TempRepo();
+        SeedConsistentRepo(repo);
+        repo.ReplaceInFile(CensusRelativePath,
+            "| Q4 | sensor? | webcam | d |",
+            "| Q4 | sensor? | none worth naming | d |");
+
+        var report = Run(repo.Root);
+        _output.WriteLine(report.Describe());
+
+        Assert.NotEmpty(report.PrivacyViolations);
+        Assert.Contains("Q4", string.Join(" ", report.PrivacyViolations), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ABehaviourRowWithoutAClosedVocabularyLabelFailsTheGuard()
     {
@@ -356,7 +423,8 @@ public sealed class FypCensusTests
         IReadOnlyList<ProductRow> ProductRows,
         IReadOnlyList<ConsumerRow> ConsumerRows,
         IReadOnlyList<BehaviourRow> BehaviourRows,
-        IReadOnlyList<string> PrivacyAnswers,
+        IReadOnlyList<(string Id, string Answer)> PrivacyAnswers,
+        IReadOnlyList<string> PrivacyViolations,
         int CensusPayloadCount,
         string CensusPayloadDisposition,
         IReadOnlyList<string> ProductFilesOnDisk,
@@ -383,6 +451,7 @@ public sealed class FypCensusTests
             Append(sb, "census product rows with no file on disk", ProductFilesMissingFromDisk);
             Append(sb, "consumers upstream that the census never heard of", ConsumersMissingFromCensus);
             Append(sb, "census consumer rows with no file on disk", ConsumersMissingFromDisk);
+            Append(sb, "privacy violations", PrivacyViolations);
             Append(sb, "label violations", LabelViolations);
             Append(sb, "platform violations", PlatformViolations);
             Append(sb, "structure problems", StructureProblems);
@@ -420,6 +489,28 @@ public sealed class FypCensusTests
         if (consumerRows.Count == 0) structure.Add("the consumer table is empty or unparseable");
         if (behaviourRows.Count == 0) structure.Add("the behaviour table is empty or unparseable");
         if (privacy.Count != 4) structure.Add($"expected 4 privacy answers, parsed {privacy.Count}");
+
+        var privacyViolations = new List<string>();
+        foreach (var (id, startsWith, needle) in PrivacyVerdicts)
+        {
+            var match = privacy.FirstOrDefault(a => a.Id == id);
+            if (match.Id is null)
+            {
+                privacyViolations.Add($"{id}: no answer row parsed");
+                continue;
+            }
+
+            var answer = StripEmphasis(match.Answer);
+            var ok = startsWith
+                ? answer.StartsWith(needle, StringComparison.Ordinal)
+                : answer.Contains(needle, StringComparison.OrdinalIgnoreCase);
+            if (!ok)
+            {
+                privacyViolations.Add(
+                    $"{id}: answer '{Trim(answer)}' no longer "
+                    + (startsWith ? $"begins with '{needle}'" : $"names '{needle}'"));
+            }
+        }
         if (payloadCount < 0) structure.Add("the payload count is missing or unparseable");
         if (payloadDisposition.Length == 0) structure.Add("the payload disposition is missing");
 
@@ -445,7 +536,7 @@ public sealed class FypCensusTests
         if (!Directory.Exists(wpfRoot))
         {
             return new Report(
-                GuardBranch.Unreachable, productRows, consumerRows, behaviourRows, privacy,
+                GuardBranch.Unreachable, productRows, consumerRows, behaviourRows, privacy, privacyViolations,
                 payloadCount, payloadDisposition, [], [], 0, [], [], [], [],
                 labelViolations, platformViolations, structure);
         }
@@ -464,7 +555,7 @@ public sealed class FypCensusTests
         if (structure.Count > 0)
         {
             return new Report(
-                GuardBranch.Reachable, productRows, consumerRows, behaviourRows, privacy,
+                GuardBranch.Reachable, productRows, consumerRows, behaviourRows, privacy, privacyViolations,
                 payloadCount, payloadDisposition, [], [], 0, [], [], [], [],
                 labelViolations, platformViolations, structure);
         }
@@ -477,7 +568,7 @@ public sealed class FypCensusTests
         var censusConsumers = consumerRows.Select(r => r.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return new Report(
-            GuardBranch.Reachable, productRows, consumerRows, behaviourRows, privacy,
+            GuardBranch.Reachable, productRows, consumerRows, behaviourRows, privacy, privacyViolations,
             payloadCount, payloadDisposition,
             productOnDisk, consumersOnDisk, payloadOnDisk,
             [.. productOnDisk.Where(p => !censusProduct.Contains(p)).Order(StringComparer.Ordinal)],
@@ -497,7 +588,7 @@ public sealed class FypCensusTests
         foreach (var directory in SurfaceDirectories)
         {
             var full = Path.Combine(wpfRoot, directory.Replace('/', Path.DirectorySeparatorChar));
-            foreach (var file in Directory.EnumerateFiles(full, "*.cs", SearchOption.AllDirectories))
+            foreach (var file in Directory.EnumerateFiles(full, "*", SearchOption.AllDirectories))
             {
                 found.Add(Relative(wpfRoot, file));
             }
@@ -606,17 +697,20 @@ public sealed class FypCensusTests
         return rows;
     }
 
-    private static List<string> ParsePrivacyAnswers(string text)
+    private static List<(string Id, string Answer)> ParsePrivacyAnswers(string text)
     {
-        var answers = new List<string>();
+        var answers = new List<(string, string)>();
         foreach (Match m in Regex.Matches(text, @"^\|\s*(Q[1-4])\s*\|[^|]+\|([^|]+)\|", RegexOptions.Multiline))
         {
             var answer = m.Groups[2].Value.Trim();
-            if (answer.Length > 0 && !answer.All(c => c == '-')) answers.Add(answer);
+            if (answer.Length > 0 && !answer.All(c => c == '-')) answers.Add((m.Groups[1].Value, answer));
         }
 
         return answers;
     }
+
+    /// <summary>Markdown emphasis is presentation, not content: strip it before reading a verdict.</summary>
+    private static string StripEmphasis(string cell) => cell.Replace("*", string.Empty).Trim();
 
     private static (int Count, string Disposition) ParsePayload(string text)
     {

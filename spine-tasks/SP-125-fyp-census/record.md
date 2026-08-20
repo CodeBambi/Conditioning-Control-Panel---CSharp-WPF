@@ -21,7 +21,7 @@ missed:**
    `Chaos/ChaosGifCascadeOverlay.cs:357` reference `RemoteMediaCache`. **No anchored or unanchored
    `fyp` search can find them.** They appeared only because the reveal rule promoted the surface's
    own type names to needles. This is the haptic-count failure mode caught prospectively.
-3. **The settings are in a tree the constitution calls failure evidence.** All 14 FYP settings live in
+3. **The settings are in a tree the constitution calls failure evidence.** All 15 FYP settings live in
    `CCP.Core/Models/AppSettings.cs`, and the shipping app project-references that project
    (`ConditioningControlPanel.csproj:52`). Recorded as D209 rather than resolved unilaterally.
 
@@ -100,19 +100,24 @@ construction, headlessly testable, and already what two shipped port surfaces ne
 
 ## Tests and floor
 
-`client/tests/CcpClient.Tests/FypCensusTests.cs`, **+16 unit / 0 headless**, declared in
+`client/tests/CcpClient.Tests/FypCensusTests.cs`, **+19 unit / 0 headless**, declared in
 `floor-delta.json`. Built to `HapticSiteCensusTests`'s existing shape rather than a second convention:
 directory roots and type-name needles live in the TEST, the product-file set, payload count and
-consumer set are **re-derived from the shipping bytes every run**, repo root anchors on
+consumer set are **re-derived from the shipping bytes every run** (the surface walk is `*`, not
+`*.cs`, so it covers the same universe the census counts with `find -type f`), the four privacy
+VERDICTS are pinned rather than merely counted, repo root anchors on
 `client/CcpClient.sln`, root-not-found and missing-census are hard failures, a half-present tree
 FAILS, and the branch is written to test output.
 
-**Bite proven against the real tree, not only fixtures:** renaming one census row to
+**Bite proven against the real tree, not only fixtures**, twice. Renaming one census row to
 `RenamedByHand.cs` reds `TheProductFileSetIsRederivedFromTheShippingBytes` in **both** directions
-(file on disk absent from census; census row absent from disk). Restored, re-verified green.
+(file on disk absent from census; census row absent from disk). Softening Q3's answer from YES to NO
+on the real document reds `ThePrivacyVerdictsThemselvesArePinned` with the exact diagnostic
+`Q3: answer 'NO — HTTPS POSTs to api.scrolller.com ...' no longer begins with 'YES'`. Both restored
+and re-verified green.
 
 - Warning gate: **0 warnings, 0 errors**, 4 projects, forced non-incremental.
-- Floor: **observed 2325 unit = pin 2309 + declared 16.** Headless **144 = pin 144 + 0**.
+- Floor: **observed 2328 unit = pin 2309 + declared 19.** Headless **144 = pin 144 + 0**.
   0 failures; 2 skips, exactly the pinned Linux-gated names. `floor.json` never opened.
 
 ## Spec-versus-code discrepancies found
@@ -125,8 +130,23 @@ FAILS, and the branch is written to test output.
    correct, cited imprecisely.
 5. **`CCP.Core` is a shipping dependency** while the constitution classes `CCP.*` as failure evidence
    (D209).
-6. **One of my own citations was wrong** — I wrote `FypHostService.cs:36` for `fyp_stats.json`; `:36`
-   is blank and the line is `:37`. Caught by opening it. Corrected before commit.
+6. **Three of my own numbers/citations were wrong**, all corrected:
+   - `FypHostService.cs:36` for `fyp_stats.json` — `:36` is blank, the line is `:37`. Caught by
+     opening it before the first commit.
+   - **"14 FYP settings properties" was 15** (`AppSettings.cs:3143`-`:3267`, none `[JsonIgnore]`;
+     the consent union at `:3327` is a separate computed member). An arithmetic slip over my own
+     grep output — in a census about counts, in a durable doc, and in **D209**, which is a
+     divergence row a later packet works from. The same inherited-count error this packet exists
+     to expose. Caught at code review, not by me.
+   - `FypGhostOverlay.cs:74` for `_screen = WF.Screen.FromHandle(...)` is `:75` (`:91` was exact).
+7. **`MainWindow.Lab.cs:291` is `TierGate.DemandPremium`, not `RequiresPremium`** — it delegates to
+   the same predicate via `Services/TierGate.cs:103`. Behaviour right, symbol wrong; §6 and D207
+   now name the actual call and its delegation.
+8. **§1.5's "53" was reproducible but its universe was unnamed.** It is: tracked TEXT files under
+   `ConditioningControlPanel/`, every extension, excluding `CCP.*` and excluding
+   `Resources/web/fyp/` — unanchored **100**, anchored **53**. The same anchored sweep is 42 over
+   `.cs`/`.xaml` only and 57 including the payload tree. A count without its universe is precisely
+   the defect this packet is about, so the universe is now stated inline beside the number.
 
 ## What this does NOT prove
 
