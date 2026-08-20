@@ -545,3 +545,57 @@ sampled "background" pixels were its own.
   and its step 5 is expected to be impossible under Wayland, where a client cannot read back the
   composited output at all — so the honest Wayland outcome is that the PROOF is unavailable even where
   the picture works.
+
+## Haptic evidence class (SP-119)
+
+Haptics needs its own class, and it is the FIRST class in this document whose top rung is not on this
+machine at all.
+
+Every other capability here fails somewhere the port can look: a window the OS will not place, an
+endpoint the mixer will not meter, a click the window manager routes elsewhere. **A haptic sink's
+output leaves this process, leaves this machine's API surface, and ends in a motor.** Upstream's two
+providers are clients of a separate server the user installs — Buttplug over a WebSocket to
+`ws://127.0.0.1:12345` (`Services/Haptics/ButtplugProvider.cs:27,83`), Lovense over HTTP to
+`http://127.0.0.1:20010` (`Services/Haptics/LovenseProvider.cs:21,83,89`) — and that server talks
+Bluetooth to hardware neither it nor this process can interrogate. So the ladder has a rung that no
+amount of engineering closes.
+
+### The four classes, and where the chain stops
+
+| class | what it means | who can produce it |
+|---|---|---|
+| **`haptic-admitted`** | this build has a provider CLIENT at all — a route in `HapticSinkFactory.AdmittedRoutes` | **Nobody today.** The list is empty; this is the gap every current refusal names, and it is a property of the BUILD, identical on Windows and Linux |
+| **`haptic-server-answered`** | the separate server process answered a real request over loopback | a build with an admitted client, plus Intiface Central / Lovense Connect running |
+| **`haptic-device-named`** | the server answered and named at least one device this process can address. **This — and only this — is what `CapabilityState.Available` may rest on** (`HapticServerObservation.Confirmed`) | the above, plus a paired toy |
+| **`felt-verified`** | a human reports that a device really moved, and that it STOPPED when the all-stop ran | **a HUMAN, and nothing else, on any platform, at any depth of API** |
+
+**`felt-verified` is not merely undischarged; it is undischargeable by code.** A haptic server reports
+what it believes it commanded over Bluetooth. Neither this process nor the shipping WPF app can
+distinguish a toy that vibrated from one with a flat battery in the next room, from one whose motor
+has failed, or from a server that acknowledged a command it never sent. There is no counterpart here
+to the audio class's `render-metered` — no OS-side meter reads back what the device did, because the
+device is not the OS's.
+
+**The STOP half of `felt-verified` is the half that matters and it is easy to forget.** Upstream's own
+shutdown comment is the reason: *"a Lovense level has no server-side watchdog, so a toy we don't
+countermand keeps running after the app is gone"* (`ConditioningControlPanel/App.xaml.cs:4401-4404`).
+A haptic check that only ever confirms motion would pass on a build that can start a device and not
+stop one.
+
+### What tier 1 cannot cover for haptics
+
+1. **That any client exists.** The port's automated facts today are all about a REFUSAL, and a refusal
+   is cheap to be right about. Nothing in the suite has ever spoken either wire protocol.
+2. **That a level arrived.** Even with a client, `SetOutputsAsync` returning `Available` would mean a
+   server acknowledged a request — one process telling another it received a message.
+3. **That a stop arrived.** Same ceiling, and worse consequences.
+4. **Anything about latency or cadence.** Both providers throttle or quantize in ways the seam
+   deliberately does not model: Lovense drops commands inside 200 ms in continuous mode
+   (`LovenseProvider.cs:207-219`) and floors LAN durations at a whole second (`:232-233`).
+
+### The manual gate
+
+`Haptics.HapticSinkFactory.DeviceManualGate` carries the four steps verbatim, so the gate travels with
+the refusal rather than living only in a document. **Its first line says it cannot be attempted until
+a provider client is admitted** — which is deliberate: quoting the device gate today would send a
+reader to fix something that is not what is wrong.

@@ -34,7 +34,7 @@ public class IntegrationProofTests
 
         // MainWindow's dependencies are (host, host.Trace) — both resolve from the root's product.
         Assert.Same(trace, host!.Trace);
-        Assert.Equal(9, host.Participants.Count);
+        Assert.Equal(10, host.Participants.Count);
         var store = Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
         var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[1]);
         var ticker = Assert.IsType<CcpClient.Desktop.Features.StatusTickerParticipant>(host.Participants[2]);
@@ -60,6 +60,26 @@ public class IntegrationProofTests
         Assert.False(scheduler.Scheduler.Polling);
         Assert.False(scheduler.Scheduler.Enabled);
         Assert.Null(scheduler.Scheduler.Last);
+        // SP-119: the HAPTIC sink registers last, and its phase-3 start CONNECTS TO NOTHING. This
+        // build admits no provider client, so the participant never asks — a product that opened a
+        // WebSocket to ws://127.0.0.1:12345 with nothing able to speak the protocol would be making
+        // a connection no user could benefit from. The gate is closed too, and closed through the
+        // "could not verify" answer rather than through "you are not a patron", because this build's
+        // entitlement authority is unconfigured.
+        var haptics = Assert.IsType<CcpClient.Desktop.Haptics.HapticParticipant>(host.Participants[9]);
+        Assert.True(haptics.Running);
+        Assert.Equal(0, haptics.ConnectAttempts);
+        Assert.Null(haptics.LastConnectOutcome);
+        Assert.Null(haptics.LastObservation);
+        Assert.False(haptics.Enabled);
+        Assert.False(haptics.OutputAllowed);
+        Assert.IsType<CcpClient.Desktop.Haptics.HapticGateDecision.RefusedUnverified>(haptics.Gate);
+        Assert.Equal(CcpClient.Desktop.Haptics.HapticProviderRoute.None, haptics.Sink.Route);
+        // And the gate it consulted is the composition root's OWN entitlement capability — the same
+        // object the DTRH door consults and the same one the System page reports. A missing
+        // authority and this build's unconfigured one refuse identically, so without this assertion
+        // a root that stopped passing it would be invisible until the day one is configured.
+        Assert.True(haptics.HasEntitlementAuthority);
         Assert.False(session.Engine.Running);
         Assert.IsType<LoadOutcome.Missing>(session.Preset.LastLoadOutcome);
         Assert.True(heartbeat.Running); // phase 3 demonstrably started it

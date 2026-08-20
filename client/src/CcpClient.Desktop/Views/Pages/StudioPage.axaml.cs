@@ -78,6 +78,7 @@ public partial class StudioPage : UserControl
     private readonly BubblePopEffect _bubblePop;
     private readonly VisualsDials _visuals;
     private readonly SessionScheduler _scheduler;
+    private readonly Haptics.HapticParticipant _haptics;
     private bool _syncing;
 
     /// <param name="loom">The one Loom launch path.</param>
@@ -90,13 +91,23 @@ public partial class StudioPage : UserControl
     /// have put an app-lifetime object inside a session-lifetime one, which is exactly the
     /// ownership confusion the rack comment on this page warned about for nine waves.
     /// </param>
-    public StudioPage(LoomLaunch loom, SessionParticipant session, SessionScheduler scheduler)
+    /// <param name="haptics">
+    /// SP-119 — the one HAPTIC sink's owner, and it arrives as its own argument for the same reason
+    /// <paramref name="scheduler"/> does: it is not part of a session. Upstream's is a static built
+    /// at startup and torn down at exit (<c>App.xaml.cs:533</c>, <c>:2060</c>, <c>:4406</c>) that
+    /// the engine never touches. It is reached here rather than rebuilt, so the switch this panel
+    /// offers and the gate the composition root resolved are the same object.
+    /// </param>
+    public StudioPage(LoomLaunch loom, SessionParticipant session, SessionScheduler scheduler,
+        Haptics.HapticParticipant haptics)
     {
         ArgumentNullException.ThrowIfNull(loom);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(scheduler);
+        ArgumentNullException.ThrowIfNull(haptics);
         InitializeComponent();
         _scheduler = scheduler;
+        _haptics = haptics;
 
         _session = session;
         _flash = session.Flash;
@@ -136,6 +147,7 @@ public partial class StudioPage : UserControl
         RowBubblePop.IsCheckedChanged += (_, _) => ApplySelection();
         RowVisuals.IsCheckedChanged += (_, _) => ApplySelection();
         RowScheduler.IsCheckedChanged += (_, _) => ApplySelection();
+        RowHaptics.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -172,6 +184,19 @@ public partial class StudioPage : UserControl
             (_, e) => OnSchedulerRowPointerReleased(e),
             RoutingStrategies.Tunnel);
 
+        // SP-119 — the Haptics row takes the gesture too, and it is the ONE row on this page whose
+        // quick-toggle can be REFUSED. Upstream's entry flips the panel's own master box precisely
+        // so the refusal runs: "Flip the page's own master box so MainWindow.ChkHapticsEnabled_Changed
+        // runs - including the premium gate that reverts the box for a free account"
+        // (StudioTabView.xaml.cs:521-525). Its rack then re-reads the dot one beat later because
+        // "a refusal can undo the write (the haptics premium gate flips IsChecked back)" (:1121-1124).
+        // Here the refusal happens INSIDE the request rather than after it, so nothing is written
+        // and there is nothing to undo — see HapticParticipant.RequestEnable.
+        RowHaptics.AddHandler(
+            PointerReleasedEvent,
+            (_, e) => OnHapticsRowPointerReleased(e),
+            RoutingStrategies.Tunnel);
+
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
         SubliminalEnableToggle.IsCheckedChanged += (_, _) =>
@@ -201,6 +226,11 @@ public partial class StudioPage : UserControl
         // The scheduler's own enable. It does NOT route through SessionEngine.QuickToggle for the
         // same reason its row's right-click does not: there is no module to arm.
         SchedulerEnableToggle.IsCheckedChanged += (_, _) => OnSchedulerEnableToggled();
+
+        // The haptics master box. It does NOT write and then check: it asks the gate and writes only
+        // if allowed, which is upstream's order (MainWindow/MainWindow.Haptics.cs:489-500 returns
+        // BEFORE HapticCfg.Enabled = isEnabled).
+        HapticsEnableToggle.IsCheckedChanged += (_, _) => OnHapticsEnableToggled();
 
         // Upstream writes BOTH times from ONE LostFocus handler and saves once
         // (Features/SchedulerFeatureControl.xaml.cs:71-79, wired at .xaml:49 and :58), so both
@@ -369,6 +399,11 @@ public partial class StudioPage : UserControl
     /// "cannot act yet" (see <see cref="SessionScheduler.Dot"/>).</summary>
     public EffectDotState RenderedSchedulerDot { get; private set; } = EffectDotState.Off;
 
+    /// <summary>The Haptics row's dot (SP-119). Two reachable values, never three:
+    /// <see cref="EffectDotState.Live"/> would claim something is being sent and nothing is
+    /// (<see cref="Haptics.HapticParticipant.Dot"/>).</summary>
+    public EffectDotState RenderedHapticsDot { get; private set; } = EffectDotState.Off;
+
     /// <summary>
     /// The tint the Pink Filter panel is currently reporting, as text.
     ///
@@ -495,7 +530,9 @@ public partial class StudioPage : UserControl
         var bubblePopOpen = RowBubblePop.IsChecked == true;
         var visualsOpen = RowVisuals.IsChecked == true;
         var schedulerOpen = RowScheduler.IsChecked == true;
+        var hapticsOpen = RowHaptics.IsChecked == true;
         SchedulerModulePanel.IsVisible = schedulerOpen;
+        HapticsModulePanel.IsVisible = hapticsOpen;
         VisualsModulePanel.IsVisible = visualsOpen;
         MandatoryVideoModulePanel.IsVisible = videoOpen;
         BubbleCountModulePanel.IsVisible = bubbleCountOpen;
@@ -511,7 +548,7 @@ public partial class StudioPage : UserControl
         LockCardModulePanel.IsVisible = lockCardOpen;
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
             && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen
-            && !bubblePopOpen && !bouncingTextOpen && !visualsOpen && !schedulerOpen;
+            && !bubblePopOpen && !bouncingTextOpen && !visualsOpen && !schedulerOpen && !hapticsOpen;
     }
 
     /// <summary>
@@ -548,6 +585,58 @@ public partial class StudioPage : UserControl
 
         e.Handled = true;
         _scheduler.SetEnabled(!_scheduler.Enabled);
+        LoadDialsFromPreset();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The Haptics row's right-click. Same gesture, same <c>Handled</c>, and the one destination on
+    /// this page that can say no: it asks <see cref="Haptics.HapticParticipant.RequestEnable"/>,
+    /// which consults the premium gate and writes nothing when the gate refuses.
+    ///
+    /// <para>Upstream reaches the same gate by a longer road — its toggle flips the panel's own
+    /// checkbox so <c>ChkHapticsEnabled_Changed</c> runs and REVERTS the box
+    /// (<c>StudioTabView.xaml.cs:521-525</c>, <c>MainWindow/MainWindow.Haptics.cs:489-497</c>). The
+    /// user-visible outcome is identical and the intermediate state is not: nothing here is ever
+    /// written and then undone, so there is no instant at which the setting says yes.</para>
+    /// </summary>
+    private void OnHapticsRowPointerReleased(PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != MouseButton.Right)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        _haptics.RequestEnable(!_haptics.Enabled);
+        LoadDialsFromPreset();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The haptics panel's Enable box — the same request the row's right-click makes (the A-004
+    /// one-command-path rule), and the surface where the refusal is read.
+    ///
+    /// <para>The box is re-synced from the DOCUMENT afterwards rather than left where the user put
+    /// it, which is upstream's own repair for exactly this handler
+    /// (<c>MainWindow/MainWindow.Haptics.cs:491</c> sets <c>IsChecked = false</c> before it returns).
+    /// Without it the box would sit ticked over a setting that says otherwise, and a restart would
+    /// silently disagree with the screen.</para>
+    /// </summary>
+    private void OnHapticsEnableToggled()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var target = HapticsEnableToggle.IsChecked == true;
+        if (target == _haptics.Enabled)
+        {
+            return;
+        }
+
+        _haptics.RequestEnable(target);
         LoadDialsFromPreset();
         Refresh();
     }
@@ -1017,6 +1106,11 @@ public partial class StudioPage : UserControl
             SchedulerDayFri.IsChecked = scheduler.Friday;
             SchedulerDaySat.IsChecked = scheduler.Saturday;
             SchedulerDaySun.IsChecked = scheduler.Sunday;
+
+            // SP-119. ONE control, loaded from the DOCUMENT rather than from whatever the user just
+            // clicked — which is what makes a refused tick visible: the gate wrote nothing, so this
+            // puts the box back where the setting really is.
+            HapticsEnableToggle.IsChecked = _haptics.Enabled;
         }
         finally
         {
@@ -1067,6 +1161,20 @@ public partial class StudioPage : UserControl
         SchedulerReadingState.Text = SchedulerPanelNotices.DescribeReading(schedulerReading);
         SchedulerLastTickState.Text = SchedulerPanelNotices.DescribeLastTick(_scheduler.Last);
         SchedulerAbsenceState.Text = SchedulerPanelNotices.DescribeAbsences();
+
+        // SP-119 — the Haptics row. Its dot goes through the same non-effect overload the scheduler
+        // uses, for the same structural reason: this row is not on SessionEngine.Effects and never
+        // will be, because it is APP-scoped (App.xaml.cs:533, :2060) and the engine never touches it.
+        // The sink line is the sink's OWN last answer, so the panel and the capability the System
+        // page reports cannot tell two different stories.
+        var hapticsReachable = _haptics.LastObservation is { Confirmed: true };
+        RenderedHapticsDot = PaintSchedulerDot(HapticsRowDot, _haptics.Dot);
+        HapticsWhatItIs.Text = HapticsPanelNotices.DescribeWhatItIs();
+        HapticsLiveState.Text = HapticsPanelNotices.DescribeLiveState(
+            RenderedHapticsDot, _haptics.Enabled, hapticsReachable);
+        HapticsGateState.Text = HapticsPanelNotices.DescribeGate(_haptics.Gate);
+        HapticsSinkState.Text = HapticsPanelNotices.DescribeSink(_haptics.SinkState);
+        HapticsAbsenceState.Text = HapticsPanelNotices.DescribeAbsences();
 
         var subliminal = _session.SubliminalPreset.Current;
         SubliminalFrequencyValue.Text = subliminal.PerMinute.ToString(System.Globalization.CultureInfo.CurrentCulture);

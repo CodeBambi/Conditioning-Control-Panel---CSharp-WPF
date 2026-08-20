@@ -702,6 +702,10 @@ public class StudioRackHeadlessTests
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
                 "RowBouncingText", "RowPinkFilter", "RowVisuals",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+                // SP-119: Haptics is LAST in IMMERSION, immediately after Brain Drain and before
+                // the TIMING group, which is upstream's own position
+                // (StudioTabView.xaml.cs:513/519/530).
+                "RowHaptics",
                 "RowScheduler", "RowIntensityRamp",
             ],
             rows);
@@ -750,6 +754,19 @@ public class StudioRackHeadlessTests
         Assert.DoesNotContain(
             window.Session.Engine.Effects,
             e => string.Equals(e.Id, "scheduler", StringComparison.Ordinal));
+
+        // SP-119 — THE SECOND ROW OF THAT KIND, and the first that is a SINK rather than a driver.
+        // Upstream passes a dot predicate here too (() => App.Settings?.Current?.Haptics?.Enabled,
+        // StudioTabView.xaml.cs:520), so the row carries one; and like the scheduler it is not on
+        // Engine.Effects, because it is owned at app lifetime (App.xaml.cs:533, :2060) and the
+        // engine never touches it — zero hits for App.Haptics in MainWindow/MainWindow.StartStop.cs.
+        Assert.Contains(
+            Descendant<RadioButton>(window, "RowHaptics").GetVisualDescendants()
+                .OfType<Avalonia.Controls.Shapes.Ellipse>(),
+            e => e.Classes.Contains("dot"));
+        Assert.DoesNotContain(
+            window.Session.Engine.Effects,
+            e => string.Equals(e.Id, "haptics", StringComparison.Ordinal));
 
         await boot.Host.ShutdownAsync();
     }
@@ -937,6 +954,10 @@ public class StudioRackHeadlessTests
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
                 "RowBouncingText", "RowPinkFilter", "RowVisuals",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+                // SP-119: Haptics is LAST in IMMERSION, immediately after Brain Drain and before
+                // the TIMING group, which is upstream's own position
+                // (StudioTabView.xaml.cs:513/519/530).
+                "RowHaptics",
                 "RowScheduler", "RowIntensityRamp",
             ],
             rows);

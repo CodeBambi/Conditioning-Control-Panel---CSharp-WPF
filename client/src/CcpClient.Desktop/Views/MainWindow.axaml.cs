@@ -99,7 +99,18 @@ public partial class MainWindow : Window
                 + "be unable to tell it the user stopped by hand, and it would restart the session "
                 + "on its next tick")).Scheduler;
 
-        _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler);
+        // SP-119: the haptic sink's app-lifetime owner, composed once by the composition root beside
+        // the session and the scheduler and reached through the host — the same rule all three
+        // follow. A shell-local second one would hold a second entitlement decision and a second
+        // sink, so the switch on the page and the all-stop at teardown would be about different
+        // objects, and the one that outlives the process is the one still holding a level.
+        Haptics = host.Participants.OfType<Haptics.HapticParticipant>().FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "the shell needs the haptic capability and this host has none — an ungated switch is "
+                + "the fake-available shape the capability contract bans, and it would be ungated on "
+                + "the one paid feature in the rack");
+
+        _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
         _pages[ShellRoutes.Play] = new PlayPage(Dtrh);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
@@ -215,6 +226,12 @@ public partial class MainWindow : Window
     /// than a shell-local copy of it. It is APP-lifetime, not session-lifetime: it runs while
     /// nothing is running, which is the whole feature.</summary>
     public Scheduling.SessionScheduler Scheduler { get; }
+
+    /// <summary>The one haptic sink's owner (SP-119); public so tests drive the real gate and the
+    /// real refusal rather than a shell-local copy of either. APP-lifetime, like the scheduler and
+    /// unlike every rack module: upstream's is a static built at startup and never engine-started
+    /// (<c>App.xaml.cs:533</c>, <c>:2060</c>).</summary>
+    public Haptics.HapticParticipant Haptics { get; }
 
     /// <summary>
     /// WPF's <c>UpdateStartButton</c> (<c>MainWindow/MainWindow.StartStop.cs:751-796</c>): one

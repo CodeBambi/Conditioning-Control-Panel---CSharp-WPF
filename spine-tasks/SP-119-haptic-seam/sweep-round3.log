@@ -1,0 +1,9 @@
+M-s  CAUGHT  [unit]  both routes get the SAME description  ||  Failed!  - Failed:     2, Passed:   348, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
+M-y  CAUGHT  [unit]  SetOutputs stops validating its key and its list  ||  Failed!  - Failed:     1, Passed:   349, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
+M-bj  CAUGHT  [unit]  an EMPTY output list is a silent no-op after all  ||  Failed!  - Failed:     1, Passed:   349, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
+M-at  CAUGHT  [unit]  teardown never disposes the sink  ||  Failed!  - Failed:     2, Passed:   348, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
+M-bk  CAUGHT  [unit]  the sink is released ONLY on the started path (the leak)  ||  Failed!  - Failed:     1, Passed:   349, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
+M-bl  CAUGHT  [unit]  the sink is DISPOSED before the all-stop reaches it  ||  Failed!  - Failed:     1, Passed:   349, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
+
+round 3: 6 caught, 0 survived, 0 not patched, 0 not compiled (6 attempted)
+tree restored byte-identically: YES

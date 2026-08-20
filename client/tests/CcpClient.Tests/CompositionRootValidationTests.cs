@@ -59,7 +59,7 @@ public class CompositionRootValidationTests
 
         var host = root.Build(new StartupTrace());
 
-        Assert.Equal(9, host.Participants.Count);
+        Assert.Equal(10, host.Participants.Count);
         // Persistence contract §4 rule 1: the store registers first, so its phase-3 load
         // completes before any consumer participant starts.
         Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
@@ -81,6 +81,12 @@ public class CompositionRootValidationTests
         // the scheduler can evaluate anything; and participant stop is REVERSE order, so at
         // teardown the scheduler's poll dies before the session it drives.
         Assert.IsType<CcpClient.Desktop.Scheduling.SchedulerParticipant>(host.Participants[8]);
+        // SP-119: the HAPTIC sink registers last, after the scheduler, and the position is
+        // behaviour for the same reason. Participant stop is REVERSE order, so the sink is released
+        // before anything that could still be driving it — and its all-stop runs earlier still, in
+        // the reserved pre-drain head slot, which is upstream's own ordering
+        // (ConditioningControlPanel/App.xaml.cs:4401-4407).
+        Assert.IsType<CcpClient.Desktop.Haptics.HapticParticipant>(host.Participants[9]);
     }
 
     [Fact]
