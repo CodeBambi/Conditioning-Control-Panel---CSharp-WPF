@@ -1,1 +1,0 @@
-{ "packet": "SP-122-rack-presentation", "unit": 19, "headless": 3, "reason": "RackPresentationTests pins the rack manifest, its tolerances and thresholds, the surface/state pairs the capture script can drive, and the capture path's lease, fence and deterministic-start set; RackPresentationAnchorHeadlessTests ties the manifest colours to the product brushes" }

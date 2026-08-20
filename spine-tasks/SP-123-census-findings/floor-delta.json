@@ -1,1 +1,0 @@
-{ "packet": "SP-123-census-findings", "unit": 20, "headless": 0, "reason": "7 facts on the real SystemSoundClock (fault containment + null-callback fail-fast), 8 on the real DirectoryBarkAudioResolver (never-throws contract + named rooted-path divergence), 5 driving the lifted DTRH bark composition" }
