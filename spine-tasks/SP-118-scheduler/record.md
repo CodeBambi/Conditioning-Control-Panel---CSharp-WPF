@@ -434,7 +434,8 @@ window, the day gate per day and outside the seven, both fallbacks, the parse tr
 and a week-long verdict sweep), `SchedulerModuleTests.cs` (**32** cases: two positives, the thirteen
 refusals, the poll cadence, the dot, the settings round-trip, the real composition root, and the
 sweep's closers), `SystemScheduleClockTests.cs` (**6** cases on the REAL clock that ships — the
-review's blocker), `SchedulerRowHeadlessTests.cs` (**8** cases on real input).
+review's blocker), `SchedulerRowHeadlessTests.cs` (**8** cases on real input). The final review added the two
+daylight-saving predicate facts and the fall-back double-start (§8).
 **Tests — changed at zero count:** `CompositionRootValidationTests.cs` and `IntegrationProofTests.cs`
 (8 → 9 participants, plus new assertions that the ninth starts NO session),
 `StudioRackHeadlessTests.cs` (the row list gains `RowScheduler` in WPF's position, and the
@@ -453,15 +454,26 @@ order fact gains two assertions: this row HAS a dot and has NO effect behind it)
 start.** Every fact stops at the engine's `Running`, the row's dot, or the document behind them. No
 headed capture was taken; `presentation-verified` is untouched.
 
-- **The real clock is now driven, but only at the seam.** `SystemScheduleClockTests` executes
-  `SystemScheduleClock` — containment, reporting, the zero and negative delays, cancellation, and
-  the local reading — which is what the code review's blocker was about. What is still NOT proved
-  is the 60 s grace and the 30 s poll as INTERVALS: no test waits one out, deliberately, so
-  "thirty seconds means thirty seconds on a user's machine" rests on `TimeSpan.FromSeconds(30)`
-  reaching `System.Threading.Timer` and on nothing else.
-- **Daylight saving and timezone changes are untested**, which is uncomfortable precisely because
-  "this seam must be LOCAL, not UTC" is §2's whole argument. A window that spans a transition, or a
-  machine whose timezone changes while the app runs, is unproven in either direction.
+- **The interval residual, narrowed to what is really left.** An earlier draft said "the 60 s
+  grace and the 30 s poll are proved only on an injected clock", and the final review was right
+  that this overstates it. **M-au** and **M-ax** pin WHICH constant reaches `Arm` and that the poll
+  re-arms at all; `SystemScheduleClockTests` executes the real `System.Threading.Timer` at zero and
+  at negative delays. What remains unproven is only that `Timer` honours a POSITIVE `dueTime` —
+  **a BCL property, not a port claim**, and one no amount of test-writing here would make more
+  true.
+- **Daylight saving is now largely PINNED rather than named**, and the final review was right that
+  it was far cheaper to close than the earlier draft claimed: the injected clock reproduces both
+  transition sequences with no OS timezone change. **Spring forward** — a window inside the lost
+  hour never opens and the session is silently missed. **Fall back** — the predicate cannot tell
+  the two 02:00s apart, the window closes on the first pass (clearing `_schedulerAutoStarted`), and
+  the repeated hour re-opens it, so **a second unbidden auto-start really can happen in one night**.
+  That second case is this row's own headline harm and it is now a fact
+  (`AFallBackNightCanAutoStartTWICE_AndThatIsUpstreamsBehaviourNotADefect`), recorded as D190 and
+  deliberately NOT "fixed": a DST-aware predicate would start sessions at moments upstream does
+  not. **What is still untested** is a real machine crossing a real transition, and a timezone
+  changed underneath a running app. Closing the second needed one honest modelling correction in
+  the test clock: a rewound wall clock shifts every pending timer by the same offset, because
+  `System.Threading.Timer` counts an elapsed DURATION and not a wall-clock instant.
 - **Nothing proves the minimize is seen.** The headless fact asserts `ShellTray.IsDucked` and
   `WindowState == Minimized` in a headless window. Whether a real desktop shows a taskbar button, a
   tray icon, or anything at all is a headed claim and is not made.

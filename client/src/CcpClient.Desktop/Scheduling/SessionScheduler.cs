@@ -133,8 +133,10 @@ public sealed class SessionScheduler
     /// runs INSIDE the same <c>Dispatcher.Invoke</c> as the start.
     ///
     /// <para>Skip-until-bound: with no window there is nothing to minimize, and the session still
-    /// starts. The balloon that WPF sends beside the minimize (<c>:616</c>) is NOT sent — see
-    /// <see cref="SchedulerReasonCodes.SchedulerBalloonAbsent"/>.</para>
+    /// starts. The balloon WPF sends beside the minimize (<c>:616</c>) is NOT sent: <c>ShellTray</c>
+    /// exposes no arbitrary-notification entry and <c>Tray/**</c> was outside this packet's File
+    /// Scope. The absence is stated on the panel where a user reads it, and recorded as D183 —
+    /// deliberately NOT as a reason code, because nothing would ever emit one.</para>
     /// </summary>
     public event Action? AutoStarted;
 

@@ -291,6 +291,70 @@ public class SchedulerWindowTests
     }
 
     // =====================================================================================
+    //  DAYLIGHT SAVING — the two nights a local clock does not behave like a clock
+    // =====================================================================================
+
+    [Fact]
+    public void ASpringForwardNight_SKIPSAWindowThatLiesInsideTheLostHour_Entirely()
+    {
+        // The predicate reads LOCAL time, which is the whole reason this port needed a new seam —
+        // and the price of local time is that it is not monotone. On a spring-forward night the
+        // wall clock goes 01:59:59 -> 03:00:00 and the hour between simply does not occur, so a
+        // window inside it never opens and the scheduled session is silently missed.
+        //
+        // No OS timezone change is needed to state this: the reading is a value, and the fact is
+        // that NO reachable value on that night satisfies the window.
+        var doc = Doc("02:15", "02:45");
+
+        Assert.False(ScheduleWindow.Read(doc, At(new TimeSpan(1, 59, 59))).InWindow);
+        Assert.False(ScheduleWindow.Read(doc, At(new TimeSpan(3, 0, 0))).InWindow);
+
+        // Every second of that night that a spring-forward clock can actually show. The lost hour
+        // is excluded because it does not exist, which is exactly the point.
+        var reachable = 0;
+        for (var minute = 0; minute < 24 * 60; minute++)
+        {
+            if (minute >= 120 && minute < 180)
+            {
+                continue; // 02:00-02:59 never happens
+            }
+
+            reachable++;
+            Assert.False(ScheduleWindow.Read(doc, At(TimeSpan.FromMinutes(minute))).InWindow);
+        }
+
+        Assert.Equal(24 * 60 - 60, reachable);
+
+        // And it is the LOST HOUR doing it, not the window being malformed: the same window on an
+        // ordinary night opens exactly as written.
+        Assert.True(ScheduleWindow.Read(doc, At(new TimeSpan(2, 30, 0))).InWindow);
+    }
+
+    [Fact]
+    public void AFallBackNight_CannotTellTheTwoOhTwosApart_BecauseThePredicateIsAPureFunctionOfTheReading()
+    {
+        // The other half, and the one with teeth. On a fall-back night 02:00-03:00 happens TWICE,
+        // and the two passes differ only in UTC offset — which this predicate never sees, because
+        // it takes a local reading and nothing else. So the window opens on both passes, which is
+        // upstream's behaviour exactly (it reads DateTime.Now and asks nothing else).
+        var doc = Doc("01:30", "02:30");
+        var firstPass = At(new TimeSpan(2, 0, 0));
+        var secondPass = At(new TimeSpan(2, 0, 0)); // the same wall-clock label, one hour later
+
+        var a = ScheduleWindow.Read(doc, firstPass);
+        var b = ScheduleWindow.Read(doc, secondPass);
+
+        Assert.True(a.InWindow);
+        Assert.True(b.InWindow);
+        Assert.Equal(a, b);
+
+        // The window's own close is unaffected: 02:30 is out on BOTH passes (half-open end), which
+        // is what lets the tick clear its flag between them — and that is what makes a second
+        // auto-start possible. See SchedulerModuleTests' fall-back fact.
+        Assert.False(ScheduleWindow.Read(doc, At(new TimeSpan(2, 30, 0))).InWindow);
+    }
+
+    // =====================================================================================
     //  THE READING — what the panel is allowed to say
     // =====================================================================================
 

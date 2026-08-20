@@ -868,6 +868,45 @@ public class SchedulerModuleTests
         }
     }
 
+    [Fact]
+    public async Task AFallBackNightCanAutoStartTWICE_AndThatIsUpstreamsBehaviourNotADefect()
+    {
+        // THE daylight-saving case with teeth, and it lands on this row's own headline harm: an
+        // unbidden start. The predicate is a pure function of the local reading (see
+        // SchedulerWindowTests' fall-back fact), so when 02:00-03:00 repeats the window re-opens —
+        // and by then the STOP branch has already cleared _schedulerAutoStarted (:630), so the
+        // one-per-opening conjunct no longer blocks anything.
+        //
+        // It is PINNED rather than fixed. A DST-aware predicate would start sessions at moments
+        // upstream does not, and the whole discipline of this row is that it starts one exactly
+        // when upstream would. What the port owes here is that the behaviour is known, named
+        // (D190) and cannot change silently — not that it is different.
+        await using var rig = await Rig.StartAsync("01:30", "02:30", enabled: true, at: 0);
+        await rig.PassTheGrace();
+
+        // First pass through the window.
+        rig.TickAt(new TimeSpan(1, 45, 0));
+        Assert.True(rig.Engine.Running);
+        Assert.Equal(1, rig.Scheduler.StartsPerformed);
+        Assert.True(rig.Scheduler.AutoStartedSession);
+
+        // The window closes on the first pass and the flag goes with it.
+        rig.TickAt(new TimeSpan(2, 30, 0));
+        Assert.False(rig.Engine.Running);
+        Assert.Equal(1, rig.Scheduler.StopsPerformed);
+        Assert.False(rig.Scheduler.AutoStartedSession);
+
+        // 03:00 local; then the clock falls back and 02:00 happens for the second time.
+        rig.TickAt(new TimeSpan(2, 45, 0));
+        rig.Clock.RepeatTheHour(MondayMorning.Date + new TimeSpan(2, 0, 0));
+        rig.Clock.Advance(SessionScheduler.PollInterval);
+
+        Assert.True(rig.Engine.Running);
+        Assert.Equal(2, rig.Scheduler.StartsPerformed);
+        Assert.Equal(2, rig.DuckRequests);
+        Assert.Equal(SchedulerAction.Started, rig.Scheduler.Last!.Action);
+    }
+
     // =====================================================================================
     //  the rig
     // =====================================================================================
@@ -1157,6 +1196,34 @@ public class SchedulerModuleTests
         {
             SetLocalTime(moment);
             Pump();
+        }
+
+        /// <summary>
+        /// Move the wall clock BACKWARDS, which a local clock really does once a year.
+        ///
+        /// <para><see cref="SetLocalTime"/> refuses this on purpose — in every other fact a clock
+        /// that went backwards would be a broken test. On a fall-back night it is the world:
+        /// 02:00-03:00 happens twice and the second pass has a smaller reading than the moment
+        /// before it. No OS timezone change is needed to produce that here, and none is made.</para>
+        ///
+        /// <para><b>Every pending timer is shifted by the SAME offset, and that is not a
+        /// convenience.</b> <see cref="System.Threading.Timer"/> counts an elapsed DURATION, not a
+        /// wall-clock instant: a poll armed thirty seconds ago is still thirty seconds from firing
+        /// however the wall clock has been moved underneath it. Leaving the entries where they
+        /// were would model a timer that stops for an hour when the clock falls back, which no
+        /// real timer does — and it would hide the very double-start this fact exists to show.</para>
+        /// </summary>
+        public void RepeatTheHour(DateTime moment)
+        {
+            lock (_timers)
+            {
+                var shift = moment - _now;
+                _now = moment;
+                foreach (var entry in _timers)
+                {
+                    entry.Due += shift;
+                }
+            }
         }
 
         /// <summary>

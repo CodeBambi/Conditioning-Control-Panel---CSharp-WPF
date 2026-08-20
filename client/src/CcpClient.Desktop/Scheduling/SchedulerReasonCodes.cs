@@ -11,14 +11,16 @@ namespace CcpClient.Desktop.Scheduling;
 /// because it is the only thing in the port that can start a conditioning session with nobody at
 /// the keyboard. A tick whose outcome could not be named would be a start nobody could audit.</para>
 ///
-/// <para><b>Every code here is EMITTED by a path, and one was not.</b> SP-118 shipped a
-/// <c>scheduler-not-polling</c> code that nothing ever produced — the state it named is carried
-/// entirely by the dot's <c>Off</c> and by the panel's own "not watching the clock yet" line — and
-/// the review removed it. The capability contract's rule is that "codes are additive; new codes
-/// land with their consumer row", and a code with no consumer is exactly what that forbids.
-/// <see cref="SchedulerBalloonAbsent"/> is kept on the other side of that line deliberately: it
-/// names a DECLARED ABSENCE rather than a tick outcome, and it is cited from the code that would
-/// otherwise have sent the balloon.</para>
+/// <para><b>Every code here is EMITTED by a path, and TWO were not.</b> SP-118 shipped
+/// <c>scheduler-not-polling</c> and <c>scheduler-balloon-absent</c>, and no path ever produced
+/// either: the first named a state carried entirely by the dot's <c>Off</c> and the panel's own
+/// "not watching the clock yet" line, and the second was reachable only from a <c>&lt;see
+/// cref&gt;</c> in a doc comment. The capability contract's rule is that "codes are additive; new
+/// codes land with their consumer row", and a code with no consumer is exactly what that forbids.
+/// The first was removed at code review; the second survived one round on the argument that
+/// naming a DECLARED ABSENCE is different from naming a tick outcome — <b>which was the packet
+/// applying its own rule unevenly</b>, and the final review said so. Both are gone. The absence
+/// itself is unaffected: it is stated on the panel where a user reads it and recorded as D183.</para>
 /// </summary>
 public static class SchedulerReasonCodes
 {
@@ -59,13 +61,4 @@ public static class SchedulerReasonCodes
     /// </summary>
     public const string SchedulerStartRefusedBySession = "scheduler-start-refused-by-session";
 
-    /// <summary>
-    /// The tray balloons WPF raises on an auto-start and an auto-stop
-    /// (<c>MainWindow.StartStop.cs:616</c>, <c>:631</c>) are not sent by this build.
-    /// <c>Tray/ShellTray</c> exposes no arbitrary-notification entry and <c>Tray/**</c> is outside
-    /// SP-118's File Scope, so the absence is NAMED rather than faked. The minimize half IS
-    /// ported: <see cref="Tray.ShellTray.Duck"/> is the port's landed analogue of
-    /// <c>MinimizeToTray()</c> (<c>:615</c>).
-    /// </summary>
-    public const string SchedulerBalloonAbsent = "scheduler-balloon-absent";
 }
