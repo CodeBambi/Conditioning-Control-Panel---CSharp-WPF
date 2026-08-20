@@ -550,3 +550,10 @@ Floor pin **2067 unit / 121 headless**. Next task ID **SP-117**. Twelve modules 
 **BOUNDED, NOT ZERO.** 0/1500 = 0.20%; 0/30 = 9.5%; six post-fix runs expect 0.34 events. **Three consecutive greens is still not proof** and `verification-harness.md` says so deliberately.
 **`TestWait` was misreporting every `Task`-overload expiry as `ENVIRONMENT-STARVED`**, whose text says "rerun" - now fixed, with both verdicts pinned against each other and the pin asserting the ABSENCE of the word "rerun" (the instruction, not the label).
 **Line-ending trap, now in `port-workflow.md`:** one lone CR makes git's clean filter decline to normalise the whole file, so a 13-line doc edit can enter the blob as a 533-line rewrite invisibly. Always compare `git diff --numstat` against `--ignore-all-space` before landing a doc change, and match base's BOM convention rather than a reviewer's instruction.
+
+## 2026-08-20 - wave 57 landed
+Floor pin **2123 unit / 125 headless**. Next task ID **SP-118**. **THIRTEEN of fifteen rack rows.**
+**THE SESSION EFFECT SPINE IS COMPLETE - AND THE PRODUCT IS NOT AT PARITY.** Always say both halves. The two remaining rows are not session-scoped effect modules: Scheduler drives the engine from outside it (`StartEngine()`/`StopEngine()` from a 30s timer while nothing runs), Haptics is app-scoped and never engine-started. So 'N of fifteen' was never the right denominator for the spine.
+**D179 is why the second half matters:** Haptics is a SINK the spine drives, and the thirteen ported modules are silent to it - the shipping app reaches for it from EIGHT sites in three modules that ARE ported here (Flash x4, Video x3, Subliminals x1).
+**Haptics' four blockers are structural, not the absent device:** a seventh capability folder, a NuGet dependency needing an admission checkpoint, app-scope wiring in `Lifecycle/**`, and a premium gate. Both providers are CLIENTS of a separate server process.
+**Census-before-code is now proven twice** (SP-116's protocol, SP-117's census). A refusal with an inventory is a result; a refusal without one is an excuse.
