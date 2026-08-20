@@ -1,8 +1,8 @@
 # SP-119 — record
 
 Branch `lane/SP-119-haptic-seam`, base `4746d513`.
-Floor: pin **2191 unit / 133 headless**; observed **2245 unit / 141 headless**, zero failures;
-declared **+54 unit / +8 headless** (`floor-delta.json`). 2191 + 54 = 2245 and 133 + 8 = 141,
+Floor: pin **2191 unit / 133 headless**; observed **2247 unit / 141 headless**, zero failures;
+declared **+56 unit / +8 headless** (`floor-delta.json`). 2191 + 56 = 2247 and 133 + 8 = 141,
 confirmed by `node client/tests/floor/sum-deltas.mjs --check --packets SP-119-haptic-seam`. The floor
 run therefore REPORTS a violation against the pin, which is the expected shape: the orchestrator sums
 the deltas and applies one bump. Two skips, both pre-existing
@@ -300,9 +300,80 @@ setting can change, so a checkbox for the first would decide nothing.
 
 ---
 
-## 8. PROVING IT BITES
+## 8. PROVING IT BITES — 61 mutations, two rounds, **60 caught and ONE survivor**
 
-*(filled from `sweep-round*.log`; see §8.1)*
+Every conjunct, arm, clamp, constant, wording and wiring line this packet added was mutated one at a
+time by `spine-tasks/SP-119-haptic-seam/sweep.mjs`, which lives inside this packet's folder and
+writes only inside it (SP-112's rule). The driver normalises for MATCHING and writes each mutant back
+in the file's OWN line endings — the tree is CRLF and the needles are LF, which is what silently
+skipped 27 of SP-112's hardest cases — restores each file byte-identically, gates on a real compile
+before running anything, and asserts `git status --porcelain client/src` is empty at the end. The raw
+logs are beside this record and every count below is taken from them.
+
+**The books:** 61 distinct mutations; 57 (round 1) + 3 (round 2) = **60 caught**; **1 survives**;
+0 not patched; 1 NOT COMPILED in round 1, which was a fault in the DRIVER and is accounted for below
+rather than counted as evidence about the code.
+
+### Round 1 — 57 caught, 3 survived, 1 not compiled
+
+### Round 2 — the three survivors plus the driver correction: 3 caught, 1 survived
+
+- **M-av — `SinkState` classifying a hard-coded `NotAsked` instead of the real observation.** A real
+  hole. Every fact about that expression drove a build with nothing to observe, so a capability line
+  that could never change would have read as one that reports. Closed by
+  `SINKSTATEReportsWhatTheSERVERSaid_NotAFixedSentence`, which drives a recording sink with three
+  devices and asserts the detail names them.
+- **M-ax — deleting the haptic flush from the reserved pre-drain slot.** A real hole, and the same
+  one `SchedulerModuleTests` closes for its own settings: every other fact about the document either
+  saved it explicitly or never restarted, so a switch a user flipped on the way out could have been
+  silently lost. Closed by `ANUNSAVEDSettingStillReachesDiskThroughTheReservedPreDrainSlot` — dirty,
+  never saved, real `ShutdownAsync`, read the file back.
+- **M-ba — NOT COMPILED, and that verdict was MINE rather than the code's.** The replacement was not
+  type-preserving, so no test was ever asked about it. Re-stated as a swap for a participant whose
+  constructor really does type-check at that call site, and it is **CAUGHT** in round 2. A driver that
+  can manufacture a NOT COMPILED can also manufacture a false clean, which is why this is in the
+  record rather than in a comment.
+
+### The ONE survivor, dispositioned **UNCOVERED** — never "equivalent"
+
+**M-as — `ApplyEntitlementAsync` carrying `ex.Message` instead of `ex.GetType().Name`.**
+
+The mutation is a real hazard and the suite does not discriminate it. The reason is exact and was
+established by enumerating the consumers with `grep` **before** the disposition, which is the standing
+rule: **the value it corrupts has no reader in this build.** It is written into an
+`EntitlementReason.Detail`, and the two things that consume that outcome both read the CODE only —
+`HapticGate.Decide` (`reason.Code`, and `Explain` is a switch over codes with authored sentences) and
+`EntitlementOutcome.Describe()` (`"unavailable(" + reason.Code + ")"`, `EntitlementOutcome.cs:146-149`).
+`grep -n "\.Detail" client/src/CcpClient.Desktop` returns no site that renders a haptic entitlement
+detail to a log, a panel or a capability state.
+
+**So it is not an equivalent mutant** — an authority whose exception message carried a bearer really
+would put it in a string — **and it is not a hole a fact can close today without inventing a reader.**
+Adding a property so one test could read it is the unexecuted-shape failure this packet already
+removed once (the sink seam, §9). It is recorded as an obligation on the packet that first renders an
+entitlement detail: **that packet must not render this one.**
+
+The fact that DOES exist (`ANAUTHORITYThatTHROWSIsUNKNOWN_AndOnlyItsTYPENAMEIsCarried`) pins what is
+observable — the gate's message and the log carry no part of the exception — and it says in its own
+body what it does not cover.
+
+### The false-clean channels, named
+
+`runSuite` decides CAUGHT from a **non-zero exit code**, and `dotnet test` exits non-zero for reasons
+that are not a failing assertion. `compiles()` closes the largest — a mutant that does not build is
+reported as its own `NOT COMPILED` outcome, and round 1 produced exactly one, which is why M-ba is
+discussed above rather than counted as a catch. **The remaining channels — an empty `--filter`, a
+crashed host, the 15-minute timeout — are UNCLOSED**, and are bounded only empirically: every line in
+both logs shows a non-zero passing count from the same filters (349, then 351, on the unit side; 63 on
+the headless side), so no filter in this sweep matched zero tests.
+
+### One thing the sweep caught that was not a mutation
+
+Round 1's final line read `tree restored byte-identically: NO`. **The driver was innocent and the
+commit was not.** A `docs(SP-119)` commit ran `git add -A` while the sweep had M-h applied and
+captured that mutant — `DeviceCount == 0` became `DeviceCount < 0`, which would have made an empty
+haptic server report `Available`. It is fixed in its own commit with the reason at the top, rather
+than amended away, because the checkpoint that caught it is the one worth keeping visible.
 
 ---
 
@@ -324,7 +395,8 @@ right-click, the one-control panel, the four notice lines).
 `Persistence/**`, `Tray/**` and the csproj are byte-identical to base.**
 
 **Tests — new:** `HapticCapabilityTests.cs` (**22**), `HapticGateTests.cs` (**13**),
-`HapticParticipantTests.cs` (**19**) — 54 unit; `HapticsRowHeadlessTests.cs` (**8**) headless.
+`HapticParticipantTests.cs` (**21**, the last two being the sweep's M-av and M-ax closers) — 56 unit;
+`HapticsRowHeadlessTests.cs` (**8**) headless.
 **Tests — changed at zero count:** `CompositionRootValidationTests.cs` and `IntegrationProofTests.cs`
 (9 → 10 participants, plus new assertions that the tenth connects to nothing and holds the root's own
 entitlement authority), `CapabilityTests.cs` (the registered-name list gains `haptic-sink`, plus the
@@ -333,7 +405,7 @@ they are about — order relative to the session — asserted unchanged),
 `StudioRackHeadlessTests.cs` (the row list gains `RowHaptics` in WPF's position, and the order fact
 gains two assertions: this row HAS a dot and has NO effect behind it).
 
-22 + 13 + 19 = **54** unit, **8** headless — the declared delta.
+22 + 13 + 21 = **56** unit, **8** headless — the declared delta.
 
 **Docs:** `client/docs/wpf-surface-reachability.md` (§SP-119, **D191-D202**),
 `client/docs/verification-harness.md` (the haptic evidence class).
