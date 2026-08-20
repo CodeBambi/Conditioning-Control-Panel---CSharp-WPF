@@ -206,6 +206,13 @@ is empty at the end. **It was, on all three rounds.**
 **The books:** 60 distinct mutations; 57 (round 1) + 2 (round 2) + 1 (round 3) = **60 caught**;
 **0 survive**; 0 not patched, so no needle was silently skipped.
 
+**Rounds 4 and 5 add no mutations to those books and must not be counted into them.** Both re-run
+mutations round 1 already caught, as checks on the DRIVER rather than on the code: round 4 re-ran
+M-x while its compile behaviour was being measured, and round 5 re-ran M-x and M-at through the
+compile-gated driver. Each has its own durable log. A run whose evidence is deleted is
+indistinguishable from a run that never happened — SP-112 was corrected on exactly that point — so
+they are logged and excluded rather than logged and quietly added.
+
 ### Round 1 — 57 caught, 3 survived, 0 not patched
 
 ### Round 2 — the three survivors, each closed by a fact rather than argued away: 2 caught, 1 survived
@@ -236,7 +243,45 @@ already caught. The route is corrected in the driver with the reason at the line
 re-run with a durable log. A sweep whose own routing can manufacture a survivor is a sweep that can
 also manufacture a false clean, which is why this is in the record rather than in a comment.
 
-That fact creates **no window**, deliberately and by construction rather than by luck:
+### The SECOND false-clean channel, named because the paragraph above obliges it
+
+The paragraph above argues that a sweep whose routing can manufacture a survivor can also
+manufacture a false clean. **There is a second channel of exactly that kind in this driver and an
+earlier draft of this record left it unstated, which is that standard applied unevenly.**
+
+`sweep.mjs`'s `runSuite` decides `CAUGHT` from a **non-zero exit code**, and `dotnet test` exits
+non-zero for reasons that are not a failing assertion: **a mutant that does not COMPILE**, a
+`--filter` that matches no test, a crashed test host, or the 15-minute timeout. Every one of those
+registers as a catch, so the exit code alone cannot distinguish "a fact noticed" from "nothing was
+ever measured".
+
+**The bound that makes rounds 1-4 sound anyway, measured rather than argued:**
+
+- All 60 mutations are **type-preserving** — each swaps a constant, a member, an operand or a whole
+  statement for another that type-checks — so none can produce a compile error by construction.
+- **No project under `client/` sets `TreatWarningsAsErrors` or `WarningsAsErrors`** (`grep` over
+  every `*.csproj`, `*.props` and `*.targets` there returns nothing), so a warning cannot become an
+  error.
+- The one mutation that could plausibly still have failed to build is **M-x**, which removes the
+  sole `Changed?.Invoke()` (`FlashDraw.cs:160`) and orphans the event declared at `:131`. It was
+  applied by hand and built: **`CS0067` is a WARNING, `Build succeeded`, 0 errors.** Its `CAUGHT` is
+  therefore a real assertion failure — `TheDialsWriteThroughToTheDocumentAndRaiseChanged`'s
+  `Assert.Equal(3, changes)` — and not a build failure wearing a catch's clothes.
+- The filter channel is bounded differently: every round's log shows a non-zero passing count from
+  the same filters, so no filter in this sweep matched zero tests.
+
+**The driver now closes the largest of those channels rather than only describing it.** `compiles()`
+builds the product project before the suite runs and reports **`NOT COMPILED`** as its own outcome,
+the way `NOT PATCHED` already is, and the round summary carries a fourth column for it. **It was
+added after round 3 and therefore did NOT gate rounds 1-4** — that is why the bound above is stated
+rather than skipped. Round 5 re-ran M-x and M-at through the compile-gated driver as a check on the
+driver itself: both remain `CAUGHT`, `0 not compiled` (`sweep-round5.log`). **The remaining
+channels — empty filter, crashed host, timeout — are UNCLOSED and are named here rather than left
+for a reader to find.**
+
+### The composition-root fact creates no window
+
+Deliberately and by construction rather than by luck:
 `FlashSurfacePresenter.Show` takes the reading FIRST, and `ShowOne` gives up at the undecodable
 frame **before** `OverlaySurfaceSet.Acquire` is ever reached. It asserts `SurfacesShown == 0` so
 that property is pinned rather than assumed.
@@ -297,6 +342,26 @@ them and three landed facts updated per §4, all at **0** count change).
 ---
 
 ## 8. WHAT THIS WORK DOES NOT PROVE
+
+**FIRST, because it is this record's largest claim and the unjoined half of it reads as something
+false.** §1.1 says Scheduler is not a session module and this record elsewhere says the effect spine
+is complete. **The joined, scoped, qualified form is the only one that may be carried forward:**
+thirteen of the rack's fifteen rows are ported; the two that remain are **not session-scoped effect
+modules** — Scheduler calls `StartEngine()` / `StopEngine()` from a 30 s timer that runs when nothing
+is running (`MainWindow/MainWindow.StartStop.cs:601-637`), and Haptics is app-scoped and never
+engine-started (`App.xaml.cs:533`, `:2060`, `:2103-2105`; zero hits for `App.Haptics` in
+`MainWindow/MainWindow.StartStop.cs`). **So the session effect SPINE is complete and the PRODUCT is
+not at parity.**
+
+**That qualification is load-bearing rather than pedantic. Haptics is a SINK the spine drives, and
+none of the thirteen ported modules has a haptic limb.** The shipping product's ported-module code
+calls the haptic service from **eight** sites in three of them: `FlashService.cs:1453`, `:1480`,
+`:1516` (all three spawn arms) and `:1915` (the click); `VideoService.cs:2580`, `:4585`, `:6580`;
+`SubliminalService.cs:230`. So the absence subtracts from thirteen modules, not from one unported
+row. Recorded as **D179** in the ledger, which the ledger had carried only as one item inside three
+other modules' reward lists (D68, D145, D161) — **and not for Flash Images or Mandatory Video at
+all**, including Flash, the module this packet just extended. Unqualified, "the effect spine is
+complete" reads as behavioural parity, which is exactly what `task-board.md:24` was filed to prevent.
 
 - **Nothing here proves a human saw a flash at any size, opacity or duration.** No headed capture was
   taken; `presentation-verified` is untouched. Every measurement stops at the request this process

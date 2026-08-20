@@ -9,6 +9,28 @@
 // back in the file's OWN endings. A sweep that silently skips its hardest cases is worse than no
 // sweep.
 //
+// THE SECOND FALSE-CLEAN CHANNEL, named here rather than left implicit, because this packet's own
+// record argues that a sweep which can manufacture a SURVIVOR can manufacture a false CLEAN — and
+// leaving this one unstated would be that standard applied unevenly.
+//
+// `runSuite` decides CAUGHT from a NON-ZERO EXIT CODE, and `dotnet test` exits non-zero for reasons
+// that are not a failing assertion: a mutant that does not COMPILE, a `--filter` that matches no
+// test, a crashed test host, or the timeout below. **Every one of those registers as a catch**, so
+// the exit code alone cannot distinguish "a fact noticed" from "nothing was ever measured".
+//
+// `compiles()` closes the largest of those channels by building the product project BEFORE the
+// suite runs and reporting NOT COMPILED as its own outcome, the way NOT PATCHED already is: a
+// mutation the compiler rejected is a mutation no test was ever asked about.
+//
+// **It was added after round 3 and therefore did NOT gate rounds 1-4 of SP-117's own sweep.** The
+// bound that makes those rounds sound anyway is stated rather than assumed, and was measured:
+// all 60 mutations are type-preserving, and no project under `client/` sets
+// `TreatWarningsAsErrors` or `WarningsAsErrors` — so the one mutation that could plausibly have
+// failed to build, M-x (removing the sole `Changed?.Invoke()` and orphaning the event), was applied
+// by hand and built: `CS0067` at `FlashDraw.cs:131` is a WARNING, `Build succeeded`, 0 errors. Its
+// CAUGHT is a real assertion failure. The remaining channels (empty filter, crashed host, timeout)
+// are unclosed and are named in `record.md` §6.
+//
 // Usage: node spine-tasks/SP-117-last-three/sweep.mjs [--only M-a,M-b] [--round N]
 
 import { execFileSync } from "node:child_process";
@@ -301,6 +323,23 @@ function applyMutation(rel, find, replace) {
   return { ok: true, original };
 }
 
+/**
+ * Build the product project alone, before any test runs. A mutant the compiler rejects is reported
+ * as NOT COMPILED rather than counted as a catch, because nothing was measured about it.
+ */
+function compiles() {
+  try {
+    execFileSync(
+      "dotnet",
+      ["build", `${SRC}/CcpClient.Desktop.csproj`, "-c", "Debug", "--nologo", "-v", "q"],
+      { cwd: repo, stdio: "pipe", encoding: "utf8", timeout: 10 * 60 * 1000 },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function runSuite(suite) {
   const project =
     suite === "headless"
@@ -329,6 +368,7 @@ const log = [];
 let caught = 0;
 let survived = 0;
 let skipped = 0;
+let notCompiled = 0;
 
 for (const m of MUTATIONS) {
   if (only && !only.has(m.id)) {
@@ -346,12 +386,14 @@ for (const m of MUTATIONS) {
 
   let verdict;
   try {
-    verdict = runSuite(m.suite);
+    verdict = compiles() ? runSuite(m.suite) : "NOT COMPILED";
   } finally {
     write(m.file, applied.original);
   }
 
-  if (verdict === "CAUGHT") {
+  if (verdict === "NOT COMPILED") {
+    notCompiled++;
+  } else if (verdict === "CAUGHT") {
     caught++;
   } else {
     survived++;
@@ -368,8 +410,9 @@ const status = execFileSync("git", ["status", "--porcelain", "client/src"], {
 });
 const clean = status.trim() === "";
 const summary =
-  `\nround ${round}: ${caught} caught, ${survived} survived, ${skipped} not patched ` +
-  `(${caught + survived + skipped} attempted)\n` +
+  `\nround ${round}: ${caught} caught, ${survived} survived, ${skipped} not patched, ` +
+  `${notCompiled} not compiled ` +
+  `(${caught + survived + skipped + notCompiled} attempted)\n` +
   `tree restored byte-identically: ${clean ? "YES" : "NO — " + status}`;
 console.log(summary);
 log.push(summary);

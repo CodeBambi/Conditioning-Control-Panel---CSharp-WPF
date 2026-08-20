@@ -1268,6 +1268,17 @@ is driven by hand on the injected clock, so a logo that moved at half speed sati
 code.** The census is `spine-tasks/SP-117-last-three/plan.md`, committed before the first product
 edit. Two rows were refused with an inventory rather than an estimate; one shipped.
 
+**The scoped claim, joined and qualified, because the unjoined half of it is the sentence a reader
+would take for parity.** Thirteen of the rack's fifteen rows are now ported, and **the two that
+remain are not session-scoped effect modules**: Scheduler drives the engine from OUTSIDE a session
+(`MainWindow/MainWindow.StartStop.cs:601-637` calls `StartEngine()` / `StopEngine()` from a 30 s
+timer that runs when nothing is running), and Haptics is app-scoped and **never engine-started**
+(`App.xaml.cs:533`, `:2060`, `:2103-2105`; `grep App.Haptics MainWindow/MainWindow.StartStop.cs`
+returns **zero hits**). So **the session effect SPINE is complete, and the PRODUCT is not at
+parity** — and the gap between those two statements is not a technicality. **Haptics is a SINK the
+spine drives**, so its absence subtracts from all thirteen ported modules rather than from one
+unported row: see **D179**, which is the general record of the haptic limb none of them has.
+
 **Scheduler is not a session module, verified rather than inherited.** `SchedulerTimer_Tick`
 (`MainWindow/MainWindow.StartStop.cs:601-637`) runs on a 30 s `DispatcherTimer`
 (`MainWindow/MainWindow.xaml.cs:616-620`) **while nothing is running**, and its output is
@@ -1311,8 +1322,11 @@ that panel.
 | **D176** | — (port-internal; the boundary) | `FlashDraw` **throws** on an out-of-range reading instead of clamping | The document clamps on every write, WPF's clamp, so the product path can never construct an illegal one. A second clamp in the reading would silently absorb a document that had stopped clamping — **the defect it would hide is exactly the one the document's own facts exist to catch**, which is the tolerance rule applied to a clamp. Same boundary rule `OverlaySurfaceRequest` states for opacity zero |
 | **D177** | WPF's Intensity Ramp links **five** dials (`CCP.Core/Models/AppSettings.cs:2589-2621`), the first of which is flash opacity (`MainWindow/MainWindow.StartStop.cs:506-510`, capped at 100) | **Three.** D93's flash-opacity link is now present and real; master volume and subliminal volume are still absent | **D93 partially closes, on its own stated condition rather than by waiver.** Its rule was that a link whose dial has no ported panel is absent rather than present-and-inert; the Visuals row is flash opacity's panel. The other two links still have no dial anywhere. The dial is keyed to `FlashImagesEffect.EffectId` — the module whose value it borrows — and not to the row the slider is drawn on, so the ramp's custody line names the right owner. Its `Reapply` is a **no-op**, for D174's reason, so the whole of custody rests on `Write`; a spine fact drives held → climbed → clamped at the ceiling → restored |
 | **D178** | — (port-internal; a landed defect found while adding a store to the same lists) | `_bouncingTextPreset` was in **none** of `StartAsync`, `LogIfDegraded`, `StopAsync` or `FlushAsync` (SP-115). `PersistenceStore.Load` runs only from `StartAsync`, so the Bouncing Text dials were never read from disk and never written to it | Silent data loss: every dial a user set on that panel was gone at the next launch, and nothing said so. Repaired in the same commit that added the twelfth store to the same four lists, because leaving one out of four is exactly how the next one gets missed |
+| **D179** | **Ported modules CALL the haptic service as part of their own work.** Flash Images fires `FlashDecayVibeAsync()` on **all three** of its spawn arms — layer, host and per-window (`Services/Flash/FlashService.cs:1453`, `:1480`, `:1516`) — and `FlashClickVibeAsync()` when a flash is clicked (`:1915`). Mandatory Video starts a background vibe with the clip (`Services/Video/VideoService.cs:2580`), pulses on an attention-check hit (`:4585`) and stops the vibe on every teardown path (`:6580`). Subliminals fires a trigger pattern per card (`Services/Subliminal/SubliminalService.cs:230`) | **No ported module has a haptic limb at all**, and this is a property of the BUILD rather than of any one row | **Haptics is not one more unported rack row; it is a SINK the effect spine drives**, so its absence subtracts from thirteen ported modules rather than from one. This is recorded here as the GENERAL fact precisely so "the session effect spine is complete" can never be read as behavioural parity. The ledger previously carried it only as one item inside three other modules' reward lists — D68 (subliminals), D145 (bubble pop), D161 (bouncing text) — and **not for Flash Images or Mandatory Video at all**, including Flash, the module SP-117 just extended. What a port of the sink itself would need is censused in `spine-tasks/SP-117-last-three/plan.md` §2: a seventh capability folder, a NuGet dependency, an app-scope wiring point and a premium gate, plus a third-party server process and a device this machine does not have |
 
 **Undischarged, and named:** that a human sees a flash at any size, opacity or duration — no headed
 capture is taken here and `presentation-verified` is untouched; every part of Linux; multi-monitor;
-and the composited half of the opacity dial, which is measured only as far as the byte this process
-handed the overlay and the request the overlay was asked for.
+the composited half of the opacity dial, which is measured only as far as the byte this process
+handed the overlay and the request the overlay was asked for; and **everything D179 records** — the
+thirteen ported modules are silent to a device the shipping product drives from eight call sites in
+three of them, and nothing in this packet changes or discharges that.

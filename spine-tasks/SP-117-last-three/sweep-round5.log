@@ -1,0 +1,5 @@
+M-x  CAUGHT  [unit]  a dial move raises no Changed
+M-at  CAUGHT  [unit]  the presenter is built without the dials
+
+round 5: 2 caught, 0 survived, 0 not patched, 0 not compiled (2 attempted)
+tree restored byte-identically: YES
