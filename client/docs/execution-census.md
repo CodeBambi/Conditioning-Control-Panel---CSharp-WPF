@@ -140,7 +140,7 @@ not a defect in either.
 
 | project | exit | total | passed | failed | skipped |
 |---|---|---|---|---|---|
-| CcpClient.Tests | 0 | 2257 | 2255 | 0 | 2 |
+| CcpClient.Tests | 0 | 2270 | 2268 | 0 | 2 |
 | CcpClient.HeadlessTests | 0 | 141 | 141 | 0 | 0 |
 
 ## The shipped-type rule
@@ -149,11 +149,11 @@ The exclusion rule is BIGGER than the answer, so it is the risk. Every clause is
 one sentence and states what it removed. Widening a clause to shorten the list would be
 `allowedSkips`-as-quarantine wearing a new hat.
 
-Universe: **3947** `<class>` entries across every cobertura report.
+Universe: **3958** `<class>` entries across every cobertura report.
 
 | clause | what it removes | removed | defence |
 |---|---|---|---|
-| **C1** | any entry outside package `CcpClient.Desktop` | 1891 | The row asks about SHIPPED types, and CcpClient.Desktop is the assembly that gets published; CcpClient.Tests and CcpClient.HeadlessTests are not shipped, and an unexecuted test class is the floor's question (a test count), not this census's. |
+| **C1** | any entry outside package `CcpClient.Desktop` | 1902 | The row asks about SHIPPED types, and CcpClient.Desktop is the assembly that gets published; CcpClient.Tests and CcpClient.HeadlessTests are not shipped, and an unexecuted test class is the floor's question (a test count), not this census's. |
 | **C2** | any entry with a dot-segment matching `^<` | 728 | No C# identifier may begin with '<', so a dot-segment that does was emitted by the compiler and written by nobody: <>c, <>c__DisplayClassN_M, <Method>d__N, <<Method>b__N_M>d, <>c<TModel>, <Module>, <PrivateImplementationDetails>, and the [GeneratedRegex] tree including its nested RunnerFactory/Runner. |
 | **C3** | any entry whose FINAL dot-segment matches `^XamlClosure_[0-9]+$` | 4 | Avalonia's XAML compiler emits these nested classes for deferred content and no source file declares them; they are the only compiler-generated shape in this assembly that does not begin with '<'. Anchored at both ends so a type someone actually named XamlClosure_Registry survives. |
 | **kept** | merged by fully-qualified name into types | 1324 entries → 649 types | a partial class is ONE type; coverage is unioned |
@@ -169,7 +169,7 @@ Universe: **3947** `<class>` entries across every cobertura report.
 ### C1's counterfactual, measured rather than argued
 
 C1 removes the unshipped test assemblies. Published so the clause is not taken on trust: of
-**1880** authored-shape types in `CcpClient.Tests` and `CcpClient.HeadlessTests`,
+**1891** authored-shape types in `CcpClient.Tests` and `CcpClient.HeadlessTests`,
 **53** have zero executed lines. That number is a diagnostic about test-side
 helpers and never enters the answer above.
 
