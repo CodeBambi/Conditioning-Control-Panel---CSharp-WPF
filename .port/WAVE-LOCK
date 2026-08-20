@@ -1,0 +1,6 @@
+WAVE: 60
+PACKETS: SP-120-haptic-limb-census SP-121-zero-execution-census
+LANES: 2
+BASE: 9af75cdf
+GATE: validate-wave.mjs WAVE OK; floor 2247/141
+OPENED: 2026-08-20T23:55:00Z
