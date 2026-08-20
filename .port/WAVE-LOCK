@@ -1,0 +1,6 @@
+WAVE: 62
+PACKETS: SP-124-anchor-chokepoint SP-125-fyp-census
+LANES: 2
+BASE: d3c0e1b0
+GATE: validate-wave.mjs WAVE OK; FloorWrapperGuardTests 3/3; floor 2309/144
+OPENED: 2026-08-21T10:05:00Z
