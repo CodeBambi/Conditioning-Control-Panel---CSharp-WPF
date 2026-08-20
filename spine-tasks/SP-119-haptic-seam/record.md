@@ -317,7 +317,7 @@ setting can change, so a checkbox for the first would decide nothing.
 
 ---
 
-## 8. PROVING IT BITES — 61 mutations, two rounds, **60 caught and ONE survivor**
+## 8. PROVING IT BITES — 64 mutations, three rounds, **63 caught and ONE survivor**
 
 Every conjunct, arm, clamp, constant, wording and wiring line this packet added was mutated one at a
 time by `spine-tasks/SP-119-haptic-seam/sweep.mjs`, which lives inside this packet's folder and
@@ -327,9 +327,9 @@ skipped 27 of SP-112's hardest cases — restores each file byte-identically, ga
 before running anything, and asserts `git status --porcelain client/src` is empty at the end. The raw
 logs are beside this record and every count below is taken from them.
 
-**The books:** 61 distinct mutations; 57 (round 1) + 3 (round 2) = **60 caught**; **1 survives**;
-0 not patched; 1 NOT COMPILED in round 1, which was a fault in the DRIVER and is accounted for below
-rather than counted as evidence about the code.
+**The books:** 64 distinct mutations; 57 (round 1) + 3 (round 2) + 6 (round 3) = **63 caught**;
+**1 survives**; 0 not patched; 1 NOT COMPILED in round 1, which was a fault in the DRIVER and is
+accounted for below rather than counted as evidence about the code.
 
 ### Round 1 — 57 caught, 3 survived, 1 not compiled
 
@@ -375,6 +375,32 @@ observable — the gate's message and the log carry no part of the exception. **
 fact carried no such note and this record claimed it did; the comment is now really in its body**,
 naming the mutation, naming why nothing discriminates it, and naming the packet that inherits the
 obligation.
+
+### Round 3 — the code review's round: 6 caught, 0 survived
+
+The review changed **three product lines**, and all three carried a mutation needle with them. Round
+3 re-runs those three in their new form and adds three for the code the review introduced:
+
+- **M-s** (both routes get the same description) — the Lovense text moved when FIX 3 corrected the
+  owner sentence. Re-caught.
+- **M-y** (SetOutputs stops validating) — narrowed to the key and the null list, because the guard
+  set grew a third member. Re-caught.
+- **M-at** (teardown never disposes the sink) — restated against the restructured `StopAsync`.
+  Re-caught.
+- **M-bj** (an empty output list is a silent no-op after all) — **new**, covering the guard that
+  makes `IHapticSink`'s documented contract real.
+- **M-bk** (the sink is released ONLY on the started path) — **new**, and it is the leak the review
+  found: reachable because this participant is registered LAST, so any earlier participant's phase-3
+  failure leaves it constructed and un-started while teardown still stops everyone.
+- **M-bl** (the sink is DISPOSED before the all-stop reaches it) — **new**, and it is upstream's own
+  fixed defect: an all-stop that arrives after the provider is torn down reaches nothing
+  (`HapticService.cs:961-962` all-stops and only then disposes the mixer).
+
+**Rounds 1 and 2's verdicts still stand against the shipped tree, and that is checkable rather than
+asserted.** `git diff 3b01a240 HEAD -- client/src`, with comment-only lines filtered out, contains
+exactly the three sites above; every other mutated line is byte-identical to what rounds 1 and 2
+measured. The full sweep was not re-run for the unchanged 58, and this paragraph is the reason it did
+not need to be.
 
 ### The false-clean channels, named
 
