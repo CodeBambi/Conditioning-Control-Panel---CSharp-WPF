@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -1111,10 +1111,161 @@ Stay tuned... :3";
         }
 
         /// <summary>
-        /// Cleans up stale .NET single-file extraction cache folders.
-        /// When running as a self-contained single-file app, .NET extracts native libraries to
-        /// %TEMP%\.net\ConditioningControlPanel\{hash}=\ (~200MB each). Each new build gets a
-        /// different hash, and old folders are never cleaned up automatically.
+        /// Marks a folder we are in the middle of deleting. Renaming before deleting makes the
+        /// removal all-or-nothing from the point of view of anyone still using the folder: if a
+        /// file inside is locked the rename fails outright and the folder is left completely
+        /// intact, instead of being stripped of everything that happened not to be mapped.
+        /// </summary>
+        private const string ParkedFolderSuffix = ".stale-";
+
+        private static bool IsParkedFolder(string dir) =>
+            Path.GetFileName(dir).Contains(ParkedFolderSuffix, StringComparison.Ordinal);
+
+        /// <summary>
+        /// Returns the <c>&lt;base&gt;\&lt;hash&gt;</c> folder THIS process is running out of, or
+        /// null if it cannot be established (a normal non-bundled build, or an unreadable module
+        /// list). Null means "do not delete anything" — never "probably that one".
+        /// </summary>
+        private static string? ResolveLiveExtractionFolder(string dotnetTempBase)
+        {
+            try
+            {
+                var prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dotnetTempBase))
+                             + Path.DirectorySeparatorChar;
+
+                foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
+                {
+                    string file;
+                    // A module can vanish between enumeration and read; skip it rather than
+                    // abandoning the whole scan.
+                    try { file = module.FileName ?? string.Empty; } catch { continue; }
+
+                    if (file.Length <= prefix.Length ||
+                        !file.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // <base>\<hash>\libSkiaSharp.dll and <base>\<hash>\libvlc\win-x64\libvlc.dll
+                    // both answer the same thing: the first segment after the base.
+                    var rest = file.Substring(prefix.Length);
+                    var sep = rest.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+                    var hash = sep < 0 ? rest : rest.Substring(0, sep);
+                    if (hash.Length == 0) continue;
+
+                    return Path.Combine(Path.TrimEndingDirectorySeparator(prefix), hash);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Cleanup: could not read the module list: {Error}", ex.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// True when another process of this same executable is alive. Fails CLOSED — if we
+        /// cannot tell, we report true and the caller prunes nothing.
+        /// </summary>
+        private static bool OtherInstancesRunning()
+        {
+            try
+            {
+                using var me = Process.GetCurrentProcess();
+                foreach (var other in Process.GetProcessesByName(me.ProcessName))
+                {
+                    using (other)
+                    {
+                        if (other.Id != me.Id) return true;
+                    }
+                }
+                return false;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Park-then-delete one stale folder. Returns true only when the folder is actually gone.
+        /// </summary>
+        private static bool TryRemoveStaleFolder(string dir, out long size)
+        {
+            size = 0;
+            try
+            {
+                size = GetDirectorySize(new DirectoryInfo(dir));
+
+                var parked = Path.Combine(
+                    Path.GetDirectoryName(dir)!,
+                    Path.GetFileName(dir) + ParkedFolderSuffix + Environment.ProcessId);
+
+                // The rename is the safety interlock: it throws (leaving the folder untouched)
+                // if anything in there is still mapped by a live process.
+                Directory.Move(dir, parked);
+                Directory.Delete(parked, true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // Loud, not silent. The empty catch that used to be here is why a half-deleted
+                // live folder went unnoticed until users started reporting a dead app.
+                App.Logger?.Warning("Cleanup: could not remove stale .NET cache folder {Path}: {Error}",
+                    dir, ex.Message);
+                size = 0;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Finishes off folders a previous run parked but could not delete (a crash between the
+        /// rename and the delete, or a file that was still locked at the time).
+        /// </summary>
+        private static void SweepParkedFolders(string dotnetTempBase, ref int deletedCount, ref long freedBytes)
+        {
+            foreach (var dir in Directory.GetDirectories(dotnetTempBase))
+            {
+                if (!IsParkedFolder(dir)) continue;
+                try
+                {
+                    var size = GetDirectorySize(new DirectoryInfo(dir));
+                    Directory.Delete(dir, true);
+                    freedBytes += size;
+                    deletedCount++;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Cleanup: parked folder {Path} still not removable: {Error}", dir, ex.Message);
+                }
+            }
+        }
+        /// <summary>
+        /// Deletes extraction-cache folders left behind by PREVIOUS builds.
+        ///
+        /// <para>A self-contained single-file build unpacks its natives into
+        /// <c>%TEMP%\.net\ConditioningControlPanel\{hash}\</c>, one folder per build, several
+        /// hundred MB each, and the .NET host never removes the old ones. So we do - but only
+        /// ones we can PROVE are not in use.</para>
+        ///
+        /// <para><b>Why the paranoia.</b> This method used to pick the live folder by a
+        /// heuristic: the first folder whose LastWriteTime sat within five minutes of process
+        /// start. On 2026-08-20 a 6.8.2 -> 6.8.3 upgrade put two folders inside that window (the
+        /// outgoing build had been running four minutes earlier), the loop matched the WRONG one
+        /// first and broke, and every other folder - including the one this very process was
+        /// running out of - went through <c>Directory.Delete(dir, true)</c>. That delete removes
+        /// what it can and throws when it reaches a mapped image section, so the live folder was
+        /// stripped down to the only three files a running WPF app has locked
+        /// (D3DCompiler_47_cor3, PresentationNative_cor3, wpfgfx_cor3) and the throw landed in an
+        /// empty catch. libSkiaSharp was gone; three seconds later AmbientFxCanvas asked for an
+        /// SKPaint and the app died in InitializeComponent with a XamlParseException that named a
+        /// decorative FX control and nothing else.</para>
+        ///
+        /// <para>The .NET host cannot save us here: it verifies and re-extracts missing files at
+        /// process START, and this runs on a background thread well after that. Every subsequent
+        /// launch repeated the same delete, so the install stayed broken until the folder was
+        /// removed by hand. Hence the two hard rules below - identify the live folder exactly, and
+        /// when anything is uncertain delete NOTHING. Reclaiming disk is a nicety; bricking the
+        /// app is not a tradeoff worth making for it.</para>
         /// </summary>
         private static void CleanupDotNetTempCache(ref int deletedCount, ref long freedBytes)
         {
@@ -1123,63 +1274,54 @@ Stay tuned... :3";
                 var dotnetTempBase = Path.Combine(Path.GetTempPath(), ".net", "ConditioningControlPanel");
                 if (!Directory.Exists(dotnetTempBase)) return;
 
-                // Determine which folder the current process is using by checking
-                // if any loaded assembly resides inside one of these hash folders
-                var currentExePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
-                var currentFolder = "";
+                // Finish any parked folder a previous run could not fully remove (see below).
+                SweepParkedFolders(dotnetTempBase, ref deletedCount, ref freedBytes);
 
-                // For single-file apps, native libs are extracted to the hash folder.
-                // The app's own exe is NOT in the temp folder, but loaded native DLLs are.
-                // We can identify the active folder by checking which one was most recently written
-                // and matches the current process start time.
-                var processStart = Process.GetCurrentProcess().StartTime;
-
-                foreach (var dir in Directory.GetDirectories(dotnetTempBase))
+                // RULE 1: ask the loader which folder is ours, never the clock. Every native we
+                // have mapped out of the bundle lives under the active hash folder, so our own
+                // module list names it exactly. NativeBundleGuard has already loaded Skia by the
+                // time this background task runs, so there is always at least one such module to
+                // find; if there somehow is not, we bail rather than guess.
+                var liveFolder = ResolveLiveExtractionFolder(dotnetTempBase);
+                if (liveFolder == null)
                 {
-                    var dirInfo = new DirectoryInfo(dir);
-                    // The active folder's last write time should be very close to process start
-                    if (Math.Abs((dirInfo.LastWriteTime - processStart).TotalMinutes) < 5)
-                    {
-                        currentFolder = dir;
-                        break;
-                    }
+                    // Not a single-file build, or we simply could not tell. Guessing is what
+                    // caused the incident above.
+                    App.Logger?.Debug("Cleanup: could not identify the live extraction folder — skipping .NET cache prune");
+                    return;
                 }
 
-                // Fallback: if we couldn't identify current folder, keep the newest one
-                if (string.IsNullOrEmpty(currentFolder))
+                // RULE 2: another instance of this exe may be running out of a DIFFERENT hash
+                // folder (mid-update, or a second copy). We cannot see its folder from here, and
+                // half-deleting it would brick that process exactly the way we bricked ourselves.
+                // The prune is pure disk hygiene — skipping it costs nothing but a later retry.
+                if (OtherInstancesRunning())
                 {
-                    currentFolder = Directory.GetDirectories(dotnetTempBase)
-                        .OrderByDescending(d => new DirectoryInfo(d).LastWriteTime)
-                        .FirstOrDefault() ?? "";
+                    App.Logger?.Debug("Cleanup: another instance is running — skipping .NET cache prune");
+                    return;
                 }
 
                 var staleCount = 0;
                 foreach (var dir in Directory.GetDirectories(dotnetTempBase))
                 {
-                    if (string.Equals(dir, currentFolder, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(dir, liveFolder, StringComparison.OrdinalIgnoreCase))
                         continue;
+                    if (IsParkedFolder(dir))
+                        continue; // already handled by the sweep above
 
-                    try
+                    if (TryRemoveStaleFolder(dir, out var size))
                     {
-                        var dirInfo = new DirectoryInfo(dir);
-                        var dirSize = GetDirectorySize(dirInfo);
-                        Directory.Delete(dir, true);
-                        freedBytes += dirSize;
+                        freedBytes += size;
                         deletedCount++;
                         staleCount++;
-                    }
-                    catch
-                    {
-                        // Folder may be in use by another instance — skip silently
                     }
                 }
 
                 if (staleCount > 0)
                 {
-                    App.Logger?.Information("Cleanup: Deleted {Count} stale .NET cache folder(s) from {Path}",
-                        staleCount, dotnetTempBase);
+                    App.Logger?.Information("Cleanup: Deleted {Count} stale .NET cache folder(s) from {Path} (kept live folder {Live})",
+                        staleCount, dotnetTempBase, Path.GetFileName(liveFolder));
                 }
-
                 // Also clean up CCPUpdateHelper cache - this is a temp copy of our exe used during updates.
                 // It extracts to its own .NET cache folder that's never cleaned up.
                 // By the time the main app runs, the update helper has exited, so all folders are safe to delete.
