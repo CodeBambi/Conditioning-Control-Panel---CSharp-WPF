@@ -989,6 +989,18 @@
       "expectDetected": true,
       "verdict": "not-vacuous",
       "reason": "fs usage is the FindRepoRoot anchor probe + the Assert.True(File.Exists(ledgerPath)) never-skip checkpoint at depth 0 — the guard never skips by design"
+    },
+    {
+      "key": "CcpClient.Tests/SchedulerModuleTests.cs::SchedulerModuleTests.TheRealCompositionRootRegistersIt_AndItsSettingsReachDiskThroughTheRootsOwnTeardown",
+      "path": "CcpClient.Tests/SchedulerModuleTests.cs",
+      "line": 560,
+      "method": "SchedulerModuleTests.TheRealCompositionRootRegistersIt_AndItsSettingsReachDiskThroughTheRootsOwnTeardown",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "SP-118. The single File.Exists is the argument of an Assert.True at body depth 0 — the predicate IS the assertion, and a scheduler whose settings never reached disk FAILS here rather than being silenced. Same disposition, same shape and same mechanical reason as the AiMemoryStoreTests fs-predicate entries above. The enclosing try/finally exists only to delete the temp directory and does not guard the assertions (the detector classifies try/finally as non-guarding for exactly this reason)"
     }
   ]
 }

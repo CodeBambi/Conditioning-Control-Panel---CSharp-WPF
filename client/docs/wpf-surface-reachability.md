@@ -1330,3 +1330,49 @@ the composited half of the opacity dial, which is measured only as far as the by
 handed the overlay and the request the overlay was asked for; and **everything D179 records** — the
 thirteen ported modules are silent to a device the shipping product drives from eight call sites in
 three of them, and nothing in this packet changes or discharges that.
+
+## SP-118 — the Scheduler: the first thing this port has built that OWNS the engine
+
+**Fourteen of fifteen rack rows are ported, and the fourteenth is not a module.** `SchedulerTimer_Tick`
+(`MainWindow/MainWindow.StartStop.cs:601-639`) runs on a 30 s `DispatcherTimer`
+(`MainWindow/MainWindow.xaml.cs:615-620`) started after a 60 s grace (`:624-635`) and stopped at
+window close (`MainWindow/MainWindow.WindowChrome.cs:166`) — **while nothing is running** — and its
+output is `StartEngine()` (`:618`) and `StopEngine()` (`:628`). So it is owned at APP lifetime
+(`Scheduling/SchedulerParticipant.cs`, registered last in `CompositionRoot.DefaultParticipants`) and
+it is deliberately absent from `SessionEngine.Effects`. SP-117 §1.1 predicted exactly this and the
+prediction was re-verified against source line by line before anything rested on it.
+
+**The predicate is upstream's, clause by clause, and the interesting facts are the refusals.**
+Thirteen are pinned by name (`SchedulerModuleTests` R1-R13): a disabled scheduler never even reads
+the clock; outside the window nothing starts; a session the user started is neither touched nor
+claimed; a hand-stop inside the window is never overridden; an unticked day refuses all day; an
+unreadable time falls back rather than opening; the window's end is CLOSED on both branches; an
+equal start/end is EMPTY; the grace is silent; teardown is final; one opening starts one session.
+
+**No `ISessionClock` was widened.** The scheduler needs LOCAL time and `Session/SessionClock.cs:17-25`
+is `UtcNow`; the symbol's consumers were enumerated by `grep` before the decision (twelve modules and
+presenters under `Effects/**`, the `PacedSessionEffect` base, `CompositionRoot.SessionClockFactory`,
+`SessionParticipant`, and ~24 hand-written implementations under `client/tests/**`), and `Effects/**`
+was outside this packet's File Scope, so the widening was unreachable as well as inadvisable. A new
+seam, `Scheduling/IScheduleClock`, carries `LocalNow` + `Schedule`. **No equivalence claim is made
+anywhere in this packet.**
+
+| # | v6.8.1 fact | Port at SP-118 | Reason |
+|---|---|---|---|
+| **D180** | The Scheduler rack row's dot is `() => App.Settings?.Current?.SchedulerEnabled` (`Views/Tabs/StudioTabView.xaml.cs:536`) — a claim about a CHECKBOX | **A dot with three earned states.** `Off` = the enable is off OR no tick is on the clock; `Armed` = enabled, really polling, outside the window; `Live` = enabled, really polling, inside the window (`SessionScheduler.Dot`) | The port's dot has always been a claim about what a module can DO, never about a stored flag (`OwnedSessionEffect.WorkIsRunning`). The visible consequence is the 60-second grace: upstream lights the dot the instant the box is ticked, and for those 60 seconds nothing can happen, because `_schedulerTimer.Start()` has not run yet (`MainWindow/MainWindow.xaml.cs:624-635`). The port paints `Off` and the panel says why in words. It is also the FIRST dot in this rack that is not a claim about a capability — the scheduler acquires none of the six |
+| **D181** | `CheckSchedulerAfterSettingsChange()` (`MainWindow/MainWindow.StartStop.cs:583-599`) arms the scheduler the instant the enable is saved | **Not ported at all.** Enabling arms within one 30 s poll | **It is dead code in the shipping product, and provably so rather than by its comment.** `MainWindow/MainWindow.Settings.cs:363` is `var schedulerWasEnabled = s.SchedulerEnabled;` and `:364` is `if (s.SchedulerEnabled && !schedulerWasEnabled)` — `b && !b`, a tautological false, on the line immediately after the assignment. The shipping product's own note reaches the same conclusion from the other direction: "enabling the scheduler now arms within one 30s SchedulerTimer_Tick instead of instantly" (`Views/Controls/Studio/SchedulerRackPanel.xaml.cs:14-18`). Porting it would have shipped a path upstream cannot reach |
+| **D182** | `StartEngine()` (`MainWindow/MainWindow.StartStop.cs:161`) has **no `_isRunning` guard of its own**, and `CheckSchedulerOnStartup()` (`:562-581`) does not check one either — so a session the user started during the 60 s grace is re-armed service by service AND marked `_schedulerAutoStarted = true` (`:579`) | **The port refuses the second start** (`SessionEngine.Start()` returns `false` when `Running`) **and does not claim it**: the outcome is `scheduler-start-refused-by-session` and the auto-started flag stays false | Not a rounding of upstream but a repair of a live defect, in the one direction that matters: without it, the window closing at 22:00 would stop a session the scheduler never started. Pinned by `R12_AStartTheSessionRefuses_IsNotCountedAsSchedulerStarted`, which also asserts the user's session survives the window's close |
+| **D183** | The tick raises TWO tray balloons — "Scheduler Active / Session auto-started based on schedule." on the start (`:616`) and "Scheduler / Scheduled session ended." on the stop (`:631`) — alongside `_trayIcon?.MinimizeToTray()` (`:614`) | **The minimize IS ported** (`ShellTray.Duck()`, raised as a UI projection the shell answers). **The two balloons are ABSENT**, named on the panel where the user reads it and coded as `scheduler-balloon-absent` | `Tray/ShellTray` exposes no entry for an arbitrary notification — its only balloon is WPF's once-per-process first-minimize one (`AskForFirstMinimizeBalloon`, `TrayIconService.cs:150-157`) — and `Tray/**` was outside this packet's File Scope. A scheduler that needs a capability folder changed is a finding, so it is recorded as one rather than worked around. What tells the user a scheduled session began is the ducked window, the tray icon that goes up with it, and the shell's START control turning red |
+| **D184** | — (port-internal; the reading) | `IsInScheduledTimeWindow` returns a `ScheduleWindowReading` — day, day-active, time of day, both parsed times, both fallback flags, the wrap flag and the verdict — and the panel renders it | Upstream computes the same working and throws it into a `Debug` log line (`:692-693`) plus a `Warning` per unparseable time (`:669`, `:675`), none of which a user ever sees. **The parse is upstream's own `TimeSpan.TryParse` and is NOT a time-of-day parser**: measured on this runtime, `"8"` succeeds as **8 days** and `"25:00"`/`"24:00"` fail into the 16:00/22:00 fallbacks. A user who types `8` meaning eight in the morning silently gets a 00:00-22:00 window through the overnight branch. **The predicate is unchanged** — changing it would change when sessions start — and the mitigation is that the panel shows what was really parsed, and the box keeps the user's own text so their mistake stays visible to them |
+| **D185** | The two scheduler flags are written from `BtnStart_Click` on the way past: `_manuallyStoppedDuringSchedule = true` when the user stops **while the scheduler is enabled AND inside the window** (`:98-101`), `= false` when the user starts (`:106-107`) | Ported to the shell's ONE start/stop control, in WPF's order — the scheduler is told what the press MEANS while `Engine.Running` still says which press it was (`Views/MainWindow.axaml.cs`) | This one line is what makes "I pressed STOP and it came back" impossible, which is the largest user-harm this row could do and the same class SP-110 shipped and had caught in review. Pinned in the pure suite (R4, R4b, R4c, R4d, R4e) and again through the REAL button in the headless suite (`PressingTheShellsSTOPButtonInsideTheWindow_StopsItComingBack`) |
+| **D186** | — (port-internal; a consequence of upstream's clause order, recorded because it reads like a bug) | Switching the scheduler OFF mid-session leaves the scheduled session RUNNING, and the window's close does not end it | `if (!settings.SchedulerEnabled) return;` is the tick's FIRST statement (`:604`), before `IsInScheduledTimeWindow()` and before both the stop branch (`:622`) and the reset branch (`:635`). So a disabled scheduler clears no flags and stops nothing. Ported faithfully and pinned (`R1b`) rather than "fixed", because the fix would be a scheduler that acts while switched off — and the user's own STOP button is unaffected. The panel's last-check line says the tick "changed nothing" |
+| **D187** | — (port-internal; the same clause order, the other consequence) | `_schedulerAutoStarted` records that **this window's OPENING has been served**, not that the current session is the scheduler's. A user who stops the scheduled session and restarts it by hand still has that session stopped when the window closes | Upstream's flag is written only at `:619`/`:630`/`:637`; neither manual branch (`:98-107`) touches it. Pinned inside `R4c` rather than left to be discovered, because the name reads like "the scheduler started what is running now" and it does not. It is also the SAFE direction of the two: it ends a session, it never begins one |
+
+**Undischarged, and named:** every part of Linux (the scheduler itself is platform-neutral — it
+reads a clock and calls the engine — but the session it starts draws through capabilities that
+refuse there); that a human ever saw a window minimize, a tray icon appear, or a session begin
+while they were away from the keyboard, none of which any headless frame can claim; the real
+`SystemScheduleClock`, which no test drives, so the 60 s grace and the 30 s poll are proved only on
+an injected clock; behaviour across a daylight-saving transition or a timezone change, which is
+exactly what makes this the one seam in the port that must NOT be UTC and is exactly what is not
+tested; and the two balloons of D183.

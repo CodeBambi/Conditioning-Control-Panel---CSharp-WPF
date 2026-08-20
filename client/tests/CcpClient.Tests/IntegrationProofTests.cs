@@ -34,7 +34,7 @@ public class IntegrationProofTests
 
         // MainWindow's dependencies are (host, host.Trace) — both resolve from the root's product.
         Assert.Same(trace, host!.Trace);
-        Assert.Equal(8, host.Participants.Count);
+        Assert.Equal(9, host.Participants.Count);
         var store = Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
         var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[1]);
         var ticker = Assert.IsType<CcpClient.Desktop.Features.StatusTickerParticipant>(host.Participants[2]);
@@ -43,11 +43,23 @@ public class IntegrationProofTests
         Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhParticipant>(host.Participants[5]);
         // SP-046: the companion AI chain composes last (memory store started in phase-3 order).
         Assert.IsType<CcpClient.Desktop.Features.Companion.CompanionParticipant>(host.Participants[6]);
-        // SP-098: the conditioning session registers LAST, and its phase-3 start loads the
-        // preset WITHOUT starting a session — WPF's engine runs only when the user presses
-        // START (MainWindow/MainWindow.StartStop.cs:34,105).
+        // SP-098: the conditioning session's phase-3 start loads the preset WITHOUT starting a
+        // session — WPF's engine runs only when the user presses START
+        // (MainWindow/MainWindow.StartStop.cs:34,105).
         var session = Assert.IsType<CcpClient.Desktop.Session.SessionParticipant>(host.Participants[7]);
         Assert.True(session.Running);
+        Assert.False(session.Engine.Running);
+        // SP-118: the SCHEDULER registers last and its phase-3 start ALSO starts no session. It
+        // arms a 60-second grace and nothing else — and on a fresh install the enable is off, so
+        // even when the grace elapses the first thing the tick does is return
+        // (MainWindow/MainWindow.StartStop.cs:604). The one participant in this list that CAN
+        // begin a conditioning session by itself is asserted not to have.
+        var scheduler = Assert.IsType<CcpClient.Desktop.Scheduling.SchedulerParticipant>(host.Participants[8]);
+        Assert.True(scheduler.Running);
+        Assert.False(scheduler.GracePassed);
+        Assert.False(scheduler.Scheduler.Polling);
+        Assert.False(scheduler.Scheduler.Enabled);
+        Assert.Null(scheduler.Scheduler.Last);
         Assert.False(session.Engine.Running);
         Assert.IsType<LoadOutcome.Missing>(session.Preset.LastLoadOutcome);
         Assert.True(heartbeat.Running); // phase 3 demonstrably started it

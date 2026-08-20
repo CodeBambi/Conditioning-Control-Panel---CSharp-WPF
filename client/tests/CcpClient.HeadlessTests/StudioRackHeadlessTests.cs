@@ -702,7 +702,7 @@ public class StudioRackHeadlessTests
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
                 "RowBouncingText", "RowPinkFilter", "RowVisuals",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
-                "RowIntensityRamp",
+                "RowScheduler", "RowIntensityRamp",
             ],
             rows);
 
@@ -736,6 +736,20 @@ public class StudioRackHeadlessTests
         Assert.Empty(
             Descendant<RadioButton>(window, "RowVisuals").GetVisualDescendants()
                 .OfType<Avalonia.Controls.Shapes.Ellipse>());
+
+        // SP-118 — AND THE ROW THAT HAS A DOT WITH NO EFFECT BEHIND IT, which is the inverse case
+        // and is new to this rack. Upstream passes a dot predicate for Scheduler
+        // (StudioTabView.xaml.cs:536) where it passes null for Visuals (:496), so the row carries
+        // one; what it does NOT carry is a module — the scheduler is owned at app lifetime and
+        // drives the engine from outside it, so it is deliberately absent from Engine.Effects and
+        // the rack's quick-toggle dispatch has no id for it.
+        Assert.Contains(
+            Descendant<RadioButton>(window, "RowScheduler").GetVisualDescendants()
+                .OfType<Avalonia.Controls.Shapes.Ellipse>(),
+            e => e.Classes.Contains("dot"));
+        Assert.DoesNotContain(
+            window.Session.Engine.Effects,
+            e => string.Equals(e.Id, "scheduler", StringComparison.Ordinal));
 
         await boot.Host.ShutdownAsync();
     }
@@ -923,7 +937,7 @@ public class StudioRackHeadlessTests
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
                 "RowBouncingText", "RowPinkFilter", "RowVisuals",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
-                "RowIntensityRamp",
+                "RowScheduler", "RowIntensityRamp",
             ],
             rows);
 

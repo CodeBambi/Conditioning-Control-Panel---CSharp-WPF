@@ -59,7 +59,7 @@ public class CompositionRootValidationTests
 
         var host = root.Build(new StartupTrace());
 
-        Assert.Equal(8, host.Participants.Count);
+        Assert.Equal(9, host.Participants.Count);
         // Persistence contract §4 rule 1: the store registers first, so its phase-3 load
         // completes before any consumer participant starts.
         Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
@@ -73,9 +73,14 @@ public class CompositionRootValidationTests
         Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhSaveSlots>(host.Participants[4]);
         // SP-046: the companion AI chain (pipeline + memory + awareness + executor).
         Assert.IsType<CcpClient.Desktop.Features.Companion.CompanionParticipant>(host.Participants[6]);
-        // SP-098: the conditioning session registers last (its preset load runs after every
-        // other store's phase-3 load).
+        // SP-098: the conditioning session (its preset load runs after every other store's
+        // phase-3 load).
         Assert.IsType<CcpClient.Desktop.Session.SessionParticipant>(host.Participants[7]);
+        // SP-118: the SCHEDULER registers last, and the position is behaviour rather than tidiness.
+        // Registration order is phase-3 START order, so the session's preset load completes before
+        // the scheduler can evaluate anything; and participant stop is REVERSE order, so at
+        // teardown the scheduler's poll dies before the session it drives.
+        Assert.IsType<CcpClient.Desktop.Scheduling.SchedulerParticipant>(host.Participants[8]);
     }
 
     [Fact]
