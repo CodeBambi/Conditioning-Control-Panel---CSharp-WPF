@@ -58,14 +58,6 @@ internal static class GlyphSurfaceObservations
     /// </summary>
     internal const int ArbitrationAttempts = 32;
 
-    /// <summary>
-    /// How far a HALF-opacity sample may be from the predicted composite, per channel. Zero is the
-    /// tolerance at full opacity and is asserted there; see
-    /// <c>DifferentialRun.EveryHalfOpacityPointIsWithinOneOfThePrediction</c> for the one measured
-    /// unit this exists for and for why the model was not tuned to remove it.
-    /// </summary>
-    internal const int HalfOpacityTolerance = 1;
-
     private static readonly Lazy<LifecycleRun> LazyLifecycle =
         new(RunLifecycle, LazyThreadSafetyMode.ExecutionAndPublication);
 
@@ -592,55 +584,18 @@ internal static class GlyphSurfaceObservations
             HalfOpacityHeld && HalfOpacity[1] == BackdropColour && HalfOpacity[0] == BackdropColour;
 
         /// <summary>
-        /// Every half-opacity point is within <see cref="HalfOpacityTolerance"/> of the same
-        /// arithmetic at constant alpha 128, per channel.
+        /// Every half-opacity point equals the same arithmetic at constant alpha 128, EXACTLY.
         ///
-        /// <para><b>A tolerance, and it is named rather than hidden.</b> At constant alpha 255 the
-        /// prediction is EXACT and is asserted as such. At 128 it is exact at three of the four
-        /// sampled points and one unit out in the red channel of the fourth (predicted
-        /// <c>0xD65E47</c>, screen <c>0xD65E48</c>) - the compositor evidently rounds the
-        /// per-pixel-times-constant product somewhere this model does not, and no reading of the
-        /// documented formula reproduces it. Fitting <c>CompositeOver</c> to that single observation
-        /// would be tuning the oracle to the data, so the model is left alone and the residue is
-        /// declared. The claim this leg is FOR - that the dial reaches the compositor - does not
-        /// rest on this at all; it rests on the half-opacity capture DIFFERING from the
-        /// full-opacity one, which is a difference of tens of units, not one.</para>
+        /// <para><b>There is no tolerance here, and an earlier draft had one.</b> That draft's
+        /// oracle rounded each of the three terms of the composite separately, missed the screen by
+        /// one unit in one channel of one point, and absorbed the miss with a
+        /// <c>±1</c> allowance — which would have silently swallowed a real one-unit-per-channel
+        /// regression at every non-255 setting of the dial. The formula was not wrong; the number of
+        /// roundings was. Rounding once, at the end, reproduces all eight measured values at both
+        /// opacities, so equality is asserted at 128 exactly as it is at 255.</para>
         /// </summary>
-        internal bool EveryHalfOpacityPointIsWithinOneOfThePrediction
-        {
-            get
-            {
-                if (!HalfOpacityHeld)
-                {
-                    return false;
-                }
-
-                for (var i = 0; i < HalfOpacity.Length; i++)
-                {
-                    if (!WithinTolerance(HalfOpacity[i], ExpectedHalfOpacity[i]))
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-        }
-
-        private static bool WithinTolerance(uint held, uint expected)
-        {
-            for (var shift = 0; shift <= 16; shift += 8)
-            {
-                var a = (int)((held >> shift) & 0xFF);
-                var b = (int)((expected >> shift) & 0xFF);
-                if (Math.Abs(a - b) > HalfOpacityTolerance)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
+        internal bool EveryHalfOpacityPointMatchesThePrediction =>
+            HalfOpacityHeld && HalfOpacity.SequenceEqual(ExpectedHalfOpacity);
 
         internal string Why =>
             $"desktop={MachineHasInteractiveDesktop} backdropPresented={BackdropPresented} "

@@ -175,21 +175,23 @@ public class GlyphAlphaDifferentialTests
     }
 
     [Fact]
-    public void ANDEVERYHALFOPACITYPOINTIsWithinONEUnitOfTheSameArithmetic()
+    public void ANDEVERYHALFOPACITYPOINTMatchesTheSameArithmeticEXACTLY()
     {
-        // WITHIN ONE, and the tolerance is the finding rather than a convenience. At full opacity
-        // the prediction is EXACT and is asserted as such two facts above. At half opacity it is
-        // exact at three of the four points and one unit out in the red channel of the fourth. The
-        // model was NOT tuned to remove that unit: fitting CompositeOver to a single observation
-        // would make the oracle a copy of the data. The residue is declared here, in the record and
-        // at the constant.
+        // EXACTLY, with no tolerance - and an earlier draft of this fact had one. Its oracle rounded
+        // each of the three terms of the composite separately, missed the screen by one unit in one
+        // channel of one point, and absorbed the miss with a plus-or-minus-one allowance. That
+        // allowance would have swallowed a real one-unit-per-channel regression at every non-255
+        // setting of the dial, which is the whole class of defect this leg exists to catch.
+        //
+        // The formula was never wrong; the number of roundings was. Rounding ONCE at the end
+        // reproduces all eight measured values across both opacities, so this asserts equality at
+        // 128 exactly as the fact above asserts it at 255.
         var run = GlyphSurfaceObservations.Differential;
 
         Assert.True(
-            run.EveryHalfOpacityPointIsWithinOneOfThePrediction == run.MachineHasInteractiveDesktop,
+            run.EveryHalfOpacityPointMatchesThePrediction == run.MachineHasInteractiveDesktop,
             $"predicted [{string.Join(", ", run.ExpectedHalfOpacity.Select(v => $"0x{v:X6}"))}] and the screen "
-            + $"holds [{string.Join(", ", run.HalfOpacity.Select(v => $"0x{v:X6}"))}], further apart than "
-            + $"{GlyphSurfaceObservations.HalfOpacityTolerance} unit per channel. {run.Why}");
+            + $"holds [{string.Join(", ", run.HalfOpacity.Select(v => $"0x{v:X6}"))}]. {run.Why}");
     }
 
     [Fact]

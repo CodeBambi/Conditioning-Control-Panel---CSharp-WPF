@@ -454,7 +454,7 @@ which is worse than absent. So this capability's evidence is classed more finely
 |---|---|---|---|
 | `glyph-surface-held` | the OS holds the window: it exists, is visible, carries exactly the requested rectangle and every extended style, sits above every ordinary window in the OS's own z-order, routes its own centre point the way the request asked in BOTH polarities, and never took the foreground | `IsWindow` / `IsWindowVisible` / `GetWindowRect` / `GetWindowLongPtr` / `GetTopWindow`+`GetWindow` / `WindowFromPoint` / `GetForegroundWindow` | an interactive desktop |
 | `glyph-composited` | **the operating system's own copy of the surface carries the frame**: every fully-opaque ink point reads back exactly its own colour and every fully-transparent sample reads back nothing | `PrintWindow(hwnd, dc, PW_RENDERFULLCONTENT)` into a bitmap the caller owns | an interactive desktop |
-| `glyph-desktop-composited` | **a fully transparent pixel shows the background BEHIND it, an opaque black pixel does NOT, a glyph pixel is its own colour, and a partial alpha is exact premultiplied source-over** | `BitBlt(SRCCOPY \| CAPTUREBLT)` from the screen DC over a known background, DPI-mapped, with a control capture taken with the surface hidden | an interactive desktop **and** the occlusion arbitration winning |
+| `glyph-desktop-composited` | **a fully transparent pixel shows the background BEHIND it, an opaque black pixel does NOT, a glyph pixel is its own colour, and a partial alpha is exact premultiplied source-over** — at the two uniform-opacity settings named below, and at those only | `BitBlt(SRCCOPY \| CAPTUREBLT)` from the screen DC over a known background, DPI-mapped, with a control capture taken with the surface hidden, at uniform opacity **1.0 and 0.5** | an interactive desktop **and** the occlusion arbitration winning |
 | `watched-verified` | a human saw a word bounce | a person | **undischarged, and no automated step on any platform discharges it** |
 
 ### The negative control is the class, not a footnote
@@ -480,8 +480,25 @@ have three.
 Partial-alpha values are **not** asserted in `glyph-composited`. They were measured stable across
 repeated calls and ALSO measured once at half the expected value on a window whose device context had
 been read with `GetDC` + `BitBlt` first, so the product anchors on alpha 255 and alpha 0 only and
-never calls `GetDC` on its own surface. Partial alpha is asserted in `glyph-desktop-composited`, where
-the arithmetic is exact and reproduced against the frame.
+never calls `GetDC` on its own surface. Partial alpha is asserted in `glyph-desktop-composited`.
+
+### The oracle for `glyph-desktop-composited`, and the exact size of its claim
+
+The predicted value is `GlyphFrame.CompositeOver`: premultiplied source-over,
+`src·k/255 + dst·(255−α)/255` with `α = a·k/255`, evaluated over a common denominator and **rounded
+to nearest exactly once, per channel, at the end**. It is asserted with **no tolerance** and it holds
+exactly at **every** sampled point at both measured settings of the uniform dial.
+
+**The single rounding is load-bearing and was got wrong first.** An earlier draft rounded each of the
+three terms separately; it reproduced seven of the eight measured values and was one unit low in the
+red channel of the eighth, and that miss was absorbed with a `±1` allowance. **A `±1` allowance on
+this class is not a safety margin — it is exactly the size of the defect the class exists to catch**,
+so it would have silently passed a one-unit-per-channel regression at every non-255 dial setting. The
+formula was never wrong; the number of roundings was.
+
+**What is measured, and what is not.** Uniform opacity has been read off a screen at **1.0 and 0.5
+only**. Every other setting of the dial is this arithmetic, unchecked against any display. Nothing in
+this class measures cadence, order or timing.
 
 ### Occlusion arbitration — what replaces "the rectangles are disjoint"
 

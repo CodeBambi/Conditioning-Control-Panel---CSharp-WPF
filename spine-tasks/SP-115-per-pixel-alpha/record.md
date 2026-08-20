@@ -224,15 +224,37 @@ constructor contract. **The claim is withdrawn**, and
   than done", on the user-facing dial the product ships at 100. It is done: a second
   composited-desktop capture at opacity 0.5, same frame, same bytes, only the multiplier changed.
 
-**And the half-opacity leg produced a finding of its own.** The prediction is **exact at three of
-four sampled points and one unit low in the red channel of the fourth** (predicts `0xD65E47`, the
-screen holds `0xD65E48`). The compositor rounds the per-pixel-times-constant product somewhere the
-model does not, and no reading of the documented formula reproduces it. **`CompositeOver` was
-deliberately NOT tuned to match** — fitting the oracle to a single observation would make it a copy
-of the data it is supposed to check. Exactness is asserted at constant 255, **within one unit** at
-128, and the residue is declared at the constant, in the model's own doc comment and here. The claim
-this leg exists for does not rest on it: the dial's arrival is proven by the half-opacity capture
-DIFFERING from the full-opacity one, which is tens of units, not one.
+**And the half-opacity leg produced a finding of its own — which I then got wrong, and final review
+overturned in my favour.**
+
+The prediction came back **exact at three of four sampled points and one unit low in the red channel
+of the fourth** (predicting `0xD65E47` where the screen holds `0xD65E48`). I wrote that no reading of
+the documented formula reproduced it, refused to change `CompositeOver` on the ground that fitting an
+oracle to a single datum makes it a copy of the data, asserted **within one unit** at 128, and
+declared the residue in three places.
+
+**The principle was right and the application was wrong, and the reviewer showed the arithmetic.**
+`CompositeOver` was rounding **three times** — once for `α`, once for the source term, once for the
+background term — and summing the three rounded values. Evaluate the *same* formula exactly and round
+**once**, at the end, and it reproduces the screen: `α = 128·128/255 = 64.25` was losing its `.25`
+and `10·191/255 = 7.48` was losing its `.48`, and the two discarded fractions sum to `0.73` — enough
+to carry `71.73` up to `72`. At constant 255 the two models are identical, which is why the error was
+invisible until a second opacity was ever measured.
+
+So this is **not** fitting the oracle to a datum: it is the same formula with the number of roundings
+corrected from three to the one that belongs there. Verified before changing anything, over all eight
+measured values across both opacities: **per-term reproduces 7/8, single rounding reproduces 8/8.**
+The tolerance is **deleted**, `128` is asserted exactly as `255` is, and the differential re-run
+against a real screen passes with no allowance anywhere.
+
+**And the tolerance was worse than an inelegance.** `±1` per channel is precisely the size of the
+defect this leg exists to catch, so it would have silently absorbed a real one-unit-per-channel
+regression at every non-255 setting of the dial. A tolerance sized to one observation is not a safety
+margin; it is a hole with a comment on it.
+
+**What remains true:** only the constant-alpha values **255 and 128** have been read off a screen at
+all. Every other setting is arithmetic, and the model's own doc comment, the evidence class and §8
+all say so.
 
 ### THE SHARPEST FINDING — a real defect, in the most dangerous line in the packet
 
@@ -306,9 +328,19 @@ independently enumerated by code review — every consumer of the mutated symbol
   reads it.
 - **M-az** — the PRESENTER's `Running` dropping its second and third clauses. `WorkIsRunning`
   (M-bg) is now caught by the module lab, but the presenter's own property still needs `showing` true
-  while `lastFrameHeld` is false, and the retire-on-failure path makes that state unreachable from
-  outside — **the same residue SP-111 named as its M-be**. It is the ONE survivor round 5 did not
-  close, and it is the presenter's, not the module's.
+  while `lastFrameHeld` is false, and `Advance` sets `_lastFrameHeld = false` and then calls
+  `Withdraw()` — clearing `_showing` — inside the same synchronous call, so no external observer ever
+  sees the interior state. It is the ONE survivor round 5 did not close, and it is the presenter's,
+  not the module's.
+
+  **It is the same CLASS of residue SP-111 recorded at its M-be, and not the same thing.** SP-111's
+  is `WorkIsRunning` dropping `ScheduleArmed`, blocked by `OwnedSessionEffect.Dot` short-circuiting
+  and by `ReleaseWork` being `protected sealed` on a sealed module — a different symbol, in a
+  different class, blocked by a different mechanism. The shared property is only that an interior
+  conjunct is unobservable from outside. **After five false equivalence claims in four waves, saying
+  "the same class as" where the first draft said "the same residue as" is not pedantry**: an identity
+  claim between two survivors is exactly the kind of assertion this packet has already had to
+  withdraw once.
 - **M-ba** — the frame timer not disposed on withdraw. Under the hand clock the next fire returns
   early because the surface is down, so the OUTCOME is identical; on the real
   `System.Threading.Timer` it is a **leak**, not a behaviour, and no fact in this suite can see a
@@ -322,7 +354,7 @@ independently enumerated by code review — every consumer of the mutated symbol
 **Scope, stated rather than implied.** Each mutation was run against the packet's own suites plus
 `ContinuousEffectSpineTests`, `SecondEffectSpineTests`, `AudioModuleSpineTests`, `SessionSpineTests`,
 `StudioSurfaceNoticeTests` and `MovingEffectSpineTests`. That is narrower than a whole-suite
-discipline, and the mitigation is that the full unit suite (2041), the full headless suite (121) and
+discipline, and the mitigation is that the full unit suite (2062), the full headless suite (121) and
 both gates were run green afterwards on the restored tree.
 
 ---
@@ -419,9 +451,9 @@ four headless facts in `StudioRackHeadlessTests.cs`.
   driver, an exclusive-fullscreen swap chain or a physically dark monitor.
 - **Nothing measures cadence, order or timing.** Every frame advance is driven by hand.
 - **Nothing proves five surfaces coexist under CONTENTION** — see §3.
-- **The half-opacity composite is predicted to within one unit, not exactly** — measured, declared,
-  and the model deliberately left untuned. Only the constant-alpha values 255 and 128 have been read
-  off a screen at all; every other setting of the dial is arithmetic.
+- **Only the constant-alpha values 255 and 128 have been read off a screen at all.** Both are exact
+  against the oracle with no tolerance, and every other setting of the uniform dial is arithmetic
+  that no display has checked.
 - **Concurrency is single-threaded.** The presenter's gate is held across no capability call and the
   cadence is driven inline; two threads racing a frame against a teardown are not covered.
 - **The composite cost was not profiled.** A re-raster is a GDI+ text draw plus a full-buffer

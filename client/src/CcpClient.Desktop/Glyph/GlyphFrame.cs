@@ -117,24 +117,27 @@ public sealed class GlyphFrame
     /// <summary>
     /// What the COMPOSITED DESKTOP should read at a point when this frame is composited at
     /// <paramref name="constantAlpha"/> over a known opaque background: premultiplied source-over,
-    /// <c>src + dst·(255−α)/255</c>, with each division ROUNDED TO NEAREST.
+    /// <c>src·k/255 + dst·(255−α)/255</c> where <c>α = a·k/255</c>, evaluated EXACTLY and rounded
+    /// to nearest exactly ONCE, at the end, per channel.
     ///
-    /// <para><b>The rounding is not a preference; it is the measurement.</b> White at alpha 128 over
-    /// B=200 G=40 R=10 reads back <c>0xE49485</c> off this machine's composited desktop. Truncating
-    /// gives <c>0xE39484</c> — one low in every channel — and rounding gives exactly what the screen
-    /// holds: <c>200·127/255 = 99.6 → 100</c>, so blue is <c>128+100 = 228 = 0xE4</c>. The first
-    /// draft of this method truncated and the differential caught it, which is the reading being
-    /// used as an oracle rather than as decoration.</para>
+    /// <para><b>The single rounding is the whole model, and it was arrived at the hard way.</b> An
+    /// earlier draft rounded each of the three terms separately. That version reproduced the screen
+    /// at seven of eight measured points and was <b>one unit low in the red channel of the eighth</b>
+    /// (predicting <c>0xD65E47</c> where the screen holds <c>0xD65E48</c>), and the record around it
+    /// claimed no reading of the formula reproduced the measurement. <b>That claim was false.</b>
+    /// The same formula with one final rounding reproduces all eight: α = 128·128/255 = 64.25 lost
+    /// its .25 and 10·191/255 = 7.48 lost its .48, and the two discarded fractions sum to 0.73 —
+    /// enough to carry 71.73 up to 72. Rounding once keeps that.</para>
     ///
-    /// <para><b>What is measured, and what is one unit out.</b> At
-    /// <paramref name="constantAlpha"/> = 255 this is EXACT against a composited-desktop read, at
-    /// every sampled point. At 128 it is exact at three of four sampled points and <b>one unit low
-    /// in the red channel of the fourth</b> (predicts <c>0xD65E47</c>, the screen holds
-    /// <c>0xD65E48</c>): the compositor rounds the per-pixel-times-constant product somewhere this
-    /// model does not, and no reading of the documented formula reproduces it. <b>The model is
-    /// deliberately NOT tuned to that observation</b> - fitting it would make the oracle a copy of
-    /// the one measurement it is supposed to check - so the harness asserts exactness at 255 and
-    /// within one unit at 128, and says so.</para>
+    /// <para><b>Why this is not fitting the oracle to the data.</b> It is the SAME formula; only the
+    /// number of roundings changed, from three to the one that belongs there. It is exact at
+    /// <paramref name="constantAlpha"/> = 255 (where both models agree and both are exact) AND at
+    /// 128, over every sampled point, with no tolerance anywhere — which is what lets the harness
+    /// assert equality rather than nearness, so a genuine one-unit-per-channel regression at a
+    /// non-255 dial setting still reds.</para>
+    ///
+    /// <para><b>What remains unmeasured:</b> only the constant-alpha values 255 and 128 have been
+    /// read off a screen at all. Every other setting of the dial is this arithmetic, unchecked.</para>
     /// </summary>
     /// <param name="x">Sample column.</param>
     /// <param name="y">Sample row.</param>
@@ -144,17 +147,31 @@ public sealed class GlyphFrame
     {
         BoundsCheck(x, y);
         var offset = (y * Stride) + (x * BytesPerPixel);
-        var alpha = Scale(_pixels[offset + 3], constantAlpha);
-        var inverse = 255 - alpha;
 
-        var blue = Math.Clamp(Scale(_pixels[offset], constantAlpha) + Scale((int)((background >> 16) & 0xFF), inverse), 0, 255);
-        var green = Math.Clamp(Scale(_pixels[offset + 1], constantAlpha) + Scale((int)((background >> 8) & 0xFF), inverse), 0, 255);
-        var red = Math.Clamp(Scale(_pixels[offset + 2], constantAlpha) + Scale((int)(background & 0xFF), inverse), 0, 255);
+        // Everything is kept over the common denominator 255*255 so no intermediate is rounded.
+        var inverse = Denominator - (_pixels[offset + 3] * constantAlpha);
+
+        var blue = Blend(_pixels[offset], constantAlpha, (int)((background >> 16) & 0xFF), inverse);
+        var green = Blend(_pixels[offset + 1], constantAlpha, (int)((background >> 8) & 0xFF), inverse);
+        var red = Blend(_pixels[offset + 2], constantAlpha, (int)(background & 0xFF), inverse);
         return (uint)((blue << 16) | (green << 8) | red);
     }
 
-    /// <summary><c>value · factor / 255</c>, rounded to nearest. See <see cref="CompositeOver"/>.</summary>
-    private static int Scale(int value, int factor) => ((value * factor) + 127) / 255;
+    /// <summary>255 * 255: the common denominator both terms are carried over.</summary>
+    private const int Denominator = 255 * 255;
+
+    /// <summary>
+    /// One channel of the composite, exact until the single final rounding.
+    ///
+    /// <para><c>(src·k·255 + dst·inverse) / 65025</c>, rounded half-up by doubling rather than by a
+    /// floating-point round, so the result is deterministic and has no representation error.</para>
+    /// </summary>
+    private static int Blend(int source, int constantAlpha, int background, int inverse)
+    {
+        var numerator = ((long)source * constantAlpha * 255) + ((long)background * inverse);
+        var rounded = ((2 * numerator) + Denominator) / (2 * Denominator);
+        return (int)Math.Clamp(rounded, 0, 255);
+    }
 
     /// <summary>
     /// A frame of one uniform colour at one uniform alpha, premultiplied here so a caller cannot
