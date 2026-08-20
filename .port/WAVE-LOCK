@@ -1,0 +1,6 @@
+WAVE: 61
+PACKETS: SP-122-rack-presentation SP-123-census-findings
+LANES: 2
+BASE: fda4aedd
+GATE: validate-wave.mjs WAVE OK; FloorWrapperGuardTests 3/3; floor 2270/141
+OPENED: 2026-08-21T06:40:00Z
