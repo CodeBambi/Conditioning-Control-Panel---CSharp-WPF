@@ -44,7 +44,11 @@ public static class RampPanelNotices
         bool sessionRunning)
     {
         ArgumentNullException.ThrowIfNull(preset);
-        var anyLink = preset.LinkSpiralOpacity || preset.LinkPinkFilterOpacity;
+        // SP-117 added the third of WPF's five links (flash opacity). This predicate is what decides
+        // whether the panel says "nothing is linked to it yet", so a link the port has and this
+        // clause does not know about would make the panel tell a user with a linked ramp that their
+        // ramp does nothing.
+        var anyLink = preset.LinkSpiralOpacity || preset.LinkPinkFilterOpacity || preset.LinkFlashOpacity;
 
         if (dot == EffectDotState.Off)
         {

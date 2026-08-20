@@ -261,6 +261,15 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
         MutateAndReapply(p => p.LinkPinkFilterOpacity = linked);
 
     /// <summary>
+    /// Link the Flash Images module's opacity to this ramp (same handler upstream) — WPF's FIRST
+    /// link switch (<c>MainWindow/MainWindow.StartStop.cs:506-510</c>), admissible here only since
+    /// SP-117 gave flash opacity a dial on a ported panel. D93's other two links, master volume and
+    /// subliminal volume, are still absent because their dials still are.
+    /// </summary>
+    public void SetLinkFlashOpacity(bool linked) =>
+        MutateAndReapply(p => p.LinkFlashOpacity = linked);
+
+    /// <summary>
     /// Take custody of the linked dials and start driving them.
     ///
     /// <para>The dial and the generation have already been checked by
@@ -518,6 +527,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     {
         SpiralOverlayEffect.EffectId => preset.LinkSpiralOpacity,
         PinkFilterEffect.EffectId => preset.LinkPinkFilterOpacity,
+        FlashImagesEffect.EffectId => preset.LinkFlashOpacity,
         // A dial this build does not know how to link is not linked. It cannot happen in the
         // product composition, and a default of "linked" would let an unrecognised dial be driven
         // by a switch that does not exist on any panel.

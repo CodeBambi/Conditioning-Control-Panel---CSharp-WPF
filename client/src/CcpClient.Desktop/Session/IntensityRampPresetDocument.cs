@@ -113,6 +113,15 @@ public sealed class IntensityRampPresetDocument
     /// false. Drives <see cref="PinkFilterPresetDocument.OpacityPercent"/>.</summary>
     public bool LinkPinkFilterOpacity { get; set; }
 
+    /// <summary>
+    /// WPF's <c>RampLinkFlashOpacity</c> (<c>CCP.Core/Models/AppSettings.cs:2589-2594</c>), default
+    /// false. Drives <see cref="VisualsPresetDocument.FlashOpacityPercent"/> — the FIRST of WPF's
+    /// five links and, until SP-117 landed the Visuals row, the one this port had to leave absent
+    /// (D93). The remaining two, master volume and subliminal volume, still have no dial on any
+    /// ported panel and are still absent.
+    /// </summary>
+    public bool LinkFlashOpacity { get; set; }
+
     /// <summary>Unknown-member preservation (persistence contract §6 — required on every persisted model).</summary>
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }

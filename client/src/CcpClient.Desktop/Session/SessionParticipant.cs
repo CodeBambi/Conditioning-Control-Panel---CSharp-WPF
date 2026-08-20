@@ -41,6 +41,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<BubbleCountPresetDocument> _bubbleCountPreset;
     private readonly PersistenceStore<BubblePopPresetDocument> _bubblePopPreset;
     private readonly PersistenceStore<BouncingTextPresetDocument> _bouncingTextPreset;
+    private readonly PersistenceStore<VisualsPresetDocument> _visualsPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
     private readonly ILogSink _log;
     private readonly IFlashSurface _surface;
@@ -169,6 +170,21 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, BouncingTextPresetDocument.FileName),
             BouncingTextPresetDocument.CurrentSchemaVersion);
 
+        // SP-117: the Visuals row's document — the Flash Images module's three DRAW dials. Same
+        // per-module precedent again (D71), and the same reason it is a document at all rather than
+        // three more members on the shared session preset: SessionPresetDocument's own remarks said
+        // these values "arrive with the surface that honours them", and the surface arrived at
+        // SP-100.
+        _visualsPreset = new PersistenceStore<VisualsPresetDocument>(
+            infra.OwnerFor("VisualsPreset"), infra.Log,
+            Path.Combine(dataDirectory, VisualsPresetDocument.FileName),
+            VisualsPresetDocument.CurrentSchemaVersion);
+
+        // Not an ISessionEffect, deliberately: upstream's Visuals is a settings page with no
+        // service, no enable and no dot (Views/Tabs/StudioTabView.xaml.cs:494-496), so the port's
+        // is an owner of three dials and nothing more. See VisualsDials.
+        Visuals = new VisualsDials(_visualsPreset);
+
         // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
         // pool cannot become the one consumer that ignores an uncheck — the exact
@@ -207,7 +223,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // draws: the factory inside it runs on the first surface, so a session that never flashes
         // — and every headless or unit run, where the boundary is unbound and the projection is
         // skipped — creates no window at all.
-        _surface = surface ?? FlashSurfacePresenter.Product(sessionClock, Dispatch);
+        // SP-117: the presenter now PULLS the Visuals row's three dials at the moment a flash is
+        // shown, instead of drawing with three constants. A build with no document draws with
+        // FlashDraw.Defaults, which are the same three numbers it used before.
+        _surface = surface ?? FlashSurfacePresenter.Product(sessionClock, Dispatch, draw: Visuals.Draw);
         _subliminalSurface = subliminalSurface ?? SubliminalSurfacePresenter.Product(sessionClock, Dispatch);
 
         // SP-105: the continuous module's surface. It takes the same clock as the other two, and
@@ -302,11 +321,13 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // rides, because its 2 s progress sample is its own (WPF's _rampTimer,
         // MainWindow/MainWindow.StartStop.cs:426-431) and there is no surface to keep it in.
         //
-        // Its dials are the two the port really has. WPF links five (AppSettings.cs:2589-2621); flash
-        // opacity, master volume and subliminal volume have no dial on any ported panel, so they are
-        // absent rather than present-and-inert (D93). The list is built HERE because the composition
-        // root is the only thing that knows which modules exist — the ramp itself knows nothing about
-        // spirals or tints, which is what lets it be exercised with no surface anywhere.
+        // Its dials are the three the port really has. WPF links five (AppSettings.cs:2589-2621);
+        // SP-117 closed the flash-opacity one by giving flash opacity a dial on a ported panel,
+        // which is exactly the condition D93 named. Master volume and subliminal volume have no
+        // dial on any ported panel, so they are still absent rather than present-and-inert. The
+        // list is built HERE because the composition root is the only thing that knows which
+        // modules exist — the ramp itself knows nothing about spirals or tints, which is what lets
+        // it be exercised with no surface anywhere.
         // SP-109: the AUDIO capability. Built HERE, once, and SHARED by both audio modules — a
         // second presence would be a second device open on the same endpoint, and each module's
         // stop-replace already has its own slot inside the one presence (keyed by module id), which
@@ -340,6 +361,11 @@ public sealed class SessionParticipant : IBackgroundParticipant
             [
                 new SpiralOpacityDial(_spiralPreset, Spiral),
                 new PinkFilterOpacityDial(_pinkFilterPreset, PinkFilter),
+                // SP-117: WPF's FIRST link (MainWindow.StartStop.cs:506-510), and the comment above
+                // named the exact condition for it — "no dial on any ported panel". The Visuals row
+                // is that panel. Master volume and subliminal volume are still absent because their
+                // dials still are, so this list is three of WPF's five and says which three.
+                new FlashOpacityDial(Visuals),
             ],
             // WPF wraps the tick's dial writes in Dispatcher.Invoke (MainWindow.StartStop.cs:504).
             // Here only the half that touches a LIVE surface goes through the dispatch; the persisted
@@ -596,6 +622,19 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>The Bouncing Text module's persisted store, same reason.</summary>
     public PersistenceStore<BouncingTextPresetDocument> BouncingTextPreset => _bouncingTextPreset;
 
+    /// <summary>
+    /// The <b>Visuals</b> row: the Flash Images module's three DRAW dials (SP-117).
+    ///
+    /// <para>It is NOT on <see cref="SessionEngine.Effects"/> and never will be — there is no
+    /// module here to arm. Upstream's Visuals is a settings page with no service, no master toggle
+    /// and, by its own rack entry's decision, no state dot
+    /// (<c>Views/Tabs/StudioTabView.xaml.cs:494-496</c>).</para>
+    /// </summary>
+    public VisualsDials Visuals { get; }
+
+    /// <summary>The Visuals row's persisted store, same reason as the others.</summary>
+    public PersistenceStore<VisualsPresetDocument> VisualsPreset => _visualsPreset;
+
     /// <summary>The Bouncing Text module's surface, so the panel can report what the OS said.</summary>
     public IBouncingTextSurface BouncingTextSurface => _bouncingTextSurface;
 
@@ -641,6 +680,15 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _videoPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _bubbleCountPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _bubblePopPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+
+        // SP-117 found _bouncingTextPreset missing from all four of these lists. A store that is
+        // never started is never LOADED — PersistenceStore.Load runs only from StartAsync — so
+        // SP-115's dials silently reverted to defaults on every launch and were never written back.
+        // It is added here, and to the Degraded report, the stop and the flush below, because the
+        // defect is data loss the user sees and because leaving one store out of four lists is
+        // exactly how the next one gets missed.
+        await _bouncingTextPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _visualsPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _assetSelection.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Typed Degraded, never silent: a quarantined or newer-schema preset means the module runs
@@ -658,6 +706,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         LogIfDegraded("video-preset", _videoPreset.LastLoadOutcome);
         LogIfDegraded("bubblecount-preset", _bubbleCountPreset.LastLoadOutcome);
         LogIfDegraded("bubblepop-preset", _bubblePopPreset.LastLoadOutcome);
+        LogIfDegraded("bouncingtext-preset", _bouncingTextPreset.LastLoadOutcome);
+        LogIfDegraded("visuals-preset", _visualsPreset.LastLoadOutcome);
     }
 
     /// <inheritdoc/>
@@ -720,7 +770,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
             _spiralPreset.StopAsync(), _rampPreset.StopAsync(), _mindWipePreset.StopAsync(),
             _brainDrainPreset.StopAsync(), _lockCardPreset.StopAsync(), _videoPreset.StopAsync(),
-            _bubbleCountPreset.StopAsync(), _bubblePopPreset.StopAsync(), _assetSelection.StopAsync());
+            _bubbleCountPreset.StopAsync(), _bubblePopPreset.StopAsync(),
+            _bouncingTextPreset.StopAsync(), _visualsPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
     /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
@@ -738,7 +789,13 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _brainDrainPreset.FlushAsync(boundedWait),
             _lockCardPreset.FlushAsync(boundedWait), _videoPreset.FlushAsync(boundedWait),
             _bubbleCountPreset.FlushAsync(boundedWait),
-            _bubblePopPreset.FlushAsync(boundedWait));
+            _bubblePopPreset.FlushAsync(boundedWait),
+            _bouncingTextPreset.FlushAsync(boundedWait),
+            // The Visuals row's three dials. The flash-opacity one is also a dial the ramp BORROWS,
+            // and the same guarantee holds for the same reason: Engine.Stop() above restores it
+            // synchronously before this line, so no flush here can write a ramped value over the
+            // user's own (Effects/IntensityDial.cs, the split-write rule).
+            _visualsPreset.FlushAsync(boundedWait));
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {

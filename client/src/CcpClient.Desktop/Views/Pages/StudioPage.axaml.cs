@@ -75,6 +75,7 @@ public partial class StudioPage : UserControl
     private readonly MandatoryVideoEffect _mandatoryVideo;
     private readonly BubbleCountEffect _bubbleCount;
     private readonly BubblePopEffect _bubblePop;
+    private readonly VisualsDials _visuals;
     private bool _syncing;
 
     public StudioPage(LoomLaunch loom, SessionParticipant session)
@@ -97,6 +98,12 @@ public partial class StudioPage : UserControl
         _bubbleCount = session.BubbleCount;
         _bubblePop = session.BubblePop;
 
+        // SP-117. NOT an effect, and never taken from session.Engine.Effects: the Visuals row is
+        // the Flash Images module's DRAW dials, so this is the only field on this page that is not
+        // an ISessionEffect. Everything the row does not have below — an enable, a dot, a quick
+        // toggle, an arm result — is absent for that one reason.
+        _visuals = session.Visuals;
+
         // Row selection swaps the panel in, exactly as WPF's rack drives its row state from
         // the RadioButton's own checked transitions rather than from the click handler
         // (StudioTabView.xaml.cs:664-665), so the panel can never drift out of step with the
@@ -113,6 +120,7 @@ public partial class StudioPage : UserControl
         RowMandatoryVideo.IsCheckedChanged += (_, _) => ApplySelection();
         RowBubbleCount.IsCheckedChanged += (_, _) => ApplySelection();
         RowBubblePop.IsCheckedChanged += (_, _) => ApplySelection();
+        RowVisuals.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -131,6 +139,12 @@ public partial class StudioPage : UserControl
         AddQuickToggle(RowMandatoryVideo, MandatoryVideoEffect.EffectId);
         AddQuickToggle(RowBubbleCount, BubbleCountEffect.EffectId);
         AddQuickToggle(RowBubblePop, BubblePopEffect.EffectId);
+
+        // NO quick toggle on RowVisuals, and it is upstream's own unhandled case rather than an
+        // omission: the gesture flips a module's enable, and this row has no enable to flip
+        // (StudioTabView.xaml.cs:496 passes null where every other row passes a dot predicate, and
+        // its panel carries no master box). WPF's rack lets exactly such rows fall through
+        // unhandled (:659).
 
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
@@ -179,6 +193,8 @@ public partial class StudioPage : UserControl
         RampLinkPinkFilterToggle.IsCheckedChanged += (_, _) =>
             OnRampSwitch(
                 RampLinkPinkFilterToggle, _ramp.Preset.LinkPinkFilterOpacity, _ramp.SetLinkPinkFilterOpacity);
+        RampLinkFlashToggle.IsCheckedChanged += (_, _) =>
+            OnRampSwitch(RampLinkFlashToggle, _ramp.Preset.LinkFlashOpacity, _ramp.SetLinkFlashOpacity);
         RampCurvePicker.SelectionChanged += (_, _) => OnRampCurvePicked();
 
         OnSliderMoved(FlashFrequencySlider, OnFrequencyMoved);
@@ -204,6 +220,9 @@ public partial class StudioPage : UserControl
         OnSliderMoved(BubblePopFrequencySlider, OnBubblePopFrequencyMoved);
         OnSliderMoved(BubblePopSizeSlider, OnBubblePopSizeMoved);
         OnSliderMoved(BubblePopSpeedSlider, OnBubblePopSpeedMoved);
+        OnSliderMoved(VisualsScaleSlider, OnVisualsScaleMoved);
+        OnSliderMoved(VisualsOpacitySlider, OnVisualsOpacityMoved);
+        OnSliderMoved(VisualsDurationSlider, OnVisualsDurationMoved);
 
         _session.Engine.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
@@ -400,6 +419,8 @@ public partial class StudioPage : UserControl
         var videoOpen = RowMandatoryVideo.IsChecked == true;
         var bubbleCountOpen = RowBubbleCount.IsChecked == true;
         var bubblePopOpen = RowBubblePop.IsChecked == true;
+        var visualsOpen = RowVisuals.IsChecked == true;
+        VisualsModulePanel.IsVisible = visualsOpen;
         MandatoryVideoModulePanel.IsVisible = videoOpen;
         BubbleCountModulePanel.IsVisible = bubbleCountOpen;
         BubblePopModulePanel.IsVisible = bubblePopOpen;
@@ -414,7 +435,7 @@ public partial class StudioPage : UserControl
         LockCardModulePanel.IsVisible = lockCardOpen;
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
             && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen
-            && !bubblePopOpen && !bouncingTextOpen;
+            && !bubblePopOpen && !bouncingTextOpen && !visualsOpen;
     }
 
     /// <summary>
@@ -785,6 +806,7 @@ public partial class StudioPage : UserControl
             RampEndSessionToggle.IsChecked = ramp.EndSessionOnComplete;
             RampLinkSpiralToggle.IsChecked = ramp.LinkSpiralOpacity;
             RampLinkPinkFilterToggle.IsChecked = ramp.LinkPinkFilterOpacity;
+            RampLinkFlashToggle.IsChecked = ramp.LinkFlashOpacity;
             RampCurvePicker.SelectedIndex = ramp.Curve switch
             {
                 RampCurve.EaseIn => 1,
@@ -826,6 +848,13 @@ public partial class StudioPage : UserControl
             BubblePopFrequencySlider.Value = bubblePop.PerMinute;
             BubblePopSizeSlider.Value = bubblePop.SizePercent;
             BubblePopSpeedSlider.Value = bubblePop.SpeedBoostPercent;
+
+            // SP-117. No enable box to load: the Visuals row has none, upstream has none, and this
+            // is the only block here with three slider lines and no checkbox line.
+            var visuals = _session.VisualsPreset.Current;
+            VisualsScaleSlider.Value = visuals.ImageScalePercent;
+            VisualsOpacitySlider.Value = visuals.FlashOpacityPercent;
+            VisualsDurationSlider.Value = visuals.FlashDurationSeconds;
         }
         finally
         {
@@ -849,6 +878,19 @@ public partial class StudioPage : UserControl
         FlashLiveState.Text = DescribeState(RenderedFlashDot, _flash.FlashCount, _flash.Last);
         FlashPoolState.Text = DescribePool(_flash.Last);
         FlashSurfaceState.Text = DescribeSurface(_session.Surface.LastPlacement);
+
+        // SP-117 — the Visuals row. NO PaintDot CALL, and that is the row's whole shape: it has no
+        // Ellipse in the visual tree to paint, because upstream gives it no dot
+        // (StudioTabView.xaml.cs:494-496). Its three numbers come from the same reading the
+        // presenter will use for the next flash, so the panel and the screen cannot disagree.
+        var draw = _visuals.Draw();
+        VisualsScaleValue.Text = draw.ScalePercent.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        VisualsOpacityValue.Text = draw.OpacityPercent.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        VisualsDurationValue.Text = draw.DurationSeconds.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        VisualsOwnershipState.Text = VisualsPanelNotices.DescribeOwnership(_flash.Enabled);
+        VisualsDialState.Text = VisualsPanelNotices.DescribeDials(draw);
+        VisualsAbsenceState.Text = VisualsPanelNotices.DescribeAbsences();
+        VisualsSurfaceState.Text = VisualsPanelNotices.DescribeSurface(_session.Surface.LastPlacement);
 
         var subliminal = _session.SubliminalPreset.Current;
         SubliminalFrequencyValue.Text = subliminal.PerMinute.ToString(System.Globalization.CultureInfo.CurrentCulture);
@@ -1057,6 +1099,65 @@ public partial class StudioPage : UserControl
 
         _bubblePop.SetSpeedBoostPercent((int)Math.Round(BubblePopSpeedSlider.Value));
         _ = _session.BubblePopPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The Visuals size slider — WPF's <c>SliderSize_Changed</c>
+    /// (<c>Features/VisualsFeatureControl.xaml.cs:67-76</c>): write the setting, save, and that is
+    /// all. It changes the NEXT flash, never one already on screen, for the reason the two below
+    /// share (D174).
+    /// </summary>
+    private void OnVisualsScaleMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _visuals.SetImageScalePercent((int)Math.Round(VisualsScaleSlider.Value));
+        _ = _session.VisualsPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The Visuals opacity slider — WPF's <c>SliderOpacity_Changed</c> (<c>:78-87</c>).
+    ///
+    /// <para><b>It reaches the next flash, not one already up, and that is a real divergence</b>
+    /// rather than a rounding of upstream. WPF recomputes <c>maxAlpha</c> on every composition
+    /// frame and re-tints live windows (<c>Services/Flash/FlashService.cs:2072</c>, applied
+    /// <c>:2108-2117</c>). Here the value becomes a layered window's <c>LWA_ALPHA</c> at placement,
+    /// and changing it afterwards means re-<c>Present</c>ing — which clears click-through to run
+    /// its differential hit test and restores it (<c>Overlay/Win32OverlayPresence.cs:558</c>,
+    /// <c>:566</c>, <c>:574</c>). Opening that gap on a surface whose whole contract is that the
+    /// user's clicks pass through it costs more than the re-tint is worth. D174.</para>
+    /// </summary>
+    private void OnVisualsOpacityMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _visuals.SetFlashOpacityPercent((int)Math.Round(VisualsOpacitySlider.Value));
+        _ = _session.VisualsPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The Visuals duration slider — WPF's <c>SliderDuration_Changed</c> (<c>:100-109</c>). It sets
+    /// the lifetime the NEXT flash's surfaces are given; upstream is the same, because the lifetime
+    /// is computed once per flash and handed to each window (<c>FlashService.cs:1073</c>).
+    /// </summary>
+    private void OnVisualsDurationMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _visuals.SetFlashDurationSeconds((int)Math.Round(VisualsDurationSlider.Value));
+        _ = _session.VisualsPreset.Save();
         Refresh();
     }
 

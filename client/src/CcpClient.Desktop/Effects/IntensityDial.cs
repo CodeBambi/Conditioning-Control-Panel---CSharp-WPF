@@ -120,6 +120,70 @@ public sealed class SpiralOpacityDial : IIntensityDial
 }
 
 /// <summary>
+/// The Flash Images module's opacity, as a dial the ramp can drive — WPF's
+/// <c>RampLinkFlashOpacity</c> branch, the FIRST of its five and the one the port could not have
+/// (<c>MainWindow/MainWindow.StartStop.cs:506-510</c>, <c>settings.FlashOpacity = newVal</c> capped
+/// at 100).
+///
+/// <para><b>Why this dial arrives at SP-117 and not at SP-108.</b> The ramp's own composition
+/// comment named the condition exactly — "flash opacity, master volume and subliminal volume have
+/// no dial on any ported panel, so they are absent rather than present-and-inert (D93)"
+/// (<c>Session/SessionParticipant.cs</c>). The Visuals row IS that panel, so the condition is
+/// discharged for flash opacity and for it alone; the two audio links stay absent because their
+/// dials still do not exist.</para>
+///
+/// <para><b><see cref="Reapply"/> is a NO-OP, and that is a divergence rather than an oversight.</b>
+/// Upstream re-reads <c>FlashOpacity</c> on every composition frame and re-tints windows that are
+/// ALREADY on screen (<c>Services/Flash/FlashService.cs:2072</c>, spent at <c>:2108-2117</c>). This
+/// port sets a layered window's <c>LWA_ALPHA</c> once, at placement, and the only way to change it
+/// afterwards is <see cref="Overlay.IOverlayPresence.Present"/> — which walks the whole top-level
+/// z-order and, to run its differential hit test, <b>clears click-through and restores it</b>
+/// (<c>Overlay/Win32OverlayPresence.cs:558</c>, <c>:566</c>, <c>:574</c>). Re-tinting up to ten live
+/// flashes on the ramp's 2-second cadence would open that gap repeatedly on a surface whose entire
+/// contract is that the user's clicks pass through it. So the ramp's new value reaches the NEXT
+/// flash, not the ones already up. Recorded as D174.</para>
+/// </summary>
+public sealed class FlashOpacityDial : IIntensityDial
+{
+    private readonly VisualsDials _dials;
+
+    public FlashOpacityDial(VisualsDials dials)
+    {
+        ArgumentNullException.ThrowIfNull(dials);
+        _dials = dials;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>The dial belongs to Flash Images — the ramp records custody against the module whose
+    /// value it borrowed, not against the panel the slider is drawn on.</remarks>
+    public string Id => FlashImagesEffect.EffectId;
+
+    /// <inheritdoc/>
+    public string Label => "Flash Images opacity";
+
+    /// <inheritdoc/>
+    /// <remarks>WPF <c>Math.Min(flashBase * currentMult, 100)</c>
+    /// (<c>MainWindow.StartStop.cs:508</c>), and the document's own clamp ceiling
+    /// (<c>AppSettings.cs:859</c>).</remarks>
+    public int Ceiling => VisualsPresetDocument.MaxFlashOpacityPercent;
+
+    /// <inheritdoc/>
+    public int Read() => _dials.Preset.FlashOpacityPercent;
+
+    /// <inheritdoc/>
+    /// <remarks>Routed through <see cref="VisualsDials.SetFlashOpacityPercent"/> rather than round
+    /// it, so the ramp and the panel's own slider converge on one behaviour — the reason
+    /// <see cref="SpiralOpacityDial"/> gives, applied to a dial whose owner is not an effect.</remarks>
+    public void Write(int percent) => _dials.SetFlashOpacityPercent(percent);
+
+    /// <inheritdoc/>
+    /// <remarks>Nothing to push: see the class remarks and D174.</remarks>
+    public void Reapply()
+    {
+    }
+}
+
+/// <summary>
 /// The Pink Filter module's opacity, as a dial the ramp can drive — WPF's
 /// <c>RampLinkPinkFilterOpacity</c> branch (<c>MainWindow/MainWindow.StartStop.cs:521-525</c>), whose
 /// cap is <b>50</b> rather than 100 because a tint the user could take to fully opaque would black

@@ -59,6 +59,15 @@ public interface IFlashSurface
 /// cadence are now <see cref="OverlaySurfaceSet"/>, shared with the Subliminals card. What stays
 /// here is what is genuinely a FLASH: the stagger, the placement roll, the geometry and the
 /// constants. Not one call to the overlay changed order.</para>
+///
+/// <para><b>SP-117: three of those constants became DIALS.</b> The size, the opacity and the
+/// duration are the Visuals row's three sliders (<see cref="VisualsDials"/>), and this presenter
+/// pulls a <see cref="FlashDraw"/> reading for each flash instead of reading four fixed numbers.
+/// The constants below stay, unchanged in value, as the DEFAULTS a build with no document draws
+/// with — which is what every flash between SP-100 and SP-117 drew with. The reading is taken ONCE
+/// per <see cref="Show"/>, never per surface, because upstream takes it once per flash
+/// (<c>FlashService.cs:1028-1034</c>, <c>:655-656</c>) and this presenter staggers a flash's
+/// surfaces across 300 ms each.</para>
 /// </summary>
 public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
 {
@@ -70,23 +79,27 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     /// <summary>WPF staggers the windows of one flash by 300 ms each (<c>:1112</c>).</summary>
     public const int StaggerMilliseconds = 300;
 
-    /// <summary>WPF's <c>FlashDuration</c> default, in seconds (<c>AppSettings.cs:926-931</c>). The
-    /// dial itself is not ported (SP-098 divergence D49), so its shipped default is the constant.</summary>
-    public const int FlashDurationSeconds = 5;
+    /// <summary>WPF's <c>FlashDuration</c> DEFAULT, in seconds
+    /// (<c>CCP.Core/Models/AppSettings.cs:925-930</c>). Since SP-117 the dial itself is ported
+    /// (<see cref="VisualsDials"/>) and this is what a build with no document draws with.</summary>
+    public const int FlashDurationSeconds = VisualsPresetDocument.DefaultFlashDurationSeconds;
 
-    /// <summary>WPF's per-window lifetime is the duration plus one second (<c>:1073</c>).</summary>
+    /// <summary>WPF's per-window lifetime is the duration plus one second (<c>:1073</c>). This is
+    /// the grace, and it is NOT a dial in either build.</summary>
     public const int LifetimeGraceMilliseconds = 1000;
 
-    /// <summary>WPF's <c>ImageScale</c> default (<c>AppSettings.cs:838-850</c>), same reasoning.</summary>
-    public const int ImageScalePercent = 100;
+    /// <summary>WPF's <c>ImageScale</c> DEFAULT (<c>AppSettings.cs:839</c>), same reasoning.</summary>
+    public const int ImageScalePercent = VisualsPresetDocument.DefaultImageScalePercent;
 
-    /// <summary>WPF's <c>FlashOpacity</c> default, 100 % (<c>AppSettings.cs:852-861</c>).</summary>
-    public const int OpacityPercent = 100;
+    /// <summary>WPF's <c>FlashOpacity</c> DEFAULT, 100 % (<c>AppSettings.cs:853</c>).</summary>
+    public const int OpacityPercent = VisualsPresetDocument.DefaultFlashOpacityPercent;
 
     /// <summary>WPF's <c>RaiseAllToFront</c> cadence (<c>:206-243</c>).</summary>
     public static readonly TimeSpan TopmostCadence = TimeSpan.FromSeconds(1);
 
-    /// <summary>How long one surface stays up: WPF's <c>lifetimeMs</c> (<c>:1073</c>).</summary>
+    /// <summary>How long one surface stays up AT THE DEFAULT DURATION: WPF's <c>lifetimeMs</c>
+    /// (<c>:1073</c>). The live figure is <see cref="FlashDraw.Lifetime"/>, which is this arithmetic
+    /// over the user's own dial.</summary>
     public static readonly TimeSpan SurfaceLifetime =
         TimeSpan.FromSeconds(FlashDurationSeconds) + TimeSpan.FromMilliseconds(LifetimeGraceMilliseconds);
 
@@ -95,6 +108,7 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     private readonly OverlaySurfaceSet _surfaces;
     private readonly IFlashFrameSource _frames;
     private readonly Func<OverlayBounds?> _display;
+    private readonly Func<FlashDraw> _draw;
     private readonly Random _random;
     private readonly List<IDisposable> _pending = [];
 
@@ -107,13 +121,17 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     /// <param name="frames">Turns a path into pixels.</param>
     /// <param name="display">Where surfaces may go; null when the OS reports no display.</param>
     /// <param name="random">Placement rolls.</param>
+    /// <param name="draw">The Visuals row's three dials, read once per flash (SP-117). Null means
+    /// <see cref="FlashDraw.Defaults"/> — WPF's shipped numbers, which is what this presenter drew
+    /// with before the dials existed.</param>
     public FlashSurfacePresenter(
         ISessionClock clock,
         Action<Action> dispatch,
         Func<IOverlayPresence> presenceFactory,
         IFlashFrameSource frames,
         Func<OverlayBounds?> display,
-        Random? random = null)
+        Random? random = null,
+        Func<FlashDraw>? draw = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(dispatch);
@@ -124,16 +142,19 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         _dispatch = dispatch;
         _frames = frames;
         _display = display;
+        _draw = draw ?? (static () => FlashDraw.Defaults);
         _random = random ?? new Random();
         _surfaces = new OverlaySurfaceSet(clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence);
     }
 
     /// <summary>The product composition: the real overlay backend for this platform, the GDI+
     /// frame source, and the OS's own primary display.</summary>
-    public static FlashSurfacePresenter Product(ISessionClock clock, Action<Action> dispatch, Random? random = null) =>
+    public static FlashSurfacePresenter Product(
+        ISessionClock clock, Action<Action> dispatch, Random? random = null, Func<FlashDraw>? draw = null) =>
         new(clock, dispatch, OverlayPresenceFactory.Create, new GdiPlusFlashFrameSource(),
             static () => OverlayDisplays.Enumerate() is [var primary, ..] ? primary.Bounds : null,
-            random);
+            random,
+            draw);
 
     /// <summary>How many surfaces this presenter believes are on screen right now. Its OWN
     /// bookkeeping, never <see cref="IOverlayPresence.IsPresenting"/>.</summary>
@@ -160,6 +181,10 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     /// <inheritdoc/>
     public CapabilityState? LastPlacement => _surfaces.LastPresent;
 
+    /// <summary>The reading the last <see cref="Show"/> took, or null before any flash. Diagnostics
+    /// and facts; never a claim about a screen.</summary>
+    public FlashDraw? LastDraw { get; private set; }
+
     /// <inheritdoc/>
     public void Show(IReadOnlyList<string> paths)
     {
@@ -169,6 +194,14 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
             return;
         }
 
+        // ONCE per flash, before the first surface and before the stagger — upstream reads its
+        // duration once at the top of ShowImages (FlashService.cs:1028-1034) and its scale once in
+        // LoadImagesUntilAsync (:655-656), then applies the same numbers to every window of that
+        // flash. Reading inside ShowOne instead would let a dial moved during the 300 ms stagger
+        // give one flash's pictures two different sizes.
+        var draw = _draw();
+        LastDraw = draw;
+
         for (var i = 0; i < paths.Count; i++)
         {
             var path = paths[i];
@@ -176,7 +209,7 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
             {
                 // WPF spawns the first window of a flash synchronously and defers the rest
                 // (FlashService.cs:1114-1121): the flash starts the moment it comes due.
-                ShowOne(path);
+                ShowOne(path, draw);
                 continue;
             }
 
@@ -190,7 +223,7 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
                     // slow leak across a session's worth of flashes, and HideAll would spend its
                     // time disposing handles that fired minutes ago.
                     _pending.Remove(pending);
-                    ShowOne(path);
+                    ShowOne(path, draw);
                 }));
         }
     }
@@ -218,7 +251,7 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         _surfaces.Dispose();
     }
 
-    private void ShowOne(string path)
+    private void ShowOne(string path, FlashDraw draw)
     {
         if (_surfaces.Disposed)
         {
@@ -241,7 +274,7 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         var frame = _frames.Render(
             path,
             (sourceWidth, sourceHeight) =>
-                FlashGeometry.Size(sourceWidth, sourceHeight, monitor.Width, monitor.Height, ImageScalePercent));
+                FlashGeometry.Size(sourceWidth, sourceHeight, monitor.Width, monitor.Height, draw.ScalePercent));
 
         if (frame is null)
         {
@@ -261,8 +294,8 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         // serve pop / hydra / XP mechanics this port does not have, and a surface that catches
         // clicks it does nothing with would swallow the user's input — the exact desktop-breaking
         // failure OverlayInputNotPassingThrough exists to refuse (SP-100 divergence).
-        var request = new OverlaySurfaceRequest(placement, OpacityPercent / 100.0, ClickThrough: true);
-        _surfaces.Place(slot, request, frame, SurfaceLifetime);
+        var request = new OverlaySurfaceRequest(placement, draw.Opacity, ClickThrough: true);
+        _surfaces.Place(slot, request, frame, draw.Lifetime);
     }
 
     private sealed class PendingShow : IDisposable

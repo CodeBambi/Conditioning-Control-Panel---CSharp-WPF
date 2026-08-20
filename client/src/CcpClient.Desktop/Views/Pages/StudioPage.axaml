@@ -153,6 +153,27 @@
             </Grid>
           </RadioButton>
 
+          <!-- SP-117 — VISUALS, the EFFECTS group's sixth and last row, in WPF's own position
+               (StudioTabView.xaml.cs:484-496: flash, video, subliminal, spiral, pinkfilter,
+               visuals).
+
+               IT HAS NO DOT, AND THE ABSENCE IS THE PORTED DECISION. Upstream's rack entry passes
+               null where every other row passes a dot predicate (:496), because Visuals has no
+               master toggle to read: it is not a module, it is the Flash Images module's own draw
+               dials on their own page, and there is no VisualsService anywhere in the shipping
+               tree. Upstream says so at :494-495 — "A dot that cannot be wired honestly is
+               omitted". A dot here could only ever be the Flash Images row's dot, repeated two
+               inches to its left. This is the only row in the rack whose Grid has one child. -->
+          <RadioButton x:Name="RowVisuals"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowVisuals"
+                       AutomationProperties.Name="Visuals rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Visuals" VerticalAlignment="Center" />
+            </Grid>
+          </RadioButton>
+
           <!-- SP-110 — GAMES & CARDS, and it is the group SP-109's comment said the port did
                not have. WPF's group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
                (StudioTabView.xaml.cs:483/498/508/530), so it opens here, between the two that
@@ -315,11 +336,16 @@
           <TextBlock Classes="page-blurb" Text="Images flash on a schedule while the session runs." />
 
           <!-- THREE DIALS, and every one of them is read by the running effect. WPF's panel has
-               a dozen more (opacity, scale, duration, fade, clickable, hydra, centre exclusion —
-               Features/FlashFeatureControl.xaml, AppSettings.cs:749-960) and every one of those
-               describes how a flash is DRAWN. The port draws none, so they are ABSENT rather
-               than greyed: a disabled dial swallows the gesture and tells the user nothing
-               (§9 D7). They arrive with the surface that honours them. -->
+               a dozen more (clickable, hydra, centre exclusion, solid mode, glow —
+               Features/FlashFeatureControl.xaml, CCP.Core/Models/AppSettings.cs:749-960) and every
+               one of those describes how a flash is DRAWN. Those the port has no drawing for are
+               ABSENT rather than greyed: a disabled dial swallows the gesture and tells the user
+               nothing (§9 D7).
+
+               SP-117: THREE OF THEM ARRIVED. Size, opacity and duration are now real dials, and
+               they are on the VISUALS row rather than here, because that is where upstream puts
+               them (Features/VisualsFeatureControl.xaml). This panel is the SCHEDULE; that one is
+               the DRAW. -->
           <CheckBox x:Name="FlashEnableToggle"
                     Classes="dial-enable"
                     AutomationProperties.AutomationId="FlashEnableToggle"
@@ -390,6 +416,96 @@
             <TextBlock TextWrapping="Wrap"
                        x:Name="FlashSurfaceState"
                        AutomationProperties.AutomationId="FlashSurfaceState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Visuals ================= -->
+        <!-- SP-117. THE ONLY PANEL IN THE RACK WITH NO ENABLE CHECKBOX, matching upstream, whose
+             own markup says why: "no enable pill: Visuals is the one module with no master toggle
+             at all" (Features/VisualsFeatureControl.xaml:12-14). It carries no live-state line
+             either, because it has no dot to explain: what it reports instead is whose dials these
+             are and when a change lands. -->
+        <StackPanel x:Name="VisualsModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Visuals" />
+          <TextBlock Classes="page-blurb"
+                     x:Name="VisualsOwnershipState"
+                     TextWrapping="Wrap"
+                     AutomationProperties.AutomationId="VisualsOwnershipState"
+                     Text="" />
+
+          <!-- THREE DIALS, and TWO DELIBERATE ABSENCES. Upstream's page has five controls; its
+               Fade slider writes AppSettings.FadeDuration, which NOTHING in the shipping product
+               reads (the fade rate is the constant FADE_PER_SEC = 2.4,
+               Services/Flash/FlashService.cs:2018), and its Link-to-audio switch makes a flash last
+               as long as its sound, which this port's silent flash cannot do. Both are ABSENT
+               rather than greyed (§9 D7), and the panel says so out loud below. -->
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Size" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="VisualsScaleSlider"
+                    Minimum="50" Maximum="250"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="VisualsScaleSlider"
+                    AutomationProperties.Name="Flash image size" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="VisualsScaleValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="VisualsScaleValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Opacity" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="VisualsOpacitySlider"
+                    Minimum="10" Maximum="100"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="VisualsOpacitySlider"
+                    AutomationProperties.Name="Flash image opacity" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="VisualsOpacityValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="VisualsOpacityValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Classes="dial-label" Text="On screen for" />
+            <Slider Grid.Row="2" Grid.Column="1"
+                    x:Name="VisualsDurationSlider"
+                    Minimum="1" Maximum="30"
+                    SmallChange="1" LargeChange="5"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="VisualsDurationSlider"
+                    AutomationProperties.Name="Flash image duration in seconds" />
+            <TextBlock Grid.Row="2" Grid.Column="2"
+                       x:Name="VisualsDurationValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="VisualsDurationValue"
+                       Text="" />
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="VisualsDialState"
+                         AutomationProperties.AutomationId="VisualsDialState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="VisualsAbsenceState"
+                         AutomationProperties.AutomationId="VisualsAbsenceState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="VisualsSurfaceState"
+                       AutomationProperties.AutomationId="VisualsSurfaceState"
                        Text="" />
           </Border>
         </StackPanel>
@@ -1324,10 +1440,12 @@
                     AutomationProperties.Name="End the session when the ramp finishes"
                     Content="End the session when the ramp finishes" />
 
-          <!-- TWO links where WPF has five (AppSettings.cs:2589-2621). Flash opacity, master
-               volume and subliminal volume have no dial on any ported panel, so their switches
-               are ABSENT rather than present-and-inert — a switch that quietly does nothing is
-               the greyed control §9 D7 refuses. D93. -->
+          <!-- THREE links where WPF has five (CCP.Core/Models/AppSettings.cs:2589-2621), and the
+               third arrived at SP-117 rather than being invented: D93's rule is that a link whose
+               dial has no ported panel is ABSENT rather than present-and-inert, and the Visuals row
+               IS flash opacity's panel. Master volume and subliminal volume still have no dial
+               anywhere, so their switches are still absent — a switch that quietly does nothing is
+               the greyed control §9 D7 refuses. -->
           <TextBlock Classes="dial-label" Text="Link to ramp" Margin="0,4,0,0" />
           <CheckBox x:Name="RampLinkSpiralToggle"
                     Classes="dial-enable"
@@ -1339,6 +1457,11 @@
                     AutomationProperties.AutomationId="RampLinkPinkFilterToggle"
                     AutomationProperties.Name="Link Pink Filter opacity to the ramp"
                     Content="Pink Filter opacity" />
+          <CheckBox x:Name="RampLinkFlashToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="RampLinkFlashToggle"
+                    AutomationProperties.Name="Link Flash Images opacity to the ramp"
+                    Content="Flash Images opacity (reaches the next flash, not one already up)" />
 
           <Border Classes="notice">
             <StackPanel Spacing="4">
