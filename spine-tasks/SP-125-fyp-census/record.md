@@ -100,7 +100,7 @@ construction, headlessly testable, and already what two shipped port surfaces ne
 
 ## Tests and floor
 
-`client/tests/CcpClient.Tests/FypCensusTests.cs`, **+19 unit / 0 headless**, declared in
+`client/tests/CcpClient.Tests/FypCensusTests.cs`, **+20 unit / 0 headless**, declared in
 `floor-delta.json`. Built to `HapticSiteCensusTests`'s existing shape rather than a second convention:
 directory roots and type-name needles live in the TEST, the product-file set, payload count and
 consumer set are **re-derived from the shipping bytes every run** (the surface walk is `*`, not
@@ -112,12 +112,23 @@ FAILS, and the branch is written to test output.
 **Bite proven against the real tree, not only fixtures**, twice. Renaming one census row to
 `RenamedByHand.cs` reds `TheProductFileSetIsRederivedFromTheShippingBytes` in **both** directions
 (file on disk absent from census; census row absent from disk). Softening Q3's answer from YES to NO
-on the real document reds `ThePrivacyVerdictsThemselvesArePinned` with the exact diagnostic
-`Q3: answer 'NO — HTTPS POSTs to api.scrolller.com ...' no longer begins with 'YES'`. Both restored
-and re-verified green.
+on the real document reds `ThePrivacyVerdictsThemselvesArePinned`, and so does rewriting Q4's verdict
+from "The webcam" to "Nothing worth naming": `Q4: answer 'Nothing worth naming, under the app-wide
+consent (  +  , the…' no longer begins with 'The webcam'`. All restored and re-verified green.
+
+**The Q4 pin did NOT bite in its first form, and final review caught it.** It asked whether the cell
+CONTAINED "webcam" — which the `WebcamConsentDialog` citation in the same cell satisfies on its own —
+so the reviewer's mutation left the suite green at 19/19, and my written claim that "Q4 cannot stop
+naming the webcam" was **false for one of the two OWNER-FLAGGED findings**. That is the worst place
+in this packet for an overstated guard, and the demonstration I had recorded was for Q3 only, which
+is exactly why a fixture that bites on a seed cell is not evidence about the document. Fixed by
+anchoring every verdict at the START of the answer and stripping inline-code spans before matching,
+so a citation can never satisfy a verdict; the seed's Q4 cell now carries a citation beside its
+verdict so a `Contains` regression cannot pass the fixture either, and a second fact pins that a
+citation alone is not an answer.
 
 - Warning gate: **0 warnings, 0 errors**, 4 projects, forced non-incremental.
-- Floor: **observed 2328 unit = pin 2309 + declared 19.** Headless **144 = pin 144 + 0**.
+- Floor: **observed 2329 unit = pin 2309 + declared 20.** Headless **144 = pin 144 + 0**.
   0 failures; 2 skips, exactly the pinned Linux-gated names. `floor.json` never opened.
 
 ## Spec-versus-code discrepancies found

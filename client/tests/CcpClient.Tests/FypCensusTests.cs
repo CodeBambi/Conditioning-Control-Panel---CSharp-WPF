@@ -76,15 +76,21 @@ public sealed class FypCensusTests
     /// The privacy verdicts themselves, pinned. Counting the answers and checking they are non-blank
     /// leaves Q3 free to flip YES to NO and stay green — and Q3 (does it leave the machine) and Q4
     /// (which sensor, under whose consent) are the two OWNER-FLAGGED findings, which makes them the
-    /// part of this census a later edit is most likely to soften. <c>StartsWith</c> for the verdicts,
-    /// <c>Contains</c> for the sensor, both after markdown emphasis is stripped.
+    /// part of this census a later edit is most likely to soften.
+    ///
+    /// <para><b>Every verdict is anchored at the START of the answer, and inline-code spans are
+    /// stripped before matching.</b> Both halves are load-bearing, and the first version of this pin
+    /// had neither for Q4: it asked whether the cell CONTAINED "webcam", which the citation
+    /// <c>WebcamConsentDialog</c> in the same cell satisfies on its own. Rewriting the verdict from
+    /// "The webcam" to "Nothing worth naming" left the guard GREEN — the exact softening this pin
+    /// exists to catch. A verdict pin must read the VERDICT, never an incidental token beside it.</para>
     /// </summary>
-    private static readonly (string Id, bool StartsWith, string Needle)[] PrivacyVerdicts =
+    private static readonly (string Id, string Verdict)[] PrivacyVerdicts =
     [
-        ("Q1", true, "YES"),
-        ("Q2", true, "NO"),
-        ("Q3", true, "YES"),
-        ("Q4", false, "webcam"),
+        ("Q1", "YES"),
+        ("Q2", "NO"),
+        ("Q3", "YES"),
+        ("Q4", "The webcam"),
     ];
 
     /// <summary>The closed label vocabulary from the census's §3 decision rule.</summary>
@@ -185,7 +191,13 @@ public sealed class FypCensusTests
     /// <summary>
     /// The two OWNER-FLAGGED answers are the most valuable thing in this census and the part a later
     /// edit is most likely to soften, so the VERDICTS are pinned and not merely counted: Q3 cannot
-    /// stop saying the surface talks to the network, and Q4 cannot stop naming the webcam.
+    /// stop opening with YES about what leaves the machine, and Q4 cannot stop opening by naming the
+    /// webcam as the sensor.
+    ///
+    /// <para>Both claims are demonstrated against the REAL census document, not only against the
+    /// seed: flipping Q3's verdict to NO, and rewriting Q4's from "The webcam" to "Nothing worth
+    /// naming", each red this fact. The Q4 demonstration is the one that matters, because the first
+    /// version of this pin passed that exact mutation — see <see cref="PrivacyVerdicts"/>.</para>
     /// </summary>
     [Fact]
     public void ThePrivacyVerdictsThemselvesArePinned_NotJustTheirCount()
@@ -359,14 +371,38 @@ public sealed class FypCensusTests
         Assert.Contains("Q3", string.Join(" ", report.PrivacyViolations), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The seed's Q4 answer keeps a <c>WebcamConsentDialog</c> citation beside the verdict, exactly as
+    /// the real census does. So this fact fails unless the guard reads the VERDICT: a <c>Contains</c>
+    /// pin on "webcam" is satisfied by the surviving citation and stays green. That is not a
+    /// hypothetical — it is what the first version of this pin did, and it is why the seed carries the
+    /// citation rather than a bare word.
+    /// </summary>
     [Fact]
-    public void DroppingTheSensorNameFromTheConsentAnswerFailsTheGuard()
+    public void SofteningTheSensorVerdictFailsTheGuard_EvenThoughTheCitationBesideItStillSaysWebcam()
     {
         using var repo = new TempRepo();
         SeedConsistentRepo(repo);
         repo.ReplaceInFile(CensusRelativePath,
-            "| Q4 | sensor? | webcam | d |",
-            "| Q4 | sensor? | none worth naming | d |");
+            "| Q4 | sensor? | The webcam, gated on `WebcamConsentDialog` | d |",
+            "| Q4 | sensor? | Nothing worth naming, gated on `WebcamConsentDialog` | d |");
+
+        var report = Run(repo.Root);
+        _output.WriteLine(report.Describe());
+
+        Assert.NotEmpty(report.PrivacyViolations);
+        Assert.Contains("Q4", string.Join(" ", report.PrivacyViolations), StringComparison.Ordinal);
+    }
+
+    /// <summary>A citation alone, with the verdict gone entirely, must not satisfy the pin either.</summary>
+    [Fact]
+    public void ASensorAnswerThatIsOnlyACitationFailsTheGuard()
+    {
+        using var repo = new TempRepo();
+        SeedConsistentRepo(repo);
+        repo.ReplaceInFile(CensusRelativePath,
+            "| Q4 | sensor? | The webcam, gated on `WebcamConsentDialog` | d |",
+            "| Q4 | sensor? | see `WebcamTrackingService` | d |");
 
         var report = Run(repo.Root);
         _output.WriteLine(report.Describe());
@@ -491,7 +527,7 @@ public sealed class FypCensusTests
         if (privacy.Count != 4) structure.Add($"expected 4 privacy answers, parsed {privacy.Count}");
 
         var privacyViolations = new List<string>();
-        foreach (var (id, startsWith, needle) in PrivacyVerdicts)
+        foreach (var (id, verdict) in PrivacyVerdicts)
         {
             var match = privacy.FirstOrDefault(a => a.Id == id);
             if (match.Id is null)
@@ -500,15 +536,10 @@ public sealed class FypCensusTests
                 continue;
             }
 
-            var answer = StripEmphasis(match.Answer);
-            var ok = startsWith
-                ? answer.StartsWith(needle, StringComparison.Ordinal)
-                : answer.Contains(needle, StringComparison.OrdinalIgnoreCase);
-            if (!ok)
+            var answer = StripEmphasis(StripCodeSpans(match.Answer));
+            if (!answer.StartsWith(verdict, StringComparison.Ordinal))
             {
-                privacyViolations.Add(
-                    $"{id}: answer '{Trim(answer)}' no longer "
-                    + (startsWith ? $"begins with '{needle}'" : $"names '{needle}'"));
+                privacyViolations.Add($"{id}: answer '{Trim(answer)}' no longer begins with '{verdict}'");
             }
         }
         if (payloadCount < 0) structure.Add("the payload count is missing or unparseable");
@@ -712,6 +743,14 @@ public sealed class FypCensusTests
     /// <summary>Markdown emphasis is presentation, not content: strip it before reading a verdict.</summary>
     private static string StripEmphasis(string cell) => cell.Replace("*", string.Empty).Trim();
 
+    /// <summary>
+    /// Remove inline-code spans before a verdict is read. A privacy answer carries its citations
+    /// inline, and a citation is not a verdict: <c>WebcamConsentDialog</c> sitting beside a softened
+    /// answer must never be able to satisfy a pin on the sensor's name. An unterminated span is
+    /// dropped to end-of-cell so a stray backtick cannot smuggle text back in.
+    /// </summary>
+    private static string StripCodeSpans(string cell) => Regex.Replace(cell, "`[^`]*`?", " ");
+
     private static (int Count, string Disposition) ParsePayload(string text)
     {
         var count = -1;
@@ -875,7 +914,7 @@ public sealed class FypCensusTests
         sb.AppendLine("| Q1 | persisted? | YES | a |");
         sb.AppendLine("| Q2 | shown to others? | NO | b |");
         sb.AppendLine("| Q3 | leaves the machine? | YES | c |");
-        sb.AppendLine("| Q4 | sensor? | webcam | d |");
+        sb.AppendLine("| Q4 | sensor? | The webcam, gated on `WebcamConsentDialog` | d |");
         sb.AppendLine();
         sb.AppendLine("| Id | Path |");
         sb.AppendLine("|---|---|");

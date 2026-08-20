@@ -170,7 +170,7 @@ seven noun phrases the owner wrote at `client/docs/task-board.md:97`, not re-der
 | B3 | webcam gaze scrolling | `Services/Fyp/FypHostService.cs:903-1045`; consent `:944`, dialog `:946`, `StartAsync` `:958`, ownership `:964`, conditional stop `:1023`, gaze subscribe `:1045` | Camera capture + face/iris inference + calibrated gaze mapped to a screen point | `none` — webcam is **not** among the port's seven landed capabilities | **OWNER-GATED** (see §5) — `client/docs/capability-inventory.md:70` requires "a consent-contract revision and owner review"; `:78` "a stub that says running is a failure" | Windows: **unproven**. **Linux: unproven** — `capability-inventory.md:78` additionally requires XDG Camera portal/PipeWire proof |
 | B4 | opacity control | `CCP.Core/Models/AppSettings.cs:3190-3199` — `FypWindowOpacity`, clamp `Math.Clamp(value, 0.01, 1.0)`, "the DWM thumbnail opacity of the see-through mirror, **never the real window's alpha**" | A 0.01-1.0 translucency applied to the mirror | inherits B2 — there is no mirror to apply it to | **GAP: consequent of B2** (the clamp itself is trivial; its subject does not exist) | Windows: unproven. Linux: unproven |
 | B5 | any monitor | `Services/Fyp/FypGhostOverlay.cs:75` `_screen = WF.Screen.FromHandle(sourceHwnd)`; `:91` `_form.Bounds = _screen.Bounds` | Resolve the monitor a window is on and fill exactly that monitor in physical px | `client/src/CcpClient.Desktop/Overlay/OverlayDisplays.cs` (per-display overlay placement already lands) | **PARTIAL on overlay** — missing member: "which display does this *foreign* window occupy", i.e. an HWND-to-display resolve | Windows: partial. **Linux: unproven** — mixed-DPI multi-monitor is a headed gate the port has never discharged |
-| B6 | survives Show Desktop | `Services/Fyp/FypHostService.cs:711-721` veto of `SC_MINIMIZE`; `:585-592` severs the owner link; `:784` heals a minimize that lands anyway | Refuse/heal an OS-initiated minimise of a window the user cannot see | `none` — no `client/src` window subclasses a WndProc to veto a system command | **GAP: system-command veto on a foreign message pump** — (a) primitive: intercept `WM_SYSCOMMAND`/`SC_MINIMIZE`; (b) WPF uses `HwndSource.AddHook`; (c) the port would need a Win32 hook seam, and on Linux there is no equivalent because there is no equivalent of Show Desktop's owner-cascade | Windows: unproven. **Linux: not applicable in this form** — the behaviour would have to be re-derived, not ported |
+| B6 | survives Show Desktop | `Services/Fyp/FypHostService.cs:711-722` veto of `SC_MINIMIZE` (`handled = true` is `:722`); `:585-593` severs the owner link (`SuspendMainWindowGlue(true)` is `:593`); `:784` heals a minimize that lands anyway | Refuse/heal an OS-initiated minimise of a window the user cannot see | `none` — no `client/src` window subclasses a WndProc to veto a system command | **GAP: system-command veto on a foreign message pump** — (a) primitive: intercept `WM_SYSCOMMAND`/`SC_MINIMIZE`; (b) WPF uses `HwndSource.AddHook`; (c) the port would need a Win32 hook seam, and on Linux there is no equivalent because there is no equivalent of Show Desktop's owner-cascade | Windows: unproven. **Linux: not applicable in this form** — the behaviour would have to be re-derived, not ported |
 | B7 | undecodable clips notice-and-swap | `Services/Fyp/FypHostService.cs:213-225` (`media-error`, codes 2/3/4, `RecordFailure` for library ids only); `Services/Fyp/FypMetaStore.cs:29-30` `FailStrikeLimit = 2` | Count decode failures per asset, stop serving after 2 strikes, page past the bad tile | `none` in the port, **but the logic is pure and page-side** | **PARTIAL on video** — missing member: a per-asset failure ledger; the swap itself lives in `main.js`, which the port would serve unmodified | Windows: unproven. Linux: unproven |
 
 ### 3.1 What the seven-capability map says overall
@@ -181,8 +181,10 @@ seven noun phrases the owner wrote at `client/docs/task-board.md:97`, not re-der
 - **OWNER-GATED: 1 of 7** (B3).
 
 **Ghost mode is the surface's title and half its identity, and it is the deepest gap in the
-inventory.** Applying the essentiality test written into the plan — remove it and would a WPF user
-still recognise the surface? — the answer for B2 is no. The board row itself names it in the title.
+inventory.** Applying the essentiality rule fixed in the plan — a behaviour is essential iff it realises one of
+the owner’s seven phrases (`plan.md` §4) — B2 realises *“ghost mode = see-through AND click-through”*
+verbatim, so it is essential and the rule fires without a judgement call. The board row names it in
+the title.
 
 ---
 
@@ -226,7 +228,7 @@ Per the plan's §4 carve-out these are **not folded into any size**. Both are de
 
 ### 5.1 The whole surface fetches NSFW media from a third party, over the network
 
-`ScrolllerSource.cs:12-41` (opened): **`POST https://api.scrolller.com/admin`**, an *unofficial*
+`ScrolllerSource.cs:12-43` (opened): **`POST https://api.scrolller.com/admin`**, an *unofficial*
 GraphQL API of a Reddit media aggregator, with CDN hotlinks played directly. The niche catalog
 (`FypOnlineCoordinator.cs:44-62`) is 12 named categories of explicit content, and channel selection
 plus dwell-weighted rotation means **the user's revealed preferences shape the requests sent to that
