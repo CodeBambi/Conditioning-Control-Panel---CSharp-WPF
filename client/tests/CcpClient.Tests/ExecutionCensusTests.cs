@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Xunit;
@@ -5,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-121: the guards on the zero-execution census (<c>client/docs/task-board.md:32</c>).
+/// SP-121: the guards on the zero-execution census (<c>client/docs/task-board.md:33</c>).
 ///
 /// <para>WHAT THIS DOES NOT DO. It sets NO threshold, NO target and NO gate on the census count.
 /// The board row asks which shipped types have ZERO executed lines, not a percentage, and a
@@ -13,7 +14,7 @@ namespace CcpClient.Tests;
 /// Nothing here reds because the number moved; the number is free to move in either direction.</para>
 ///
 /// <para>WHAT IT DOES BIND, AND WHY THAT IS THE RISK. The census's exclusion rule is BIGGER than
-/// its answer — on the run that produced the committed document, 2619 of 3943 report entries were
+/// its answer — on the run that produced the committed document, 2622 of 3946 report entries were
 /// excluded to leave 649 shipped types. So the census is only as honest as the rule, and the
 /// tempting failure is to widen an exclusion until the list looks short, which is
 /// <c>allowedSkips</c>-as-quarantine wearing a new hat. The ANTI-WIDENING GUARD is
@@ -28,9 +29,19 @@ namespace CcpClient.Tests;
 /// <c>shipped-type-rule.json</c> so that this test and <c>census.mjs</c> apply the SAME rule in two
 /// languages. That alone is defeated by one edit: inline a pattern in the generator and the JSON
 /// guard stays green while the census widens. So
-/// <see cref="CensusGenerator_HoldsNoShapeLiteralOfItsOwn"/> reads <c>census.mjs</c> as text and
-/// refuses any shape literal in it. Precedent for reading a tool's source: FloorWrapperGuardTests,
-/// AllowedSkipsBanGuardTests.</para>
+/// <see cref="CensusGenerator_HoldsNoShapeLiteralOfItsOwn"/> reads <c>census.mjs</c> as text.
+/// Precedent for reading a tool's source: FloorWrapperGuardTests, AllowedSkipsBanGuardTests.</para>
+///
+/// <para>WHAT THAT GUARD ACTUALLY ENFORCES, STATED EXACTLY BECAUSE IT USED TO OVERSTATE ITSELF. It
+/// forbids a NAMED list of literals in the generator's non-comment, non-document-emitting lines:
+/// the four generated-shape names, and the <c>obj/</c> path fragments that would reinstate the
+/// rejected R1 path clause. It does NOT prove the generator applies no other filter. A hand-rolled
+/// predicate mentioning none of those literals — <c>if (name.includes("&lt;")) continue;</c> inside
+/// <c>accumulate</c>, which is precisely the rejected R2 widening — would pass this guard, the JSON
+/// fixture guard and <c>--self-check</c> alike, because none of the three observes
+/// <c>accumulate</c>; all three observe <c>classify</c>. Review confirmed no such widening exists
+/// today. The honest statement of this guard's reach: it closes the literal-reuse route and NAMES
+/// the route it leaves open, rather than claiming a completeness it cannot deliver.</para>
 ///
 /// <para>HONESTY. These are pure-logic facts over committed files. They never run coverage, never
 /// start a test host, and prove nothing about whether the census's number is correct — only that
@@ -153,12 +164,14 @@ public sealed class ExecutionCensusTests
             .Where(l => !l.StartsWith("//", StringComparison.Ordinal) && !l.StartsWith("w(", StringComparison.Ordinal)));
 
         var violations = new List<string>();
-        foreach (var forbidden in new[] { "XamlClosure", "DisplayClass", "<>c", "CompiledAvaloniaXaml" })
+        // The generated-shape names, plus the obj/ path fragments that would reinstate the REJECTED
+        // R1 path clause — the one that would have discarded DtrhLoom's [GeneratedRegex] half.
+        foreach (var forbidden in new[] { "XamlClosure", "DisplayClass", "<>c", "CompiledAvaloniaXaml", "/obj/", "\\\\obj\\\\" })
         {
             if (code.Contains(forbidden, StringComparison.Ordinal))
             {
-                violations.Add($"  census.mjs contains the shape literal \"{forbidden}\" in code — every shape " +
-                    "belongs in shipped-type-rule.json, or the cross-language guard goes blind");
+                violations.Add($"  census.mjs contains the literal \"{forbidden}\" in code — every shape belongs " +
+                    "in shipped-type-rule.json, and a path-based exclusion is the rejected R1 clause returning");
             }
         }
 
@@ -192,6 +205,67 @@ public sealed class ExecutionCensusTests
         var listed = Regex.Matches(census, @"^## The (\d+) shipped types with zero executed lines$", RegexOptions.Multiline);
         Assert.True(listed.Count == 1, "the census must carry exactly one zero-execution list heading");
         Assert.Equal(zero, int.Parse(listed[0].Groups[1].Value));
+
+        // The stated total must equal the rows actually rendered. Without this, a marker turned into
+        // a filter inside the render loop would shorten the list while the headline kept its number.
+        Assert.Equal(zero, ZeroListRows(census).Count);
+    }
+
+    /// <summary>
+    /// THE DENOMINATOR IS ANCHORED TO THE REAL ASSEMBLY, not to a literal and not to itself.
+    ///
+    /// <para><c>zero</c> is the answer and the universe is what makes the answer mean anything. A
+    /// regression that quietly shrank the universe would leave the answer looking better while
+    /// measuring less — the same reassuring-direction failure the platform markers had. So the two
+    /// metadata counts the census prints are recomputed here by ordinary reflection over the shipped
+    /// assembly, a second implementation with a different mechanism from <c>census.mjs</c>'s
+    /// hand-rolled ECMA-335 table reader, and must agree exactly.</para>
+    ///
+    /// <para>Deliberately NOT a threshold: nothing here says the universe must be big, only that the
+    /// number the census reports is the number the assembly actually has.</para>
+    /// </summary>
+    [Fact]
+    public void Census_DenominatorIsAnchoredToTheShippedAssembly()
+    {
+        var rule = ReadRule();
+        var census = ReadCensus();
+        var assembly = typeof(CcpClient.Desktop.Haptics.HapticGate).Assembly;
+
+        // Authored name shape: the same C2/C3 clauses, applied to the assembly's own type names.
+        // Same C2/C3 clauses, applied to simple names exactly as census.mjs applies them to the
+        // metadata: a simple name carries no namespace, so "not excluded" is the test, never "kept"
+        // (a bare name never starts with the shipped namespace root and would read as flagged).
+        var authored = assembly.GetTypes()
+            .Where(t => !Classify(rule, "CcpClient.Desktop", t.Name).StartsWith("excluded-", StringComparison.Ordinal))
+            .ToList();
+
+        // "No method body at all": every declared method is abstract or extern, so nothing can be
+        // instrumented and the type is INVISIBLE rather than zero.
+        const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+            | BindingFlags.Static | BindingFlags.DeclaredOnly;
+        var noMethodBody = authored.Count(t => t.GetMethods(Declared).All(m => m.GetMethodBody() is null)
+            && t.GetConstructors(Declared).All(c => c.GetMethodBody() is null));
+
+        Assert.Equal(authored.Count, ScalarRow(census, "of those, authored name shape (would survive C2/C3)"));
+        Assert.Equal(noMethodBody, ScalarRow(census,
+            "— no method body at all: interfaces without default members, enums, abstract-only"));
+
+        // With both anchored to the assembly, the chain below constrains the universe itself: a
+        // silent shrink cannot hide, it must surface as a larger "no source line maps to it".
+        var universe = ScalarRow(census, "census universe (shipped types reaching this census)");
+        var invisible = ScalarRow(census, "**INVISIBLE rather than zero**");
+        var noSourceMapped = ScalarRow(census, "— has a method body, but no source line maps to it");
+        Assert.Equal(invisible, authored.Count - universe);
+        Assert.Equal(invisible, noMethodBody + noSourceMapped);
+    }
+
+    /// <summary>The type rows of the zero-execution list only — never the tables above it.</summary>
+    private static List<string> ZeroListRows(string census)
+    {
+        var heading = Regex.Match(census, @"^## The \d+ shipped types with zero executed lines$", RegexOptions.Multiline);
+        Assert.True(heading.Success, "the census carries no zero-execution list heading");
+        return Regex.Matches(census[heading.Index..], @"^\| `([^`]+)`[^|]*\| \d+ \| ", RegexOptions.Multiline)
+            .Select(m => m.Groups[1].Value).ToList();
     }
 
     /// <summary>

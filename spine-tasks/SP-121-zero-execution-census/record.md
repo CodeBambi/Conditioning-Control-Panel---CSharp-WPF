@@ -1,7 +1,7 @@
 # SP-121 — record
 
 Branch `lane/SP-121-zero-execution-census`. Base `4276249e`, merged `b5f789de` (the coordinator's
-base unred) at `048eafb9`. Census row: `client/docs/task-board.md:32`.
+base unred) at `048eafb9`. Census row: `client/docs/task-board.md:33`.
 
 **The answer: 42 shipped types have zero executed lines, out of a census universe of 649.**
 No threshold was set, no gate was added on that number, and nothing was excluded to shorten it.
@@ -122,12 +122,24 @@ assembly, and it ran before the floor.
    **13 of the 42 rows carry a `construction-invisible` marker.** They are marked, not excluded —
    excluding them would be widening a rule to shorten a list, which is the thing this packet exists
    to refuse. Treat such a row as unproven in both directions.
-4. **The census is OS-conditioned.** Generated on Windows, so Linux legs never execute. Rows are
-   marked `platform-conditional` when the type's **own source file** holds a platform predicate
-   (`OperatingSystem.Is*`, `RuntimeInformation.IsOSPlatform`, `[SupportedOSPlatform]`) — a checkable
-   property, deliberately not a guess from matching type names against OS-gated test names, because
-   a wrong `os-gated` marker excuses a real defect as a machine artifact. **17 of 42** are marked;
-   `SecretToolSecretStore` (116 lines, the Linux `secret-tool` store) is the clearest.
+4. **The census is OS-conditioned, and the marker now records POLARITY — the first version of it
+   was direction-blind and 14 of its 17 marks pointed the wrong way.** Corrected on review. A mark
+   now requires the predicate to be **code** (comments are stripped, so `ChaosTunnelWin32.cs:8` —
+   a `///` line reading *"every caller guards on OperatingSystem.IsWindows()"* — no longer marks
+   anything) and records **which OS the predicate selects**:
+   - `other-os-gated(linux)` — **4 rows**, all the `SecretStores.cs` family including
+     `SecretToolSecretStore` (116 lines, the Linux `secret-tool` store). Here the machine genuinely
+     may explain the zero.
+   - `same-os-code(windows)` — **12 rows**, including the census's largest dead surface,
+     `DtrhHostWindow` at 833 lines. Their predicates (`DtrhProcessFailed.cs:45`,
+     `DtrhProfileLock.cs:86`, `ChaosTunnelService.cs:278`, `DtrhHostWindow.axaml.cs:701`) are all
+     `!OperatingSystem.IsWindows()` guards selecting **the OS this census ran on**, so the machine
+     **does not excuse these rows at all** — they would be MORE dead on Linux, not less.
+
+   The old framing ("their types land in the zero list because of the MACHINE") was literally true
+   and changed no count, but it invited exactly the wrong inference on the biggest dead surface in
+   the document. 16 rows are marked now rather than 17, and the honest split is 4 explanatory
+   against 12 that are the opposite of explanatory.
 5. Executed is not tested; a dead half of a live partial class is invisible; zero is a fact about the
    suite, not a verdict on the code.
 
@@ -168,11 +180,11 @@ Filed, not fixed: this packet changed no product file.
 | gate | result |
 |---|---|
 | `check-warnings.mjs` | **OK** — 0 warnings, 0 errors, 4 projects, forced non-incremental |
-| `check-floor.mjs` | **total drift 2256 vs pin 2247 — expected and correct**: 0 failures, 0 bad outcomes, only the 2 pinned OS skips |
+| `check-floor.mjs` | **total drift 2257 vs pin 2247 — expected and correct**: 0 failures, 0 bad outcomes, only the 2 pinned OS skips |
 
-- Observed: **2256 unit / 141 headless**. Pin **2247 / 141**. Declared delta **+9 / 0**
-  (`floor-delta.json`). 2247 + 9 = 2256 and 141 + 0 = 141, both exact.
-- The census's own provenance run was fully green after the base merge: `CcpClient.Tests` 2254
+- Observed: **2257 unit / 141 headless**. Pin **2247 / 141**. Declared delta **+10 / 0**
+  (`floor-delta.json`). 2247 + 10 = 2257 and 141 + 0 = 141, both exact.
+- The census's own provenance run was fully green after the base merge: `CcpClient.Tests` 2255
   passed / 2 skipped / 0 failed, `CcpClient.HeadlessTests` 141 / 0 / 0.
 
 ### Reds seen along the way, recorded rather than chased
@@ -184,7 +196,7 @@ Filed, not fixed: this packet changed no product file.
   coordinator's `b5f789de` instead; SP-120's row was never mine to touch.
 - **`PointerCapabilityTests.TheDeliveryOracle_CanSeeAClickArriveAtAWindowItBuiltItself_...`** failed
   in exactly one instrumented run and passed in the three after it. Instrumentation changes timing
-  and the suite is bounded at 0.20% fenced / 9.5% suite, never zero (`task-board.md:35`). Recorded,
+  and the suite is bounded at 0.20% fenced / 9.5% suite, never zero (`task-board.md:36`). Recorded,
   not re-run for, not touched.
 - **`VacuousShapeGuardTests`** correctly caught my own `Census_AndRule_DeclareTheSameClauses` with
   every assertion loop-nested. **Fixed the vacuity** (non-nested `Assert.Equal(3, clauses.Count)`),
@@ -197,6 +209,33 @@ Filed, not fixed: this packet changed no product file.
 `:224`). The validator passed this wave on packets the suite guard reds. That is the same class of
 defect this packet is about — two owners of one rule, disagreeing, with a green in between.
 
+## Corrections made at code review
+
+1. **`platform-conditional` was direction-blind** — see limit 4 above. Replaced with polarity-aware
+   `other-os-gated` / `same-os-code`, comments stripped before matching.
+2. **The anti-widening guard overstated its own reach.** `CensusGenerator_HoldsNoShapeLiteralOfItsOwn`
+   forbids a NAMED literal list, while its summary claimed it "refuses any shape literal". A
+   hand-rolled `if (name.includes("<")) continue;` inside `accumulate` — the rejected R2 widening —
+   would pass it, the JSON fixture guard and `--self-check` alike, because all three observe
+   `classify` and none observes `accumulate`. The summary now says exactly that and NAMES the route
+   it leaves open; the literal list also gained the `obj/` path fragments that would reinstate the
+   rejected R1 clause. No such widening exists today.
+3. **The board-row citation was off by one in five places** (`:32` → `:33`, the census row; the
+   adjacent `:32` is D190's unbidden-auto-start row), and `:35` → `:36` for the bounded-flake
+   numbers. Fixed in `shipped-type-rule.json`, `census.mjs` (twice, one of which regenerates into
+   the census), `ExecutionCensusTests.cs` and here.
+4. **Neither the rendered row count nor the universe was pinned.** `Census_IsInternallyConsistent`
+   now asserts the rendered zero-list rows equal the stated total, so a marker turned into a filter
+   inside the render loop cannot shorten the list while the headline keeps its number. A new fact,
+   `Census_DenominatorIsAnchoredToTheShippedAssembly`, recomputes the authored-shape count and the
+   no-method-body count by ordinary reflection over `CcpClient.Desktop.dll` and requires them to
+   equal what the census prints — a second implementation, by a different mechanism, of what
+   `census.mjs` reads from the ECMA-335 tables. **They agree exactly (884 and 212)**, which also
+   independently confirms the hand-rolled metadata reader. It pins no minimum: nothing says the
+   universe must be big, only that the reported number is the assembly's real one.
+5. **Stale comment** at `census.mjs:135` said attribution "adds exactly one authored type"; it adds
+   three, as the table and this record already said.
+
 ## Files
 
 | path | why |
@@ -204,7 +243,7 @@ defect this packet is about — two owners of one rule, disagreeing, with a gree
 | `client/tools/coverage/shipped-type-rule.json` | the rule as data: clauses, refusals, valve, and 20 fixtures, read by both the tool and the C# guard |
 | `client/tools/coverage/census.mjs` | the tool: runs both suites instrumented into `os.tmpdir()`, unions per line, attributes generated entries back, reads the assembly's ECMA-335 TypeDef/MethodDef tables for the invisible denominator, writes the census, deletes the artifacts |
 | `client/docs/execution-census.md` | the committed census |
-| `client/tests/CcpClient.Tests/ExecutionCensusTests.cs` | 9 pure-logic guards (+9 unit) |
+| `client/tests/CcpClient.Tests/ExecutionCensusTests.cs` | 10 pure-logic guards (+10 unit) |
 | `spine-tasks/SP-121-zero-execution-census/{plan.md,record.md,floor-delta.json}` | checkpoint, record, delta |
 
 No csproj touched, no `PackageReference` added, no product file changed, no threshold set, no
