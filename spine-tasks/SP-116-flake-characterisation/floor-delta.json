@@ -1,1 +1,0 @@
-{ "packet": "SP-116-flake-characterisation", "unit": 5, "headless": 0, "reason": "the compositor fence pin in FlashDrawTests, the two deterministic pins for the parked operation's teardown tail in MovingEffectSpineTests, and the two TestWait verdict pins that stop an expired signal wait telling the reader to re-run a real break" }

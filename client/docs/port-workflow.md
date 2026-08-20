@@ -320,3 +320,32 @@ has one. Correcting it reproduced the measurement at 8 of 8 points and the toler
 answer is one the check was written to catch, the tolerance is a hole. Prefer finding the model
 wrong over widening the window: a disagreement between a model and a measurement is evidence
 about the model at least as often as about the world.
+
+## The line-ending trap (recorded 2026-08-20, SP-116)
+
+**A single lone CR makes git's clean filter decline to normalise the WHOLE file.**
+
+SP-116 wrote four `
+` sequences into a governance document. Each produced a lone CR, so
+`core.autocrlf=true` stopped normalising that file entirely and a **13-line edit entered the blob
+as a 533-line rewrite** - invisibly, inside a commit about something else, making `git log -p`
+and `git blame` useless on the document that defines this port's evidence classes.
+
+Proven empirically rather than argued, by hashing through the repo's own clean filter:
+
+    git hash-object --path=<in-repo path>  "a
+b
+"    -> blob holds  a 
+ b 
+      (normalised)
+    git hash-object --path=<in-repo path>  "a
+b
+"  -> blob holds  a   
+ b  
+  (verbatim)
+
+**Before landing any doc change, compare `git diff --numstat` against `git diff --numstat
+--ignore-all-space`.** If they disagree, the commit is carrying whitespace churn that hides its
+own content. And **match base's convention** - SP-116 was told to restore a BOM, checked, found
+base had none, and correctly refused: the BOM was its own earlier slip, and restoring it would
+have re-introduced the very divergence the fix existed to remove.
