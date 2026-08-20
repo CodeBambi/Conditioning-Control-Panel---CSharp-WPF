@@ -20,6 +20,21 @@
 //   node client/tools/coverage/census.mjs --from <dir>     use cobertura reports already under <dir>
 //   node client/tools/coverage/census.mjs --filter <expr>  unit project only, filtered (bite probe)
 //   node client/tools/coverage/census.mjs --out <path>     write somewhere other than the doc
+//   node client/tools/coverage/census.mjs --metadata-json  print this file's OWN reading of the
+//                                                          shipped assembly's metadata as JSON and
+//                                                          stop: no coverage run, no test host, no
+//                                                          document. SP-124's cross-validation
+//                                                          calls this and compares every name,
+//                                                          kind and verdict against ordinary .NET
+//                                                          reflection over the identical file.
+//   node client/tools/coverage/census.mjs --check-stale    recompute the three metadata scalars
+//                                                          from the built assembly and diff them
+//                                                          against the committed census. Exit 1
+//                                                          and name every drifted row. SP-124's
+//                                                          land-time drift check; it always prints
+//                                                          what it did NOT check.
+//     --dll <path>     which assembly --metadata-json / --check-stale read (default: the Debug build)
+//     --census <path>  which document --check-stale reads (default: the committed census)
 //
 // MECHANISM
 //   --collect:"Code Coverage;Format=cobertura" on BOTH test projects. No new package:
@@ -381,6 +396,119 @@ export function readMetadataTypeDefs(dllPath) {
   });
 }
 
+// THE THREE SCALARS THE DOCUMENT PRINTS FROM METADATA, named ONCE.
+// render() writes these labels and --check-stale reads them back, so an edit to one that misses
+// the other surfaces as a loud MISSING ROW rather than as a check that quietly stopped looking.
+const METADATA_ROW_TYPEDEFS = "type definitions in `CcpClient.Desktop.dll`";
+const METADATA_ROW_AUTHORED = "of those, authored name shape (would survive C2/C3)";
+const METADATA_ROW_NO_BODY =
+  "— no method body at all: interfaces without default members, enums, abstract-only";
+
+/**
+ * The metadata view the document reports, computed ONCE and shared by render(), --metadata-json
+ * and --check-stale, so the JSON a test cross-validates is literally the numbers the document
+ * would print rather than a second derivation that could agree with neither.
+ *
+ * Classified as the assembly's own package so C1 never fires: what remains is exactly the
+ * name-shape clauses, applied to metadata simple names by the SAME classifier that reads the
+ * coverage report. No shape literal appears here.
+ */
+function metadataView(rule, metadata) {
+  const authored = metadata.filter(
+    (t) => !classify(rule.shippedAssembly, t.name, rule).verdict.startsWith("excluded-"));
+  return { authored, invisible: authored.filter((t) => !t.hasIl) };
+}
+
+/**
+ * SP-124. The reader's own answer, in machine-readable form, for cross-validation against a
+ * SECOND independent mechanism (ordinary .NET reflection over the identical file) at RUNTIME.
+ *
+ * WHY THIS MODE EXISTS. The census used to be cross-validated by pinning two of its scalars in
+ * ExecutionCensusTests and recomputing them by reflection. That bound a LIVE measurement to a
+ * STORED number, so every packet adding one ordinary shipped type reddened the suite and the only
+ * remedy was regenerating a document closed to lanes. Emitting the reading instead moves BOTH
+ * sides of the comparison to runtime: a new type moves both, a wrong reader moves only one.
+ *
+ * Names and kinds are emitted, never just counts: 295 of this assembly's 1325 TypeDef simple names
+ * repeat (nested types reuse simple names), so a reader that dropped one row and invented another
+ * would keep every count intact. Only the sorted multiset catches it.
+ */
+function metadataJson(rule, dllPath) {
+  const metadata = readMetadataTypeDefs(dllPath);
+  const { authored, invisible } = metadataView(rule, metadata);
+  return {
+    dll: path.basename(dllPath),
+    rows: metadata.map((t) => ({
+      name: t.name,
+      kind: t.kind,
+      hasIl: t.hasIl,
+      verdict: classify(rule.shippedAssembly, t.name, rule).verdict,
+    })),
+    scalars: {
+      [METADATA_ROW_TYPEDEFS]: metadata.length,
+      [METADATA_ROW_AUTHORED]: authored.length,
+      [METADATA_ROW_NO_BODY]: invisible.length,
+    },
+    authored: authored.map((t) => t.name),
+    noMethodBody: invisible.map((t) => t.name),
+  };
+}
+
+/**
+ * SP-124. Does the COMMITTED census still describe the tree?
+ *
+ * This is the drift check that used to live in the test suite as a pinned scalar. It is here, and
+ * not there, because a per-lane fact comparing a live count to a stored one is a chokepoint: every
+ * packet adding a shipped type reds it, and no lane may regenerate the document. Run at the LAND,
+ * where regenerating is the orchestrator's to do.
+ *
+ * IT ALWAYS PRINTS WHAT IT DID NOT CHECK. A quiet exit here means the three metadata scalars agree
+ * with the built assembly, and NOTHING MORE — the coverage-derived rows and the embedded suite run
+ * table are stale by construction the moment a test is added, and a reader who took silence for
+ * "the census is current" would be misled by exactly the reassuring direction this tool exists to
+ * refuse.
+ */
+function checkStale(rule, dllPath, censusPath) {
+  const metadata = readMetadataTypeDefs(dllPath);
+  const { authored, invisible } = metadataView(rule, metadata);
+  const expected = [
+    [METADATA_ROW_TYPEDEFS, metadata.length],
+    [METADATA_ROW_AUTHORED, authored.length],
+    [METADATA_ROW_NO_BODY, invisible.length],
+  ];
+
+  const document = fs.readFileSync(censusPath, "utf8");
+  const drift = [];
+  for (const [label, live] of expected) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const row = new RegExp(`^\\| (?:\\*\\*)?${escaped}(?:\\*\\*)? \\| (?:\\*\\*)?(\\d+)(?:\\*\\*)? \\|`, "m").exec(document);
+    if (!row) {
+      drift.push(`  MISSING ROW  "${label}"\n    the census carries no such row — this check refuses to go blind`);
+    } else if (Number(row[1]) !== live) {
+      drift.push(`  STALE ROW    "${label}"\n    census says ${row[1]}, the built assembly has ${live}`);
+    }
+  }
+
+  console.log("checked: the three scalars this tool reads from the shipped assembly's own metadata.");
+  console.log("NOT CHECKED, and stale by construction the moment a test or a covered line moves:");
+  console.log("  * the embedded suite run table (passed/failed/skipped per project) — it is a");
+  console.log("    snapshot of one run and nothing here or in the floor binds it (task-board.md:34)");
+  console.log("  * every coverage-derived row: the census universe, the executed/zero split, the");
+  console.log("    zero-execution list itself and its per-type line counts");
+  console.log("  * the platform marks, the namespace headings and the prose");
+  console.log("A quiet exit therefore means the metadata scalars agree, and nothing more.");
+
+  if (drift.length === 0) {
+    console.log(`census metadata scalars agree with ${path.basename(dllPath)}: ${expected.map(([, n]) => n).join(" / ")}`);
+    return true;
+  }
+
+  console.error(`the committed census no longer describes ${path.basename(dllPath)}:`);
+  console.error(drift.join("\n"));
+  console.error("regenerate with `node client/tools/coverage/census.mjs` — that is the orchestrator's at a land, never a lane's");
+  return false;
+}
+
 // ---------------------------------------------------------------- the run
 
 function runSuite(project, resultsDir, filter) {
@@ -434,12 +562,9 @@ function render(rule, tally, types, runs, metadata) {
   const deadLines = zero.reduce((n, t) => n + t.lines, 0);
 
   // The metadata's simple names are classified by the SAME clauses as the report's names, so the
-  // denominator and the census cannot drift apart. No shape literal appears here.
-  // Classified as the assembly's own package so C1 never fires: what remains is exactly the
-  // name-shape clauses, applied to metadata simple names by the SAME code that classifies the
-  // report. No shape literal appears here, and the denominator cannot drift from the census.
-  const authored = metadata.filter((t) => !classify(rule.shippedAssembly, t.name, rule).verdict.startsWith("excluded-"));
-  const invisible = authored.filter((t) => !t.hasIl);
+  // denominator and the census cannot drift apart. metadataView is shared with --metadata-json and
+  // --check-stale (SP-124), so what a test cross-validates is what this document prints.
+  const { authored, invisible } = metadataView(rule, metadata);
   const invisibleBy = (kind) => invisible.filter((t) => t.kind === kind).length;
   const universeCount = shipped.length - flagged.length;
 
@@ -508,11 +633,11 @@ function render(rule, tally, types, runs, metadata) {
   w();
   w("| | |");
   w("|---|---|");
-  w(`| type definitions in \`CcpClient.Desktop.dll\` | ${metadata.length} |`);
-  w(`| of those, authored name shape (would survive C2/C3) | ${authored.length} |`);
+  w(`| ${METADATA_ROW_TYPEDEFS} | ${metadata.length} |`);
+  w(`| ${METADATA_ROW_AUTHORED} | ${authored.length} |`);
   w(`| of those, reaching this census | ${universeCount} |`);
   w(`| **INVISIBLE rather than zero** | **${authored.length - universeCount}** |`);
-  w(`| — no method body at all: interfaces without default members, enums, abstract-only | ${invisible.length} |`);
+  w(`| ${METADATA_ROW_NO_BODY} | ${invisible.length} |`);
   w(`|     interfaces ${invisibleBy("interface")}, enums ${invisibleBy("enum")}, structs ${invisibleBy("struct")}, classes ${invisibleBy("class")} | |`);
   w(`| — has a method body, but no source line maps to it | ${authored.length - universeCount - invisible.length} |`);
   w();
@@ -760,6 +885,18 @@ function main() {
   const flag = (n) => argv.includes(n);
   const value = (n) => (argv.indexOf(n) >= 0 ? argv[argv.indexOf(n) + 1] : null);
   const rule = loadRule();
+  const dll = value("--dll") ?? PRODUCT_DLL;
+
+  // SP-124's two non-generating modes, handled FIRST and deliberately ahead of selfCheck: both
+  // must be usable on a tree with no coverage run behind them, and --metadata-json's stdout is
+  // parsed as JSON by a test, so nothing else may write to it.
+  if (flag("--metadata-json")) {
+    process.stdout.write(`${JSON.stringify(metadataJson(rule, dll))}\n`);
+    return;
+  }
+  if (flag("--check-stale")) {
+    process.exit(checkStale(rule, dll, value("--census") ?? DEFAULT_OUT) ? 0 : 1);
+  }
 
   if (flag("--self-check")) {
     process.exit(selfCheck(rule) ? 0 : 1);
@@ -793,7 +930,7 @@ function main() {
   const tally = { universe: 0, kept: 0, attributed: 0, removed: {}, nonShipped: new Map() };
   for (const r of reports) accumulate(fs.readFileSync(r, "utf8"), rule, types, tally);
 
-  const metadata = readMetadataTypeDefs(PRODUCT_DLL);
+  const metadata = readMetadataTypeDefs(dll);
   const document = render(rule, tally, types, runs, metadata);
 
   const out = value("--out") ?? DEFAULT_OUT;
