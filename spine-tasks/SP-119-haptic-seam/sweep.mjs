@@ -297,12 +297,16 @@ const MUTATIONS = [
   { id: "M-az", file: F.root, what: "the participant gets NO entitlement authority", suite: "unit",
     find: `                _entitlementForParticipants is { } entitlement ? entitlement.ResolveAsync : null),`,
     replace: `                null),` },
+  // Round 1 reported M-ba as NOT COMPILED, which is a fault in the DRIVER and not a finding about
+  // the code: the replacement was not type-preserving. Re-stated as a swap for another participant
+  // whose constructor really does type-check here, so the mutation is "the tenth participant is
+  // something else" rather than "the file no longer builds".
   { id: "M-ba", file: F.root, what: "the participant is not registered at all", suite: "unit",
     find: `            new Haptics.HapticParticipant(
                 infra, Path.GetDirectoryName(SettingsPathFactory())!,
-                sink: null,`,
-    replace: `            new Scheduling.SchedulerParticipant(
-                infra, Path.GetDirectoryName(SettingsPathFactory())!, session.Engine, null, null!,` },
+                sink: null,
+                _entitlementForParticipants is { } entitlement ? entitlement.ResolveAsync : null),`,
+    replace: `            new HeartbeatParticipant(infra.OwnerFor("HeartbeatTwo"), infra.UiDispatch),` },
 
   // ---- the shell and the page ---------------------------------------------------------------
   { id: "M-bb", file: F.shell, what: "the shell builds its OWN haptic owner instead of the root's", suite: "headless",

@@ -77,6 +77,27 @@ public class HapticParticipantTests
         await participant.StopAsync();
     }
 
+    [Fact]
+    public async Task SINKSTATEReportsWhatTheSERVERSaid_NotAFixedSentence()
+    {
+        // The sweep's M-av: SinkState classifying a hard-coded NotAsked instead of the observation
+        // survived, because every fact about it drove a build with nothing to observe. A capability
+        // line that cannot change is a capability line that is decoration.
+        using var scope = new Scope();
+        var sink = new RecordingSink(HapticProviderRoute.Lovense, devices: 3);
+        var participant = scope.Build(sink);
+
+        Assert.IsType<CapabilityState.Unavailable>(participant.SinkState);
+
+        await participant.StartAsync(TestContext.Current.CancellationToken);
+
+        var available = Assert.IsType<CapabilityState.Available>(participant.SinkState);
+        Assert.Contains("3 device(s)", available.Detail, StringComparison.Ordinal);
+        Assert.Contains("Lovense", available.Detail, StringComparison.Ordinal);
+
+        await participant.StopAsync();
+    }
+
     // =====================================================================================
     //  The premium gate, and what a refused tick writes
     // =====================================================================================
@@ -324,6 +345,44 @@ public class HapticParticipantTests
         Assert.Equal(1, sink.StopAlls);
         Assert.Equal(1, participant.AllStops);
         Assert.True(sink.Disposed);
+    }
+
+    [Fact]
+    public async Task ANUNSAVEDSettingStillReachesDiskThroughTheReservedPreDrainSlot()
+    {
+        // The sweep's M-ax: deleting the haptic flush from the pre-drain slot survived, because
+        // every other fact about the setting either saved it explicitly or never restarted. A
+        // switch the user flipped on the way out is a persisted setting like any other
+        // (persistence contract §11), and this is the ONE place the port guarantees it reaches disk.
+        using var scope = new Scope();
+        HapticParticipant? haptics = null;
+        var root = new CompositionRoot
+        {
+            SettingsPathFactory = () => Path.Combine(scope.Directory, "settings.json"),
+            ParticipantsFactory = infra =>
+            {
+                haptics = new HapticParticipant(
+                    infra, scope.Directory, new RecordingSink(HapticProviderRoute.Buttplug, 1),
+                    Entitled(EntitlementTier.Supporter));
+                return [haptics];
+            },
+        };
+        Assert.True(root.Validate(out _));
+        var host = root.Build(new StartupTrace());
+        Assert.IsType<StartupOutcome.Success>(
+            await host.StartParticipantsAsync(TestContext.Current.CancellationToken));
+
+        // Dirty, and NEVER saved: no Save() call anywhere on this path.
+        Assert.NotNull(haptics);
+        Assert.IsType<HapticGateDecision.Allow>(haptics!.RequestEnable(true));
+        Assert.True(haptics.Preset.IsDirty);
+
+        await host.ShutdownAsync();
+
+        var json = await File.ReadAllTextAsync(
+            Path.Combine(scope.Directory, HapticSettingsDocument.FileName),
+            TestContext.Current.CancellationToken);
+        Assert.Contains("\"enabled\": true", json, StringComparison.Ordinal);
     }
 
     [Fact]
