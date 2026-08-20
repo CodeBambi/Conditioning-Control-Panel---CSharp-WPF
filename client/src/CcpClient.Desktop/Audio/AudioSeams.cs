@@ -123,8 +123,30 @@ public interface ISoundClock
     IDisposable Schedule(TimeSpan due, Action fire);
 }
 
-/// <summary>The real clock on <see cref="System.Threading.Timer"/>.</summary>
-public sealed class SystemSoundClock : ISoundClock
+/// <summary>
+/// The real clock on <see cref="System.Threading.Timer"/>.
+///
+/// <para><b>A faulting callback must not take the process with it (SP-101, and this clock is the
+/// THIRD instance of the shape).</b> A timer callback runs on a thread-pool thread with no caller
+/// above it, so an exception escaping it is an UNHANDLED exception and .NET terminates the process.
+/// Measured, not theorised: the first fact ever written against
+/// <see cref="Session.SystemSessionClock"/> killed the whole test host. The callbacks THIS clock
+/// carries are the audio stack's own recovery and pacing work — the device recovery probe
+/// (<c>SoundArbitration.cs:780</c>), the per-item pacing fire (<c>:903</c>) and the 5-minute duck
+/// watchdog (<c>:986</c>), plus the DTRH segment-cap timer (<c>DtrhNativeEffects.cs:338</c>). Every
+/// one of those runs while the user is doing something else, so a crash from one looks like the app
+/// vanishing for no reason at all.</para>
+///
+/// <para>So the fault is CAUGHT and REPORTED, never swallowed — the same shape
+/// <see cref="Session.SystemSessionClock"/> and <see cref="Scheduling.SystemScheduleClock"/> both
+/// use, for the same reason. A silent catch would be the worse half of the same defect: the audio
+/// stack would simply stop pacing itself and nothing would say why.</para>
+/// </summary>
+/// <param name="onCallbackFault">Where a faulting scheduled callback is reported. Null means the
+/// fault is contained but unreported, which is only correct for a caller that has no log — the two
+/// product paths that own one supply it (<c>DtrhHostWindow.axaml.cs</c>, <c>DtrhNativeEffects.cs</c>),
+/// and the third (<see cref="Companion.BarkPipelineOptions.Clock"/>) schedules nothing at all.</param>
+public sealed class SystemSoundClock(Action<Exception>? onCallbackFault = null) : ISoundClock
 {
     /// <inheritdoc/>
     public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
@@ -132,8 +154,26 @@ public sealed class SystemSoundClock : ISoundClock
     /// <inheritdoc/>
     public IDisposable Schedule(TimeSpan due, Action fire)
     {
+        // Fail FAST on the caller's thread, exactly as both siblings do. Without this the null
+        // becomes a NullReferenceException inside Run — on a pool thread, contained and logged,
+        // i.e. a wiring bug demoted to a log line, which is worse than either alternative.
+        ArgumentNullException.ThrowIfNull(fire);
         var ms = Math.Max(0, (long)due.TotalMilliseconds);
-        return new Timer(_ => fire(), null, ms, Timeout.Infinite);
+        return new Timer(_ => Run(fire), null, ms, Timeout.Infinite);
+    }
+
+    private void Run(Action fire)
+    {
+        try
+        {
+            fire();
+        }
+        catch (Exception ex)
+        {
+            // Reported, not swallowed. And deliberately not re-thrown: there is nothing above this
+            // frame to catch it, so re-throwing is exactly the process kill this exists to prevent.
+            onCallbackFault?.Invoke(ex);
+        }
     }
 }
 

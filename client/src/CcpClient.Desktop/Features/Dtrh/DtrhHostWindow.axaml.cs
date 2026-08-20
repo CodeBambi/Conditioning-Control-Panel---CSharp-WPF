@@ -211,12 +211,10 @@ public partial class DtrhHostWindow : Window
         }
 
         var backend = new SoundFlowAudioBackend(_host.LogDiagnostic);
-        _barkArbitration = new SoundArbitration(
-            backend,
-            new UnavailableDuckSink(), // q1 named limit: cross-app duck sink not admitted
-            new SystemSoundClock(),
-            new SoundArbitrationOptions(),
-            _host.LogDiagnostic);
+        // SP-123: the arbitration graph is built by DtrhBarkRouting.Composition.cs — same objects, same
+        // arguments, same order — so the wiring can be driven by a fact instead of only by a
+        // headed run. Everything else in this method stayed exactly where it was.
+        _barkArbitration = DtrhBarkRouting.CreateArbitration(backend, _host.LogDiagnostic);
         var deviceOutcome = _barkArbitration.Initialize(null);
         _host.LogDiagnostic($"dtrh: bark arbitration device init → {deviceOutcome.GetType().Name} (typed)");
 
@@ -232,14 +230,8 @@ public partial class DtrhHostWindow : Window
             _host.LogDiagnostic($"dtrh: companion state load → {_barkStore.LastLoadOutcome?.GetType().Name} (typed Degraded — flagged defaults, original bytes preserved if quarantined)");
         }
 
-        var rules = BarkRuleLoader.Parse(DefaultBarkRules.ManifestJson, _host.LogDiagnostic);
-        _bark = new BarkPipeline(
-            _barkArbitration,
-            _barkStore,
-            new DirectoryBarkAudioResolver(System.IO.Path.Combine(_dtrh.DataDirectory, "companion_audio")),
-            rules,
-            new BarkPipelineOptions(),
-            _host.LogDiagnostic);
+        _bark = DtrhBarkRouting.CreatePipeline(
+            _barkArbitration, _barkStore, _dtrh.DataDirectory, _host.LogDiagnostic);
         _bark.BarkSurfaced += payload =>
             // Presence+shape ONLY (SP-016 content-free class): rule id + suppression shape,
             // NEVER the bark text. The surface itself (portrait/bubble) is a future UI row.
