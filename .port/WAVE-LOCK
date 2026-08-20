@@ -1,0 +1,6 @@
+WAVE: 56
+PACKETS: SP-116-flake-characterisation
+LANES: 1
+BASE: 66080546
+GATE: validate-wave.mjs WAVE OK; floor 2062/121
+OPENED: 2026-08-20T01:13:01Z
