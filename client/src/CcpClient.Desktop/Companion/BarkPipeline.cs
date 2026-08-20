@@ -62,17 +62,62 @@ public abstract record BarkOutcome
 /// <summary>Resolves a variant's audio filename to a playable file path (null = miss → typed AudioResolveFailed).</summary>
 public interface IBarkAudioResolver
 {
-    /// <summary>The full path for <paramref name="audioFileName"/>, or null when absent.</summary>
+    /// <summary>
+    /// The full path for <paramref name="audioFileName"/>, or null when absent.
+    ///
+    /// <para>Null is the ONLY miss channel. An implementation that throws is a defect, not a
+    /// signal: <see cref="BarkPipeline"/> contains it (<c>SafeResolve</c>) and logs it as
+    /// "audio resolver faulted", which reports a port bug in the vocabulary of bad content.</para>
+    /// </summary>
     string? Resolve(string audioFileName);
 }
 
-/// <summary>Filesystem resolver over one sounds root (missing file → null, never throws).</summary>
+/// <summary>
+/// Filesystem resolver over one sounds root: a name it cannot turn into an existing file answers
+/// null, and it NEVER throws.
+///
+/// <para><b>SP-123 — the promise above used to be kept by accident, and the census proved it by
+/// showing this type had never executed at all.</b> <see cref="Path.Combine(string, string)"/>
+/// throws <see cref="ArgumentNullException"/> on a null segment, so "never throws" held only
+/// because <see cref="BarkPipeline"/> happens to check <c>variant.Audio is null</c> two hundred
+/// lines away and then passes <c>variant.Audio!</c>. The promise is the correct one — WPF's
+/// resolver opens with <c>if (string.IsNullOrWhiteSpace(file)) return null;</c>
+/// (<c>ConditioningControlPanel/Services/Companion/BarkService.cs:1411-1413</c>) and every later
+/// step is <c>File.Exists(p) ? p : null</c> (<c>:1420</c>, <c>:1428</c>, <c>:1432</c>), so a null,
+/// blank or missing voiceline is silently no-audio in the shipping product. So the CODE moved to
+/// the contract, not the contract to the code, and the guard now lives in the class that makes the
+/// promise.</para>
+///
+/// <para><b>Named, deliberately unfixed: a ROOTED name discards the root.</b>
+/// <c>Path.Combine(root, rooted)</c> returns <c>rooted</c>, and a name containing <c>..</c>
+/// traverses out of the root, so this resolver is "over one sounds root" only for relative names.
+/// That is not an oversight — WPF has the identical property at <c>BarkService.cs:1419</c> (same
+/// <c>Path.Combine</c>, same manifest-supplied filename), and inventing containment here would be
+/// behaviour the ported product does not have. Today the only manifest is compiled in
+/// (<see cref="DefaultBarkRules.ManifestJson"/>), so there is no untrusted input and no consumer
+/// for a check. END CONDITION: the first time the port loads a USER- or MOD-supplied bark
+/// manifest, this becomes a real decision and must be re-taken rather than inherited.</para>
+/// </summary>
 public sealed class DirectoryBarkAudioResolver(string root) : IBarkAudioResolver
 {
+    // Validated where the wiring bug is CAUSED — on the constructing thread — so that Resolve's
+    // "never throws" is unconditional rather than conditional on the caller. Same fail-fast /
+    // contain split the clock seams use (AudioSeams.cs SystemSoundClock.Schedule).
+    private readonly string _root = root ?? throw new ArgumentNullException(nameof(root));
+
     /// <inheritdoc/>
     public string? Resolve(string audioFileName)
     {
-        var path = Path.Combine(root, audioFileName);
+        // WPF BarkService.cs:1413, outcome-for-outcome: null and blank are a MISS, not a lookup.
+        // Without this a null name reaches Path.Combine and throws, in a method documented not to
+        // — and BarkPipeline.SafeResolve (:485-496) would log it as "audio resolver faulted",
+        // reporting the port's own defect as if the content were at fault.
+        if (string.IsNullOrWhiteSpace(audioFileName))
+        {
+            return null;
+        }
+
+        var path = Path.Combine(_root, audioFileName);
         return File.Exists(path) ? path : null;
     }
 }
@@ -112,7 +157,17 @@ public sealed class BarkPipelineOptions
     /// <summary>Per-char delay over the threshold (WPF PerCharDelaySeconds 0.02).</summary>
     public double PerCharDelaySeconds { get; init; } = 0.02;
 
-    /// <summary>Injectable clock (gate timing: cooldowns, min-gap, safety-hold). Real = system; tests = manual.</summary>
+    /// <summary>
+    /// Injectable clock (gate timing: cooldowns, min-gap, safety-hold). Real = system; tests = manual.
+    ///
+    /// <para>SP-123: the default is constructed with NO callback-fault reporter, and that is a
+    /// statement rather than an omission — <see cref="BarkPipeline"/> never calls
+    /// <see cref="ISoundClock.Schedule"/> at all (it reads <see cref="ISoundClock.UtcNow"/> at
+    /// <c>CommitFire</c> and <c>Pace</c>, and nothing else), so this instance carries no callback
+    /// that could fault. The clock the bark voice path really schedules on belongs to
+    /// <see cref="SoundArbitration"/> and is constructed WITH a reporter at the composition site.
+    /// Nothing here has a log in scope to hand it anyway: this is a property initializer.</para>
+    /// </summary>
     public ISoundClock Clock { get; init; } = new SystemSoundClock();
 
     /// <summary>Injectable uniform [0,1) source (chance rolls + variant selection). Default Random.Shared.</summary>

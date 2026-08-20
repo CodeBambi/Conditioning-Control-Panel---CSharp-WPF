@@ -9,8 +9,12 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// {key} substitution read them); JSON field names follow the payload's send sites.
 /// Unrouted events are typed + logged (WPF default branch), never thrown, never silent.
 /// Content-free: this file routes presence+shape only — bark TEXT never crosses here.
+///
+/// <para>PARTIAL: the other half of this type is the DTRH bark COMPOSITION
+/// (<c>DtrhBarkRouting.Composition.cs</c>) — what the host builds to route INTO. The two halves are
+/// one type on purpose; see that file for why it is not a type of its own.</para>
 /// </summary>
-public static class DtrhBarkRouting
+public static partial class DtrhBarkRouting
 {
     private sealed record Entry(string Trigger, params (string JsonKey, string FillKey)[] Fills);
 
