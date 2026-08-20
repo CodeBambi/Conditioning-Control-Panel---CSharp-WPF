@@ -532,7 +532,7 @@ takes a drag and produces a drop is. The census's anchor column carries this wor
 where the anchor exposes only part of the primitive the row is PARTIAL with the missing member
 named, never COVERED.
 
-### 12.4 (Item 4) The unreachable branch: kept, and the reason is stated in the file
+### 12.4 (Item 4) The unreachable branch: kept, and the reason is stated in the file — **REVERSED AT IMPLEMENTATION TIME, see §13**
 
 `PROMPT.md:98` words a missing reference tree as FAILS; I kept the precedent's shape, in which a
 **fully absent** `ConditioningControlPanel/` takes an unreachable branch that still enforces the
@@ -556,3 +556,37 @@ So §6 gains a step: **the threshold literal is re-derived from the shipping byt
 `TrainerCardCensusTests` alongside the normalisation expression, and the census states it as a
 number taken from an opened line. The same applies to `top_of_the_class`'s 90% bar and
 `held_back`'s fail-streak length wherever the walk finds them.
+
+---
+
+## 13. Revision 3 — §12.4 REVERSED at implementation time, by the machinery
+
+**§12.4 said the precedent's unreachable branch would be KEPT. It was not, and I was wrong to plan
+that.** The reversal was not a judgement call; it was forced, and by three things at once.
+
+1. **The packet asked for the opposite.** `PROMPT.md:98`: *"a missing reference tree FAILS rather
+   than skips."* I planned around that wording instead of following it.
+2. **The machinery refuses the shape.** `VacuousShapeDetector` classifies an early return past a
+   filesystem predicate as a silencing shape (`early-return`, `fs-predicate`), and
+   `VacuousShapeGuardTests.EverySilencingShapeSite_IsDispositionedInTheLedger` reds the floor unless
+   the site is dispositioned in `client/tests/floor/vacuous-shape-ledger.json`. **My first
+   implementation was red exactly there**, on the two facts that carried the branch.
+3. **That ledger is outside this packet's write scope.** `client/tests/floor/**` is in
+   `fileScopeMustNotChange`, so the disposition route was closed to me. Widening scope to take it
+   would have been the wrong move; the rule is to report, not to widen.
+
+So the branch is gone. `RequireReference()` now hard-asserts the repo root, the census document
+**and** `ConditioningControlPanel/`, and every filesystem predicate lives in a helper rather than in
+a fact body — which is how `FypCensusTests` already keeps itself out of the ledger, checked by
+reading it rather than assumed.
+
+**This is strictly stronger than the precedent, not weaker.** The guard cannot pass without the
+reference tree at all, so there is no branch to be permanently-unreachable and nothing to report to
+the TRX about which branch ran. A half-present tree still fails, a missing census still fails, an
+unfindable root still fails. The reason is stated in the test file's own summary, so the next reader
+finds the departure and its cause without reading this plan.
+
+**The lesson worth keeping:** the plan gate offered "make it fail outright, **or** state why the
+precedent's shape was kept", I chose the second, and the build system then proved the first was the
+only in-scope answer. A rule enforced by code beat a rule I argued for in prose — which is the same
+lesson §0.1 draws about hand-assembled file lists, arriving from the other direction.
