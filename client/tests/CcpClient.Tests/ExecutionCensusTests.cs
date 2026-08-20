@@ -202,7 +202,12 @@ public sealed class ExecutionCensusTests
         var topLevel = ScalarRow(census, "of the zero-execution types, top-level");
         Assert.Equal(zero, nested + topLevel);
 
-        var listed = Regex.Matches(census, @"^## The (\d+) shipped types with zero executed lines$", RegexOptions.Multiline);
+        // `\r?$` and not `$`: the census is GENERATED with LF and CHECKED OUT with CRLF on an
+        // autocrlf machine (`git ls-files --eol` reports i/lf w/crlf), so a bare `$` matches in the
+        // worktree that wrote the file and fails in every fresh checkout — including this land.
+        // The line ending is a property of the checkout, never of the census, so tolerating it
+        // removes an environmental dependency rather than weakening the guard.
+        var listed = Regex.Matches(census, @"^## The (\d+) shipped types with zero executed lines\r?$", RegexOptions.Multiline);
         Assert.True(listed.Count == 1, "the census must carry exactly one zero-execution list heading");
         Assert.Equal(zero, int.Parse(listed[0].Groups[1].Value));
 
@@ -262,7 +267,9 @@ public sealed class ExecutionCensusTests
     /// <summary>The type rows of the zero-execution list only — never the tables above it.</summary>
     private static List<string> ZeroListRows(string census)
     {
-        var heading = Regex.Match(census, @"^## The \d+ shipped types with zero executed lines$", RegexOptions.Multiline);
+        // `\r?$` for the same reason as the sibling anchor above: LF in the index, CRLF in the
+        // worktree on this machine.
+        var heading = Regex.Match(census, @"^## The \d+ shipped types with zero executed lines\r?$", RegexOptions.Multiline);
         Assert.True(heading.Success, "the census carries no zero-execution list heading");
         return Regex.Matches(census[heading.Index..], @"^\| `([^`]+)`[^|]*\| \d+ \| ", RegexOptions.Multiline)
             .Select(m => m.Groups[1].Value).ToList();
