@@ -336,3 +336,63 @@ admitted, `SetOutputsAsync` refuses, and `HapticSinkFactory.DeviceManualGate` na
 gate whose last step no automated step on any platform discharges. Everything below is pure-logic
 unit work: no headless frame, no headed capture, no rendering, focus, audio or window behaviour is
 touched or claimed. Linux is unchanged and unproven, and for this capability it refuses identically.
+
+---
+
+## 8. CHECKPOINT ANSWER — all three granted, recorded here before any product edit
+
+The orchestrator answered the checkpoint. Recorded verbatim in effect, with the scope each grant
+opens, so nobody later has to reconstruct why files outside the packet's own File Scope were touched.
+
+### A — GRANTED. The census document is open for DATA-ONLY line-number edits.
+
+The packet author verified the collision and named it an authoring defect: `HapticSiteCensusTests.cs:506`
+is `lines[number - 1].Contains(needle, StringComparison.Ordinal)`, the census carries fifteen pinned
+port citations, and the packet closed the census and its guard while opening the very files those
+citations pin.
+
+**Opened:** `client/docs/haptic-limb-census.md`, port line NUMBERS only. Nothing else in that
+document may move — not a verdict, not a quote, not a decision row, not an upstream citation. The
+record must state which numbers changed, from what to what, and why, because a line-number edit
+travelling silently beside a semantic one is the drift this port hunts. The guard file itself needs
+no edit; it reads the document at runtime.
+
+**Opened:** `client/src/CcpClient.Desktop/Haptics/IHapticSink.cs`, for the `:209-223` paragraph and
+its stale "THIRTEEN" ONLY — corrected to what is true once the limb lands. No member changes.
+
+**The fallback is REFUSED by the author, and I agree.** Below-the-pin fields plus post-construction
+attachment would contort the product to satisfy a guard, and leaving *"Nothing in this build sends
+anything to this sink"* in place once it is false is the stale-sentence class three waves have
+already been spent on.
+
+### B — GRANTED, narrowly. `Lifecycle/CompositionRoot.cs` is open for the wiring only.
+
+Hoist the haptic participant's construction above `session`, pass its limb into the session, keep it
+registered LAST so teardown order is unchanged. **Nothing else in `Lifecycle/**`.**
+
+The refusal of the `HapticSinkFactory.Create()` workaround is explicitly endorsed: a second sink is
+harmless only while `AdmittedRoutes` is empty and becomes two live clients against one server the day
+a route is admitted — a latent defect that would have shipped looking like wiring. A limb landing
+complete and unreachable was named as equally wrong.
+
+### C — OVERRULED IN MY FAVOUR. Site 4 is NOT wired.
+
+The author verified `Models/HapticSettings.cs:373` (`_luminanceSyncEnabled = false`) and the
+*"Off by default until the Phase E UI exposes it"* doc, and ruled: **parity means matching the
+shipped default, not the available feature.** Wiring it ON is a divergence upward on the one
+capability where louder-than-expected is the failure that matters; wiring it behind an always-false
+constant ships a Rec.601 sampler the product never runs, which is dead code with a doc comment.
+**Record the divergence.** The `Layer`-plus-auto-zero verb is still built, because the video
+background layer uses it and ships enabled.
+
+### Three standing notes carried into the build
+
+1. **The priority-0 bounce-with-bounce overlap goes in the record beside the flash-with-subliminal
+   pair.** It is a second, same-kind reachable instance of peak-of-sum that the packet did not name,
+   and it strengthens the C+ case rather than merely supporting it.
+2. **The `ActuatorIndex 0` gap goes in the LEDGER, not in the code.** `IHapticSink.cs` stays
+   byte-identical apart from item A's paragraph. Closing it is a later packet's.
+3. **The zero-on-both-teardown-paths decision is the one to hold hardest.** It is what makes this
+   port's teardown BETTER than the upstream it ports, because upstream's own stop is unreachable from
+   the panic key. It must be proven on both paths and stated in the divergence as a deliberate
+   improvement rather than a copy.
