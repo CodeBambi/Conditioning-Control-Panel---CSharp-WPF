@@ -132,7 +132,9 @@ public class RackPresentationTests
             ("the selection marker (rack-row:checked BorderBrush #FFE066FF)", 0xE0, 0x66, 0xFF),
         ];
 
-        foreach (var check in RackChecks())
+        var checks = RackChecks();
+        var compared = 0;
+        foreach (var check in checks)
         {
             var (r, g, b) = CheckManifest.ParseColor(check.ExpectedColor, $"check '{check.Name}':");
             foreach (var neighbour in neighbours)
@@ -142,6 +144,7 @@ public class RackPresentationTests
                     continue; // this IS the colour the check is for
                 }
 
+                compared++;
                 var distance = Math.Max(Math.Abs(neighbour.R - r), Math.Max(Math.Abs(neighbour.G - g), Math.Abs(neighbour.B - b)));
                 Assert.True(check.Tolerance < distance,
                     $"check '{check.Name}' expects {check.ExpectedColor} with tolerance {check.Tolerance}, which "
@@ -149,6 +152,13 @@ public class RackPresentationTests
                     + "check that cannot tell two rack states apart cannot fail on either of them");
             }
         }
+
+        // Not bookkeeping, and not only the vacuity pin the shape guard wants (SP-066): every
+        // comparison above SKIPS exactly one neighbour, the check's own colour. So this arithmetic
+        // holds only if every rack check expects one of the rack's five named liveries — and a
+        // check expecting a colour the rack does not paint is a check nothing can ever satisfy.
+        Assert.NotEmpty(checks);
+        Assert.Equal(checks.Count * (neighbours.Length - 1), compared);
     }
 
     /// <summary>

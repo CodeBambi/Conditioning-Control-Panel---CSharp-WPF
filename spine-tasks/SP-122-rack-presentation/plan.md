@@ -72,7 +72,7 @@ shell checks already discharged.
 `rack-row` captures the row rect from UIA. `rack-row-dot` captures the 8-DIP dot cell, derived
 from two UIA rects and cross-checked: `dotLeft = right(FlashImages label)= 855`,
 `dotRight = right(Visuals label) = 869` (Visuals is the only row whose Grid has one child —
-`StudioPage.axaml:157-166`, upstream `StudioTabView.xaml.cs:494-496`), and the harness asserts
+`StudioPage.axaml:172-174`, upstream `StudioTabView.xaml.cs:494-496`), and the harness asserts
 `869-855 == round(8 x scale) = 14` before capturing. A wrong derivation therefore fails loudly
 instead of photographing the wrong 14 px.
 
@@ -93,7 +93,7 @@ below are the intent; the exact `minPixelFraction` will be set from the two meas
 |---|---|---|---|
 | `rack-row-selected-marker` | left band of the row capture, `#E066FF` | the 3-DIP accent bar of `RadioButton.rack-row:checked` (`MainWindow.axaml:101-105`) | the rack ground `#19141F` in that band — i.e. a row that is NOT open. Proof: run it against the real `rack-row/unselected` capture. |
 | `rack-row-selected-fill` | interior strip right of the label, `#2A2130` | the checked row's background | `#19141F` (unselected ground; distance 17/13/17, far outside the tolerance). Proof: same wrong capture. |
-| `rack-row-unselected-ground` | same strip, `#19141F` | the rack ground under a closed row | `#2A2130` plus a magenta bar — i.e. an OPEN row. Proof: run it against the real `rack-row/selected` capture. |
+| `rack-row-unselected-ground` | same strip, `#19141F` | the rack ground under a closed row | `#2A2130` — i.e. an OPEN row (the strip right of the caption carries no accent bar). Proof: run it against the real `rack-row/selected` capture. |
 | `rack-row-dot-armed` | the 14 px dot cell, `#6B5B73` | the FILLED disc of `Ellipse.dot.armed` (`MainWindow.axaml:386-389`) | a hollow ring on `#2A2130` — the dot of a module that is switched off. Proof: run it against the real `rack-row-dot/off` capture. |
 | `rack-row-dot-off` | the same cell, `#2A2130` | ground showing through the hollow ring of `Ellipse.dot` | a solid disc filling ~78% of the cell — an armed module. Proof: run it against the real `rack-row-dot/armed` capture. |
 
@@ -164,3 +164,22 @@ anything on the screen, I stop and record it rather than editing product code. S
 measured pass/fail fractions are not far apart: a threshold squeezed between two close numbers is
 a tolerance the size of the defect it hides, and I would report the surface as not verifiable
 rather than tune it.
+
+---
+
+## Review outcome (appended after the checkpoint; the plan above is unedited except for two
+## corrections review asked for, marked in place)
+
+Approved. The product change was WITHDRAWN by the coordinator: `client/src/CcpClient.Desktop/**`
+is closed to this packet. Eight corrections were applied; they are listed with their evidence in
+`record.md` §11. Two of them changed this plan's own text: the one-child Visuals grid is
+`StudioPage.axaml:172-174` (`:157-166` is the SP-117 comment), and the strip right of the caption
+carries no accent bar so `#2A2130` alone is what bites the ground check.
+
+Three things in the plan turned out to be wrong when measured, and are corrected in `record.md`
+rather than here, so the difference between what was planned and what was found stays visible:
+the dot-cell cross-check had to compare WIDTHS rather than edges (a checked row's content is
+displaced 5 px by its 3-DIP left border); `armed` is the COLD state and `off` is the one that
+costs a gesture (`SessionPresetDocument.FlashEnabled` defaults to true); and `capture.ps1` never
+called `exit 0`, which made `self-test.ps1`'s exit-code guards read the previous command's code.
+
