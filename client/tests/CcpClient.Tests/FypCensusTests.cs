@@ -84,6 +84,15 @@ public sealed class FypCensusTests
     /// <c>WebcamConsentDialog</c> in the same cell satisfies on its own. Rewriting the verdict from
     /// "The webcam" to "Nothing worth naming" left the guard GREEN — the exact softening this pin
     /// exists to catch. A verdict pin must read the VERDICT, never an incidental token beside it.</para>
+    ///
+    /// <para><b>What this pin does NOT catch, stated because it has already been wrong once about
+    /// its own strength.</b> A prefix anchor sees only the OPENING of the answer, so a cell that
+    /// begins with the pinned verdict and is then contradicted later in the same cell passes: an
+    /// answer opening "The webcam" and continuing "...is never actually turned on by this surface,
+    /// and no consent is involved at all" is GREEN here while the finding is gutted. Catching that
+    /// needs a semantic reading of prose, which is not achievable and is deliberately not attempted.
+    /// The residual is a HUMAN review obligation on the two owner-flagged answers, not a gap to be
+    /// closed with a cleverer matcher.</para>
     /// </summary>
     private static readonly (string Id, string Verdict)[] PrivacyVerdicts =
     [
@@ -198,6 +207,11 @@ public sealed class FypCensusTests
     /// seed: flipping Q3's verdict to NO, and rewriting Q4's from "The webcam" to "Nothing worth
     /// naming", each red this fact. The Q4 demonstration is the one that matters, because the first
     /// version of this pin passed that exact mutation — see <see cref="PrivacyVerdicts"/>.</para>
+    ///
+    /// <para>"Cannot stop opening with" is the exact and whole claim: this fact reads the OPENING of
+    /// each answer. An answer that opens with the pinned verdict and contradicts it further down the
+    /// same cell passes here, and no matcher on prose can honestly close that — the residual is named
+    /// in <see cref="PrivacyVerdicts"/> and belongs to human review.</para>
     /// </summary>
     [Fact]
     public void ThePrivacyVerdictsThemselvesArePinned_NotJustTheirCount()

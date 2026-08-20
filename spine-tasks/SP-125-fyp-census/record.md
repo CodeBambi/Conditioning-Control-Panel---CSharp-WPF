@@ -163,9 +163,17 @@ citation alone is not an answer.
 
 **No product code was written; `client/src/**` was untouched.** Nothing was built, run or rendered:
 there is no FYP code in the port to exercise. **No headed evidence of any kind** — no window, no
-frame, no pixel, so nothing here is `presentation-verified` or even `draw-verified`; the 16 new facts
+frame, no pixel, so nothing here is `presentation-verified` or even `draw-verified`; the 20 new facts
 are assertions over documents and directory walks. B1's COVERED means the DTRH WebView exists and
 ships, **not** that the FYP page renders in it. **Linux is unproven for every row** (no WSL distro).
 The Wayland claim in B2 is reasoning from the compositor's security model, **not a measurement** — I
 did not test a Wayland session. The 11 compile-time consumers were derived by **grep, not a
 compiler**, so a reflective or generated consumer would not appear.
+
+**And the pin has a named limit of its own.** The privacy verdicts are matched at the OPENING of
+each answer, so an answer that begins with the pinned verdict and contradicts it later in the same
+cell passes — verified, not assumed: rewriting Q4 to “The webcam **is never actually turned on by
+this surface, and no consent is involved at all**” leaves the suite green at 20/20. Closing that
+would need a semantic reading of prose, which is not achievable and was deliberately not attempted;
+the residual is a human review obligation on the two owner-flagged answers. It is written beside the
+pin itself in `FypCensusTests.cs` so the next reader meets it where the guard is, not only here.
