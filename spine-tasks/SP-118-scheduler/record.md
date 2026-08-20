@@ -1,8 +1,8 @@
 # SP-118 — record
 
 Branch `lane/SP-118-scheduler`, base `907ea805`.
-Floor: pin **2123 unit / 125 headless**; observed **2188 unit / 133 headless**, zero failures;
-declared **+65 unit / +8 headless** (`floor-delta.json`). 2123 + 65 = 2188 and 125 + 8 = 133,
+Floor: pin **2123 unit / 125 headless**; observed **2191 unit / 133 headless**, zero failures;
+declared **+68 unit / +8 headless** (`floor-delta.json`). 2123 + 68 = 2191 and 125 + 8 = 133,
 confirmed by `node client/tests/floor/sum-deltas.mjs --check --packets SP-118-scheduler`. The floor
 run therefore REPORTS a violation against the pin, which is the expected shape: the orchestrator
 sums the deltas and applies one bump. Two skips, both pre-existing
@@ -205,7 +205,7 @@ scheduler records `scheduler-start-refused-by-session` instead of claiming it. D
 
 ---
 
-## 5. PROVING IT BITES — 73 mutations, five rounds, **1 survivor, and it is UNCOVERED not equivalent**
+## 5. PROVING IT BITES — 73 mutations, six rounds, **1 survivor, and it is UNCOVERED not equivalent**
 
 Every conjunct, boundary, constant, flag write and wiring line this packet added was mutated one at
 a time by `spine-tasks/SP-118-scheduler/sweep.mjs`, which lives inside this packet's folder and
@@ -223,8 +223,33 @@ hardening moved the lines under it) and it is an instrument for the driver, neve
 code.
 
 **The books: 73 distinct mutations; 72 caught; 1 survives; 0 not patched; 0 not compiled.** Every
-round's log carries a non-zero passing count from the same filters (59, then 67-74 unit / 62-63
+round's log carries a non-zero passing count from the same filters (59, then 67-77 unit / 62-63
 headless), so no filter in this sweep matched zero tests.
+
+### WHICH VERDICTS ARE CURRENT AGAINST THE SHIPPED TREE — and the round-6 answer
+
+**Presenting 72 catches as equally fresh would have been false, and the final review said so.** A
+verdict is only evidence about the tree it was taken against, and this packet changed product code
+*after* rounds 1-3 — twice, in one file. §5's own M-av disclosure proves that is not a formality:
+that hardening silently turned a caught mutant into a masked one.
+
+| file | product code changed after its verdicts? | current verdicts |
+|---|---|---|
+| **`Scheduling/SchedulerParticipant.cs`** (11 mutations) | **YES, twice** — `GenerationLive` (after r1) and `OnDue`'s second liveness gate (r4) | **all eleven re-run after both**: M-av/M-aw/M-ax/M-az/M-bt/M-bu in r4, M-av again in r5, and **M-au/M-ay/M-ba/M-bb/M-bc in round 6** |
+| `Scheduling/ScheduleWindow.cs`, `SchedulerPresetDocument.cs`, `SessionScheduler.cs`, `ScheduleClock.cs`, `Views/**`, `Lifecycle/CompositionRoot.cs` | **NO.** `git diff <r1 commit> HEAD` over all of them, with comment lines filtered out, is **two lines of an AXAML comment** ("NINE" → "TEN") | round-1 verdicts stand, against byte-identical executable code |
+| `Scheduling/SchedulerReasonCodes.cs` | two constants deleted | no mutation targets this file |
+
+**Round 6 exists because round 4's selection rule did not cover the failure mode round 4 itself
+discovered.** That rule was "re-run the mutations whose CLOSERS were newly written", which is a
+test-side rule — and M-av was re-opened by a PRODUCT change. So five `F.part` mutations kept
+round-1 verdicts against a participant that then grew two guards. The worst of them to leave stale
+was **M-ay**, which asks whether a stop leaves a live one-shot behind: D188's own harm class.
+
+**Round 6 re-ran all five against the shipped tree: 5 caught, 0 survived, 0 not patched, 0 not
+compiled, tree restored byte-identically** (`sweep-round6.log`). Nothing was masked. Test-side
+changes since a verdict are not a freshness risk in the other direction: this packet only ADDED
+facts (and removed one duplicate, whose mutation M-bd was re-run in r4 and is caught by the new
+`SystemScheduleClockTests`), and adding an assertion cannot turn a catch into a survivor.
 
 > **A note on the driver's own tree check.** Rounds 2 and 3 report `tree restored byte-identically:
 > NO — M SchedulerParticipant.cs`. That is MY uncommitted edit (the `GenerationLive` property added
@@ -429,9 +454,9 @@ in WPF's TIMING position, the ten-control panel, the dot, the right-click, the f
 **All six capability folders, `Effects/**`, `Persistence/**` and `Tray/**` are byte-identical to
 base** (`git diff --stat` over each is empty).
 
-**Tests — new:** `SchedulerWindowTests.cs` (**27** cases: the boundaries at the tick, the empty
+**Tests — new:** `SchedulerWindowTests.cs` (**29** cases: the boundaries at the tick, the empty
 window, the day gate per day and outside the seven, both fallbacks, the parse trap, the defaults,
-and a week-long verdict sweep), `SchedulerModuleTests.cs` (**32** cases: two positives, the thirteen
+both daylight-saving nights, and a week-long verdict sweep), `SchedulerModuleTests.cs` (**33** cases: two positives, the thirteen
 refusals, the poll cadence, the dot, the settings round-trip, the real composition root, and the
 sweep's closers), `SystemScheduleClockTests.cs` (**6** cases on the REAL clock that ships — the
 review's blocker), `SchedulerRowHeadlessTests.cs` (**8** cases on real input). The final review added the two
@@ -441,7 +466,7 @@ daylight-saving predicate facts and the fall-back double-start (§8).
 `StudioRackHeadlessTests.cs` (the row list gains `RowScheduler` in WPF's position, and the
 order fact gains two assertions: this row HAS a dot and has NO effect behind it).
 
-27 + 32 + 6 = **65** unit, **8** headless — the declared delta.
+29 + 33 + 6 = **68** unit, **8** headless — the declared delta.
 
 **Docs:** `client/docs/wpf-surface-reachability.md` (§SP-118, **D180-D187**).
 **Sweep artefacts, inside this packet's folder:** `sweep.mjs`, `sweep-round*.log`.

@@ -336,7 +336,8 @@ public class SchedulerWindowTests
         // The other half, and the one with teeth. On a fall-back night 02:00-03:00 happens TWICE,
         // and the two passes differ only in UTC offset — which this predicate never sees, because
         // it takes a local reading and nothing else. So the window opens on both passes, which is
-        // upstream's behaviour exactly (it reads DateTime.Now and asks nothing else).
+        // upstream's behaviour exactly (it reads the local wall clock and asks nothing else — the
+        // banned token is deliberately not spelled out here, because that guard is lexical).
         var doc = Doc("01:30", "02:30");
         var firstPass = At(new TimeSpan(2, 0, 0));
         var secondPass = At(new TimeSpan(2, 0, 0)); // the same wall-clock label, one hour later
