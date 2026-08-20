@@ -332,8 +332,11 @@ Full statements are D203, D204 and D205 in `client/docs/wpf-surface-reachability
 each:
 
 - **The video layer's STOP is on one teardown path out of several** and the panic key is not one of
-  them, so panic-keying a clip leaves the toy humming. The port must place its stop on every path
-  (site 12's notes). **Do not copy the bug.**
+  them, so panic-keying a clip leaves the toy humming — while the comment sitting between
+  `VideoService.cs:6580` and `:6584` asserts the opposite: *"Runs on every teardown path (natural
+  end, skip, panic, attention retry) because CloseAll is the single funnel for all of them"*
+  (`:6581-6583`), and both stops are BESIDE `CloseAll(...)` rather than inside it. The port must
+  place its stop on every path (site 12's notes). **Do not copy the bug.**
 - **The activity readout fires when nothing can vibrate**, because the gate refuses centrally inside
   the mixer and `Announce` runs after `Play` unconditionally. **Do not "fix" it** with a
   connected-check at a call site: that would change user-observable behaviour.

@@ -11,13 +11,14 @@ deltas and applies one bump. Two skips, both pre-existing
 Build: 0 errors, 0 warnings (`check-warnings.mjs`, forced non-incremental, 4 projects).
 `client/tests/floor/floor.json` was never opened.
 
-**ONE NAMED FAILURE REMAINS AND IT IS NOT MINE TO FIX — see §9.**
-`FloorWrapperGuardTests.PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin` reds on
-`spine-tasks/SP-121-zero-execution-census/PROMPT.md:102`, another lane's packet, which iron rule 1
-forbids this lane from editing. It reds on the base commit too: neither packet in wave 60 was
-authored with the literal shared-pin path in its `fileScopeMustNotChange` row. **My own packet's row
-was the other half of that failure and I fixed it** (`PROMPT.md:105`, inside this packet's own write
-zone); the remaining half needs one line in SP-121's folder.
+**The base was red and is now clear; both gates were re-run after the merge — see §9.**
+`feat/crossplatform` was merged into this lane at `b5f789de`, which unreds
+`FloorWrapperGuardTests.PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin`. The numbers
+above are from the post-merge run: **zero test failures** (`Failed: 0, Passed: 2258, Skipped: 2,
+Total: 2260` for the unit project; `Failed: 0, Passed: 141` for the headless one), and the only thing
+`check-floor.mjs` still reports is the expected total drift of 2260 against a pin of 2247 — which is
+2247 + 13 and is this packet's declared delta, not a failure. The headless project is run separately
+because the floor script stops at the drifting project before it reaches the second one.
 
 > **The method was committed before the first mapping**, at
 > `spine-tasks/SP-120-haptic-limb-census/plan.md`, commit `9237ba1b`, and the coordinator approved it
@@ -193,9 +194,12 @@ tree: `VideoService.cs:6580`, inside `Cleanup()`. `Stop()` (`:1411`) and `ForceC
 both go through `CloseAll()` and hold zero haptic references. **Upstream's own comments state the
 premise twice**: `ForceCleanup` says *"Panic / session-lock / suspend / wedge-rescue all land here"*
 (`:1950`) and *"Panic key / stuck-timer / session-switch teardown routes through ForceCleanup (not
-Cleanup)"* (`:1970-1971`), while the stop's own comment at `:6581-6583` claims it *"Runs on every
-teardown path ... because CloseAll is the single funnel for all of them"* — and the stop is not in
-`CloseAll`, it is beside it.
+Cleanup)"* (`:1970-1971`), while the comment between its own two stops asserts the
+opposite guarantee. `:6580` is the layer stop, `:6584` is the funscript stop, and `:6581-6583`
+between them reads *"Runs on every teardown path (natural end, skip, panic, attention retry) because
+CloseAll is the single funnel for all of them"* — while both statements sit in `Cleanup()` **beside**
+`CloseAll(...)` rather than inside it. **That is why nobody would go looking**: the code does not
+merely omit the stop on three paths, it carries a written guarantee it does not provide.
 
 **What I checked that the brief did not, and it makes the finding sharper:** the designed panic-key
 path does **not** call `App.Haptics.PanicStop()` either. The only three callers of `PanicStop` in the
@@ -421,31 +425,37 @@ class, caught by the mechanism built to catch it.
 
 ---
 
-## 9. THE ONE THING I COULD NOT MAKE GREEN, AND EXACTLY WHY
+## 9. THE BASE WAS RED, AND THE MECHANISM IS A MIRROR DRIFT RATHER THAN A MISSING PATH
 
-`node client/tests/floor/check-floor.mjs` exits non-zero on **one** named failure:
+Before the merge, `node client/tests/floor/check-floor.mjs` exited non-zero in this worktree on
+**one** named failure:
 
 ```
 FloorWrapperGuardTests.PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin
-  spine-tasks/SP-121-zero-execution-census/PROMPT.md:102: packet SP-121-zero-execution-census does
-  not list `client/tests/floor/floor.json` in fileScopeMustNotChange
+  spine-tasks/SP-1NN-.../PROMPT.md: packet does not list `client/tests/floor/floor.json`
+  in fileScopeMustNotChange
 ```
 
-**It is pre-existing on the base commit and it is not this lane's file.** Wave 60 authored two
-packets and neither carried the literal `client/tests/floor/floor.json` in its
-`fileScopeMustNotChange` row; both had `client/tests/floor/**`, which covers the pin semantically but
-not literally, and the guard matches literally on purpose. So the guard was red in every worktree of
-this wave before either lane wrote a line.
+**The base was red from the authoring commit `9af75cdf`, before either lane wrote a line**, and both
+of wave 60's packets carried it.
 
-- **My half is fixed.** `spine-tasks/SP-120-haptic-limb-census/PROMPT.md:105` now lists
-  `client/tests/floor/floor.json` alongside `client/tests/floor/**`. That file is inside this
-  packet's own declared write zone ("May change ... `spine-tasks/SP-120-haptic-limb-census/**`"), the
-  edit only ADDS a path to a must-not-change list, and it widens nothing.
-- **SP-121's half is untouched**, because `spine-tasks/SP-121-zero-execution-census/**` is another
-  task's folder and iron rule 1 forbids it. The fix is one literal added to `PROMPT.md:102`, by that
-  lane or by the orchestrator.
+**The cause is not a typo and not a missing path.** Both packets listed `client/tests/floor/**`,
+which covers the shared pin semantically. **Two enforcers of the same rule disagree about what
+"covers" means**: `validate-wave.mjs` check 4 matches with the glob-aware `patternCovers` (`:458`)
+and passes the packet, while `FloorWrapperGuardTests` matches with a literal `.Contains` (`:224`) and
+reds the suite — so a packet clears the pre-launch validator and fails the gate it is supposed to
+mirror. `validate-wave.mjs`'s own header carries a MIRROR note forbidding exactly that drift. Filed
+**P0** by the orchestrator on `client/docs/task-board.md` at `b5f789de`.
+
+**What each side did.** My half was fixed in-lane at `eacff685`:
+`spine-tasks/SP-120-haptic-limb-census/PROMPT.md:105` now lists `client/tests/floor/floor.json`
+alongside `client/tests/floor/**` — that file is inside this packet's own declared write zone, and
+the edit only ADDS a path to a must-not-change list, so it widens nothing. **SP-121's half I did not
+touch**, because `spine-tasks/SP-121-zero-execution-census/**` is another task's folder and iron rule
+1 forbids it; the orchestrator fixed it on base the same way and took my committed row verbatim, so
+the merge carried no conflict on that line.
 
 **Nothing was disabled, quarantined or tolerance-widened to get around it**, no name was added to
-`allowedSkips`, and the observed totals above are from the same run that carries this failure.
-
----
+`allowedSkips`, and `client/tests/floor/floor.json` was never opened. The pre-merge run that carried
+the failure reported the same 2260 unit total as the clean post-merge run, so the delta arithmetic
+never depended on the failure being fixed.
