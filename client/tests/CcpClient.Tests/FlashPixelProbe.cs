@@ -119,8 +119,47 @@ internal static class FlashPixelProbe
     }
 
     /// <summary>
+    /// SP-116. The result of the last compositor fence this probe took, as an <c>HRESULT</c>:
+    /// <c>0</c> is <c>S_OK</c>, <see cref="FenceNotTaken"/> means no read has happened yet or the
+    /// fence has been REMOVED from <see cref="CaptureDesktop"/>, and anything else is DWM refusing
+    /// (<c>DWM_E_COMPOSITIONDISABLED</c> on a session with no compositor).
+    /// </summary>
+    internal static int LastCompositorFenceResult { get; private set; } = FenceNotTaken;
+
+    /// <summary>The sentinel <see cref="LastCompositorFenceResult"/> carries before any fence has
+    /// been taken. Distinct from every <c>HRESULT</c> DWM can return, so "never taken" and "taken
+    /// and refused" are different answers.</summary>
+    internal const int FenceNotTaken = int.MinValue;
+
+    /// <summary>True when the last screen read really was ordered behind the compositor.</summary>
+    internal static bool CompositorFenceHeld => LastCompositorFenceResult == 0;
+
+    /// <summary>
     /// The composited desktop, at a rectangle given in the CALLER's (possibly virtualised) window
     /// coordinate space, mapped to the screen device context's own space through the OS's ratio.
+    ///
+    /// <para><b>SP-116 — THE ORDERING EDGE, AND THE WHOLE OF SP-107's §4 RESIDUE.</b> Between "this
+    /// process showed and painted a layered top-most window" and "this process read the screen"
+    /// there was no happens-before edge of any kind. The window can be visible, top-most, owner of
+    /// its own centre point by <c>WindowFromPoint</c>, and holding the painted bits in its own
+    /// device context, and the <c>CAPTUREBLT</c> read can still return the desktop BEHIND it,
+    /// because the compositor has not published it yet. Measured on this machine, with the pool
+    /// loaded, over a rig that replicates
+    /// <c>FlashDrawObservations</c>'s own control window: <b>34 misses in 1200</b> reads with no
+    /// fence, <b>0 in 900</b> with one, and on every single miss the control window OWNED the point
+    /// (so occlusion by a foreign window is refuted, not assumed) and rendered its own colour
+    /// through <c>PrintWindow</c> (so the paint had landed). Decomposed: <c>GdiFlush</c> alone is
+    /// 8 in 300 — no effect, GDI batching is not the mechanism — and <c>DwmFlush</c> alone is
+    /// 0 in 300. Evidence: <c>spine-tasks/SP-116-flake-characterisation/sweep-control.log</c>.</para>
+    ///
+    /// <para><b>Why this is not a wait, a retry or a widened window.</b> <c>DwmFlush</c> blocks
+    /// until the compositor's NEXT PRESENT has consumed the outstanding surface updates — it is an
+    /// edge on the producer's own completion, the pixel-world twin of awaiting a task, and it
+    /// carries no deadline this suite chose. Nothing is re-read, nothing is re-asserted, and no
+    /// assertion moved: every fact downstream still gets exactly one screen read and must be
+    /// exactly right about it. SP-100 §1 measured that an immediate <c>CAPTUREBLT</c> already
+    /// carries the painted pixel; that measurement was taken on an IDLE machine and the numbers
+    /// above are what it costs under load, which is the state a floor run is always in.</para>
     /// </summary>
     internal static uint[] CaptureDesktop(int x, int y, int width, int height)
     {
@@ -128,6 +167,8 @@ internal static class FlashPixelProbe
         {
             return [];
         }
+
+        TakeCompositorFence();
 
         var (virtualWidth, physicalWidth) = HorizontalResolutions;
         var (virtualHeight, physicalHeight) = VerticalResolutions;
@@ -167,6 +208,33 @@ internal static class FlashPixelProbe
             ReleaseSurface(surface);
         }
     }
+
+    /// <summary>
+    /// Order this thread behind the compositor before the screen is read. A DWM that refuses
+    /// (composition disabled, or a Windows build without <c>dwmapi</c>) is RECORDED rather than
+    /// swallowed, because a read taken with no fence is a coin flip and the reader has to be able
+    /// to tell that from a read that was fenced and still saw nothing.
+    /// </summary>
+    private static void TakeCompositorFence()
+    {
+        try
+        {
+            LastCompositorFenceResult = DwmFlush();
+        }
+        catch (DllNotFoundException)
+        {
+            LastCompositorFenceResult = FenceUnavailable;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            LastCompositorFenceResult = FenceUnavailable;
+        }
+    }
+
+    /// <summary>What <see cref="LastCompositorFenceResult"/> carries when <c>dwmapi</c> itself is
+    /// not there to ask. Distinct from <see cref="FenceNotTaken"/>: one means nobody asked, the
+    /// other means there was nothing to ask.</summary>
+    internal const int FenceUnavailable = int.MinValue + 1;
 
     /// <summary>How many of <paramref name="pixels"/> are exactly <paramref name="colour"/>.</summary>
     internal static int CountOf(uint[] pixels, uint colour)
@@ -356,4 +424,9 @@ internal static class FlashPixelProbe
 
     [DllImport("gdi32.dll")]
     private static extern int GetDeviceCaps(nint dc, int index);
+
+    /// <summary>SP-116. "Issues a flush call that blocks the caller until the next present, when
+    /// all of the DirectX surface updates that are currently outstanding have been made."</summary>
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmFlush();
 }

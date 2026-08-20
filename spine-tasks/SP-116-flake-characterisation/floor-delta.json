@@ -1,0 +1,1 @@
+{ "packet": "SP-116-flake-characterisation", "unit": 3, "headless": 0, "reason": "the compositor fence pin in FlashDrawTests, and the two deterministic pins for the parked operation's teardown tail in MovingEffectSpineTests" }

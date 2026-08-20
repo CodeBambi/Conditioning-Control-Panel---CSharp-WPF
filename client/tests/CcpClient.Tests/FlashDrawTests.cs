@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Capabilities;
+﻿using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Overlay;
 using Xunit;
@@ -52,6 +52,39 @@ public class FlashDrawTests
     }
 
     [Fact]
+    public void EveryCompositedReadIsOrderedBehindTheCompositor_OrEveryNumberBelowIsACoinFlip()
+    {
+        // SP-116. THE RESIDUE SP-107 §4 LEFT OPEN, AND ITS PIN.
+        //
+        // Between "this process showed and painted a layered top-most window" and "this process
+        // read the screen" there was no happens-before edge. Measured with a rig that replicates
+        // the control window below, on a loaded pool: 34 misses in 1200 unfenced reads and 0 in 900
+        // fenced ones, and on EVERY miss the window owned its own centre point by WindowFromPoint
+        // and rendered its own colour through PrintWindow — so the window was up, on top, and
+        // painted, and the compositor simply had not published it yet. Occlusion by a foreign
+        // window is refuted by that control, not assumed away. Decomposed: GdiFlush alone changes
+        // nothing (8 in 300), DwmFlush alone is the whole effect (0 in 300).
+        //
+        // This fact exists so that deleting FlashPixelProbe's fence reds the suite ON EVERY RUN
+        // instead of restoring a 5 % intermittent that took three packets to name. It is one
+        // implication and it is not vacuous: where the capture is live, the fence must have been
+        // taken and DWM must have granted it. Where composition is off, DesktopCaptureIsLive is
+        // false and every composited expectation in this file is already false == false.
+        var run = FlashDrawObservations.Run;
+
+        Assert.True(
+            !run.DesktopCaptureIsLive || run.CompositorFenceHeld,
+            "a desktop capture is live on this machine and the compositor fence was NOT held "
+            + $"(FlashPixelProbe.LastCompositorFenceResult = 0x{FlashPixelProbe.LastCompositorFenceResult:X8}; "
+            + $"{FlashPixelProbe.FenceNotTaken:X8} means no fence was taken at all, "
+            + $"{FlashPixelProbe.FenceUnavailable:X8} means dwmapi was not there to ask, anything else is DWM "
+            + "refusing). Every composited number in this file was then read with no ordering against the "
+            + "thing that publishes pixels, which SP-116 measured as 34 misses in 1200 reads. This is not a "
+            + "flake to be re-run: either the fence was removed from FlashPixelProbe.CaptureDesktop, or this "
+            + "session has no compositor and cannot make composited claims at all");
+    }
+
+    [Fact]
     public void TheDesktopReadIsMappedThroughTheOperatingSystemsOwnDpiRatio_NotAssumedToBeOne()
     {
         // The trap that cost SP-100 four measurement rounds: this test host is DPI-unaware, so
@@ -99,8 +132,10 @@ public class FlashDrawTests
     {
         // The closest a process can get to "a human sees it": the desktop, captured with CAPTUREBLT
         // (the only screen read that includes layered windows), at the surface's own rectangle,
-        // with no wall-clock wait anywhere. Both halves are checked, so a flash that composited
-        // upside down or in the wrong place fails.
+        // with no wall-clock wait anywhere: the read is ordered behind DWM's own next present
+        // (SP-116, FlashPixelProbe.CaptureDesktop), which is an edge on the producer rather than a
+        // deadline this suite chose, and nothing is re-read. Both halves are checked, so a flash
+        // that composited upside down or in the wrong place fails.
         var run = FlashDrawObservations.Run;
 
         Assert.True(
@@ -268,7 +303,10 @@ public class FlashDrawTests
             + "capture mapped the rectangle through the wrong ratio and sampled somewhere the flash never was "
             + "(the pixel count cannot show this, being physical and so scale-invariant); and only a real "
             + "desktop read at unchanged metrics means the flash was genuinely not composited where a user "
-            + "would see it");
+            + $"would see it. SP-116 adds the fifth and it is the one that used to fire: the compositor fence "
+            + $"was held = {run.CompositorFenceHeldDuring} — a read taken WITHOUT that edge saw a layered "
+            + "top-most window this process had just shown and painted 34 times in 1200, with the window "
+            + "owning its own centre point every time");
         Assert.True(run.DesktopPixelsAfterHide == 0,
             $"after the flash was hidden the desktop still carries {run.DesktopPixelsAfterHide} pixels of the "
             + "image's colour — the picture outlived the effect that put it there");

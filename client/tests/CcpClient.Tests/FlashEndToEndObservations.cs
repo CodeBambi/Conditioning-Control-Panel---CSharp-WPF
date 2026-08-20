@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Effects;
+﻿using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Overlay;
 using CcpClient.Desktop.Session;
 
@@ -51,6 +51,13 @@ internal static class FlashEndToEndObservations
     /// allocation is most likely to fail. This field is diagnostic only; nothing is asserted about
     /// it and nothing is silenced by it.
     /// </param>
+    /// <param name="CompositorFenceHeldDuring">
+    /// SP-116, and the fifth verdict behind a count of zero. Whether the screen read that produced
+    /// <see cref="Run.DesktopPixelsDuring"/> was ordered behind the compositor at all
+    /// (<see cref="FlashPixelProbe.CompositorFenceHeld"/>). Without that edge a layered top-most
+    /// window this process had just shown and painted was absent from the read 34 times in 1200 on
+    /// this machine, with the window owning its own centre point every time. Diagnostic only.
+    /// </param>
     /// <param name="DesktopUniformPixelsDuring">
     /// SP-107: how many of those returned pixels equal the first one. A read that came back UNIFORM
     /// is a blank or asleep display, which is a third verdict again — different from "the allocation
@@ -87,6 +94,7 @@ internal static class FlashEndToEndObservations
         int DesktopPixelsDuring,
         int DesktopPixelsAfterHide,
         int DesktopPixelsSampledDuring,
+        bool CompositorFenceHeldDuring,
         int DesktopUniformPixelsDuring,
         uint DesktopFirstPixelDuring,
         (int Width, int Height) PlacementScreen,
@@ -169,6 +177,7 @@ internal static class FlashEndToEndObservations
                 DesktopPixelsDuring: during,
                 DesktopPixelsAfterHide: after,
                 DesktopPixelsSampledDuring: sampledDuring,
+                CompositorFenceHeldDuring: FlashPixelProbe.CompositorFenceHeld,
                 DesktopUniformPixelsDuring: uniformDuring,
                 DesktopFirstPixelDuring: firstDuring,
                 PlacementScreen: (screenWidth, screenHeight),

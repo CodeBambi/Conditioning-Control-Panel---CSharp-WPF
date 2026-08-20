@@ -325,11 +325,34 @@ public class SpiralOverlayEffectTests
     }
 
     [Fact]
-    public void DisarmReleasesTheWorkUNCONDITIONALLY_EvenWhenItThoughtItWasNotArmed()
+    public async Task DisarmReleasesTheWorkUNCONDITIONALLY_EvenWhenItThoughtItWasNotArmed()
     {
         using var lab = new Lab();
         lab.Effect.Arm();
+        var stopped = lab.Effect.Completion!;
         lab.Effect.Disarm();
+
+        // SP-116. THE DISARM ABOVE IS NOT FINISHED WHEN IT RETURNS, and this is the only fact in
+        // the project that can see it, because it is the only one that puts something back on the
+        // surface behind the module's back. The parked operation's tail calls ReleaseWork a third
+        // time from a thread-pool continuation (OwnedSessionEffect.cs:345,357 — the TCS carries
+        // RunContinuationsAsynchronously), the guard at :417 lets it through because Disarm does
+        // not clear _generation, and this rig's InlineDispatch then runs the withdraw ON that pool
+        // thread instead of marshalling it to a UI thread the way the product's
+        // Dispatcher.UIThread.Post does. So the re-engagement below and the tail race, and
+        // Assert.True(Showing) is decided by the scheduler.
+        //
+        // Awaiting the module's own published completion is the ordering edge, and it is the same
+        // one MovingEffectSpineTests already takes for the same reason (:196-197, and the drained
+        // note at :171-174). It is not a wait for an assertion to pass: the operation is finished
+        // or the window fails loudly, and the sequence below is then single-threaded.
+        // ATailThatLandsAfterSomethingWasPutBackUp_TAKESITDOWN in MovingEffectSpineTests forces
+        // that ordering deterministically, so the hazard is pinned rather than merely avoided.
+        await TestWait.Until(
+            stopped,
+            "the spiral module's parked operation to finish, so its own teardown tail cannot withdraw "
+            + "the surface this test re-engages after the disarm");
+        Assert.IsType<OperationOutcome.Cancelled>(await stopped);
 
         // Something is on screen and the module does not believe it is armed. Contrived here, and
         // upstream's services all guard against it in as many words — WPF's bouncing text stop says

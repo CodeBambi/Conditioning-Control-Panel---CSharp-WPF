@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Capabilities;
+﻿using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Overlay;
@@ -272,6 +272,91 @@ public class MovingEffectSpineTests
     }
 
     [Fact]
+    public async Task ONESTOPRELEASESTHEWORKTHREETIMES_AndTheTHIRDIsOnAPoolThreadAfterDisarmReturned()
+    {
+        // SP-116. The shared body's teardown is not one call and it does not all happen on the
+        // caller's thread. Per stop, EXACTLY three:
+        //   1. Disarm's own, synchronous, on the caller's thread (OwnedSessionEffect.cs:212);
+        //   2. the generation's cancellation registration (:352), which runs inside
+        //      AsyncOperationOwner.Cancel on the disarming thread when the parked body has already
+        //      registered, and inline on the POOL thread when it has not (registering an
+        //      already-cancelled token invokes the callback immediately);
+        //   3. the tail after `await stopped.Task` (:357), which is a thread-pool continuation
+        //      because the TCS carries RunContinuationsAsynchronously — so it lands an unbounded
+        //      time after Disarm returned, and Disarm does not clear _generation, so the guard at
+        //      :417 lets it through.
+        // The count is deterministic and so is the ordering against Completion: the tail runs
+        // BEFORE the owned task completes, which is exactly what makes awaiting Completion a real
+        // edge rather than a hopeful pause. This is why the contract requires ReleaseWork to be
+        // idempotent, and why a test that observes rig state after a disarm must await first.
+        var registry = new OperationRegistry();
+        var owner = registry.OwnerFor("TailProbe");
+        var boundary = new UiDispatchBoundary();
+        boundary.Bind(new InlineDispatch());
+        var probe = new TailProbe(owner, new EffectSignal(boundary, static () => true));
+
+        probe.Arm();
+        var stopped = probe.Completion!;
+        probe.Disarm();
+        Assert.IsType<OperationOutcome.Cancelled>(await stopped);
+
+        Assert.True(probe.Releases == 3,
+            $"the owned task completed with {probe.Releases} releases behind it rather than 3. The tail's "
+            + "release must be ordered BEFORE the completion, or awaiting Completion buys no ordering at all "
+            + "and every post-disarm observation in this project is back to being the pool's choice");
+    }
+
+    [Fact]
+    public async Task ATailThatLandsAfterSomethingWasPutBackUp_TAKESITDOWN_WhichIsWhyThePostDisarmAwaitIsNotOptional()
+    {
+        // SP-116. SP-115 measured the base tree red 1 in 7 on
+        // SpiralOverlayEffectTests.DisarmReleasesTheWorkUNCONDITIONALLY_…, a fact that touches no
+        // OS at all — the strand that "the desktop was contended" cannot explain. THIS is the
+        // mechanism, with the thread pool's choice taken away: the probe parks its third release
+        // until this test opens the gate, so the interleaving that used to be a coin flip happens
+        // every run.
+        //
+        // The control that would fail if the reading were wrong is the wait itself: if the tail did
+        // NOT reach ReleaseWork after Disarm returned, TailArrived never completes and TestWait
+        // fails loudly with CONDITION-NEVER-TRUE instead of quietly passing.
+        //
+        // Nothing here says the PRODUCT has a defect. On a real dispatcher the withdraw is posted
+        // to the UI thread, every touch of a surface is single-threaded by construction, and a
+        // second withdraw of an already-withdrawn surface is the no-op the contract requires. What
+        // this pins is that a TEST which re-engages a surface behind the module's back, on a rig
+        // whose dispatch runs posts inline on whatever thread posted them, is racing its own
+        // module's teardown unless it awaits Completion first.
+        var registry = new OperationRegistry();
+        var owner = registry.OwnerFor("TailProbe");
+        var boundary = new UiDispatchBoundary();
+        boundary.Bind(new InlineDispatch());
+        var probe = new TailProbe(owner, new EffectSignal(boundary, static () => true));
+
+        probe.ParkReleaseNumber(3);
+        probe.Arm();
+        var stopped = probe.Completion!;
+        try
+        {
+            probe.Disarm();
+            await TestWait.Until(
+                probe.TailArrived,
+                "the parked operation's tail to reach ReleaseWork after Disarm had already returned",
+                () => $"releases so far = {probe.Releases}");
+
+            // The re-engagement, standing in for SpiralOverlayEffectTests' direct Surface.Engage.
+            probe.Live = true;
+        }
+        finally
+        {
+            probe.OpenGate();
+        }
+
+        Assert.IsType<OperationOutcome.Cancelled>(await stopped);
+        Assert.False(probe.Live);
+        Assert.Equal(3, probe.Releases);
+    }
+
+    [Fact]
     public void TheGuardIsNotADisarmGuard_AReleaseForTheLiveGenerationStillWorksAfterAStopAndStart()
     {
         // The negative control for the theory above, stated separately because it is the failure a
@@ -528,6 +613,72 @@ public class MovingEffectSpineTests
             new CapabilityState.Available("generation probe: engaged");
 
         protected override void ReleaseWork() => Releases++;
+    }
+
+    /// <summary>
+    /// SP-116. A module that does nothing but COUNT its releases and, on request, hold one of them
+    /// until the test lets it go — so the ordering the thread pool picks at random becomes the
+    /// ordering this test chose.
+    ///
+    /// <para>The instrument does not carry the defect it measures: the counter is
+    /// <see cref="Interlocked"/>, every field crossing the boundary is read and written through
+    /// <see cref="Volatile"/>, and the gate is opened in a <c>finally</c> so a failed assertion can
+    /// never leave a pool thread parked for the rest of the process.</para>
+    /// </summary>
+    private sealed class TailProbe(AsyncOperationOwner owner, EffectSignal signal)
+        : OwnedSessionEffect(owner, signal, "tail-probe")
+    {
+        private readonly ManualResetEventSlim _gate = new(false);
+        private readonly TaskCompletionSource _arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _releases;
+        private int _parked = -1;
+        private int _live;
+
+        public override string Id => "tail-probe";
+
+        public override string Title => "Tail probe";
+
+        public override bool Enabled => true;
+
+        /// <summary>How many times the shared body has released this module's work.</summary>
+        public int Releases => Volatile.Read(ref _releases);
+
+        /// <summary>Completes when the parked release has ARRIVED and is waiting on the gate.</summary>
+        public Task TailArrived => _arrived.Task;
+
+        /// <summary>Stands in for "something is on screen": set by the test after the disarm, and
+        /// cleared by any release that runs afterwards.</summary>
+        public bool Live
+        {
+            get => Volatile.Read(ref _live) == 1;
+            set => Volatile.Write(ref _live, value ? 1 : 0);
+        }
+
+        public override void SetEnabled(bool enabled)
+        {
+        }
+
+        /// <summary>Hold the Nth release until <see cref="OpenGate"/>.</summary>
+        public void ParkReleaseNumber(int number) => Volatile.Write(ref _parked, number);
+
+        public void OpenGate() => _gate.Set();
+
+        protected override bool WorkIsRunning => false;
+
+        protected override CapabilityState Engage(int generation) =>
+            new CapabilityState.Available("tail probe: engaged");
+
+        protected override void ReleaseWork()
+        {
+            var number = Interlocked.Increment(ref _releases);
+            if (number == Volatile.Read(ref _parked))
+            {
+                _arrived.TrySetResult();
+                _gate.Wait();
+            }
+
+            Volatile.Write(ref _live, 0);
+        }
     }
 
     /// <summary>A four-frame clip that never touches a file.</summary>

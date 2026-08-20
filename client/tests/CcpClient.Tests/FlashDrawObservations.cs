@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Overlay;
 
@@ -106,6 +106,13 @@ internal static class FlashDrawObservations
     /// probe painted with its own calls is visible in its own desktop capture. False on a locked
     /// workstation, on a session with no compositor, and anywhere a screen read is not a screen.
     /// </param>
+    /// <param name="CompositorFenceHeld">
+    /// SP-116. Whether the screen reads in this run were really ordered behind the compositor
+    /// (<see cref="FlashPixelProbe.CompositorFenceHeld"/>). False means either the fence has been
+    /// removed from <see cref="FlashPixelProbe.CaptureDesktop"/> or DWM refused it, and in both
+    /// cases every composited number below was taken with no happens-before edge against the thing
+    /// that publishes pixels — measured at 34 misses in 1200 reads (SP-116).
+    /// </param>
     /// <param name="ControlWindowRendersItsColour">The control's content read back by
     /// <c>PrintWindow</c> — the instrument saying it can read a window at all.</param>
     /// <param name="ControlWindowGoneAfterTeardown">The control cleaned up after itself.</param>
@@ -137,6 +144,7 @@ internal static class FlashDrawObservations
     internal sealed record Measurements(
         bool MachineHasInteractiveDesktop,
         bool DesktopCaptureIsLive,
+        bool CompositorFenceHeld,
         bool ControlWindowRendersItsColour,
         bool ControlWindowGoneAfterTeardown,
         double VirtualToPhysicalRatio,
@@ -225,6 +233,7 @@ internal static class FlashDrawObservations
         return new Measurements(
             MachineHasInteractiveDesktop: OverlayWindowProbe.MachineHasInteractiveDesktop,
             DesktopCaptureIsLive: control.DesktopCaptureIsLive,
+            CompositorFenceHeld: FlashPixelProbe.CompositorFenceHeld,
             ControlWindowRendersItsColour: control.RendersItsColour,
             ControlWindowGoneAfterTeardown: control.GoneAfterTeardown,
             VirtualToPhysicalRatio: virtualWidth > 0 ? physicalWidth / (double)virtualWidth : 0.0,
