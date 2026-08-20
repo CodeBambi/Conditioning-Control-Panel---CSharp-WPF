@@ -1261,3 +1261,58 @@ four distinct values from one capture, which one uniform alpha over an opaque fr
 `presentation-verified` remains the orchestrator's; every part of Linux; multi-monitor; the six
 transform effects (D160); and the cadence, which nothing measures — every frame advance in every fact
 is driven by hand on the injected clock, so a logo that moved at half speed satisfies all of them.
+
+## SP-117 — the last three, censused; Visuals, the row that is not a module
+
+**Three rack rows remained and this packet surveyed all three before writing a line of product
+code.** The census is `spine-tasks/SP-117-last-three/plan.md`, committed before the first product
+edit. Two rows were refused with an inventory rather than an estimate; one shipped.
+
+**Scheduler is not a session module, verified rather than inherited.** `SchedulerTimer_Tick`
+(`MainWindow/MainWindow.StartStop.cs:601-637`) runs on a 30 s `DispatcherTimer`
+(`MainWindow/MainWindow.xaml.cs:616-620`) **while nothing is running**, and its output is
+`StartEngine()` / `StopEngine()` plus a tray minimize and a notification. Its predicate is entirely
+local wall-clock day-of-week and time-of-day (`:642-696`). It needs **none of the port's six
+capabilities**; what it needs is an app-lifetime owner in `Lifecycle/**` and a local-time seam
+`ISessionClock` does not have (`Session/SessionClock.cs:17-25` is `UtcNow` and `Schedule`). It
+belongs on the board against `Lifecycle/**`, not in the rack.
+
+**Haptics needs a seventh capability.** `Services/Haptics/**` is 9193 lines over 21 files; the
+service is APP-scoped (`App.xaml.cs:533`, `:2060`, `:2103-2105`, `:4406`) and **never
+engine-started** — `grep App.Haptics MainWindow/MainWindow.StartStop.cs` returns nothing — and it is
+driven reactively by 99 call sites across 29 shipping files. Its two device backends are clients of
+separate server processes: Buttplug over a WebSocket to `ws://127.0.0.1:12345`
+(`Services/Haptics/ButtplugProvider.cs:27`, `:83`, NuGet `Buttplug` 5.0.1) and Lovense over HTTP to
+`http://127.0.0.1:20010` (`Services/Haptics/LovenseProvider.cs:21`, `:244`). **Named limit,
+measured:** `netstat` on this machine shows no listener on 12345, 20010 or 30010, and no toy is
+attached — but the blocker is not the device. It is a new capability folder, a new NuGet dependency,
+an app-scope wiring point and a premium gate, none of them writable from this packet's File Scope.
+
+**Visuals shipped, and the census is why it could.** It is not a module: the shipping page is five
+load/save pairs over `App.Settings.Current` (`Features/VisualsFeatureControl.xaml.cs:35-118`), there
+is no `VisualsService` anywhere in the shipping tree, and its rack entry passes `null` where every
+other row passes a dot predicate (`Views/Tabs/StudioTabView.xaml.cs:496`). Its five controls are the
+**Flash Images** module's own draw dials — and three of them were already parameters on seams this
+port landed at SP-100 and has been handing constants ever since.
+
+**The port's own source had written this debt down twice.**
+`Persistence/SessionPresetDocument.cs:17-23` said those dials "arrive with the surface that honours
+them"; the surface arrived nine waves ago. `Session/SessionParticipant.cs` said flash opacity had
+"no dial on any ported panel, so [it is] absent rather than present-and-inert (D93)"; this row is
+that panel.
+
+| # | v6.8.1 fact | Port at SP-117 | Reason |
+|---|---|---|---|
+| **D171** | The Visuals rack row has **no state dot**: `Add("visuals", …, null)` passes `null` where every other row passes a dot predicate (`Views/Tabs/StudioTabView.xaml.cs:496`), and the comment above it says "A dot that cannot be wired honestly is omitted" (`:494-495`) | **Ported verbatim, including the absence.** `RowVisuals` is the only rack row whose `Grid` has one child, and a headless fact asserts it carries no `Ellipse` at all | The row has no enable to read. The only dot it could carry is the Flash Images row's dot repeated two inches to its left, and SP-112 §4 already settled that the dot's meanings are properties of CAPABILITIES rather than of rows. **The shipping comment's own citation does not verify** — `MainWindow/MainWindow.Presets.cs:800` is inside `ShowMediaDropChoiceDialog`, the only `Visuals` in that file is `:41` (a help-button note), and no dashboard card for Visuals exists anywhere in the tree. The behavioural fact does not depend on it: the `null` at `:496` is read directly |
+| **D172** | `AppSettings.FadeDuration` (`CCP.Core/Models/AppSettings.cs:892-897`, default 40, clamped 0..200) is a slider on the Visuals page (`Features/VisualsFeatureControl.xaml:86-88`) | **ABSENT — not greyed, not ported.** The panel says so in plain words | **It is a DEAD DIAL in the shipping product**, and the enumeration is the evidence rather than an impression: every reference in the whole repository is a WRITER (`Features/VisualsFeatureControl.xaml.cs:46,47,59,96`; `CCP.Core/Models/Preset.cs:68,178,202,226,253,292,338,456`) or the model's own clamp. **Nothing reads it to draw anything.** The fade a user sees is `private const double FADE_PER_SEC = 2.4` (`Services/Flash/FlashService.cs:2018`), spent at `:2073` and applied at `:2110-2117`. It is also the only slider on that page NOT marked `SessionLock.Owned` (`:87` against `:55`, `:71`, `:103`), and `SessionSettings` carries `FlashOpacity`, `FlashScale` and `FlashAudioEnabled` (`CCP.Core/Models/Session.cs:876,878,881`) but no fade. Porting it would ship the greyed control §9 D7 refuses |
+| **D173** | `FlashAudioEnabled` (`AppSettings.cs:899-904`, default true) makes a flash last **as long as its sound**: `duration = PlaySound(soundPath, MasterVolume)` (`FlashService.cs:1037-1042`) | **ABSENT.** The panel names it and says why | This port's flash is silent — `FlashImagesEffect.Deliver` hands paths to a surface and raises an event, and nothing in the module reaches `Audio/**`. A checkbox here would move nothing. Upstream's own comment calls `FlashDuration` the duration "when audio is disabled" (`AppSettings.cs:925`), so the port's always-on duration path IS upstream's audio-link-off path |
+| **D174** | The opacity dial is re-read on **every composition frame** and re-tints flash windows that are ALREADY on screen (`FlashService.cs:2072`, applied `:2108-2117`) | The dial reaches the **NEXT** flash. One already up keeps the alpha it was placed with. The panel and the ramp's own switch both say so where the user reads them | Not a rounding of upstream: a forced choice with a measured price. This port's opacity is a layered window's `LWA_ALPHA`, set at `Present`, and `Present` **clears click-through to run its differential hit test and restores it** (`Overlay/Win32OverlayPresence.cs:558`, `:566`, `:574`). Re-tinting up to ten live flashes on the ramp's 2 s cadence would open that gap repeatedly on a surface whose entire contract is that the user's clicks pass through it — the desktop-breaking failure `OverlayInputNotPassingThrough` exists to refuse. `OverlaySurfaceSet` offers `Repaint` (content) and no re-tint, so there is no cheaper route |
+| **D175** | The draw values are read at the moment a flash fires: the duration once at the top of `ShowImages` (`FlashService.cs:1028-1034`) and the scale once in `LoadImagesUntilAsync` (`:655-656`), then applied to every window of that flash | One `FlashDraw` reading, taken once per `Show`, carried into every one of that flash's staggered surfaces | Same outcome, and it had to be stated rather than assumed: this presenter staggers a flash's surfaces by 300 ms each (`:1112`), so a per-surface read would let a dial moved mid-stagger — by the user, or by the ramp — split one flash across two sizes |
+| **D176** | — (port-internal; the boundary) | `FlashDraw` **throws** on an out-of-range reading instead of clamping | The document clamps on every write, WPF's clamp, so the product path can never construct an illegal one. A second clamp in the reading would silently absorb a document that had stopped clamping — **the defect it would hide is exactly the one the document's own facts exist to catch**, which is the tolerance rule applied to a clamp. Same boundary rule `OverlaySurfaceRequest` states for opacity zero |
+| **D177** | WPF's Intensity Ramp links **five** dials (`CCP.Core/Models/AppSettings.cs:2589-2621`), the first of which is flash opacity (`MainWindow/MainWindow.StartStop.cs:506-510`, capped at 100) | **Three.** D93's flash-opacity link is now present and real; master volume and subliminal volume are still absent | **D93 partially closes, on its own stated condition rather than by waiver.** Its rule was that a link whose dial has no ported panel is absent rather than present-and-inert; the Visuals row is flash opacity's panel. The other two links still have no dial anywhere. The dial is keyed to `FlashImagesEffect.EffectId` — the module whose value it borrows — and not to the row the slider is drawn on, so the ramp's custody line names the right owner. Its `Reapply` is a **no-op**, for D174's reason, so the whole of custody rests on `Write`; a spine fact drives held → climbed → clamped at the ceiling → restored |
+| **D178** | — (port-internal; a landed defect found while adding a store to the same lists) | `_bouncingTextPreset` was in **none** of `StartAsync`, `LogIfDegraded`, `StopAsync` or `FlushAsync` (SP-115). `PersistenceStore.Load` runs only from `StartAsync`, so the Bouncing Text dials were never read from disk and never written to it | Silent data loss: every dial a user set on that panel was gone at the next launch, and nothing said so. Repaired in the same commit that added the twelfth store to the same four lists, because leaving one out of four is exactly how the next one gets missed |
+
+**Undischarged, and named:** that a human sees a flash at any size, opacity or duration — no headed
+capture is taken here and `presentation-verified` is untouched; every part of Linux; multi-monitor;
+and the composited half of the opacity dial, which is measured only as far as the byte this process
+handed the overlay and the request the overlay was asked for.

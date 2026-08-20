@@ -547,6 +547,38 @@ public class VisualsModuleTests
         }
     }
 
+    [Fact]
+    public async Task THECOMPOSITIONROOTReallyHandsTheDialsToTheProductPresenter()
+    {
+        // SP-117's sweep survivor M-at, closed, and it was the most load-bearing hole in the packet:
+        // every other fact drives a presenter this test built, so dropping `draw: Visuals.Draw` from
+        // SessionParticipant left every dial correct in isolation and inert in the product.
+        //
+        // The real product presenter is used — no surface override — and NO WINDOW IS CREATED:
+        // FlashSurfacePresenter.Show takes the reading FIRST and ShowOne gives up at the undecodable
+        // frame, before OverlaySurfaceSet.Acquire is ever reached, so a path that cannot decode
+        // exercises the wiring and nothing else.
+        var directory = Path.Combine(Path.GetTempPath(), "ccp-sp117w-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            await using var rig = await ParticipantRig.StartAsync(directory, productSurface: true);
+            rig.Session.Visuals.SetImageScalePercent(215);
+            rig.Session.Visuals.SetFlashOpacityPercent(35);
+            rig.Session.Visuals.SetFlashDurationSeconds(23);
+
+            var presenter = Assert.IsType<FlashSurfacePresenter>(rig.Session.Surface);
+            presenter.Show([Path.Combine(directory, "no-such-image.png")]);
+
+            Assert.Equal(new FlashDraw(215, 35, 23), presenter.LastDraw);
+            Assert.Equal(0, presenter.SurfacesShown);
+        }
+        finally
+        {
+            TryDelete(directory);
+        }
+    }
+
     private static void TryDelete(string directory)
     {
         try
@@ -614,7 +646,9 @@ public class VisualsModuleTests
 
         public SessionParticipant Session { get; }
 
-        public static async Task<ParticipantRig> StartAsync(string directory)
+        /// <param name="productSurface">True builds the REAL flash presenter the composition root
+        /// builds, so the dial wiring itself is under test rather than a double's.</param>
+        public static async Task<ParticipantRig> StartAsync(string directory, bool productSurface = false)
         {
             var registry = new OperationRegistry();
             var log = new NullSink();
@@ -623,7 +657,8 @@ public class VisualsModuleTests
             var infra = new ParticipantInfrastructure(registry, boundary, log);
             var session = new SessionParticipant(
                 infra, directory, new ManualSessionClock(), new StubPool(),
-                new NullFlashSurface(), new NullSubliminalSurface(), static () => true);
+                productSurface ? null : new NullFlashSurface(), new NullSubliminalSurface(),
+                static () => true);
             var host = new ApplicationHost(log, [session], new StartupTrace(), registry, infra.UiDispatch);
             Assert.IsType<StartupOutcome.Success>(
                 await host.StartParticipantsAsync(TestContext.Current.CancellationToken));

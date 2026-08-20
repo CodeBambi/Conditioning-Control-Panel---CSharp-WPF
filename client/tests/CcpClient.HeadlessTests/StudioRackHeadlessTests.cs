@@ -1177,6 +1177,19 @@ public class StudioRackHeadlessTests
         Assert.Contains("200%", line, StringComparison.Ordinal);
         Assert.Contains("12 seconds", line, StringComparison.Ordinal);
 
+        // SP-117's sweep survivor M-bg, closed. Every other check here reads a slider the user just
+        // moved, so a panel that RELOADED from a constant instead of from the document changed no
+        // measured outcome — and the sliders would have silently reset to WPF's defaults on the
+        // next reload. The rack's right-click is the product's own reload path
+        // (OnRowPointerReleased -> LoadDialsFromPreset), so it is used rather than a test hook; it
+        // is aimed at another row, whose enable it flips, because this row has no enable to flip.
+        Click(window, Descendant<RadioButton>(window, "RowSpiralOverlay"), MouseButton.Right);
+        Click(window, Descendant<RadioButton>(window, "RowVisuals"));
+
+        Assert.Equal(200, (int)Math.Round(Descendant<Slider>(window, "VisualsScaleSlider").Value));
+        Assert.Equal(40, (int)Math.Round(Descendant<Slider>(window, "VisualsOpacitySlider").Value));
+        Assert.Equal(12, (int)Math.Round(Descendant<Slider>(window, "VisualsDurationSlider").Value));
+
         await boot.Host.ShutdownAsync();
     }
 

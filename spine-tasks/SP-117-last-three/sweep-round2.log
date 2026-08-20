@@ -1,0 +1,6 @@
+M-ao  CAUGHT  [unit]  the flash link does not count as a link
+M-at  SURVIVED  [headless]  the presenter is built without the dials
+M-bg  CAUGHT  [headless]  the dials do not load from the document
+
+round 2: 2 caught, 1 survived, 0 not patched (3 attempted)
+tree restored byte-identically: YES

@@ -580,6 +580,29 @@ public class StudioSurfaceNoticeTests
     }
 
     [Fact]
+    public void ARampLinkedToNothingBUTTHEFLASHOpacityIsStillLinked_WhichSp117sThirdLinkMadeReachable()
+    {
+        // SP-117's sweep survivor M-ao, closed. RampPanelNotices' anyLink predicate decides whether
+        // this panel tells the user "nothing is linked to it yet"; before this fact, every case that
+        // exercised it linked the spiral or the tint, so dropping the third link from the predicate
+        // changed no measured outcome — and a user who had linked ONLY flash opacity would have been
+        // told their ramp does nothing.
+        var flashOnly = new IntensityRampPresetDocument
+        {
+            Enabled = true,
+            LinkFlashOpacity = true,
+            Multiplier = 3.0,
+        };
+
+        var text = RampPanelNotices.DescribeRampState(
+            EffectDotState.Armed, flashOnly, progress: 0.0, currentMultiplier: 1.0, heldCount: 0,
+            sessionRunning: false);
+
+        Assert.Contains("the effects you have linked climb to", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("nothing is linked to it yet", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheTwoStatesThatLookAlikeSayDifferentThings_BecauseOneIsRunningAndTheOtherIsNot()
     {
         // THE PAIR THIS SENTENCE EXISTS FOR. A ramp holding nothing and a ramp holding two dials at
