@@ -1,4 +1,4 @@
-# SP-116 — record
+﻿# SP-116 — record
 
 Branch `lane/SP-116-flake-characterisation`, base `11036bbc`, worktree
 `.claude/worktrees/agent-a76eaa63a39ac984b`.
@@ -335,7 +335,14 @@ counts overlap. **The strong evidence is the mechanism-level measurement — 34 
    except for one enriched failure MESSAGE and one corrected comment; `git diff 11036bbc --
    client/tests/CcpClient.Tests/FlashDrawTests.cs` should show one new `[Fact]`, one message, one
    comment and nothing else.
-3. **That the fence pin really bites.** Delete the `TakeCompositorFence()` call from
-   `FlashPixelProbe.CaptureDesktop` and
-   `EveryCompositedReadIsOrderedBehindTheCompositor_OrEveryNumberBelowIsACoinFlip` must red on the
-   next run, naming `FenceNotTaken`.
+3. **That the fence pin really bites — DEMONSTRATED, not asserted.** The fence was made to report
+   `FenceNotTaken` instead of taking, the fact was run, and it red with the message below; the edit
+   was then reverted with `git checkout --` and `git diff HEAD` is empty afterwards, so the tree is
+   byte-identical.
+
+   ```
+   Failed CcpClient.Tests.FlashDrawTests.EveryCompositedReadIsOrderedBehindTheCompositor_OrEveryNumberBelowIsACoinFlip
+     a desktop capture is live on this machine and the compositor fence was NOT held
+     (FlashPixelProbe.LastCompositorFenceResult = 0x80000000; 80000000 means no fence was taken at
+     all, 80000001 means dwmapi was not there to ask, anything else is DWM refusing). ...
+   ```
