@@ -58,17 +58,20 @@ public static class HapticSinkFactory
             + "package, the sink is ONE file: connect a ButtplugWebsocketConnector to ws://127.0.0.1:12345, scan "
             + "(:89-95), take every device whose features expose a Vibrate output (:62-66), and set levels per "
             + "feature — Buttplug outputs LATCH, so no keep-alive is needed at all "
-            + "(Services/Haptics/ButtplugProviderV2.cs:31-34). Without the package it is not one file: it is a "
+            + "(Services/Haptics/ButtplugProviderV2.cs:27-30). Without the package it is not one file: it is a "
             + "hand-written implementation of Buttplug message spec v4 over ClientWebSocket, and the port would "
             + "then own a wire protocol somebody else versions.",
 
         HapticProviderRoute.Lovense =>
-            "Lovense Connect / Lovense Remote needs NO package at all: the shipping provider imports only the BCL "
-            + "(Services/Haptics/LovenseProvider.cs:1-8 — System.Net.Http and System.Text.Json). The sink is one "
-            + "file plus two pieces of real work: an HttpClient whose certificate exception is loopback-only "
-            + "(:41-52), and a HOLD strategy, because the LAN API expires its own command — timeSec, floored at a "
-            + "whole second by Math.Max(1, durationMs / 1000) (:232-233) — while Connect mode expires nothing at "
-            + "all (:242-243). It reaches Lovense hardware only.",
+            "Lovense Connect / Lovense Remote needs NO HAPTICS-SPECIFIC package at all: the shipping provider's "
+            + "wire imports are pure BCL (Services/Haptics/LovenseProvider.cs:1-7 — System.Net.Http and "
+            + "System.Text.Json). Its ONE non-BCL using is Serilog at :8, which is the shipping app's existing "
+            + "logger and not a haptics dependency: this port logs through its own ILogSink, so nothing new enters "
+            + "the dependency graph for the Lovense route. The sink is one file plus two pieces of real work: an "
+            + "HttpClient whose certificate exception is loopback-only (:41-52), and a HOLD strategy, because the "
+            + "LAN API expires its own command — timeSec, floored at a whole second by "
+            + "Math.Max(1, durationMs / 1000) (:232-233) — while Connect mode expires nothing at all (:242-243). "
+            + "It reaches Lovense hardware only.",
 
         HapticProviderRoute.None =>
             "no route. This build admits none, which is the state it is in: " + AdmissionGap,

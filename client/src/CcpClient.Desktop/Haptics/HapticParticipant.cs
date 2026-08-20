@@ -160,11 +160,13 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// <item><b>Armed</b> — the enable is on and a device is really reachable.</item>
     /// <item><b>Live</b> — <b>UNREACHABLE, and that is D179 made visible on the rack.</b> Live would
     /// have to mean "something is being sent". Nothing is: the thirteen ported effect modules are
-    /// silent to this sink, where upstream drives it from eight sites in three of them
-    /// (<c>Services/Flash/FlashService.cs:1453,1480,1516,1915</c>;
-    /// <c>Services/Video/VideoService.cs:2580,4585,6580</c>;
-    /// <c>Services/SubliminalService.cs:230</c>). Giving them a haptic limb is a later packet, and
-    /// until then a lit dot here would claim a limb that does not exist.</item>
+    /// silent to this sink, where upstream drives it from THIRTEEN sites in three of them
+    /// (<c>Services/Flash/FlashService.cs:1453,1480,1516,1627,1915</c>;
+    /// <c>Services/Video/VideoService.cs:2580,4585,4673,6580</c>;
+    /// <c>Services/Subliminal/SubliminalService.cs:230,297,387,588</c> — the full enumeration and
+    /// the four adjacent-but-not-output sites are on <see cref="IHapticSink"/>). Giving them a
+    /// haptic limb is a later packet, and until then a lit dot here would claim a limb that does not
+    /// exist.</item>
     /// </list>
     ///
     /// <para>Upstream passes a dot predicate for this row —
@@ -300,14 +302,14 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// gate's answer.
     ///
     /// <para><b>The ORDER is upstream's and it is load-bearing.</b>
-    /// <c>MainWindow/MainWindow.Haptics.cs</c> tests the gate at <c>:487</c>, reverts the box at
-    /// <c>:489</c>, tells the user at <c>:490-495</c> and <c>returns</c> at <c>:496</c> — so it
-    /// reaches <c>HapticCfg.Enabled = isEnabled</c> at <c>:499</c> <b>only</b> when the gate allowed.
+    /// <c>MainWindow/MainWindow.Haptics.cs</c> tests the gate at <c>:489</c>, reverts the box at
+    /// <c>:491</c>, tells the user at <c>:492-496</c> and <c>returns</c> at <c>:497</c> — so it
+    /// reaches <c>HapticCfg.Enabled = isEnabled</c> at <c>:500</c> <b>only</b> when the gate allowed.
     /// A refused tick therefore writes NOTHING. Reversing those two statements would leave the box
     /// visually off and the setting on, which is the state that survives a restart.</para>
     ///
     /// <para>Switching OFF is never gated — upstream's condition is <c>isEnabled &amp;&amp; …</c>
-    /// (<c>:487</c>), so a user whose pledge lapsed can still turn a feature off. Refusing that would
+    /// (<c>:489</c>), so a user whose pledge lapsed can still turn a feature off. Refusing that would
     /// trap somebody with a running toy.</para>
     /// </summary>
     /// <returns>The decision. <see cref="HapticGateDecision.Allow"/> means the write happened.</returns>
@@ -342,6 +344,13 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// <para>One-shot, like upstream's own latch (<c>HapticMixer.cs:172-174,1122</c>): the head slot
     /// calls it and <see cref="StopAsync"/> would call it again, and a stop that burned its budget
     /// twice was a real defect upstream fixed rather than a hypothetical.</para>
+    ///
+    /// <para><b>The latch is never reset, and that is a decision.</b> A participant's life is the
+    /// process's (SP-003 §5): nothing in this port stops one and starts it again, and upstream's
+    /// equivalent latch is process-lifetime too. If a restartable participant ever exists, this must
+    /// be cleared in <see cref="StartAsync"/> — a stop that has already been "spent" would then
+    /// silently decline to countermand a device on the second run, which is the one failure in this
+    /// class a person feels.</para>
     /// </summary>
     public Task ShutdownStopAsync() =>
         Interlocked.Exchange(ref _shutdownStopped, 1) != 0 ? Task.CompletedTask : RunAllStopAsync();
@@ -354,14 +363,28 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// </remarks>
     public async Task StopAsync()
     {
+        // ORDER FIRST, because getting it wrong here is upstream's own fixed defect: the all-stop
+        // must REACH the sink BEFORE the sink is torn down (App.xaml.cs:4401-4407, and
+        // HapticService.cs:957-962, where Dispose all-stops at :961 and only then disposes the mixer
+        // at :962). Latched, so the pre-drain head slot having already run makes
+        // this free.
+        await ShutdownStopAsync().ConfigureAwait(false);
+
+        // Then release the sink WHATEVER happened, and the early return is deliberately below this
+        // line. A participant that never started still owns a sink: this one is registered LAST, so
+        // any earlier participant's phase-3 failure leaves it constructed and un-started while
+        // teardown runs (StartParticipantsAsync returns Failed and ShutdownAsync still stops
+        // everyone). Today that costs nothing — the unadmitted sink's Dispose is empty — but the day
+        // a route is admitted the sink holds a WebSocket or an HttpClient, and leaking one on the
+        // failure path is how a process keeps a connection open after it has given up.
+        Sink.Dispose();
+
         if (!_running)
         {
             return;
         }
 
         _running = false;
-        await ShutdownStopAsync().ConfigureAwait(false);
-        Sink.Dispose();
         await _store.StopAsync().ConfigureAwait(false);
     }
 

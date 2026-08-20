@@ -115,8 +115,8 @@ public class HapticsRowHeadlessTests
 
         Click(window, box);
 
-        // Upstream reverts the box (MainWindow/MainWindow.Haptics.cs:489) and RETURNS before the
-        // write at :499. Both halves are asserted, and the second is the one that matters: a box
+        // Upstream reverts the box (MainWindow/MainWindow.Haptics.cs:491) and RETURNS at :497,
+        // before the write at :500. Both halves are asserted, and the second is the one that matters: a box
         // that snapped back over a setting that had already been written would disagree with itself
         // at the next launch.
         Assert.False(box.IsChecked);
@@ -204,7 +204,7 @@ public class HapticsRowHeadlessTests
 
         // THE RULE, on the surface that renders it. This build's authority is unconfigured, so every
         // real user reaches the unknown branch — and the Windows app shows the refusal wording here
-        // instead (MainWindow/MainWindow.Haptics.cs:490-495, en.json:3394).
+        // instead (MainWindow/MainWindow.Haptics.cs:492-496, en.json:3394).
         Assert.Contains(HapticGate.CouldNotVerifyHeader, gate, StringComparison.Ordinal);
         Assert.Contains(HapticGate.CouldNotVerifyFooter, gate, StringComparison.Ordinal);
         Assert.DoesNotContain(HapticGate.DeniedMessage, gate, StringComparison.Ordinal);

@@ -308,8 +308,8 @@
                this build can reach a device. Armed = the switch is on and a device really is
                reachable. LIVE IS UNREACHABLE, deliberately: it would have to mean something is
                being sent, and nothing is — the thirteen ported effect modules are silent to this
-               sink where upstream drives it from eight sites in three of them. See
-               Haptics/HapticParticipant.Dot.
+               sink where upstream drives it from THIRTEEN sites in three of them. See
+               Haptics/HapticParticipant.Dot, and IHapticSink for the enumeration.
 
                THE ROW TAKES THE RIGHT-CLICK, and it is the one gesture on this page that can be
                REFUSED. Upstream's toggle flips the panel's own master box so the real handler
@@ -1445,7 +1445,7 @@
 
              THE GATE'S ANSWER IS ITS OWN LINE, and it is never merged with the capability line. The
              Windows app shows one modal for both ("Haptic feedback is available for Patreon
-             supporters.", en.json:3394, MainWindow/MainWindow.Haptics.cs:490-495) whether the answer
+             supporters.", en.json:3394, MainWindow/MainWindow.Haptics.cs:492-496) whether the answer
              was "no pledge" or "I could not ask". Those are different facts about different things
              and this panel says which. -->
         <StackPanel x:Name="HapticsModulePanel" IsVisible="False" Spacing="10">

@@ -5,8 +5,8 @@ namespace CcpClient.Desktop.Haptics;
 
 /// <summary>
 /// SP-119: the haptic sink's persisted setting — WPF's <c>HapticSettings.Enabled</c>, the master
-/// toggle the premium gate guards (<c>MainWindow/MainWindow.Haptics.cs:499</c>, written only after
-/// the gate has let the handler past <c>:487-497</c>).
+/// toggle the premium gate guards (<c>MainWindow/MainWindow.Haptics.cs:500</c>, written only after
+/// the gate has let the handler past <c>:489-497</c>).
 ///
 /// <para><b>It holds ONE field, and the count is a decision rather than an omission.</b> WPF's
 /// haptics object carries an auto-connect flag, two provider URLs, per-provider enables, a

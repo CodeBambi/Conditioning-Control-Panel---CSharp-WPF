@@ -228,7 +228,7 @@ public partial class StudioPage : UserControl
         SchedulerEnableToggle.IsCheckedChanged += (_, _) => OnSchedulerEnableToggled();
 
         // The haptics master box. It does NOT write and then check: it asks the gate and writes only
-        // if allowed, which is upstream's order (MainWindow/MainWindow.Haptics.cs:487-499 returns
+        // if allowed, which is upstream's order (MainWindow/MainWindow.Haptics.cs:489-500 returns
         // BEFORE HapticCfg.Enabled = isEnabled).
         HapticsEnableToggle.IsCheckedChanged += (_, _) => OnHapticsEnableToggled();
 
@@ -596,7 +596,7 @@ public partial class StudioPage : UserControl
     ///
     /// <para>Upstream reaches the same gate by a longer road — its toggle flips the panel's own
     /// checkbox so <c>ChkHapticsEnabled_Changed</c> runs and REVERTS the box
-    /// (<c>StudioTabView.xaml.cs:521-525</c>, <c>MainWindow/MainWindow.Haptics.cs:487-497</c>). The
+    /// (<c>StudioTabView.xaml.cs:521-525</c>, <c>MainWindow/MainWindow.Haptics.cs:489-497</c>). The
     /// user-visible outcome is identical and the intermediate state is not: nothing here is ever
     /// written and then undone, so there is no instant at which the setting says yes.</para>
     /// </summary>
@@ -619,7 +619,7 @@ public partial class StudioPage : UserControl
     ///
     /// <para>The box is re-synced from the DOCUMENT afterwards rather than left where the user put
     /// it, which is upstream's own repair for exactly this handler
-    /// (<c>MainWindow/MainWindow.Haptics.cs:489</c> sets <c>IsChecked = false</c> before it returns).
+    /// (<c>MainWindow/MainWindow.Haptics.cs:491</c> sets <c>IsChecked = false</c> before it returns).
     /// Without it the box would sit ticked over a setting that says otherwise, and a restart would
     /// silently disagree with the screen.</para>
     /// </summary>

@@ -35,9 +35,9 @@ public abstract record HapticGateDecision
 ///
 /// <para><b>WPF parity, and there are TWO gates upstream rather than one.</b> The one this packet
 /// ports is the enable checkbox: <c>if (isEnabled &amp;&amp; App.Patreon?.HasPremiumAccess != true)</c>
-/// → revert the box, show <c>msg_haptic_feedback_patreon_only</c> in a
-/// <c>title_patreon_feature</c> box, and <c>return</c>
-/// (<c>MainWindow/MainWindow.Haptics.cs:484-503</c>). The second is deeper and is the reason the
+/// at <c>:489</c> → revert the box (<c>:491</c>), show <c>msg_haptic_feedback_patreon_only</c> in a
+/// <c>title_patreon_feature</c> box (<c>:492-496</c>), and <c>return</c> (<c>:497</c>), so the write
+/// at <c>:500</c> is unreachable (<c>MainWindow/MainWindow.Haptics.cs:484-502</c>). The second is deeper and is the reason the
 /// gate also lives on the output path: <c>Services/Haptics/Core/HapticMixer.cs:191-204</c> evaluates
 /// the same bar once per 10 Hz tick <i>"rather than in every consumer"</i>, and its open→closed
 /// transition <b>drops everything and stops the toys once</b> (<c>:253-262</c>).</para>
@@ -54,7 +54,8 @@ public abstract record HapticGateDecision
 /// <c>(App.Patreon?.HasPremiumAccess ?? false) || App.DailyFree?.IsFreeToday("haptics") == true</c>
 /// (<c>HapticMixer.cs:200-201</c>) and the premium rail's lockband uses the two-term
 /// <c>TierGate.RequiresPremium(…, "haptics")</c> (<c>MainWindow/MainWindow.PremiumRail.cs:573</c>);
-/// <b>the checkbox handler uses only the first term</b> (<c>MainWindow.Haptics.cs:487</c>). Since
+/// <b>the checkbox handler uses only the first term</b> (<c>MainWindow.Haptics.cs:489</c> — the
+/// PREDICATE line, not the <c>isEnabled</c> assignment above it at <c>:487</c>). Since
 /// <c>"haptics"</c> is in <c>DailyFreeService.OverridableKeys</c> (<c>:49</c>) but was CUT from the
 /// rotation <c>Pool</c> (<c>:40</c>), that disagreement is reachable only on a day the SERVER names
 /// haptics — on which the rail unlocks and the mixer opens while the checkbox still refuses. The
@@ -80,7 +81,7 @@ public static class HapticGate
     public const string FeatureName = "Haptic feedback";
 
     /// <summary>
-    /// The bar: tier 1. <c>MainWindow.Haptics.cs:487</c> reads <c>HasPremiumAccess</c>, which is
+    /// The bar: tier 1. <c>MainWindow.Haptics.cs:489</c> reads <c>HasPremiumAccess</c>, which is
     /// <c>CurrentTier &gt;= PatreonTier.Level1</c> (<c>Services/Account/PatreonService.cs:134</c>).
     /// </summary>
     public const EntitlementTier RequiredTier = EntitlementTier.Supporter;

@@ -74,9 +74,15 @@ public class HapticCapabilityTests
         Assert.Contains("ONE file", buttplug, StringComparison.Ordinal);
         Assert.Contains("message spec v4", buttplug, StringComparison.Ordinal);
 
-        // Lovense needs NO package at all — the shipping provider imports only the BCL — and its
-        // real cost is the hold, because the LAN API expires its own command.
-        Assert.Contains("NO package", lovense, StringComparison.Ordinal);
+        // Lovense needs no HAPTICS-SPECIFIC package — the shipping provider's wire imports are pure
+        // BCL at :1-7, and its one non-BCL using is the app's own logger (Serilog at :8), which this
+        // port does not need because it logs through ILogSink. This is the sentence the owner acts
+        // on, so it is pinned including the qualifier: "imports only the BCL" was WRONG as written
+        // and a reviewer checked it.
+        Assert.Contains("NO HAPTICS-SPECIFIC package", lovense, StringComparison.Ordinal);
+        Assert.Contains("LovenseProvider.cs:1-7", lovense, StringComparison.Ordinal);
+        Assert.Contains("Serilog at :8", lovense, StringComparison.Ordinal);
+        // Its real cost is the hold, because the LAN API expires its own command.
         Assert.Contains("timeSec", lovense, StringComparison.Ordinal);
         Assert.DoesNotContain("Buttplug 5.0.1", lovense, StringComparison.Ordinal);
 
@@ -147,11 +153,21 @@ public class HapticCapabilityTests
         using var sink = HapticSinkFactory.Create();
 
         // A caller whose bad argument is swallowed by a refusing build discovers it on the day the
-        // refusal stops, which is the day a real device is attached to it.
+        // refusal stops, which is the day a real device is attached to it. Each guard is exercised
+        // with the OTHER arguments valid, so none of them is only ever observed through another's
+        // throw — the first draft of this fact passed an empty list with a whitespace key and saw
+        // only the key's exception.
         await Assert.ThrowsAsync<ArgumentException>(
-            () => sink.SetOutputsAsync("   ", [], TestContext.Current.CancellationToken));
+            () => sink.SetOutputsAsync("   ", [new HapticOutput(0, HapticLevel.Silent)],
+                TestContext.Current.CancellationToken));
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => sink.SetOutputsAsync("buttplug:0", null!, TestContext.Current.CancellationToken));
+
+        // IHapticSink documents that an empty list is a caller error and not a silent no-op, and a
+        // contract only a comment believes in is not a contract.
+        var empty = await Assert.ThrowsAsync<ArgumentException>(
+            () => sink.SetOutputsAsync("buttplug:0", [], TestContext.Current.CancellationToken));
+        Assert.Equal("outputs", empty.ParamName);
     }
 
     // =====================================================================================

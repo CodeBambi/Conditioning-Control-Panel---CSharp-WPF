@@ -105,8 +105,8 @@ public class HapticParticipantTests
     [Fact]
     public async Task AREFUSEDTickWritesNOTHING_WhichIsUpstreamsOwnStatementOrder()
     {
-        // MainWindow/MainWindow.Haptics.cs tests the gate at :487, reverts the box at :489 and
-        // RETURNS at :496 — so HapticCfg.Enabled = isEnabled at :499 is reached only when the gate
+        // MainWindow/MainWindow.Haptics.cs tests the gate at :489, reverts the box at :491 and
+        // RETURNS at :497 — so HapticCfg.Enabled = isEnabled at :500 is reached only when the gate
         // allowed. Reversing those two would leave the box visually off and the setting on, and the
         // setting is what survives a restart.
         using var scope = new Scope();
@@ -144,7 +144,7 @@ public class HapticParticipantTests
     [Fact]
     public async Task SWITCHINGOFFIsNEVERGated_SoALapsedPledgeCannotTrapARunningToy()
     {
-        // Upstream's condition is `isEnabled && …` (MainWindow.Haptics.cs:487): the gate only
+        // Upstream's condition is `isEnabled && …` (MainWindow.Haptics.cs:489): the gate only
         // guards turning it ON.
         using var scope = new Scope();
         var participant = scope.Build(entitlement: Entitled(EntitlementTier.Lab));
@@ -215,6 +215,15 @@ public class HapticParticipantTests
         Assert.Equal(EntitlementReasonCodes.TierAuthorityFault, unverified.ReasonCode);
         Assert.DoesNotContain("SECRET-VALUE", string.Join("\n", scope.Log.Lines), StringComparison.Ordinal);
         Assert.DoesNotContain("SECRET-VALUE", unverified.Message, StringComparison.Ordinal);
+
+        // WHAT THIS FACT DOES NOT COVER, said here because the sweep proved it (M-as, the packet's
+        // one survivor). It pins the two things that are OBSERVABLE — the gate's message and the log
+        // — and neither renders the EntitlementReason.Detail this participant builds from the
+        // exception. Swapping ex.GetType().Name for ex.Message there survives this fact and every
+        // other one in the suite, because in this build that detail has NO READER at all:
+        // HapticGate.Decide takes reason.Code and EntitlementOutcome.Describe takes reason.Code.
+        // Dispositioned UNCOVERED rather than equivalent — whichever packet first RENDERS an
+        // entitlement detail inherits the obligation not to render this one.
 
         await participant.StopAsync();
     }
@@ -403,15 +412,32 @@ public class HapticParticipantTests
     }
 
     [Fact]
-    public async Task STOPPINGANeverStartedParticipantIsANoOp()
+    public async Task STOPPINGANeverStartedParticipantStillCOUNTERMANDSAndStillRELEASESTheSink()
     {
+        // It is NOT a no-op, and the difference is reachable rather than theoretical: this
+        // participant is registered LAST, so any earlier participant's phase-3 failure leaves it
+        // constructed and un-started while ApplicationHost.ShutdownAsync still stops everyone. A
+        // sink released only on the happy path is a WebSocket or an HttpClient held open by a
+        // process that has already given up.
         using var scope = new Scope();
-        var participant = scope.Build();
+        var sink = new RecordingSink(HapticProviderRoute.Buttplug, devices: 1);
+        var participant = scope.Build(sink);
 
         await participant.StopAsync();
 
         Assert.False(participant.Running);
-        Assert.Equal(0, participant.AllStops);
+        Assert.Equal(1, participant.AllStops);
+        Assert.Equal(1, sink.StopAlls);
+        Assert.True(sink.Disposed);
+
+        // And the ORDER is upstream's: the all-stop reached the sink BEFORE the sink was torn down
+        // (App.xaml.cs:4401-4407; HapticService.cs:961-962 all-stops and only then disposes).
+        Assert.Equal(1, sink.StopAllsBeforeDispose);
+
+        // Idempotent, and still one all-stop: the latch and Dispose both hold on a second pass.
+        await participant.StopAsync();
+        Assert.Equal(1, participant.AllStops);
+        Assert.Equal(1, sink.StopAlls);
     }
 
     // =====================================================================================
@@ -490,6 +516,11 @@ public class HapticParticipantTests
 
         public bool Disposed { get; private set; }
 
+        /// <summary>How many all-stops had run at the moment Dispose was first called. The order
+        /// witness: an all-stop that arrives after teardown reaches a provider that is already
+        /// gone, which is the defect upstream's own comment describes (App.xaml.cs:4401-4404).</summary>
+        public int StopAllsBeforeDispose { get; private set; } = -1;
+
         public Task<HapticServerObservation> ObserveAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new HapticServerObservation(true, Route, true, true, _devices));
 
@@ -512,7 +543,15 @@ public class HapticParticipantTests
             return Task.FromResult(LastOutcome = new CapabilityState.Available("recorded all-stop"));
         }
 
-        public void Dispose() => Disposed = true;
+        public void Dispose()
+        {
+            if (!Disposed)
+            {
+                StopAllsBeforeDispose = StopAlls;
+            }
+
+            Disposed = true;
+        }
     }
 
     /// <summary>A participant that records WHEN it stopped, on the same monotonic tick the haptic

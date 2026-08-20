@@ -183,7 +183,8 @@ public sealed record HapticServerObservation(
 /// <para><b>LEVEL-SET, and the stop is its own verb.</b> There is deliberately no
 /// <c>Vibrate(intensity, durationMs)</c>, because upstream's own two implementations of that exact
 /// signature disagree about who ends it: <c>ButtplugProvider</c> runs a client-side
-/// <c>Task.Delay(durationMs)</c> and then stops every device itself (<c>:309-331</c>), while
+/// <c>Task.Delay(durationMs)</c> and then stops every device itself (<c>:309-331</c>) — the level it
+/// set LATCHES until the next command (<c>ButtplugProviderV2.cs:27-30</c>) — while
 /// <c>LovenseProvider</c> hands the duration to the SERVER as <c>timeSec</c> — floored at one whole
 /// second, <c>Math.Max(1, durationMs / 1000)</c> (<c>:232-233</c>) — and in Connect mode passes no
 /// duration at all, so <i>"the device maintains vibration until next command"</i> (<c>:242-243</c>).
@@ -205,11 +206,21 @@ public sealed record HapticServerObservation(
 /// That is a named manual gate (<c>HapticSinkFactory.DeviceManualGate</c>) and no automated step on
 /// any platform discharges it.</para>
 ///
-/// <para><b>Nothing in this build sends anything to this sink.</b> Upstream drives it from eight
-/// sites in three of the ported effect modules (<c>Services/Flash/FlashService.cs:1453,1480,1516,1915</c>;
-/// <c>Services/Video/VideoService.cs:2580,4585,6580</c>;
-/// <c>Services/SubliminalService.cs:230</c>). Giving those modules a haptic limb is a later
-/// packet's work. A landed capability is not a working feature.</para>
+/// <para><b>Nothing in this build sends anything to this sink.</b> Upstream drives it from
+/// THIRTEEN sites in three of the ported effect modules — every call that COMMANDS the sink, which
+/// is the enumeration a later packet has to work from:
+/// <c>Services/Flash/FlashService.cs:1453,1480,1516,1627,1915</c>;
+/// <c>Services/Video/VideoService.cs:2580,4585,4673,6580</c>;
+/// <c>Services/Subliminal/SubliminalService.cs:230,297,387,588</c>. Giving those modules a haptic
+/// limb is a later packet's work. A landed capability is not a working feature.</para>
+///
+/// <para><b>Four more sites are ADJACENT and are deliberately not in the thirteen</b>, named here so
+/// nobody has to re-derive why: <c>VideoService.cs:2584</c> and <c>:6584</c> drive
+/// <c>App.Haptics.FunScript</c>, a script player this port has not ported at all; and
+/// <c>VideoService.cs:4567</c> and <c>:4680</c> subscribe to <c>ToyInput.ButtonPressed</c>, which is
+/// haptic INPUT — the toy driving the app — and runs the opposite way through this seam. Settings
+/// reads (<c>FlashService.cs:1602-1607</c>, <c>VideoService.cs:4649-4651</c>,
+/// <c>SubliminalService.cs:584</c>) are not commands and are not counted.</para>
 /// </summary>
 public interface IHapticSink : IDisposable
 {

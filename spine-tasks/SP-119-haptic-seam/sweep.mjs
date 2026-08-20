@@ -130,9 +130,9 @@ const MUTATIONS = [
     replace: `        + "over a second connection "` },
   { id: "M-s", file: F.factory, what: "both routes get the SAME description", suite: "unit",
     find: `        HapticProviderRoute.Lovense =>
-            "Lovense Connect / Lovense Remote needs NO package at all: the shipping provider imports only the BCL "`,
+            "Lovense Connect / Lovense Remote needs NO HAPTICS-SPECIFIC package at all: the shipping provider's "`,
     replace: `        HapticProviderRoute.Lovense =>
-            "Buttplug 5.0.1 needs NO package at all: the shipping provider imports only the BCL "` },
+            "Buttplug 5.0.1 needs NO HAPTICS-SPECIFIC package at all: the shipping provider's "` },
   { id: "M-t", file: F.factory, what: "the device gate stops saying it is downstream of admission", suite: "unit",
     find: `        "MANUAL GATE (undischarged, and it CANNOT be attempted until a provider client is admitted): "`,
     replace: `        "MANUAL GATE (undischarged): "` },
@@ -168,11 +168,18 @@ const MUTATIONS = [
   { id: "M-x", file: F.sink, what: "a DISPOSED sink answers with the admission gap instead of the disposal", suite: "unit",
     find: `        LastOutcome = _disposed`,
     replace: `        LastOutcome = false` },
-  { id: "M-y", file: F.sink, what: "SetOutputs stops validating its arguments", suite: "unit",
+  { id: "M-y", file: F.sink, what: "SetOutputs stops validating its key and its list", suite: "unit",
     find: `        ArgumentException.ThrowIfNullOrWhiteSpace(deviceKey);
         ArgumentNullException.ThrowIfNull(outputs);
-        cancellationToken.ThrowIfCancellationRequested();`,
-    replace: `        cancellationToken.ThrowIfCancellationRequested();` },
+        if (outputs.Count == 0)`,
+    replace: `        if (outputs.Count == 0)` },
+  // Added at code review with the guard it covers: the interface documented that an empty list is a
+  // caller error and nothing enforced it, and the fact that passed [] observed the KEY's throw.
+  { id: "M-bj", file: F.sink, what: "an EMPTY output list is a silent no-op after all", suite: "unit",
+    find: `        if (outputs.Count == 0)
+        {`,
+    replace: `        if (outputs.Count < 0)
+        {` },
   { id: "M-z", file: F.sink, what: "ObserveAsync claims a confirmed server", suite: "unit",
     find: `        return Task.FromResult(HapticServerObservation.NotAsked);`,
     replace: `        return Task.FromResult(new HapticServerObservation(true, HapticProviderRoute.Buttplug, true, true, ["x:0"]));` },
@@ -268,9 +275,31 @@ const MUTATIONS = [
     find: `                    "the entitlement lookup failed: " + ex.GetType().Name));`,
     replace: `                    "the entitlement lookup failed: " + ex.Message));` },
   { id: "M-at", file: F.part, what: "teardown never disposes the sink", suite: "unit",
+    find: `        Sink.Dispose();
+
+        if (!_running)`,
+    replace: `        if (!_running)` },
+  // Added at code review. The early return used to sit ABOVE the disposal, so a participant that
+  // never started leaked its sink — reachable because this one is registered LAST and any earlier
+  // participant's phase-3 failure leaves it constructed and un-started.
+  { id: "M-bk", file: F.part, what: "the sink is released ONLY on the started path (the leak)", suite: "unit",
     find: `        await ShutdownStopAsync().ConfigureAwait(false);
-        Sink.Dispose();`,
-    replace: `        await ShutdownStopAsync().ConfigureAwait(false);` },
+
+        // Then release the sink WHATEVER happened`,
+    replace: `        if (!_running) { return; }
+        await ShutdownStopAsync().ConfigureAwait(false);
+
+        // Then release the sink WHATEVER happened` },
+  // And the ORDER, which is upstream's fixed defect: an all-stop that arrives after the provider is
+  // torn down reaches nothing.
+  { id: "M-bl", file: F.part, what: "the sink is DISPOSED before the all-stop reaches it", suite: "unit",
+    find: `        await ShutdownStopAsync().ConfigureAwait(false);
+
+        // Then release the sink WHATEVER happened`,
+    replace: `        Sink.Dispose();
+        await ShutdownStopAsync().ConfigureAwait(false);
+
+        // Then release the sink WHATEVER happened` },
   { id: "M-au", file: F.part, what: "the connect attempt is not counted", suite: "unit",
     find: `        ConnectAttempts++;
         LastConnectOutcome = await Sink.ConnectAsync(cancellationToken).ConfigureAwait(false);`,

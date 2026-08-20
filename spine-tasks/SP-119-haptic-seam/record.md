@@ -51,7 +51,7 @@ than it reads**, and that narrowing is the whole of §6.
 | # | SP-117's claim | verdict |
 |---|---|---|
 | 1 | a seventh capability folder | **holds.** Six existed (`Overlay`, `Input`, `Audio`, `Video`, `Pointer`, `Glyph`); `Haptics` is the seventh |
-| 2 | a NuGet dependency the csproj does not carry | **holds for ONE of the two providers only.** `ConditioningControlPanel.csproj:60` is `Buttplug` 5.0.1 and `ButtplugProvider.cs:6-7` imports `Buttplug.Client`/`Buttplug.Core.Messages`. **`LovenseProvider.cs:1-8` imports nothing but the BCL** (`System.Net.Http`, `System.Text.Json`). The dependency blocks the Buttplug half and not the Lovense half |
+| 2 | a NuGet dependency the csproj does not carry | **holds for ONE of the two providers only.** `ConditioningControlPanel.csproj:60` is `Buttplug` 5.0.1 and `ButtplugProvider.cs:6-7` imports `Buttplug.Client`/`Buttplug.Core.Messages`. **`LovenseProvider.cs:1-7` is pure BCL** (`System.Net.Http`, `System.Text.Json`) and its one non-BCL `using` is `Serilog` at `:8` — the shipping app's own logger, which this port replaces with `ILogSink`, so no haptics-specific package enters the graph for that route. The dependency blocks the Buttplug half and not the Lovense half |
 | 3 | app-scope wiring in `Lifecycle/**` | **holds.** `App.xaml.cs:533`, `:2060`, `:2103-2105`, `:4406`, `:4524`; zero hits for `App.Haptics` in `MainWindow/MainWindow.StartStop.cs` |
 | 4 | a premium gate | **holds, and there are TWO of them.** The packet cites the enable checkbox (`MainWindow/MainWindow.Haptics.cs:484-503`). The second is `Services/Haptics/Core/HapticMixer.cs:191-204` (`IsGateOpen`), evaluated once per 10 Hz tick, with an open→closed **all-stop** at `:253-262`. Both are ported (§4) |
 
@@ -171,7 +171,7 @@ quoting it today cannot send anybody to fix the wrong thing.
 `Haptics/HapticGate.cs` is a pure function `EntitlementOutcome -> HapticGateDecision` built on
 `EntitlementOutcome.Match`, which does not compile with a branch missing.
 
-**The bar is TIER 1, and that is the difference from the DTRH door.** `MainWindow.Haptics.cs:487`
+**The bar is TIER 1, and that is the difference from the DTRH door.** `MainWindow.Haptics.cs:489`
 reads `HasPremiumAccess`, which is `CurrentTier >= PatreonTier.Level1`
 (`Services/Account/PatreonService.cs:134`) = `EntitlementTier.Supporter`; `DtrhGate.RequiredTier` is
 `Lab`. Same folder, same three answers, a different bar — which is what "consume it" looks like. A
@@ -187,8 +187,8 @@ adds no producer of `NotEntitled` and widens nothing.
 **The gate bites in TWO places, because upstream's does.**
 
 1. **The enable toggle.** The statement ORDER is upstream's and is load-bearing:
-   `MainWindow.Haptics.cs` tests at `:487`, reverts the box at `:489`, tells the user at `:490-495`
-   and **returns** at `:496`, so `HapticCfg.Enabled = isEnabled` at `:499` is reached only when the
+   `MainWindow.Haptics.cs` tests at `:489`, reverts the box at `:491`, tells the user at `:492-496`
+   and **returns** at `:497`, so `HapticCfg.Enabled = isEnabled` at `:500` is reached only when the
    gate allowed. A refused tick therefore writes **nothing** — asserted both at the participant and
    through the REAL checkbox in the headless suite. Switching OFF is never gated (upstream's
    condition is `isEnabled && …`), so a lapsed pledge cannot trap somebody with a running toy.
@@ -202,7 +202,7 @@ Upstream's three haptic gates do not use the same predicate:
 
 | site | predicate |
 |---|---|
-| the enable checkbox (`MainWindow.Haptics.cs:487`) | `App.Patreon?.HasPremiumAccess != true` — **one term** |
+| the enable checkbox (`MainWindow.Haptics.cs:489` — the PREDICATE; `:487` is the `isEnabled` assignment) | `App.Patreon?.HasPremiumAccess != true` — **one term** |
 | the mixer (`HapticMixer.cs:200-201`) | `HasPremiumAccess ?? false \|\| DailyFree?.IsFreeToday("haptics") == true` — **two** |
 | the premium rail's lockband (`MainWindow/MainWindow.PremiumRail.cs:573`) | `TierGate.RequiresPremium(…, "haptics")` — **two** (`Services/TierGate.cs:67-73`) |
 
@@ -223,10 +223,27 @@ lapses mid-run is noticed at the next launch, not within 100 ms.** D198.
 
 ## 5. D179 IS NOT CLOSED, AND THE DOT SAYS SO
 
-**The thirteen ported effect modules are silent to this sink.** Upstream drives it from eight sites in
-three of them — `Services/Flash/FlashService.cs:1453`, `:1480`, `:1516`, `:1915`;
-`Services/Video/VideoService.cs:2580`, `:4585`, `:6580`; `Services/SubliminalService.cs:230` — and
-`Effects/**` was closed to this packet. Giving those modules a haptic limb is a later packet.
+**The thirteen ported effect modules are silent to this sink.** Upstream drives it from **THIRTEEN**
+sites in three of them — `Services/Flash/FlashService.cs:1453`, `:1480`, `:1516`, `:1627`, `:1915`;
+`Services/Video/VideoService.cs:2580`, `:4585`, `:4673`, `:6580`;
+`Services/Subliminal/SubliminalService.cs:230`, `:297`, `:387`, `:588` — and `Effects/**` was closed
+to this packet.
+
+**That count and that path are CORRECTIONS, and they matter because this list is a later packet's
+work item.** The plan (§5), this record's first draft, D202 and the three source comments all said
+"eight sites in three modules" and cited `Services/SubliminalService.cs:230`, **a path that does not
+exist** — the file is `Services/Subliminal/SubliminalService.cs`, and it drives haptics from four
+sites, not one. Flash also drives the luminance layer at `:1627` and Video also rewards a toy-button
+attention hit at `:4673`. The rule the thirteen are counted by is "a call that COMMANDS the sink";
+**four more are ADJACENT and deliberately excluded**, named on `IHapticSink` so nobody re-derives
+them: `VideoService.cs:2584`/`:6584` drive `App.Haptics.FunScript` (a script player this port has not
+ported at all) and `VideoService.cs:4567`/`:4680` subscribe to `ToyInput.ButtonPressed`, which is
+haptic INPUT running the other way through the seam. Settings reads are not commands.
+`spine-tasks/SP-119-haptic-seam/plan.md` is left uncorrected on purpose: it is a checkpoint committed
+before the first product edit and rewriting it would falsify what was known then. **Two artefacts
+outside this packet's File Scope carry the same undercount**: D179 (corrected in place with an
+attributed note, since it is a divergence row) and the board's HAPTICS row (`task-board.md`, a shared
+chokepoint this lane may not commit — flagged for the orchestrator). Giving those modules a haptic limb is a later packet.
 
 **So the dot has only TWO reachable values, and the third one's absence is the finding:**
 
@@ -257,7 +274,7 @@ different for the two halves, which is the part SP-117's one-line summary could 
 | option | csproj cost | code cost | reach | what it costs |
 |---|---|---|---|---|
 | **A. Admit Buttplug** | **ONE line** — `<PackageReference Include="Buttplug" Version="5.0.1" />` into `CcpClient.Desktop.csproj:24-42` | **ONE file** — `Haptics/ButtplugHapticSink.cs` over the §2.3 seam | every Intiface-supported device, on Windows and Linux alike | a third-party package on the port's supply chain. **Unverified here:** its net10.0 TFM compatibility and its licence. The shipping tree's own note says BSD-3 and "pure .NET, one package containing Core + Client + WebSocket connector" (`ButtplugProviderV2.cs:17-19`) — that is READ, not verified against the nupkg on this machine, and the owner should treat it as a claim to check rather than a fact |
-| **B. Admit Lovense** | **ZERO** — `System.Net.Http` + `System.Text.Json` are BCL (`LovenseProvider.cs:1-8`) | **ONE file** plus a URL/mode setting surface and the keep-alive of D2 | Lovense hardware only | a per-vendor client; the LAN one-second `timeSec` floor is a permanent behaviour limit (D3) |
+| **B. Admit Lovense** | **ZERO haptics-specific packages** — `LovenseProvider.cs:1-7` is pure BCL (`System.Net.Http`, `System.Text.Json`); its one non-BCL `using` is `Serilog` at `:8`, the app's own logger, which this port replaces with `ILogSink` | **ONE file** plus a URL/mode setting surface and the keep-alive of D2 | Lovense hardware only | a per-vendor client; the LAN one-second `timeSec` floor is a permanent behaviour limit (D3) |
 | **C. Buttplug WITHOUT the package** | zero | **a REDESIGN, not a file**: a hand-written Buttplug **message spec v4** client over `System.Net.WebSockets.ClientWebSocket` — handshake, `OutputCmd`, the per-feature capability model, device add/remove, spec-version tracking | as A | the port would own a wire protocol somebody else versions. `ButtplugProviderV2.cs:13-27` is the shipping tree's own account of how much that spec moved between v3 and v4 |
 | **D. Admit nothing** | zero | zero | none | haptics stays unported and the thirteen modules stay silent to it. **This packet lands D** |
 
@@ -354,8 +371,10 @@ removed once (the sink seam, §9). It is recorded as an obligation on the packet
 entitlement detail: **that packet must not render this one.**
 
 The fact that DOES exist (`ANAUTHORITYThatTHROWSIsUNKNOWN_AndOnlyItsTYPENAMEIsCarried`) pins what is
-observable — the gate's message and the log carry no part of the exception — and it says in its own
-body what it does not cover.
+observable — the gate's message and the log carry no part of the exception. **At code review that
+fact carried no such note and this record claimed it did; the comment is now really in its body**,
+naming the mutation, naming why nothing discriminates it, and naming the packet that inherits the
+obligation.
 
 ### The false-clean channels, named
 
@@ -444,3 +463,43 @@ with a flat battery in the next room.
   one-shot latch is `Interlocked` and that is reasoning, not a stress result.
 - **The dot has never been seen by a person.** It is asserted as style-resolved classes on an
   `Ellipse` in a headless tree.
+
+---
+
+## 11. WHAT THE CODE REVIEW CHANGED
+
+The review returned APPROVE with eight non-blocking items. All eight are actioned; three were
+carried into other people's work and are the ones that mattered.
+
+1. **The D179 enumeration was an undercount with a wrong path** — "eight sites" and
+   `Services/SubliminalService.cs:230`, a file that does not exist. Corrected to **thirteen** with the
+   counting rule stated and the four adjacent sites named (§5). This is the item with real
+   consequences: the list is a later packet's work item and five missing sites would have left it
+   silently incomplete.
+2. **Every `MainWindow.Haptics.cs` citation was off by two** — including D197's anchor, which pointed
+   at the `isEnabled` assignment (`:487`) rather than the predicate (`:489`). Every behavioural claim
+   attached was correct at the real lines; only the pointers were wrong. Corrected in nine files.
+3. **The owner sentence was checkable and wrong**: `LovenseProvider.cs:1-8` "imports only the BCL" —
+   line 8 is `using Serilog;`. The conclusion is unchanged (Serilog is the app's own logger and this
+   port logs through `ILogSink`), but the sentence the owner acts on now says `:1-7` and names line 8.
+   It is pinned by a fact, so it cannot silently drift back.
+4. `ButtplugProviderV2`'s latch claim is at `:27-30`, not `:31-34`. Corrected, and the citation is
+   now also on the seam's own duration paragraph where the asymmetry is argued.
+5. **`SetOutputsAsync` documented that an empty list is a caller error and nothing enforced it**, and
+   the fact that passed `[]` observed the whitespace key's throw instead. The guard is real now and
+   each of the three arguments is exercised with the other two valid.
+6. **`HapticGate`'s "cannot silently inherit" claim outran its mechanism** — the fact hardcoded ten
+   codes, so an eleventh would arrive unswept. Now reflected off `EntitlementReasonCodes`, with a
+   blindness guard, which is the pattern `LaunchFaultTextTests.cs:109-116` already uses.
+7. **This record claimed the M-as fact said in its own body what it did not cover; it did not.** The
+   comment is written now (§8).
+8. **`StopAsync` returned early on `!_running` without releasing the sink.** Reachable rather than
+   theoretical: this participant is registered LAST, so any earlier participant's phase-3 failure
+   leaves it constructed and un-started while teardown still stops everyone. It now all-stops and
+   then disposes on every path — **in that order**, which is upstream's (`HapticService.cs:961-962`
+   all-stops and only then disposes the mixer) — and the fact pins the order with a witness on the
+   recording sink rather than only the outcome. `_shutdownStopped` is still never reset; that is now
+   a documented decision on the member, with the condition under which it must change.
+
+Items 5-8 changed product code and added assertions but no test methods, so the declared delta is
+unchanged at **+56 / +8**.

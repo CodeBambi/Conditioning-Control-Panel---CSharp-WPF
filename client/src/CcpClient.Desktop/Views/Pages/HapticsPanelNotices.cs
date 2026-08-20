@@ -61,7 +61,7 @@ public static class HapticsPanelNotices
     /// (<c>Entitlement/EntitlementOutcome.cs:7-17</c>). The Windows app has only ONE refusal here —
     /// <c>App.Patreon?.HasPremiumAccess != true</c> shows "Haptic feedback is available for Patreon
     /// supporters." whether the answer was "no pledge" or "I could not ask"
-    /// (<c>MainWindow/MainWindow.Haptics.cs:487-496</c>). This port keeps them apart.</para>
+    /// (<c>MainWindow/MainWindow.Haptics.cs:489-497</c>). This port keeps them apart.</para>
     /// </summary>
     public static string DescribeGate(HapticGateDecision decision)
     {
@@ -111,10 +111,11 @@ public static class HapticsPanelNotices
     ///
     /// <para>It is on the PAGE rather than only in a record, on the precedent SP-111, SP-113, SP-115
     /// and SP-117 set for a half-ported row. The last sentence is D179: the thirteen ported effect
-    /// modules are silent to this sink, where the Windows app drives it from eight sites in three of
-    /// them (<c>Services/Flash/FlashService.cs:1453,1480,1516,1915</c>;
-    /// <c>Services/Video/VideoService.cs:2580,4585,6580</c>;
-    /// <c>Services/SubliminalService.cs:230</c>).</para>
+    /// modules are silent to this sink, where the Windows app drives it from THIRTEEN sites in three
+    /// of them (<c>Services/Flash/FlashService.cs:1453,1480,1516,1627,1915</c>;
+    /// <c>Services/Video/VideoService.cs:2580,4585,4673,6580</c>;
+    /// <c>Services/Subliminal/SubliminalService.cs:230,297,387,588</c>; the full enumeration is on
+    /// <see cref="Haptics.IHapticSink"/>).</para>
     /// </summary>
     public static string DescribeAbsences() =>
         "The Windows app's haptics page also has a provider list with two server addresses, an auto-connect box, a "

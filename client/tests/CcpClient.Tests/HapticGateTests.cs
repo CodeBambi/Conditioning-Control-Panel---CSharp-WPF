@@ -10,7 +10,7 @@ namespace CcpClient.Tests;
 /// <para>The one rule every fact here serves: <b>"I could not tell" must never render as "you are
 /// not a patron."</b> The shipping app breaks it on this exact surface —
 /// <c>App.Patreon?.HasPremiumAccess != true</c> shows one message for both answers
-/// (<c>MainWindow/MainWindow.Haptics.cs:487-496</c>) — and the port's typed outcome exists so it
+/// (<c>MainWindow/MainWindow.Haptics.cs:489-497</c>) — and the port's typed outcome exists so it
 /// cannot (<c>Entitlement/EntitlementOutcome.cs:7-17</c>).</para>
 /// </summary>
 public class HapticGateTests
@@ -51,21 +51,20 @@ public class HapticGateTests
     [Fact]
     public void EVERYUNKNOWNAnswerRefusesUNVERIFIED_AndCarriesItsOwnReasonCode()
     {
-        var codes = new[]
-        {
-            EntitlementReasonCodes.HostAppDataAbsent,
-            EntitlementReasonCodes.HostTokenAbsent,
-            EntitlementReasonCodes.HostTokenEmpty,
-            EntitlementReasonCodes.HostTokenUndecryptable,
-            EntitlementReasonCodes.HostReadFailed,
-            EntitlementReasonCodes.UnsupportedPlatform,
-            EntitlementReasonCodes.TierAuthorityAbsent,
-            EntitlementReasonCodes.TierAuthorityUnreachable,
-            EntitlementReasonCodes.TierAuthorityRejected,
-            EntitlementReasonCodes.TierAuthorityFault,
-        };
+        // REFLECTED, not hand-listed. HapticGate's own comment claims a reason code added later
+        // "cannot silently inherit" the refusal wording, and a hardcoded list cannot hold that claim:
+        // the eleventh code would arrive unswept and the fact would still pass. This is the pattern
+        // LaunchFaultTextTests.cs:109-116 already uses over the same vocabulary.
+        var codes = typeof(EntitlementReasonCodes)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(string) && f.IsLiteral)
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
-        Assert.NotEmpty(codes);
+        // The blindness guard the reflection needs: a sweep that discovers nothing passes vacuously.
+        Assert.True(codes.Length >= 10,
+            $"only {codes.Length} entitlement reason codes were discovered — the sweep has gone blind");
         Assert.All(codes, code =>
         {
             var decision = HapticGate.Decide(

@@ -77,6 +77,17 @@ public sealed class UnadmittedHapticSink : IHapticSink
         // attached to it.
         ArgumentException.ThrowIfNullOrWhiteSpace(deviceKey);
         ArgumentNullException.ThrowIfNull(outputs);
+        if (outputs.Count == 0)
+        {
+            // IHapticSink.SetOutputsAsync says an empty list is a caller error and not a silent
+            // no-op, and a contract only one comment believes in is not a contract. It is enforced
+            // HERE, in the refusing build, for the same reason the two guards above are: a caller
+            // whose mistake is swallowed today discovers it on the day a real device is attached.
+            throw new ArgumentException(
+                "an empty output list commands nothing; call StopAllAsync to stop, or send a silent level",
+                nameof(outputs));
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
         RefusedCalls++;
         return Task.FromResult(Refuse());
