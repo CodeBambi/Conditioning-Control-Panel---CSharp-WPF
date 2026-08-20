@@ -118,7 +118,11 @@ async function copyText(text) {
 export function createReportCard({ ceremonies, toast, log } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const shout = typeof toast === 'function' ? toast : () => {};
-  const root = el('div', 'arc-panel');
+  // The report is a fullscreen beat now (shell marks <html> arc-report-on):
+  // the stage is the night ground under a desk lamp, and everything the card
+  // used to box sits on one graded PAPER laid on it. Same DOM order, same
+  // class names on the rows/grades/share block - only the frame changed.
+  const root = el('div', 'arc-reportstage');
 
   /**
    * @param {Object} state
@@ -136,8 +140,13 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
     const classes = (s.timetable && s.timetable.classes) || [];
     root.textContent = '';
 
-    root.appendChild(el('p', 'arc-kicker', s.title || t('report_card', 'Report Card')));
-    root.appendChild(el('h2', 'arc-h2', s.dateLabel || (s.timetable && s.timetable.dateSeed) || ''));
+    /* the paper under the lamp - every block below lands on it */
+    const paper = el('div', 'arc-report-paper');
+    root.appendChild(paper);
+    const put = (n) => paper.appendChild(n);
+
+    put(el('p', 'arc-kicker', s.title || t('report_card', 'Report Card')));
+    put(el('h2', 'arc-h2', s.dateLabel || (s.timetable && s.timetable.dateSeed) || ''));
 
     /* --- the three classes --- */
     const strip = el('div', 'reportcard');
@@ -156,7 +165,7 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
       }
       strip.appendChild(cell);
     }
-    root.appendChild(strip);
+    put(strip);
 
     /* --- attendance --- */
     const att = el('div', 'arc-classbar');
@@ -175,12 +184,12 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
     if (streak.perfectDays) {
       att.appendChild(el('span', 'chip', t('perfect_attendance', 'Perfect Attendance') + ' x' + (streak.perfectDays | 0)));
     }
-    root.appendChild(att);
+    put(att);
 
     /* --- perfect attendance stamp (shared ceremony) --- */
     if (s.perfect) {
       const stampHost = el('div', 'arc-classbar');
-      root.appendChild(stampHost);
+      put(stampHost);
       if (ceremonies) {
         try {
           ceremonies.stamp({
@@ -220,7 +229,7 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
         });
         box.appendChild(btn);
         box.appendChild(el('pre', 'arc-sharepreview', text));
-        root.appendChild(box);
+        put(box);
       }
     }
 
@@ -231,7 +240,7 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
     done.addEventListener('click', () => { try { if (s.onDone) s.onDone(); } catch (e) { /* noop */ } });
     foot.appendChild(done);
     if (s.tier != null) foot.appendChild(el('span', 'chip year', tierLabel(s.tier)));
-    root.appendChild(foot);
+    put(foot);
 
     return root;
   }

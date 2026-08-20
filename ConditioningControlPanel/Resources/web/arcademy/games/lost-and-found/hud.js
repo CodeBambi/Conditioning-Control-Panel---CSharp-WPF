@@ -41,12 +41,20 @@ export function createHud(o) {
   const wrap = el('div', 'g-lf');
 
   /* --------------------------------- HUD ---------------------------------- */
+  /* Floating evidence polaroid (styles.js pins and tilts it); the tally slots
+     stamp pink one by one as finds are claimed. */
   const hud = el('div', 'g-lf-hud');
   const tchip = el('span', 'g-lf-tchip');
   const tart = el('span', 'g-lf-tt');
   const tlabel = el('small', null, t('lf_find_prompt', 'Find her'));
   const tcount = el('b', null, '0 / 0');
-  if (tchip) { tchip.appendChild(tart); tchip.appendChild(tlabel); tchip.appendChild(tcount); }
+  const slots = el('span', 'g-lf-slots');
+  if (tchip) {
+    tchip.appendChild(tart);
+    tchip.appendChild(tlabel);
+    tchip.appendChild(tcount);
+    if (slots) tchip.appendChild(slots);
+  }
   const clock = el('span', 'chip num', opts.zen ? t('lf_zen_clock', '--:--') : '00:00');
   const streakLabel = el('span', 'chip', t('streak', 'Streak'));
   const streakMount = el('span', 'g-lf-streak');
@@ -123,9 +131,26 @@ export function createHud(o) {
     streakMount,
     stampAnchor,
 
-    /** "4 / 5" - numerals need no lexicon row. */
+    /** "4 / 5" - numerals need no lexicon row. The tally slots mirror it. */
     setProgress(found, total) {
       if (tcount) tcount.textContent = found + ' / ' + total;
+      if (slots) {
+        const want = Math.max(0, total | 0);
+        while (slots.children && slots.children.length > want) {
+          try { slots.children[slots.children.length - 1].remove(); } catch (e) { break; }
+        }
+        while (slots.children && slots.children.length < want) {
+          const s = el('span', 'g-lf-slot');
+          if (!s) break;
+          slots.appendChild(s);
+        }
+        const kids = slots.children || [];
+        for (let i = 0; i < kids.length; i++) {
+          const k = kids[i];
+          if (!k || !k.classList) continue;
+          if (i < found) k.classList.add('on'); else k.classList.remove('on');
+        }
+      }
     },
     setPrompt(text) { if (tlabel) tlabel.textContent = text; },
     setClock(secLeft) {

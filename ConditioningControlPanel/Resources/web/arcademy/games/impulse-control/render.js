@@ -91,10 +91,12 @@ export function createRender({ root, t, ceremonies, showRt, reduced, log } = {})
     chrome.appendChild(warn);
     wrap.appendChild(chrome);
 
-    /* arena */
+    /* arena - the whole hall is the tap surface */
     const arena = el('div', 'g-ic-arena');
     arena.setAttribute('role', 'button');
     arena.setAttribute('tabindex', '0');
+    // Set dressing (pointer-events:none in CSS): the door you came in through.
+    arena.appendChild(el('span', 'g-ic-door'));
     const aperture = el('div', 'g-ic-aperture');
     const ring = el('span', 'g-ic-ring');
     const ash = el('span', 'g-ic-ash');
@@ -146,10 +148,15 @@ export function createRender({ root, t, ceremonies, showRt, reduced, log } = {})
     if (p.block != null && n.block) n.block.textContent = String(p.block);
     if (p.nogoPct != null && n.share) n.share.textContent = Math.round(p.nogoPct) + '%';
   }
-  /** The tier-2 taste-of-the-twist is TELEGRAPHED: the player is warned first. */
+  /** The tier-2 taste-of-the-twist is TELEGRAPHED: the player is warned first -
+   *  and the whole room grows uneasy (a slow light pulse) while the warning is up. */
   function telegraph(on) {
     if (!n.warn) return;
     if (on) n.warn.classList.add('on'); else n.warn.classList.remove('on');
+    if (n.wrap) {
+      if (on) n.wrap.classList.add('room-armed');
+      else n.wrap.classList.remove('room-armed');
+    }
   }
 
   /* ------------------------------------------------------------- stimulus */
@@ -212,10 +219,18 @@ const VIDEO_RE = /\.(mp4|m4v|webm|mov)(\?|#|$)/i;
   }
 
   /* ------------------------------------------------------------- feedback */
-  /** Correct GO: LOUD. Ring punch, gold ms readout, gild on a personal best. */
+  /** THE ROOM REACTS: a class on the stage wrap animates the spotlight layer
+   *  (style.js .room-*). Dresses existing beats only - never a timing change,
+   *  and reduced motion collapses every one of these to a cut in CSS. */
+  function roomBeat(kind, ms) {
+    if (n.wrap) flash(n.wrap, 'room-' + kind, ms);
+  }
+
+  /** Correct GO: LOUD. Ring punch, gold ms readout, the light brightens. */
   function hit(o) {
     const p = o || {};
     flash(n.ring, 'go', soft ? 260 : 640);
+    roomBeat('go', soft ? 260 : 640);
     if (wantRt && n.rt) {
       n.rt.textContent = (p.rtMs == null ? '--' : Math.round(p.rtMs)) + ' ms';
       n.rt.classList.remove('slow', 'best');
@@ -226,14 +241,18 @@ const VIDEO_RE = /\.(mp4|m4v|webm|mov)(\?|#|$)/i;
     if (p.edge) flash(n.edge, 'on', 480);
   }
 
-  /** Correct withhold: SERENE. The decoy dissolves to ash, one calm tick. */
+  /** Correct withhold: SERENE. The decoy dissolves to ash, the light dims
+   *  approvingly - restraint is soothed at room scale. */
   function withhold() {
     flash(n.ash, 'on', soft ? 320 : 720);
+    roomBeat('calm', soft ? 400 : 1200);
   }
 
-  /** An error: no shouting. The toast does the attributing. */
+  /** An error: no shouting from the UI - but the spotlight snaps. The toast
+   *  does the attributing. */
   function errorMark() {
     if (n.aperture) flash(n.aperture, 'tight', 420);
+    roomBeat('snap', 460);
   }
 
   /** The clean-chain notch: the aperture ring tightens as the streak climbs. */
@@ -274,6 +293,9 @@ const VIDEO_RE = /\.(mp4|m4v|webm|mov)(\?|#|$)/i;
     if (body) n.toast.appendChild(document.createTextNode(body));
     if (clean) n.toast.classList.add('clean'); else n.toast.classList.remove('clean');
     n.toast.classList.add('on');
+    // An induced attribution tints the whole hall pink - the machine working.
+    // Clean errors leave the room neutral: that one's yours, not the room's.
+    if (!clean) roomBeat('lie', soft ? 400 : 950);
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = later(() => { if (n.toast) n.toast.classList.remove('on'); }, 4200);
   }

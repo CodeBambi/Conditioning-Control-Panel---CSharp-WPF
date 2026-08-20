@@ -211,6 +211,42 @@ export default {
     }
 
     /* ---------------------- rendering ------------------------------------ */
+    /** The room: lamp pools, door-neon bleed, floor line, dust motes, vignette.
+     *  DECORATION ONLY - pointer-events:none, aria-hidden, occludes nothing. */
+    function roomLayer() {
+      const room = el('div', 'g-dt-room');
+      room.setAttribute('aria-hidden', 'true');
+      room.appendChild(el('div', 'g-dt-neonbleed'));
+      const lampA = el('div', 'g-dt-lamp');
+      lampA.style.setProperty('left', '4%');
+      lampA.style.setProperty('top', '-8%');
+      room.appendChild(lampA);
+      const lampB = el('div', 'g-dt-lamp b');
+      lampB.style.setProperty('right', '2%');
+      lampB.style.setProperty('top', '-6%');
+      room.appendChild(lampB);
+      room.appendChild(el('div', 'g-dt-floor'));
+      if (!reduced) {
+        // fixed table, not rng: ambience must not consume a seeded stream
+        const motes = [
+          ['12%', '68%', '9s', '0s'], ['22%', '80%', '11s', '2s'], ['36%', '58%', '10s', '4s'],
+          ['48%', '74%', '8.5s', '1s'], ['58%', '62%', '12s', '3s'], ['68%', '82%', '9.5s', '5s'],
+          ['78%', '56%', '11s', '6s'], ['88%', '72%', '10s', '2.5s'], ['30%', '38%', '13s', '7s'],
+          ['70%', '34%', '12.5s', '1.5s'], ['8%', '44%', '10.5s', '3.5s'], ['92%', '46%', '9s', '6.5s'],
+        ];
+        for (const [x, y, tt, dl] of motes) {
+          const m = el('span', 'g-dt-mote');
+          m.style.setProperty('--x', x);
+          m.style.setProperty('--y', y);
+          m.style.setProperty('--t', tt);
+          m.style.setProperty('--dl', dl);
+          room.appendChild(m);
+        }
+      }
+      room.appendChild(el('div', 'g-dt-vignette'));
+      return room;
+    }
+
     function msg(text, warn) {
       if (!msgEl) return;
       msgEl.textContent = String(text == null ? '' : text);
@@ -495,6 +531,11 @@ export default {
       jackpot = roll('vr') < (VR_BY_TIER[tier - 1] || 0.3);
       const word = entry.groups.join(' ').toUpperCase();
 
+      // the solved row earns its chalk underline (rowIndex is still this row -
+      // afterReveal only advances it on a miss)
+      const solvedRow = rowEls[rowIndex];
+      if (solvedRow) solvedRow.classList.add('solved');
+
       if (ladder) ladder.absorbDressing(jackpot ? 'confetti' : 'petals');
       fx('sub_flash', { text: word, variant: 'centre' });
       tick(jackpot ? 'jackpot' : 'sting', 0.6);
@@ -735,11 +776,26 @@ export default {
         injectStyles();
         ctx.root.textContent = '';
         wrap = el('div', 'g-dt');
+        // the room first, so every light pool sits under the play surfaces
+        wrap.appendChild(roomLayer());
         buildHud(wrap);
-        buildBoard(wrap);
+        // the lesson wall: header + chalkboard slab + chalk-note message line,
+        // centered in the flexible zone; the desk (keyboard) anchors the bottom
+        const zone = el('div', 'g-dt-stagezone');
+        zone.appendChild(el('p', 'g-dt-lesson', t('dt_lesson_header', "Today's Lesson")));
+        const slab = el('div', 'g-dt-slab');
+        const doodleL = el('span', 'g-dt-doodle l');
+        doodleL.setAttribute('aria-hidden', 'true');
+        slab.appendChild(doodleL);
+        const doodleR = el('span', 'g-dt-doodle r');
+        doodleR.setAttribute('aria-hidden', 'true');
+        slab.appendChild(doodleR);
+        buildBoard(slab);
+        zone.appendChild(slab);
         msgEl = el('p', 'g-dt-msg');
         msgEl.setAttribute('role', 'status');
-        wrap.appendChild(msgEl);
+        zone.appendChild(msgEl);
+        wrap.appendChild(zone);
         buildKeyboard(wrap, layout);
         ctx.root.appendChild(wrap);
 

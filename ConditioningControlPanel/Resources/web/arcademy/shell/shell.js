@@ -251,8 +251,29 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // The campus owns a 1s bell interval; a screen wipe must not orphan it.
     if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
     extrasBox = null;
+    // Every screen switch funnels through here, so no throw path can strand
+    // the immersive stage lock (the campus's arc-campus-on unwinds in its own
+    // destroy above, same guarantee).
+    setStage(null);
     if (!dom || !dom.screen) return;
     dom.screen.textContent = '';
+  }
+
+  /**
+   * The immersive stage lock (the campus pattern, generalised). While a class
+   * or the report card is up the page IS the scene: <html> carries the marker
+   * class (styles.css pins the stage to the viewport and locks body scroll)
+   * and the topbar retires - the proctor strip / the report's own chrome carry
+   * its job. clearScreen() always unwinds it.
+   * @param {?string} mode  'arc-class-on' | 'arc-report-on' | null
+   */
+  function setStage(mode) {
+    const html = document.documentElement;
+    if (html && html.classList) {
+      html.classList.remove('arc-class-on', 'arc-report-on');
+      if (mode) html.classList.add(mode);
+    }
+    if (dom && dom.topbar) dom.topbar.hidden = !!mode;
   }
 
   /* ---------------------- top bar --------------------------------------- */
@@ -526,12 +547,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       onDone: () => showBoard(),
     });
     dom.screen.appendChild(reportCard.root);
+    setStage('arc-report-on');
   }
 
   /* ============================ THE CLASS RUNNER ======================== */
+  /**
+   * The classroom is the window: a viewport-pinned stage (game root fills it,
+   * edge to edge) under a slim floating "proctor strip" that carries what the
+   * old boxed class bar did. The strip ignores the pointer outside its own
+   * children, and games keep critical interactives clear of the top ~56px.
+   */
   function classScreenChrome(cls, gradeTier, retake) {
-    const panel = el('div', 'arc-panel');
-    const bar = el('div', 'arc-classbar');
+    const panel = el('div', 'arc-classstage');
+
+    const root = el('div', 'arc-classroot');
+    panel.appendChild(root);
+
+    const bar = el('div', 'arc-proctor');
     const back = el('button', 'btn ghost', t('leave_class', 'Leave class'));
     back.type = 'button';
     back.addEventListener('click', () => showBoard());
@@ -545,8 +577,6 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     bar.appendChild(clock);
     panel.appendChild(bar);
 
-    const root = el('div', 'arc-classroot');
-    panel.appendChild(root);
     return { panel, root, clock };
   }
 
@@ -557,6 +587,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     clearScreen();
     renderTopbar();
     dom.screen.appendChild(active.panel);
+    setStage('arc-class-on');
     pauseClass(false);
   }
 
@@ -756,6 +787,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     };
 
     dom.screen.appendChild(chrome.panel);
+    setStage('arc-class-on');
     bridge.send({ type: 'class-started', gameKey: cls.gameKey, gradeTier });
 
     try {
@@ -1074,6 +1106,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (destroyed) return;
       destroyed = true;
       teardownClass();
+      setStage(null);
       if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
       if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } }

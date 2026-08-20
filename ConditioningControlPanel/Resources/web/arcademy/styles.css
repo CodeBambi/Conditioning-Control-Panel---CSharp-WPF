@@ -251,6 +251,67 @@ kbd {
   padding:10px 12px; color:var(--ink-dim); overflow-x:auto; max-width:100%;
 }
 
+/* ---- the fullscreen report beat (shell marks <html> arc-report-on) ----
+   The stage is the night ground under a desk lamp; the report itself is a
+   graded PAPER laid on it. Base .reportcard/.rcell/.grade rules above still
+   serve the campus board foot - everything here is scoped to the stage. */
+html.arc-report-on body { overflow:hidden; }
+.arc-reportstage {
+  position:fixed; inset:0; z-index:10;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(16px, 4vh, 48px);
+  overflow:auto;                      /* a short window scrolls the paper, never clips Done */
+  background:
+    radial-gradient(1000px 760px at 50% 24%, color-mix(in srgb, var(--gold), transparent 84%), transparent 66%),
+    radial-gradient(440px 340px at 50% 6%, color-mix(in srgb, var(--gold), transparent 70%), transparent 72%),
+    radial-gradient(135% 110% at 50% 50%, var(--ground) 55%, color-mix(in srgb, var(--ground), black 45%) 100%);
+}
+.arc-report-paper {
+  /* The paper OWNS the frame - a timid sheet floating in darkness is the exact
+     negative-space complaint this wave exists to kill. */
+  width:min(1040px, 92vw); margin:auto;  /* margin:auto keeps it centred AND scrollable */
+  font-size:16px;
+  position:relative;
+  background:
+    radial-gradient(620px 260px at 50% -60px, color-mix(in srgb, var(--gold), transparent 82%), transparent 72%),
+    repeating-linear-gradient(180deg, transparent 0 27px, color-mix(in srgb, var(--line), transparent 62%) 27px 28px),
+    linear-gradient(168deg, var(--panel), var(--navy) 70%);
+  border:var(--hairline); border-radius:6px;
+  box-shadow:0 34px 90px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.07);
+  padding:30px 36px 26px;
+  transform:rotate(-.6deg);
+  animation:arc-paper-in .5s cubic-bezier(.2,1.2,.4,1) both;
+}
+@keyframes arc-paper-in {
+  from { transform:translateY(28px) rotate(1.4deg); opacity:0; }
+  to   { transform:translateY(0) rotate(-.6deg); opacity:1; }
+}
+/* the red margin rule every school paper has */
+.arc-report-paper::before {
+  content:""; position:absolute; top:0; bottom:0; left:26px; width:1px;
+  background:color-mix(in srgb, var(--pink-deep), transparent 45%);
+}
+.arc-reportstage .arc-h2 { font-size:22px; letter-spacing:.18em; }
+.arc-reportstage .reportcard {
+  display:flex; flex-direction:column; gap:0; align-items:stretch;
+  border-top:0; margin-top:18px; padding-top:0;
+}
+.arc-reportstage .rcell {
+  display:flex; align-items:center; gap:14px;
+  background:none; border:0; border-radius:0; padding:11px 2px;
+  border-bottom:1px dashed color-mix(in srgb, var(--line), transparent 25%);
+  font-size:14px; color:var(--ink);
+}
+.arc-reportstage .rcell > span:nth-child(2) { flex:1; letter-spacing:.04em; }
+.arc-reportstage .rcell .num { color:var(--gold); }
+.arc-reportstage .grade {
+  font-size:22px; min-width:40px; height:40px; border-radius:8px;
+  transform:rotate(-5deg);
+  box-shadow:0 3px 10px rgba(0,0,0,.45);
+}
+.arc-reportstage .arc-classbar { margin:16px 0 0; }
+.arc-reportstage .arc-sharepreview { background:color-mix(in srgb, var(--flap-well), transparent 25%); }
+
 /* ============================ CEREMONIES ================================= */
 .arc-ceremony { position:fixed; inset:0; z-index:45; pointer-events:none; }
 .arc-stamp {
@@ -279,20 +340,46 @@ kbd {
 @keyframes arc-seg { from { transform:scaleX(.2); opacity:.3; } to { transform:none; opacity:1; } }
 
 /* ============================ CLASS RUNNER =============================== */
+/* THE CLASSROOM IS THE WINDOW (campus pattern). While a class is up shell.js
+   marks <html> with arc-class-on: the stage pins to the viewport, body scroll
+   locks and the topbar retires - the proctor strip below carries its job.
+   Games design edge-to-edge inside .arc-classroot and keep critical controls
+   clear of the top ~56px, where the strip lives. */
+html.arc-class-on body { overflow:hidden; }
+.arc-classstage { position:fixed; inset:0; z-index:10; background:var(--ground); }
+.arc-classroot {
+  position:absolute; inset:0;
+  background:var(--ground);
+  overflow:hidden;
+}
+/* The proctor strip. Slim, translucent, and it must never eat a click outside
+   its own controls: the container (and the flexible spacer) ignore the pointer,
+   the real children re-arm it. */
+.arc-proctor {
+  position:absolute; top:0; left:0; right:0; z-index:30;
+  display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+  min-height:52px; padding:8px 16px;
+  background:color-mix(in srgb, var(--ground), transparent 35%);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid color-mix(in srgb, var(--line), transparent 45%);
+  pointer-events:none;
+}
+.arc-proctor > * { pointer-events:auto; }
+.arc-proctor > .arc-spacer { pointer-events:none; }
+.arc-proctor .arc-title {
+  font-family:var(--disp); font-size:14px; letter-spacing:.12em; color:var(--ink);
+  text-shadow:0 0 14px rgba(0,0,0,.6);
+}
 .arc-classbar {
   display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:12px;
 }
-.arc-classroot {
-  position:relative; min-height:420px;
-  background:var(--ground); border:var(--hairline); border-radius:var(--radius);
-  overflow:hidden;
-}
 .arc-fx { position:fixed; inset:0; z-index:40; pointer-events:none; overflow:hidden; }
 
-/* Placeholder card the four game STUBS render (game agents replace these). */
+/* Placeholder card the four game STUBS render (game agents replace these).
+   Inside the fullscreen root it centers on the whole stage. */
 .arc-stub {
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:14px; min-height:420px; padding:28px; text-align:center;
+  gap:14px; min-height:100%; padding:28px; text-align:center;
 }
 .arc-stub h3 { font-family:var(--disp); font-size:22px; letter-spacing:.06em; margin:0; }
 .arc-stub dl {
@@ -302,14 +389,20 @@ kbd {
 .arc-stub dt { color:var(--ink-faint); text-align:right; }
 .arc-stub dd { margin:0; color:var(--ink); }
 
-/* class_suspended treatment (SYNTHESIS #8) - one internal key, lexicon flavor. */
+/* class_suspended treatment (SYNTHESIS #8) - one internal key, lexicon flavor.
+   The root is the viewport now, so this covers the whole window; it sits ABOVE
+   the proctor strip on purpose - its own Resume / Leave class buttons are the
+   single way out of a frozen class (traps 27/29: look restyled, wiring law
+   unchanged). */
 .arc-suspended {
-  position:absolute; inset:0; z-index:12;
+  position:absolute; inset:0; z-index:35;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:12px; padding:24px; text-align:center;
+  gap:14px; padding:24px; text-align:center;
   background:rgba(20,20,43,.94); backdrop-filter:blur(6px);
 }
-.arc-suspended .arc-h2 { color:var(--gold); }
+.arc-suspended .arc-h2 { color:var(--gold); font-size:22px; letter-spacing:.16em; }
+.arc-suspended .arc-note { font-size:13px; max-width:44ch; }
+.arc-suspended .arc-classbar { margin-bottom:0; justify-content:center; }
 
 /* ============================ SETTINGS =================================== */
 .arc-settings { display:grid; gap:14px; }

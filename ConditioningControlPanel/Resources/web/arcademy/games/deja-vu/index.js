@@ -177,7 +177,7 @@ export default {
     /* ---- dom ------------------------------------------------------------ */
     let stage = null; let grid = null; let well = null; let hint = null;
     let meterWrap = null; let swapChip = null; let clockChip = null;
-    let peekBtn = null; let cramRow = null;
+    let peekBtn = null; let cramRow = null; let rack = null;
 
     /* ==================================================================== *
      * TIMERS - every step goes through run() so a suspend freezes the class
@@ -240,6 +240,16 @@ export default {
       root.textContent = '';
       stage = el('div', 'g-dv-stage');
 
+      /* The lab itself: ambience layer under everything, decoration only.
+       * (Corner monitor glows ride the stage background; these are the moving
+       * parts - scanlines, the oscilloscope sweep, the vignette.) */
+      const lab = el('div', 'g-dv-lab');
+      lab.setAttribute('aria-hidden', 'true');
+      lab.appendChild(el('span', 'g-dv-scanlines'));
+      lab.appendChild(el('span', 'g-dv-sweep'));
+      lab.appendChild(el('span', 'g-dv-vig'));
+      stage.appendChild(lab);
+
       /* HUD: the shared 10-segment streak meter, the swap budget, the bell. */
       const hud = el('div', 'g-dv-hud');
       meterWrap = el('span', 'g-dv-meterwrap');
@@ -265,6 +275,7 @@ export default {
       const wrap = el('div', 'g-dv-boardwrap');
       grid = el('div', 'g-dv-grid');
       grid.style.setProperty('--g-dv-cols', String(dials.cols));
+      grid.style.setProperty('--g-dv-rows', String(dials.rows));
       grid.setAttribute('role', 'group');
       grid.setAttribute('aria-label', t('game_deja_vu', 'Deja Vu'));
       well = el('div', 'g-dv-flashwell');
@@ -288,7 +299,25 @@ export default {
 
       hint = el('p', 'g-dv-hint', t('dv_deal_hint', 'Dealing the board.'));
       stage.appendChild(hint);
+
+      /* The specimen rack: one slide chip per matched pair, filed at the
+       * frame's edge. Pure decoration (pointer-events:none in CSS) - locked
+       * cells stay on the grid because the mutation laws key off them. */
+      rack = el('aside', 'g-dv-rack');
+      rack.setAttribute('aria-hidden', 'true');
+      rack.appendChild(el('span', 'g-dv-rack-label', t('dv_rack_label', 'Specimens')));
+      stage.appendChild(rack);
+
       root.appendChild(stage);
+    }
+
+    /** File a matched pair into the rack (decoration; must never throw). */
+    function rackAdd(pairId) {
+      if (!rack) return;
+      try {
+        const glyph = GLYPHS[((pairId % GLYPHS.length) + GLYPHS.length) % GLYPHS.length];
+        rack.appendChild(el('span', 'g-dv-slide', glyph));
+      } catch (e) { /* the rack is scenery */ }
     }
 
     function buildCell(i) {
@@ -393,6 +422,7 @@ export default {
 
     function preview() {
       setHint('dv_preview_hint', 'Memorize the board.');
+      if (grid) grid.classList.add('scanning');       // the machine shows you
       for (const c of cells) {
         applyMedia(c);
         c.card.classList.add('up');
@@ -406,6 +436,7 @@ export default {
     }
 
     function previewDown() {
+      if (grid) grid.classList.remove('scanning');    // the machine is done showing
       for (const c of cells) {
         c.card.classList.add('flipping');
         playFace(c, false);
@@ -504,6 +535,7 @@ export default {
         if (!c.wax) { c.wax = el('span', 'g-dv-wax', '★'); c.holder.appendChild(c.wax); }
         playFace(c, loopPolicy.play);
       }
+      rackAdd(pairId);
       try {
         ctx.ceremonies.stamp({ text: t('dv_stamp_match', 'PAIR'), target: cells[b].holder });
       } catch (e) { /* noop */ }
@@ -1085,12 +1117,16 @@ export default {
       pause() {
         if (paused) return;
         paused = true;
+        // the lab holds its breath: every CSS animation (sweep, beam, shudder)
+        // freezes in place via animation-play-state
+        if (stage) stage.classList.add('suspended');
         for (const c of cells) playFace(c, false);
       },
 
       resume() {
         if (!paused) return;
         paused = false;
+        if (stage) stage.classList.remove('suspended');
         lastTick = Date.now();
         for (const c of cells) if (c.state === 'up' || (c.state === 'locked' && loopPolicy.play)) playFace(c, true);
         const q = deferred.splice(0);

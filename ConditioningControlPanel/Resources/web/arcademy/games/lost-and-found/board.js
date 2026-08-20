@@ -207,14 +207,12 @@ export function createBoard(o) {
     rows.push({ el: rowEl, strip, tiles: rowTiles, reps, durSec, dir: r % 2 ? 'r' : 'l' });
   });
   if (opts.mount && mosaic && opts.mount.appendChild) {
-    // Tall boards must not push the class panel past the window: the row count is
-    // only known here, so the tile size is trimmed here too (5 rows ~ 350px,
-    // 6 rows ~ 370px, both inside the shell's 420px class root). The CSS keeps the
-    // default for small boards - this only ever shrinks.
-    const size = sizes.length >= 6 ? [58, 52] : (sizes.length >= 5 ? [66, 60] : null);
-    if (size && opts.mount.style) {
-      opts.mount.style.setProperty('--g-lf-tw', size[0] + 'px');
-      opts.mount.style.setProperty('--g-lf-th', size[1] + 'px');
+    // The wall fills the window (immersion wave): the row count is only known
+    // here, so it is PUBLISHED here and styles.js solves the tile height from it
+    // (rows always fill the frame; density never changes with the window - the
+    // tile SIZE breathes, the tile COUNT is a tuned dial).
+    if (opts.mount.style) {
+      opts.mount.style.setProperty('--g-lf-rows', String(sizes.length));
     }
     opts.mount.appendChild(mosaic);
   }
