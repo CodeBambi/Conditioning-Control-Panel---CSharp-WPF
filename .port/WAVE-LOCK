@@ -1,6 +1,0 @@
-WAVE: 55
-PACKETS: SP-115-per-pixel-alpha
-LANES: 1
-BASE: 91d3b131
-GATE: validate-wave.mjs WAVE OK; floor 1938/117
-OPENED: 2026-08-19T21:27:02Z
