@@ -737,11 +737,17 @@ public class SchedulerModuleTests
         Assert.True(rig.Participant.Running);
         Assert.False(rig.Participant.GenerationLive);
 
+        var schedulesBefore = rig.Clock.Schedules;
         rig.Clock.Advance(SessionScheduler.PollInterval);
 
         Assert.False(rig.Engine.Running);
         Assert.Equal(0, rig.Scheduler.StartsPerformed);
         Assert.False(rig.Scheduler.Polling);
+
+        // AND it asked the clock for nothing. This is the half the FIRST liveness check owns on its
+        // own: without it the callback runs on to Arm, which puts a one-shot up and then tears it
+        // straight back down — invisible in PendingCount, and a teardown racing an endless re-arm.
+        Assert.Equal(schedulesBefore, rig.Clock.Schedules);
         await rig.DisposeAsync();
     }
 
@@ -1051,6 +1057,7 @@ public class SchedulerModuleTests
         private readonly List<Action> _spent = [];
         private DateTime _now = start;
         private int _reads;
+        private int _schedules;
 
         public DateTime LocalNow
         {
@@ -1116,9 +1123,16 @@ public class SchedulerModuleTests
         /// </summary>
         public Action? WhileScheduling { get; set; }
 
+        /// <summary>How many times anything has ASKED this clock for a timer. A tick that is not
+        /// allowed to act must not re-arm itself either, and this is the only way to see that it
+        /// did not: a one-shot armed and then torn down again leaves no trace in
+        /// <see cref="PendingCount"/>.</summary>
+        public int Schedules => Volatile.Read(ref _schedules);
+
         public IDisposable Schedule(TimeSpan due, Action fire)
         {
             Entry entry;
+            Interlocked.Increment(ref _schedules);
             lock (_timers)
             {
                 entry = new Entry { Due = _now + due, Fire = fire };
