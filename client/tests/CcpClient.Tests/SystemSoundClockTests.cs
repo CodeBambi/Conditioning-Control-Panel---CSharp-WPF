@@ -23,16 +23,33 @@ namespace CcpClient.Tests;
 /// exception and .NET ends the process — while the user is watching a video or listening to
 /// something, with no diagnostic and nothing to report.</para>
 ///
-/// <para><b>No wall-clock wait anywhere.</b> Every positive fact waits on a DETERMINISTIC SIGNAL
-/// through the approved helper, never on an interval elapsing. The negative observation — that a
-/// cancelled schedule does not fire — is proved with an ordering BARRIER: a second schedule due
-/// immediately is armed AFTER the first is cancelled, and when that one has run, the cancelled one
-/// must still not have. Nothing here asserts how long anything took. Structured on
-/// <see cref="SystemSessionClockTests"/> and <see cref="SystemScheduleClockTests"/> deliberately:
-/// the three clocks are one shape and their facts should read side by side.</para>
+/// <para><b>No wall-clock wait anywhere — with ONE deliberate exception, named (SP-124).</b> Every
+/// positive fact waits on a DETERMINISTIC SIGNAL through the approved helper: no
+/// <c>Thread.Sleep</c>, no bare <c>Task.Delay</c>, no clock poll. The negative observation — that a
+/// cancelled schedule does not fire — is proved with an ordering BARRIER.
+/// <see cref="DisposingTheHandleBeforeItIsDue_SuppressesTheCallback"/> is the exception and it is
+/// deliberate: <b>its subject IS a due time arriving</b>, so it schedules at a short delay and waits
+/// for the resulting signals. That is not a tolerance bought to make it pass — until SP-124 the
+/// doomed schedule there was due in TEN MINUTES, which made its assertion incapable of failing, and
+/// observing the delay is exactly what gives it teeth. Nothing here asserts how LONG anything took.
+/// Structured on <see cref="SystemSessionClockTests"/> and <see cref="SystemScheduleClockTests"/>
+/// deliberately: the three clocks are one shape and their facts should read side by side.</para>
 /// </summary>
 public class SystemSoundClockTests
 {
+    /// <summary>
+    /// SP-124. The doomed schedule's due time — the one delay in this file whose ELAPSING is the
+    /// subject rather than an incidental wait. Short enough to cost the suite a second, long enough
+    /// that a stall between two adjacent statements would have to run into whole seconds; and if it
+    /// ever did, the fact detects that and says so rather than blaming the product.
+    /// </summary>
+    private static readonly TimeSpan DoomedDue = TimeSpan.FromMilliseconds(1000);
+
+    /// <summary>The ordering barrier's due time: a whole <see cref="DoomedDue"/> LATER, so when it
+    /// fires the doomed schedule's own moment is not merely past, it is past by a margin in which
+    /// the pool demonstrably ran other work.</summary>
+    private static readonly TimeSpan BarrierDue = TimeSpan.FromMilliseconds(2000);
+
     [Fact]
     public async Task ACallbackThatThrows_IsContainedAndREPORTED_RatherThanKillingTheProcess()
     {
@@ -87,9 +104,10 @@ public class SystemSoundClockTests
         // ACallbackThatThrows_IsContainedAndREPORTED above, which does redden. This fact pins the
         // null-reporter CONFIGURATION, and that is all it should be read as claiming.
         //
-        // The shape is inherited verbatim from SystemScheduleClockTests.cs:74, so the same limit
-        // applies to the sibling; it is named here rather than fixed because that file is outside
-        // this packet's scope (SP-123 record.md, findings).
+        // The shape is inherited verbatim from SystemScheduleClockTests, so the same limit applies
+        // to that sibling. SP-123 could only NAME that, because the file was outside its scope;
+        // SP-124 measured it there directly (`Failed: 0, Passed: 1` with the containment bared) and
+        // corrected its comment, so the cross-reference is no longer a debt.
         var clock = new SystemSoundClock();
         var barrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -150,22 +168,62 @@ public class SystemSoundClockTests
     public async Task DisposingTheHandleBeforeItIsDue_SuppressesTheCallback()
     {
         // The property every stop in the audio stack rests on — the duck watchdog and the pacing
-        // timer are both disposed and re-armed under the arbitration gate. Proved with a BARRIER,
-        // not a wait: the cancelled schedule is due far enough out that it cannot legitimately have
-        // fired, and the barrier is armed AFTERWARDS and due immediately, so when the barrier has
-        // run the real clock has demonstrably serviced work armed after the cancellation.
+        // timer are both disposed and re-armed under the arbitration gate.
+        //
+        // SP-124 — WHY THIS FACT LOOKS LIKE THIS NOW, AND WHY IT DID NOT BITE BEFORE. The doomed
+        // schedule used to be due in TEN MINUTES, so `cancelledFired` was false whether or not
+        // Dispose suppressed anything: the assertion was trivially true and could not fail. Making
+        // it bite needs the doomed schedule's own moment to ARRIVE inside the fact, and then three
+        // properties, none of them a margin bought by hoping:
+        //
+        //   System.Threading.Timer fixes its deadline at CONSTRUCTION, so arming order is deadline
+        //   order: control < doomed < barrier.
+        //
+        //   1. IT WAS DISPOSED BEFORE IT WAS DUE. `control` is armed BEFORE `doomed` at the same
+        //      delay, so its deadline is earlier. If control has not fired when Dispose returns,
+        //      then less than DoomedDue has passed since control was armed, hence less than
+        //      DoomedDue since doomed was armed. That is a deduction, not a probability. If it ever
+        //      trips, this machine stalled a full second between two adjacent statements, and the
+        //      message says so instead of blaming the product.
+        //   2. ITS MOMENT HAS PASSED, WITH ROOM TO SPARE. control firing proves the timer queue ran
+        //      the pass at DoomedDue; the barrier is due a whole DoomedDue LATER, so by the time it
+        //      signals, a suppressed-in-name-only callback has had that long to run on a pool the
+        //      queue was demonstrably servicing.
+        //   3. THE DELAY IS OBSERVABLE AT ALL. control firing is the POSITIVE CONTROL: push
+        //      DoomedDue back out to ten minutes and this leg times out. The vacuity that made the
+        //      old shape unfailable is now itself a failing assertion.
+        //
+        // HONEST LIMIT: step 2 is an ordering-plus-settle argument, not a happens-before edge — a
+        // pool starved for a whole second while still servicing two later timer callbacks could
+        // mask a fired callback and let this read green. That is the same class of argument this
+        // file already made, and it is named rather than hidden.
+        //
+        // TaskCompletionSource rather than the old `bool cancelledFired`: that bool was written on a
+        // pool thread and read on the test thread with nothing ordering the two.
         var clock = new SystemSoundClock();
-        var cancelledFired = false;
+        var control = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var doomedFired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var barrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var doomed = clock.Schedule(TimeSpan.FromMinutes(10), () => cancelledFired = true);
+        using var proof = clock.Schedule(DoomedDue, () => control.TrySetResult());
+        var doomed = clock.Schedule(DoomedDue, () => doomedFired.TrySetResult());
         doomed.Dispose();
 
-        using var handle = clock.Schedule(TimeSpan.Zero, () => barrier.TrySetResult());
+        Assert.False(control.Task.IsCompleted,
+            "a schedule armed BEFORE the doomed one, at the same delay, had already fired by the time "
+            + "Dispose returned — this machine stalled longer than the whole due time between two "
+            + "adjacent statements, so the suppression below is not observable on this run. Treat as "
+            + "an ENVIRONMENT failure, not a product one");
+
+        using var handle = clock.Schedule(BarrierDue, () => barrier.TrySetResult());
+        await TestWait.Until(control.Task,
+            "a schedule armed before the cancelled one to fire, which is what proves this fact observes its own due time");
         await TestWait.Until(
             barrier.Task, "a schedule armed after the cancellation to run on the real clock");
 
-        Assert.False(cancelledFired,
+        Assert.True(control.Task.IsCompletedSuccessfully,
+            "the positive control never completed successfully — this fact cannot observe a suppression it never gave a chance to happen");
+        Assert.False(doomedFired.Task.IsCompleted,
             "a sound schedule whose handle was disposed still fired — a duck watchdog that can "
             + "outlive its own release is a volume ratchet, which this stack must never be");
     }
