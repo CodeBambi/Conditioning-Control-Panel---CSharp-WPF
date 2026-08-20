@@ -281,7 +281,12 @@ public class HapticParticipantTests
                 haptics = new HapticParticipant(
                     infra, scope.Directory, new RecordingSink(HapticProviderRoute.Buttplug, 1),
                     Entitled(EntitlementTier.Supporter), () => Interlocked.Increment(ref ticks));
-                return [new OrderedParticipant("Other", order, () => Interlocked.Increment(ref ticks)), haptics];
+                // HAPTICS FIRST, deliberately, and it is what makes this fact bite. Participant stop
+                // is REVERSE order, so registering it first means its own StopAsync runs LAST — and
+                // then the ONLY thing that can put the all-stop before the other participant's stop
+                // is the reserved pre-drain head slot. Register it last and the fact passes with the
+                // head slot deleted, which is the mutation this is aimed at.
+                return [haptics, new OrderedParticipant("Other", order, () => Interlocked.Increment(ref ticks))];
             },
         };
         Assert.True(root.Validate(out _));
@@ -293,7 +298,7 @@ public class HapticParticipantTests
 
         Assert.NotNull(haptics);
         Assert.Equal(1, haptics!.AllStops);
-        var other = Assert.IsType<OrderedParticipant>(host.Participants[0]);
+        var other = Assert.IsType<OrderedParticipant>(host.Participants[1]);
         Assert.True(other.StopSequence > 0, "the other participant never stopped");
         Assert.True(
             haptics.AllStopSequence < other.StopSequence,

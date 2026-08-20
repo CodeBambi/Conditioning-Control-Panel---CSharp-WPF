@@ -75,6 +75,11 @@ public class IntegrationProofTests
         Assert.False(haptics.OutputAllowed);
         Assert.IsType<CcpClient.Desktop.Haptics.HapticGateDecision.RefusedUnverified>(haptics.Gate);
         Assert.Equal(CcpClient.Desktop.Haptics.HapticProviderRoute.None, haptics.Sink.Route);
+        // And the gate it consulted is the composition root's OWN entitlement capability — the same
+        // object the DTRH door consults and the same one the System page reports. A missing
+        // authority and this build's unconfigured one refuse identically, so without this assertion
+        // a root that stopped passing it would be invisible until the day one is configured.
+        Assert.True(haptics.HasEntitlementAuthority);
         Assert.False(session.Engine.Running);
         Assert.IsType<LoadOutcome.Missing>(session.Preset.LastLoadOutcome);
         Assert.True(heartbeat.Running); // phase 3 demonstrably started it

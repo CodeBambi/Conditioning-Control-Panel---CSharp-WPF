@@ -111,6 +111,17 @@ public sealed class HapticParticipant : IBackgroundParticipant
     public bool OutputAllowed => Gate is HapticGateDecision.Allow;
 
     /// <summary>
+    /// Whether an entitlement authority was supplied at all.
+    ///
+    /// <para>It exists so the composition can be ASSERTED rather than assumed. Both a missing
+    /// authority and this build's unconfigured one refuse every user with the same outcome class,
+    /// so without this the wiring that hands the participant the host's real entitlement capability
+    /// would be invisible to every fact — and a root that quietly stopped passing it would look
+    /// identical from outside on the day an authority is finally configured.</para>
+    /// </summary>
+    public bool HasEntitlementAuthority => _resolveEntitlement is not null;
+
+    /// <summary>
     /// How many times this participant asked a sink to connect. <b>Zero on every run of this
     /// build</b>, and it is evidence rather than a counter: a product that knocked on
     /// <c>ws://127.0.0.1:12345</c> with no client to speak the protocol would be making a network

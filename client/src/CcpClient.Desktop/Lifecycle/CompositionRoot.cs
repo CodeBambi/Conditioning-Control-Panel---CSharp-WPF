@@ -131,18 +131,11 @@ public sealed class CompositionRoot
     /// </summary>
     public Func<Scheduling.IScheduleClock>? ScheduleClockFactory { get; init; }
 
-    /// <summary>
-    /// SP-119: the HAPTIC SINK seam. Product default is <c>Haptics.HapticSinkFactory.Create()</c>,
-    /// which refuses on every platform because this build admits no provider client at all — the
-    /// gap is a property of the BUILD, not of the machine, and not of whether a toy is attached.
-    ///
-    /// <para>A test substitutes a recording sink so the ownership, teardown-ordering and
-    /// entitlement-transition facts are about real calls. <b>Nothing may inject a sink that claims
-    /// <c>Available</c> on a product path</b> — that is the fake-available shape the truthful
-    /// capability contract bans, and it would do it on the one capability whose failure a person
-    /// feels rather than sees.</para>
-    /// </summary>
-    public Func<Haptics.IHapticSink>? HapticSinkFactory { get; init; }
+    // SP-119 deliberately adds NO sink-factory seam here. The haptic sink is already injectable
+    // through ParticipantsFactory — which is how the ownership, teardown-ordering and
+    // entitlement-transition facts drive a recording sink — and a second seam that no test and no
+    // product path ever set would be a configuration point nothing configures. Anything compiled
+    // and never executed is unexecuted, and a seam is not exempt from that.
 
     /// <summary>The entitlement capability the NEXT ParticipantsFactory call composes against (set
     /// by Build before invoking the factory, the same way <see cref="_capabilitiesForParticipants"/>
@@ -297,7 +290,7 @@ public sealed class CompositionRoot
             // (App.xaml.cs:2098-2105).
             new Haptics.HapticParticipant(
                 infra, Path.GetDirectoryName(SettingsPathFactory())!,
-                HapticSinkFactory?.Invoke(),
+                sink: null,
                 _entitlementForParticipants is { } entitlement ? entitlement.ResolveAsync : null),
         ];
     }
