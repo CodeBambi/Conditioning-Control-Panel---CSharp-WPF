@@ -47,7 +47,15 @@ $verifyDir = $PSScriptRoot
 $shots = Join-Path $verifyDir 'artifacts'
 New-Item -ItemType Directory -Force -Path $shots | Out-Null
 $exe = Join-Path $verifyDir '..\..\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.exe'
-$settingsFile = Join-Path $env:APPDATA 'CcpClient\settings.json'
+# The deterministic-start set. It was ONE file, and that had been incomplete since SP-098: the rack
+# rows' module dials do not live in settings.json, they live in session_preset.json in the same data
+# directory (SessionPresetDocument.FileName, SessionParticipant.cs:96). Measured rather than
+# reasoned — a `-State off` capture right-clicked Flash Images off, and the NEXT run's `-State
+# armed` capture read back "Switched off." on what was supposed to be a cold start.
+$stateFiles = @(
+    (Join-Path $env:APPDATA 'CcpClient\settings.json'),
+    (Join-Path $env:APPDATA 'CcpClient\session_preset.json')
+)
 $outFile = Join-Path $shots "windows-$Surface-$State.png"
 
 # ValidateSet cannot express a PAIR, and an unpaired combination is not a typo the caller should
@@ -282,11 +290,12 @@ function Assert-Route($window, [string]$route) {
 # contend with another run's windows, so the lease has to cover the launch and not just the read.
 Take-Lease
 
-# Deterministic start: remove the demonstrator settings file (demo store only). This is also what
-# makes the four SP-122 captures order-independent — the rack's right-click quick-toggle persists
-# the module's enabled flag through the preset store into this same file, so deleting it means an
-# 'armed' capture cannot leak into the next run's 'off' capture.
-if (Test-Path $settingsFile) { Remove-Item $settingsFile -Force }
+# Deterministic start: remove the demo stores. This is what makes the SP-122 captures
+# order-independent — the rack's right-click quick-toggle persists the module's enabled flag, and
+# without the preset file in this set an 'off' capture leaks into the NEXT run's 'armed' capture.
+foreach ($stateFile in $stateFiles) {
+    if (Test-Path $stateFile) { Remove-Item $stateFile -Force }
+}
 
 $script:proc = [System.Diagnostics.Process]::Start($exe)
 Write-Output "launched pid=$($script:proc.Id)"
@@ -392,16 +401,23 @@ if ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     }
 
     if ($Surface -eq 'rack-row-dot') {
-        # WHICH STATE NEEDS THE GESTURE IS THE OPPOSITE OF THE OBVIOUS ONE, and it is measured
-        # rather than assumed: SessionPresetDocument.FlashEnabled defaults to TRUE (:64, ported
-        # from WPF's AppSettings.FlashEnabled), so a cold start with the settings file deleted is
-        # already ARMED. 'off' is therefore the state that costs a gesture.
-        if ($State -eq 'off') {
-            # THE RACK'S OWN SECOND GESTURE, on a real desktop, for the first time.
-            RightClick-Rect $rowRect
-        }
-        $live = (Get-Element $window 'FlashLiveState').Current.Name
+        # DRIVE THE STATE, NEVER ASSUME IT.
+        # WHICH state costs a gesture is the opposite of the obvious one: SessionPresetDocument
+        # .FlashEnabled defaults to TRUE (:64, ported from WPF's AppSettings.FlashEnabled), so a
+        # cold start is already ARMED and 'off' is the state that needs the toggle.
+        #
+        # But the FIRST version of this branch hard-coded that, and it was WRONG the moment a
+        # persisted preset leaked between runs — which one did, because the deterministic-start set
+        # was missing session_preset.json. So the state is now READ, toggled only if it disagrees,
+        # and read again. The rack's own second gesture (StudioPage.axaml.cs:449-453 -> :559-569) is
+        # what does the toggling, on a real desktop, which no run had ever performed before SP-122.
         $expectedHead = if ($State -eq 'armed') { 'Armed.' } else { 'Switched off.' }
+        $live = (Get-Element $window 'FlashLiveState').Current.Name
+        if (-not $live.StartsWith($expectedHead)) {
+            Write-Output "state drive: right-click quick-toggle on the Flash Images row (it read '$live')"
+            RightClick-Rect $rowRect
+            $live = (Get-Element $window 'FlashLiveState').Current.Name
+        }
         if (-not $live.StartsWith($expectedHead)) {
             Fail "the module did not reach '$State': FlashLiveState reads '$live' (expected it to start '$expectedHead')"
         }

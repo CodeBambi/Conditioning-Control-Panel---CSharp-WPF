@@ -222,6 +222,29 @@ public class RackPresentationTests
     }
 
     /// <summary>
+    /// THE DETERMINISTIC START HAS TO COVER THE STORE THE RACK ACTUALLY WRITES TO, and it did not.
+    /// <c>capture.ps1</c> deleted <c>settings.json</c> only; the rack rows' module dials live in
+    /// <see cref="CcpClient.Desktop.Persistence.SessionPresetDocument.FileName"/> beside it
+    /// (<c>SessionParticipant.cs:96</c>), so an <c>-State off</c> capture's right-click quick-toggle
+    /// leaked into the NEXT run and made an <c>armed</c> capture read "Switched off.". Measured, on
+    /// a real desktop, on the already-committed harness — not reasoned about.
+    ///
+    /// <para>The file name comes from the PRODUCT constant rather than being restated here, so
+    /// renaming the store reddens this instead of silently un-covering the harness.</para>
+    /// </summary>
+    [Fact]
+    public void TheCaptureScriptClearsThePresetStoreTheRackWritesTo()
+    {
+        var script = CaptureScriptCode();
+        Assert.Contains(CcpClient.Desktop.Persistence.SessionPresetDocument.FileName, script, StringComparison.Ordinal);
+
+        // Cleared BEFORE the app starts, or the app reads the stale file on the way up.
+        var clear = script.IndexOf(CcpClient.Desktop.Persistence.SessionPresetDocument.FileName, StringComparison.Ordinal);
+        var launch = script.IndexOf("Process]::Start($exe)", StringComparison.Ordinal);
+        Assert.InRange(clear, 0, launch);
+    }
+
+    /// <summary>
     /// SP-116's rule: an unfenced screen read is a defect, not a flake — 34 misses in 1200 unfenced
     /// reads, 0 in 1500 fenced. The fence must be taken BEFORE the read, which is the only ordering
     /// that means anything, and the harness must fail rather than continue when it cannot be taken.

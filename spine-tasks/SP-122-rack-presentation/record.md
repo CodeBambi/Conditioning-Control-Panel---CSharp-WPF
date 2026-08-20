@@ -82,9 +82,49 @@ Three things about that table were found by measurement and would have been wron
    had ever performed it. `capture.ps1` performs it, and the module reports the flip.
 
 Arming puts nothing on the screen — "Armed. Nothing is scheduled until the session starts." — so
-no capture is polluted by an effect. The captures are order-independent because the quick-toggle
-persists through the preset store into `%APPDATA%\CcpClient\settings.json`, which `capture.ps1`
-deletes at the start of every run.
+no capture is polluted by an effect.
+
+**A FOURTH DEFECT, AND IT WAS MY OWN CLAIM THAT WAS WRONG.** The paragraph above originally said
+the captures were order-independent because `capture.ps1` deletes
+`%APPDATA%\CcpClient\settings.json`. A confirmation run on the committed harness refused:
+
+```
+state drive: left-click on the Flash Images rack row -> IsSelected=True
+FAIL: the module did not reach 'armed': FlashLiveState reads 'Switched off. Nothing will happen,
+session or no session.' (expected it to start 'Armed.')
+```
+
+The rack rows' module dials are NOT in `settings.json`. They are in `session_preset.json` in the
+same data directory (`SessionPresetDocument.FileName:32`, `SessionParticipant.cs:96`), which
+`capture.ps1` never deleted — an incompleteness that has been there since SP-098 introduced the
+file, and which nothing before this packet exercised because nothing before it toggled a module.
+The previous run's `off` capture had leaked into this one. Two fixes, both landed:
+
+1. The deterministic-start set is now the two files, not one.
+2. **The dot state is DRIVEN, not assumed.** `capture.ps1` reads `FlashLiveState`, right-clicks
+   only if it disagrees, and reads again — so a leaked store can never silently produce the wrong
+   capture. The first version hard-coded "off needs the gesture, armed does not" and that is
+   exactly the assumption the leak broke.
+
+Proven order-independent afterwards, `off` then `armed` back to back on the real desktop:
+
+```
+[off]    state drive: right-click quick-toggle on the Flash Images row (it read 'Armed. …')
+         state drive confirmed: FlashLiveState = 'Switched off. …'          CAPTURE PASS
+[armed]  state drive confirmed: FlashLiveState = 'Armed. …'  (no toggle needed)  CAPTURE PASS
+```
+
+The confirmed drive is what caught this. An unconfirmed capture would have photographed a hollow
+dot, filed it as `armed`, and the check would have failed later looking like a product regression.
+
+**And a near-miss worth recording, because the harness already warns about it in its own words.**
+While mutation-testing the new guard for this fix, I restored `capture.ps1` with
+`git checkout -- ` while the fix itself was still UNCOMMITTED — and silently lost it.
+`self-test.ps1:17-27` documents that exact failure as the SP-094 near-miss and restores from bytes
+held in memory precisely so it cannot happen; I did it to myself with a bare git command outside
+that script. Caught immediately (the redone script was re-run and re-proved end to end above), but
+it is the second time this repository has paid for the same reflex, and the mutation-proof loop for
+any uncommitted file should copy bytes rather than reach for git.
 
 ### Geometry, and two traps in it
 
@@ -249,7 +289,7 @@ reported and FAILS the capture rather than being swallowed: an unfenced read is 
 PNG that might be of the wallpaper is not evidence. Every capture in this record printed
 `screen read fenced through DwmFlush (HRESULT 0)`.
 
-## 6. A third defect, found by the work
+## 6. A third defect, found by the work (a fourth is in §2)
 
 `capture.ps1` never called `exit 0`. A `.ps1` invoked with `&` that never calls `exit` leaves
 `$LASTEXITCODE` holding the PREVIOUS command's code, and `self-test.ps1` guards every capture with
@@ -261,11 +301,11 @@ at the source with `exit 0`, which makes the pre-existing guards mean something 
 
 ## 7. Tests added, and each one shown to bite
 
-`client/tests/CcpClient.Tests/RackPresentationTests.cs` — **16 facts**. Manifest shape (every rack
+`client/tests/CcpClient.Tests/RackPresentationTests.cs` — **17 facts**. Manifest shape (every rack
 check is `presentation-verified`; both surfaces covered in both states); the surface set derived
 from `capture.ps1`'s own `ValidateSet` rather than restated (the SP-094 rule); the tolerance
 separation property; ten synthetic-buffer facts that each check accepts its own state's colour and
-rejects the other's; and two lexical guards on the capture path.
+rejects the other's; two lexical guards on the capture path, and one that the deterministic-start set covers the preset store the rack really writes to, keyed on the PRODUCT constant `SessionPresetDocument.FileName` so renaming the store reddens it.
 
 `client/tests/CcpClient.HeadlessTests/RackPresentationAnchorHeadlessTests.cs` — **3 facts** tying
 the manifest's colours to the product's resolved brushes, so a brush change reddens the floor
@@ -281,6 +321,7 @@ Deliberate mutations, each reverted from git afterwards and the tree confirmed c
 | `'rack-row-dot'` renamed in the `ValidateSet` | `checks.json names surface 'rack-row-dot' but capture.ps1 accepts only [dashboard, rack-row, rack-row-spot, rail-door] … the check is decoration` |
 | `DwmFlush()` call removed | `Assert.InRange() Failure: Value not in range` |
 | lease `FileShare.Read` -> `FileShare.None` | `Assert.Contains() Failure: Sub-string not found` |
+| `session_preset.json` dropped from the deterministic-start set | `Assert.Contains() Failure: Sub-string not found` |
 
 **The last two are LEXICAL and prove deletion, not disabling.** A commented-out lease would keep
 them green. §4's transcripts are what prove the mechanism, and the test file says so in its own
@@ -288,8 +329,8 @@ summary rather than leaving a reader to assume otherwise.
 
 ## 8. Floor
 
-Pin **2270 unit / 141 headless**. Declared delta: **+16 unit / +3 headless**
-(`spine-tasks/SP-122-rack-presentation/floor-delta.json`). Expected observed totals: **2286 unit /
+Pin **2270 unit / 141 headless**. Declared delta: **+17 unit / +3 headless**
+(`spine-tasks/SP-122-rack-presentation/floor-delta.json`). Expected observed totals: **2287 unit /
 144 headless**. Observed and both gates' results are in the final report. `floor.json` was never
 opened. Both gates were run alone and never beside a capture.
 
