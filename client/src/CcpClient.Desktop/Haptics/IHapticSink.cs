@@ -157,7 +157,7 @@ public sealed record HapticServerObservation(
                         + "Lovense Remote (Lovense) and check that nothing is diverting loopback traffic — upstream's "
                         + "own note is that a VPN can break this route after a successful connect "
                         + "(Services/Haptics/IHapticProvider.cs:23-28)"))
-                    : DeviceCount == 0
+                    : DeviceCount < 0
                         ? new CapabilityState.DependencyMissing(
                             "a haptic device attached to the running haptic server",
                             new CapabilityReason(HapticReasonCodes.HapticNoDevice,

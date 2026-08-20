@@ -1385,3 +1385,57 @@ property, not a port claim. And the DAYLIGHT-SAVING residual is now largely clos
 named: the injected clock reproduces both transition sequences with no OS timezone change, and both
 are pinned (D190). What is still untested is a real machine crossing a real transition, and a
 timezone changed underneath a running app.
+
+---
+
+## SP-119 — Haptics: the last rack row, and the first capability that refuses on EVERY platform
+
+**Fifteen of fifteen rack rows now exist; the fifteenth is a SINK, and it is not a working feature.**
+Upstream's row is the last entry in the IMMERSION group (`Views/Tabs/StudioTabView.xaml.cs:519-527`),
+it is upstream's one PAID rack module (`tier: 1`, `:526-527`), and its service is APP-scoped —
+constructed at startup (`App.xaml.cs:533`, `:2060`), auto-connected there (`:2103-2105`), all-stopped
+FIRST at exit (`:4406`) and disposed last (`:4524`) — with **zero hits** for `App.Haptics` in
+`MainWindow/MainWindow.StartStop.cs`. The port owns it the same way: an `IBackgroundParticipant`
+registered last in `CompositionRoot.DefaultParticipants`, with its all-stop in the reserved pre-drain
+HEAD slot.
+
+**The gap this refuses on is a property of the BUILD, not of the machine, and not of the platform.**
+Every other capability in this port refuses on Linux and works on Windows, because every other one is
+a platform API. Upstream's two haptic providers are a WebSocket client to `ws://127.0.0.1:12345`
+(`Services/Haptics/ButtplugProvider.cs:27,83`) and an HTTP client to `http://127.0.0.1:20010`
+(`Services/Haptics/LovenseProvider.cs:21,83,89`) — **both clients of a separate server process the
+user installs**, neither a driver, neither Windows-only. So `HapticSinkFactory` does not switch on the
+OS at all; it switches on whether any provider ROUTE is admitted, and the admitted list is empty.
+
+**The seam is justified against BOTH providers**, because a seam shaped around one of them is a
+failure that has already happened here: `IHapticProvider.cs:23-28` requires `PingAsync` to touch the
+wire because *"IsConnected can lie"*, `LovenseProvider.cs:163-186` obeys, and
+`ButtplugProvider.cs:215-221` answers from the cached field with a comment admitting it. The port's
+seam therefore has no `IsConnected` to answer from, and no duration on its output verb either.
+
+| # | v6.8.1 fact | Port at SP-119 | Reason |
+|---|---|---|---|
+| **D191** | Haptics reaches a device through one of two providers, and the app carries a NuGet dependency for one of them (`ConditioningControlPanel.csproj:60`, `Buttplug` 5.0.1) | **No provider client is admitted.** The capability refuses in type with `haptic-no-admitted-provider`, identically on Windows and Linux | The dependency decision is the OWNER's and this packet stops at it. Its exact cost: **Buttplug = one `PackageReference` line plus one file** (with the package; without it, a hand-written message-spec-v4 client over `ClientWebSocket` — a redesign, not a file); **Lovense = no package at all plus one file and a keep-alive**, because `LovenseProvider.cs:1-8` imports only the BCL. Refusing the package does not block haptics; it blocks Buttplug specifically |
+| **D192** | `ConnectAsync` returns `false` for a server that did not answer AND for a server that answered with no devices (`ButtplugProvider.cs:132-145`, `LovenseProvider.cs:116-124`) | **Three typed answers where upstream has two**: `Unavailable(haptic-no-admitted-provider)`, `Unavailable(haptic-server-unreachable)`, `DependencyMissing("a haptic device …", haptic-no-device)` | A user told to plug a toy in when Intiface is not running has been sent to the wrong place. The classification asks the ADMISSION question first, so no run of this build can reach the missing-device arm |
+| **D193** | `IHapticProvider.VibrateAsync(intensity, durationMs)` — and the two implementations disagree about who ends it: a client-side `Task.Delay` then a per-device stop (`ButtplugProvider.cs:309-331`) versus a server-side `timeSec` floored at a whole second (`LovenseProvider.cs:232-233`) and, in Connect mode, no expiry at all (`:242-243`) | **LEVEL-SET plus an explicit all-stop**, keyed by device AND actuator index. No duration anywhere in the seam | A duration is unrepresentable in one implementation (sub-second) and unhonoured in another (Connect mode latches). Upstream converged on the same shape once it had both providers in hand — `IHapticProviderV2.SetOutputsAsync` + `StopAllAsync` (`Services/Haptics/Core/HapticContracts.cs:105-137`), with the hold explicitly *"provider's choice"* (`:70-73`) |
+| **D194** | Intensity is quantized per provider: `Percent(x)` onto the feature's step range (`ButtplugProvider.cs:268`) versus 0..20 with levels 1-2 unreachable (`LovenseProvider.cs:200-204`) | The seam carries **0..1 only**, clamped; quantization stays the provider's | Upstream's own v2 contract says the same (`HapticContracts.cs:36-38,70-82`). Baking either mapping into the seam is the one-provider shape this row was most exposed to |
+| **D195** | The seam exposes `IsConnected` (a cached field in both implementations) and a `PingAsync` whose contract demands a wire round trip that one implementation does not perform | **Neither member exists.** There is one way to ask — `ObserveAsync` — and it is defined as touching the wire | The divergence upstream shipped is structurally impossible here rather than forbidden by a comment. Recorded as an IMPROVEMENT over the source, not as parity |
+| **D196** | The premium gate is `App.Patreon?.HasPremiumAccess != true` → revert the checkbox and show `msg_haptic_feedback_patreon_only` in a modal (`MainWindow/MainWindow.Haptics.cs:484-503`, `en.json:3394,3395`) | Ported at **tier 1** (`PatreonService.cs:134` is `CurrentTier >= Level1`) through `Entitlement/**` UNCHANGED, with a THIRD answer: `RefusedUnverified` says which part could not be determined and that nothing was decided about the user | `!= true` renders "I could not tell" as "you are not a patron" — the exact conflation `EntitlementOutcome` exists to prevent (D21's shape, second occurrence). The modal is a panel line here: the port has no modal refusal surface and a dead "See tiers" button would be worse than words |
+| **D197** | **A DISCREPANCY IN THE SHIPPING SOURCE.** Upstream's haptic gates disagree: the checkbox uses ONE term (`MainWindow.Haptics.cs:487`) while the mixer (`HapticMixer.cs:200-201`) and the premium rail's lockband (`MainWindow/MainWindow.PremiumRail.cs:573`) use TWO — `HasPremiumAccess || DailyFree.IsFreeToday("haptics")` | The port implements term 1 only | `"haptics"` is in `DailyFreeService.OverridableKeys` (`:49`) and was CUT from the rotation `Pool` (`:40`), so the disagreement is reachable only on a day the SERVER names haptics — on which the rail unlocks and the mixer opens while the checkbox still refuses. The port has no `DailyFreeService` and no `/config/daily-feature` fetch, so term 2 has nothing to bind to (D24's shape, second occurrence). Recorded so the next reader does not "fix" one gate to match the other without knowing they were different |
+| **D198** | The mixer evaluates the gate once per 10 Hz tick and stops the toys once on the open→closed transition (`HapticMixer.cs:191-204`, `:253-262`) | The **transition** is ported — a gate that closes owes an all-stop — but the entitlement is resolved **ONCE, at phase 3**, not per tick | A DPAPI read plus an authority call is not a 10 Hz operation. The consequence is stated rather than hidden: a pledge that lapses mid-run is noticed at the next launch, not within 100 ms |
+| **D199** | Upstream's haptics page carries two provider boxes with their own URLs, an auto-connect box, a per-event routing table, a master cap, a temperament and a DSP block (`Views/Tabs/HapticsTabView.xaml`, 1640 lines over `Services/Haptics/**`'s 9193) | **One control**: the master enable the gate guards. Everything else is ABSENT rather than present-and-inert | Every one of them configures a connection this build cannot make (§9 D7's greyed-control rule, and D93's absent-rather-than-inert rule). Auto-connect in particular: upstream's predicate is `AutoConnect && HasRealHapticProviderEnabled()` (`App.xaml.cs:2103`) and the second conjunct is false here for a reason no setting can change |
+| **D200** | The row's dot reads `App.Settings?.Current?.Haptics?.Enabled` (`StudioTabView.xaml.cs:520`) | The row HAS a dot, and it is EARNED: `Off` unless the enable is on **and** the sink says a device is really reachable. **`Live` is unreachable in this build** | SP-109's fifth dot meaning (reach) over a resource in another process, plus SP-118's D180 rule that a dot is not read off a checkbox. `Live` would have to mean something is being SENT, and nothing is — which is D179, made visible on the rack instead of only in a record |
+| **D201** | Upstream's rack quick-toggle flips the panel's own master box *"so ChkHapticsEnabled_Changed runs - including the premium gate that reverts the box for a free account"* (`StudioTabView.xaml.cs:521-525`), and re-reads the dot a beat later because *"a refusal can undo the write"* (`:1121-1124`) | The gesture is ported and the refusal happens INSIDE the request, so nothing is written and there is nothing to undo | The user-visible outcome is identical; the intermediate state is not. There is no instant at which the setting says yes |
+| **D202** | Upstream drives the haptic service from eight sites in three ported effect modules (`Services/Flash/FlashService.cs:1453,1480,1516,1915`; `Services/Video/VideoService.cs:2580,4585,6580`; `Services/SubliminalService.cs:230`) | **Zero.** No effect in this build sends anything to this sink | `Effects/**` is closed to this packet: giving the modules a haptic limb is a later packet. This is D179 restated as a divergence rather than a note, and it is stated on the panel where a user reads it. **A landed capability is not a working feature** |
+
+### What SP-119 does NOT establish
+
+Nothing here proves anything moved. There is no device, no server and no client: the chain stops at
+a typed refusal and at the documents and controls behind it. `HapticSinkFactory.DeviceManualGate`
+names the four-step gate that a real claim would need, and its last step is not dischargeable by any
+automated step on any platform at any depth of API — a haptic server reports what it believes it
+commanded over Bluetooth, and neither this process nor upstream's can tell a toy that vibrated from
+one with a flat battery in the next room. No headed capture was taken; `presentation-verified` is
+untouched. The headless facts drive real controls in a real visual tree, which is `draw-verified`
+and no more. Linux is unproven and unchanged — and for once that is not the interesting axis, because
+this capability refuses identically on both.
