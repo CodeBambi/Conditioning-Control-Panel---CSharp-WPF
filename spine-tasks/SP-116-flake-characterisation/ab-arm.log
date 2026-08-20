@@ -1,0 +1,73 @@
+SP-116 A/B arm: 30 pair(s), base 11036bbc vs lane 2c3316da, started 2026-08-20T02:35:31.233Z
+BASE r1  GREEN  55.3s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+LANE r1  GREEN  52.4s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r2  GREEN  54.1s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+LANE r2  GREEN  54.2s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r3  GREEN  54.3s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+LANE r3  GREEN  52.7s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r4  GREEN  54.1s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+LANE r4  GREEN  53.0s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r5  GREEN  54.2s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+LANE r5  GREEN  55.2s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r6  GREEN  52.7s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r6  GREEN  53.9s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+BASE r7  GREEN  53.5s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+LANE r7  GREEN  55.2s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r8  GREEN  52.7s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r8  GREEN  55.0s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r9  RED    52.3s  Failed!  - Failed:     3, Passed:  2057, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)  results=C:\Users\Micha\AppData\Local\Temp\ccp-sp116ab-NshNd0
+    FAILED: CcpClient.Tests.FlashDrawTests.WithdrawingTheSurface_TakesTheFlashOffTheCompositedDesktopToo
+      the differential did not close: capture live = False, the desktop showed the flash = True, and after Withdraw it reads 0x10070B. Where the screen can be read, the flash must be on it BEFORE and gone AFTER; a withdraw that only clears the code's books leaves pixels on the user's screen
+    FAILED: CcpClient.Tests.FlashDrawTests.TheCompositedDesktopHoldsTheFlashWhereTheSurfaceIs_BothHalvesTheRightWayUp
+      a desktop capture can see a painted layered window on this machine = False, and the composited desktop at the top half of the flash reads 0x30C0F0 against the frame's 0x30C0F0. Those two must agree: where the screen can be read the flash must be ON it, and where it cannot, nothing may be claimed. Backend said: Available(window 0x13000164 holds a 240x180 frame: the pixels were blitted into the surface and then read BACK out of it from the OS at 1024 spread sample points including all four corners and the centre, and every one of them is the colour the frame carries. The surface composites at LWA_ALPHA 255, so this is content the compositor has something to draw. That a human SEES it is a headed claim and is not made here)
+    FAILED: CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+      Assert.Equal() Failure: Values differ
+      Expected: 0
+      Actual:   1
+LANE r9  GREEN  53.4s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+BASE r10  GREEN  52.5s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r10  GREEN  52.6s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r11  RED    53.5s  Failed!  - Failed:     1, Passed:  2059, Skipped:     2, Total:  2062, Duration: 46 s - CcpClient.Tests.dll (net10.0)  results=C:\Users\Micha\AppData\Local\Temp\ccp-sp116ab-UVvo4e
+    FAILED: CcpClient.Tests.FlashDrawTests.ARealImageFile_ReachesTheCompositedDesktop_AndLeavesItWhenTheFlashIsHidden
+      a desktop capture can see a painted layered window on this machine = True, and while the flash was up the composited desktop carried 0 pixels of the image's colour against an expected area of at least 112614. Those two must agree: where the screen can be read, the user's own image must really be on it. The screen read RETURNED 5184000 pixels (SP-107), of which 43430 were the same colour as the first one (0x151515). The display metrics were 1646x1029 virtual / H(1646, 2880) V(1029, 1800) when the flash was PLACED and H(1646, 2880) V(1029, 1800) when the screen was READ — they agree = True. FOUR different verdicts hide behind a count of zero and those numbers separate them: returned=0 is a failed CAPTUREBLT allocation and this fact measured nothing; returned=all-uniform is a blank or asleep display; metrics that MOVED mean the desktop was rescaled between the placement and the read, so the capture mapped the rectangle through the wrong ratio and sampled somewhere the flash never was (the pixel count cannot show this, being physical and so scale-invariant); and only a real desktop read at unchanged metrics means the flash was genuinely not composited where a user would see it
+LANE r11  GREEN  55.0s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r12  GREEN  52.3s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r12  GREEN  54.8s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r13  GREEN  54.4s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+LANE r13  GREEN  54.7s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r14  GREEN  53.4s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+LANE r14  GREEN  54.3s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r15  GREEN  54.7s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+LANE r15  GREEN  55.8s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 48 s - CcpClient.Tests.dll (net10.0)
+BASE r16  GREEN  54.5s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+LANE r16  GREEN  54.1s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+BASE r17  GREEN  54.5s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+LANE r17  GREEN  52.8s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r18  GREEN  52.6s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r18  GREEN  53.3s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+BASE r19  GREEN  53.4s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+LANE r19  GREEN  52.6s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r20  GREEN  52.4s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r20  GREEN  53.1s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r21  GREEN  52.6s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r21  GREEN  55.2s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r22  GREEN  53.0s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r22  GREEN  52.5s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r23  GREEN  52.8s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r23  GREEN  55.1s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r24  GREEN  53.3s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+LANE r24  GREEN  52.7s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r25  GREEN  54.8s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+LANE r25  GREEN  55.2s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+BASE r26  GREEN  52.7s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r26  GREEN  52.6s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r27  GREEN  55.5s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 48 s - CcpClient.Tests.dll (net10.0)
+LANE r27  GREEN  53.1s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+BASE r28  GREEN  52.5s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r28  GREEN  52.9s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+SP-116 A/B arm: 2 pair(s), base 11036bbc vs lane 2c3316da, started 2026-08-20T03:38:36.991Z
+BASE r1  GREEN  54.2s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+LANE r1  GREEN  54.0s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 46 s - CcpClient.Tests.dll (net10.0)
+BASE r2  GREEN  52.5s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
+LANE r2  GREEN  54.3s  Passed!  - Failed:     0, Passed:  2063, Skipped:     2, Total:  2065, Duration: 47 s - CcpClient.Tests.dll (net10.0)
+A/B TOTAL: base 0 red in 2, lane 0 red in 2, ended 2026-08-20T03:42:57.826Z
