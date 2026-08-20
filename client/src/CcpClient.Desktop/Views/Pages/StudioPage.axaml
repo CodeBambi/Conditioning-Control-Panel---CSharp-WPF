@@ -300,10 +300,42 @@
                IMMERSION, TIMING — §8.3, built at StudioTabView.xaml.cs:483/498/508/530); the
                port now has two, because it now has a module in a second one. The group header
                is upstream's own string (st4_studio_group_timing = "TIMING", en.json:4819) and
-               the group exists because a module needs it, not to fill the rack out: the other
-               TIMING row, Scheduler, starts the engine from OUTSIDE a session and is therefore
-               not a session module at all. -->
+               the group exists because a module needs it, not to fill the rack out.
+
+               SP-118 COMPLETES THIS GROUP, and the sentence that used to end this comment —
+               "the other TIMING row, Scheduler, starts the engine from OUTSIDE a session and
+               is therefore not a session module at all" — is still TRUE and is no longer a
+               reason it has no row. It is not on SessionEngine.Effects and never will be; it
+               is owned at APP lifetime (Scheduling/SchedulerParticipant.cs) and it drives the
+               engine rather than living in it. Upstream's rack puts it FIRST in TIMING, before
+               Intensity Ramp (StudioTabView.xaml.cs:535-539), which is where it goes. -->
           <TextBlock Classes="rack-group" Text="TIMING" />
+
+          <!-- THE ONLY ROW ON THIS PAGE THAT CAN START A SESSION. Every other row acts inside
+               one somebody started; this one begins one on a clock, with nobody at the
+               keyboard. Its dot therefore means something no earlier dot has meant, and it is
+               NOT a capability claim — this module needs none of the port's six. Live means:
+               the enable is on, a tick is REALLY on the clock (the 60 s start-up grace has
+               elapsed and the poll is armed), and the LOCAL clock is inside the user's window
+               right now. Off covers both "switched off" and "cannot act yet", because to a
+               user those are the same thing. See SessionScheduler.Dot.
+
+               Upstream passes a dot predicate here — () => App.Settings?.Current?.SchedulerEnabled
+               (StudioTabView.xaml.cs:536) — unlike Visuals' null at :496, so this row has one;
+               it is earned rather than read off the checkbox. -->
+          <RadioButton x:Name="RowScheduler"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowScheduler"
+                       AutomationProperties.Name="Scheduler rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Scheduler" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="SchedulerRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="SchedulerRowDot" />
+            </Grid>
+          </RadioButton>
 
           <RadioButton x:Name="RowIntensityRamp"
                        Classes="rack-row"
@@ -1360,6 +1392,114 @@
             <TextBlock TextWrapping="Wrap"
                        x:Name="BrainDrainAudioState"
                        AutomationProperties.AutomationId="BrainDrainAudioState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Scheduler ================= -->
+        <!-- NINE CONTROLS, WHICH IS UPSTREAM'S NINE: an enable, two times and seven day boxes
+             (Features/SchedulerFeatureControl.xaml, loaded at .xaml.cs:41-51). The four other
+             Scheduler* settings on AppSettings (:2461-2478) belong to the intensity RAMP and are
+             on no scheduler surface upstream either.
+
+             THE TIMES ARE FREE TEXT, deliberately, and that is upstream's control
+             (SchedulerFeatureControl.xaml:47,56 are TextBoxes written on LostFocus, :49/:58).
+             A picker would make the unparseable-time fallback unreachable — and that fallback is
+             a live behaviour: a time this build cannot read silently becomes 16:00 or 22:00
+             (MainWindow/MainWindow.StartStop.cs:667-677). The panel says so out loud instead,
+             because the alternative is a session starting at an hour nobody chose.
+
+             NO SURFACE LINE. Like the Intensity Ramp below it, this module acquires no
+             capability at all; a sentence about where its pixels went would be about something
+             it never asks for. -->
+        <StackPanel x:Name="SchedulerModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Scheduler" />
+          <TextBlock Classes="page-blurb"
+                     x:Name="SchedulerWhatItIs"
+                     TextWrapping="Wrap"
+                     AutomationProperties.AutomationId="SchedulerWhatItIs"
+                     Text="" />
+
+          <CheckBox x:Name="SchedulerEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="SchedulerEnableToggle"
+                    AutomationProperties.Name="Scheduler enabled"
+                    Content="Enable Scheduler" />
+
+          <Grid ColumnDefinitions="150,Auto,Auto,Auto" RowDefinitions="Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Time range" />
+            <TextBox Grid.Row="0" Grid.Column="1"
+                     x:Name="SchedulerStartTimeBox"
+                     Width="80"
+                     AutomationProperties.AutomationId="SchedulerStartTimeBox"
+                     AutomationProperties.Name="Scheduled start time" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       Classes="dial-label"
+                       Margin="10,0"
+                       VerticalAlignment="Center"
+                       Text="to" />
+            <TextBox Grid.Row="0" Grid.Column="3"
+                     x:Name="SchedulerEndTimeBox"
+                     Width="80"
+                     AutomationProperties.AutomationId="SchedulerEndTimeBox"
+                     AutomationProperties.Name="Scheduled end time" />
+          </Grid>
+
+          <Grid ColumnDefinitions="150,*" RowDefinitions="Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Active days" />
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="10">
+              <CheckBox x:Name="SchedulerDayMon" Content="M"
+                        AutomationProperties.AutomationId="SchedulerDayMon"
+                        AutomationProperties.Name="Scheduler active on Monday" />
+              <CheckBox x:Name="SchedulerDayTue" Content="T"
+                        AutomationProperties.AutomationId="SchedulerDayTue"
+                        AutomationProperties.Name="Scheduler active on Tuesday" />
+              <CheckBox x:Name="SchedulerDayWed" Content="W"
+                        AutomationProperties.AutomationId="SchedulerDayWed"
+                        AutomationProperties.Name="Scheduler active on Wednesday" />
+              <CheckBox x:Name="SchedulerDayThu" Content="T"
+                        AutomationProperties.AutomationId="SchedulerDayThu"
+                        AutomationProperties.Name="Scheduler active on Thursday" />
+              <CheckBox x:Name="SchedulerDayFri" Content="F"
+                        AutomationProperties.AutomationId="SchedulerDayFri"
+                        AutomationProperties.Name="Scheduler active on Friday" />
+              <CheckBox x:Name="SchedulerDaySat" Content="S"
+                        AutomationProperties.AutomationId="SchedulerDaySat"
+                        AutomationProperties.Name="Scheduler active on Saturday" />
+              <CheckBox x:Name="SchedulerDaySun" Content="S"
+                        AutomationProperties.AutomationId="SchedulerDaySun"
+                        AutomationProperties.Name="Scheduler active on Sunday" />
+            </StackPanel>
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="SchedulerLiveState"
+                         AutomationProperties.AutomationId="SchedulerLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="SchedulerReadingState"
+                         AutomationProperties.AutomationId="SchedulerReadingState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="SchedulerLastTickState"
+                         AutomationProperties.AutomationId="SchedulerLastTickState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="SchedulerAbsenceState"
+                       AutomationProperties.AutomationId="SchedulerAbsenceState"
                        Text="" />
           </Border>
         </StackPanel>

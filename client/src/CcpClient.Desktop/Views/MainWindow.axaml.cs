@@ -88,7 +88,18 @@ public partial class MainWindow : Window
                 "the shell needs the conditioning session and this host has none — a START button "
                 + "wired to nothing is the flag-instead-of-a-session shape the spine exists to prevent");
 
-        _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session);
+        // SP-118: the scheduler, composed once by the composition root beside the session and
+        // reached through the host — the same rule the session and the entitlement capability
+        // follow. A shell-local second scheduler would poll a different engine than the one the
+        // START button drives, which is precisely how a session gets started that nobody can stop
+        // from the surface that started it.
+        Scheduler = (host.Participants.OfType<Scheduling.SchedulerParticipant>().FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "the shell needs the scheduler and this host has none — the START button would then "
+                + "be unable to tell it the user stopped by hand, and it would restart the session "
+                + "on its next tick")).Scheduler;
+
+        _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
         _pages[ShellRoutes.Play] = new PlayPage(Dtrh);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
@@ -126,10 +137,25 @@ public partial class MainWindow : Window
         // the shell so a session started here survives every navigation (§8.6).
         SessionStartButton.Click += (_, _) =>
         {
+            // SP-118. WPF's BtnStart_Click reads _isRunning and writes the scheduler's manual-stop
+            // flag on the way past, BEFORE it calls StopEngine/StartEngine
+            // (MainWindow/MainWindow.StartStop.cs:52, :98-101, :106-107). So the scheduler is told
+            // what the press MEANS while the session's state still says which press it was.
+            //
+            // This is the line that makes "I pressed STOP and it came back" impossible: a stop
+            // inside an active window latches the flag, and the scheduler will not start anything
+            // again until that window closes.
+            Scheduler.NoteManualToggle(Session.Engine.Running);
             Session.Engine.Toggle();
             RenderSessionState();
         };
         Session.Engine.Changed += OnSessionEngineChanged;
+
+        // SP-118: WPF minimizes to tray inside the same invoke as a scheduled start
+        // (MainWindow/MainWindow.StartStop.cs:614). Duck is the port's landed analogue — the shell
+        // is minimized and a tray icon with the full menu goes up, and nothing is ever HIDDEN
+        // (ShellTray, §12 D35). The event arrives already marshalled onto this thread.
+        Scheduler.AutoStarted += () => ShellTray.Duck();
         RenderSessionState();
 
         Mount(Router.Current.Id);
@@ -184,6 +210,11 @@ public partial class MainWindow : Window
     /// <summary>The conditioning session START drives (SP-098); public so tests drive the real
     /// engine and the real effect rather than a shell-local copy of either.</summary>
     public Session.SessionParticipant Session { get; }
+
+    /// <summary>The one scheduler (SP-118); public so tests drive the real decision machine rather
+    /// than a shell-local copy of it. It is APP-lifetime, not session-lifetime: it runs while
+    /// nothing is running, which is the whole feature.</summary>
+    public Scheduling.SessionScheduler Scheduler { get; }
 
     /// <summary>
     /// WPF's <c>UpdateStartButton</c> (<c>MainWindow/MainWindow.StartStop.cs:751-796</c>): one

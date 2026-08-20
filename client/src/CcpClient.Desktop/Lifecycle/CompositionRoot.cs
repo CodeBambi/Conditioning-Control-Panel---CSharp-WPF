@@ -113,6 +113,20 @@ public sealed class CompositionRoot
     /// </summary>
     public Func<Effects.IFlashImagePool>? FlashImagePoolFactory { get; init; }
 
+    /// <summary>
+    /// SP-118: the SCHEDULER's clock seam, and it is a different clock from
+    /// <see cref="SessionClockFactory"/> on purpose — <see cref="Scheduling.IScheduleClock"/> reads
+    /// LOCAL time (the user typed a wall-clock window) where <see cref="Session.ISessionClock"/>
+    /// reads UTC (a paced effect must not fire twice at 02:00 on a daylight-saving night). Product
+    /// default is the real <see cref="Scheduling.SystemScheduleClock"/>; a test injects a manual one
+    /// so nothing in the suite waits out the 60-second start-up grace on a wall clock.
+    ///
+    /// <para>Like the session clock it is a TIMER and a READING only: it can make the scheduler
+    /// evaluate sooner, and it can move what "now" is, but it cannot make the scheduler start a
+    /// session the predicate refuses.</para>
+    /// </summary>
+    public Func<Scheduling.IScheduleClock>? ScheduleClockFactory { get; init; }
+
     public CompositionRoot()
     {
         // Instance default (needs SettingsPathFactory); init-only so tests can override.
@@ -192,6 +206,12 @@ public sealed class CompositionRoot
         var store = new PersistenceStore<DemoSettings>(
             infra.OwnerFor("Persistence"), infra.Log, SettingsPathFactory(),
             DemoSettings.CurrentSchemaVersion, [new DemoMigrationV0ToV1()]);
+        // SP-118: built into a local first because the scheduler below is constructed AGAINST this
+        // exact engine. A second SessionParticipant here would give the rack row and the scheduler
+        // two different sessions, which is the shell-local-copy failure MainWindow already refuses.
+        var session = new Session.SessionParticipant(
+            infra, Path.GetDirectoryName(SettingsPathFactory())!,
+            SessionClockFactory?.Invoke(), FlashImagePoolFactory?.Invoke());
         return
         [
             store,
@@ -223,12 +243,21 @@ public sealed class CompositionRoot
                 Path.GetDirectoryName(SettingsPathFactory())!,
                 AiOllamaHostOverride),
             // SP-098 the conditioning session: the preset store, the effect rack and the
-            // engine START drives. Registered LAST so its phase-3 preset load runs after every
-            // other store's — and it starts NO session: WPF's engine runs only when the user
+            // engine START drives. It starts NO session: WPF's engine runs only when the user
             // presses START (MainWindow/MainWindow.StartStop.cs:34,105).
-            new Session.SessionParticipant(
-                infra, Path.GetDirectoryName(SettingsPathFactory())!,
-                SessionClockFactory?.Invoke(), FlashImagePoolFactory?.Invoke()),
+            session,
+            // SP-118 the SCHEDULER, and it is the first participant here that can start a session
+            // by itself. Registered AFTER the session for two reasons that both matter:
+            // registration order is phase-3 START order, so the session's preset load completes
+            // before the scheduler can evaluate anything; and participant stop is REVERSE order,
+            // so at teardown the scheduler's poll dies BEFORE the session it drives.
+            //
+            // Construction still starts nothing. Nothing here can begin a session until phase 3
+            // has started the participant AND the 60-second grace has elapsed
+            // (MainWindow/MainWindow.xaml.cs:624-635).
+            new Scheduling.SchedulerParticipant(
+                infra, Path.GetDirectoryName(SettingsPathFactory())!, session.Engine,
+                ScheduleClockFactory?.Invoke()),
         ];
     }
 
@@ -281,6 +310,10 @@ public sealed class CompositionRoot
         // out is a persisted setting like any other, and teardown's head slot is the ONE place
         // the port guarantees it reaches disk.
         var session = participants.OfType<Session.SessionParticipant>().FirstOrDefault();
+        // SP-118: the scheduler's nine settings flush in the same slot. A day box a user unticked
+        // on the way out decides whether a session appears tomorrow, so it is the LAST setting the
+        // port may lose (persistence contract §11).
+        var scheduler = participants.OfType<Scheduling.SchedulerParticipant>().FirstOrDefault();
 
         // Capability contract §3: the demonstrator probes are registered at composition
         // (never run here) and execute as owned operations in the CapabilityProbes phase.
@@ -323,6 +356,7 @@ public sealed class CompositionRoot
         return new ApplicationHost(
             log, participants, trace, infra.Registry, infra.UiDispatch,
             preDrainFlush: store is null && slotStores is null && companion is null && session is null
+                && scheduler is null
                 ? null
                 : async () =>
                 {
@@ -330,6 +364,7 @@ public sealed class CompositionRoot
                     if (slotStores is not null) await slotStores.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (companion is not null) await companion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (session is not null) await session.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
+                    if (scheduler is not null) await scheduler.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                 },
             capabilities: capabilities, probeRunner: probeRunner, entitlement: entitlement);
     }

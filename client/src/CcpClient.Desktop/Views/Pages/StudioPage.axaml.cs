@@ -8,6 +8,7 @@ using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Navigation;
 using CcpClient.Desktop.Persistence;
+using CcpClient.Desktop.Scheduling;
 using CcpClient.Desktop.Session;
 
 namespace CcpClient.Desktop.Views.Pages;
@@ -76,13 +77,26 @@ public partial class StudioPage : UserControl
     private readonly BubbleCountEffect _bubbleCount;
     private readonly BubblePopEffect _bubblePop;
     private readonly VisualsDials _visuals;
+    private readonly SessionScheduler _scheduler;
     private bool _syncing;
 
-    public StudioPage(LoomLaunch loom, SessionParticipant session)
+    /// <param name="loom">The one Loom launch path.</param>
+    /// <param name="session">The one conditioning session.</param>
+    /// <param name="scheduler">
+    /// SP-118 — the one SCHEDULER, and it arrives as its own argument rather than off
+    /// <paramref name="session"/> because it is not part of one: it is owned at APP lifetime by
+    /// <c>Scheduling/SchedulerParticipant</c> and it drives the session from outside
+    /// (<c>MainWindow/MainWindow.StartStop.cs:601-639</c>). Threading it through the session would
+    /// have put an app-lifetime object inside a session-lifetime one, which is exactly the
+    /// ownership confusion the rack comment on this page warned about for nine waves.
+    /// </param>
+    public StudioPage(LoomLaunch loom, SessionParticipant session, SessionScheduler scheduler)
     {
         ArgumentNullException.ThrowIfNull(loom);
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(scheduler);
         InitializeComponent();
+        _scheduler = scheduler;
 
         _session = session;
         _flash = session.Flash;
@@ -121,6 +135,7 @@ public partial class StudioPage : UserControl
         RowBubbleCount.IsCheckedChanged += (_, _) => ApplySelection();
         RowBubblePop.IsCheckedChanged += (_, _) => ApplySelection();
         RowVisuals.IsCheckedChanged += (_, _) => ApplySelection();
+        RowScheduler.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -145,6 +160,17 @@ public partial class StudioPage : UserControl
         // (StudioTabView.xaml.cs:496 passes null where every other row passes a dot predicate, and
         // its panel carries no master box). WPF's rack lets exactly such rows fall through
         // unhandled (:659).
+
+        // SP-118 — the Scheduler row DOES take the gesture, and it is the one row whose toggle
+        // does not go through SessionEngine.QuickToggle: it has no ISessionEffect behind it, so
+        // there is no module id to dispatch on. Upstream's entry does the same thing for the same
+        // reason — its toggle is `() => FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled)`
+        // (StudioTabView.xaml.cs:537), and its comment says why in as many words: "neither drives
+        // a service directly … so the honest quick-toggle is the panel's own enable box" (:532-534).
+        RowScheduler.AddHandler(
+            PointerReleasedEvent,
+            (_, e) => OnSchedulerRowPointerReleased(e),
+            RoutingStrategies.Tunnel);
 
         FlashEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(FlashEnableToggle, _flash, FlashImagesEffect.EffectId);
@@ -171,6 +197,26 @@ public partial class StudioPage : UserControl
             OnEnableToggled(BubbleCountEnableToggle, _bubbleCount, BubbleCountEffect.EffectId);
         BubblePopEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(BubblePopEnableToggle, _bubblePop, BubblePopEffect.EffectId);
+
+        // The scheduler's own enable. It does NOT route through SessionEngine.QuickToggle for the
+        // same reason its row's right-click does not: there is no module to arm.
+        SchedulerEnableToggle.IsCheckedChanged += (_, _) => OnSchedulerEnableToggled();
+
+        // Upstream writes BOTH times from ONE LostFocus handler and saves once
+        // (Features/SchedulerFeatureControl.xaml.cs:71-79, wired at .xaml:49 and :58), so both
+        // boxes land on the same entry here. LostFocus rather than TextChanged is upstream's own
+        // choice and it is the right one: writing on every keystroke would put "1", then "16",
+        // then "16:" through the parser, and "1" parses successfully as ONE DAY.
+        SchedulerStartTimeBox.LostFocus += (_, _) => OnSchedulerTimesCommitted();
+        SchedulerEndTimeBox.LostFocus += (_, _) => OnSchedulerTimesCommitted();
+
+        AddSchedulerDay(SchedulerDayMon, DayOfWeek.Monday);
+        AddSchedulerDay(SchedulerDayTue, DayOfWeek.Tuesday);
+        AddSchedulerDay(SchedulerDayWed, DayOfWeek.Wednesday);
+        AddSchedulerDay(SchedulerDayThu, DayOfWeek.Thursday);
+        AddSchedulerDay(SchedulerDayFri, DayOfWeek.Friday);
+        AddSchedulerDay(SchedulerDaySat, DayOfWeek.Saturday);
+        AddSchedulerDay(SchedulerDaySun, DayOfWeek.Sunday);
 
         // Strict is one of the module's own dials, not its enable, so it writes through the module
         // the way the ramp's switches do rather than through the rack's quick-toggle.
@@ -225,6 +271,10 @@ public partial class StudioPage : UserControl
         OnSliderMoved(VisualsDurationSlider, OnVisualsDurationMoved);
 
         _session.Engine.Changed += OnSessionChanged;
+        // SP-118: the scheduler's state moves on a pool thread, 30 seconds at a time, with nobody
+        // touching the app. It raises through the same EffectSignal every module uses, so this
+        // handler may touch controls directly.
+        _scheduler.Changed += OnSessionChanged;
         _flash.Fired += _ => Refresh();
         _subliminals.Fired += _ => Refresh();
         _mindWipe.Fired += _ => Refresh();
@@ -313,6 +363,12 @@ public partial class StudioPage : UserControl
     /// foreground (<see cref="BubblePopSurfacePresenter.Running"/>).</summary>
     public EffectDotState RenderedBubblePopDot { get; private set; } = EffectDotState.Off;
 
+    /// <summary>The Scheduler row's dot (SP-118) — the first on this page that is not a claim about
+    /// a module at all. <c>Live</c> means the enable is on, a tick is REALLY on the clock, and the
+    /// LOCAL clock is inside the user's window right now; <c>Off</c> covers both "switched off" and
+    /// "cannot act yet" (see <see cref="SessionScheduler.Dot"/>).</summary>
+    public EffectDotState RenderedSchedulerDot { get; private set; } = EffectDotState.Off;
+
     /// <summary>
     /// The tint the Pink Filter panel is currently reporting, as text.
     ///
@@ -335,6 +391,24 @@ public partial class StudioPage : UserControl
             {
                 handler();
             }
+        };
+
+    private void AddSchedulerDay(CheckBox box, DayOfWeek day) =>
+        box.IsCheckedChanged += (_, _) =>
+        {
+            if (_syncing)
+            {
+                return;
+            }
+
+            var target = box.IsChecked == true;
+            if (target == ScheduleWindow.IsDayActive(_scheduler.Preset, day))
+            {
+                return;
+            }
+
+            _scheduler.SetDay(day, target);
+            Refresh();
         };
 
     private void AddQuickToggle(RadioButton row, string effectId) =>
@@ -420,6 +494,8 @@ public partial class StudioPage : UserControl
         var bubbleCountOpen = RowBubbleCount.IsChecked == true;
         var bubblePopOpen = RowBubblePop.IsChecked == true;
         var visualsOpen = RowVisuals.IsChecked == true;
+        var schedulerOpen = RowScheduler.IsChecked == true;
+        SchedulerModulePanel.IsVisible = schedulerOpen;
         VisualsModulePanel.IsVisible = visualsOpen;
         MandatoryVideoModulePanel.IsVisible = videoOpen;
         BubbleCountModulePanel.IsVisible = bubbleCountOpen;
@@ -435,7 +511,7 @@ public partial class StudioPage : UserControl
         LockCardModulePanel.IsVisible = lockCardOpen;
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
             && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen
-            && !bubblePopOpen && !bouncingTextOpen && !visualsOpen;
+            && !bubblePopOpen && !bouncingTextOpen && !visualsOpen && !schedulerOpen;
     }
 
     /// <summary>
@@ -453,6 +529,75 @@ public partial class StudioPage : UserControl
         e.Handled = true;
         _session.Engine.QuickToggle(effectId);
         LoadDialsFromPreset();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The Scheduler row's right-click. Same gesture, same <c>Handled</c>, different destination:
+    /// it flips the scheduler's own enable, because this row has no <see cref="ISessionEffect"/>
+    /// for <see cref="SessionEngine.QuickToggle"/> to find. Upstream's entry does exactly this —
+    /// <c>toggle: () =&gt; FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled)</c>
+    /// (<c>Views/Tabs/StudioTabView.xaml.cs:537</c>).
+    /// </summary>
+    private void OnSchedulerRowPointerReleased(PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != MouseButton.Right)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        _scheduler.SetEnabled(!_scheduler.Enabled);
+        LoadDialsFromPreset();
+        Refresh();
+    }
+
+    /// <summary>The scheduler panel's Enable box — the same write the row's right-click makes, so
+    /// the two gestures cannot drift into two behaviours (the A-004 one-command-path rule).</summary>
+    private void OnSchedulerEnableToggled()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var target = SchedulerEnableToggle.IsChecked == true;
+        if (target == _scheduler.Enabled)
+        {
+            return;
+        }
+
+        _scheduler.SetEnabled(target);
+        Refresh();
+    }
+
+    /// <summary>
+    /// Both time boxes, committed together on focus loss — upstream's own handler shape
+    /// (<c>Features/SchedulerFeatureControl.xaml.cs:71-79</c>: it assigns start AND end and saves
+    /// once, whichever box lost focus).
+    ///
+    /// <para>The text is written through UNVALIDATED, deliberately. What a user typed is what
+    /// upstream stores, and the predicate's fallback is what happens to text it cannot read
+    /// (<c>MainWindow/MainWindow.StartStop.cs:667-677</c>). Rejecting it here would delete a live
+    /// behaviour and, worse, would leave the user's box showing something the scheduler is not
+    /// using. The panel reports what was really parsed instead.</para>
+    /// </summary>
+    private void OnSchedulerTimesCommitted()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var start = SchedulerStartTimeBox.Text ?? string.Empty;
+        var end = SchedulerEndTimeBox.Text ?? string.Empty;
+        if (string.Equals(start, _scheduler.Preset.StartTime, StringComparison.Ordinal)
+            && string.Equals(end, _scheduler.Preset.EndTime, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _scheduler.SetTimes(start, end);
         Refresh();
     }
 
@@ -855,6 +1000,23 @@ public partial class StudioPage : UserControl
             VisualsScaleSlider.Value = visuals.ImageScalePercent;
             VisualsOpacitySlider.Value = visuals.FlashOpacityPercent;
             VisualsDurationSlider.Value = visuals.FlashDurationSeconds;
+
+            // SP-118. Nine controls, and the two TEXT ones are loaded back VERBATIM — the raw
+            // string the document holds, not the parsed value — because the parse is lossy in both
+            // directions here: "8" would come back as "8.00:00:00" and "25:00" would come back as
+            // "16:00", and a box that silently rewrites what the user typed is a box that hides
+            // the very mistake the reading line exists to show them.
+            var scheduler = _scheduler.Preset;
+            SchedulerEnableToggle.IsChecked = scheduler.Enabled;
+            SchedulerStartTimeBox.Text = scheduler.StartTime;
+            SchedulerEndTimeBox.Text = scheduler.EndTime;
+            SchedulerDayMon.IsChecked = scheduler.Monday;
+            SchedulerDayTue.IsChecked = scheduler.Tuesday;
+            SchedulerDayWed.IsChecked = scheduler.Wednesday;
+            SchedulerDayThu.IsChecked = scheduler.Thursday;
+            SchedulerDayFri.IsChecked = scheduler.Friday;
+            SchedulerDaySat.IsChecked = scheduler.Saturday;
+            SchedulerDaySun.IsChecked = scheduler.Sunday;
         }
         finally
         {
@@ -891,6 +1053,20 @@ public partial class StudioPage : UserControl
         VisualsDialState.Text = VisualsPanelNotices.DescribeDials(draw);
         VisualsAbsenceState.Text = VisualsPanelNotices.DescribeAbsences();
         VisualsSurfaceState.Text = VisualsPanelNotices.DescribeSurface(_session.Surface.LastPlacement);
+
+        // SP-118 — the Scheduler row. Its dot is NOT PaintDot's: that overload takes an
+        // ISessionEffect and this row has none, which is the structural half of "it drives the
+        // engine rather than living in it". The three states are the module's own derived state
+        // (SessionScheduler.Dot) and are painted with the same two classes every other dot uses.
+        var schedulerReading = _scheduler.Reading;
+        RenderedSchedulerDot = PaintSchedulerDot(SchedulerRowDot, _scheduler.Dot);
+        SchedulerWhatItIs.Text = SchedulerPanelNotices.DescribeWhatItIs(_scheduler.Enabled);
+        SchedulerLiveState.Text = SchedulerPanelNotices.DescribeLiveState(
+            RenderedSchedulerDot, _scheduler.Enabled, _scheduler.Polling, schedulerReading,
+            _session.Engine.Running);
+        SchedulerReadingState.Text = SchedulerPanelNotices.DescribeReading(schedulerReading);
+        SchedulerLastTickState.Text = SchedulerPanelNotices.DescribeLastTick(_scheduler.Last);
+        SchedulerAbsenceState.Text = SchedulerPanelNotices.DescribeAbsences();
 
         var subliminal = _session.SubliminalPreset.Current;
         SubliminalFrequencyValue.Text = subliminal.PerMinute.ToString(System.Globalization.CultureInfo.CurrentCulture);
@@ -1275,6 +1451,19 @@ public partial class StudioPage : UserControl
     private static EffectDotState PaintDot(Shape dot, ISessionEffect effect)
     {
         var state = effect.Dot;
+        dot.Classes.Set("armed", state == EffectDotState.Armed);
+        dot.Classes.Set("live", state == EffectDotState.Live);
+        return state;
+    }
+
+    /// <summary>
+    /// The same two classes, from a state that did not come from an <see cref="ISessionEffect"/>.
+    /// SP-118's row is the only one on this page with no module behind it AND a dot in front of it,
+    /// so this overload exists rather than a fake effect wrapper: an <c>ISessionEffect</c> the
+    /// engine never arms would be a lie in the type system to save four lines here.
+    /// </summary>
+    private static EffectDotState PaintSchedulerDot(Shape dot, EffectDotState state)
+    {
         dot.Classes.Set("armed", state == EffectDotState.Armed);
         dot.Classes.Set("live", state == EffectDotState.Live);
         return state;
