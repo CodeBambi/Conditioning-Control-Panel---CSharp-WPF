@@ -33,6 +33,7 @@ import { gradeClass, capsRaised } from '../core/grades.js';
 import { createStore } from '../core/store.js';
 import { loadGames, descriptors, tierFor, advance, suspendedStub } from '../games/registry.js';
 import { createBoard } from './splitflap.js';
+import { createCampus, campusState } from './campus.js';
 import { createReportCard } from './reportcard.js';
 import { createSettingsPage, boardSizeKey, SETTING_KEYS, isGlobalSettingKey } from './settings.js';
 import { createCeremonies } from './ceremonies.js';
@@ -154,6 +155,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   let screen = 'board';            // 'board' | 'class' | 'report' | 'settings'
   let board = null;
+  let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
+  let extrasBox = null;            // replay/report bar + yesterday strip container
   let settingsPage = null;
   let reportCard = null;
   let active = null;               // the running class (see startClass)
@@ -245,6 +248,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   function clearScreen() {
+    // The campus owns a 1s bell interval; a screen wipe must not orphan it.
+    if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
+    extrasBox = null;
     if (!dom || !dom.screen) return;
     dom.screen.textContent = '';
   }
@@ -278,36 +284,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ============================ SCREEN: BOARD =========================== */
-  function showBoard(opts) {
-    screen = 'board';
-    teardownClass();
-    clearScreen();
-    renderTopbar();
-    if (!dom || !dom.screen) return;
-
-    const panel = el('div', 'arc-panel');
-    panel.appendChild(el('p', 'arc-kicker', t('timetable', 'Timetable')));
-    panel.appendChild(el('h1', 'arc-h1', t('arcademy', 'The Arcademy')));
-    if (timetable.banner) panel.appendChild(el('p', 'arc-lede', timetable.banner));
-
-    if (src.audioOnlySession) {
-      // The host gate should have refused the launch (BUILD-CONTRACT §3); this is
-      // the belt-and-braces path so a stale page can never start a visual class.
-      panel.appendChild(el('p', 'arc-lede',
-        'The Arcademy is closed during an audio-only session. Your attendance is safe.'));
-      dom.screen.appendChild(panel);
-      return;
-    }
-
-    const rows = timetable.classes.map((c) => {
+  /**
+   * @param {boolean=} compact  the campus departure board carries only period,
+   *   flaps and status - family/budget chips live in the room's door card. The
+   *   plain fallback screen keeps the full chip row.
+   */
+  function buildRows(compact) {
+    return timetable.classes.map((c) => {
       const entry = games.byKey[c.gameKey];
       const record = todaysRecord(c.gameKey);
       const done = !!record;
       const suspended = c.missing || !entry || !entry.ok;
       const chips = [];
-      if (c.homeroom) chips.push({ text: t('homeroom', 'Homeroom'), kind: 'homeroom' });
-      chips.push({ text: t('family_' + c.family, c.family) });
-      chips.push({ text: c.timeBudgetSec + 's', kind: 'num' });
+      if (!compact) {
+        if (c.homeroom) chips.push({ text: t('homeroom', 'Homeroom'), kind: 'homeroom' });
+        chips.push({ text: t('family_' + c.family, c.family) });
+        chips.push({ text: c.timeBudgetSec + 's', kind: 'num' });
+      }
       if (suspended) chips.push({ text: t('class_suspended', 'Class Suspended'), kind: 'warn' });
       if (done) {
         chips.push({ text: t('grade', 'Grade') + ' ' + String(record.grade).toUpperCase() });
@@ -326,17 +319,46 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         ariaLabel: c.timeLabel + ' ' + gameName(c.gameKey),
       };
     });
+  }
 
-    board = createBoard({
-      rows,
-      reducedMotion,
-      animate: !(opts && opts.silent),
-      onSelect: (gameKey) => {
-        const cls = timetable.classes.find((c) => c.gameKey === gameKey);
-        if (cls) startClass(cls);
-      },
+  /** Today's rows for the campus state mapper (session results OR meta rows). */
+  function buildCampusState() {
+    const records = Object.create(null);
+    for (const c of timetable.classes) records[c.gameKey] = todaysRecord(c.gameKey);
+    return campusState({
+      classes: timetable.classes,
+      records,
+      suspended: suspendedGlobally,
     });
-    panel.appendChild(board.root);
+  }
+
+  function campusStats() {
+    const streak = store.streak();
+    return {
+      streak: streak.count | 0,
+      perfectDays: streak.perfectDays | 0,
+      tier: maxTier(),
+    };
+  }
+
+  /** Descriptor detail the campus door card shows (family, budget, tier). */
+  function campusDescriptors() {
+    return timetable.classes.map((c) => ({
+      gameKey: c.gameKey,
+      family: c.family,
+      timeBudgetSec: c.timeBudgetSec,
+      homeroom: !!c.homeroom,
+      tier: tierFor(store.gameMeta(c.gameKey)),
+    }));
+  }
+
+  /** Replay/report bar + yesterday strip + failed-games note, re-renderable. */
+  function renderBoardExtras(mount) {
+    if (!extrasBox || extrasBox.parentNode !== mount) {
+      extrasBox = el('div', 'arc-boardextras');
+      mount.appendChild(extrasBox);
+    }
+    extrasBox.textContent = '';
 
     const bar = el('div', 'arc-classbar');
     const replay = el('button', 'btn ghost', t('replay_board', 'Flip the board again'));
@@ -349,7 +371,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       rc.addEventListener('click', () => showReport());
       bar.appendChild(rc);
     }
-    panel.appendChild(bar);
+    extrasBox.appendChild(bar);
 
     /* yesterday's strip (the mockup's report-card row) */
     const y = store.day(dayAdd(localDate, -1));
@@ -366,16 +388,108 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         cell.appendChild(el('span', null, gameName(key)));
         strip.appendChild(cell);
       }
-      panel.appendChild(strip);
+      extrasBox.appendChild(strip);
     }
 
     if (games.failed.length) {
-      panel.appendChild(el('p', 'arc-note',
+      extrasBox.appendChild(el('p', 'arc-note',
         games.failed.length + ' class(es) could not load and show as '
         + t('class_suspended', 'Class Suspended') + '.'));
     }
+  }
 
-    dom.screen.appendChild(panel);
+  function showBoard(opts) {
+    const silent = !!(opts && opts.silent);
+
+    // FAST REPAINT: a live campus is patched, never rebuilt - tearing the stage
+    // down on every meta echo would restart every ambient animation mid-frame.
+    if (silent && screen === 'board' && campus && board) {
+      board.setRows(buildRows(true), { animate: false });
+      campus.update(buildCampusState(), campusStats());
+      campus.noteDescriptors(campusDescriptors());
+      if (extrasBox && extrasBox.parentNode) renderBoardExtras(extrasBox.parentNode);
+      return;
+    }
+
+    screen = 'board';
+    teardownClass();
+    clearScreen();
+    renderTopbar();
+    if (!dom || !dom.screen) return;
+
+    if (src.audioOnlySession) {
+      // The host gate should have refused the launch (BUILD-CONTRACT §3); this is
+      // the belt-and-braces path so a stale page can never start a visual class.
+      const panel = el('div', 'arc-panel');
+      panel.appendChild(el('p', 'arc-kicker', t('timetable', 'Timetable')));
+      panel.appendChild(el('h1', 'arc-h1', t('arcademy', 'The Arcademy')));
+      panel.appendChild(el('p', 'arc-lede',
+        'The Arcademy is closed during an audio-only session. Your attendance is safe.'));
+      dom.screen.appendChild(panel);
+      return;
+    }
+
+    const onSelectRow = (gameKey) => {
+      const cls = timetable.classes.find((c) => c.gameKey === gameKey);
+      if (cls) startClass(cls);
+    };
+    board = createBoard({
+      rows: buildRows(true),
+      reducedMotion,
+      animate: !silent,
+      onSelect: onSelectRow,
+    });
+
+    /* THE CAMPUS IS OPTIONAL. A hub that throws costs the scenery, never the
+     * school: the catch below renders the plain panel the shell shipped with
+     * (full chip rows, same buttons), which is also what the headless suites
+     * drive when the stage cannot build. */
+    try {
+      campus = createCampus({
+        state: buildCampusState(),
+        gameName,
+        banner: timetable.banner,
+        stats: campusStats(),
+        reducedMotion,
+        on: {
+          begin: (gameKey) => {
+            const cls = timetable.classes.find((c) => c.gameKey === gameKey);
+            if (cls) startClass(cls);
+          },
+          records: () => showReport(),
+          registrar: () => showSettings(),
+        },
+        log: say,
+      });
+      campus.noteDescriptors(campusDescriptors());
+      campus.boardMount.appendChild(board.root);
+      renderBoardExtras(campus.footMount);
+      dom.screen.appendChild(campus.root);
+      // The window IS the campus: the topbar's content is diegetic in-scene
+      // (crest, student ID, Registrar/gear), so the bar itself steps aside.
+      // Every other screen re-shows it through renderTopbar().
+      if (dom.topbar) dom.topbar.hidden = true;
+    } catch (e) {
+      say('campus hub failed (' + ((e && e.message) || e) + ') - plain board fallback');
+      // If the stage built and a LATER line threw, its bell interval and the
+      // arc-campus-on body lock must not outlive it.
+      if (campus) { try { campus.destroy(); } catch (e2) { /* noop */ } }
+      campus = null;
+      try { board.destroy(); } catch (e2) { /* noop */ }
+      board = createBoard({
+        rows: buildRows(false),
+        reducedMotion,
+        animate: !silent,
+        onSelect: onSelectRow,
+      });
+      const panel = el('div', 'arc-panel');
+      panel.appendChild(el('p', 'arc-kicker', t('timetable', 'Timetable')));
+      panel.appendChild(el('h1', 'arc-h1', t('arcademy', 'The Arcademy')));
+      if (timetable.banner) panel.appendChild(el('p', 'arc-lede', timetable.banner));
+      panel.appendChild(board.root);
+      renderBoardExtras(panel);
+      dom.screen.appendChild(panel);
+    }
   }
 
   /* ============================ SCREEN: SETTINGS ======================== */
@@ -928,6 +1042,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * boot.js only reaches for fullscreen/exit once the page has nothing to close.
      */
     escapeStep() {
+      // The campus door card is the outermost thing a tap can close.
+      if (screen === 'board' && campus) {
+        try { if (campus.closeCard()) return true; } catch (e) { /* noop */ }
+      }
       if (screen === 'settings') {
         if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } settingsPage = null; }
         if (active) showClassScreen(); else showBoard();
@@ -956,6 +1074,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (destroyed) return;
       destroyed = true;
       teardownClass();
+      if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
       if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } }
     },

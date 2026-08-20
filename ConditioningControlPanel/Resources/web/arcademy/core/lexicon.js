@@ -75,6 +75,54 @@ export const DEFAULT_LEXICON = Object.freeze({
   share_hit: '💗',   // pink heart
   share_near: '🌀',  // cyclone
   share_miss: '🖤',  // black heart
+
+  /* campus (the Direction A hub - shell/campus.js). Room names are diegetic
+   * and FIXED to their game (a game always lives in its room); every value
+   * stays under the 96-char mod-skin cap (MergeModTable drops longer rows). */
+  student: 'Student',
+  campus_room_daily_trigger: 'Homeroom',
+  campus_room_deja_vu: 'Memory Lab',
+  campus_room_impulse_control: 'Discipline Hall',
+  campus_room_lost_and_found: 'Lost & Found',
+  campus_desc_daily_trigger: 'One word, six chances. The whole school sits the same word today.',
+  campus_desc_deja_vu: 'Pairs that move when you blink. The board settles only when you stop looking.',
+  campus_desc_impulse_control: 'Hands on the desk. Move only when told - the room will lie to you.',
+  campus_desc_lost_and_found: 'Things went missing in a wall of moving pictures. Find them before they move again.',
+  campus_records: 'Records',
+  campus_desc_records: 'Report card, attendance ledger, grades. Your whole term, in ink.',
+  campus_registrar: 'Registrar',
+  campus_desc_registrar: 'Every setting is a form. Every consent, a waiver with a stamp.',
+  campus_entrance_hall: 'Entrance Hall',
+  campus_desc_entrance: 'The notice board carries announcements. The trophy case waits for your diplomas.',
+  campus_notice_board: 'Notice Board',
+  campus_trophy_case: 'Trophy Case',
+  campus_admissions: 'Admissions',
+  campus_bell_tower: 'Bell Tower',
+  campus_main_gate: 'Main Gate',
+  campus_main_hall: 'Main Hall',
+  campus_the_quad: 'The Quad',
+  campus_front_path: 'Front Path',
+  campus_east_wing: 'East Wing',
+  campus_west_wing: 'West Wing',
+  campus_desc_east: 'You can hear hammering behind the tape.',
+  campus_desc_west: 'The boards are older here.',
+  campus_sealed: 'Sealed',
+  campus_opens_semester_2: 'Opens Semester II',
+  campus_semester_3: 'Semester III',
+  campus_in_session: 'In Session',
+  campus_not_tonight: 'Not tonight',
+  campus_next_bell: 'Next Bell',
+  campus_step_inside: 'Step inside',
+  campus_xp_first: 'First pass of the day pays XP.',
+  campus_xp_retake: 'Retakes pay no XP - pride only.',
+  campus_hint: 'Hover a room - click to step inside.',
+  campus_night_sessions: 'Night Sessions',
+  campus_rm: 'RM',
+  /* Semester II ghost labels behind the tape (unregistered games get their
+   * game_<key> row here, same convention the registry uses once they ship). */
+  game_misdirection: 'Misdirection',
+  game_instant_recall: 'Instant Recall',
+  game_echo: 'Echo',
 });
 
 let table = Object.create(null);
