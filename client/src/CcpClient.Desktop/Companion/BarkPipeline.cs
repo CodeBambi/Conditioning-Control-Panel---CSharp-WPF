@@ -110,7 +110,7 @@ public sealed class DirectoryBarkAudioResolver(string root) : IBarkAudioResolver
     {
         // WPF BarkService.cs:1413, outcome-for-outcome: null and blank are a MISS, not a lookup.
         // Without this a null name reaches Path.Combine and throws, in a method documented not to
-        // — and BarkPipeline.SafeResolve (:485-496) would log it as "audio resolver faulted",
+        // — and BarkPipeline.SafeResolve (:540-551) would log it as "audio resolver faulted",
         // reporting the port's own defect as if the content were at fault.
         if (string.IsNullOrWhiteSpace(audioFileName))
         {

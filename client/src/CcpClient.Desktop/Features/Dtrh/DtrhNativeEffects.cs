@@ -52,7 +52,7 @@ public sealed class DtrhNativeEffects : IDisposable
         // behavior unchanged.
         //
         // SP-123: the real clock is handed this module's log as its callback-fault reporter.
-        // The cap callback (:332) stops a covering video and reclaims focus on a POOL thread —
+        // The cap callback (:338) stops a covering video and reclaims focus on a POOL thread —
         // an exception escaping it would be unhandled and would end the process mid-session
         // (SP-101 class; SchedulerParticipant.cs:63-64 is the same wiring for the same reason).
         _clock = clock ?? new SystemSoundClock(ex => _log(

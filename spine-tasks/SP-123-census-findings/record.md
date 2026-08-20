@@ -37,7 +37,7 @@ made things worse rather than better.
 `Run(fire)` and the private `Run`, with its own words for why. The callbacks it actually guards
 are `SoundArbitration`'s device-recovery probe (`SoundArbitration.cs:780`), the per-item pacing
 fire (`:903`), the five-minute duck watchdog (`:986`), and the DTRH segment-cap timer
-(`DtrhNativeEffects.cs:332`).
+(`DtrhNativeEffects.cs:338`).
 
 Reporter wiring at the three default sites (`grep -rn "new SystemSoundClock" client/src` — three,
 as the packet said):
@@ -51,8 +51,10 @@ as the packet said):
    is none to fault. The XML doc now says exactly that and nothing more. `BarkPipelineOptions.Clock`
    was **not** widened to nullable to route a log into a callback that does not exist.
 
-Containment does not depend on reporting, and that is pinned separately
-(`ACallbackThatThrowsWithNoReporter_IsStillContained`).
+`ACallbackThatThrowsWithNoReporter_IsStillContained` exercises that null-reporter configuration.
+**It does NOT pin the containment, and an earlier draft of this record claimed it did.** See
+§5.4 — the claim was refuted by measurement, and the correction is recorded rather than quietly
+dropped.
 
 ### Revert → red → restore (fix 1a: the containment)
 
@@ -69,7 +71,12 @@ Containment does not depend on reporting, and that is pinned separately
 Failed!  - Failed: 1, Passed: 6, Skipped: 0, Total: 7
 ```
 
-Restored; 7/7 green. **Stated precisely, because the difference matters:** the process did NOT
+Restored; 7/7 green. **That `Passed: 6` hides something and §5.4 is the correction:** one of those
+six was `ACallbackThatThrowsWithNoReporter_IsStillContained`, which passes with the containment
+gone. Exactly one fact reddens here — the one named in the FAIL line — and the second catastrophic
+-failure line above is that no-reporter fact's throw escaping without failing it.
+
+**Stated precisely, because the difference matters:** the process did NOT
 die here. xunit.v3's runner has an unhandled-exception net that turns the escaping pool-thread
 exception into `[FATAL ERROR] ... Catastrophic failure` instead of a process kill — which is why
 this reads as two catastrophic-failure lines plus one FAIL rather than as the vanished host
@@ -110,7 +117,7 @@ outcome in the product being ported is: a null, blank or missing voiceline is si
 never an exception. Iron rule 5 says port the outcome, and the outcome backs the contract.
 
 **The greenfield tree agrees from the inside, which is the corroboration that settles it.**
-`BarkPipeline.SafeResolve` (`Companion/BarkPipeline.cs:485-496`) wraps the resolver in a
+`BarkPipeline.SafeResolve` (`Companion/BarkPipeline.cs:540-551`) wraps the resolver in a
 try/catch and logs `"bark: audio resolver faulted (...) — typed resolve-failed"`. The port's only
 consumer already treats a resolver throw as a DEFECT. Worse, it reports that defect in the
 vocabulary of bad CONTENT — a reader of the log would conclude the manifest was wrong when the
@@ -330,6 +337,50 @@ same wave.
 
 ---
 
+### 5.4 A claim in this record was refuted by measurement — CORRECTED, and the fact kept
+
+`ACallbackThatThrowsWithNoReporter_IsStillContained` does **not** pin the containment. Measured
+directly, with `return new Timer(_ => Run(fire), ...)` reverted to `_ => fire()` and the single
+fact run in isolation:
+
+```
+[xUnit.net 00:00:03.35]     [FATAL ERROR] System.InvalidOperationException
+[xUnit.net 00:00:03.36] Catastrophic failure: System.InvalidOperationException : no reporter
+Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1
+```
+
+Its only assertion is that a SECOND, unrelated schedule fired, which is true whether or not the
+first throw was contained. The escaping exception appears only out-of-band, as the runner's
+catastrophic-failure line — which does fail the suite's exit code, but not this fact. My §1
+revert run reported `Passed: 6` and that 6 silently included this one, which is exactly how the
+false claim survived my own review of it.
+
+**What was wrong is the claim, not the fact.** The fact is kept and not inflated: it exercises a
+real product configuration (`BarkPipelineOptions.Clock` supplies no reporter), and the containment
+is pinned by `ACallbackThatThrows_IsContainedAndREPORTED`, which does redden. The test's own
+comment now states this limit at the site — leaving a false claim in the code while correcting it
+only in the record would invert this packet's own rule about doc comments that lie.
+
+**Provenance, because it is not mine.** The shape is copied verbatim from the already-landed
+`client/tests/CcpClient.Tests/SystemScheduleClockTests.cs:74`, so the same limit applies there. I
+did not edit the sibling files — they are outside this packet's scope — and the orchestrator is
+filing them as a board row at the land.
+
+### 5.5 An inherited fact shape asserts a trivially-true condition — NOT fixed, filed
+
+`DisposingTheHandleBeforeItIsDue_SuppressesTheCallback` (`SystemSoundClockTests.cs`) arms the
+doomed schedule ten minutes out and then asserts the flag is still false. It would be false
+whether or not `Dispose` suppressed anything, so the barrier proves the clock serviced later work
+but the assertion does not isolate suppression. The same shape is inherited verbatim from
+`SystemSessionClockTests.cs:53` and `SystemScheduleClockTests.cs:122`, so this is a question about
+all three files and not about this one.
+
+Not fixed here, deliberately: a real fix means changing the fact's design across three files, two
+of which are outside scope, and this packet was told not to touch the fact set. Raised for the
+orchestrator to file. Naming it matters more than the fact does — it is the same failure mode as
+§5.2 and §5.4 (green for a reason other than the one claimed), now observed three times in one
+packet, which suggests the class is worth a guard rather than three more careful readers.
+
 ## 6. Divergences
 
 `client/docs/wpf-surface-reachability.md` was NOT edited: nothing here changed which WPF surface is
@@ -355,5 +406,11 @@ condition (§2).
   Linux in this packet.
 - **The census row movement is an expectation, not a measurement.** The census was not
   regenerated; that is the orchestrator's at the land.
+- **Two of the twenty facts assert less than their names suggest, and both are named above**
+  (§5.4 no-reporter, §5.5 dispose-suppression). Both shapes are inherited verbatim from the two
+  already-landed sibling clock files; neither was deleted, and neither was inflated to look
+  better. Eighteen facts pin what their names say; those two pin a configuration and an ordering
+  respectively, and the properties their names imply are pinned elsewhere (§5.4) or not at all
+  (§5.5).
 - The DTRH host's persistence, meta engine, watchdog, exit flow and native effects are all
   untouched and unproven by anything here.

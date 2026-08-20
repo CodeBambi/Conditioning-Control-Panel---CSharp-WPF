@@ -18,7 +18,7 @@ namespace CcpClient.Tests;
 ///
 /// <para><b>The stake.</b> This clock carries <c>SoundArbitration</c>'s device recovery probe
 /// (<c>SoundArbitration.cs:780</c>), the per-item pacing fire (<c>:903</c>), the five-minute duck
-/// watchdog (<c>:986</c>) and the DTRH segment-cap timer (<c>DtrhNativeEffects.cs:332</c>). Each
+/// watchdog (<c>:986</c>) and the DTRH segment-cap timer (<c>DtrhNativeEffects.cs:338</c>). Each
 /// runs on a pool thread with no caller above it, so an exception escaping one is an UNHANDLED
 /// exception and .NET ends the process — while the user is watching a video or listening to
 /// something, with no diagnostic and nothing to report.</para>
@@ -74,8 +74,22 @@ public class SystemSoundClockTests
     public async Task ACallbackThatThrowsWithNoReporter_IsStillContained()
     {
         // The reporter is optional and one product path (BarkPipelineOptions.Clock) supplies none,
-        // because that instance schedules nothing. This is what says the CONTAINMENT does not
-        // depend on the REPORTING: the invoke is null-conditional, inside the catch.
+        // because that instance schedules nothing. So a null reporter is a real configuration and
+        // this exercises it: the invoke inside the catch is null-conditional, and the clock keeps
+        // servicing work afterwards.
+        //
+        // HONEST LIMIT, measured rather than assumed. This fact does NOT redden if the containment
+        // is removed: with `new Timer(_ => fire(), ...)` restored it still reports Passed 1 /
+        // Failed 0, because its only assertion is that a SECOND, unrelated schedule ran — which is
+        // true whether or not the first throw was contained. The escaping exception surfaces
+        // out-of-band as the runner's "[FATAL ERROR] ... Catastrophic failure" line, which fails
+        // the suite's exit code but not this fact. The mechanism is pinned by
+        // ACallbackThatThrows_IsContainedAndREPORTED above, which does redden. This fact pins the
+        // null-reporter CONFIGURATION, and that is all it should be read as claiming.
+        //
+        // The shape is inherited verbatim from SystemScheduleClockTests.cs:74, so the same limit
+        // applies to the sibling; it is named here rather than fixed because that file is outside
+        // this packet's scope (SP-123 record.md, findings).
         var clock = new SystemSoundClock();
         var barrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 

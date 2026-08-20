@@ -68,6 +68,14 @@ Containment does not depend on the reporter — the sibling fact
 `ACallbackThatThrowsWithNoReporter_IsStillContained` (`SystemScheduleClockTests.cs:73`) already
 pins that, and I will pin it for this clock too.
 
+> **CORRECTED AFTER MEASUREMENT (SP-123 code review, and left visible rather than rewritten
+> because a plan that silently agrees with its outcome teaches nothing).** The second clause is
+> FALSE. That fact does not pin containment in the sibling file and does not pin it here: run in
+> isolation against a reverted containment it reports `Passed: 1, Failed: 0`, because its only
+> assertion is that a second, unrelated schedule ran. It pins the null-reporter CONFIGURATION.
+> The containment is pinned by `ACallbackThatThrows_IsContainedAndREPORTED`, which does redden.
+> See `record.md` §5.4.
+
 ### The fact, and the revert-red-restore
 
 New `client/tests/CcpClient.Tests/SystemSoundClockTests.cs`, structured on its two siblings so

@@ -133,7 +133,7 @@ public interface ISoundClock
 /// <see cref="Session.SystemSessionClock"/> killed the whole test host. The callbacks THIS clock
 /// carries are the audio stack's own recovery and pacing work — the device recovery probe
 /// (<c>SoundArbitration.cs:780</c>), the per-item pacing fire (<c>:903</c>) and the 5-minute duck
-/// watchdog (<c>:986</c>), plus the DTRH segment-cap timer (<c>DtrhNativeEffects.cs:332</c>). Every
+/// watchdog (<c>:986</c>), plus the DTRH segment-cap timer (<c>DtrhNativeEffects.cs:338</c>). Every
 /// one of those runs while the user is doing something else, so a crash from one looks like the app
 /// vanishing for no reason at all.</para>
 ///

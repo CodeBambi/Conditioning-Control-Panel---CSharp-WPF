@@ -20,7 +20,7 @@ namespace CcpClient.Tests;
 /// product being ported, a null, blank or missing voiceline is silently no-audio and never an
 /// exception. The greenfield promise stated that outcome correctly; only the greenfield code
 /// diverged. The port's own consumer agrees from the inside: <c>BarkPipeline.SafeResolve</c>
-/// (<c>BarkPipeline.cs:485-496</c>) catches a resolver throw and logs "audio resolver faulted",
+/// (<c>BarkPipeline.cs:540-551</c>) catches a resolver throw and logs "audio resolver faulted",
 /// i.e. it already treats a throw here as a defect — and reports it in the vocabulary of bad
 /// CONTENT, which is why the defect had to be pinned on the resolver directly and could never have
 /// been seen through the pipeline.</para>
