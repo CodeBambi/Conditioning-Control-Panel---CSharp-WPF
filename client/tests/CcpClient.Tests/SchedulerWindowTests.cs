@@ -132,6 +132,21 @@ public class SchedulerWindowTests
     }
 
     [Fact]
+    public void ADayOutSIDETheSevenFailsCLOSED_WhichIsUpstreamsOwnDefaultArm()
+    {
+        // M-m SURVIVED round 1: the `_ => false` default arm (:659) flipped to `_ => true`. Every
+        // fact fed it a real DayOfWeek, so the arm was unreachable and its absence was invisible —
+        // and for a module that STARTS SESSIONS the direction of an unreachable default is not a
+        // detail. C# enums are not closed sets: a cast produces a value no switch arm names, and
+        // upstream chose to answer NO there.
+        var doc = Doc("00:00", "23:59");
+        Assert.True(ScheduleWindow.IsDayActive(doc, DayOfWeek.Monday));
+        Assert.False(ScheduleWindow.IsDayActive(doc, (DayOfWeek)7));
+        Assert.False(ScheduleWindow.IsDayActive(doc, (DayOfWeek)99));
+        Assert.False(ScheduleWindow.IsDayActive(doc, (DayOfWeek)(-1)));
+    }
+
+    [Fact]
     public void AnUntickedDay_RefusesInTheMIDDLEOfAnOtherwisePerfectWindow()
     {
         var doc = Doc("00:00", "23:59");

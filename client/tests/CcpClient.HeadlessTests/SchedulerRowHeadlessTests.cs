@@ -250,6 +250,46 @@ public class SchedulerRowHeadlessTests
     }
 
     [AvaloniaFact]
+    public async Task EachDayBoxWritesItsOWNDay_AndLeavesTheOtherSixAlone()
+    {
+        // M-bl SURVIVED round 1: every day handler rewritten to write Monday. No headless fact
+        // clicked a day box at all, so seven controls were wired by inspection only — and a user
+        // who unticked Sunday would have unticked Monday instead, which for this row means a
+        // session on a morning they had switched off.
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenStudioAndSchedulerRow(window);
+
+        (string Box, DayOfWeek Day)[] boxes =
+        [
+            ("SchedulerDayMon", DayOfWeek.Monday), ("SchedulerDayTue", DayOfWeek.Tuesday),
+            ("SchedulerDayWed", DayOfWeek.Wednesday), ("SchedulerDayThu", DayOfWeek.Thursday),
+            ("SchedulerDayFri", DayOfWeek.Friday), ("SchedulerDaySat", DayOfWeek.Saturday),
+            ("SchedulerDaySun", DayOfWeek.Sunday),
+        ];
+        Assert.Equal(7, boxes.Length);
+
+        foreach (var (box, day) in boxes)
+        {
+            Click(window, Descendant<CheckBox>(window, box));
+
+            // Exactly one day changed, and it is this box's own.
+            foreach (var (_, candidate) in boxes)
+            {
+                Assert.Equal(
+                    candidate != day,
+                    CcpClient.Desktop.Scheduling.ScheduleWindow.IsDayActive(boot.Scheduler.Preset, candidate));
+            }
+
+            // Put it back, so the next box starts from a full week.
+            Click(window, Descendant<CheckBox>(window, box));
+            Assert.True(CcpClient.Desktop.Scheduling.ScheduleWindow.IsDayActive(boot.Scheduler.Preset, day));
+        }
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
     public async Task AnUnreadableTimeIsKeptVERBATIMInTheBox_AndThePanelSaysWhatIsReallyInForce()
     {
         var boot = await BootAsync();

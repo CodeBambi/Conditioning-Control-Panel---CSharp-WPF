@@ -600,6 +600,248 @@ public class SchedulerModuleTests
     }
 
     // =====================================================================================
+    //  THE SWEEP'S CLOSERS — every fact below exists because a mutation survived round 1
+    // =====================================================================================
+
+    [Fact]
+    public async Task TheHandStopLatchAlsoBlocksAStartTheSchedulerNeverMade_WhichIsTheCaseItIsREALLYFor()
+    {
+        // M-x SURVIVED round 1 — the sweep's most important find, and it was a hole in the TEST
+        // rather than in the code. R4 stops a session the SCHEDULER started, so `_autoStarted` is
+        // still true and the START branch is blocked by that conjunct alone: dropping
+        // `!_manuallyStopped` changed nothing and the headline refusal was never really exercised.
+        //
+        // The case the latch is actually for is this one: the user starts a session THEMSELVES
+        // inside the window (so `_autoStarted` is false) and then stops it. Without the latch the
+        // scheduler sees an open window, no session and no served opening, and starts one thirty
+        // seconds later — which is precisely "I pressed STOP and it came back".
+        await using var rig = await Rig.StartAsync("16:00", "22:00", enabled: true);
+        await rig.PassTheGrace();
+
+        // The window opens BETWEEN two polls, which is the ordinary case at a 30-second cadence:
+        // the clock moves and the user acts before the scheduler's next tick.
+        rig.Clock.SetLocalTime(MondayMorning.Date + new TimeSpan(16, 0, 0));
+
+        // The user's own session, started before the scheduler's first in-window tick.
+        rig.PressStartStopButton();
+        Assert.True(rig.Engine.Running);
+        Assert.False(rig.Scheduler.AutoStartedSession);
+
+        rig.PressStartStopButton();
+        Assert.False(rig.Engine.Running);
+        Assert.False(rig.Scheduler.AutoStartedSession);
+        Assert.True(rig.Scheduler.ManuallyStoppedInWindow);
+
+        for (var minute = 30; minute <= 5 * 60 + 30; minute += 30)
+        {
+            rig.TickAt(new TimeSpan(16, 0, 0) + TimeSpan.FromMinutes(minute));
+            Assert.False(rig.Engine.Running);
+        }
+
+        Assert.Equal(0, rig.Scheduler.StartsPerformed);
+        Assert.Equal(SchedulerAction.Held, rig.Scheduler.Last!.Action);
+    }
+
+    [Fact]
+    public async Task AnAutoStartedSessionSurvivesEVERYTickInsideItsWindow()
+    {
+        // M-z SURVIVED round 1, and it was a real hole: dropping `!reading.InWindow` from the STOP
+        // branch stops the scheduler's own session on the very NEXT tick, thirty seconds after it
+        // started. The flag is then cleared, so the tick after that starts it again — a
+        // thirty-second on/off flap for the length of the window. No fact ticked inside the window
+        // with the auto-started session still running, so nothing saw it.
+        await using var rig = await Rig.StartAsync("16:00", "22:00", enabled: true);
+        await rig.PassTheGrace();
+        rig.TickAt(new TimeSpan(16, 0, 0));
+        Assert.True(rig.Engine.Running);
+
+        for (var minute = 30; minute <= 5 * 60 + 30; minute += 30)
+        {
+            rig.TickAt(new TimeSpan(16, 0, 0) + TimeSpan.FromMinutes(minute));
+            Assert.True(rig.Engine.Running);
+            Assert.True(rig.Scheduler.AutoStartedSession);
+            Assert.Equal(SchedulerAction.Held, rig.Scheduler.Last!.Action);
+        }
+
+        Assert.Equal(1, rig.Scheduler.StartsPerformed);
+        Assert.Equal(0, rig.Scheduler.StopsPerformed);
+    }
+
+    [Fact]
+    public async Task ACallbackThatArrivesAFTERTeardownDoesNothingAtAll()
+    {
+        // M-av SURVIVED round 1: the liveness re-check inside the due callback was unreachable,
+        // because the test clock dropped a cancelled timer instead of doing what the real one
+        // does. System.Threading.Timer suppresses a disposed timer's callback only BEST-EFFORT —
+        // a callback already dispatched to the pool runs anyway — which is why
+        // IScheduleClock.Schedule says so in its own contract and why every scheduled callback in
+        // this port re-checks its own liveness (async contract §5.5).
+        // 08:00 on a Monday against a 16:00-22:00 window: the grace's start-up check holds, so
+        // nothing is running when teardown begins and a session appearing afterwards can only have
+        // come from the late callback.
+        var rig = await Rig.StartAsync("16:00", "22:00", enabled: true);
+        await rig.PassTheGrace();
+        Assert.False(rig.Engine.Running);
+        Assert.True(rig.Participant.GenerationLive);
+
+        await rig.Host.ShutdownAsync();
+        Assert.False(rig.Participant.Running);
+        Assert.False(rig.Participant.GenerationLive);
+
+        var beforeStarts = rig.Scheduler.StartsPerformed;
+        var late = rig.Clock.SpentCallbacks;
+        Assert.NotEmpty(late);
+        for (var i = 0; i < late.Count; i++)
+        {
+            rig.Clock.RefireSpent(i);
+        }
+
+        Assert.False(rig.Engine.Running);
+        Assert.Equal(beforeStarts, rig.Scheduler.StartsPerformed);
+        Assert.Equal(0, rig.Clock.PendingCount);
+        Assert.False(rig.Scheduler.Polling);
+        await rig.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ATickThatComesDueBETWEENTheGenerationDrainAndTheParticipantStop_StartsNothing()
+    {
+        // M-av SURVIVED rounds 1 AND 2, and the reason round 2's closer missed it is worth having:
+        // after StopAsync the pending slot is null, so the CompareExchange identity guard returns
+        // first and the liveness re-check is never reached. Masked, not covered.
+        //
+        // The window where the liveness check is the ONLY thing standing between a live token and
+        // a started session is real and is the product's own teardown order:
+        // ApplicationHost.ShutdownAsync cancels and DRAINS every generation BEFORE it stops
+        // participants in reverse. Between those two steps the scheduler is still `_running`, its
+        // poll token is still in the slot, and its generation is dead. A tick due in that window
+        // must do nothing — and this reproduces it exactly.
+        var rig = await Rig.StartAsync("16:00", "22:00", enabled: true);
+        await rig.PassTheGrace();
+        Assert.Equal(1, rig.Clock.PendingCount);
+        Assert.False(rig.Engine.Running);
+
+        // The window opens between two polls, so the next tick would otherwise start a session.
+        rig.Clock.SetLocalTime(MondayMorning.Date + new TimeSpan(16, 0, 0));
+
+        // Step 2 of ShutdownAsync, alone: the generation is cancelled and drained, and the
+        // participant has NOT been stopped yet.
+        await rig.Registry.CancelAndDrainAsync(rig.Log, CcpClient.Desktop.Lifecycle.CompositionRoot.DefaultFlushTimeout);
+        Assert.True(rig.Participant.Running);
+        Assert.False(rig.Participant.GenerationLive);
+
+        rig.Clock.Advance(SessionScheduler.PollInterval);
+
+        Assert.False(rig.Engine.Running);
+        Assert.Equal(0, rig.Scheduler.StartsPerformed);
+        Assert.False(rig.Scheduler.Polling);
+        await rig.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ASupersededTickDoesNothing_AndDoesNotSTEALTheLivePollsSlot()
+    {
+        // M-aw SURVIVED round 1: replacing the CompareExchange identity with a bare Exchange. The
+        // difference only shows when a SPENT callback is delivered while a DIFFERENT tick owns the
+        // slot — the exact shape ScheduledFire was written for (SP-101 hazard 3). With a bare
+        // Exchange the stale callback clears the live tick's slot, runs a tick that is not due, and
+        // arms a second timer: two one-shots on the clock and a dot reading off the wrong one.
+        await using var rig = await Rig.StartAsync("16:00", "22:00", enabled: true);
+        await rig.PassTheGrace();
+        Assert.Equal(1, rig.Clock.PendingCount);
+
+        var ticksBefore = rig.Scheduler.Last;
+        Assert.NotEmpty(rig.Clock.SpentCallbacks);
+
+        // Deliver the GRACE callback a second time. It is spent; the slot now belongs to the poll.
+        rig.Clock.RefireSpent(0);
+
+        Assert.Equal(1, rig.Clock.PendingCount);
+        Assert.Same(ticksBefore, rig.Scheduler.Last);
+        Assert.True(rig.Scheduler.Polling);
+    }
+
+    [Fact]
+    public async Task StoppingTheParticipantCancelsItsGeneration_WhichIsTheParticipantContract()
+    {
+        // M-az SURVIVED round 1: _owner.Cancel() dropped from StopAsync. Nothing else in the
+        // product reads the generation once _running is false, so the line is defence — but it is
+        // the participant contract's own requirement (SP-003 §5.3, and what HeartbeatParticipant
+        // does), and it is the second half of the guard every scheduled callback re-checks.
+        var rig = await Rig.StartAsync("16:00", "22:00", enabled: true);
+        await rig.PassTheGrace();
+        Assert.True(rig.Participant.Running);
+        Assert.True(rig.Participant.GenerationLive);
+
+        await rig.Participant.StopAsync();
+
+        Assert.False(rig.Participant.Running);
+        Assert.False(rig.Participant.GenerationLive);
+        await rig.DisposeAsync();
+    }
+
+    [Fact]
+    public void TheRealClockIsLOCAL_AndThatIsTheWholeReasonThisSeamExists()
+    {
+        // M-bd SURVIVED round 1: SystemScheduleClock.LocalNow swapped for the UTC reading. No test
+        // drove the real clock at all, so the ONE property that made a new seam necessary instead
+        // of widening ISessionClock was unpinned.
+        //
+        // Kind is the discriminator rather than the value, and deliberately: on a machine whose
+        // timezone IS UTC the two readings are equal, so comparing them would pass under the
+        // mutant exactly where the port is hardest to check. The local reading's Kind is Local and
+        // the universal one's is Utc on every machine there is.
+        //
+        // This reads a real clock ONCE, which is a measurement and not a deadline: nothing here
+        // waits, polls or compares elapsed time, so the timing discipline is untouched (the banned
+        // tokens are deliberately not spelled out above, because that guard is lexical).
+        var clock = new SystemScheduleClock();
+
+        Assert.Equal(DateTimeKind.Local, clock.LocalNow.Kind);
+        Assert.NotEqual(DateTimeKind.Utc, clock.LocalNow.Kind);
+    }
+
+    [Fact]
+    public async Task AnUnsavedSettingStillReachesDiskThroughTheReservedPreDrainSlot()
+    {
+        // M-bo SURVIVED round 1: the scheduler's FlushAsync dropped from CompositionRoot's
+        // pre-drain slot. Every panel gesture saves as it goes, so the earlier fact could not see
+        // the flush at all — it was asserting its own Save(). The slot's guarantee is about a
+        // DIRTY-BUT-UNSAVED document (persistence contract §11), which is what the other four
+        // stores are in that slot for.
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-sp118-flush-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var clock = new ManualScheduleClock(MondayMorning);
+            var root = new CcpClient.Desktop.Lifecycle.CompositionRoot
+            {
+                SettingsPathFactory = () => Path.Combine(dir, "settings.json"),
+                ScheduleClockFactory = () => clock,
+            };
+            Assert.True(root.Validate(out _));
+            var host = root.Build(new StartupTrace());
+            var participant = Assert.IsType<SchedulerParticipant>(host.Participants[^1]);
+            Assert.IsType<StartupOutcome.Success>(
+                await host.StartParticipantsAsync(TestContext.Current.CancellationToken));
+
+            // Dirty, and NEVER saved: no Save() call anywhere on this path.
+            participant.Preset.Mutate(doc => doc.EndTime = "21:07");
+            Assert.True(participant.Preset.IsDirty);
+
+            await host.ShutdownAsync();
+
+            var json = await File.ReadAllTextAsync(
+                Path.Combine(dir, SchedulerPresetDocument.FileName), TestContext.Current.CancellationToken);
+            Assert.Contains("21:07", json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    // =====================================================================================
     //  the rig
     // =====================================================================================
 
@@ -608,10 +850,13 @@ public class SchedulerModuleTests
         private readonly bool _ownsDirectory;
 
         private Rig(
-            ApplicationHost host, SchedulerParticipant participant, SessionEngine engine,
+            ApplicationHost host, OperationRegistry registry, CollectingSchedulerLog log,
+            SchedulerParticipant participant, SessionEngine engine,
             ManualScheduleClock clock, string directory, bool ownsDirectory)
         {
             Host = host;
+            Registry = registry;
+            Log = log;
             Participant = participant;
             Engine = engine;
             Clock = clock;
@@ -621,6 +866,12 @@ public class SchedulerModuleTests
         }
 
         public ApplicationHost Host { get; }
+
+        /// <summary>The operation registry the host owns, so a fact can reproduce the teardown
+        /// window between the generation drain and the participant stop.</summary>
+        public OperationRegistry Registry { get; }
+
+        public CollectingSchedulerLog Log { get; }
 
         public SchedulerParticipant Participant { get; }
 
@@ -690,7 +941,8 @@ public class SchedulerModuleTests
                 participant.Scheduler.SetEnabled(wanted);
             }
 
-            return new Rig(host, participant, engine, clock, dir, ownsDirectory: directory is null);
+            return new Rig(
+                host, registry, log, participant, engine, clock, dir, ownsDirectory: directory is null);
         }
 
         /// <summary>Let WPF's 60-second start-up grace elapse, on the injected clock.</summary>
@@ -775,6 +1027,7 @@ public class SchedulerModuleTests
         }
 
         private readonly List<Entry> _timers = [];
+        private readonly List<Action> _spent = [];
         private DateTime _now = start;
         private int _reads;
 
@@ -811,6 +1064,28 @@ public class SchedulerModuleTests
             }
         }
 
+        /// <summary>
+        /// Every callback this clock has already fired or had cancelled, kept so a test can
+        /// deliver one AGAIN.
+        ///
+        /// <para><b>This is not a contrivance; it is the only deterministic way to reproduce what
+        /// the REAL clock does.</b> <see cref="IScheduleClock.Schedule"/>'s own contract says a
+        /// disposed timer's callback is "best-effort suppressed", which is
+        /// <see cref="System.Threading.Timer"/>'s actual guarantee: a callback already dispatched
+        /// to the pool runs even though the handle has been disposed. So a scheduled callback can
+        /// arrive after teardown, or after it has been superseded, and the product's two guards —
+        /// the liveness re-check and the CompareExchange identity — exist for exactly that.
+        /// Without this, both guards are unreachable from any test and their absence is
+        /// invisible.</para>
+        /// </summary>
+        public IReadOnlyList<Action> SpentCallbacks
+        {
+            get { lock (_timers) { return [.. _spent]; } }
+        }
+
+        /// <summary>Deliver a spent callback again, by the order in which it was created.</summary>
+        public void RefireSpent(int index) => SpentCallbacks[index]();
+
         public IDisposable Schedule(TimeSpan due, Action fire)
         {
             Entry entry;
@@ -835,6 +1110,20 @@ public class SchedulerModuleTests
 
         public void AdvanceTo(DateTime moment)
         {
+            SetLocalTime(moment);
+            Pump();
+        }
+
+        /// <summary>
+        /// Move the wall clock WITHOUT delivering any timer that became due.
+        ///
+        /// <para>Not a contrivance: at a thirty-second cadence the ordinary case is that time
+        /// passes and the user acts BEFORE the scheduler's next tick. A test that could only move
+        /// the clock by firing a tick could never put the user's own gesture between two polls,
+        /// which is exactly where this module's hardest refusal lives.</para>
+        /// </summary>
+        public void SetLocalTime(DateTime moment)
+        {
             lock (_timers)
             {
                 if (moment < _now)
@@ -845,8 +1134,6 @@ public class SchedulerModuleTests
 
                 _now = moment;
             }
-
-            Pump();
         }
 
         private void Pump()
@@ -863,6 +1150,7 @@ public class SchedulerModuleTests
                     }
 
                     _timers.Remove(next);
+                    _spent.Add(next.Fire);
                 }
 
                 next.Fire();
@@ -875,8 +1163,14 @@ public class SchedulerModuleTests
             {
                 lock (clock._timers)
                 {
+                    if (entry.Cancelled)
+                    {
+                        return;
+                    }
+
                     entry.Cancelled = true;
                     clock._timers.Remove(entry);
+                    clock._spent.Add(entry.Fire);
                 }
             }
         }

@@ -1,0 +1,14 @@
+M-m  CAUGHT  [unit]  the unreachable default arm says YES  ||  Failed!  - Failed:     1, Passed:    66, Skipped:     0, Total:    67, Duration: 564 ms - CcpClient.Tests.dll (net10.0)
+M-x  CAUGHT  [unit]  START drops the HAND-STOP clause — the headline harm  ||  Failed!  - Failed:     1, Passed:    66, Skipped:     0, Total:    67, Duration: 625 ms - CcpClient.Tests.dll (net10.0)
+M-z  CAUGHT  [unit]  STOP drops the outside-the-window clause  ||  Failed!  - Failed:     1, Passed:    66, Skipped:     0, Total:    67, Duration: 602 ms - CcpClient.Tests.dll (net10.0)
+M-aa  SURVIVED  [unit]  a refused start is still marked auto-started  ||  Passed!  - Failed:     0, Passed:    67, Skipped:     0, Total:    67, Duration: 600 ms - CcpClient.Tests.dll (net10.0)
+M-av  SURVIVED  [unit]  the due callback drops its liveness re-check  ||  Passed!  - Failed:     0, Passed:    67, Skipped:     0, Total:    67, Duration: 577 ms - CcpClient.Tests.dll (net10.0)
+M-aw  CAUGHT  [unit]  the spent tick clears the slot whatever is in it  ||  Failed!  - Failed:     1, Passed:    66, Skipped:     0, Total:    67, Duration: 605 ms - CcpClient.Tests.dll (net10.0)
+M-az  CAUGHT  [unit]  stop never cancels the generation  ||  Failed!  - Failed:     1, Passed:    66, Skipped:     0, Total:    67, Duration: 598 ms - CcpClient.Tests.dll (net10.0)
+M-bd  CAUGHT  [unit]  the real clock reads UTC instead of local  ||  Failed!  - Failed:     1, Passed:    66, Skipped:     0, Total:    67, Duration: 596 ms - CcpClient.Tests.dll (net10.0)
+M-bl  CAUGHT  [headless]  every day box writes Monday  ||  Failed!  - Failed:     1, Passed:    62, Skipped:     0, Total:    63, Duration: 20 s - CcpClient.HeadlessTests.dll (net10.0)
+M-bo  CAUGHT  [unit]  the scheduler's settings never flush at teardown  ||  Failed!  - Failed:     1, Passed:    66, Skipped:     0, Total:    67, Duration: 587 ms - CcpClient.Tests.dll (net10.0)
+
+round 2: 8 caught, 2 survived, 0 not patched, 0 not compiled (10 attempted)
+tree restored byte-identically: NO —  M client/src/CcpClient.Desktop/Scheduling/SchedulerParticipant.cs
+

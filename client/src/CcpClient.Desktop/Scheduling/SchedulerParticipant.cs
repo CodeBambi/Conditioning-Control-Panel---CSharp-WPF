@@ -90,6 +90,16 @@ public sealed class SchedulerParticipant : IBackgroundParticipant
     /// Before that the scheduler cannot act at all, which is what its dot reports.</summary>
     public bool GracePassed => Volatile.Read(ref _gracePassed);
 
+    /// <summary>
+    /// Whether this participant's operation generation is still live. It is the participant
+    /// contract's own property — stop cancels the generation (SP-003 §5.3) — and it is the second
+    /// half of the guard every scheduled callback re-checks before it does anything
+    /// (<c>_running</c> being the first). Exposed because a scheduler that can start a session is
+    /// the one participant whose "am I still allowed to act" answer is worth being able to ask
+    /// from outside.
+    /// </summary>
+    public bool GenerationLive => _owner.IsLive(_generation);
+
     /// <inheritdoc/>
     /// <remarks>
     /// Phase 3 loads the nine settings and arms the GRACE, and nothing else. WPF delays the
