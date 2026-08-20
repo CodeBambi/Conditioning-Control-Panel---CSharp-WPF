@@ -1,0 +1,1 @@
+{ "packet": "SP-125-fyp-census", "unit": 16, "headless": 0, "reason": "FypCensusTests re-derives the FYP product-file set, payload count and consumer set from the shipping bytes and pins the census document's label, platform and privacy shape" }
