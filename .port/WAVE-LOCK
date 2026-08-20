@@ -1,6 +1,0 @@
-WAVE: 58
-PACKETS: SP-118-scheduler
-LANES: 1
-BASE: e1a6f107
-GATE: validate-wave.mjs WAVE OK; floor 2123/125
-OPENED: 2026-08-20T07:46:01Z
