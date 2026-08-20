@@ -557,3 +557,9 @@ Floor pin **2123 unit / 125 headless**. Next task ID **SP-118**. **THIRTEEN of f
 **D179 is why the second half matters:** Haptics is a SINK the spine drives, and the thirteen ported modules are silent to it - the shipping app reaches for it from EIGHT sites in three modules that ARE ported here (Flash x4, Video x3, Subliminals x1).
 **Haptics' four blockers are structural, not the absent device:** a seventh capability folder, a NuGet dependency needing an admission checkpoint, app-scope wiring in `Lifecycle/**`, and a premium gate. Both providers are CLIENTS of a separate server process.
 **Census-before-code is now proven twice** (SP-116's protocol, SP-117's census). A refusal with an inventory is a result; a refusal without one is an excuse.
+
+## 2026-08-20 - wave 58 landed
+Floor pin **2191 unit / 133 headless**. Next task ID **SP-119**. **FOURTEEN of fifteen rack rows - only HAPTICS remains**, blocked on four structural items (seventh capability folder, NuGet admission, `Lifecycle/**` wiring, premium gate) and an owner dependency call.
+**Compiled-but-never-executed is a standing blind spot and has now produced a real defect TWICE** (SP-101's clock killed the test host; SP-118's `SystemScheduleClock` hid D188 - a tick that could start a session mid-shutdown). No gate here can answer which shipped types have zero executed lines. **Treat any surface whose only coverage is a type reference or property read as UNEXECUTED until a fact drives its behaviour.**
+**A re-run rule scoped to TEST changes cannot catch a masking caused by a PRODUCT change.** SP-118 hardened a file after its mutations were verdicted and five went stale; final review caught it. When product code changes mid-sweep, re-run every mutation in that file.
+**D190, owner decision pending: a DST fall-back night can auto-start TWICE.** Pinned as upstream behaviour rather than fixed - a DST-aware predicate would start sessions at moments the shipping app does not.

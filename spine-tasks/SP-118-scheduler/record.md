@@ -468,7 +468,7 @@ order fact gains two assertions: this row HAS a dot and has NO effect behind it)
 
 29 + 33 + 6 = **68** unit, **8** headless — the declared delta.
 
-**Docs:** `client/docs/wpf-surface-reachability.md` (§SP-118, **D180-D187**).
+**Docs:** `client/docs/wpf-surface-reachability.md` (§SP-118, **D180-D190**).
 **Sweep artefacts, inside this packet's folder:** `sweep.mjs`, `sweep-round*.log`.
 
 ---
