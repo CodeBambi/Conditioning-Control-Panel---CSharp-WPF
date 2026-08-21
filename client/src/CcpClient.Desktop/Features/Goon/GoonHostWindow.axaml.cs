@@ -18,7 +18,7 @@ namespace CcpClient.Desktop.Features.Goon;
 /// upstream's 25 C# files is ported (goon-game-census.md §7.1, "Upstream code to port: none of
 /// the 25 as code"). What this window owes the page is the handshake and nothing more.</para>
 ///
-/// <para><b>Boot contract</b> (<c>GoonHostService.cs:296-380</c>, mirrored): the page announces
+/// <para><b>Boot contract</b> (<c>GoonHostService.cs:297-388</c>, mirrored): the page announces
 /// <c>ready</c> (<c>bridge.js:106</c>), then the host posts <c>init</c>, then <c>manifest</c>,
 /// then the <c>fullscreen</c> echo. <c>boot.js</c> settles only when BOTH init and manifest have
 /// landed (<c>boot.js:415-416</c>) and gives up at 45 s (<c>:112-113</c>), so the manifest is
@@ -28,7 +28,7 @@ namespace CcpClient.Desktop.Features.Goon;
 /// upstream is explicit that this surface has no tray tuck (<c>GoonHostService.cs:20-23</c>);
 /// fullscreen is host-owned and echoed as the ACTUAL state (catalogue <c>:31</c>,
 /// <c>boot.js:2504-2513</c>); the exit handshake is <c>exit</c> → <c>end-run</c> →
-/// <c>exit-done</c> with a bounded wait (<c>boot.js:2436-2465</c>).</para>
+/// <c>exit-done</c> with a bounded wait (<c>boot.js:2437-2465</c>).</para>
 ///
 /// <para><b>Named limits, not silences.</b> (1) There is no relaunch coordinator for this
 /// surface, so a watchdog recovery demand closes the window honestly with a diagnostic rather
@@ -89,7 +89,7 @@ public partial class GoonHostWindow : Window
         Closing += (_, e) =>
         {
             // Graceful exit for window-X on a LIVE page only: ask the page to wind down and wait
-            // a bounded 1200 ms for exit-done (boot.js:2436-2465). Never for a recovery close.
+            // a bounded 1200 ms for exit-done (boot.js:2437-2465). Never for a recovery close.
             if (!_recoveryClosing && !_exitFlow.Exiting && _watchdog.IsLive
                 && _exitFlow.RequestClose(pageLive: true) == DtrhExitFlow.DtrhExitAction.RequestWindDown)
             {
@@ -288,7 +288,7 @@ public partial class GoonHostWindow : Window
         _watchTimer.Tick += (_, _) =>
         {
             // runActive is always false here: this host does not model a mid-run tier. Upstream's
-            // extra net is a paint-stall rule (GoonHostService.cs:74-80) this unit does not port.
+            // extra net is a paint-stall rule (GoonHostService.cs:71-80) this unit does not port.
             var outcome = _watchdog.Tick(DateTimeOffset.UtcNow, runActive: false);
             if (outcome is not null)
             {

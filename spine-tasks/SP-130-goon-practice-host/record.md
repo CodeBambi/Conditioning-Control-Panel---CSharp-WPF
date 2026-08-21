@@ -145,6 +145,69 @@ miss it every time, because the manifest is organised by asset class, not by fea
    makes it served. `UpstreamPayloadInventoryTests` checks well-formedness and tree presence only,
    never disposition, so the entry goes stale silently. Outside File Scope; the orchestrator holds it.
 
+### 7.3 Citations: what was swept, how the coverage was established, and what it found
+
+**An earlier version of this record said "147 citation head-lines checked, zero out of range". That
+claim was overstated and is withdrawn.** The verifier behind it matched only the NAMED form
+(`File.ext:N`) and silently skipped every bare `:N` continuation, so its coverage was unmeasured and
+lower than it sounded. Final review's independent sweep of the same files found 197 where mine found
+147, and three range-starts mine had not flagged. **The description outran the mechanism, and the
+description was of the mechanism** — which is this packet's own subject one level up.
+
+**How coverage is established now, mechanically rather than by care.** The verifier extracts BOTH
+forms — `File.ext:N[-M]` and the bare `:N[-M]` continuation, which inherits the most recently named
+file within the same source file, exactly as a reader resolves it. Every extracted span is then
+MASKED OUT of the source text, and the residue is re-scanned for `:\d+`. **Any survivor is a
+citation the extractor did not see, and is reported as a failure.** That is the coverage measurement:
+not "I believe it saw everything", but "nothing citation-shaped is left after it ran". One shape is
+excluded and only by SHAPE, never by value: a `host:PORT` (an IP or `localhost` immediately before
+the colon), so a real citation can never be swallowed by the exclusion.
+
+**Result over the 13 files this packet added or modified:**
+
+| | |
+|---|---|
+| Extracted | **282** |
+| Resolved against the cited file and checked | **265** |
+| Named in prose but never line-cited here (declared, not dropped) | 17 |
+| Of the extracted, the bare `:N` continuation form | **93** |
+| `host:PORT` tokens excluded by shape | 1 |
+| **Problems remaining** | **0** |
+
+**What it found, all fixed:**
+
+1. Three range-STARTS landing on a blank line or a comment tail, all found by final review and all in
+   `GoonHostWindow.axaml.cs` — `GoonHostService.cs:296-380` -> **`:297-388`** (`:296` blank,
+   `OnPageReady` is `:297`); `boot.js:2436-2465` -> **`:2437-2465`** (`:2436` blank); and
+   `GoonHostService.cs:74-80` -> **`:71-80`** in the window, **`:75`** in `GoonProtocol.cs` (`:74` is
+   the closing line of the doc comment, `PaintStallSeconds` is `:75`).
+2. **Four bare continuations that crossed a file boundary** — `:32`, `:48-49`, `:50-51`, `:377`,
+   `:368` in `GoonProtocol.cs` all meant `GoonHostService.cs` while the nearest NAMED file was
+   `boot.js`, `bridge.js` or `DtrhProtocol.cs`. **Every target was correct in substance** (verified
+   line by line: `:32` is the `ping` catalogue row, `:48-49` the transfer-cache family, `:50-51` the
+   received-inbox family, `:377` the `received` field, `:368` the inbox purge) — the FORM was
+   ambiguous, to my tool and to a reader alike. All five are now written out in full.
+3. One survivor, declared: `tunnel/index.html:29-34` in the csproj is a **pre-existing SP-061
+   comment** (commit `05fed4ddd`), outside this packet's diff.
+
+**The residual limit, stated rather than papered over.** The masking rule proves the extractor SAW
+every citation-shaped token. It does not prove ATTRIBUTION for the 93 bare continuations: the
+nearest-named rule can only show that each resolves to a real, non-blank line in the file it picks. A
+bare `:N` mis-attributed to a file that happens to have a plausible line N would pass silently. The
+four in item 2 were caught only because their wrong targets were too short or blank there. **Closing
+that class needs semantics, not a matcher** — it is a human reading obligation, and the mitigation
+applied here is to write out any continuation that crosses a file boundary.
+
+### 7.4 Filed, not built (board rows, deliberately not widened into at a final gate)
+
+1. **`GoonPracticeTests.cs` duplicates `LoopbackServer`'s nine-extension allowlist as a test
+   literal** instead of reading `LoopbackServer.cs:25-34`. The two agree today, so D258 is correct —
+   but a change on the SERVER side would not red this guard. Reading the real table would close it.
+2. **No test issues an HTTP request against the running goon `LoopbackServer`.** An in-process GET
+   needs no headed run and no browser, so this is a real evidence step that was available and not
+   taken: it is the difference between "the files ship" (proved) and "the origin serves them" (not
+   proved). The obvious first move for whoever takes this next.
+
 ## 8. Discrepancies found, and how each was resolved
 
 | Found | Resolution |
@@ -165,3 +228,23 @@ miss it every time, because the manifest is organised by asset class, not by fea
   (184 appended entries, 0 deletions) and `client/tests/CcpClient.Tests/AssetManifestTests.cs:144`
   (one number)
 - **Docs:** `client/docs/wpf-surface-reachability.md` (D250-D259 only)
+
+## 10. The board row this earns — status **WIP**, not DONE
+
+**What the row must say.** A Goon practice **HOST** was built: the payload is served by a linked
+read-only glob (**184 files, zero bytes forked**), `init` and `manifest` are transcribed
+field-for-field from the two upstream copies, and the four owner-gated doors — Host, Join, voice
+notes, media setup — **refuse typed**, each naming what is missing. **The evidence class reached is
+that the payload SHIPS, and only that.** Page load and handshake completion are **not established**.
+Duel playability is **not established and is owed to a headed Windows run**. **Linux is unproven.**
+
+**What the row must not say.** Not "Goon practice mode landed". Not "Goon Game playable". Not
+"practice mode works". Nothing from which a reader could conclude that a person can play.
+**Nobody has loaded this page.**
+
+**Why the headline outcome is a manual gate rather than a skipped step**, recorded so the next reader
+does not mistake it for laziness: there was no automated route to a headed duel in this repository at
+all. `client/tools/verify/capture.ps1`'s surface list carries no goon entry and `client/tools/**` is
+must-not-change; a `--goon-demo` would have needed `Program.cs` argument parsing, a fourth file
+outside the granted touches; and no harness here can play a duel in any case. The route that DOES
+exist is a person opening the Play page and pressing PRACTICE.

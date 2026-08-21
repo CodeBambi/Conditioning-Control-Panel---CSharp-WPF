@@ -18,10 +18,10 @@ namespace CcpClient.Desktop.Features.Goon;
 /// reads only the ECHOED state (<c>boot.js:2504-2513</c>), so without the echo F11 is a dead
 /// key.</para>
 ///
-/// <para><b>1 OUT, TYPED BUT NEVER EMITTED:</b> <c>ping</c> (<c>:32</c>). The page answers it
+/// <para><b>1 OUT, TYPED BUT NEVER EMITTED:</b> <c>ping</c> (<c>GoonHostService.cs:32</c>). The page answers it
 /// with <c>pong</c> (<c>boot.js:377</c>), but this host ships no paint-stall watchdog prod
 /// (upstream posts one at <c>GoonHostService.cs:1540</c>, off the paint-stall rule whose
-/// constants are at <c>:74-80</c>). Classified rather than silently absent — the
+/// constant is at <c>:75</c>). Classified rather than silently absent — the
 /// <see cref="Intake.IntakeProtocol"/> authoring discipline.</para>
 ///
 /// <para><b>1 OUT, THE REFUSAL:</b> <c>net-post-result {id,status,body}</c> (<c>:34</c>).
@@ -37,8 +37,9 @@ namespace CcpClient.Desktop.Features.Goon;
 /// <c>net-post {id,path,body}</c> (<c>:47</c>; <c>bridge.js:169-179</c>).</para>
 ///
 /// <para><b>Out of vocabulary for THIS host (typed, tolerated, never acted on):</b> the
-/// transfer-cache family (<c>:48-49</c>), the received-inbox family (<c>:50-51</c>), the
-/// Discord family (<c>:52-54</c>), and the two upstream stubs <c>toy-pattern</c>/<c>toy-stop</c>
+/// transfer-cache family (<c>GoonHostService.cs:48-49</c>), the received-inbox family
+/// (<c>GoonHostService.cs:50-51</c>), the Discord family (<c>GoonHostService.cs:52-54</c>), and
+/// the two upstream stubs <c>toy-pattern</c>/<c>toy-stop</c>
 /// (<c>:45</c>) and <c>match-result</c> (<c>:46</c>). None is reachable in a build with
 /// <c>assetCache:false</c>, <c>mediaTransfer:false</c> and no Discord block, and every one of
 /// them is logged by presence and shape rather than dropped.</para>
@@ -166,9 +167,10 @@ public static class GoonProtocol
     /// core") — and the frame is <c>DtrhProtocol.BuildManifest</c> (<c>DtrhProtocol.cs:268-277</c>),
     /// field-for-field identical minus one.
     ///
-    /// <para><b>That one field is <c>received</c> (<c>:377</c>), and it is a FRAME-SHAPE STUB
-    /// here, documented rather than hidden.</b> Upstream it is the accepted-artifact list, and
-    /// upstream wipes the inbox immediately before listing (<c>:368</c>) precisely so the rows
+    /// <para><b>That one field is <c>received</c> (<c>GoonHostService.cs:377</c>), and it is a
+    /// FRAME-SHAPE STUB here, documented rather than hidden.</b> Upstream it is the
+    /// accepted-artifact list, and upstream wipes the inbox immediately before listing
+    /// (<c>GoonHostService.cs:368</c>) precisely so the rows
     /// "are always empty". A practice-only build has no media channel to fill it and no inbox
     /// to wipe, so it is always empty — for a different reason, which is why it is stated. The
     /// page's priming path is kept alive by the field's presence (<c>boot.js:356-360</c>).</para>
