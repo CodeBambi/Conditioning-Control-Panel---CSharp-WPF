@@ -28,6 +28,10 @@ public partial class DtrhLoomWindow : Window
     private DtrhLoomDispatch? _loomDispatch;
     private DtrhNativeEffects? _fx;
     private SoundFlowDtrhAudio? _audio;
+    // SP-135: the PermissionRequested deny hook. This window has no ProcessFailed subscription and
+    // no watchdog at all, so this is its FIRST native CoreWebView2 subscription — the field and the
+    // dispose line below are new, not a copy of a neighbouring pattern.
+    private WebViewPermissionDeny.PermissionDenySignal? _permissionDenySignal;
     private bool _sentLoomList;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
@@ -51,6 +55,9 @@ public partial class DtrhLoomWindow : Window
         Closing += (_, _) =>
         {
             _closing.Cancel();
+            // Detach BEFORE the adapter dies (detach on a zombie is tolerated anyway).
+            try { _permissionDenySignal?.Dispose(); } catch { /* best-effort */ }
+            _permissionDenySignal = null;
             try { _fx?.Teardown(); } catch { /* best-effort — teardown is idempotent */ }
             try { _fx?.Dispose(); } catch { /* best-effort */ }
             _fx = null;
@@ -129,7 +136,11 @@ public partial class DtrhLoomWindow : Window
     {
         _web = new NativeWebView();
         _web.EnvironmentRequested += OnEnvironmentRequested;
-        _web.AdapterCreated += (_, _) => _host.LogDiagnostic("loom: AdapterCreated");
+        _web.AdapterCreated += (_, _) =>
+        {
+            _host.LogDiagnostic("loom: AdapterCreated");
+            AttachPermissionDeny();
+        };
         _web.AdapterDestroyed += (_, _) => _host.LogDiagnostic("loom: AdapterDestroyed");
         _web.WebMessageReceived += OnWebMessage;
         WebHost.Children.Add(_web);
@@ -159,6 +170,42 @@ public partial class DtrhLoomWindow : Window
             _host.LogDiagnostic("loom: GTK WebKit base dirs set (loom-suffixed)");
         }
     }
+
+    /// <summary>SP-135: the DENYING PermissionRequested handler, on the studio's embedded surface
+    /// too. Upstream's LoomHostService has no permission handler at all, so this tightens beyond
+    /// upstream; the studio asks the browser for nothing, which is exactly why denying costs it
+    /// nothing. Autoplay is left at the browser default — the studio's sfx already rely on the
+    /// --autoplay-policy switch set at :162 above. A failed attach is typed and LOGGED.</summary>
+    private void AttachPermissionDeny()
+    {
+        if (_web?.TryGetPlatformHandle() is Avalonia.Platform.IWindowsWebView2PlatformHandle wv2)
+        {
+            switch (WebViewPermissionDeny.TryAttach(wv2.CoreWebView2, OnPermissionDecision))
+            {
+                case WebViewPermissionDeny.AttachOutcome.Attached attached:
+                    _permissionDenySignal = attached.Signal;
+                    _host.LogDiagnostic(
+                        "loom: PermissionRequested DENY hook ATTACHED (WebView2 slot-23 subscription; autoplay alone left at the browser default)");
+                    break;
+                case WebViewPermissionDeny.AttachOutcome.Unavailable unavailable:
+                    _host.LogDiagnostic(
+                        $"loom: PermissionRequested DENY hook UNAVAILABLE ({unavailable.Code}) — {unavailable.Detail}; "
+                        + "the browser still owns the prompt on this surface (D250 stands here)");
+                    break;
+            }
+        }
+        else
+        {
+            _host.LogDiagnostic(
+                "loom: PermissionRequested DENY hook UNAVAILABLE (unsupported-platform) — the platform handle is not "
+                + "IWindowsWebView2PlatformHandle; the browser still owns the prompt on this surface (D250 stands here)");
+        }
+    }
+
+    /// <summary>One permission answer, for the diagnostic log (arrives on the UI thread — COM
+    /// apartment). Kind and decision ONLY: the requesting origin is never read and never logged.</summary>
+    private void OnPermissionDecision(int kind, WebViewPermissionDeny.Decision decision) =>
+        _host.LogDiagnostic($"loom: permission {WebViewPermissionDeny.KindName(kind)} -> {decision}");
 
     // ---------- Linux: NativeWebDialog (WebKitGTK toplevel) ----------
 

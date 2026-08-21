@@ -55,6 +55,9 @@ public partial class DtrhHostWindow : Window
     private readonly DtrhWatchdog? _watchdog;
     private DispatcherTimer? _watchTimer;
     private DtrhProcessFailed.DtrhProcessFailedSignal? _processFailedSignal;
+    // SP-135: the PermissionRequested deny hook (Windows embedded only). Independent of the
+    // watchdog — a permission answer has nothing to do with process recovery.
+    private WebViewPermissionDeny.PermissionDenySignal? _permissionDenySignal;
     private bool _runActive;
     // b5 graceful exit (window-scoped flow) + stale-profile retry latch (retry ONCE,
     // never a crash loop).
@@ -148,6 +151,8 @@ public partial class DtrhHostWindow : Window
             // MarkDead parks the watch without spending the relaunch.
             try { _processFailedSignal?.Dispose(); } catch { /* best-effort */ }
             _processFailedSignal = null;
+            try { _permissionDenySignal?.Dispose(); } catch { /* best-effort */ }
+            _permissionDenySignal = null;
             _watchdog?.MarkDead();
             try { _meta?.FlushSave(); } catch { /* best-effort — teardown is idempotent */ }
             TeardownBarkPipeline();
@@ -572,6 +577,7 @@ public partial class DtrhHostWindow : Window
         {
             _host.LogDiagnostic($"dtrh: AdapterCreated info='{SafeAdapterInfo()}'");
             AttachProcessFailedSignal();
+            AttachPermissionDeny();
         };
         _web.AdapterDestroyed += (_, _) => _host.LogDiagnostic("dtrh: AdapterDestroyed");
         _web.WebMessageReceived += OnWebMessage;
@@ -829,6 +835,45 @@ public partial class DtrhHostWindow : Window
                 + "IWindowsWebView2PlatformHandle; heartbeat watchdog is the only net (named limit, never faked)");
         }
     }
+
+    /// <summary>SP-135: subscribe the DENYING PermissionRequested handler at AdapterCreated, so the
+    /// browser's own permission prompt never reaches the user (D250). Deliberately NOT guarded by
+    /// the watchdog the way <see cref="AttachProcessFailedSignal"/> is: a permission answer has
+    /// nothing to do with process recovery, and a null watchdog must never make the deny silently
+    /// conditional. Upstream has NO handler on this host — GoonHostService.cs:431 is the shipping
+    /// app's only PermissionRequested subscription — so denying here tightens beyond upstream. A
+    /// failed attach is logged with its code: the port never becomes quieter about this than it was
+    /// when it had no handler at all.</summary>
+    private void AttachPermissionDeny()
+    {
+        if (_web?.TryGetPlatformHandle() is Avalonia.Platform.IWindowsWebView2PlatformHandle wv2)
+        {
+            switch (WebViewPermissionDeny.TryAttach(wv2.CoreWebView2, OnPermissionDecision))
+            {
+                case WebViewPermissionDeny.AttachOutcome.Attached attached:
+                    _permissionDenySignal = attached.Signal;
+                    _host.LogDiagnostic(
+                        "dtrh: PermissionRequested DENY hook ATTACHED (WebView2 slot-23 subscription; autoplay alone left at the browser default)");
+                    break;
+                case WebViewPermissionDeny.AttachOutcome.Unavailable unavailable:
+                    _host.LogDiagnostic(
+                        $"dtrh: PermissionRequested DENY hook UNAVAILABLE ({unavailable.Code}) — {unavailable.Detail}; "
+                        + "the browser still owns the prompt on this surface (D250 stands here)");
+                    break;
+            }
+        }
+        else
+        {
+            _host.LogDiagnostic(
+                "dtrh: PermissionRequested DENY hook UNAVAILABLE (unsupported-platform) — the platform handle is not "
+                + "IWindowsWebView2PlatformHandle; the browser still owns the prompt on this surface (D250 stands here)");
+        }
+    }
+
+    /// <summary>One permission answer, for the diagnostic log (arrives on the UI thread — COM
+    /// apartment). Kind and decision ONLY: the requesting origin is never read and never logged.</summary>
+    private void OnPermissionDecision(int kind, WebViewPermissionDeny.Decision decision) =>
+        _host.LogDiagnostic($"dtrh: permission {WebViewPermissionDeny.KindName(kind)} -> {decision}");
 
     /// <summary>Native ProcessFailed callback (arrives on the UI thread — COM apartment;
     /// posted defensively anyway). WPF OnProcessFailed :850-852 parity.</summary>

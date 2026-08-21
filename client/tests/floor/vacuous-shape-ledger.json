@@ -1001,6 +1001,42 @@
       "expectDetected": true,
       "verdict": "not-vacuous",
       "reason": "SP-118. The single File.Exists is the argument of an Assert.True at body depth 0 — the predicate IS the assertion, and a scheduler whose settings never reached disk FAILS here rather than being silenced. Same disposition, same shape and same mechanical reason as the AiMemoryStoreTests fs-predicate entries above. The enclosing try/finally exists only to delete the temp directory and does not guard the assertions (the detector classifies try/finally as non-guarding for exactly this reason)"
+    },
+    {
+      "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheSubscription_LandsOnSlot23_AndTypesEveryFailure",
+      "path": "CcpClient.Tests/WebViewPermissionTests.cs",
+      "line": 277,
+      "method": "WebViewPermissionTests.TheSubscription_LandsOnSlot23_AndTypesEveryFailure",
+      "shapes": [
+        "early-return"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "SP-135. The CCW this fact needs (Marshal.GetComInterfaceForObject) is a Windows COM facility, so the subscription cannot be exercised elsewhere. The non-Windows arm is NOT silent: WindowsOrTypedUnsupported() asserts the product's typed unsupported-platform refusal and its detail text before returning, so every supported OS lands in an asserting arm. The deny DECISION carries no such predicate at all - it was extracted into WebViewPermissionDeny.AnswerRequest (pure vtable traffic, no CCW) precisely so the eight TheAnswer_* facts in this file run on every platform, which took this file from twelve shaped sites to three"
+    },
+    {
+      "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheHandlerAttachedAtSlot23_Fires_AndDeniesTheMicrophone",
+      "path": "CcpClient.Tests/WebViewPermissionTests.cs",
+      "line": 309,
+      "method": "WebViewPermissionTests.TheHandlerAttachedAtSlot23_Fires_AndDeniesTheMicrophone",
+      "shapes": [
+        "early-return"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm as the entry above. This is the fact that proves the pointer handed to slot 23 is the handler that denies - it invokes that CCW through its own vtable and observes DENY arrive at put_State - so it cannot be expressed without the CCW it needs. The deny DECISION it corroborates is asserted platform-independently by the eight TheAnswer_* facts, which drive WebViewPermissionDeny.AnswerRequest (pure vtable traffic, no CCW) and carry no platform predicate at all"
+    },
+    {
+      "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
+      "path": "CcpClient.Tests/WebViewPermissionTests.cs",
+      "line": 335,
+      "method": "WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
+      "shapes": [
+        "early-return"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm as the two entries above. Detach can only be exercised on a subscription that exists, and the subscription needs the CCW; making it cross-platform by reflecting the signal's internal constructor was possible and was REJECTED, because a token this fact invented rather than received would make Assert.Equal(DefaultToken, remove.TokenSeen) tautological and lose the attach-to-detach round trip. The deny decision itself needs no CCW and is asserted everywhere by the eight TheAnswer_* facts over WebViewPermissionDeny.AnswerRequest"
     }
   ]
 }
