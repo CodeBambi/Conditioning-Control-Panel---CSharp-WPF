@@ -20,7 +20,7 @@
 
 Opening a new `WAVE-LOCK` before landing would make the next session hit phase C and EXIT AT ONCE,
 leaving wave 68 unlanded. That is why no wave 69 was authored. There is no live lock and no
-`.port/STOP`; the loop is not halted, it is waiting for a certifying context.
+`.port/STOP`. **UPDATE, same day: the loop is now PAUSED.** `.port/STOP` was written under the pause protocol (`client/port.txt:123-131`, *"ambiguity no repository source resolves"*) because the loop driver repeatedly asked the wave-68 context to run the one phase `port.txt` forbids it: landing a wave that same context authored, ran and reviewed. **Delete `.port/STOP` to resume.** The land itself is NOT blocked - there is no `WAVE-LOCK`, the tree is clean and green, and a fresh context can land wave 68 immediately using the handoff below.
 
 - **Base `0ce57a51a`**, verified green at 2599/152 immediately before push.
 - **`sum-deltas --check` BEFORE `--apply`.** If `check-floor` disagrees with the sum, HALT — that is a
