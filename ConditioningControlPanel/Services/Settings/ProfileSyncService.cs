@@ -229,7 +229,16 @@ namespace ConditioningControlPanel.Services
         private bool _disposed;
         private bool _syncEnabled = true;
         private bool _pendingQuestResetClear;
-        private DateTime _lastAuthRecoveryAttempt = DateTime.MinValue;
+        // Per-strategy recovery cooldowns. restore-session is a single cheap proxy call, so it may
+        // retry often; a provider re-validate walks the Patreon/Discord API and is rate-limited
+        // upstream, so it gets a longer leash. One shared 5-minute cooldown used to cover both,
+        // which meant a diverged token kept 401ing for five minutes before the only strategy that
+        // can actually fix it was even tried.
+        private static readonly TimeSpan RestoreSessionCooldown = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan ProviderRevalidateCooldown = TimeSpan.FromMinutes(2);
+        private DateTime _lastRestoreSessionAttempt = DateTime.MinValue;
+        private DateTime _lastProviderRevalidateAttempt = DateTime.MinValue;
+        private readonly SemaphoreSlim _authRecoveryGate = new(1, 1);
         private bool _hasLoadedProfile; // true after first successful LoadProfileAsync/SyncProfileAsync round-trip
         private readonly SemaphoreSlim _syncGate = new(1, 1);
 
@@ -3492,8 +3501,9 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Handles a 401 Unauthorized response. Attempts token recovery via restore-session with a
-        /// 5-minute cooldown between attempts. The token is preserved on failure.
+        /// Handles a 401 Unauthorized response. Attempts token recovery (see
+        /// <see cref="TryRecoverAuthTokenAsync"/>) under per-strategy cooldowns. The token is
+        /// preserved on failure.
         ///
         /// Returns TRUE only when the session was actually recovered and it is safe to carry on
         /// with the request that 401'd. It used to return true for any 401 - including "recovery
@@ -3511,33 +3521,77 @@ namespace ConditioningControlPanel.Services
             if (response.StatusCode != HttpStatusCode.Unauthorized)
                 return false;
 
-            // Attempt recovery with a 5-minute cooldown to prevent concurrent 401s from spam-recovering
-            // while still allowing retry if a transient server issue resolves later.
-            if (DateTime.Now - _lastAuthRecoveryAttempt > TimeSpan.FromMinutes(5))
+            // One recovery at a time: a burst of concurrent 401s must not fire a burst of
+            // re-validates. Waiters re-enter TryRecoverAuthTokenAsync and fall straight out on the
+            // per-strategy cooldowns the winner just claimed, so they cost nothing.
+            await _authRecoveryGate.WaitAsync();
+            try
             {
-                _lastAuthRecoveryAttempt = DateTime.Now;
-                App.Logger?.Information("[Auth] 401 received — attempting token recovery via restore-session");
-                var recovered = await TryRecoverAuthTokenAsync();
-                if (recovered)
+                App.Logger?.Information("[Auth] 401 received — attempting token recovery");
+                if (await TryRecoverAuthTokenAsync())
                 {
                     App.Logger?.Information("[Auth] Token recovered successfully");
                     StartHeartbeat();
                     return true;
                 }
             }
+            finally
+            {
+                _authRecoveryGate.Release();
+            }
 
             // Don't clear the auth token — it may still be valid for other endpoints or after
-            // a transient server issue. The 5-minute cooldown prevents recovery spam.
+            // a transient server issue. The per-strategy cooldowns prevent recovery spam.
             App.Logger?.Warning("[Auth] 401 — recovery failed or on cooldown, token kept for retry");
             return false;
         }
 
         /// <summary>
-        /// Attempts to recover the auth token by calling /v2/auth/restore-session.
+        /// Attempts to recover the auth token, cheapest strategy first.
+        ///
+        /// 1. /v2/auth/restore-session — confirms the stored token is still the server's. It can
+        ///    only ever clear a TRANSIENT 401, because the endpoint authenticates with the very
+        ///    token we are trying to replace: if the client and server copies have diverged it
+        ///    answers 401 forever, which is why recovery alone never healed a divergence.
+        /// 2. Provider re-validate — /patreon/validate and /discord/validate both re-issue the
+        ///    auth token when the one we present doesn't match (BUG-7DCJHDP3JZ), and the provider
+        ///    OAuth token (not the CCP one) authenticates the call. This is the ONLY client path
+        ///    that can mint a fresh token, so a divergence has to fall through to it.
+        ///
         /// Returns true if the token was successfully recovered.
-        /// Must NOT call HandleUnauthorizedAsync on the response (would recurse).
+        /// Must NOT call HandleUnauthorizedAsync on any response here (would recurse).
         /// </summary>
         private async Task<bool> TryRecoverAuthTokenAsync()
+        {
+            if (string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId))
+                return false;
+
+            if (TryClaimCooldown(ref _lastRestoreSessionAttempt, RestoreSessionCooldown)
+                && await TryRestoreSessionAsync())
+                return true;
+
+            if (TryClaimCooldown(ref _lastProviderRevalidateAttempt, ProviderRevalidateCooldown)
+                && await TryProviderRevalidateAsync())
+                return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Marks a recovery strategy as attempted now, or returns false if it is still cooling down.
+        /// </summary>
+        private static bool TryClaimCooldown(ref DateTime lastAttempt, TimeSpan cooldown)
+        {
+            if (DateTime.Now - lastAttempt <= cooldown)
+                return false;
+            lastAttempt = DateTime.Now;
+            return true;
+        }
+
+        /// <summary>
+        /// Recovery strategy 1: ask the server to confirm the stored token.
+        /// </summary>
+        private async Task<bool> TryRestoreSessionAsync()
         {
             try
             {
@@ -3587,6 +3641,54 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Warning("[Auth] restore-session recovery failed: {Error}", ex.Message);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Recovery strategy 2: force the signed-in provider to re-validate, which makes the server
+        /// re-issue the auth token when the stored one no longer matches its hash. Reuses the
+        /// services' own validate entry points — both already persist a re-issued token — so a
+        /// change in <see cref="AppSettings.AuthToken"/> across the call is the success signal.
+        /// </summary>
+        private static async Task<bool> TryProviderRevalidateAsync()
+        {
+            var before = App.Settings?.Current?.AuthToken;
+            try
+            {
+                var patreon = App.Patreon;
+                var discord = App.Discord;
+                if (patreon?.IsAuthenticated == true)
+                {
+                    App.Logger?.Information("[Auth] Re-validating Patreon to have the server re-issue the auth token");
+                    await patreon.ValidateSubscriptionAsync(forceRefresh: true);
+                }
+                else if (discord?.IsAuthenticated == true)
+                {
+                    App.Logger?.Information("[Auth] Re-validating Discord to have the server re-issue the auth token");
+                    await discord.ValidateAndRefreshUserAsync(forceRefresh: true);
+                }
+                else
+                {
+                    // Invite-code / email-only sessions have no provider to mint from; nothing left
+                    // to try short of the user signing in again.
+                    App.Logger?.Warning("[Auth] No provider session available to re-issue the auth token");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("[Auth] Provider re-validate failed: {Error}", ex.Message);
+                return false;
+            }
+
+            var after = App.Settings?.Current?.AuthToken;
+            if (!string.IsNullOrEmpty(after) && after != before)
+            {
+                App.Logger?.Information("[Auth] Provider re-validate issued a fresh auth token");
+                return true;
+            }
+
+            App.Logger?.Warning("[Auth] Provider re-validate returned no new auth token — token still diverged");
+            return false;
         }
 
         /// <summary>
