@@ -152,7 +152,7 @@ packet. Reported as D294; the correction belongs to whoever owns that sentence. 
 refusal stays true: no capture device is opened, and the missing CROSSING (no peer) is still the
 reason the door refuses.
 
-## 7. BLOCKED: three facts need a file this packet may not touch
+## 7. RESOLVED (was BLOCKED): three facts needed a file this packet could not touch
 
 `VacuousShapeGuardTests` (SP-066) requires every `[Fact]` carrying a silencing shape to be
 dispositioned in **`client/tests/floor/vacuous-shape-ledger.json`** — inside `client/tests/floor/**`,
@@ -164,7 +164,10 @@ which this packet's File Scope lists as must-not-change. Three facts need a CCW
 **twelve sites to three** and turned eight Windows-only facts into cross-platform ones — better
 evidence, not just fewer entries. The remaining three are genuinely machine-bound.
 
-**The exact entries needed** (append to `entries` in `vacuous-shape-ledger.json`):
+**The coordinator granted exactly this and nothing more, and it is applied**: three entries
+appended to `client/tests/floor/vacuous-shape-ledger.json` (82 entries -> 85, `36 insertions(+),
+0 deletions`, valid JSON, keys unique). `floor.json` and everything else under
+`client/tests/floor/**` stayed closed. The entries as landed:
 
 ```json
 {
@@ -209,9 +212,25 @@ blocked exactly the way this one is. That is worth a mechanism, not a per-packet
 Pin **2573 unit / 152 headless**. Declared delta **+14 unit / 0 headless**
 (`spine-tasks/SP-135-webview-permission-deny/floor-delta.json`); `floor.json` was never opened.
 
-**Observed: 2587 unit total = 2573 pin + 14 declared** — 2584 passed, 2 known machine-class skips, and
-**1 failure: `VacuousShapeGuardTests`, for the scope reason in §7 and nothing else.** The warnings gate
-is **0 warnings / 0 errors across all four projects, forced non-incremental**.
+**Observed after the granted ledger edit: 2587 unit = 2573 pin + 14 declared, with ZERO named
+failures** (2585 passed, 2 known machine-class skips), and **152 headless, unchanged**. The only thing
+`check-floor` still reports is the expected pin drift — 2587 against a pin of 2573 — which is the
+delta mechanism working as designed: the pin is bumped once at land from every packet's declared
+delta, never by a lane. `floor.json` was never opened. The warnings gate is **0 warnings / 0 errors
+across all four projects, forced non-incremental**.
+
+**One unrelated test flaked once, and is named rather than papered over.**
+`SoundArbitrationTests.Construction_AbandonedThenFaults_CountStillDrops_CapNeverRefusesForever`
+failed `Assert.Equal() Expected: 1 / Actual: 0` on the FIRST full run after the ledger edit, and has
+passed every run since — 3/3 in isolation and the next full floor run clean, zero failures. It is a
+wall-clock-BUDGET fact: `ConstructionBudget = 200 ms` (`SoundArbitrationTests.cs:1106`) is a real
+timeout inside the product's construction path, not a `TestWait`, so it is sensitive to CPU
+contention in a parallel run. It also passed in all three earlier full floor runs of this session.
+**I did not touch it, did not quarantine it, and did not add it to `allowedSkips`** — it is recorded
+here because a count that moves once and goes unmentioned is how a flake becomes a habit. What I
+cannot rule out: that this packet's facts contribute LOAD to the same process (each `FakeCom` marshals
+61 delegate stubs, and roughly twenty are built per run), which would make them a contributor to a
+latent timing flake rather than its cause.
 
 ## 9. Spec-versus-code discrepancies
 
