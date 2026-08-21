@@ -259,5 +259,18 @@ can point at. It is a board row, not a silent widening, so it is named here and 
 `D260` and this file quote `d280560b5` for the commit the figures and the red demonstrations were
 taken at. All 21 demonstrations were run twice: once at `ae7168d8f` before the code review, and
 again in full at `d280560b5` after the anchor sweep moved every line number in `detect.mjs`. That
-placeholder is replaced in the immediately following commit, which changes only hexadecimal text and
-therefore cannot move a citation count — verified by re-running the tool after the substitution.
+placeholder is replaced in `5a20755e5`, and the CORRECTED account of that commit — read from
+`git show --stat` rather than from memory — is: it is a normal child of `d280560b5`, not an amend,
+and it changes **7 insertions / 5 deletions across two files**, not hexadecimal alone. Four lines in
+`wpf-surface-reachability.md` restamp SHAs in D260 and D262; eight lines in this file restamp and add
+two sentences. Its commit message says "hex only", which **overstates**. What the message got right
+is the part the demonstrations rest on, and it is verifiable by blob hash: `detect.mjs`,
+`self-test.mjs`, `CitationNeedleTests.cs` and the inventory are **byte-identical** between the two
+commits, so nothing under test moved and the citation counts could not move — confirmed by
+re-running the tool after the substitution.
+
+**This is the second SHA account in this packet that did not match the git facts**, and both were
+caught by a reviewer rather than by me. Both were benign, and that is not the point: in a packet
+whose whole subject is claims that stop matching the bytes underneath them, describing a commit I
+had not re-read is the same error one level up. `git show --stat` costs nothing and is now the rule
+before any sentence about a commit.

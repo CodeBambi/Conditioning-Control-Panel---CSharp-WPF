@@ -10,6 +10,11 @@ scripts under the session scratchpad. No number here is an estimate.
 
 ## 0. What I read
 
+**Line numbers as at base `e3aee3e21`.** This table is a provenance record of a plan-time reading,
+not a claim about HEAD: a citation that documents a past reading is anchored to the state that
+was read, and re-deriving these to HEAD would falsify what I actually read. Every anchor that
+supports a PRESENT claim, everywhere else in this packet, is anchored to HEAD instead.
+
 | Source | What I took from it |
 |---|---|
 | `client/tools/citations/detect.mjs:1-103` | the header contract: review-list-not-red-test (`:13-14`), the exit contract (`:74-82`), the stated limit (`:91-93`), the two universes, the ordering invariant |
