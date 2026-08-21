@@ -88,9 +88,86 @@
 //   shell string. Every path is normalized to forward slashes before comparison. There
 //   is no wall-clock wait, no retry loop and no sleep anywhere in this file.
 //
+// THE NEEDLE MODE (SP-131) — THE SECOND MODE, AND THE LINE-LEVEL HALF
+//   The default mode answers a FILE-level question: did an upstream file the port cites
+//   change? The rot is LINE-level: does the cited line still say what the citation claims?
+//   A file can be untouched in a sync window and still have every citation into it shifted
+//   by an edit ten lines above. `--needles` answers that, for the citations that opt in.
+//
+//   A NEEDLE, NOT A LINE. An inventory entry may carry `needles: [{id, needle}]`. There is
+//   still NO line-number field anywhere in the schema, deliberately: a stored line rots
+//   exactly as fast as the citation it describes. BOTH endpoints of every comparison are
+//   DERIVED — one from `git show <endpoint>:<path>`, one from the working tree — so there is
+//   nothing to re-record after a repair and nothing that can go stale in the data.
+//
+//   WHAT MAKES A GOOD NEEDLE (whoever adds the next one will copy what they see here):
+//     1. A short distinctive SUBSTRING of the cited line, never the whole line. A whole line
+//        rots on an indent change; a substring does not, which is why the match is a
+//        substring match and not a line match.
+//     2. It must occur EXACTLY ONCE in the file. `Math.Min(run.AffirmedMantras` was rejected
+//        during seeding because it matches two lines (the XP sum and the credit cap); the
+//        `var affirmed = ` prefix is what makes it an anchor. NEEDLE-AMBIGUOUS reports this.
+//     3. Prefer a code token or a distinctive phrase. Avoid punctuation-only text and text
+//        whose internal whitespace a reformat would collapse.
+//     4. Never a line number and never a regex: the match is literal, case-sensitive and
+//        Ordinal (the same match GoonGameCensusTests.cs's proven pin uses).
+//
+//   FOUR CLASSES, AND EACH STATES SOMETHING CERTAINLY TRUE. That is what keeps this out of
+//   cry-wolf territory: NEEDLE-GONE (0 matches today), NEEDLE-AMBIGUOUS (>1 today),
+//   NEEDLE-MOVED (exactly one match at both endpoints, at different lines) and
+//   CITATION-OUT-OF-RANGE (a span past the file's end — arithmetic, not inference).
+//
+//   THE CLASS THAT WAS DESIGNED, MEASURED AND CUT — recorded so it is not re-invented.
+//   A per-CITATION `CITATION-DRIFT` class (a span that contained a needle at the endpoint and
+//   contains none now) was implemented and measured at the inventory's own previous baseline
+//   42286638. It emitted FOUR rows and ALL FOUR were false: GradedRunAwards.cs:95,
+//   trainer-card-census.md:180 and wpf-surface-reachability.md:1467/:1491 all cite
+//   IntakeHostService.cs:418-420, which today is exactly the `held_back` comment they mean
+//   (:1467 is D223, quoting :418-420 as a RECORDED historical mis-citation, which is a
+//   different reason for the same verdict). They fire only because the emit needle happened
+//   to sit at :419 at that endpoint. A 100% false-positive rate is the shape line 13 forbids
+//   by name, so the class is CUT, not softened. The consequence, stated rather than hidden:
+//   this mode issues a per-SUBJECT verdict and names the shift; re-basing the citations is
+//   the reviewer's step. See divergence D261.
+//
+//   SCOPED TO NEEDLED ENTRIES, STRUCTURALLY. Every line-level check reads `entry.needles`
+//   first and does nothing when it is absent, so "no blanket line-number validation" is a
+//   property of the code and not a promise. Citations into the other entries stay FILE-level.
+//
 // WHAT THIS FILE DELIBERATELY DOES NOT DO
-//   - It does not validate citation LINE NUMBERS. The `:NNN` suffix is matched and then
-//     discarded; there is no line-number field in the row shape.
+//   - The DEFAULT mode does not validate citation LINE NUMBERS: the `:NNN` suffix is matched
+//     and then discarded, and there is no line-number field in the row shape. `--needles`
+//     checks lines ONLY for entries that carry a needle (1 of 297 today) and never for any
+//     other entry. The coverage block prints that split on every run, in both modes.
+//   - It does not resolve BARE `:NNN` continuations to a file, in either mode. A bare
+//     reference names no file, and the nearest-preceding-citation-token heuristic was
+//     measured and REJECTED. THE MEASUREMENT, at commit e3aee3e21 and stated with its SHA
+//     because no run re-derives it: the heuristic credits 200 of the port's bare references
+//     to IntakeHostService.cs alone, and mis-binds on the first example examined —
+//     DtrhUserMedia.cs's `FlashService.GetMediaFiles :2855-2867`, which is a FlashService
+//     citation. This is the LARGEST gap in the needle mode: FIVE of the seven citations D232
+//     records as rotted are of this form (enumerated at 3c38c3973; D232 and the repaired
+//     comment at IntakeQuizRun.cs:136-137 both say seven, and both are wrong — see D264).
+//     The COUNT of bare references is re-derived and printed on every run, in both modes.
+//   - IT DOES NOT SEE CITATIONS INTO THE PORT'S OWN TOOLING, in either mode, and this packet
+//     proved it the hard way. CITATION_WITH_LINE matches only `.cs` and `.xaml`, and the corpus
+//     is client/src/** plus client/docs/** and nothing else. So a citation into client/tools/**,
+//     and ANY citation into a .mjs file, is invisible to all six default classes and to all four
+//     needle classes. SP-131's own citations INTO THIS FILE rotted inside it: six of them, all
+//     correct at e3aee3e21 and all invalidated by SP-131's own commit a70371e21, which inserted
+//     this header without re-deriving them. A human reviewer caught them; the tool could not,
+//     because the tool cannot see itself.
+//     THE SAME FACT, SEEN FROM THE OTHER SIDE, AND IT IS ONE PROPERTY AND NOT TWO: it is exactly
+//     why editing this header, or spine-tasks/**, can never move the coverage counts — which is
+//     what makes those counts a stable fixed point. A reader told only the reassuring half has
+//     been told half a fact. See D260's seventh blind spot.
+//   - It does not re-derive an entry's `citedBy`. NEW-CITATION (:640-651) skips any path
+//     already in the inventory, and no class anywhere in runDetector diffs an existing
+//     entry's citer list — the recorded citedBy is only copied into rows for display. A
+//     citation ADDED to a file the inventory already carries is therefore invisible to all
+//     six classes. Measured today: the IntakeHostService.cs entry's citedBy is missing
+//     GradedRunAwards.cs, trainer-card-census.md and wpf-surface-reachability.md, all of
+//     which cite it. Re-deriving citedBy is a regeneration job, not a detection one.
 //   - The first-attempt counter reads the PATH PREFIX immediately before the token, and
 //     nothing else. A bare basename sitting in first-attempt prose
 //     (first-attempt-lessons.md:108 lists `LocalAiService.cs` unqualified beside a
@@ -670,9 +747,374 @@ export function runDetector({ repoRoot, since, until, inventoryPath } = {}) {
   };
 }
 
+// ------------------------------------------------------- SP-131 the needle review
+
+/** The needle mode's row classes. A typed vocabulary, like CLASS above, and for the same
+ *  reason: a fact must be able to assert the SPECIFIC check that tripped. */
+export const NEEDLE_CLASS = Object.freeze({
+  GONE: "NEEDLE-GONE",
+  AMBIGUOUS: "NEEDLE-AMBIGUOUS",
+  MOVED: "NEEDLE-MOVED",
+  OUT_OF_RANGE: "CITATION-OUT-OF-RANGE",
+});
+
+const NEEDLE_CLASS_ORDER = [
+  NEEDLE_CLASS.GONE,
+  NEEDLE_CLASS.AMBIGUOUS,
+  NEEDLE_CLASS.MOVED,
+  NEEDLE_CLASS.OUT_OF_RANGE,
+];
+
+/** A FILE-QUALIFIED citation carrying an explicit line span: `Name.cs:426`, `Name.cs:427-429`,
+ *  with or without a path prefix. The FILE half is character-for-character CITATION_TOKEN's own
+ *  pattern (:248) and not a second, drifting copy of it — the two must agree about what a
+ *  citation token is, or the needle mode would resolve names the default mode cannot. */
+const CITATION_WITH_LINE = /([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:cs|xaml)\b):(\d+)(?:-(\d+))?/g;
+
+/** A BARE `:NNN` / `:NNN-MMM` continuation — the form that names no file.
+ *
+ *  THE RULE, DEFINED HERE BECAUSE THE COVERAGE BLOCK PRINTS ITS COUNT AND A DIVERGENCE ROW
+ *  QUOTES THAT COUNT. A number in a review row must come from the mechanism it describes, so
+ *  the definition lives in the tool rather than in a one-off script:
+ *    - the `:` must NOT follow a path or word character. That single lookbehind is what
+ *      excludes the file-qualified form (`IntakeHostService.cs:433` — `s` precedes), a port
+ *      number (`host:80`, `https://x.example:8080` — `t`/`e` precede), a ratio (`1:3`) and a
+ *      timestamp (`12:34:56`, where BOTH colons follow a digit);
+ *    - it must not be followed by a further digit, so a longer number cannot be split.
+ *  What remains is `(:426`, `` `:418-420` ``, `at :55` — the continuation form as written.
+ *  It is COUNTED and never resolved; see the header's second do-not-do bullet. */
+const BARE_LINE_REFERENCE = /(?<![A-Za-z0-9_./\\-]):(\d+)(?:-(\d+))?(?!\d)/g;
+
+/** Every 1-based line of `text` that CONTAINS `needle`. Literal, case-sensitive, Ordinal —
+ *  the same match GoonGameCensusTests.cs's proven pin uses. A needle that is a substring is
+ *  already immune to an indent change, which is why no whitespace normalisation is applied:
+ *  deviating from a proven mechanism needs evidence, and there is none. */
+export function needleLines(text, needle) {
+  const hits = [];
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) if (lines[i].includes(needle)) hits.push(i + 1);
+  return hits;
+}
+
+/** The file's bytes at a git endpoint, or null when the path did not exist there.
+ *  null is "cannot compare", never "did not move": the difference is counted and printed. */
+function readAtEndpoint(repoRoot, sha, relPath) {
+  const result = runGit(repoRoot, ["show", `${sha}:${relPath}`]);
+  return result.ok ? result.stdout : null;
+}
+
+/** Pure core of the second mode: {endpoint, rows, coverage}, PRINTS NOTHING.
+ *  Same transposition as runDetector(), so fixtures can drive every branch. */
+export function runNeedleReview({ repoRoot, since, inventoryPath } = {}) {
+  if (!repoRoot) throw new DetectorError("runNeedleReview requires a repoRoot");
+  const root = toPosix(path.resolve(repoRoot));
+  const invPath = inventoryPath
+    ? toPosix(path.resolve(inventoryPath))
+    : `${root}/client/docs/upstream-citation-inventory.json`;
+
+  let inventory;
+  try {
+    inventory = JSON.parse(fs.readFileSync(invPath, "utf8"));
+  } catch (err) {
+    throw new DetectorError(`inventory at ${invPath} is not readable/parseable JSON: ${err.message}`);
+  }
+  if (!inventory || !Array.isArray(inventory.entries)) {
+    throw new DetectorError(`inventory at ${invPath} has no "entries" array`);
+  }
+
+  const wpfRoot = path.join(root, "ConditioningControlPanel");
+  if (!fs.existsSync(wpfRoot)) {
+    throw new DetectorError(`ConditioningControlPanel/ is absent under ${root} — nothing to re-grep needles in`);
+  }
+
+  // The comparison endpoint. Default: the state the inventory was RECORDED against, which is
+  // why this mode is silent on a tree whose upstream has not moved past its own baseline —
+  // and fires at the next sync, which is when the wave-64 rot was created. Verified BEFORE
+  // any read, by the same helper the default mode uses, so a bad SHA is still named.
+  const endpoint = since ?? inventory.baseline?.merge;
+  if (!endpoint) {
+    throw new DetectorError("no comparison endpoint: pass --since <sha>, or give the inventory a baseline.merge");
+  }
+  verifyEndpoint(root, endpoint, "comparison endpoint");
+
+  // Resolve citation tokens against the SHIPPING universe only, by the same rule and the same
+  // index the default mode uses (:482-487): an ambiguous basename picks nothing.
+  const isWpfSource = (name) => /\.(?:cs|xaml)$/i.test(name);
+  const shippingUniverse = walkFiles(wpfRoot, isWpfSource)
+    .map((p) => p.slice(root.length + 1))
+    .filter((p) => !isFirstAttemptPath(p));
+  const shippingIndex = indexByBasename(shippingUniverse);
+
+  const needled = inventory.entries.filter((e) => Array.isArray(e.needles) && e.needles.length > 0);
+  const needledPaths = new Set(needled.map((e) => e.path));
+
+  // --- scan the port for citation spans and bare continuations, in ONE pass
+  const srcFiles = walkFiles(path.join(root, "client", "src"), (n) => /\.(?:cs|axaml)$/i.test(n));
+  const docFiles = walkFiles(path.join(root, "client", "docs"), (n) => /\.md$/i.test(n));
+  const spans = []; // only those resolving to a NEEDLED path
+  let explicitTotal = 0;
+  let bareTotal = 0;
+
+  for (const file of [...srcFiles, ...docFiles]) {
+    let text;
+    try {
+      text = fs.readFileSync(file, "utf8");
+    } catch {
+      continue; // a file that vanished mid-scan is not a reason to lie about the rest
+    }
+    const label = file.startsWith(`${root}/client/docs/`)
+      ? `docs:${file.slice(`${root}/client/docs/`.length)}`
+      : `src:${file.slice(`${root}/client/`.length)}`;
+
+    let lineNumber = 0;
+    for (const raw of text.split("\n")) {
+      lineNumber += 1;
+      for (const m of raw.matchAll(CITATION_WITH_LINE)) {
+        explicitTotal += 1;
+        const candidates = shippingIndex.get(m[1]);
+        if (!candidates || candidates.length !== 1) continue; // unresolved or ambiguous: never picked
+        if (!needledPaths.has(candidates[0])) continue; // FILE-level only, by design
+        const from = Number(m[2]);
+        const to = m[3] ? Number(m[3]) : from;
+        spans.push({ path: candidates[0], citer: `${label}:${lineNumber}`, text: m[0], from, to });
+      }
+      for (const _bare of raw.matchAll(BARE_LINE_REFERENCE)) bareTotal += 1;
+    }
+  }
+
+  // --- the needles themselves
+  const rows = [];
+  const currentLine = new Map(); // `${path}#${id}` -> line, for needles that anchor cleanly
+  let located = 0;
+  let gone = 0;
+  let ambiguous = 0;
+  let unchanged = 0;
+  let moved = 0;
+  let absentAtEndpoint = 0;
+  let ambiguousAtEndpoint = 0;
+  let needleTotal = 0;
+
+  for (const entry of needled) {
+    let current = null;
+    try {
+      current = fs.readFileSync(path.join(root, entry.path), "utf8");
+    } catch {
+      current = null; // the default mode already classes this as UNRESOLVED; here it is per-needle
+    }
+    const before = current === null ? null : readAtEndpoint(root, endpoint, entry.path);
+
+    for (const needle of entry.needles) {
+      needleTotal += 1;
+      if (current === null) {
+        gone += 1;
+        rows.push({
+          cls: NEEDLE_CLASS.GONE,
+          path: entry.path,
+          id: needle.id,
+          needle: needle.needle,
+          reason: "the cited file is absent from the working tree",
+          action: "the entry's own path no longer exists; the default mode's UNRESOLVED row names the move",
+        });
+        continue;
+      }
+
+      const now = needleLines(current, needle.needle);
+      if (now.length === 0) {
+        gone += 1;
+        rows.push({
+          cls: NEEDLE_CLASS.GONE,
+          path: entry.path,
+          id: needle.id,
+          needle: needle.needle,
+          reason: "no line in the file contains this needle any more",
+          action:
+            "upstream deleted or rewrote the subject a landed claim names — re-read the file, then re-cite or retire the claim",
+        });
+        continue;
+      }
+      if (now.length > 1) {
+        ambiguous += 1;
+        rows.push({
+          cls: NEEDLE_CLASS.AMBIGUOUS,
+          path: entry.path,
+          id: needle.id,
+          needle: needle.needle,
+          reason: `matches ${now.length} lines today (${now.join(", ")})`,
+          action: "this needle can no longer anchor a line — lengthen it until it matches exactly one",
+        });
+        continue;
+      }
+
+      located += 1;
+      currentLine.set(`${entry.path}#${needle.id}`, now[0]);
+
+      if (before === null) {
+        absentAtEndpoint += 1;
+        continue; // cannot compare, and counted as such rather than reported as unmoved
+      }
+      const then = needleLines(before, needle.needle);
+      if (then.length !== 1) {
+        if (then.length === 0) absentAtEndpoint += 1;
+        else ambiguousAtEndpoint += 1;
+        continue;
+      }
+      if (then[0] === now[0]) {
+        unchanged += 1;
+        continue;
+      }
+      moved += 1;
+      const delta = now[0] - then[0];
+      rows.push({
+        cls: NEEDLE_CLASS.MOVED,
+        path: entry.path,
+        id: needle.id,
+        needle: needle.needle,
+        reason: `:${then[0]} -> :${now[0]} (${delta > 0 ? "+" : ""}${delta}) since ${endpoint}`,
+        citedBy: [...(entry.citedBy ?? [])],
+        action:
+          `upstream moved this subject; a citation into this file written against ${endpoint} is off by ` +
+          `that much. Re-base it — this mode names the SHIFT, never which citation is wrong`,
+      });
+    }
+  }
+
+  // --- the citation spans into needled paths
+  const lineCount = new Map();
+  for (const p of needledPaths) {
+    try {
+      lineCount.set(p, fs.readFileSync(path.join(root, p), "utf8").split("\n").length);
+    } catch {
+      lineCount.set(p, 0);
+    }
+  }
+
+  let confirmed = 0;
+  let uncovered = 0;
+  let outOfRange = 0;
+  for (const span of spans) {
+    const total = lineCount.get(span.path) ?? 0;
+    if (total > 0 && span.to > total) {
+      outOfRange += 1;
+      rows.push({
+        cls: NEEDLE_CLASS.OUT_OF_RANGE,
+        path: span.path,
+        id: null,
+        needle: null,
+        reason: `${span.text} cited from ${span.citer}, but the file has ${total} lines`,
+        action: "the file shrank under this citation; re-read it and re-cite, or retire the claim",
+      });
+      continue;
+    }
+    const inside = [...currentLine.entries()].some(
+      ([key, line]) => key.startsWith(`${span.path}#`) && line >= span.from && line <= span.to,
+    );
+    if (inside) confirmed += 1;
+    else uncovered += 1;
+  }
+
+  rows.sort((a, b) => {
+    const ci = NEEDLE_CLASS_ORDER.indexOf(a.cls) - NEEDLE_CLASS_ORDER.indexOf(b.cls);
+    if (ci !== 0) return ci;
+    if (a.path !== b.path) return a.path < b.path ? -1 : 1;
+    return String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0;
+  });
+
+  return {
+    endpoint,
+    rows,
+    coverage: {
+      endpoint,
+      entries: {
+        total: inventory.entries.length,
+        needled: needled.length,
+        bare: inventory.entries.length - needled.length,
+      },
+      needles: { total: needleTotal, located, gone, ambiguous },
+      comparison: { unchanged, moved, absentAtEndpoint, ambiguousAtEndpoint },
+      citations: { explicitTotal, intoNeedled: spans.length, confirmed, uncovered, outOfRange, bare: bareTotal },
+      byClass: Object.fromEntries(NEEDLE_CLASS_ORDER.map((c) => [c, rows.filter((r) => r.cls === c).length])),
+      totalRows: rows.length,
+    },
+  };
+}
+
+/** The coverage block, printed by BOTH modes on every run. An unstated coverage gap is how a
+ *  review list becomes a false reassurance, so the gap is printed as numbers, not implied. */
+export function formatNeedleCoverage(coverage) {
+  const { entries, needles, comparison, citations } = coverage;
+  return [
+    "## NEEDLE COVERAGE",
+    `  inventory entries: ${entries.total} — ${entries.needled} carry needle(s), ${entries.bare} do not. ` +
+      `The ${entries.bare} stay FILE-level: this mode says NOTHING about their citation lines.`,
+    `  needles: ${needles.total} declared — ${needles.located} anchor at exactly one line, ` +
+      `${needles.gone} gone, ${needles.ambiguous} ambiguous`,
+    `  compared against ${coverage.endpoint}: ${comparison.unchanged} unchanged, ${comparison.moved} moved, ` +
+      `${comparison.absentAtEndpoint} not present there, ${comparison.ambiguousAtEndpoint} ambiguous there ` +
+      `(the last two CANNOT be compared, and are not "unmoved")`,
+    `  file-qualified citations with a line: ${citations.explicitTotal} in the port, ` +
+      `${citations.intoNeedled} into a needled path — ${citations.confirmed} confirmed ` +
+      `(a needle's current line is inside the span), ${citations.uncovered} uncovered ` +
+      `(no needle describes that span), ${citations.outOfRange} past the end of the file`,
+    // Every figure on this line is DERIVED by the run that prints it. The size of the rejected
+    // heuristic's mis-binding is a hand measurement at a named commit and therefore lives in this
+    // file's header with its SHA, not here: a number in derived output that the run did not derive
+    // is the next thing to go stale silently.
+    `  bare :NNN continuations: ${citations.bare} in the port — NOT CHECKED, in either mode. ` +
+      `A bare reference names no file, and the nearest-preceding-citation-token heuristic was ` +
+      `measured and rejected (this file's header carries the measurement and its SHA). LARGEST gap:`,
+    "    FIVE of the SEVEN citations that motivated this mode — D232's rotted corpus, the reason it",
+    "    exists — are of that form, so the mode cannot reach them. It reaches the other two.",
+    "  also not checked: a citation that was wrong the day it was written (no needle knows what a",
+    "  citation intended); an entry's citedBy, which no class re-derives once the entry exists; and",
+    "  any citation into client/tools/** or into a .mjs file, which is outside the corpus entirely —",
+    "  SP-131's own citations into detect.mjs rotted inside it, unseen by this tool.",
+  ].join("\n");
+}
+
+export function formatNeedleReport(outcome) {
+  const { endpoint, rows, coverage } = outcome;
+  const out = [];
+  out.push("UPSTREAM CITATION NEEDLE REVIEW LIST");
+  out.push(`comparison endpoint: ${endpoint} .. working tree`);
+  out.push("");
+
+  // Grouped by PATH inside each class, so a citer list — which belongs to the entry and not to
+  // the needle — is printed ONCE rather than repeated under every needle that moved. Nine
+  // identical sixteen-name lists is the shape that gets a report skimmed instead of read.
+  for (const cls of NEEDLE_CLASS_ORDER) {
+    const group = rows.filter((r) => r.cls === cls);
+    out.push(`## ${cls} (${group.length})`);
+    if (group.length === 0) out.push("  (none)");
+    let lastPath = null;
+    for (const row of group) {
+      if (row.path !== lastPath) {
+        lastPath = row.path;
+        out.push(`  ${row.path}`);
+        if (row.citedBy) {
+          out.push(`      cited by ${row.citedBy.length}: ${row.citedBy.length > 0 ? row.citedBy.join(", ") : "(nothing)"}`);
+        }
+      }
+      out.push(`    ${row.id ? `#${row.id}` : "-"}  (${row.reason})`);
+      if (row.needle !== null && row.needle !== undefined) out.push(`        needle: ${JSON.stringify(row.needle)}`);
+      out.push(`        action: ${row.action}`);
+    }
+    out.push("");
+  }
+
+  out.push(formatNeedleCoverage(coverage));
+  out.push(`  TOTAL ROWS: ${coverage.totalRows}`);
+  out.push("");
+  out.push("This is a REVIEW LIST, not a failure. Exit 0 means the detector ran.");
+  return out.join("\n");
+}
+
 // -------------------------------------------------------------------- reporting
 
-export function formatReport(outcome) {
+/** `needleCoverage` is the SP-131 coverage block, optional so the fourteen facts that call
+ *  this with one argument keep working. When present it is emitted BEFORE the closing line,
+ *  because a coverage gap printed after "this is a review list, not a failure" reads as an
+ *  appendix rather than as part of the finding. */
+export function formatReport(outcome, needleCoverage) {
   const { window, rows, summary } = outcome;
   const out = [];
   out.push("UPSTREAM CITATION REVIEW LIST");
@@ -727,6 +1169,10 @@ export function formatReport(outcome) {
   for (const p of fa.solePaths) out.push(`      ${p}`);
   out.push(`  TOTAL ROWS: ${summary.totalRows}`);
   out.push("");
+  if (needleCoverage) {
+    out.push(needleCoverage);
+    out.push("");
+  }
   out.push("This is a REVIEW LIST, not a failure. Exit 0 means the detector ran.");
   return out.join("\n");
 }
@@ -734,7 +1180,7 @@ export function formatReport(outcome) {
 // -------------------------------------------------------------------------- CLI
 
 function parseArgs(argv) {
-  const opts = { since: undefined, until: undefined, out: undefined };
+  const opts = { since: undefined, until: undefined, out: undefined, needles: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const eq = arg.indexOf("=");
@@ -756,6 +1202,9 @@ function parseArgs(argv) {
       case "--out":
         opts.out = take();
         break;
+      case "--needles":
+        opts.needles = true;
+        break;
       case "-h":
       case "--help":
         opts.help = true;
@@ -768,11 +1217,19 @@ function parseArgs(argv) {
 }
 
 const USAGE = [
-  "usage: node client/tools/citations/detect.mjs [--since <sha>] [--until <sha>] [--out <path>]",
+  "usage: node client/tools/citations/detect.mjs [--needles] [--since <sha>] [--until <sha>] [--out <path>]",
   "",
   "  Emits the upstream citation REVIEW LIST to stdout.",
   "  --since/--until override the window read from the inventory's baseline.",
+  "  --needles emits the LINE-LEVEL review list instead: every inventory needle is re-grepped in",
+  "            the working tree and compared with its position at the comparison endpoint.",
+  "            --since overrides that endpoint (default: the inventory's baseline.merge).",
+  "            --until has no meaning here and is REJECTED rather than silently ignored,",
+  "            because this mode always compares against the WORKING TREE.",
   "  --out writes the same report to a file as well (opt-in; nothing is written otherwise).",
+  "",
+  "  Both modes print the NEEDLE COVERAGE block, every run: an unstated coverage gap is how a",
+  "  review list becomes a false reassurance.",
   "",
   "  Exit 0: the detector ran (an empty list and a long list both exit 0).",
   "  Exit 1: the detector could not run honestly; the reason is named on stderr.",
@@ -791,11 +1248,25 @@ export function main(argv = [], cwd = process.cwd()) {
     return 0;
   }
   let report;
-  let outcome;
   try {
     const repoRoot = findRepoRoot(cwd);
-    outcome = runDetector({ repoRoot, since: opts.since, until: opts.until });
-    report = formatReport(outcome);
+    if (opts.needles) {
+      // --until is REJECTED, not ignored: this mode always compares against the working tree,
+      // and a flag that is silently dropped is a tool lying about what it measured.
+      if (opts.until !== undefined) {
+        throw new DetectorError(
+          "--until has no meaning with --needles: the needle mode always compares the comparison " +
+            "endpoint against the WORKING TREE. Use --since to move the endpoint.",
+        );
+      }
+      report = formatNeedleReport(runNeedleReview({ repoRoot, since: opts.since }));
+    } else {
+      // The coverage block is printed in BOTH modes, so the default report can never read as
+      // complete: it answers a FILE-level question and says so, with numbers.
+      const outcome = runDetector({ repoRoot, since: opts.since, until: opts.until });
+      const needles = runNeedleReview({ repoRoot });
+      report = formatReport(outcome, formatNeedleCoverage(needles.coverage));
+    }
   } catch (err) {
     if (err instanceof DetectorError) {
       // NO review list on a broken input, ever.
@@ -809,9 +1280,11 @@ export function main(argv = [], cwd = process.cwd()) {
     fs.mkdirSync(path.dirname(path.resolve(opts.out)), { recursive: true });
     fs.writeFileSync(path.resolve(opts.out), `${report}\n`, "utf8");
   }
-  // THE EXIT CONTRACT. `outcome.rows.length` is deliberately NOT consulted here: a
-  // review list with rows in it is the tool working, not the tool failing. Turning this
-  // into `return outcome.rows.length ? 1 : 0` is what self-test fact F10 forbids.
+  // THE EXIT CONTRACT, AND IT COVERS BOTH MODES. No row count of either kind is consulted
+  // here — that is why neither `outcome` nor the needle outcome escapes the try block above.
+  // A review list with rows in it is the tool working, not the tool failing. Turning this
+  // into `return outcome.rows.length ? 1 : 0` is what self-test fact F10 forbids, and what
+  // CitationNeedleTests pins from the .NET floor for both modes.
   return 0;
 }
 

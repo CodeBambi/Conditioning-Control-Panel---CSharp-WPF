@@ -18,6 +18,7 @@
   "ambiguousBasenames": [
     "MainWindow.xaml"
   ],
+  "needleContract": "SP-131. An entry MAY carry needles: [{id, needle}] and MUST NOT carry a line number anywhere - a stored line rots exactly as fast as the citation it describes, so both endpoints of every comparison are derived instead (git show <baseline.merge>:<path>, and the working tree). A needle is a SHORT DISTINCTIVE SUBSTRING of the cited line, at most 80 characters, never the whole line: a whole line rots on an indent change and a substring does not. It must occur EXACTLY ONCE in the file, or `detect.mjs --needles` reports NEEDLE-AMBIGUOUS and it anchors nothing - `Math.Min(run.AffirmedMantras` was rejected during seeding for matching two lines, and the `var affirmed = ` prefix is what makes it an anchor. Prefer a code token or a distinctive phrase; avoid punctuation-only text and text whose internal whitespace a reformat would collapse. The match is literal, case-sensitive and Ordinal - never a regex, never a line number. Coverage is OPT-IN: an entry with no needles stays FILE-level and the tool says nothing about its citation lines, which is printed as a number on every run.",
   "entries": [
     {
       "path": "ConditioningControlPanel/App.xaml.cs",
@@ -199,7 +200,18 @@
         "add": 106,
         "del": 1
       },
-      "verdict": "THIRD CONSECUTIVE SYNC on this file - re-read owed against the landed Intake host contract - tier-1 review row"
+      "verdict": "THIRD CONSECUTIVE SYNC on this file - re-read owed against the landed Intake host contract - tier-1 review row",
+      "needles": [
+        { "id": "top-marks-rationale", "needle": "Deliberately NOT full marks" },
+        { "id": "top-marks-constant", "needle": "TopMarksPercent = 90.0" },
+        { "id": "score-percent", "needle": "var pct = run.MaxScore" },
+        { "id": "category-normalise", "needle": "run.Niche.Trim().ToLowerInvariant()" },
+        { "id": "quiz-completed-emit", "needle": "QuizService.RaiseQuizCompleted(" },
+        { "id": "passed-always-true", "needle": "passed: true" },
+        { "id": "perfect-guard", "needle": "perfect: run.MaxScore > 0" },
+        { "id": "mantra-credit-cap", "needle": "var affirmed = Math.Min(run.AffirmedMantras" },
+        { "id": "mantra-credit-loop", "needle": "TrackMantraCompleted" }
+      ]
     },
     {
       "path": "ConditioningControlPanel/Services/AIService/AiTextHygiene.cs",

@@ -45,7 +45,19 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { CLASS, REASON, TREE_CCP, TREE_SHIPPING, formatReport, runDetector, UNREVIEWED_SENTINEL } from "./detect.mjs";
+import {
+  CLASS,
+  formatNeedleCoverage,
+  formatNeedleReport,
+  formatReport,
+  NEEDLE_CLASS,
+  REASON,
+  runDetector,
+  runNeedleReview,
+  TREE_CCP,
+  TREE_SHIPPING,
+  UNREVIEWED_SENTINEL,
+} from "./detect.mjs";
 
 const DETECT = fileURLToPath(new URL("./detect.mjs", import.meta.url));
 
@@ -611,5 +623,240 @@ test("F14: a citation naming CCP.*/tests but credited to a shipping path is coun
     const report = formatReport(outcome);
     assert.match(report, /CREDITED to a shipping path/, "the summary must print the counter, not merely carry it");
     assert.match(report, /ConditioningControlPanel\/Services\/Twin\.cs/, "the sole-citation paths must be named in the report");
+  });
+});
+
+// ================================================ F15-F24 the SP-131 needle mode
+//
+// THESE INHERIT THE SAME NAMED LIMIT AS F1-F14: NO STANDING GATE IN THIS REPOSITORY RUNS
+// THIS FILE (see the header). Wiring it into one is a separate board row with its own
+// acceptance and was explicitly out of SP-131's scope. What IS on the floor is
+// client/tests/CcpClient.Tests/CitationNeedleTests.cs, which pins the exit contract of BOTH
+// modes, the coverage block, and every needle resolving at exactly one line in the FROZEN
+// baseline snapshot — but not the mechanism below, which is why the mechanism is fixtured
+// here and why that gap is stated rather than implied away.
+//
+// Every fixture is a temp-dir repository, exactly as F1-F14. Nothing here reads the real
+// inventory, the real WPF tree or the real port sources.
+
+/** A repo whose upstream file moves a subject DOWN by `shift` lines between two commits, so
+ *  the needle's position at the endpoint and in the working tree are known by construction.
+ *  `rewrite` replaces the head revision outright; `cite` writes one port citer. */
+function needleFixture(fx, { needles, shift = 0, rewrite = null, cite = null }) {
+  const body = ["namespace X;", "class Y {", "  const int Anchor = 1;", "  void Emit() { Raise(); }", "}", ""];
+
+  // THREE commits, not two, and the reason is the DEFAULT mode: its window is
+  // previous.merge..merge, so a fixture with only one baseline endpoint makes every
+  // both-modes fact (F24) fail on "no change window" rather than on anything it is testing.
+  fx.write("ConditioningControlPanel/Services/Unneedled.cs", "one\ntwo\n");
+  fx.sln();
+  const previous = fx.commit("root");
+
+  fx.write("ConditioningControlPanel/Services/Q.cs", body.join("\n"));
+  const endpoint = fx.commit("endpoint");
+
+  const after = rewrite ?? [...Array(shift).fill("// inserted above"), ...body];
+  fx.write("ConditioningControlPanel/Services/Q.cs", after.join("\n"));
+  // A churn file so the head commit is never empty: with shift 0 and no rewrite the subject
+  // deliberately does not move, and `git commit` on a clean tree fails rather than no-opping.
+  fx.write("ConditioningControlPanel/Services/Churn.cs", "head\n");
+  fx.commit("head");
+
+  if (cite) fx.write("client/src/CcpClient.Desktop/Citer.cs", cite);
+
+  fx.inventory({
+    schemaVersion: 1,
+    baseline: { merge: endpoint, previous: { merge: previous } },
+    entries: [
+      {
+        path: "ConditioningControlPanel/Services/Q.cs",
+        tier: 1,
+        citedBy: ["src:src/CcpClient.Desktop/Citer.cs"],
+        verdict: "ok",
+        needles,
+      },
+      // The opt-in control: no needles field at all, and it must contribute NOTHING.
+      { path: "ConditioningControlPanel/Services/Unneedled.cs", tier: 1, citedBy: [], verdict: "ok" },
+    ],
+  });
+  return { endpoint };
+}
+
+const needleRows = (outcome, cls) => outcome.rows.filter((r) => r.cls === cls);
+
+test("F15: a needle that has NOT moved emits no row at all — silence on the happy path is the whole non-wolf property", () => {
+  withFixtureRepo((fx) => {
+    needleFixture(fx, { needles: [{ id: "emit", needle: "Raise()" }], shift: 0 });
+    const outcome = runNeedleReview({ repoRoot: fx.root });
+
+    assert.equal(outcome.rows.length, 0, "an unmoved needle is not a finding");
+    assert.equal(outcome.coverage.comparison.unchanged, 1);
+    assert.equal(outcome.coverage.comparison.moved, 0);
+    assert.equal(outcome.coverage.needles.located, 1);
+  });
+});
+
+test("F16: a needle that MOVED emits exactly one NEEDLE-MOVED row carrying old, new and the SIGNED delta", () => {
+  withFixtureRepo((fx) => {
+    const { endpoint } = needleFixture(fx, { needles: [{ id: "emit", needle: "Raise()" }], shift: 7 });
+    const outcome = runNeedleReview({ repoRoot: fx.root });
+
+    const moved = needleRows(outcome, NEEDLE_CLASS.MOVED);
+    assert.equal(moved.length, 1);
+    assert.equal(moved[0].id, "emit");
+    // The subject sat on line 4 and seven lines were inserted above it.
+    assert.match(moved[0].reason, /:4 -> :11 \(\+7\)/);
+    assert.match(moved[0].reason, new RegExp(endpoint.slice(0, 7)));
+    assert.equal(outcome.coverage.comparison.moved, 1);
+    assert.equal(outcome.coverage.comparison.unchanged, 0);
+
+    // The row NEVER names a citation as wrong: the cut CITATION-DRIFT class is why.
+    assert.match(moved[0].action, /names the SHIFT, never which citation is wrong/);
+    assert.match(formatNeedleReport(outcome), /NEEDLE-MOVED \(1\)/);
+  });
+});
+
+test("F17: a needle whose subject was DELETED is NEEDLE-GONE, and is not also reported as moved", () => {
+  withFixtureRepo((fx) => {
+    needleFixture(fx, {
+      needles: [{ id: "emit", needle: "Raise()" }],
+      rewrite: ["namespace X;", "class Y {", "  const int Anchor = 1;", "}", ""],
+    });
+    const outcome = runNeedleReview({ repoRoot: fx.root });
+
+    const gone = needleRows(outcome, NEEDLE_CLASS.GONE);
+    assert.equal(gone.length, 1);
+    assert.match(gone[0].reason, /no line in the file contains this needle any more/);
+    assert.equal(needleRows(outcome, NEEDLE_CLASS.MOVED).length, 0, "a gone needle has no position to have moved");
+    assert.equal(outcome.coverage.needles.gone, 1);
+    assert.equal(outcome.coverage.needles.located, 0);
+  });
+});
+
+test("F18: a needle matching TWO lines is NEEDLE-AMBIGUOUS, names both, and is excluded from the comparison", () => {
+  withFixtureRepo((fx) => {
+    needleFixture(fx, {
+      needles: [{ id: "emit", needle: "Raise()" }],
+      rewrite: ["namespace X;", "class Y {", "  void A() { Raise(); }", "  void B() { Raise(); }", "}", ""],
+    });
+    const outcome = runNeedleReview({ repoRoot: fx.root });
+
+    const ambiguous = needleRows(outcome, NEEDLE_CLASS.AMBIGUOUS);
+    assert.equal(ambiguous.length, 1);
+    assert.match(ambiguous[0].reason, /matches 2 lines today \(3, 4\)/);
+    assert.equal(outcome.coverage.needles.ambiguous, 1);
+    assert.equal(
+      outcome.coverage.comparison.unchanged,
+      0,
+      "an ambiguous needle anchors nothing, so it compares to nothing",
+    );
+    assert.equal(outcome.coverage.comparison.moved, 0);
+  });
+});
+
+test("F19: an entry with NO needles contributes nothing and is COUNTED in the coverage gap — the opt-in property", () => {
+  withFixtureRepo((fx) => {
+    needleFixture(fx, { needles: [{ id: "emit", needle: "Raise()" }], shift: 7 });
+    const outcome = runNeedleReview({ repoRoot: fx.root });
+
+    assert.equal(outcome.coverage.entries.total, 2);
+    assert.equal(outcome.coverage.entries.needled, 1);
+    assert.equal(outcome.coverage.entries.bare, 1);
+    assert.ok(
+      outcome.rows.every((r) => r.path.endsWith("/Q.cs")),
+      "no row may name the un-needled entry: a citation with no needle stays FILE-level, which is how " +
+        "'no blanket line-number validation' is a property of the code rather than a promise",
+    );
+    assert.match(formatNeedleCoverage(outcome.coverage), /1 carry needle\(s\), 1 do not/);
+  });
+});
+
+test("F20: a citation span past the end of the file is CITATION-OUT-OF-RANGE; one holding a needle is confirmed", () => {
+  withFixtureRepo((fx) => {
+    needleFixture(fx, {
+      needles: [{ id: "emit", needle: "Raise()" }],
+      cite: "// good: Q.cs:4, past the end: Q.cs:900-902, and no needle there: Q.cs:2\n",
+    });
+    const outcome = runNeedleReview({ repoRoot: fx.root });
+
+    const out = needleRows(outcome, NEEDLE_CLASS.OUT_OF_RANGE);
+    assert.equal(out.length, 1);
+    assert.match(out[0].reason, /Q\.cs:900-902 cited from src:src\/CcpClient\.Desktop\/Citer\.cs:1, but the file has \d+ lines/);
+    assert.equal(outcome.coverage.citations.confirmed, 1, "Q.cs:4 holds the needle");
+    assert.equal(outcome.coverage.citations.uncovered, 1, "Q.cs:2 holds no needle, and that is a COUNTER, never a row");
+    assert.equal(outcome.coverage.citations.outOfRange, 1);
+  });
+});
+
+test("F21: a BARE :NNN continuation is counted and NEVER resolved to a file — the measured-and-rejected heuristic", () => {
+  withFixtureRepo((fx) => {
+    needleFixture(fx, {
+      needles: [{ id: "emit", needle: "Raise()" }],
+      // One file-qualified citation, then three bare continuations, then four NON-citations
+      // the rule must exclude: a host port, a ratio, a timestamp and a URL port.
+      cite: "// Q.cs:4 and (:900) and `:12-13` and at :7 — host:80, 1:3, 12:34:56, https://x.example:8080\n",
+    });
+    const outcome = runNeedleReview({ repoRoot: fx.root });
+
+    assert.equal(
+      outcome.coverage.citations.bare,
+      3,
+      "three bare continuations; the port, ratio, timestamp and URL port are excluded by the lookbehind",
+    );
+    assert.equal(
+      needleRows(outcome, NEEDLE_CLASS.OUT_OF_RANGE).length,
+      0,
+      "the bare (:900) is past the end of the file and STILL produces no row: it names no file, so it is never bound",
+    );
+    assert.match(formatNeedleCoverage(outcome.coverage), /NOT CHECKED, in either mode/);
+  });
+});
+
+test("F22: a needle absent at the ENDPOINT is counted as uncomparable, never reported as unmoved", () => {
+  withFixtureRepo((fx) => {
+    needleFixture(fx, {
+      needles: [{ id: "fresh", needle: "AddedLater()" }],
+      rewrite: ["namespace X;", "class Y {", "  void A() { AddedLater(); }", "}", ""],
+    });
+    const outcome = runNeedleReview({ repoRoot: fx.root });
+
+    assert.equal(outcome.rows.length, 0, "a subject that did not exist at the endpoint has not moved");
+    assert.equal(outcome.coverage.comparison.absentAtEndpoint, 1);
+    assert.equal(outcome.coverage.comparison.unchanged, 0, "uncomparable is NOT unchanged, and the block says so");
+    assert.match(formatNeedleCoverage(outcome.coverage), /CANNOT be compared, and are not "unmoved"/);
+  });
+});
+
+test("F23: a NON-EMPTY needle review list exits 0, and --until is rejected rather than silently ignored", () => {
+  withFixtureRepo((fx) => {
+    needleFixture(fx, { needles: [{ id: "emit", needle: "Raise()" }], shift: 7 });
+
+    const run = fx.cli(["--needles"]);
+    assert.equal(run.status, 0, "a review list with rows in it is the tool working, not the tool failing");
+    assert.match(run.stdout, /NEEDLE-MOVED \(1\)/);
+    assert.match(run.stdout, /This is a REVIEW LIST, not a failure/);
+
+    const rejected = fx.cli(["--needles", "--until", "HEAD"]);
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /--until has no meaning with --needles/);
+    assert.equal(rejected.stdout, "", "no review list on a broken invocation, ever");
+  });
+});
+
+test("F24: the coverage block is printed by BOTH modes, every run", () => {
+  withFixtureRepo((fx) => {
+    needleFixture(fx, { needles: [{ id: "emit", needle: "Raise()" }], shift: 7 });
+
+    for (const args of [[], ["--needles"]]) {
+      const run = fx.cli(args);
+      assert.equal(run.status, 0, `mode ${JSON.stringify(args)} must exit 0`);
+      assert.match(run.stdout, /## NEEDLE COVERAGE/, `mode ${JSON.stringify(args)} must print the coverage block`);
+      assert.match(
+        run.stdout,
+        /bare :NNN continuations: \d+ in the port/,
+        "the gap is printed as a NUMBER, never implied away",
+      );
+      assert.match(run.stdout, /stay FILE-level/, "the un-needled remainder must be named in both modes");
+    }
   });
 });
