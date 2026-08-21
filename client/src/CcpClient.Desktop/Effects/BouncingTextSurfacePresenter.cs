@@ -1,4 +1,4 @@
-﻿using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Glyph;
 using CcpClient.Desktop.Haptics;
 using CcpClient.Desktop.Session;

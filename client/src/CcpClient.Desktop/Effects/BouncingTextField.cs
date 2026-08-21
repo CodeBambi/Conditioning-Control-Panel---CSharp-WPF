@@ -1,4 +1,4 @@
-﻿using CcpClient.Desktop.Haptics;
+using CcpClient.Desktop.Haptics;
 
 namespace CcpClient.Desktop.Effects;
 

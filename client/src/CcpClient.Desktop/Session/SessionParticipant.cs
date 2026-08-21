@@ -1,4 +1,4 @@
-﻿using CcpClient.Desktop.Audio;
+using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Features.Dtrh;
 using CcpClient.Desktop.Haptics;

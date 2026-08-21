@@ -287,7 +287,7 @@ all-stop had just silenced — and nothing would have said so.
 using the idiom `HapticParticipant`'s own `sequence`/`AllStopSequence` pair already documents:
 
 - `RecordingHapticSink` gained `ObserveAtStopAll` / `StateAtStopAll` and `ObserveAtDispose` /
-  `StateAtDispose` — two read-only probes invoked once each, inside `StopAllAsync` and inside
+  `StateAtDispose` — two probes invoked once each, inside `StopAllAsync` and inside
   `Dispose`. **It still records and still transforms nothing**; a probe reads the caller's state and
   changes none of it.
 - **Witness 1** records what the limb was holding when the all-stop reached the sink:
@@ -322,3 +322,5 @@ which is now a claim the assertions enforce.
 3. **`BouncingTextField.cs`'s bounce comment** said the 60 ms request widens "to a 130 ms tap"; 130
    is the ON-TIME and the envelope is 158 ms, which `APulseBelowTheOnTimeFloorIsWidenedToIt` already
    pins correctly. Reworded on ONE line, deliberately, so no citation below it moves.
+
+**CORRECTED AT THE LAND (final review):** calling these `read-only` was wrong, and the sentence contradicted its own description four lines later. Witness 2 deliberately **writes** — it commands the limb to prove the limb no longer accepts, which is the hazard itself rather than a proxy for it. The purity guarantee that IS pinned is the sink's: `TheRecordingSinkRecordsRAWAndTransformsNOTHING` holds `Assert.Same` on the recorded list. **Nothing pins that a probe stays non-mutating** — `ObserveAtStopAll` and `ObserveAtDispose` are arbitrary `Func<string>` hooks the purity fact never sets. That gap is real and is filed on the board.
