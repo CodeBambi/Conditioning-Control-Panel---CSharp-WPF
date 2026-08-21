@@ -215,7 +215,7 @@ public class HapticsRowHeadlessTests
     }
 
     [AvaloniaFact]
-    public async Task THEABSENCELineSaysNOEFFECTSendsAnythingHereYet_WhichIsD179OnThePage()
+    public async Task THEABSENCELineSaysWhereTheSendReallyStops_WhichIsTheSinkNotTheModules()
     {
         var boot = await BootAsync();
         var window = boot.Window;
@@ -224,8 +224,20 @@ public class HapticsRowHeadlessTests
         var absence = Descendant<TextBlock>(window, "HapticsAbsenceState").Text!;
 
         // The sentence that stops a landed capability being read as a working feature.
-        Assert.Contains("no effect in this build sends anything to haptics yet",
-            absence, StringComparison.OrdinalIgnoreCase);
+        //
+        // SP-137 re-pointed this needle, and did NOT weaken it. SP-126 (D210) wired the limb, six
+        // effect sites command it, and "no effect sends anything" became FALSE on the page while
+        // the XML docs beside the code were kept current. What the page must say is where the send
+        // REALLY stops — the sink, not the modules — and it must no longer blame the modules.
+        //
+        // The METHOD NAME moved with the assertion, and that is deliberate. SP-137 first kept the
+        // old name and justified it with "the floor pin is name-anchored", which is FALSE:
+        // check-floor.mjs:222 compares a COUNT, and matches names only for NotExecuted results
+        // (:231). This fact is not skipped, so renaming changes no pinned name and no total. A
+        // packet about present-tense claims going false does not get to leave a false one in a
+        // test name, or in the record that justified it.
+        Assert.Contains("no provider route is admitted", absence, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no effect in this build sends", absence, StringComparison.OrdinalIgnoreCase);
         // And the structural half of the same claim: this row is not an effect at all.
         Assert.DoesNotContain(window.Session.Engine.Effects,
             e => string.Equals(e.Id, "haptics", StringComparison.Ordinal));
