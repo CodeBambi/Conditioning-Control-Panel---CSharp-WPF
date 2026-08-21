@@ -146,7 +146,9 @@ The residue is bounded, and the bound is the reassuring part: an OR-shadow makes
 it.** The inverse direction reds loudly at the pre-launch gate. That is a real gap, written down
 rather than claimed away.
 
-## 6. Every new guard watched RED at the committed head `26a9b2ec4c3140a0ee25a35f5c5e64450f9c4d45`
+## 6. Every new guard watched RED at a committed head — six passes, ending at the tip
+
+### Passes 1-4, at `26a9b2ec4c3140a0ee25a35f5c5e64450f9c4d45`
 
 Eight targeted source mutations, each applied, built, run, then reverted; the tree was verified
 clean by `git status --porcelain` after every one, and `HEAD` was unchanged throughout.
@@ -180,10 +182,30 @@ Coverage: fact 1 (M1/M11, M4), 2 (M1/M11), 3 (M1/M11, M2, M4), 4 (M2, M3), 5 (M1
 6 (M4, M5), 7 (M5), 8 (M2, M4, M6, M12, M13), 9 (M7a, M7b), wrapper-fixture (M8, M9),
 bare-`dotnet test` (M8, M9, M10), wrapper-mutation (M8, M9, M10). **All twelve watched red.**
 
-M1-M7b were watched at `26a9b2ec4`; M8-M13 at `6896a046c`. The commits between them
-(`88bb3333a`, `90feaf2d8`) are **docs-only** — `record.md` and one divergence-row wording — so the
-M1-M7b evidence stands unchanged against the current code. The final head at the end of this packet
-is stated in §13.
+### Pass 6, at the tip `abce9e40c9a13b03de6da504b25ba0279fcc4938` — because the earlier claim was wrong
+
+**The claim this section used to make did not follow.** It said M1-M7b were watched at
+`26a9b2ec4`, that the commits between were docs-only, and therefore that evidence stood against the
+current code. But `6896a046c` is itself a **code** commit landing after that watch, and it changed
+`FloorWrapperGuardTests.cs` — including `LoadAsync`, which is exactly what M7a/M7b mutate — and
+`validate-wave.mjs`. Facts 4, 6, 7 and 9 had not been re-watched against the code that now ships.
+
+Rather than caveat it, the mutations were **re-run at the tip**:
+
+| mutation | facts it reds at `abce9e40c` |
+|---|---|
+| **M2'** the C# guard grows a shadow and stops consuming the projection | `Failed: 3` — facts 3, 4, 8 |
+| **M3'** the literal predicate reintroduced on the C# side | `Failed: 1` — fact 4 only |
+| **M4'** coverage consumption inverted | `Failed: 5` — facts 1, 3, 6, 8 + `PacketsAtOrAboveSp073_...` |
+| **M5'** the C# packet walk stops seeing some packet roots | `Failed: 4` — facts 6, 7 + both pre-existing FloorWrapper facts |
+| **M7a'** the projection stops exiting 0 on a corpus it could read | `Failed: 13` of 15 — every convergence fact except the lexical one, fact 9 among them |
+| **M7b'** a failed projection reads as an EMPTY corpus instead of throwing | `Failed: 1` — fact 9 **only** |
+
+**Net position, stated exactly: all twelve convergence facts have now been watched RED at the
+current tip `abce9e40c`** — facts 1, 2, 3, 5, 6, 7, 8, 9 and all three wrapper facts via M7a', and
+fact 4 via M2'/M3' (which M7a' correctly leaves green, since the lexical read needs no projection).
+The earlier passes at `26a9b2ec4` and `6896a046c` are retained above as history, not as the
+load-bearing evidence. The full commit trail is §13.
 
 **Recorded because it is evidence and not a nuisance:** a first attempt at M7 — disabling the
 oracle's exit-code check alone — did **not** red fact 9. `LoadAsync` fails closed at four
@@ -231,7 +253,7 @@ Warning gate at the same head: `WARNING GATE OK (SP-114): 0 warnings, 0 errors a
 [CcpClient.Desktop, CcpClient.HeadlessTests, CcpClient.Tests, CcpVerify] in Debug, forced
 non-incremental.`
 
-## 8. The baseline failure is a KNOWN STRAND and this is its fourth sighting — a re-observation, not a sign-off
+## 8. The baseline failure is a KNOWN STRAND — sightings four AND five, each a re-observation, neither a sign-off
 
 Prior sightings: `SP-133/record.md:220-245` ("failed once in ten runs") and
 `SP-135/record.md:248-262` (first full run after the ledger edit, 3/3 clean in isolation). Mine is
@@ -315,6 +337,52 @@ the citation (`detect.mjs:152-156`: the detector cannot see citations into `clie
    existed in a committed state of this branch and is recorded rather than erased.
 4. **The additive/population-gated shadow residue** on the one-sided-update proof — see §5.
 
+## 10c. THE TRANSFERABLE LESSON: A CORRECTION LANDS IN THE DURABLE ROW, OR IT DOES NOT LAND
+
+At final review I was caught having corrected an overstatement in **two** places and not the
+**third**. The claim that the one-sided-update fact "closes the route the lexical guard cannot see"
+was walked back in `record.md` and in the test's own doc comment, and left standing in
+`wpf-surface-reachability.md` D302 — the divergence ledger. Same for the residue D304 was
+supposed to enumerate: it named four limits and omitted the one the correction had just created.
+
+**The durable row is the artifact that survives; the packet record is the one that gets read once.**
+A packet record is read at land and effectively never again. The ledger row is what a reader two
+waves from now actually consults, so it is simultaneously the place a correction is most likely to
+be missed and the place where missing it costs most. **When a claim is walked back, the ledger row
+is the FIRST place to change, not the last.** The reviewer notes this is the eighth instance of the
+shape this wave and that they committed it themselves this session on D294 — which is the strongest
+argument that it is structural rather than careless.
+
+That sits alongside §4b's lesson as the pair worth carrying out of this packet:
+
+- **Consolidation is not free.** Routing a decision through a shared projection REMOVES a guard
+  unless the decision is pinned by a fixture on both sides.
+- **A correction that does not reach the durable row has not been made.** Grep the ledger for the
+  claim you just weakened, before declaring the fix done.
+
+## 10d. RESIDUALS CARRIED FORWARD, confirmed at review and not blocking
+
+Collected in one place so none of them has to be reconstructed from prose:
+
+1. **The one-sided-update facts catch a REPLACING shadow only.** An additive (`covered || local`)
+   or population-gated C# shadow evades both them and the lexical guard. Bounded, not closed: an
+   OR-shadow is strictly more permissive than the validator, so this packet's own incident
+   direction cannot recur through it.
+2. **`FirstDeltaBoundPacketNumber = 73` is cross-checked by nothing.** Its VALUE is pinned by the
+   SP-072/SP-073 bracket (red at 100, red at 72), but the validator carries no delta bound, so
+   there is no second opinion to compare against and inventing one would be adding a rule to make a
+   test possible.
+3. **The figures 60 / 128 / 56 live only in comments.** Nothing asserts them; adding compliant
+   packets raises 128 and 56 while 60 stays frozen. Read them as measurements dated `766be7ac0`.
+4. **`client/docs/port-workflow.md:15`'s range into `FloorWrapperGuardTests.cs` is rotted by this
+   packet**, is outside File Scope, and has **no mechanical detector** — `detect.mjs:152-156` cannot
+   see citations into `client/tools/**` or `.mjs`, and this one points into `client/tests/**`.
+   See §10 for the exact replacement ranges.
+5. **There is no wrapper-side equivalent of `BannedCoveragePredicates`.** A C#-side
+   re-implementation of the SP-065 rule is guarded only by the replacing-shadow mutation fact, not
+   by a lexical read.
+6. **The wedged-child path in `WaveScopeOracle.RunAsync` is exercised by no fact.**
+
 ## 11. What this work does NOT prove
 
 - **Nothing here renders, composites, focuses a window, plays audio, or animates.** These are file-
@@ -356,4 +424,5 @@ the three wrapper-routing facts.) `client/tests/floor/floor.json` was never open
 | `88bb3333a` | record, and one divergence-row wording fix (docs only) |
 | `90feaf2d8` | the strand's second sighting (docs only) |
 | `6896a046c` | review fix: the SP-065 routing decision pinned, three accuracy corrections — head for red-watch pass 5 (M8-M13) |
-| final | see the branch tip; the final floor numbers in §7 are from the tip |
+| `abce9e40c` | record of the reopened check and the corrected claims — head for red-watch pass 6 (M2'-M7b'), where ALL TWELVE facts were watched red |
+| final | the durable-row corrections D302/D304 and this trail; text-only, no code and no re-pin |
