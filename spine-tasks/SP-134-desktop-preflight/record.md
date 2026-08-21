@@ -152,16 +152,17 @@ Four classes, each with a different sentence, decided by pid first and process n
 | A3 | final `check-floor.mjs`, `b3868c168` + docs | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; the ONLY gate line is `FLOOR VIOLATION — total drift: 2585 (pin total 2573)`, which is the declared delta | **empty** |
 | A4 | `check-floor.mjs` after the doc commit `13ae62e03` | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; same single pin-drift line | **empty** |
 | A5 | `check-floor.mjs` after the code-review corrections | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; warning gate 0/0; same single pin-drift line | **empty** |
-| A6 | **final** `check-floor.mjs`, after the final-review corrections | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; warning gate 0/0; same single pin-drift line | **empty** |
+| A6 | `check-floor.mjs` after the final-review corrections | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; warning gate 0/0; same single pin-drift line | **empty** |
+| A7 | `check-floor.mjs`, after the handover-list correction | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; warning gate 0/0; same single pin-drift line | **empty** |
 
-**The delta never moved across A2-A6: +12/0, observed 2585/152, failure set empty every time.** Every post-review correction was prose, a line number or a doc comment; the only code changes with any behavioural surface were the three emitted citation literals and the one assertion literal paired with them, and those moved together.
+**The delta never moved across A2-A7: +12/0, observed 2585/152, failure set empty every time.** Every post-review correction was prose, a line number or a doc comment; the only code changes with any behavioural surface were the three emitted citation literals and the one assertion literal paired with them, and those moved together.
 
 A4 exists because both edited documents are read at runtime by tests (`verification-harness.md` is
 named in nine `client/tests` files), and CLAUDE.md warns that a late doc edit can red the suite.
 The doc commit therefore gets its own gate rather than inheriting A3's.
 
 **No run in this packet was re-run to obtain a different answer.** A1 was fixed, not retried; every
-other row is a single run. **Seven floor-scale runs were made (B1, A1-A6) and none was contended** in the sense
+other row is a single run. **Eight floor-scale runs were made (B1, A1-A7) and none was contended** in the sense
 this packet detects: pid 16712 was parked throughout, which the pre-flight correctly does not
 refuse on (§4, §7-R1b). The two runs that WERE contended are R1 and R1b, both staged deliberately.
 
@@ -331,31 +332,48 @@ cited file and assert what is at that line. The gap is repository-wide rather th
 `detect.mjs` scans `client/src/**` and `client/docs/**` into `ConditioningControlPanel/**`, so an
 intra-`client/tests/**` citation is invisible to all ten of its classes.
 
-### Out of scope: six citations in three files, rotted by this lane
+### Out of scope: EIGHT stale tokens across seven lines in three files, rotted by this lane
 
-All six are consequences of the `+31`. I may not edit any of them, so they are handed over whole:
+I may not edit any of them, so they are handed over whole. **Two different shifts are at work here and they are not interchangeable: the `:35-38` and `:44-48` citations sit ABOVE both insertion points and moved by `+1` only (five tokens), while the `TryTake` citations sit BELOW the constructor insertion and carry the full `+31` (three tokens).**
 
-| file | line | citation | correct at head |
-|---|---|---|---|
-| `client/docs/task-board.md` | 336 | `RealDesktopCollection.cs:44-48` | `:45-49` |
-| `spine-tasks/SP-122-rack-presentation/record.md` | 244 | `:110-118`, `TryTake`'s `FileMode.Create` | `:141-149`; **`:110` is now my pre-flight's refusal throw** |
-| `spine-tasks/SP-122-rack-presentation/record.md` | 354 | `:44-48` | `:45-49` |
-| `spine-tasks/SP-122-rack-presentation/record.md` | 418 | `:113,144,148` | `:144,175,179`; at head `:113` is blank and `:148` is `refusal = null;` |
-| `spine-tasks/SP-122-rack-presentation/plan.md` | 12 | `:110`, `RealDesktopLease.TryTake` | `TryTake` is `:139` |
-| `spine-tasks/SP-122-rack-presentation/plan.md` | 158 | `:44-48` | `:45-49` |
+| file | line | citation | shift | correct at head |
+|---|---|---|---|---|
+| `client/docs/task-board.md` | 336 | `RealDesktopCollection.cs:44-48` | +1 | `:45-49` |
+| `client/docs/task-board.md` | 336 | `RealDesktopCollection.cs:35-38` — **SAME LINE, second token** | +1 | `:36-39` |
+| `client/docs/task-board.md` | 337 | `RealDesktopCollection.cs:44-48` — **the line the six-row table dropped** | +1 | `:45-49` |
+| `spine-tasks/SP-122-rack-presentation/record.md` | 244 | `:110-118`, `TryTake`'s `FileMode.Create` | +31 | `:141-149`; **`:110` is now my pre-flight's refusal throw** |
+| `spine-tasks/SP-122-rack-presentation/record.md` | 354 | `:44-48` | +1 | `:45-49` |
+| `spine-tasks/SP-122-rack-presentation/record.md` | 418 | `:113,144,148` | +31 | `:144,175,179`; at head `:113` is blank and `:148` is `refusal = null;` |
+| `spine-tasks/SP-122-rack-presentation/plan.md` | 12 | `:110`, `RealDesktopLease.TryTake` | +31 | `TryTake` is `:139` |
+| `spine-tasks/SP-122-rack-presentation/plan.md` | 158 | `:44-48` | +1 | `:45-49` |
 
-**My own first audit found two of these, not six** — precisely because I was looking for the
-consequences of a one-line insertion at the top of the file instead of a 31-line shift through the
-middle of it. The under-scoped generalisation did not merely fail to prevent the recurrence; it
-scoped the cleanup too.
+**This list has now been wrong TWICE, and the second time is the worse one.** The first audit
+found two tokens, because I was looking for the consequences of a one-line insertion at the top of
+the file instead of a 31-line shift through the middle of it. The second found six — and in
+becoming more PRECISE it LOST an entry the vaguer version had covered: the earlier draft wrote
+`task-board.md:336-337`, and the six-row table replaced it with a `:336` row only, dropping `:337`
+completely. It also missed the second token sharing line `:336`, because I had been counting LINES
+and calling them citations. **A completeness claim went stale inside the section about incomplete
+lists, in the revision whose entire purpose was to make the audit complete.**
+
+That is the THIRD time this packet was bitten by its own finding: the `+1` shift, the `+10` shift
+inside the commit that fixed it, and now a completeness claim over an incomplete list. Three
+attempts, each more careful than the last, each producing a new instance. **The lesson is not that
+more care was needed. It is that this class is not reliably fixable by hand at all** — which is the
+case for a check that READS the cited file, not for a more diligent reader.
 
 `spine-tasks/SP-134-desktop-preflight/plan.md` also still carries pre-shift numbers, deliberately:
 it is a point-in-time checkpoint that was accurate when written, and this record is the
 authoritative artifact.
 
-**This class recurred four times in this lane, the fourth time inside the commit that documents
-it.** Every number in this section was verified by reading the line back out of the file **in the
-state the edit leaves it**, not the state it was in when the sentence was drafted.
+**Within this packet the class has produced three instances** — the `+1` shift, the `+10` shift
+inside the commit that fixed it, and this completeness claim. (The first of them was the fourth
+self-inflicted instance across the session as a whole.) **Every VALUE in this section was verified
+by reading the line back out of the file in the state the edit leaves it** — but that guarantees only
+that each value is RIGHT, which is a different property from the LIST being COMPLETE, and it was
+exactly the second property that failed here. Verifying values one at a time cannot detect a token
+that was never enumerated. That distinction is the whole reason the closing check has to be
+mechanical.
 
 ## 11. What this does NOT prove
 
