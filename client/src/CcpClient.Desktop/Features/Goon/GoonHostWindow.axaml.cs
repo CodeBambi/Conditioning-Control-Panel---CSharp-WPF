@@ -33,12 +33,16 @@ namespace CcpClient.Desktop.Features.Goon;
 ///
 /// <para><b>Named limits, not silences.</b> (1) There is no relaunch coordinator for this
 /// surface, so a watchdog recovery demand closes the window honestly with a diagnostic rather
-/// than being silently left on a black page. (2) This host grants the page NO permissions; the
-/// shipping app grants the microphone unprompted (<c>GoonHostService.cs:489</c>, D244) and this
-/// one does not — but Avalonia exposes <c>CoreWebView2</c> only as a raw pointer, so no
-/// <c>PermissionRequested</c> deny hook exists either, and WebView2's own prompt is the residual
-/// (D250). (3) Linux is unproven and gets the typed unsupported surface; the gate that would
-/// confirm it is a WSLg/X11 run observing that surface, which this packet did not perform.</para>
+/// than being silently left on a black page. (2) This host grants the page NO permissions and,
+/// since SP-135, DENIES them: the shipping app grants the microphone unprompted
+/// (<c>GoonHostService.cs:489</c>, D244) and this one refuses it, through a hand-rolled
+/// <c>PermissionRequested</c> hook on the raw <c>CoreWebView2</c> pointer
+/// (<see cref="WebViewPermissionDeny"/>, vtable slot 23) that answers every kind but autoplay with
+/// <c>DENY</c> — so WebView2's own prompt no longer reaches the user on the WINDOWS EMBEDDED path
+/// (D250, D289). Where that hook cannot be attached — the Linux dialog path, or a failed
+/// subscription — the attach outcome is typed and LOGGED, and the browser still owns the prompt.
+/// (3) Linux is unproven and gets the typed unsupported surface; the gate that would confirm it is
+/// a WSLg/X11 run observing that surface, which this packet did not perform.</para>
 /// </summary>
 public partial class GoonHostWindow : Window
 {
@@ -52,6 +56,9 @@ public partial class GoonHostWindow : Window
     private DispatcherTimer? _watchTimer;
     private DispatcherTimer? _exitTimer;
     private DtrhProcessFailed.DtrhProcessFailedSignal? _processFailedSignal;
+    // SP-135: the PermissionRequested deny hook — the microphone residual D250 named on THIS
+    // surface. Independent of the watchdog by design.
+    private WebViewPermissionDeny.PermissionDenySignal? _permissionDenySignal;
     private readonly DtrhExitFlow _exitFlow = new();
     private WindowState? _ownerStateBeforeDuck;
     private bool _profileRetryUsed;
@@ -126,6 +133,8 @@ public partial class GoonHostWindow : Window
             _exitTimer = null;
             try { _processFailedSignal?.Dispose(); } catch { /* best-effort */ }
             _processFailedSignal = null;
+            try { _permissionDenySignal?.Dispose(); } catch { /* best-effort */ }
+            _permissionDenySignal = null;
             _watchdog.MarkDead();
             RestoreOwner();
         };
@@ -255,6 +264,7 @@ public partial class GoonHostWindow : Window
         {
             _host.LogDiagnostic($"goon: AdapterCreated info='{SafeAdapterInfo()}'");
             AttachProcessFailedSignal();
+            AttachPermissionDeny();
         };
         _web.AdapterDestroyed += (_, _) => _host.LogDiagnostic("goon: AdapterDestroyed");
         _web.WebMessageReceived += OnWebMessage;
@@ -368,6 +378,46 @@ public partial class GoonHostWindow : Window
                 "goon: native ProcessFailed signal UNAVAILABLE (unsupported-platform) — heartbeat watchdog is the only net (named limit, never faked)");
         }
     }
+
+    /// <summary>SP-135 — the D250 close, on the surface D250 was named for: every permission the
+    /// page asks the BROWSER for is answered DENY, so the prompt never reaches the user and the
+    /// microphone is refused rather than merely un-granted. Autoplay alone is left at the browser
+    /// default (this host passes --autoplay-policy=no-user-gesture-required at :302 and the page
+    /// starts its own media: goon/exec/videos.js, goon/ui/hud.js). NOT watchdog-guarded, unlike
+    /// <see cref="AttachProcessFailedSignal"/>. A failed attach is typed and LOGGED — the residual
+    /// stays visible instead of turning into silence.</summary>
+    private void AttachPermissionDeny()
+    {
+        if (_web?.TryGetPlatformHandle() is Avalonia.Platform.IWindowsWebView2PlatformHandle wv2)
+        {
+            switch (WebViewPermissionDeny.TryAttach(wv2.CoreWebView2, OnPermissionDecision))
+            {
+                case WebViewPermissionDeny.AttachOutcome.Attached attached:
+                    _permissionDenySignal = attached.Signal;
+                    _host.LogDiagnostic(
+                        "goon: PermissionRequested DENY hook ATTACHED (WebView2 slot-23 subscription; the microphone "
+                        + "is now REFUSED, not merely un-granted — autoplay alone left at the browser default)");
+                    break;
+                case WebViewPermissionDeny.AttachOutcome.Unavailable unavailable:
+                    _host.LogDiagnostic(
+                        $"goon: PermissionRequested DENY hook UNAVAILABLE ({unavailable.Code}) — {unavailable.Detail}; "
+                        + "the browser can still ask the user for the microphone on this surface (D250 stands here)");
+                    break;
+            }
+        }
+        else
+        {
+            _host.LogDiagnostic(
+                "goon: PermissionRequested DENY hook UNAVAILABLE (unsupported-platform) — the platform handle is not "
+                + "IWindowsWebView2PlatformHandle; the browser can still ask the user for the microphone on this "
+                + "surface (D250 stands here)");
+        }
+    }
+
+    /// <summary>One permission answer, for the diagnostic log (arrives on the UI thread — COM
+    /// apartment). Kind and decision ONLY: the requesting origin is never read and never logged.</summary>
+    private void OnPermissionDecision(int kind, WebViewPermissionDeny.Decision decision) =>
+        _host.LogDiagnostic($"goon: permission {WebViewPermissionDeny.KindName(kind)} -> {decision}");
 
     private void OnNativeProcessFailed(int kind)
     {
