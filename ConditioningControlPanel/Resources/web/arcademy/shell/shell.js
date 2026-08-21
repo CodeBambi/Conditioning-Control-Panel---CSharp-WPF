@@ -753,6 +753,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // Resolved SubAudioAudible: FALSE means a cue will be MIXED but inaudible,
       // so a class that leans on audio has to carry a visual tell instead.
       audioAudible: !!src.audioAudible,
+      // The "Skip class tutorials" switch. The settings hint is the contract a
+      // game must honour: even with this ON, a class still explains itself once
+      // per grade tier - the once-per-tier memory is the game's own
+      // (store.gameMeta), never the shell's.
+      hideTutorial: !!src.hideTutorial,
 
       /* The day's word pool, and the sink that adds to it. `words` is a COPY
        * (a game may not splice the shared array); `absorb` is the only way in

@@ -760,6 +760,45 @@ export default {
       return moved;
     }
 
+    /* ------------------------------------------------------------- how-to */
+    /** Tiers this player has already had the rules sheet for (persisted). */
+    function howtoSeenTiers() {
+      try {
+        const m = (ctx.store && typeof ctx.store.gameMeta === 'function')
+          ? (ctx.store.gameMeta('lost_and_found') || {}) : {};
+        return Array.isArray(m.howtoTiers) ? m.howtoTiers.slice() : [];
+      } catch (e) { return []; }
+    }
+
+    /**
+     * The class-rules sheet, ahead of the briefing. Policy is the shell's
+     * "Skip class tutorials" contract: default shows every class; with the
+     * skip on, a class still explains itself ONCE per grade tier. Dismissal
+     * is the sheet's own button only - peek is already bound, so any key
+     * shortcut here would spend the player's A-cap on a tutorial.
+     */
+    function howto(onDone) {
+      phase = 'briefing';
+      if (!hud) { onDone(); return; }
+      hud.dim(true);
+      let done = false;
+      const cardNode = hud.showHowto(targetLook(), () => {
+        if (done || ended) return;
+        done = true;
+        try {
+          if (ctx.store && typeof ctx.store.mergeGameMeta === 'function') {
+            const seen = howtoSeenTiers();
+            if (seen.indexOf(tier) < 0) seen.push(tier);
+            ctx.store.mergeGameMeta('lost_and_found', { howtoTiers: seen });
+          }
+        } catch (e) { /* best effort - the sheet just shows again next time */ }
+        hud.hideHowto();
+        hud.dim(false);
+        onDone();
+      });
+      if (!cardNode) { done = true; hud.dim(false); onDone(); }
+    }
+
     /* ------------------------------------------------------------ briefing */
     function briefing(onDone) {
       phase = 'briefing';
@@ -1217,7 +1256,7 @@ export default {
         // cheap - the briefing frames are the cleanest baseline we ever get
         startGovernor();
 
-        briefing(() => {
+        const beginClass = () => briefing(() => {
           clockStartedAt = Date.now();
           startEffects();
           armLoops();
@@ -1225,6 +1264,10 @@ export default {
           beginHunt();
           if (hud) hud.setClock(zen ? null : budgetSec);
         });
+        // Rules sheet first. ctx.hideTutorial is the shell's "Skip class
+        // tutorials" switch (absent on old harnesses -> falsy -> always show).
+        if (ctx.hideTutorial && howtoSeenTiers().indexOf(tier) >= 0) beginClass();
+        else howto(beginClass);
       },
 
       pause() { halt(true); },

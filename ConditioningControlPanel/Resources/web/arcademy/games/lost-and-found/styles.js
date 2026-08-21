@@ -324,6 +324,67 @@ export const CSS = [
   '  60% { opacity:.48; transform:translateY(1%); }',
   '  100% { opacity:0; transform:translateY(0); } }',
 
+  /* ------------------------- CLASS RULES SHEET ---------------------------- */
+  /* The how-to polaroid: three drawn vignettes, captions second (Law IV).
+     Every animation is CSS, compositor-only (transform / box-shadow pulse on
+     tiny nodes), and the sheet reads fine frozen (arc-reduced). */
+  '.g-lf-howto { width:min(430px, 88vw); align-items:stretch; text-align:left; gap:6px; }',
+  '.g-lf-howto h4 { text-align:center; margin-bottom:2px; }',
+  '.g-lf-hw-row { display:flex; align-items:center; gap:14px; padding:8px 4px; }',
+  '.g-lf-hw-row + .g-lf-hw-row { border-top:1px dashed rgba(58,58,94,.55); }',
+  '.g-lf-hw-row p { margin:0; font-size:12px; line-height:1.45; color:var(--ink-dim);',
+  '  flex:1 1 auto; text-align:left; max-width:none; }',
+  '.g-lf-hw-fig { flex:0 0 auto; display:flex; align-items:center; gap:8px; }',
+  '.g-lf-hw-eq { font-family:var(--disp); font-size:14px; color:var(--pink); }',
+  /* her polaroid */
+  '.g-lf-hw-pol { display:flex; flex-direction:column; align-items:center; gap:3px;',
+  '  padding:4px 4px 3px; border-radius:6px; transform:rotate(-2.5deg);',
+  '  background:linear-gradient(165deg, var(--panel), var(--navy));',
+  '  border:1px solid var(--pink-deep); box-shadow:0 4px 12px rgba(0,0,0,.5); }',
+  '.g-lf-hw-polart { display:block; width:36px; height:32px; border-radius:4px;',
+  '  overflow:hidden; position:relative; background:linear-gradient(135deg,#5E2A55,#B84A8F); }',
+  '.g-lf-hw-pol small { font-size:8px; letter-spacing:.1em; text-transform:uppercase;',
+  '  color:var(--pink); font-family:var(--disp); }',
+  /* the drifting mini-wall; the marked tile wears HER look */
+  '.g-lf-hw-wall { display:flex; flex-direction:column; gap:3px; width:104px;',
+  '  overflow:hidden; padding:4px; border-radius:6px;',
+  '  background:rgba(16,16,36,.75); border:1px solid var(--line); }',
+  '.g-lf-hw-mrow { display:flex; gap:3px; width:max-content;',
+  '  animation:g-lf-hw-slide 5.5s ease-in-out infinite alternate; }',
+  '.g-lf-hw-mrow.g-lf-hw-rev { animation-name:g-lf-hw-slideR; animation-duration:4.2s; }',
+  '@keyframes g-lf-hw-slide { from { transform:translateX(0); } to { transform:translateX(-16px); } }',
+  '@keyframes g-lf-hw-slideR { from { transform:translateX(-16px); } to { transform:translateX(0); } }',
+  '.g-lf-hw-tile { flex:0 0 auto; display:block; width:19px; height:15px; border-radius:3px;',
+  '  border:1px solid rgba(58,58,94,.6); position:relative; overflow:hidden; }',
+  '.g-lf-hw-mark { box-shadow:0 0 0 1.5px var(--pink), 0 0 8px rgba(255,105,180,.7);',
+  '  animation:g-lf-hw-pulse 1.6s ease-in-out infinite; }',
+  '@keyframes g-lf-hw-pulse {',
+  '  0%,100% { box-shadow:0 0 0 1.5px var(--pink), 0 0 6px rgba(255,105,180,.5); }',
+  '  50% { box-shadow:0 0 0 2px var(--pink), 0 0 15px rgba(255,105,180,.95); } }',
+  /* the tally: two banked, the third mid-stamp */
+  '.g-lf-hw-slots { display:flex; gap:5px; padding:2px 6px; }',
+  '.g-lf-hw-slot { width:15px; height:18px; border-radius:3px; display:inline-block;',
+  '  border:1px solid var(--line); background:var(--flap-well); }',
+  '.g-lf-hw-slot.on { background:var(--pink); border-color:var(--pink);',
+  '  box-shadow:0 0 7px rgba(255,105,180,.7); }',
+  '.g-lf-hw-slot.next { animation:g-lf-hw-stamp 1.5s ease-in-out infinite; }',
+  '@keyframes g-lf-hw-stamp {',
+  '  0%,30% { background:var(--flap-well); border-color:var(--line); box-shadow:none; }',
+  '  55%,100% { background:var(--pink); border-color:var(--pink); box-shadow:0 0 8px rgba(255,105,180,.8); } }',
+  /* the peek keycap */
+  '.g-lf-hw-key { flex:0 0 auto; min-width:46px; text-align:center; padding:7px 11px;',
+  '  border-radius:7px; font-family:var(--mono); font-size:12px; color:var(--ink);',
+  '  background:linear-gradient(180deg, var(--panel), var(--navy));',
+  '  border:1px solid var(--line); border-bottom-width:3px;',
+  '  box-shadow:0 2px 0 rgba(0,0,0,.4); }',
+  /* the one way out */
+  '.g-lf-hw-go { align-self:center; margin-top:4px; padding:9px 28px; cursor:pointer;',
+  '  border-radius:999px; font-family:var(--disp); font-size:13px; letter-spacing:.16em;',
+  '  text-transform:uppercase; color:#fff;',
+  '  background:linear-gradient(135deg, var(--pink), var(--pink-deep));',
+  '  border:1px solid var(--pink); box-shadow:0 0 22px rgba(255,105,180,.35); }',
+  '.g-lf-hw-go:hover { box-shadow:0 0 32px rgba(255,105,180,.6); }',
+
   /* KEN-BURNS (Law III): the MEDIA inside a seat drifts; the seat, the skin
      (hue filter / melt transform) and the hitbox never move. Phase staggers
      off the tile index; the period is seeded per class (--g-lf-kbdur). */

@@ -123,6 +123,82 @@ export function createHud(o) {
   let peekCard = null;
   let spotCard = null;
   let tauntNode = null;
+  let howtoCard = null;
+
+  /**
+   * The class-rules sheet (Law IV: the rules are DRAWN, the words only caption).
+   * Three vignettes: her polaroid against a live mini-wall (one tile wears her
+   * exact look via the same paintLook as the board), the five-find tally, and
+   * the peek keycap. All motion is CSS animation, so the shell's reduced-motion
+   * rule freezes it and the sheet stays readable as a still.
+   */
+  function buildHowto(look, onBegin) {
+    const node = el('div', 'g-lf-card g-lf-howto');
+    if (!node) return null;
+    node.appendChild(el('h4', null, t('lf_howto_title', 'Class rules')));
+
+    const row = (figKids, text) => {
+      const r = el('div', 'g-lf-hw-row');
+      if (!r) return null;
+      const fig = el('span', 'g-lf-hw-fig');
+      if (fig) { for (const k of figKids) if (k) fig.appendChild(k); r.appendChild(fig); }
+      const p = el('p', null, text);
+      if (p) r.appendChild(p);
+      return r;
+    };
+
+    /* 1 — her polaroid vs the drifting mini-wall; one tile IS her look */
+    const pol = el('span', 'g-lf-hw-pol');
+    const polArt = el('span', 'g-lf-hw-polart');
+    if (polArt) { paintLook(polArt, look || {}); if (pol) pol.appendChild(polArt); }
+    if (pol) pol.appendChild(el('small', null, t('lf_find_prompt', 'Find her')));
+    const wall = el('span', 'g-lf-hw-wall');
+    const grads = ['g-lf-g1', 'g-lf-g4', 'g-lf-g6', 'g-lf-g2', 'g-lf-g5', 'g-lf-g8', 'g-lf-g3', 'g-lf-g7', 'g-lf-g1', 'g-lf-g5', 'g-lf-g2', 'g-lf-g6', 'g-lf-g4', 'g-lf-g8'];
+    let gi = 0;
+    for (let r = 0; r < 3 && wall; r++) {
+      const mrow = el('span', 'g-lf-hw-mrow' + (r === 1 ? ' g-lf-hw-rev' : ''));
+      if (!mrow) break;
+      for (let c = 0; c < 5; c++) {
+        if (r === 1 && c === 2) {
+          const mark = el('span', 'g-lf-hw-tile g-lf-hw-mark');
+          if (mark) { paintLook(mark, look || {}); mrow.appendChild(mark); }
+        } else {
+          mrow.appendChild(el('span', 'g-lf-hw-tile ' + grads[gi++ % grads.length]));
+        }
+      }
+      wall.appendChild(mrow);
+    }
+    node.appendChild(row([pol, el('span', 'g-lf-hw-eq', '→'), wall],
+      t('lf_howto_find', 'She hides on a wall that never sits still. Spot the tile that matches her picture.')));
+
+    /* 2 — the tally: five finds, and she relocates after each */
+    const slots = el('span', 'g-lf-hw-slots');
+    for (let i = 0; i < 5 && slots; i++) {
+      slots.appendChild(el('span', 'g-lf-hw-slot' + (i < 2 ? ' on' : i === 2 ? ' next' : '')));
+    }
+    node.appendChild(row([slots],
+      t('lf_howto_five', 'Every find, she relocates. Catch her five times.')));
+
+    /* 3 — the peek verb (same key label the foot button wears) */
+    node.appendChild(row([el('span', 'g-lf-hw-key', coarse ? t('peek', 'Peek') : keyLabel)],
+      t('peek_hint', 'Hold to peek. Using it caps this class at A.')));
+
+    const go = el('button', 'g-lf-hw-go', t('lf_howto_go', 'Start the hunt'));
+    if (go) {
+      go.type = 'button';
+      go.addEventListener('click', () => { if (typeof onBegin === 'function') onBegin(); });
+      node.appendChild(go);
+    }
+    // refreshCards() repaints these when remote media lands late (expando
+    // references, so no querySelector on the test DOM double).
+    node._lookEls = [polArt];
+    for (const mr of (wall && wall.children) || []) {
+      for (const cell of mr.children || []) {
+        if (cell && cell.classList && cell.classList.contains && cell.classList.contains('g-lf-hw-mark')) node._lookEls.push(cell);
+      }
+    }
+    return node;
+  }
 
   const api = {
     root: wrap,
@@ -175,6 +251,9 @@ export function createHud(o) {
      */
     refreshCards(look) {
       api.setTargetArt(look);
+      if (howtoCard && Array.isArray(howtoCard._lookEls)) {
+        for (const le of howtoCard._lookEls) { if (le) paintLook(le, look || {}); }
+      }
       for (const node of [briefingCard, peekCard, spotCard]) {
         if (!node || !node.children) continue;
         for (const kid of node.children) {
@@ -189,6 +268,19 @@ export function createHud(o) {
     dim(on) {
       if (!dim || !dim.classList) return;
       if (on) dim.classList.add('on'); else dim.classList.remove('on');
+    },
+
+    /** The class-rules sheet. Dismissed ONLY by its own button (a stray click
+     *  on a tutorial must never count as read). Caller owns dim(). */
+    showHowto(look, onBegin) {
+      api.hideHowto();
+      howtoCard = buildHowto(look, onBegin);
+      if (view && howtoCard) view.appendChild(howtoCard);
+      return howtoCard;
+    },
+    hideHowto() {
+      if (howtoCard) { try { howtoCard.remove(); } catch (e) { /* ignore */ } }
+      howtoCard = null;
     },
 
     showBriefing(look, note) {
@@ -240,7 +332,7 @@ export function createHud(o) {
     },
 
     destroy() {
-      api.hideBriefing(); api.hidePeek(); api.hideSpot(); api.clearTaunt();
+      api.hideHowto(); api.hideBriefing(); api.hidePeek(); api.hideSpot(); api.clearTaunt();
       try { if (wrap && wrap.remove) wrap.remove(); } catch (e) { /* ignore */ }
     },
   };
