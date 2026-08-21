@@ -107,14 +107,16 @@ screen's double-locked opt-in and presses record; it was not run, and SP-132's h
 the voice screen by design. The three windows are never shown in any test, so the attach has never
 been observed against a real adapter.
 
-### Guards watched red at the committed head `<SHA>`
+### Guards watched red at the committed head `b3e4a48f9` — and TWO of the four mutations found real holes in my own tests
 
-| Mutation | Guard that reddened |
+| Mutation | Result |
 |---|---|
-| `AddPermissionRequestedSlot` 23 → 22 | `PublishedVtableOrder_...` (constant vs transcription) **and** `TheSubscription_LandsOnSlot23_...` reporting the recorded index `[1, 22]` |
-| `DenyState` 2 → 1 (Allow) | 6 deny facts, each naming the written state |
-| `AttachPermissionDeny()` removed from `GoonHostWindow` | `EveryWebView2HostIsCensused_...` |
-| autoplay carve-out removed | `TheAnswer_LeavesAutoplayAtTheBrowserDefault` |
+| `AddPermissionRequestedSlot` 23 to 22 | **4 red**: `PublishedVtableOrder_...` (`Expected: 23 / Actual: 22`) and all three subscription facts, which get `Unavailable` instead of `Attached` because slot 22 is `remove_ScriptDialogOpening`, whose filler thunk answers E_NOTIMPL |
+| `DenyState` 2 to 1 (Allow) | **FIRST RUN: 1 red only — a self-consistency hole in my own tests.** The deny facts compared the observed write against `WebViewPermissionDeny.DenyState`, so flipping the constant made them tautological. Fixed: they now assert the transcribed literal `PublishedDenyState = 2`, and the product constant is checked against that literal once. **Re-run: 7 red** |
+| `AttachPermissionDeny();` call site deleted from `GoonHostWindow` (the method left in place) | **FIRST RUN: 0 red — all 14 green.** The census guard asserted the hook EXISTED, not that it is CALLED: a hook that never runs, which is this session's signature defect appearing inside the guard written to catch it. Fixed: the guard now requires the call site. **Re-run: 1 red** |
+| autoplay carve-out removed | **1 red**: `TheAnswer_LeavesAutoplayAtTheBrowserDefault` |
+
+Both holes were found by mutation rather than by review, and both are fixed in the follow-up commit.
 
 ## 4. Hosts covered, and hosts NOT covered
 
@@ -168,7 +170,7 @@ evidence, not just fewer entries. The remaining three are genuinely machine-boun
 {
   "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheSubscription_LandsOnSlot23_AndTypesEveryFailure",
   "path": "CcpClient.Tests/WebViewPermissionTests.cs",
-  "line": 270,
+  "line": 277,
   "method": "WebViewPermissionTests.TheSubscription_LandsOnSlot23_AndTypesEveryFailure",
   "shapes": ["early-return"],
   "expectDetected": true,
@@ -178,7 +180,7 @@ evidence, not just fewer entries. The remaining three are genuinely machine-boun
 {
   "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheHandlerAttachedAtSlot23_Fires_AndDeniesTheMicrophone",
   "path": "CcpClient.Tests/WebViewPermissionTests.cs",
-  "line": 302,
+  "line": 309,
   "method": "WebViewPermissionTests.TheHandlerAttachedAtSlot23_Fires_AndDeniesTheMicrophone",
   "shapes": ["early-return"],
   "expectDetected": true,
@@ -188,7 +190,7 @@ evidence, not just fewer entries. The remaining three are genuinely machine-boun
 {
   "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
   "path": "CcpClient.Tests/WebViewPermissionTests.cs",
-  "line": 328,
+  "line": 335,
   "method": "WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
   "shapes": ["early-return"],
   "expectDetected": true,

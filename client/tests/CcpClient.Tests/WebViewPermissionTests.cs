@@ -101,6 +101,13 @@ public class WebViewPermissionTests
     private static readonly Guid PermissionRequestedEventArgs3Iid =
         new("e61670bc-3dce-4177-86d2-c629ae3cb6ac");
 
+    /// <summary>The published constants, transcribed from WebView2.h:1984-2004 (identical in both
+    /// SDKs) — asserted against the OBSERVED write, never against the product's own constant. Flip
+    /// <c>WebViewPermissionDeny.DenyState</c> to Allow and every deny fact below reddens; compare
+    /// against the product constant instead and none of them would.</summary>
+    private const int PublishedDenyState = 2;
+    private const int PublishedAutoplayKind = 9;
+
     private const int MicrophoneKind = 1;
     private const int SHr = 0;
     private const int EFail = unchecked((int)0x80004005);
@@ -133,8 +140,8 @@ public class WebViewPermissionTests
         Assert.Equal(GetPermissionKindSlot, PrivateSlot(typeof(WebViewPermissionDeny), "GetPermissionKindSlot"));
         Assert.Equal(PutStateSlot, PrivateSlot(typeof(WebViewPermissionDeny), "PutStateSlot"));
         Assert.Equal(PutSavesInProfileSlot, PrivateSlot(typeof(WebViewPermissionDeny), "PutSavesInProfileSlot"));
-        Assert.Equal(2, WebViewPermissionDeny.DenyState);      // COREWEBVIEW2_PERMISSION_STATE_DENY
-        Assert.Equal(9, WebViewPermissionDeny.AutoplayKind);   // COREWEBVIEW2_PERMISSION_KIND_AUTOPLAY
+        Assert.Equal(PublishedDenyState, WebViewPermissionDeny.DenyState);
+        Assert.Equal(PublishedAutoplayKind, WebViewPermissionDeny.AutoplayKind);
     }
 
     // ---------- the answer: what the handler DOES, on every platform ----------
@@ -146,7 +153,7 @@ public class WebViewPermissionTests
 
         var decisions = Answer(args.Pointer);
 
-        Assert.Equal([WebViewPermissionDeny.DenyState], args.StatesWritten);
+        Assert.Equal([PublishedDenyState], args.StatesWritten);
         Assert.Contains(GetPermissionKindSlot, args.Com.Calls);
         Assert.Contains(PutStateSlot, args.Com.Calls);
         Assert.Equal([(MicrophoneKind, WebViewPermissionDeny.Decision.Denied)], decisions);
@@ -155,7 +162,7 @@ public class WebViewPermissionTests
     [Fact]
     public void TheAnswer_LeavesAutoplayAtTheBrowserDefault()
     {
-        using var args = new FakeArgs(WebViewPermissionDeny.AutoplayKind);
+        using var args = new FakeArgs(PublishedAutoplayKind);
 
         var decisions = Answer(args.Pointer);
 
@@ -165,7 +172,7 @@ public class WebViewPermissionTests
         Assert.Empty(args.StatesWritten);
         Assert.DoesNotContain(PutStateSlot, args.Com.Calls);
         Assert.Equal(
-            [(WebViewPermissionDeny.AutoplayKind, WebViewPermissionDeny.Decision.LeftAtBrowserDefault)],
+            [(PublishedAutoplayKind, WebViewPermissionDeny.Decision.LeftAtBrowserDefault)],
             decisions);
     }
 
@@ -182,7 +189,7 @@ public class WebViewPermissionTests
         {
             using var args = new FakeArgs(kind);
             var decisions = Answer(args.Pointer);
-            Assert.Equal([WebViewPermissionDeny.DenyState], args.StatesWritten);
+            Assert.Equal([PublishedDenyState], args.StatesWritten);
             Assert.Equal([(kind, WebViewPermissionDeny.Decision.Denied)], decisions);
         }
     }
@@ -198,7 +205,7 @@ public class WebViewPermissionTests
         // event at all, so an unbanked deny is the difference between a policy this code owns and a
         // file in browser_data_* that outlives it. Upstream writes the same flag at :499.
         Assert.Equal([0], args.SavesInProfileWritten);
-        Assert.Equal([WebViewPermissionDeny.DenyState], args.StatesWritten);
+        Assert.Equal([PublishedDenyState], args.StatesWritten);
         // The args3 pointer QI handed out was released — no reference leaks per event.
         Assert.Equal(1, args.Com.RefCount);
     }
@@ -213,7 +220,7 @@ public class WebViewPermissionTests
         // E_NOINTERFACE is the EXPECTED answer on an older runtime, not an error. The consequence is
         // named rather than implied away: the deny still lands, but it is then banked in the profile
         // and the event may stop being raised — strictly no weaker than the deny.
-        Assert.Equal([WebViewPermissionDeny.DenyState], args.StatesWritten);
+        Assert.Equal([PublishedDenyState], args.StatesWritten);
         Assert.Empty(args.SavesInProfileWritten);
         Assert.Equal([(MicrophoneKind, WebViewPermissionDeny.Decision.Denied)], decisions);
     }
@@ -226,7 +233,7 @@ public class WebViewPermissionTests
         var decisions = Answer(args.Pointer);
 
         // An unreadable question is not a reason to hand the decision back to the browser.
-        Assert.Equal([WebViewPermissionDeny.DenyState], args.StatesWritten);
+        Assert.Equal([PublishedDenyState], args.StatesWritten);
         Assert.Equal([(WebViewPermissionDeny.UnreadableKind, WebViewPermissionDeny.Decision.Denied)], decisions);
     }
 
@@ -318,7 +325,7 @@ public class WebViewPermissionTests
         var hr = InvokeHandler(attach.HandlerPtr, core.Pointer, args.Pointer);
 
         Assert.Equal(SHr, hr);
-        Assert.Equal([WebViewPermissionDeny.DenyState], args.StatesWritten);
+        Assert.Equal([PublishedDenyState], args.StatesWritten);
         Assert.Equal([(MicrophoneKind, WebViewPermissionDeny.Decision.Denied)], decisions);
         Assert.Equal([0], args.SavesInProfileWritten);
         attached.Signal.Dispose();
@@ -399,6 +406,10 @@ public class WebViewPermissionTests
         {
             var text = File.ReadAllText(Path.Combine(src, host));
             Assert.Contains("WebViewPermissionDeny.TryAttach(wv2.CoreWebView2", text);
+            // AND IT IS CALLED. Measured, not assumed: deleting only the call site from the
+            // AdapterCreated wiring left every other fact in this file green, which is a hook that
+            // exists and never runs — this session's signature defect, in the guard meant to catch it.
+            Assert.Contains("AttachPermissionDeny();", text);
             Assert.Contains("_permissionDenySignal = attached.Signal;", text);
             Assert.Contains("_permissionDenySignal?.Dispose();", text);
             // A failed attach must stay LOUD: the port may not become quieter about this than it was
