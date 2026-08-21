@@ -19,9 +19,9 @@ node client/tools/coverage/census.mjs
 | | |
 |---|---|
 | **shipped types with ZERO executed lines** | **38** |
-| shipped types with at least one executed line | 620 |
-| census universe (shipped types reaching this census) | 658 |
-| instrumented lines inside the zero-execution types | 2322 |
+| shipped types with at least one executed line | 623 |
+| census universe (shipped types reaching this census) | 661 |
+| instrumented lines inside the zero-execution types | 2329 |
 | of the zero-execution types, nested | 25 |
 | of the zero-execution types, top-level | 13 |
 
@@ -39,7 +39,7 @@ SP-118 shape exactly.
 
 | | |
 |---|---|
-| excluded entries whose lines were attributed back to a shipped type | 732 |
+| excluded entries whose lines were attributed back to a shipped type | 736 |
 | types with NO entry of their own — every source line lives in a state machine | 3 |
 | of those, driven | 3 |
 | of those, ZERO (would have been missed entirely without attribution) | 0 |
@@ -57,9 +57,9 @@ a sequence point. Measured from the shipped assembly's own TypeDef and MethodDef
 
 | | |
 |---|---|
-| type definitions in `CcpClient.Desktop.dll` | 1340 |
-| of those, authored name shape (would survive C2/C3) | 896 |
-| of those, reaching this census | 658 |
+| type definitions in `CcpClient.Desktop.dll` | 1345 |
+| of those, authored name shape (would survive C2/C3) | 899 |
+| of those, reaching this census | 661 |
 | **INVISIBLE rather than zero** | **238** |
 | — no method body at all: interfaces without default members, enums, abstract-only | 215 |
 |     interfaces 71, enums 64, structs 45, classes 35 | |
@@ -140,7 +140,7 @@ not a defect in either.
 
 | project | exit | total | passed | failed | skipped |
 |---|---|---|---|---|---|
-| CcpClient.Tests | 0 | 2399 | 2397 | 0 | 2 |
+| CcpClient.Tests | 0 | 2457 | 2455 | 0 | 2 |
 | CcpClient.HeadlessTests | 0 | 144 | 144 | 0 | 0 |
 
 ## The shipped-type rule
@@ -149,15 +149,15 @@ The exclusion rule is BIGGER than the answer, so it is the risk. Every clause is
 one sentence and states what it removed. Widening a clause to shorten the list would be
 `allowedSkips`-as-quarantine wearing a new hat.
 
-Universe: **4114** `<class>` entries across every cobertura report.
+Universe: **4152** `<class>` entries across every cobertura report.
 
 | clause | what it removes | removed | defence |
 |---|---|---|---|
-| **C1** | any entry outside package `CcpClient.Desktop` | 2030 | The row asks about SHIPPED types, and CcpClient.Desktop is the assembly that gets published; CcpClient.Tests and CcpClient.HeadlessTests are not shipped, and an unexecuted test class is the floor's question (a test count), not this census's. |
-| **C2** | any entry with a dot-segment matching `^<` | 736 | No C# identifier may begin with '<', so a dot-segment that does was emitted by the compiler and written by nobody: <>c, <>c__DisplayClassN_M, <Method>d__N, <<Method>b__N_M>d, <>c<TModel>, <Module>, <PrivateImplementationDetails>, and the [GeneratedRegex] tree including its nested RunnerFactory/Runner. |
+| **C1** | any entry outside package `CcpClient.Desktop` | 2058 | The row asks about SHIPPED types, and CcpClient.Desktop is the assembly that gets published; CcpClient.Tests and CcpClient.HeadlessTests are not shipped, and an unexecuted test class is the floor's question (a test count), not this census's. |
+| **C2** | any entry with a dot-segment matching `^<` | 740 | No C# identifier may begin with '<', so a dot-segment that does was emitted by the compiler and written by nobody: <>c, <>c__DisplayClassN_M, <Method>d__N, <<Method>b__N_M>d, <>c<TModel>, <Module>, <PrivateImplementationDetails>, and the [GeneratedRegex] tree including its nested RunnerFactory/Runner. |
 | **C3** | any entry whose FINAL dot-segment matches `^XamlClosure_[0-9]+$` | 4 | Avalonia's XAML compiler emits these nested classes for deferred content and no source file declares them; they are the only compiler-generated shape in this assembly that does not begin with '<'. Anchored at both ends so a type someone actually named XamlClosure_Registry survives. |
-| **kept** | merged by fully-qualified name into types | 1344 entries → 658 types | a partial class is ONE type; coverage is unioned |
-| *(attribution)* | C2/C3 entries whose lines return to their declaring shipped type | 732 re-attributed, 0 dropped | the compiler moved those source lines out of the type; attribution moves them back |
+| **kept** | merged by fully-qualified name into types | 1350 entries → 661 types | a partial class is ONE type; coverage is unioned |
+| *(attribution)* | C2/C3 entries whose lines return to their declaring shipped type | 736 re-attributed, 0 dropped | the compiler moved those source lines out of the type; attribution moves them back |
 
 ### Clauses deliberately NOT written
 
@@ -169,7 +169,7 @@ Universe: **4114** `<class>` entries across every cobertura report.
 ### C1's counterfactual, measured rather than argued
 
 C1 removes the unshipped test assemblies. Published so the clause is not taken on trust: of
-**2019** authored-shape types in `CcpClient.Tests` and `CcpClient.HeadlessTests`,
+**2047** authored-shape types in `CcpClient.Tests` and `CcpClient.HeadlessTests`,
 **55** have zero executed lines. That number is a diagnostic about test-side
 helpers and never enters the answer above.
 
@@ -244,7 +244,7 @@ type — the size of what nothing drove.
 | type | lines | source |
 |---|---|---|
 | `IntakeHarness` | 20 | client/src/CcpClient.Desktop/Features/Intake/IntakeHarness.cs |
-| `IntakeHostWindow` | 495 | client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml, client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs |
+| `IntakeHostWindow` | 502 | client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml, client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs |
 | `IntakeProtocol.IntakePageMessage.Exit` `construction-invisible` | 1 | client/src/CcpClient.Desktop/Features/Intake/IntakeProtocol.cs |
 | `IntakeProtocol.IntakePageMessage.ExitDone` `construction-invisible` | 1 | client/src/CcpClient.Desktop/Features/Intake/IntakeProtocol.cs |
 | `IntakeProtocol.IntakePageMessage.IntakeClose` `construction-invisible` | 1 | client/src/CcpClient.Desktop/Features/Intake/IntakeProtocol.cs |
