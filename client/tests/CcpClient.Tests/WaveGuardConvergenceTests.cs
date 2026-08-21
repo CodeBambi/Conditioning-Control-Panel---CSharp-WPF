@@ -23,6 +23,13 @@ namespace CcpClient.Tests;
 /// it — <see cref="TheFloorGuard_RedsWhenONLYTheValidatorChanges"/> mutates the JS alone and
 /// watches the C# guard's verdict change, which no shared CONSTANT could deliver.</para>
 ///
+/// <para><b>TWO decisions are consumed twice, not one, and BOTH carry a fixture.</b> Check 4's
+/// chokepoint coverage, and check 2's SP-065 wrapper routing. The first cut of this packet pinned
+/// only the first, which closed the drift on check 4 and opened it on check 2: the routing verdict
+/// became two booleans that nothing pinned, and one substitution in the script silenced the wave
+/// gate and the floor guard together. That is recorded rather than quietly repaired, because it is
+/// the packet's own defect class arriving one check to the left.</para>
+///
 /// <para><b>WHAT THESE FACTS DO NOT PROVE.</b> Nothing here renders, composites, focuses a window,
 /// plays audio or animates; they are file- and process-level facts about two guards. The lexical
 /// anti-shadow fact is incomplete by construction and says so at its own doc comment. And the
@@ -30,14 +37,36 @@ namespace CcpClient.Tests;
 /// corpus every bound packet that declares <c>client/tests/floor/**</c> also carries the literal
 /// in the same cell, so adopting coverage changes the verdict of zero packets. What it buys is
 /// that the next packet declaring only the glob cannot print WAVE OK and red the suite.</para>
+///
+/// <para><b>THE EXACT BOUND ON THE ONE-SIDED-UPDATE PROOF, stated because it is narrower than the
+/// obvious reading.</b> <see cref="TheFloorGuard_RedsWhenONLYTheValidatorChanges"/> catches a
+/// REPLACING shadow — C# logic used INSTEAD of the projection's verdict. It does NOT catch an
+/// ADDITIVE one (<c>covered = emitted.FloorPin.Covered || someLocalPredicate</c>), because the
+/// clean run stays at zero violations and the mutated run still reaches exactly one, nor a
+/// population-gated one whose branch the SP-072/SP-073 fixtures never reach. That residue is
+/// bounded and the bound is the reassuring part: an OR-shadow makes the C# strictly MORE permissive
+/// than the validator, so guard-rejects becomes a subset of validator-rejects, and <b>the SP-136
+/// incident direction — WAVE OK printed while the base is red — cannot recur through it</b>. The
+/// inverse direction reds loudly at the pre-launch gate instead. It is a real gap, not a closed
+/// one, and it is written here rather than claimed away.</para>
 /// </summary>
 public class WaveGuardConvergenceTests
 {
     private const string GlobPacket = "SP-900-declares-a-covering-glob";
     private const string LiteralPacket = "SP-901-declares-the-literal-path";
     private const string SiblingPacket = "SP-902-declares-a-sibling-file";
-    private const string BelowBoundPacket = "SP-010-below-the-delta-bound";
-    private const string AboveBoundPacket = "SP-903-above-the-delta-bound";
+    // These two BRACKET the delta bound tightly, at 72 and 73, so the fixture pins the bound's
+    // VALUE and not merely its existence: at 72 the low packet becomes bound and reds, at 74 the
+    // high one becomes grandfathered and reds. An earlier pair (SP-010 / SP-903) left every value
+    // from 11 to 903 passing unchanged, which would have let the bound be raised silently.
+    private const string BelowBoundPacket = "SP-072-one-below-the-delta-bound";
+    private const string AboveBoundPacket = "SP-073-exactly-at-the-delta-bound";
+
+    private const string BareDotnetTestPacket = "SP-904-runs-a-bare-dotnet-test";
+    private const string WrapperRoutedPacket = "SP-905-routes-through-the-wrapper";
+
+    private const string WrapperRoutedCommand = "node client/tests/floor/check-floor.mjs";
+    private const string BareDotnetTestCommand = "dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug";
 
     private const string GlobCell = "`client/tests/floor/**`, `client/src/**`";
     private const string LiteralCell = "`client/tests/floor/floor.json`, `client/src/**`";
@@ -52,7 +81,27 @@ public class WaveGuardConvergenceTests
     /// </summary>
     private const string CoverageCallSite = "declaredValues.some((p) => patternCovers(p, chokepointPath))";
 
-    private const string LiteralOnlyMutation = "declaredValues.some((p) => p === chokepointPath)";
+    /// <summary>
+    /// The literal-substring semantics the C# guard carried before SP-136, reproduced FAITHFULLY:
+    /// substring (not equality), case-INsensitive, over the joined declaration with separators
+    /// normalised — matching <see cref="DriftedLiteralCoverage"/>. An earlier draft used
+    /// <c>p === chokepointPath</c>, which is per-value exact-equality and case-SENSITIVE, and is
+    /// therefore strictly STRICTER than what the guard actually did; it would also have refused
+    /// the <c>case-only-difference</c> and <c>windows-separators</c> cases that the historical
+    /// predicate accepted. A mutation that misrepresents the defect it replays is a worse
+    /// demonstration even when it reds.
+    /// </summary>
+    private const string LiteralOnlyMutation =
+        "declaredValues.join(\", \").replace(/\\\\/g, \"/\").toLowerCase().includes(chokepointPath.toLowerCase())";
+
+    /// <summary>
+    /// The single site computing the SP-065 routing verdict. Substituting it for a constant
+    /// <c>true</c> silences check 2 in the wave gate and the floor guard together — which is
+    /// exactly what an unpinned shared boolean permits, and why the wrapper fixture exists.
+    /// </summary>
+    private const string WrapperRoutingCallSite = "routesThroughWrapper: command.includes(WRAPPER_TOKEN),";
+
+    private const string WrapperAlwaysRoutedMutation = "routesThroughWrapper: true,";
 
     /// <summary>
     /// The verdicts the shared decision must return, pinned HERE, in C#, deliberately not read out
@@ -75,6 +124,20 @@ public class WaveGuardConvergenceTests
         ("case-only-difference", true, true),
         ("second-row-carries-it", true, true),
         ("no-scope-row-at-all", false, false),
+    ];
+
+    /// <summary>
+    /// The SP-065 routing verdicts, pinned HERE in C# for the same reason the coverage verdicts
+    /// are: a fixture read only by the side that produced it certifies nothing.
+    /// </summary>
+    private static readonly (string Id, bool InvokesDotnetTest, bool RoutesThroughWrapper)[] PinnedWrapperVerdicts =
+    [
+        ("bare-dotnet-test", true, false),
+        ("wrapper-routed", false, true),
+        ("wrapper-routed-alongside-dotnet-test", true, true),
+        ("not-a-dotnet-test-command", false, false),
+        ("dotnet-test-with-extra-whitespace", true, false),
+        ("dotnet-build-is-not-dotnet-test", false, false),
     ];
 
     /// <summary>
@@ -181,9 +244,10 @@ public class WaveGuardConvergenceTests
         // C# guard has no opinion of its own to hold steady. The mutation restores the exact
         // literal-only semantics FloorWrapperGuardTests.cs:224 used to carry.
         var spine = BuildSyntheticSpineTasks((GlobPacket, GlobCell), (LiteralPacket, LiteralCell));
-        var mutated = MutateValidator(CoverageCallSite, LiteralOnlyMutation);
+        var tempRoots = new List<string> { SyntheticRootOf(spine) };
         try
         {
+            var mutated = MutateValidator(CoverageCallSite, LiteralOnlyMutation, tempRoots);
             Assert.Equal(1, mutated.Replacements);
 
             var clean = await WaveScopeOracle.LoadAsync(WaveScopeOracle.ValidatorPath(), spine);
@@ -204,8 +268,137 @@ public class WaveGuardConvergenceTests
         }
         finally
         {
+            foreach (var root in tempRoots)
+            {
+                DeleteTree(root);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task TheWrapperRoutingRule_AgreesWithTheVerdictsPinnedHere_OnEveryCase()
+    {
+        // The SP-065 half of the convergence. Without this the routing verdict is two booleans
+        // computed in one place and trusted in two, which is the shape the coverage drift had.
+        var projection = await WaveScopeOracle.DefaultAsync();
+        var byId = projection.WrapperCases.ToDictionary(c => c.Id, StringComparer.Ordinal);
+        var violations = new List<string>();
+
+        foreach (var (id, invokes, routes) in PinnedWrapperVerdicts)
+        {
+            if (!byId.TryGetValue(id, out var emitted))
+            {
+                violations.Add($"wrapper case '{id}' is pinned in WaveGuardConvergenceTests but is absent from the "
+                    + "shared fixture in validate-wave.mjs — a case cannot be removed on one side only");
+                continue;
+            }
+
+            if (emitted.Actual.InvokesDotnetTest != invokes || emitted.Actual.RoutesThroughWrapper != routes)
+            {
+                violations.Add($"wrapper case '{id}' (`{emitted.Command}`): the shared routing decision returned "
+                    + $"{{invokesDotnetTest:{emitted.Actual.InvokesDotnetTest}, routesThroughWrapper:{emitted.Actual.RoutesThroughWrapper}}} "
+                    + $"but this test pins {{invokesDotnetTest:{invokes}, routesThroughWrapper:{routes}}} — {emitted.Why}");
+            }
+
+            if (emitted.Expect.InvokesDotnetTest != invokes || emitted.Expect.RoutesThroughWrapper != routes)
+            {
+                violations.Add($"wrapper case '{id}': validate-wave.mjs's own fixture and this test disagree about what "
+                    + "the SP-065 rule IS — that is the SP-136 class one level up");
+            }
+        }
+
+        var pinnedIds = PinnedWrapperVerdicts.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var emitted in projection.WrapperCases)
+        {
+            if (!pinnedIds.Contains(emitted.Id))
+            {
+                violations.Add($"wrapper case '{emitted.Id}' exists in validate-wave.mjs's fixture but is not pinned here — "
+                    + "a case added on one side only is unwatched");
+            }
+        }
+
+        Assert.NotEmpty(PinnedWrapperVerdicts);
+        Assert.NotEmpty(projection.WrapperCases);
+        Assert.True(violations.Count == 0,
+            "shared wrapper-routing decision does not match the verdicts pinned in this test:"
+            + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    [Fact]
+    public async Task ABareDotnetTest_IsRejectedByBothGuards()
+    {
+        // Before this fact the SP-065 violation branch in ComputeWrapperViolations was executed by
+        // NO test: every synthetic packet routed through the wrapper, so the rule was green because
+        // nothing ever asked it to refuse. A guard whose refusal path never runs is a guard whose
+        // refusal path can be deleted without a red.
+        var spine = BuildSyntheticSpineTasks(
+            (BareDotnetTestPacket, LiteralCell, BareDotnetTestCommand),
+            (WrapperRoutedPacket, LiteralCell, WrapperRoutedCommand));
+        try
+        {
+            var projection = await WaveScopeOracle.LoadAsync(WaveScopeOracle.ValidatorPath(), spine);
+            var guardViolations = FloorWrapperGuardTests.ComputeWrapperViolations(spine, projection);
+            var bare = projection.Packets.Single(p => p.Dir == BareDotnetTestPacket);
+            var routed = projection.Packets.Single(p => p.Dir == WrapperRoutedPacket);
+
+            Assert.True(bare.TestCommandRows.Single().InvokesDotnetTest);
+            Assert.False(bare.TestCommandRows.Single().RoutesThroughWrapper);
+            Assert.Contains(bare.Violations, v => v.StartsWith("[check 2]", StringComparison.Ordinal));
+            Assert.DoesNotContain(routed.Violations, v => v.StartsWith("[check 2]", StringComparison.Ordinal));
+
+            var bareHits = guardViolations.Where(v => v.Contains(BareDotnetTestPacket, StringComparison.Ordinal)).ToArray();
+            var routedHits = guardViolations.Where(v => v.Contains(WrapperRoutedPacket, StringComparison.Ordinal)).ToArray();
+
+            Assert.True(bareHits.Length == 1,
+                "a bound packet running a BARE `dotnet test` must be refused by the floor guard — this is the SP-065 "
+                + "half-install failure, and an unexpected skip reading green is exactly what it prevents. Violations: "
+                + Environment.NewLine + string.Join(Environment.NewLine, guardViolations));
+            Assert.Contains("without routing", bareHits[0], StringComparison.Ordinal);
+            Assert.True(routedHits.Length == 0,
+                "a wrapper-routed packet must be accepted: " + string.Join(Environment.NewLine, routedHits));
+        }
+        finally
+        {
             DeleteTree(SyntheticRootOf(spine));
-            DeleteTree(Path.GetDirectoryName(mutated.Path)!);
+        }
+    }
+
+    [Fact]
+    public async Task TheWrapperGuard_RedsWhenONLYTheValidatorChanges()
+    {
+        // The same one-sided-update proof as for coverage, for the SP-065 rule. The substitution is
+        // one token, and before this packet's convergence the C# guard's own predicate would have
+        // caught it; afterwards, only this fact does.
+        var spine = BuildSyntheticSpineTasks((BareDotnetTestPacket, LiteralCell, BareDotnetTestCommand));
+        var tempRoots = new List<string> { SyntheticRootOf(spine) };
+        try
+        {
+            var mutated = MutateValidator(WrapperRoutingCallSite, WrapperAlwaysRoutedMutation, tempRoots);
+            Assert.Equal(1, mutated.Replacements);
+
+            var clean = await WaveScopeOracle.LoadAsync(WaveScopeOracle.ValidatorPath(), spine);
+            var cleanViolations = FloorWrapperGuardTests.ComputeWrapperViolations(spine, clean);
+
+            var drifted = await WaveScopeOracle.LoadAsync(mutated.Path, spine);
+            var driftedViolations = FloorWrapperGuardTests.ComputeWrapperViolations(spine, drifted);
+
+            Assert.True(cleanViolations.Count == 1,
+                "the unmutated validator must refuse the bare `dotnet test` packet: "
+                + Environment.NewLine + string.Join(Environment.NewLine, cleanViolations));
+            Assert.True(driftedViolations.Count == 0,
+                "a ONE-SIDED change to validate-wave.mjs's routing verdict must change this guard's answer — it did not, "
+                + "so the C# side is holding a shadow implementation of the SP-065 rule: "
+                + Environment.NewLine + string.Join(Environment.NewLine, driftedViolations));
+            Assert.Contains(drifted.Packets.Single().TestCommandRows.Single().Command, BareDotnetTestCommand, StringComparison.Ordinal);
+            Assert.True(drifted.Packets.Single().TestCommandRows.Single().RoutesThroughWrapper,
+                "the mutation must be the thing that changed the verdict, not an unrelated parse failure");
+        }
+        finally
+        {
+            foreach (var root in tempRoots)
+            {
+                DeleteTree(root);
+            }
         }
     }
 
@@ -214,10 +407,17 @@ public class WaveGuardConvergenceTests
     /// implied. It closes the named routes by which the old predicate could return (the literal
     /// substring test against <c>SharedFloorPin</c>, or a hand-rolled <c>patternCovers</c>). It
     /// does NOT prove no shadow exists: a fresh predicate over <c>MustNotChangeRows</c> mentioning
-    /// none of these tokens would pass here. That route is closed by a different fact —
-    /// <see cref="TheFloorGuard_RedsWhenONLYTheValidatorChanges"/>, which a shadow implementation
-    /// makes fail, because the guard's answer would stop tracking the script's. Precedent for
-    /// reading a source file as text: <c>ExecutionCensusTests.CensusGenerator_HoldsNoShapeLiteralOfItsOwn</c>.
+    /// none of these tokens would pass here. That route is PARTLY closed by a different fact,
+    /// <see cref="TheFloorGuard_RedsWhenONLYTheValidatorChanges"/> — and the word is "partly" on
+    /// purpose. It catches a REPLACING shadow (used instead of the projection's verdict) because
+    /// the guard's answer stops tracking the script's. It does NOT catch an ADDITIVE one
+    /// (<c>covered || someLocalPredicate</c>), which leaves the clean run at zero violations and
+    /// the mutated run at exactly one, nor a population-gated one whose branch the fixtures never
+    /// reach. The residue is bounded rather than eliminated: an OR-shadow is strictly more
+    /// permissive than the validator, so it cannot reproduce the SP-136 incident direction
+    /// (WAVE OK printed while the base is red) — the inverse direction reds at the pre-launch gate.
+    /// Precedent for reading a source file as text:
+    /// <c>ExecutionCensusTests.CensusGenerator_HoldsNoShapeLiteralOfItsOwn</c>.
     /// </summary>
     [Fact]
     public void TheFloorGuard_HoldsNoChokepointCoverageLogicOfItsOwn()
@@ -393,16 +593,23 @@ public class WaveGuardConvergenceTests
         }
     }
 
+    /// <summary>
+    /// The exit-code contract, because the consumer's correctness rests on it in both directions.
+    /// If a violating corpus exited non-zero, the C# side would either have to bind the validator's
+    /// whole rule set (including check 8's ID-reuse rule, which fires for every packet already on
+    /// disk) or ignore exit codes and go blind. And if a FAILED projection read as an empty corpus,
+    /// every guard consuming it would be vacuously green.
+    ///
+    /// <para>NAMED PRECISELY: this covers a failed PROJECTION — non-zero exit, empty stdout,
+    /// unparseable JSON, wrong schema. It does NOT exercise the wedged-child path in
+    /// <c>WaveScopeOracle.RunAsync</c> (the <c>TestWait</c> window expiring and the process being
+    /// killed); that branch is unexercised by any fact here and is not claimed.</para>
+    /// </summary>
     [Fact]
-    public async Task TheProjection_ExitsZeroOnAViolatingCorpus_AndFailsClosedOnAbnormalTermination()
+    public async Task TheProjection_ExitsZeroOnAViolatingCorpus_AndFailsClosedOnAFailedProjection()
     {
-        // The exit-code contract, because the consumer's correctness rests on it in both
-        // directions. If a violating corpus exited non-zero, the C# side would either have to bind
-        // the validator's whole rule set (including check 8's ID-reuse rule, which fires for every
-        // packet already on disk) or ignore exit codes and go blind. And if a FAILED projection
-        // read as an empty corpus, every guard consuming it would be vacuously green.
         var spine = BuildSyntheticSpineTasks((SiblingPacket, CoversNothingCell));
-        var junkRoot = string.Empty;
+        var standInRoots = new List<string>();
         try
         {
             var run = await WaveScopeOracle.RunAsync(WaveScopeOracle.ValidatorPath(), "--emit-packet-scopes", spine);
@@ -418,20 +625,22 @@ public class WaveGuardConvergenceTests
             await Assert.ThrowsAsync<InvalidOperationException>(
                 () => WaveScopeOracle.LoadAsync(WaveScopeOracle.ValidatorPath(), absent));
 
-            var junk = WriteStandInValidator("process.stdout.write(\"this is not json\\n\");");
-            junkRoot = Path.GetDirectoryName(junk)!;
+            var junk = WriteStandInValidator("process.stdout.write(\"this is not json\\n\");", standInRoots);
             await Assert.ThrowsAsync<InvalidOperationException>(() => WaveScopeOracle.LoadAsync(junk, spine));
 
-            var wrongShape = WriteStandInValidator("process.stdout.write(JSON.stringify({ schema: \"something-else\" }));");
+            var wrongShape = WriteStandInValidator("process.stdout.write(JSON.stringify({ schema: \"something-else\" }));", standInRoots);
             await Assert.ThrowsAsync<InvalidOperationException>(() => WaveScopeOracle.LoadAsync(wrongShape, spine));
 
-            var silent = WriteStandInValidator("process.exitCode = 0;");
+            var silent = WriteStandInValidator("process.exitCode = 0;", standInRoots);
             await Assert.ThrowsAsync<InvalidOperationException>(() => WaveScopeOracle.LoadAsync(silent, spine));
         }
         finally
         {
             DeleteTree(SyntheticRootOf(spine));
-            DeleteTree(junkRoot);
+            foreach (var root in standInRoots)
+            {
+                DeleteTree(root);
+            }
         }
     }
 
@@ -459,17 +668,20 @@ public class WaveGuardConvergenceTests
     /// and would red the corpus-wide facts at the same moment it was meant to prove something. The
     /// leaf directory is named <c>spine-tasks</c> because that is the anchor both packet walks use.
     /// </summary>
-    private static string BuildSyntheticSpineTasks(params (string Dir, string ScopeCell)[] packets)
+    private static string BuildSyntheticSpineTasks(params (string Dir, string ScopeCell)[] packets) =>
+        BuildSyntheticSpineTasks(packets.Select(p => (p.Dir, p.ScopeCell, WrapperRoutedCommand)).ToArray());
+
+    private static string BuildSyntheticSpineTasks(params (string Dir, string ScopeCell, string TestCommand)[] packets)
     {
         var root = Path.Combine(Path.GetTempPath(), $"ccp-sp136-{Guid.NewGuid():N}");
         var spine = Path.Combine(root, "spine-tasks");
         Directory.CreateDirectory(spine);
 
-        foreach (var (dir, scopeCell) in packets)
+        foreach (var (dir, scopeCell, testCommand) in packets)
         {
             var packetDir = Path.Combine(spine, dir);
             Directory.CreateDirectory(packetDir);
-            File.WriteAllText(Path.Combine(packetDir, "PROMPT.md"), SyntheticPrompt(dir, scopeCell));
+            File.WriteAllText(Path.Combine(packetDir, "PROMPT.md"), SyntheticPrompt(dir, scopeCell, testCommand));
         }
 
         return spine;
@@ -480,13 +692,13 @@ public class WaveGuardConvergenceTests
     /// packets is the scope cell under test. Anything else would let an unrelated violation stand
     /// in for the one the fact is watching.
     /// </summary>
-    private static string SyntheticPrompt(string dir, string scopeCell) =>
+    private static string SyntheticPrompt(string dir, string scopeCell, string testCommand) =>
         $"""
          # {dir} — SP-136 fixture packet
 
          | Field | Value |
          |---|---|
-         | testCommand | `node client/tests/floor/check-floor.mjs` |
+         | testCommand | `{testCommand}` |
          | floorDelta | `spine-tasks/{dir}/floor-delta.json` |
          | fileScopeMustChange | `client/src/CcpClient.Desktop/Fixture{dir}.cs` |
          | fileScopeMustNotChange | {scopeCell} |
@@ -500,22 +712,24 @@ public class WaveGuardConvergenceTests
     /// explicit directory, so it runs correctly from outside the repository — which is what makes
     /// the one-sided-update demonstration possible without writing into the tree.
     /// </summary>
-    private static MutatedValidator MutateValidator(string find, string replaceWith)
+    private static MutatedValidator MutateValidator(string find, string replaceWith, List<string> createdRoots)
     {
         var source = File.ReadAllText(WaveScopeOracle.ValidatorPath());
         var replacements = CountOccurrences(source, find);
         var mutatedRoot = Path.Combine(Path.GetTempPath(), $"ccp-sp136-mutant-{Guid.NewGuid():N}");
         Directory.CreateDirectory(mutatedRoot);
+        createdRoots.Add(mutatedRoot); // registered BEFORE the write, so a throw still leaves it collectable
         var mutatedPath = Path.Combine(mutatedRoot, "validate-wave.mutated.mjs");
         File.WriteAllText(mutatedPath, source.Replace(find, replaceWith, StringComparison.Ordinal));
         return new MutatedValidator(mutatedPath, replacements);
     }
 
     /// <summary>A stand-in "validator" that emits whatever the caller wants, for the fail-closed fact.</summary>
-    private static string WriteStandInValidator(string body)
+    private static string WriteStandInValidator(string body, List<string> createdRoots)
     {
         var root = Path.Combine(Path.GetTempPath(), $"ccp-sp136-standin-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
+        createdRoots.Add(root); // registered BEFORE the write, so a throw still leaves it collectable
         var scriptPath = Path.Combine(root, "stand-in.mjs");
         File.WriteAllText(scriptPath, body + Environment.NewLine);
         return scriptPath;

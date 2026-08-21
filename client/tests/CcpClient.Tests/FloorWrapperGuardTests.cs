@@ -409,10 +409,18 @@ internal sealed record WaveScopePacket(
     WaveScopeChokepoint TaskBoard,
     string[] Violations);
 
+/// <summary>One wrapper-routing fixture case: the SP-065 rule's verdict for one testCommand.</summary>
+internal sealed record WaveScopeWrapperVerdict(bool InvokesDotnetTest, bool RoutesThroughWrapper);
+
+internal sealed record WaveScopeWrapperCase(
+    string Id, string Why, string Command,
+    WaveScopeWrapperVerdict Expect, WaveScopeWrapperVerdict Actual);
+
 internal sealed record WaveScopeProjection(
     string Schema, string SpineTasksDir, int WaveSize,
     string FloorPinPath, string TaskBoardPath, string WrapperToken, int FirstBoundPacketNumber,
-    string[] StrayPromptDirs, WaveScopeCase[] Cases, WaveScopePacket[] Packets);
+    string[] StrayPromptDirs, WaveScopeCase[] Cases, WaveScopeWrapperCase[] WrapperCases,
+    WaveScopePacket[] Packets);
 
 /// <summary>
 /// SP-136. Runs <c>client/tools/wave/validate-wave.mjs --emit-packet-scopes &lt;dir&gt;</c> and
@@ -473,11 +481,12 @@ internal static class WaveScopeOracle
                 + "cannot read is a projection it must not judge packets on (SP-136)", ex);
         }
 
-        if (projection is null || projection.Packets is null || projection.Cases is null)
+        if (projection is null || projection.Packets is null || projection.Cases is null || projection.WrapperCases is null)
         {
             throw new InvalidOperationException(
-                $"the packet-scope projection from {validatorScriptPath} parsed to null or is missing its `packets`/`cases` "
-                + "arrays — the schema this guard consumes is `ccp.wave.packet-scopes.v1` (SP-136)");
+                $"the packet-scope projection from {validatorScriptPath} parsed to null or is missing its "
+                + "`packets`/`cases`/`wrapperCases` arrays — the schema this guard consumes is "
+                + "`ccp.wave.packet-scopes.v1` (SP-136)");
         }
 
         if (!string.Equals(projection.Schema, "ccp.wave.packet-scopes.v1", StringComparison.Ordinal))

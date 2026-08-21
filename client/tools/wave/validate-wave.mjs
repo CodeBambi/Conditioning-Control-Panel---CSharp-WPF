@@ -429,6 +429,92 @@ export function coverageCaseMismatches() {
 }
 
 // ---------------------------------------------------------------------------
+// THE SHARED WRAPPER-ROUTING DECISION — the SP-065 rule, decided once
+// ---------------------------------------------------------------------------
+//
+// SP-136 REVIEW FIX. The first cut of this convergence closed the drift on check 4 and OPENED it
+// on check 2: routing the SP-065 verdict through the projection deleted the C# guard's own
+// `DOTNET_TEST.test(command) && !command.includes(WRAPPER_TOKEN)` and replaced it with two
+// booleans that NOTHING pinned. A single substitution below — `routesThroughWrapper: true` —
+// silences check 2 in the wave gate AND
+// PacketsAtOrAboveSp065_RouteDotnetTestThroughTheFloorWrapper at the same moment; before the
+// convergence, that same edit was caught by the C# side. A decision consumed in two places needs a
+// fixture exactly as the coverage decision does. Having built one for coverage only was the same
+// defect class, one check to the left.
+export function wrapperRoutingVerdict(command) {
+  return {
+    invokesDotnetTest: DOTNET_TEST.test(command),
+    routesThroughWrapper: command.includes(WRAPPER_TOKEN),
+  };
+}
+
+// The fixture both sides must satisfy for check 2. Same arrangement as the coverage fixture: the
+// C# pins these verdicts in its OWN source, so a lockstep edit to this file and its fixture still
+// reds there.
+export const WRAPPER_ROUTING_CASES = [
+  {
+    id: "bare-dotnet-test",
+    why: "THE SP-065 HALF-INSTALL FAILURE: a bare invocation lets an unexpected skip read green, and it must be refused",
+    command: "dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug",
+    expect: { invokesDotnetTest: true, routesThroughWrapper: false },
+  },
+  {
+    id: "wrapper-routed",
+    why: "the only accepted shape for a bound packet: the suite runs through the floor wrapper",
+    command: "node client/tests/floor/check-floor.mjs",
+    expect: { invokesDotnetTest: false, routesThroughWrapper: true },
+  },
+  {
+    id: "wrapper-routed-alongside-dotnet-test",
+    why: "a command that does both is accepted — the rule bans an UNWRAPPED invocation, never `dotnet test` itself",
+    command: "node client/tests/floor/check-floor.mjs && dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj",
+    expect: { invokesDotnetTest: true, routesThroughWrapper: true },
+  },
+  {
+    id: "not-a-dotnet-test-command",
+    why: "a packet whose contract runs something else entirely is not bound by the wrapper rule at all",
+    command: "pwsh client/tools/verify/capture.ps1 -Surface rail-door -State selected",
+    expect: { invokesDotnetTest: false, routesThroughWrapper: false },
+  },
+  {
+    id: "dotnet-test-with-extra-whitespace",
+    why: "the token is matched on word boundaries with flexible spacing, so `dotnet  test` is still an invocation",
+    command: "dotnet  test client/tests/CcpClient.Tests/CcpClient.Tests.csproj",
+    expect: { invokesDotnetTest: true, routesThroughWrapper: false },
+  },
+  {
+    id: "dotnet-build-is-not-dotnet-test",
+    why: "a near miss that must NOT read as an invocation, or every build-only packet would be refused",
+    command: "dotnet build client/CcpClient.sln -c Debug",
+    expect: { invokesDotnetTest: false, routesThroughWrapper: false },
+  },
+];
+
+export function evaluateWrapperCases() {
+  return WRAPPER_ROUTING_CASES.map((c) => ({
+    id: c.id,
+    why: c.why,
+    command: c.command,
+    expect: c.expect,
+    actual: wrapperRoutingVerdict(c.command),
+  }));
+}
+
+export function wrapperCaseMismatches() {
+  const bad = [];
+  for (const c of evaluateWrapperCases()) {
+    if (c.actual.invokesDotnetTest !== c.expect.invokesDotnetTest || c.actual.routesThroughWrapper !== c.expect.routesThroughWrapper) {
+      bad.push(
+        `[fixture] wrapper case '${c.id}': the shared routing decision returned ` +
+        `{invokesDotnetTest:${c.actual.invokesDotnetTest}, routesThroughWrapper:${c.actual.routesThroughWrapper}} but this ` +
+        `fixture pins {invokesDotnetTest:${c.expect.invokesDotnetTest}, routesThroughWrapper:${c.expect.routesThroughWrapper}} — ${c.why}`
+      );
+    }
+  }
+  return bad;
+}
+
+// ---------------------------------------------------------------------------
 // Packet enumeration and PROMPT.md contract parsing
 // ---------------------------------------------------------------------------
 
@@ -562,8 +648,7 @@ export function inspectPacket(name, spineTasksDir, waveSize) {
       testCommandRows.push({
         line: i + 1,
         command: hit[1],
-        invokesDotnetTest: DOTNET_TEST.test(hit[1]),
-        routesThroughWrapper: hit[1].includes(WRAPPER_TOKEN),
+        ...wrapperRoutingVerdict(hit[1]),
       });
     }
   }
@@ -705,6 +790,7 @@ export function emitPacketScopes(spineTasksDir) {
     firstBoundPacketNumber: FIRST_BOUND_PACKET_NUMBER,
     strayPromptDirs: dirs.filter((d) => !PACKET_NUMBER.test(d)),
     cases: evaluateCoverageCases(),
+    wrapperCases: evaluateWrapperCases(),
     packets,
   };
 }
@@ -854,9 +940,9 @@ export function main(argv) {
   // The shared decision is checked against its own fixture BEFORE any packet is judged. If this
   // file disagrees with the cases it pins, every verdict below it — and every verdict the C#
   // guard consumes from it — is suspect, so no wave may launch on it.
-  const fixtureMismatches = coverageCaseMismatches();
+  const fixtureMismatches = [...coverageCaseMismatches(), ...wrapperCaseMismatches()];
   if (fixtureMismatches.length > 0) {
-    console.error(`WAVE CHECK FAILED: the shared chokepoint decision disagrees with its own fixture (${fixtureMismatches.length} case(s))`);
+    console.error(`WAVE CHECK FAILED: a shared decision disagrees with its own fixture (${fixtureMismatches.length} case(s))`);
     for (const m of fixtureMismatches) {
       console.error(`  ${m}`);
     }
