@@ -74,6 +74,9 @@ namespace ConditioningControlPanel
         private SplashScreen? _splash;
         private static Thread? _showSignalThread;
         private readonly TaskCompletionSource _patreonInitDone = new();
+        // Serializes the startup auth-token upgrade (see EnsureAuthTokenAsync). Patreon and Discord
+        // init run as parallel background tasks and both used to mint a token unconditionally.
+        private readonly SemaphoreSlim _authUpgradeGate = new(1, 1);
 
         // "Open with CCP" handoff: --play / --edit args parsed at startup.
         // First instance routes directly after MainWindow loads; second instance
@@ -2936,6 +2939,69 @@ namespace ConditioningControlPanel
 
 
         /// <summary>
+        /// Mints a V2 identity + auth token for a provider that is signed in but has no usable
+        /// unified session yet, at most once per launch.
+        ///
+        /// InitializePatreonAndSyncAsync and InitializeDiscordAsync are two parallel background
+        /// tasks, and each used to run its own /v2/auth/&lt;provider&gt; upgrade under the identical
+        /// "no unified id OR no auth token" condition. Both calls mint a token server-side, the
+        /// server keeps the last write and the client keeps whichever response landed second, so
+        /// roughly half the time a dual-linked account ended up holding a token the server no
+        /// longer recognised and every authed request 401'd from then on. The gate serializes the
+        /// two, and the condition is re-checked INSIDE it so the loser sees the freshly minted
+        /// token and no-ops. Still fully async — nothing on the startup path blocks on this.
+        /// </summary>
+        private async Task EnsureAuthTokenAsync(
+            string provider,
+            Func<string?> getAccessToken,
+            Func<V2AuthService, string, Task<V2AuthService.V2AuthResponse>> authenticate)
+        {
+            if (!NeedsAuthTokenUpgrade()) return;
+
+            await _authUpgradeGate.WaitAsync();
+            try
+            {
+                if (!NeedsAuthTokenUpgrade())
+                {
+                    Logger?.Debug("{Provider} auto-upgrade skipped — another provider already minted the auth token", provider);
+                    return;
+                }
+
+                var accessToken = getAccessToken();
+                if (string.IsNullOrEmpty(accessToken)) return;
+
+                Logger?.Information("Auto-upgrading {Provider} user to V2...", provider);
+                var v2Auth = new V2AuthService();
+                var result = await authenticate(v2Auth, accessToken);
+                if (result.Success && result.User != null)
+                {
+                    v2Auth.ApplyUserDataToSettings(result.User, result.AuthToken);
+                    UnifiedUserId = result.User.UnifiedId;
+                    Logger?.Information("Auto-upgrade complete: {Id}", UnifiedUserId);
+                }
+                else if (result.NeedsRegistration)
+                {
+                    Logger?.Information("{Provider} auto-upgrade: needs registration (new user), skipping", provider);
+                }
+                else
+                {
+                    Logger?.Warning("{Provider} auto-upgrade failed: {Error}", provider, result.Error);
+                }
+            }
+            catch (Exception upgradeEx)
+            {
+                Logger?.Warning(upgradeEx, "{Provider} auto-upgrade failed (non-fatal, will retry next launch)", provider);
+            }
+            finally
+            {
+                _authUpgradeGate.Release();
+            }
+
+            static bool NeedsAuthTokenUpgrade() =>
+                string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken);
+        }
+
+        /// <summary>
         /// Initialize Patreon and load cloud profile if authenticated
         /// </summary>
         private async Task InitializePatreonAndSyncAsync()
@@ -2949,37 +3015,8 @@ namespace ConditioningControlPanel
                 if (Patreon.IsAuthenticated)
                 {
                     // Auto-upgrade: if Patreon is authenticated but no V2 identity, migrate via /v2/auth/patreon
-                    if (string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken))
-                    {
-                        try
-                        {
-                            var accessToken = Patreon.GetAccessToken();
-                            if (!string.IsNullOrEmpty(accessToken))
-                            {
-                                Logger?.Information("Auto-upgrading Patreon user to V2...");
-                                var v2Auth = new V2AuthService();
-                                var result = await v2Auth.AuthenticateWithPatreonAsync(accessToken);
-                                if (result.Success && result.User != null)
-                                {
-                                    v2Auth.ApplyUserDataToSettings(result.User, result.AuthToken);
-                                    UnifiedUserId = result.User.UnifiedId;
-                                    Logger?.Information("Auto-upgrade complete: {Id}", UnifiedUserId);
-                                }
-                                else if (result.NeedsRegistration)
-                                {
-                                    Logger?.Information("Patreon auto-upgrade: needs registration (new user), skipping");
-                                }
-                                else
-                                {
-                                    Logger?.Warning("Patreon auto-upgrade failed: {Error}", result.Error);
-                                }
-                            }
-                        }
-                        catch (Exception upgradeEx)
-                        {
-                            Logger?.Warning(upgradeEx, "Patreon auto-upgrade failed (non-fatal, will retry next launch)");
-                        }
-                    }
+                    await EnsureAuthTokenAsync("Patreon", () => Patreon.GetAccessToken(),
+                        (v2Auth, accessToken) => v2Auth.AuthenticateWithPatreonAsync(accessToken));
 
                     Logger?.Information("Patreon authenticated, loading cloud profile...");
                     await ProfileSync.LoadProfileAsync();
@@ -3045,37 +3082,8 @@ namespace ConditioningControlPanel
                     // Auto-upgrade: if Discord is authenticated but no V2 identity OR no auth token, migrate via /v2/auth/discord
                     // (legacy users created before Feb 2026 may have a UnifiedUserId but no auth_token_hash on the server —
                     // re-running /v2/auth/discord bootstraps a fresh token for them)
-                    if (string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken))
-                    {
-                        try
-                        {
-                            var accessToken = Discord.GetAccessToken();
-                            if (!string.IsNullOrEmpty(accessToken))
-                            {
-                                Logger?.Information("Auto-upgrading Discord user to V2...");
-                                var v2Auth = new V2AuthService();
-                                var result = await v2Auth.AuthenticateWithDiscordAsync(accessToken);
-                                if (result.Success && result.User != null)
-                                {
-                                    v2Auth.ApplyUserDataToSettings(result.User, result.AuthToken);
-                                    UnifiedUserId = result.User.UnifiedId;
-                                    Logger?.Information("Auto-upgrade complete: {Id}", UnifiedUserId);
-                                }
-                                else if (result.NeedsRegistration)
-                                {
-                                    Logger?.Information("Discord auto-upgrade: needs registration (new user), skipping");
-                                }
-                                else
-                                {
-                                    Logger?.Warning("Discord auto-upgrade failed: {Error}", result.Error);
-                                }
-                            }
-                        }
-                        catch (Exception upgradeEx)
-                        {
-                            Logger?.Warning(upgradeEx, "Discord auto-upgrade failed (non-fatal, will retry next launch)");
-                        }
-                    }
+                    await EnsureAuthTokenAsync("Discord", () => Discord.GetAccessToken(),
+                        (v2Auth, accessToken) => v2Auth.AuthenticateWithDiscordAsync(accessToken));
 
                     // Wait for Patreon init to finish (up to 10s) before deciding whether to load profile
                     // This prevents a race where Discord init finishes first and calls LoadProfileAsync
