@@ -9,15 +9,34 @@ namespace CcpClient.Desktop.Features.Goon;
 /// shape exactly: a THIRD §4 <see cref="LoopbackServer"/> (own ephemeral ports, own per-session
 /// bridge token, own inbox), started and stopped with the Goon window.
 ///
-/// <para><b>The server class is reused UNMODIFIED</b>, with <c>overlayRoot</c> AND
-/// <c>payloadRoot</c> both pointing at the goon tree, so the hardcoded <c>/dtrh/</c> route serves
-/// every goon URL from <c>payload/goon</c> and nothing else is reachable on this origin. (Both
-/// roots the same is an already-exercised construction —
-/// <c>client/tests/CcpClient.Tests/DtrhLoomTests.cs:153</c>.) The reason for reuse rather than a
-/// Goon-shaped origin is concrete: the page plays the user's own <b>videos</b>, and this class
-/// already ships Range 206/416, the page/media CORS split that keeps taint checks meaningful,
-/// traversal refusal, nosniff and deny-by-default 415 — all tested. Re-deriving Range handling
-/// to obtain a prettier route prefix would be a cosmetic risk.</para>
+/// <para><b>The server class is reused UNMODIFIED</b>, on its hardcoded <c>/dtrh/</c> route class.
+/// The reason for reuse rather than a Goon-shaped origin is concrete: the page plays the user's own
+/// <b>videos</b>, and this class already ships Range 206/416, the page/media CORS split that keeps
+/// taint checks meaningful, traversal refusal, nosniff and deny-by-default 415 — all tested.
+/// Re-deriving Range handling to obtain a prettier route prefix would be a cosmetic risk.</para>
+///
+/// <para><b>THE BORROW, and why SP-130's construction was wrong (SP-132, D266).</b> SP-130 passed
+/// the goon tree as BOTH roots, so that "nothing else is reachable on this origin". The first run
+/// that ever loaded the page found what that costs: <b>the goon page hotlinks twelve assets out of
+/// the DTRH tree by ABSOLUTE path</b> — <c>ui/audio.js:112</c> declares
+/// <c>DTRH_SFX_DIR = '/dtrh/assets/bubbles/sfx/'</c> and six cues resolve through it
+/// (<c>:203</c>, <c>:219</c>, <c>:221</c>, <c>:225</c>, <c>:230</c>, <c>:235</c>), and
+/// <c>exec/fx.css:271</c> plus <c>:304-308</c> pull the bubble sprite and five effect icons from
+/// <c>/dtrh/assets/bubbles/</c>. The page's own comment states the design in as many words:
+/// <i>"HOTLINKED, not copied. Resources/web is the page origin's root under WebView2 and every
+/// harness mounts /dtrh/ at that exact prefix"</i> (<c>ui/audio.js:43-46</c>). With both roots on
+/// the goon tree all twelve answered <b>404</b>, and the page said so on the host log:
+/// <c>warn: [GG audio] asset failed: /dtrh/assets/bubbles/sfx/Pop2.mp3 (HTTP 404)</c>.</para>
+///
+/// <para>So the construction is now the <see cref="Intake.IntakeParticipant"/> OVERLAY-FIRST BORROW
+/// verbatim (<c>IntakeParticipant.cs:94-100</c>): the goon tree is the overlay and shadows
+/// everything it has, and the dtrh tree is the payload fallback the twelve hotlinks resolve
+/// against. This is not a new admission surface — the intake origin has borrowed these same
+/// <c>bubbles/sfx</c> files since SP-054, and
+/// <c>IntakeServingTests.The_Borrow_Falls_Through_To_The_Dtrh_Tree</c> is that exact proof. Every
+/// §4 control is unchanged and still applies to the fallback: GET-only, MIME allowlist + 415,
+/// traversal refusal, nosniff. <c>GoonServingTests</c> pins BOTH halves at the wire — the goon
+/// tree still shadows, and exactly the borrowed set falls through.</para>
 ///
 /// <para><b>The inherited cost, measured rather than assumed (D258).</b> The goon tree holds
 /// eight extensions plus two extensionless files; <see cref="LoopbackServer"/>'s §4.4-pinned
@@ -91,8 +110,8 @@ public sealed class GoonParticipant : IDisposable
         var probe = GoonServingRoots.Probe();
         _log.Log($"goon: payload root '{probe.Root}' -> {probe.State} ({probe.FileCount} files)");
         _server = new LoopbackServer(
-            GoonServingRoots.PayloadRoot,   // payload: the goon tree
-            GoonServingRoots.PayloadRoot,   // overlay-first: the same tree (no product overlay exists)
+            DtrhParticipant.PayloadRoot,    // payload FALLBACK: the dtrh tree (THE BORROW — see below)
+            GoonServingRoots.PayloadRoot,   // overlay-first: the goon tree, which shadows it
             GoonServingRoots.MediaRoot,     // /media/* -> the goon tree's own assets (never used by the page)
             _inbox, BridgeToken, _log,
             userMediaRoot: UserMediaRoot);  // /umedia/* -> the shared user-media pool, CORS-scoped

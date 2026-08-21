@@ -1,4 +1,5 @@
 using System.Reflection;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -55,6 +56,11 @@ public partial class GoonHostWindow : Window
     private WindowState? _ownerStateBeforeDuck;
     private bool _profileRetryUsed;
     private bool _recoveryClosing;
+    private string _navigation = "pending";
+    private string _pageState = UnreadPageState;
+    private bool _pageStateRead;
+    private int _pageStateInFlight;
+    private bool _probeLogged;
 
     /// <summary>Boot-matrix facts (headed harness + diagnostics). Content-free.</summary>
     public int Heartbeats => _heartbeats;
@@ -64,6 +70,15 @@ public partial class GoonHostWindow : Window
 
     /// <summary>True once init + manifest + the fullscreen echo have been posted.</summary>
     public bool BootMessagesSent => _sentBootMessages;
+
+    /// <summary>
+    /// SP-132: the page-state slot before the page has ever answered. It reads FALSE rather than
+    /// UNKNOWN on purpose — a harness that cannot tell "not yet" from "no" would still refuse —
+    /// and <c>pageread=</c> carries the difference beside it, so a page that answered "not ready"
+    /// and a page that never answered at all are distinguishable in the transcript.
+    /// </summary>
+    private const string UnreadPageState =
+        "ready=false solo=false name=- canhost=false assetcache=false images=0 screen=- modal=-";
 
     public GoonHostWindow(ApplicationHost host, GoonParticipant participant, Window owner, DtrhWatchdog watchdog)
     {
@@ -79,6 +94,10 @@ public partial class GoonHostWindow : Window
             Width = screen.WorkingArea.Width * 0.85 / screen.Scaling;
             Height = screen.WorkingArea.Height * 0.85 / screen.Scaling;
         }
+
+        // SP-132: the probe line republishes on every layout pass of the web host, so the rect it
+        // publishes is the rect that is really there — the MainWindow.axaml.cs:194-202 shape.
+        WebHost.LayoutUpdated += (_, _) => PublishProbe();
 
         Opened += (_, _) =>
         {
@@ -201,6 +220,7 @@ public partial class GoonHostWindow : Window
                 + ".\nThe goon tree serves from payload/goon beside the exe (the SP-023 copied-asset "
                 + "convention; the bytes stay owned by the legacy tree). Never a silent substitute.";
             SetStatus($"goon: payload {probe.State} — honest surface");
+            PublishProbe();
             _host.LogDiagnostic($"goon: payload {probe.State} — honest surface shown (no substitute)");
             return;
         }
@@ -222,6 +242,7 @@ public partial class GoonHostWindow : Window
             + "synthesizes its own init (bridge.js:473) and would ignore every door refusal this "
             + "host declares. Linux is unproven and is a named gate, never faked.";
         SetStatus("goon: honest unsupported (no silent standalone)");
+        PublishProbe();
         _host.LogDiagnostic(
             "goon: embedded webview unavailable — honest unsupported surface (dialog not admitted; named Linux limit)");
     }
@@ -238,7 +259,16 @@ public partial class GoonHostWindow : Window
         _web.AdapterDestroyed += (_, _) => _host.LogDiagnostic("goon: AdapterDestroyed");
         _web.WebMessageReceived += OnWebMessage;
         _web.NavigationCompleted += (_, e) =>
+        {
+            // SP-132: a FAILED navigation is a typed state on the probe, never a silence. The
+            // headed harness refuses on it, so an error page cannot be photographed and reported
+            // as the title screen. Avalonia's args expose IsSuccess and this code does not invent
+            // a status code it has not verified exists — the platform's own detail, when there is
+            // any, arrives on the diagnostic transcript beside this line.
+            _navigation = e.IsSuccess ? "success" : "failed";
             _host.LogDiagnostic($"goon: NavigationCompleted success={e.IsSuccess} (surface {Surface})");
+            PublishProbe();
+        };
         WebHost.Children.Add(_web);
         var url = _participant.PageUrl();
         SetStatus("goon: navigating (embedded)");
@@ -406,12 +436,21 @@ public partial class GoonHostWindow : Window
                 _heartbeats++;
                 _watchdog.Heartbeat(DateTimeOffset.UtcNow);
                 if (_heartbeats % 15 == 1) _host.LogDiagnostic($"goon: heartbeat #{_heartbeats}");
+                // SP-132: the page's own 2 s cadence (boot.js:2587) drives the state re-read until
+                // it reports settled. A boot ok that never arrives therefore still converges, and
+                // this host adds no clock of its own to make that happen.
+                if (_sentBootMessages) ReadPageState();
+                PublishProbe();
                 return;
             case GoonProtocol.GoonPageMessage.Pong:
                 _watchdog.Heartbeat(DateTimeOffset.UtcNow);
                 return;
             case GoonProtocol.GoonPageMessage.Log log:
                 _host.LogDiagnostic($"goon page log: {log.Msg}");
+                // SP-132: `boot ok` (boot.js:431) is emitted immediately after openFirstScreen(),
+                // so it is the earliest moment the page's own state is worth reading — settled,
+                // app built, loader hidden, first screen mounted.
+                if (log.Msg is { } msg && msg.StartsWith("boot ok", StringComparison.Ordinal)) ReadPageState();
                 return;
             case GoonProtocol.GoonPageMessage.Ready:
                 _host.LogDiagnostic("goon: ready received — flushing init + manifest");
@@ -542,4 +581,132 @@ public partial class GoonHostWindow : Window
     }
 
     private void SetStatus(string s) => Dispatcher.UIThread.Post(() => Status.Text = s);
+
+    // ---------- SP-132: the probe line (headed-evidence seam) ----------
+
+    /// <summary>
+    /// The expression evaluated IN THE PAGE. It reads the page's own object graph — <c>__gg</c>,
+    /// exposed at <c>boot.js:2645-2664</c> for exactly this purpose ("the C# side can evaluate
+    /// window.__gg.session") — and the screen id the router writes onto the document element
+    /// (<c>ui/router.js:222</c>).
+    ///
+    /// <para><b>Why the page's state and not this host's own "I sent it".</b>
+    /// <c>session.ready</c> is written in ONE place, <c>boot.js:418</c> inside <c>settle()</c>,
+    /// behind a guard that returns unless BOTH <c>gotInit</c> (<c>:322</c>) and
+    /// <c>gotManifest</c> (<c>:354</c>) are set — so it means "init and manifest both arrived AND
+    /// were parsed", which is the acknowledgement. <see cref="BootMessagesSent"/> would have
+    /// proved nothing: it is set unconditionally BEFORE either message is dispatched, so it reads
+    /// true even if both dispatches fault.</para>
+    ///
+    /// <para><c>solo</c>, <c>displayName</c>, <c>canHost</c> and <c>assetCache</c> are values THIS
+    /// host computed and posted, read back out of the page — so they also prove the frame the page
+    /// parsed is the frame this host built, not a standalone one it synthesized for itself
+    /// (<c>bridge.js:473</c>).</para>
+    /// </summary>
+    internal const string PageStateScript =
+        "(function(){var s=(window.__gg&&window.__gg.session)||{};var c=s.caps||{};"
+        + "var m=s.manifest||{};var i=s.identity||{};"
+        + "var d=document.getElementById('gg-modal');"
+        + "return 'ready='+(s.ready===true)+' solo='+(s.solo===true)"
+        + "+' name='+(i.displayName||'-')+' canhost='+(c.canHost===true)"
+        + "+' assetcache='+(c.assetCache===true)+' images='+(m.images|0)"
+        + "+' screen='+(document.documentElement.getAttribute('data-gg-screen')||'-')"
+        + "+' modal='+(!d?'absent':(d.hidden?'closed':'open'));})()";
+
+    /// <summary>
+    /// Ask the page for its own state. Driven by the page's OWN cadence — its <c>boot ok</c> frame
+    /// (<c>boot.js:431</c>) and thereafter its 2 s heartbeat (<c>boot.js:2587</c>) until an answer
+    /// reports ready — never a timer this host chose. One read at a time; a fault is recorded as a
+    /// fault rather than left looking like "not ready yet".
+    /// </summary>
+    private void ReadPageState()
+    {
+        if (_web is null)
+        {
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _pageStateInFlight, 1) != 0)
+        {
+            return;
+        }
+
+        _ = _web.InvokeScript(PageStateScript).ContinueWith(
+            t =>
+            {
+                Volatile.Write(ref _pageStateInFlight, 0);
+                var state = t.IsFaulted
+                    ? $"pagestate-faulted={t.Exception?.GetBaseException().GetType().Name}"
+                    : Unquote(t.Result);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    _pageState = state;
+                    // pageread says the page has ANSWERED, and never that the answer is final. An
+                    // earlier version stopped re-reading here, once ready=true arrived — which
+                    // froze every other field at whatever it was in that instant. Measured, not
+                    // theorised: the title screen's first-run explainer opens 420 ms AFTER the
+                    // page settles (ui/screens/title.js:157), so the frozen probe reported
+                    // modal=closed forever while a card sat open on screen. A probe that stops
+                    // observing is a probe that lies, and this one is what a headed capture
+                    // decides on.
+                    _pageStateRead = true;
+                    PublishProbe();
+                });
+            },
+            TaskScheduler.Default);
+    }
+
+    /// <summary>The engine returns script results JSON-encoded, so a plain string arrives quoted.
+    /// The expression above produces no quote and no backslash, so trimming the wrapper is exact
+    /// rather than a partial unescape.</summary>
+    private static string Unquote(string? result)
+    {
+        var text = result ?? "";
+        return text.Length >= 2 && text[0] == '"' && text[^1] == '"' ? text[1..^1] : text;
+    }
+
+    /// <summary>
+    /// Publish the probe. Rendered in the window (UIA-readable on Windows, which is how
+    /// <c>client/tools/verify/capture.ps1</c> confirms the state BEFORE it reads a pixel) and
+    /// logged once (stderr-readable, which is the only channel a WSLg run would have).
+    /// </summary>
+    private void PublishProbe()
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(PublishProbe);
+            return;
+        }
+
+        // A DETACHED visual has no screen origin, and PointToScreen THROWS for one
+        // ("Visual does not belong to a visual tree") rather than returning anything. That is not
+        // hypothetical: a headed teardown run reached this line after the window had left the tree
+        // and the throw escaped the UI lifetime as a PANIC — the probe crashed the app it exists
+        // to observe. LayoutUpdated can still fire while a window is being torn down, so the check
+        // is on the visual root itself rather than on any flag this class keeps.
+        if (VisualRoot is null)
+        {
+            return;
+        }
+
+        var origin = WebHost.PointToScreen(new Point(0, 0));
+        var line = string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"goon-probe: surface={Surface} nav={_navigation} heartbeats={_heartbeats} "
+            + $"pageread={(_pageStateRead ? "yes" : "no")} {_pageState} "
+            + $"| page-rect {WebHost.Bounds.Width:F1}x{WebHost.Bounds.Height:F1} DIP "
+            + $"@ scale {RenderScaling:0.##} @ screen {origin.X},{origin.Y}");
+
+        if (ProbeText.Text == line)
+        {
+            return; // LayoutUpdated is chatty; a probe that has not moved is not news
+        }
+
+        ProbeText.Text = line;
+        if (!_probeLogged)
+        {
+            _probeLogged = true;
+            _host.LogDiagnostic(line);
+        }
+    }
 }

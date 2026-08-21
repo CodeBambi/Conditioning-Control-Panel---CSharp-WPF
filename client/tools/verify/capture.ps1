@@ -36,9 +36,31 @@
 #        pwsh client/tools/verify/capture.ps1 -Surface dashboard -State unselected
 #        pwsh client/tools/verify/capture.ps1 -Surface rack-row -State selected
 #        pwsh client/tools/verify/capture.ps1 -Surface rack-row-dot -State armed
+#        pwsh client/tools/verify/capture.ps1 -Surface goon-page -State first-run
+#
+# SP-132 -- THE GOON PAGE, and the one way this surface differs from every other one here.
+#
+# Every surface above is Avalonia painting into a window this script launched. `goon-page` is a
+# REAL EMBEDDED BROWSER rendering a payload page inside one, and that changes what "confirm the
+# state before you read a pixel" has to mean. A rail door is selected or it is not; a page can be
+# loading, wedged on a spinner, showing its own boot-failure text, or showing a WebView2 error
+# page -- and every one of those photographs as a plausible-looking rectangle.
+#
+# So this surface is gated on the PAGE'S OWN STATE, read back out of the page's object graph
+# through the host window's probe line (GoonHostWindow's GoonProbe): `ready=true` is written in
+# exactly one place in the payload (boot.js:418, inside settle(), behind a guard that requires
+# BOTH init and manifest to have been parsed), and `screen=title` is the id the page's own router
+# writes onto the document element (ui/router.js:222). The host's own "I sent the messages" would
+# have proved nothing -- that flag is set before either message is dispatched.
+#
+# The gate is POLLED TO A DEADLINE, never read once: a slow-but-healthy boot is otherwise
+# indistinguishable from one that never completes, and a check that fails honestly-passing runs
+# gets disabled. The state is driven by REAL INPUT throughout (Play door, then PRACTICE) -- there
+# is a --goon-demo flag and this script deliberately does not use it, because the click is the
+# thing a regression would break.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -56,6 +78,25 @@ $stateFiles = @(
     (Join-Path $env:APPDATA 'CcpClient\settings.json'),
     (Join-Path $env:APPDATA 'CcpClient\session_preset.json')
 )
+# SP-132 -- AND THE PAGE'S OWN PREFS. Hygiene, and NOT what makes this deterministic.
+#
+# The goon PAGE keeps preferences in WebView2 localStorage, and one of them decides what is on
+# screen: the title screen auto-opens its "how it works" explainer once, on a first visit, and
+# never again -- `if (prefs && !prefs.get('seenHowItWorks')) ledger.timer(showHowItWorks, 420)`
+# (ui/screens/title.js:157), with showHowItWorks setting the flag as its first act (:137).
+#
+# WHAT ACTUALLY MAKES IT DETERMINISTIC IS THE ORIGIN, and that was MEASURED rather than assumed.
+# localStorage is scoped per origin, this page is served from http://127.0.0.1:<EPHEMERAL PORT>,
+# and the port is redrawn on every launch -- so every run gets an empty store and the explainer
+# opens every time. A run with this clear deliberately SKIPPED still reported `modal=open`, which
+# is the measurement, and it is why the clear below is best-effort rather than fatal: WebView2
+# child processes can still hold files in that directory seconds after a previous run, and a
+# capture that refused for that reason would be refusing for a reason that does not affect it.
+#
+# THE REAL GUARD IS THE PROBE. The gate below requires `modal=open` before any pixel, so if page
+# state ever did survive a run, this capture REFUSES BY NAME instead of photographing the other
+# screen. That is the mechanism; this is tidying.
+$goonProfileDir = Join-Path $env:APPDATA 'CcpClient\dtrh\wv2-profile-goon'
 $outFile = Join-Path $shots "windows-$Surface-$State.png"
 
 # ValidateSet cannot express a PAIR, and an unpaired combination is not a typo the caller should
@@ -66,6 +107,7 @@ $statesFor = @{
     'rail-door'    = @('unselected', 'selected')
     'rack-row'     = @('unselected', 'selected')
     'rack-row-dot' = @('off', 'armed')
+    'goon-page'    = @('first-run')
 }
 if ($statesFor[$Surface] -notcontains $State) {
     Write-Output "FAIL: surface '$Surface' has no state '$State' (it has: $($statesFor[$Surface] -join ', '))"
@@ -86,6 +128,11 @@ public class VerifyNative {
     // compositor's NEXT PRESENT has consumed the outstanding surface updates, so it is an edge on
     // the producer's completion rather than a wait this harness chose a deadline for.
     [DllImport("dwmapi.dll")] public static extern int DwmFlush();
+    // SP-132: the goon host is a SECOND top-level window, and Process.MainWindowHandle does not
+    // say which of the two it names. WM_CLOSE is posted to the handle UIA gave us for the window
+    // this script actually found, so the close targets the window it means.
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
+    public const uint WM_CLOSE = 0x0010;
     public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004;
     public const uint RIGHTDOWN = 0x0008, RIGHTUP = 0x0010;
     public const uint SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001, SWP_SHOWWINDOW = 0x0040;
@@ -281,6 +328,49 @@ function Assert-Inside($inner, $outer, [string]$what, [string]$container) {
     }
 }
 
+# ---------------------------------------------------------------------------------------------
+# SP-132 -- the goon host window.
+#
+# Get-Window above finds a window by PROCESS ID ALONE, which is unambiguous only while a process
+# has one top-level window. The moment PRACTICE is pressed this process has two, and which one
+# FindFirst returns is not specified. So the goon window is looked up BY NAME, and the dashboard
+# lookup above is left exactly as it was -- the four landed captures were taken through it and
+# cannot be re-verified from inside this packet.
+# ---------------------------------------------------------------------------------------------
+function Get-GoonWindow([int]$processId) {
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $cond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $processId)
+    foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)) {
+        # The window's Title is "Goon Game - Practice" with an em dash; matched on the stable
+        # prefix so an encoding round-trip through this file can never decide the lookup.
+        if ($w.Current.Name -like '*Goon Game*') { return $w }
+    }
+    return $null
+}
+
+# The probe line, as the window itself publishes it (GoonHostWindow's GoonProbe). Returned raw:
+# every caller below asserts on a NAMED field of it and prints the whole line on refusal, because
+# "the page was not ready" and "the payload was missing" are different failures and the operator
+# needs to see which one happened.
+function Get-GoonProbe($goonWindow) {
+    # The window can CLOSE ITSELF while this is polling, and then every UIA call against it throws
+    # "The target element corresponds to UI that is no longer available". That is not hypothetical:
+    # a seeded build whose manifest never arrives makes the page give up at its own 45s deadline
+    # (boot.js:113), post boot-error, and the host closes the window honestly in response. The
+    # first version of this loop died on that with a raw .NET exception instead of a named
+    # refusal -- a worse outcome than the failure it was reporting. Returning $null lets the
+    # caller decide, which is where the window-vanished check lives.
+    try {
+        $el = $goonWindow.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'GoonProbe')))
+        if ($null -eq $el) { return $null }
+        return $el.Current.Name
+    }
+    catch { return $null }
+}
+
 function Assert-Route($window, [string]$route) {
     $texts = (Get-Texts $window) -join "`n"
     if ($texts -notmatch "route: $route") { Fail "the shell did not navigate to '$route' (state drive failed)" }
@@ -295,6 +385,21 @@ Take-Lease
 # without the preset file in this set an 'off' capture leaks into the NEXT run's 'armed' capture.
 foreach ($stateFile in $stateFiles) {
     if (Test-Path $stateFile) { Remove-Item $stateFile -Force }
+}
+if ($Surface -eq 'goon-page' -and (Test-Path $goonProfileDir)) {
+    # Only for this surface: blowing away a WebView2 profile is not free (the next launch rebuilds
+    # it), and no other capture here depends on page-side state.
+    try {
+        Remove-Item $goonProfileDir -Recurse -Force -ErrorAction Stop
+        Write-Output "deterministic start: goon WebView2 profile cleared ($goonProfileDir)"
+    }
+    catch {
+        # REPORTED, never silent -- but not fatal, because it is not what this capture depends on.
+        Write-Output ("NOTE: the goon WebView2 profile could not be cleared " +
+    "($($_.Exception.GetType().Name): $($_.Exception.Message)). Continuing: the page's store is " +
+    'scoped to an ephemeral origin that changes every launch, and the modal=open gate below is ' +
+    'what would catch surviving page state')
+    }
 }
 
 $script:proc = [System.Diagnostics.Process]::Start($exe)
@@ -359,7 +464,161 @@ Write-Output "shell mounted its default page; all $($railDoors.Count) rail doors
 
 $windowRect = Get-Rect $window
 
-if ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
+$script:goonWindow = $null
+$script:goonHwnd = [IntPtr]::Zero
+
+if ($Surface -eq 'goon-page') {
+    # =========================================================================================
+    # SP-132 -- THE GOON PAGE. The first capture in this harness of something the PRODUCT did not
+    # paint: a payload page inside a real WebView2.
+    #
+    # Two hops of real input, because that is the user path and because the port gives no surface
+    # a dashboard tile (wpf-surface-reachability.md): the Play door, then the PRACTICE button on
+    # the Play page. A --goon-demo flag exists and is deliberately NOT used here -- the click is
+    # the thing a regression would break, and a flag would step around it.
+    # =========================================================================================
+    Click-Rect (Get-DoorRect $window 'play')
+    Assert-Route $window 'play'
+    Write-Output 'state drive: left-click on the Play door -> route: play'
+
+    # The Play page is a plain StackPanel in an unscrolled ContentControl, so a card low on the
+    # page can sit BELOW the window on a short screen. UIA reports unclipped bounds either way
+    # (the SP-122 finding), so clicking without this check would click the wallpaper.
+    $practice = Get-Element $window 'GoonPracticeButton'
+    $practiceRect = Get-Rect $practice
+    Assert-Inside $practiceRect $windowRect 'the PRACTICE button' 'the shell window'
+    Click-Rect $practiceRect
+    Write-Output 'state drive: left-click on PRACTICE'
+
+    # The window binds a loopback origin and builds a WebView2 environment, so it is slower to
+    # arrive than an Avalonia window. Poll to a deadline; never a fixed sleep.
+    $goonDeadline = [Diagnostics.Stopwatch]::StartNew()
+    while ($goonDeadline.Elapsed.TotalSeconds -lt 60) {
+        if ($script:proc.HasExited) { Fail "app exited (code $($script:proc.ExitCode)) before the goon window appeared" }
+        $script:goonWindow = Get-GoonWindow $script:proc.Id
+        if ($null -ne $script:goonWindow) {
+            $script:goonHwnd = [IntPtr]$script:goonWindow.Current.NativeWindowHandle
+            if ($script:goonHwnd -ne [IntPtr]::Zero) { break }
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    if ($null -eq $script:goonWindow) {
+        Fail ("the Goon host window never appeared within $([int]$goonDeadline.Elapsed.TotalSeconds)s. " +
+    'PRACTICE was clicked and confirmed; the window is what did not arrive. The Play page renders a ' +
+    'launch fault under its own card (GoonFaultText) when the launch THREW -- read that before ' +
+    'treating this as a timeout')
+    }
+    if ($script:goonHwnd -eq [IntPtr]::Zero) { Fail 'the Goon host window has no native handle; it cannot be raised or captured' }
+    Write-Output "goon window up after $([math]::Round($goonDeadline.Elapsed.TotalSeconds, 1))s"
+
+    # Raise it. The host ducked the dashboard itself (a plain minimize -- GoonHostService.cs:20-23
+    # parity), so the goon window is the only thing of ours on screen; it did not necessarily open
+    # topmost, and pixels belong to whatever is.
+    [VerifyNative]::SetWindowPos($script:goonHwnd, [VerifyNative]::HWND_TOPMOST, 0, 0, 0, 0,
+        [VerifyNative]::SWP_NOMOVE -bor [VerifyNative]::SWP_NOSIZE -bor [VerifyNative]::SWP_SHOWWINDOW) | Out-Null
+    Start-Sleep -Milliseconds 500
+
+    # -----------------------------------------------------------------------------------------
+    # THE GATE. Poll the window's own probe line until the PAGE says it settled -- and refuse, by
+    # name, on every state that is not that. Each refusal below is a real outcome this surface can
+    # produce, and every one of them would otherwise photograph as a plausible rectangle:
+    #
+    #   surface=payload-missing  the goon tree is not in the build output (typed honest surface)
+    #   surface=unsupported      no WebView2 runtime, or a non-Windows head (typed honest surface)
+    #   nav=failed               the navigation failed -- a WebView2 error page is on screen
+    #   ready=false              the page loaded but init/manifest never landed: the LOADER, or
+    #                            after 45s (boot.js:113) the page's own boot-failure text
+    #   screen<>title            the page settled somewhere other than the title screen
+    # -----------------------------------------------------------------------------------------
+    $probe = $null
+    $lastProbe = $null
+    $probeDeadline = [Diagnostics.Stopwatch]::StartNew()
+    while ($probeDeadline.Elapsed.TotalSeconds -lt 90) {
+        if ($script:proc.HasExited) { Fail "the app exited (code $($script:proc.ExitCode)) while waiting for the page to settle. Last probe: $lastProbe" }
+        if ($null -eq (Get-GoonWindow $script:proc.Id)) {
+            Fail ("the Goon host window CLOSED ITSELF while this capture waited for the page. " +
+    "Last probe: $lastProbe. The page gives up at its own 45s deadline (boot.js:113) and posts " +
+    'boot-error; the host closes the window honestly in response, because no fallback surface ' +
+    'exists. This is the product being correct and the PAGE failing to boot -- a finding to read, ' +
+    'not a flake to retry')
+        }
+        $probe = Get-GoonProbe $script:goonWindow
+        if ($null -ne $probe) { $lastProbe = $probe }
+        if ($null -ne $probe) {
+            if ($probe -match 'surface=(?<s>[a-z-]+)' -and $Matches['s'] -ne 'embedded' -and $Matches['s'] -ne 'pending') {
+                Fail ("the Goon host did not select the embedded surface: $probe. " +
+    'payload-missing means the goon tree is absent from the build output; unsupported means no ' +
+    'WebView2 runtime (or a non-Windows head). Both are the product being honest, and neither is ' +
+    'a page that can be photographed')
+            }
+            if ($probe -match 'nav=failed') {
+                Fail ("the Goon page NAVIGATION FAILED: $probe. There is an error page in that window " +
+    'and capturing it would be the exact defect this gate exists to prevent. The platform detail, ' +
+    "when there is any, is on the app's transcript beside the NavigationCompleted line")
+            }
+            if (($probe -match 'ready=true') -and ($probe -match 'screen=title') -and ($probe -match 'modal=open')) { break }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    if ($null -eq $probe) { Fail 'the Goon host window published no probe line (no GoonProbe in its UIA tree)' }
+    if ($probe -notmatch 'ready=true') {
+        Fail ("the Goon page never reported ready=true within $([int]$probeDeadline.Elapsed.TotalSeconds)s: $probe. " +
+    'ready is written in ONE place in the payload (boot.js:418, inside settle()) and means init AND ' +
+    'manifest were both parsed BY THE PAGE. Without it that window is showing the boot loader or the ' +
+    "page's own failure text, and this run is NOT evidence that the handshake completed")
+    }
+    if ($probe -notmatch 'screen=title') { Fail "the Goon page settled on a screen other than the title: $probe" }
+    if ($probe -notmatch 'modal=open') {
+        Fail ("the Goon page reached the title screen but its first-run explainer is not open: $probe. " +
+    'That card auto-opens 420ms after the title mounts, ONCE, on a profile that has never seen it ' +
+    "(ui/screens/title.js:157). modal=closed here means the profile was not really cleared and this " +
+    'capture would be of a different screen than the one the checks were measured on')
+    }
+    Write-Output "goon handshake confirmed: $probe"
+
+    # THE MICROPHONE RESIDUAL (D250). This script never touches a menu item, so the voice screen is
+    # never reached -- but WebView2 can ask for a device this host can neither grant nor deny, and
+    # if it ever does, that prompt is EVIDENCE and must not be photographed as a title screen.
+    # NAMED LIMIT, not a claim: whether WebView2 projects its permission bar into the host UIA tree
+    # at all is unverified, so an enumeration that fails is REPORTED rather than passed over.
+    try {
+        $prompts = @()
+        foreach ($el in $script:goonWindow.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.Condition]::TrueCondition)) {
+            if ($el.Current.Name -match '\bAllow\b') { $prompts += $el.Current.Name }
+        }
+        if ($prompts.Count -gt 0) {
+            Fail ("a permission-prompt shape is present in the Goon window: $($prompts -join ' | '). " +
+    'That is the D250 residual made visible -- record it as evidence; it is not a flake and must ' +
+    'not be captured around')
+        }
+        Write-Output 'no permission-prompt shape in the goon window UIA tree (best-effort; see D250)'
+    }
+    catch {
+        Write-Output ("NOTE: the goon window's UIA subtree could not be enumerated for a permission " +
+    "prompt ($($_.Exception.GetType().Name)). The capture continues and the prompt check is UNMADE " +
+    'for this run; it must not be reported as having passed')
+    }
+
+    # THE RECT, from the window's own probe. Avalonia gives Panel no UIA peer (SP-007 surprise #1),
+    # which is exactly why the probe publishes one.
+    if ($probe -notmatch 'page-rect (?<w>[\d.]+)x(?<h>[\d.]+) DIP @ scale (?<s>[\d.]+) @ screen (?<x>-?\d+),(?<y>-?\d+)') {
+        Fail "the goon probe carries no readable page rect: $probe"
+    }
+    $goonScale = [double]$Matches['s']
+    $pageRect = @{
+        X = [int]$Matches['x']; Y = [int]$Matches['y']
+        W = [int]([double]$Matches['w'] * $goonScale); H = [int]([double]$Matches['h'] * $goonScale)
+    }
+    $goonRect = Get-Rect $script:goonWindow
+    Write-Output ("goon page rect $($pageRect.X),$($pageRect.Y) $($pageRect.W)x$($pageRect.H) @ scale $goonScale; " +
+    "window $($goonRect.X),$($goonRect.Y) $($goonRect.W)x$($goonRect.H)")
+    Assert-Inside $pageRect $goonRect 'the goon page rect' 'the goon host window'
+
+    $windowRect = $goonRect   # the cursor is parked relative to the window being captured
+    $capX = $pageRect.X; $capY = $pageRect.Y; $capW = $pageRect.W; $capH = $pageRect.H
+}
+elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     # =========================================================================================
     # SP-122 — THE RACK. The shell opens on Studio (ShellRoutes.Default), so the rack is already
     # in front of us and no navigation is needed; navigating anywhere else would unmount the page
@@ -511,6 +770,32 @@ $g.CopyFromScreen($capX, $capY, 0, 0, $bmp.Size)
 Write-Output 'screen read fenced through DwmFlush (HRESULT 0)'
 $bmp.Save($outFile, [System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose(); $bmp.Dispose()
+
+# SP-132 -- CLOSE THE GOON WINDOW FIRST, BY ITS OWN HANDLE.
+#
+# Two reasons, and both are defects if skipped. (1) Process.MainWindowHandle does not say which of
+# two top-level windows it names, so CloseMainWindow could send WM_CLOSE to either; the goon window
+# is closed through the handle UIA gave us for the window this script actually found, and only then
+# is the process refreshed so the dashboard close targets the dashboard. (2) The goon window CANCELS
+# its first close on a live page and runs the real exit handshake -- end-run to the page, a bounded
+# 1200 ms wait for exit-done (boot.js:2437-2465) -- so a close that is not waited on races it.
+if ($null -ne $script:goonWindow -and $script:goonHwnd -ne [IntPtr]::Zero) {
+    [VerifyNative]::PostMessage($script:goonHwnd, [VerifyNative]::WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+    $closeDeadline = [Diagnostics.Stopwatch]::StartNew()
+    while ($closeDeadline.Elapsed.TotalSeconds -lt 20) {
+        if ($script:proc.HasExited) { break }
+        if ($null -eq (Get-GoonWindow $script:proc.Id)) { break }
+        Start-Sleep -Milliseconds 250
+    }
+    if (-not $script:proc.HasExited -and $null -ne (Get-GoonWindow $script:proc.Id)) {
+        Fail ("the Goon host window did not close within $([int]$closeDeadline.Elapsed.TotalSeconds)s of WM_CLOSE. " +
+    'Its graceful path posts end-run and waits a bounded 1200ms for exit-done; a window still open ' +
+    'well past that is a real finding about the exit handshake, not a slow machine')
+    }
+    Write-Output "goon window closed after $([math]::Round($closeDeadline.Elapsed.TotalSeconds, 1))s (graceful exit handshake)"
+    # The dashboard is the only top-level window left; re-read the handle that names it.
+    $script:proc.Refresh()
+}
 
 $null = $script:proc.CloseMainWindow()
 if (-not $script:proc.WaitForExit(10000)) { Fail 'process did not exit within 10s' }

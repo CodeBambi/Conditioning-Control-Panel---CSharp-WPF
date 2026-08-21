@@ -8,12 +8,14 @@ namespace CcpClient.Desktop.Features.Goon;
 /// SP-130: THE one place a <see cref="GoonHostWindow"/> is constructed — the
 /// <see cref="Navigation.LoomLaunch"/> / <see cref="Dtrh.DtrhLaunch"/> /
 /// <see cref="Intake.IntakeLaunch"/> pattern: one construction site, several callers, no second
-/// launcher. There is exactly ONE caller today: the Play page's Goon card (the user path). A
-/// <c>--goon-demo</c> flag was granted for the headed-evidence path and is NOT BUILT (D259) —
-/// wiring it needs <c>Program.cs</c> (where <c>--intake-demo</c> is parsed and threaded into
-/// <c>App</c>), a fourth file outside that grant, so a flag in <c>App.axaml.cs</c> alone would
-/// have been a dial nothing could turn. Corrected at the wave-65 land: the earlier wording here
-/// described that flag in the present tense as though it existed.
+/// launcher. TWO callers reach this object: the Play page's Goon card (the user path), and
+/// <c>--goon-demo</c>, which SP-132 built through all four of its sites — parsed in
+/// <c>Program.cs</c> beside <c>--intake-demo</c>, threaded through <c>BuildAvaloniaApp</c> into
+/// <c>new App(...)</c>, and classified <c>Demo</c> in <c>Lifecycle/HarnessEntryPoints.cs</c>.
+/// SP-130 was granted that flag and correctly REFUSED to half-wire it (D259), because a flag in
+/// <c>App.axaml.cs</c> alone would have been a dial nothing could turn; D265 records what changed.
+/// The flag carries no drive and no auto-close: the headed evidence for this surface is taken
+/// through real input, and either modifier would be a HARNESS entry point rather than a Demo one.
 ///
 /// <para><b>There is no gate here, and that is the ported fact, not an omission.</b> Upstream's
 /// Goon card is an unconditional door — <c>Views/Tabs/PlayTabView.xaml:547-549</c> refuses to

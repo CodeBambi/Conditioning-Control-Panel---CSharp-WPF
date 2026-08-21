@@ -115,6 +115,63 @@
       "expectedColor": "#2A2130",
       "tolerance": 4,
       "minPixelFraction": 0.9
+    },
+
+    // SP-132 -- THE GOON PAGE. The first checks in this manifest that read pixels the PRODUCT DID
+    // NOT PAINT: a payload page rendered by a real WebView2 inside the Goon practice host, driven
+    // there by real input (Play door, then PRACTICE) and confirmed through UIAutomation before any
+    // pixel was taken. Every fraction below is measured; the captures are named in
+    // spine-tasks/SP-132-goon-evidence/record.md.
+    //
+    // WHAT `first-run` IS, EXACTLY, because the name has to be honest. The page's screen id is
+    // `title` (ui/router.js:222 writes it onto the document element) and over it sits the title
+    // screen's explainer card, which auto-opens 420 ms after the first mount on a store that has
+    // never seen it (ui/screens/title.js:157). That card is what these checks photograph. The BARE
+    // title menu is a DIFFERENT state, it is NOT captured here, and it is not reachable from this
+    // harness without driving input INSIDE the page -- which nothing here does.
+    //
+    // THE TOLERANCES WERE MEASURED AGAINST THREE REAL WRONG CAPTURES AND AGAINST EVERY OTHER
+    // COLOUR THIS MANIFEST DECLARES. The wrong captures are (1) the boot LOADER, from a build
+    // whose manifest send was seeded out so the page never settles -- the state a capture would
+    // photograph if the handshake failed; (2) the typed payload-missing surface, produced by
+    // renaming payload/goon in the build output, with no source change at all; and (3) a real
+    // capture of the DASHBOARD, a different surface entirely. Both checks score 0.0000 on all
+    // three.
+    //
+    // (3) IS THE ONE THAT CHANGED THESE NUMBERS, and it is recorded because assuming it would have
+    // shipped the defect. The first draft pinned the backdrop at tolerance 8, and at 8 it PASSED
+    // the dashboard capture 1.0000 -- dashboard-background is #141018, only 7 away per channel. A
+    // check that accepts a photograph of a different window is the defect this project has found
+    // fourteen times. Both tolerances now sit strictly below the distance to the NEAREST colour
+    // any other check in this file declares (backdrop: 6 against 8; card: 8 against 11), and
+    // GoonServingTests.NoGoonCheckAcceptsTheColourOfAnotherDeclaredState asserts that mechanically
+    // over the manifest itself, so widening either one reddens the floor and names both colours.
+    //
+    // A FOURTH REGION WAS MEASURED AND REJECTED, recorded because it is the whole reason to
+    // measure: the scrim at the left margin (0.02, 0.35, 0.12, 0.30) is perfectly flat and scores
+    // 1.0000 on the real capture -- and 1.0000 on the LOADER too, at every tolerance down to 4. It
+    // cannot tell the two apart, and it would have looked exactly like coverage.
+    {
+      "name": "goon-page-backdrop",
+      "surface": "goon-page",
+      "state": "first-run",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.30, "y": 0.02, "w": 0.40, "h": 0.035 } },
+      "expectedColor": "#1C0B1F",
+      "tolerance": 6,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "goon-page-explainer-card",
+      "surface": "goon-page",
+      "state": "first-run",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.35, "y": 0.40, "w": 0.05, "h": 0.025 } },
+      "expectedColor": "#1C0923",
+      "tolerance": 8,
+      "minPixelFraction": 0.95
     }
   ]
 }

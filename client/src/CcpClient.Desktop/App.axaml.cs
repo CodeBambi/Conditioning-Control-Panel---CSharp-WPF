@@ -34,6 +34,7 @@ public partial class App : Application
     private readonly bool _tunnelDemo;
     private readonly string? _tunnelDrive;
     private readonly int _tunnelAutoCloseSeconds;
+    private readonly bool _goonDemo;
     private StreamWriter? _avatarTraceWriter;
 
     public App(ApplicationHost host, bool popupDemo = false,
@@ -44,7 +45,8 @@ public partial class App : Application
         bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0,
         bool intakeDemo = false, string? intakeDrive = null, bool intakeKillRenderers = false,
         int intakeAutoCloseSeconds = 0,
-        bool tunnelDemo = false, string? tunnelDrive = null, int tunnelAutoCloseSeconds = 0)
+        bool tunnelDemo = false, string? tunnelDrive = null, int tunnelAutoCloseSeconds = 0,
+        bool goonDemo = false)
     {
         _host = host;
         _popupDemo = popupDemo;
@@ -70,6 +72,7 @@ public partial class App : Application
         _tunnelDemo = tunnelDemo;
         _tunnelDrive = tunnelDrive;
         _tunnelAutoCloseSeconds = tunnelAutoCloseSeconds;
+        _goonDemo = goonDemo;
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -328,6 +331,21 @@ public partial class App : Application
             if (_tunnelDemo)
             {
                 Features.Chaos.ChaosTunnelDemoDrive.Attach(_host, dashboard, desktop, _tunnelDrive, _tunnelAutoCloseSeconds);
+            }
+
+            // SP-132 Goon practice DEMONSTRATOR (--goon-demo): opens the practice host at startup.
+            // Through the SAME GoonLaunch the Play page's PRACTICE button reaches (MainWindow.Goon
+            // — one construction site, two callers), which is the LoomLaunch/DtrhLaunch/IntakeLaunch
+            // convention and the reason no MainWindow edit is needed here.
+            //
+            // There is no gate to step past, and that is upstream's fact, not a shortcut: the Goon
+            // card is an unconditional door (Views/Tabs/PlayTabView.xaml:547-549) and the paid rungs
+            // live INSIDE, on hosting and sending (GoonHostService.cs:894, :909), where GoonDoors
+            // refuses them. So unlike --dtrh-demo and --intake-demo this flag steps past nothing:
+            // the demonstrator and the user path are the same path.
+            if (_goonDemo)
+            {
+                dashboard.Opened += (_, _) => dashboard.Goon.Practice();
             }
         }
 

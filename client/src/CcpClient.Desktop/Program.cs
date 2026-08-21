@@ -234,6 +234,20 @@ public static class Program
             ? intakeCloseSeconds
             : 0;
 
+        // SP-132 Goon practice DEMONSTRATOR (--goon-demo): opens the practice host at startup
+        // (the --intake-demo shape verbatim). THE PARSE LIVES HERE ON PURPOSE. SP-130 was granted
+        // this flag and refused to build it, because a flag added to App.axaml.cs alone would be
+        // a dial nothing can turn (D259) — nothing mechanically requires the literal to sit in
+        // this file rather than that one, and the version that passes every test while doing
+        // nothing is the one that reads the argument nowhere. It reaches the SAME GoonLaunch the
+        // Play page's PRACTICE button reaches; there is no second construction site.
+        //
+        // It carries NO drive and NO auto-close, and that is a decision rather than an omission:
+        // the headed evidence for this surface is taken through real input (a click on the Play
+        // door, then on PRACTICE), which is stronger evidence than a flag, and either modifier
+        // would be a HARNESS entry point rather than a Demo one.
+        var goonDemo = args.Contains("--goon-demo", StringComparer.Ordinal);
+
         // SP-061 Chaos tunnel backdrop DEMONSTRATOR (--tunnel-demo): the opaque
         // below-Topmost surface at startup (the --loom-demo demonstrator class; no
         // dashboard entry point exists — typed named limit). --tunnel-drive "<steps>" is
@@ -253,7 +267,7 @@ public static class Program
                 dtrhDemo, dtrhPage, dtrhAutoClose, dtrhQuick, dtrhPickerTimeout, dtrhFxDrive, dtrhM2Test,
                 dtrhKillRenderers, loomDemo, loomDrive, loomAutoClose,
                 intakeDemo, intakeDrive, intakeKillRenderers, intakeAutoClose,
-                tunnelDemo, tunnelDrive, tunnelAutoClose).StartWithClassicDesktopLifetime(args);
+                tunnelDemo, tunnelDrive, tunnelAutoClose, goonDemo).StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
         {
@@ -326,14 +340,15 @@ public static class Program
         bool loomDemo = false, string? loomDrive = null, int loomAutoCloseSeconds = 0,
         bool intakeDemo = false, string? intakeDrive = null, bool intakeKillRenderers = false,
         int intakeAutoCloseSeconds = 0,
-        bool tunnelDemo = false, string? tunnelDrive = null, int tunnelAutoCloseSeconds = 0)
+        bool tunnelDemo = false, string? tunnelDrive = null, int tunnelAutoCloseSeconds = 0,
+        bool goonDemo = false)
     {
         var builder = AppBuilder
             .Configure<App>(() => new App(host, popupDemo, avatarDemo, avatarCorrupt, avatarTracePath, avatarAnimate,
                 dtrhDemo, dtrhPage, dtrhAutoCloseSeconds, dtrhQuick, dtrhPickerTimeoutSeconds, dtrhFxDrive, dtrhM2Test,
                 dtrhKillRenderers, loomDemo, loomDrive, loomAutoCloseSeconds,
                 intakeDemo, intakeDrive, intakeKillRenderers, intakeAutoCloseSeconds,
-                tunnelDemo, tunnelDrive, tunnelAutoCloseSeconds))
+                tunnelDemo, tunnelDrive, tunnelAutoCloseSeconds, goonDemo))
             .UsePlatformDetect();
         // Live-UI MCP seat (avalonia-live, Keincheck embedded server on http://127.0.0.1:3001).
         // Opt-in per run (CCP_MCP=1) so tests and normal runs never bind the port.

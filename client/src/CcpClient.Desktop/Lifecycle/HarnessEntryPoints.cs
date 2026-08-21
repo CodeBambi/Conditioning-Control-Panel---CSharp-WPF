@@ -58,6 +58,10 @@ public static class HarnessEntryPoints
         new("--dtrh-quick", EntryPointDisposition.Demo),
         new("--loom-demo", EntryPointDisposition.Demo),
         new("--intake-demo", EntryPointDisposition.Demo),
+        // SP-132: opens the Goon practice host at startup against the REAL profile, exactly as
+        // --intake-demo does. Demo, not Harness, by the enum's own contract (:6-13): it captures
+        // no evidence and injects no failure. A --goon-drive or --goon-auto-close would NOT be.
+        new("--goon-demo", EntryPointDisposition.Demo),
         new("--tunnel-demo", EntryPointDisposition.Demo),
 
         // Class 3 — PRE-PHASE SELF-CHECK: return before any phase; never touch the profile.

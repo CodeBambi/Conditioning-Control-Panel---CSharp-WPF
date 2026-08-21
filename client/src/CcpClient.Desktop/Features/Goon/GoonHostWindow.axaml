@@ -24,6 +24,28 @@
                FontFamily="Consolas" FontSize="12"
                Text="goon host booting" />
 
+    <!--
+      SP-132 THE PROBE LINE. The SP-007 layout-probe pattern (MainWindow.axaml.cs ProbeLine),
+      applied to this window for the same reason it exists there: Avalonia gives Panel/Border no
+      UIA peer, so the web host's rect is unreadable from outside, and the headed harness has to
+      aim CopyFromScreen somewhere.
+
+      It carries MORE than a rect, and that is the point. Every field is a state the harness must
+      be able to REFUSE on before it reads a pixel: which surface was selected (a missing WebView2
+      runtime lands in `surface`), whether the navigation succeeded, how many heartbeats the page
+      has sent, and — read back out of the page's OWN object graph — whether init and manifest
+      actually landed there. A capture that silently photographs a loader or an error page is the
+      worst outcome this surface can produce, and this line is what makes it impossible.
+
+      CONTENT-FREE by construction: an enum, two booleans, a count, a screen id, a display name
+      that is a constant, and a rectangle. Never a file name, never a path, never the bridge token.
+    -->
+    <TextBlock x:Name="ProbeText" DockPanel.Dock="Bottom"
+               AutomationProperties.AutomationId="GoonProbe"
+               Foreground="#7a7a99" Background="#141422" Padding="6,2"
+               FontFamily="Consolas" FontSize="11"
+               Text="goon-probe: pending" />
+
     <Border x:Name="RefusalRail" DockPanel.Dock="Right"
             Width="340" Background="#141422" BorderBrush="#2a2a44" BorderThickness="1,0,0,0">
       <ScrollViewer>
