@@ -15,6 +15,18 @@ committed so the next reviewer can re-run it instead of trusting that it was run
 
 Exit code is 0 always: every hit is a CANDIDATE for human triage, never a verdict. The heuristic
 only separates "this line RESTATES the retired form" from "this line DESCRIBES the correction".
+
+THE HEURISTIC SORTS; IT NEVER SUPPRESSES. Every candidate is printed whatever DESCRIBING decides,
+so the CANDIDATE LIST is the evidence and the "flagged live" count is only a reading aid. That
+matters because DESCRIBING can be wrong in the dangerous direction: a line that genuinely restates
+a retired form AND happens to contain a describing phrase is filed as describes-the-correction, and
+a reader who trusted the count alone would miss it. Read the list.
+
+That is DEMONSTRATED, not hypothetical: a positive control reintroducing "cited at forty lines" into
+record.md's mechanism table was matched by its rule and then filed as describes-the-correction,
+because the surrounding row legitimately contains the word "stale". The candidate line was still
+printed, which is the whole reason nothing is suppressed. A tool whose limits are undocumented gets
+trusted past them, and that is this packet's lesson in one sentence.
 """
 import io
 import re
@@ -48,6 +60,8 @@ CORRECTIONS = [
      'PARAPHRASE — the class that survived round one'),
     ('haptic count of 14', r'haptic count of 14\b', 'paraphrase'),
     ('three fixtures -> four', r'Three `TheNumberSweep_\*` fixtures', 'paraphrase'),
+    ('GoonHostService citation count "forty" -> 15',
+     r'cited at forty|at forty (different )?lines', 'word'),
 ]
 
 # A line that TALKS ABOUT a correction legitimately contains the retired form.

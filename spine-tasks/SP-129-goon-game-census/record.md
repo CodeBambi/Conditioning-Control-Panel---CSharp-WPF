@@ -209,7 +209,7 @@ let this through twice:**
 | A label tally restated anywhere, digits or spelled out | `TheLabelTally_MatchesTheBehaviourMap_EverywhereItIsRestated` |
 | An owner-decision count | `EveryOwnerFlaggedSection_ExistsAndIsNeverPriced` |
 | A **port-anchor** citation stale in body prose | `EveryBodyCitationOfAPortAnchor_UsesTheLineThePinTableClaims` (added this round, watched red at `census:568`) |
-| A **WPF** citation stale in body prose | **HAND ONLY**, unless that citation is individually pinned in §10.4. `GoonHostService.cs` is cited at forty lines legitimately, so a blanket rule would be noise |
+| A **WPF** citation stale in body prose | **HAND ONLY**, unless that citation is individually pinned in §10.4. One WPF file is legitimately cited at many distinct lines — the census pins that count as `census-cites-goonhostservice-lines` — so a blanket rule would be noise |
 | A **worded** claim restated across deliverables (this round's blocker 2) | **HAND ONLY.** No mechanism here reads prose |
 | Anything in `wpf-surface-reachability.md` or `record.md` | **HAND ONLY.** Every fact in this guard reads the census; the other two deliverables are unguarded |
 

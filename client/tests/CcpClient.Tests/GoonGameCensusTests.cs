@@ -207,9 +207,10 @@ public sealed class GoonGameCensusTests
     ///
     /// <para>Scoped to §10.5 (port anchors) rather than §10.4 (WPF citations) because a port anchor
     /// is single-purpose — one declaration per file — so every body citation of it means the same
-    /// thing. <c>GoonHostService.cs</c> is legitimately cited at forty different lines, so the same
-    /// rule over §10.4 would be noise. <b>That asymmetry is a real residual, stated rather than
-    /// hidden:</b> a stale WPF citation in body prose is still only caught by pinning it.</para>
+    /// thing. <c>GoonHostService.cs</c> is legitimately cited at many different lines (the census pins
+    /// the count as <c>census-cites-goonhostservice-lines</c>), so the same rule over §10.4 would be
+    /// noise. <b>That asymmetry is a real residual, stated rather than hidden:</b> a stale WPF
+    /// citation in body prose is still only caught by pinning it.</para>
     /// </summary>
     [Fact]
     public void EveryBodyCitationOfAPortAnchor_UsesTheLineThePinTableClaims()
@@ -298,7 +299,10 @@ public sealed class GoonGameCensusTests
     }
 
     /// <summary>The line totals and group counts the census states in PROSE. SP-127's pin covered
-    /// its tables and left its prose numbers free; these are the ones a reader quotes.</summary>
+    /// its tables and left its prose numbers free; these are the ones a reader quotes. All but one
+    /// re-derive from the shipping tree; <c>census-cites-goonhostservice-lines</c> re-derives from
+    /// the census, because its subject IS the document (the same justification as the label
+    /// tally).</summary>
     [Fact]
     public void EveryDerivedLineCountStatedInProse_RederivesFromTheBytes()
     {
@@ -343,6 +347,18 @@ public sealed class GoonGameCensusTests
                 "Services/GoonGame/GoonContracts.cs", "IceTimeoutMs") / 1000).ToString(),
             ["voice-note-max-seconds"] = (MillisecondConstant(reference.Wpf,
                 "docs/GOON_VOICE_PLAN.md", "VN_MAX_MS") / 1000).ToString(),
+
+            // The one key here derived from the CENSUS rather than the shipping tree, and it is
+            // legitimate for the same reason the label tally is: its subject IS the document. It
+            // backs §10.7's justification for scoping the port-anchor rule to §10.5, and an earlier
+            // draft stated it as "forty" — unpinned, imprecise and wrong, in the one document whose
+            // whole subject is that failure.
+            ["census-cites-goonhostservice-lines"] = Regex
+                .Matches(reference.Census, @"GoonHostService\.cs:\d+")
+                .Select(m => m.Value)
+                .Distinct(StringComparer.Ordinal)
+                .Count()
+                .ToString(),
         };
 
         AssertAgrees(declared, actual, "§10.4.1");

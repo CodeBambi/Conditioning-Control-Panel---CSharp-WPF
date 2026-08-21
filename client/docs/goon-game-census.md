@@ -845,6 +845,7 @@ Re-derived by walking each path and counting lines on every run.
 | surface-csharp-total-lines | 16476 |
 | payload-served-share-percent | 89.1 |
 | shared-vendor-tree-files | 9 |
+| census-cites-goonhostservice-lines | 15 |
 | intake-vo-goon-named-files | 7 |
 | ice-timeout-seconds | 10 |
 | voice-note-max-seconds | 10 |
@@ -962,6 +963,14 @@ Every term is re-derived from the shipping bytes on every run.
 
   An edit that changes one side must change the other. Four `TheNumberSweep_*` fixtures pin the
   repaired behaviours, each watched red at the head that ships it.
+
+  **Inside a pin subsection the vocabulary is still soft, and a DIFFERENT mechanism bounds it.**
+  A reviewer probed the new boundary: a narrative table row placed inside §10.1 does still reach
+  the vocabulary, and the sweep stays green. It is caught anyway, because §10.1's rows are read as
+  directory roots and `EveryDirectoryCount_IsRederivedFromTheShippingBytes_NotReadOutOfTheCensus`
+  hard-fails on the invented root with *"HALF-PRESENT reference tree … Corrupt checkout"*. **That is
+  defence in depth arriving by design rather than by luck**, and it is recorded here so a future
+  editor knows the two mechanisms hold each other up before "simplifying" either one.
 - **The label tally re-derives from the map's own rows** (§10.4.3) and is compared against every
   restatement in this document, **including the verdict's spelled-out one** — the check that catches
   a corrected tally which did not propagate to the section a reader stops at.
@@ -969,9 +978,19 @@ Every term is re-derived from the shipping bytes on every run.
   stale-restatement class no other mechanism here can see: **a citation is a class the number sweep
   deliberately EXCLUDES**, so a citation corrected in the pin table and left stale in the prose is
   invisible to it. Scoped to §10.5 because a port anchor is single-purpose; the equivalent rule over
-  §10.4 would be noise, since `GoonHostService.cs` is legitimately cited at forty different lines.
+  §10.4 would be noise, because one WPF file is legitimately cited at many different lines — this
+  document cites `GoonHostService.cs` at **15** distinct lines in `File.cs:NNN` form, plus further
+  bare `:NNN` continuations, and every one means something different:
+
+  ```
+  grep -o "GoonHostService\.cs:[0-9]*" client/docs/goon-game-census.md | sort -u | wc -l   ->  15
+  ```
+
   **That asymmetry is a real residual: a stale WPF citation in body prose is still only caught by
   pinning it**, which is why the citations carrying findings are pinned individually.
+  **An earlier draft of this bullet said "forty", which was unpinned, imprecise and wrong** — in the
+  one document whose whole subject is that failure. It is now derived, pinned in §10.4.1, and
+  carries its invocation, which §1 requires of every count here.
 - **The two `walk.mjs` copies are byte-identical**, and the sha256 quoted in §1 is re-computed.
 - Every behaviour row in §4 carries one of the four labels and a platform cell; §6.6's four privacy
   answers are present; every `## 6.x` owner-flagged section exists.
