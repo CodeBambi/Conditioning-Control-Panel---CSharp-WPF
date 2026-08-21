@@ -179,3 +179,31 @@ involved. It does not widen what `detect.mjs` can see: the corpus/token-class li
 D260 (blind spot 7 — citations into `client/tools/**` and any `.mjs` are invisible to the tool) are
 untouched and remain a separate board row. It does not make the detector a red test on the real
 tree; the review-list contract at `detect.mjs:13-14` is unchanged.
+
+---
+
+## 12. Amendments after the plan gate (APPROVE + seven refinements)
+
+Kept for honesty: this section records where the plan above was corrected, so nobody reads a
+superseded prediction as a finding. See `record.md` for the executed result.
+
+1. **A second mutation was taken.** `detect.mjs:957-958` swaps the `absentAtEndpoint` /
+   `ambiguousAtEndpoint` counters, corrupting a bucket BOUNDARY (reds F22) where `:966` corrupts the
+   moved row's PAYLOAD (reds F16). Both were watched red at `8beb0b679`.
+2. **The window's doc comment names why it is not the banned widening.** `AudioCapabilityTests.cs:559`
+   is 15 s, NARROWER than the default, so it is precedent for the syntax only; the justification
+   written into the constant is that 23.6 s against a 20 s window is a deterministic false red, not a
+   flake being silenced.
+3. **The anchor matches the `Fn:` prefix, never the title** (`^(?<id>F\d+[a-z]?):`), stated in the
+   code comment.
+4. **The summary is parsed per token**, one counter per line; §2's slash-joined display was
+   presentation in this document only. No single-line summary regex exists.
+5. **§6's cited reason for declining parallelisation was wrong.** `self-test.mjs` is open to this
+   packet; `detect.mjs` is the closed one. The real obstacle is that all 25 fixture bodies are
+   synchronous, so node's in-file `concurrency` buys nothing without rewriting them.
+6. **The cost prediction was wrong and is replaced by a measurement.** "~23.5 s added" did not
+   happen: same command shape, back to back, 2547 tests in 46 s without the class and 2555 in 46 s
+   with it. The 28.08 s shared run overlaps other collections.
+7. **A stale citation was found and repaired in passing.** `self-test.mjs:6` credited
+   `check-floor.mjs:253` for running the discovered projects; the run is at `:364`. Recorded as D278
+   item 5.

@@ -3,7 +3,7 @@
 //
 // WHY THIS EXISTS, AND HOW IT REACHES THE .NET SUITE (SP-133)
 // check-floor.mjs discovers only csproj entries under tests/ in client/CcpClient.sln
-// (:80-107) and runs them (:253), so a node file under client/tools/ is invisible to it
+// (:80-107) and runs them (:364), so a node file under client/tools/ is invisible to it
 // and NOTHING RAN THIS FILE from SP-088 until SP-133. It now runs on every floor run:
 // client/tests/CcpClient.Tests/CitationSelfTestGateTests.cs spawns
 //   node --test-reporter=tap client/tools/citations/self-test.mjs
