@@ -1,0 +1,8 @@
+WAVE: 66
+PACKETS: SP-132-goon-evidence SP-133-citation-selftest-gate
+LANES: 2
+AUTHORED-AGAINST: 1f54e3e0b
+LANE-BASE: derived with git merge-base after the lanes exist, never asserted here
+GATE: validate-wave.mjs WAVE OK; FloorWrapperGuardTests 3/3; floor 2547/152
+D-RANGES: SP-132 D265-D274, SP-133 D275+
+OPENED: 2026-08-21T08:24:49Z
