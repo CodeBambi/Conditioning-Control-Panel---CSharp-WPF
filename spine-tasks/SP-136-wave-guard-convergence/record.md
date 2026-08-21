@@ -182,7 +182,7 @@ Coverage: fact 1 (M1/M11, M4), 2 (M1/M11), 3 (M1/M11, M2, M4), 4 (M2, M3), 5 (M1
 6 (M4, M5), 7 (M5), 8 (M2, M4, M6, M12, M13), 9 (M7a, M7b), wrapper-fixture (M8, M9),
 bare-`dotnet test` (M8, M9, M10), wrapper-mutation (M8, M9, M10). **All twelve watched red.**
 
-### Pass 6, at the tip `abce9e40c9a13b03de6da504b25ba0279fcc4938` — because the earlier claim was wrong
+### Pass 6, measured at `abce9e40c9a13b03de6da504b25ba0279fcc4938` — because the earlier claim was wrong
 
 **The claim this section used to make did not follow.** It said M1-M7b were watched at
 `26a9b2ec4`, that the commits between were docs-only, and therefore that evidence stood against the
@@ -190,7 +190,7 @@ current code. But `6896a046c` is itself a **code** commit landing after that wat
 `FloorWrapperGuardTests.cs` — including `LoadAsync`, which is exactly what M7a/M7b mutate — and
 `validate-wave.mjs`. Facts 4, 6, 7 and 9 had not been re-watched against the code that now ships.
 
-Rather than caveat it, the mutations were **re-run at the tip**:
+Rather than caveat it, the mutations were **re-run against the shipping code**:
 
 | mutation | facts it reds at `abce9e40c` |
 |---|---|
@@ -201,11 +201,16 @@ Rather than caveat it, the mutations were **re-run at the tip**:
 | **M7a'** the projection stops exiting 0 on a corpus it could read | `Failed: 13` of 15 — every convergence fact except the lexical one, fact 9 among them |
 | **M7b'** a failed projection reads as an EMPTY corpus instead of throwing | `Failed: 1` — fact 9 **only** |
 
-**Net position, stated exactly: all twelve convergence facts have now been watched RED at the
-current tip `abce9e40c`** — facts 1, 2, 3, 5, 6, 7, 8, 9 and all three wrapper facts via M7a', and
-fact 4 via M2'/M3' (which M7a' correctly leaves green, since the lexical read needs no projection).
-The earlier passes at `26a9b2ec4` and `6896a046c` are retained above as history, not as the
-load-bearing evidence. The full commit trail is §13.
+**Net position, stated exactly: all twelve convergence facts have been watched RED at
+`abce9e40c`** — facts 1, 2, 3, 5, 6, 7, 8, 9 and all three wrapper facts via M7a', and fact 4 via
+M2'/M3' (which M7a' correctly leaves green, since the lexical read needs no projection).
+
+**And the SHA is stated exactly, because the earlier version of this section got the same shape
+wrong.** `abce9e40c` is where the mutations were MEASURED; the landed head is later. The two differ
+only by `.md` files — the durable-row corrections and this record — so the watched code is the
+shipping code, but "the current tip" was false as written and is not the claim being made. The
+earlier passes at `26a9b2ec4` and `6896a046c` are retained above as history, not as the
+load-bearing evidence. The full commit trail, with the landed head, is §13.
 
 **Recorded because it is evidence and not a nuisance:** a first attempt at M7 — disabling the
 oracle's exit-code check alone — did **not** red fact 9. `LoadAsync` fails closed at four
@@ -353,12 +358,41 @@ is the FIRST place to change, not the last.** The reviewer notes this is the eig
 shape this wave and that they committed it themselves this session on D294 — which is the strongest
 argument that it is structural rather than careless.
 
-That sits alongside §4b's lesson as the pair worth carrying out of this packet:
+### The enforcement half, learned the hard way one round later
+
+**The correction reached the row and not the reader.** Both corrected rows carried a literal
+`||` inside a code span — the notation naming an additive shadow — and **GFM does not respect
+backticks inside table cells**. Seven unescaped pipes where a four-column row needs five, so the
+renderer dropped everything past column four: D302 truncated mid-sentence and **D304's entire
+Reason cell, which is where the "different halves" retraction lives, was invisible**. The notation
+for the defect destroyed the description of the defect.
+
+Measured, not eyeballed, before and after — because that is the point:
+
+| row | before | after |
+|---|---|---|
+| D302 | 7 unescaped pipes, renders 6 cells | 5, renders 4, reason cell 944 chars |
+| D304 | 7 unescaped pipes, renders 6 cells | 5, renders 4, reason cell 430 chars |
+| D296-D301, D303, D305 | 5 each | 5 each |
+
+This is a repeat at repository scale: the wave-64 land found **27,859 characters across 17 board
+rows** silently dropped by exactly this, and the reviewer committed it again this session in a row
+that was *about* unescaped pipes. So the rule has an enforcement clause, and the clause is what
+makes it usable:
+
+- **Escape `|` inside table cells even within backticks**, and
+- **verify by COUNTING the delimiters, never by reading.** A four-column row has exactly five
+  unescaped pipes. The failure is invisible to review by eye — the source looks correct and only
+  the rendered output is wrong — so the check has to be mechanical or it does not happen.
+
+That sits alongside §4b's lesson as the trio worth carrying out of this packet:
 
 - **Consolidation is not free.** Routing a decision through a shared projection REMOVES a guard
   unless the decision is pinned by a fixture on both sides.
 - **A correction that does not reach the durable row has not been made.** Grep the ledger for the
   claim you just weakened, before declaring the fix done.
+- **A correction that does not RENDER has not been made either.** Count the delimiters in every
+  table row you touch; backticks do not protect a pipe.
 
 ## 10d. RESIDUALS CARRIED FORWARD, confirmed at review and not blocking
 
@@ -390,8 +424,10 @@ Collected in one place so none of them has to be reconstructed from prose:
   claimed to discharge one.
 - The **anti-shadow fact is lexical and incomplete**, and says so in its own doc comment: it closes
   the named routes (`Contains(SharedFloorPin`, a hand-rolled `patternCovers`) and cannot see a
-  fresh predicate mentioning none of them. That route is closed by a *different* fact (the
-  one-sided mutation), and neither is claimed to close both.
+  fresh predicate mentioning none of them. That route is only **PARTLY** closed by the one-sided
+  mutation fact: a REPLACING shadow reds there, an ADDITIVE or population-gated one reds nowhere.
+  See §5, §10b.4 and §10d.1 — this sentence was the fourth surviving copy of a claim corrected in
+  three other places, which is the whole of why §10c exists.
 - Only **validator-accepts implies guard-accepts** is asserted, never the converse. The validator
   legitimately raises more (row cardinality, ID reuse, File Scope disjointness) and binds a larger
   population. That asymmetry is declared, not accidental.
