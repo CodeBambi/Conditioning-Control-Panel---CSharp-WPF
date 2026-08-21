@@ -1,6 +1,0 @@
-{
-  "packet": "SP-133-citation-selftest-gate",
-  "unit": 8,
-  "headless": 0,
-  "reason": "CitationSelfTestGateTests puts client/tools/citations/self-test.mjs on the floor: the clean run, a name anchor over all 25 fact ids, totals derived from the script's own TAP plan and summary, three negative-path facts (failing fact at exit 0, non-zero exit with a clean transcript, truncated transcript) and two never-skip facts (absent interpreter, absent script)"
-}

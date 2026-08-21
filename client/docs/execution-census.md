@@ -21,7 +21,7 @@ node client/tools/coverage/census.mjs
 | **shipped types with ZERO executed lines** | **40** |
 | shipped types with at least one executed line | 646 |
 | census universe (shipped types reaching this census) | 686 |
-| instrumented lines inside the zero-execution types | 2331 |
+| instrumented lines inside the zero-execution types | 2337 |
 | of the zero-execution types, nested | 27 |
 | of the zero-execution types, top-level | 13 |
 
@@ -39,7 +39,7 @@ SP-118 shape exactly.
 
 | | |
 |---|---|
-| excluded entries whose lines were attributed back to a shipped type | 752 |
+| excluded entries whose lines were attributed back to a shipped type | 754 |
 | types with NO entry of their own — every source line lives in a state machine | 3 |
 | of those, driven | 3 |
 | of those, ZERO (would have been missed entirely without attribution) | 0 |
@@ -57,7 +57,7 @@ a sequence point. Measured from the shipped assembly's own TypeDef and MethodDef
 
 | | |
 |---|---|
-| type definitions in `CcpClient.Desktop.dll` | 1391 |
+| type definitions in `CcpClient.Desktop.dll` | 1392 |
 | of those, authored name shape (would survive C2/C3) | 929 |
 | of those, reaching this census | 686 |
 | **INVISIBLE rather than zero** | **243** |
@@ -140,7 +140,7 @@ not a defect in either.
 
 | project | exit | total | passed | failed | skipped |
 |---|---|---|---|---|---|
-| CcpClient.Tests | 0 | 2547 | 2545 | 0 | 2 |
+| CcpClient.Tests | 0 | 2573 | 2571 | 0 | 2 |
 | CcpClient.HeadlessTests | 0 | 152 | 152 | 0 | 0 |
 
 ## The shipped-type rule
@@ -149,15 +149,15 @@ The exclusion rule is BIGGER than the answer, so it is the risk. Every clause is
 one sentence and states what it removed. Widening a clause to shorten the list would be
 `allowedSkips`-as-quarantine wearing a new hat.
 
-Universe: **4247** `<class>` entries across every cobertura report.
+Universe: **4306** `<class>` entries across every cobertura report.
 
 | clause | what it removes | removed | defence |
 |---|---|---|---|
-| **C1** | any entry outside package `CcpClient.Desktop` | 2085 | The row asks about SHIPPED types, and CcpClient.Desktop is the assembly that gets published; CcpClient.Tests and CcpClient.HeadlessTests are not shipped, and an unexecuted test class is the floor's question (a test count), not this census's. |
-| **C2** | any entry with a dot-segment matching `^<` | 756 | No C# identifier may begin with '<', so a dot-segment that does was emitted by the compiler and written by nobody: <>c, <>c__DisplayClassN_M, <Method>d__N, <<Method>b__N_M>d, <>c<TModel>, <Module>, <PrivateImplementationDetails>, and the [GeneratedRegex] tree including its nested RunnerFactory/Runner. |
+| **C1** | any entry outside package `CcpClient.Desktop` | 2142 | The row asks about SHIPPED types, and CcpClient.Desktop is the assembly that gets published; CcpClient.Tests and CcpClient.HeadlessTests are not shipped, and an unexecuted test class is the floor's question (a test count), not this census's. |
+| **C2** | any entry with a dot-segment matching `^<` | 758 | No C# identifier may begin with '<', so a dot-segment that does was emitted by the compiler and written by nobody: <>c, <>c__DisplayClassN_M, <Method>d__N, <<Method>b__N_M>d, <>c<TModel>, <Module>, <PrivateImplementationDetails>, and the [GeneratedRegex] tree including its nested RunnerFactory/Runner. |
 | **C3** | any entry whose FINAL dot-segment matches `^XamlClosure_[0-9]+$` | 4 | Avalonia's XAML compiler emits these nested classes for deferred content and no source file declares them; they are the only compiler-generated shape in this assembly that does not begin with '<'. Anchored at both ends so a type someone actually named XamlClosure_Registry survives. |
 | **kept** | merged by fully-qualified name into types | 1402 entries → 686 types | a partial class is ONE type; coverage is unioned |
-| *(attribution)* | C2/C3 entries whose lines return to their declaring shipped type | 752 re-attributed, 0 dropped | the compiler moved those source lines out of the type; attribution moves them back |
+| *(attribution)* | C2/C3 entries whose lines return to their declaring shipped type | 754 re-attributed, 0 dropped | the compiler moved those source lines out of the type; attribution moves them back |
 
 ### Clauses deliberately NOT written
 
@@ -169,7 +169,7 @@ Universe: **4247** `<class>` entries across every cobertura report.
 ### C1's counterfactual, measured rather than argued
 
 C1 removes the unshipped test assemblies. Published so the clause is not taken on trust: of
-**2074** authored-shape types in `CcpClient.Tests` and `CcpClient.HeadlessTests`,
+**2130** authored-shape types in `CcpClient.Tests` and `CcpClient.HeadlessTests`,
 **55** have zero executed lines. That number is a diagnostic about test-side
 helpers and never enters the answer above.
 
@@ -195,7 +195,7 @@ type — the size of what nothing drove.
 
 | type | lines | source |
 |---|---|---|
-| `App` | 227 | client/src/CcpClient.Desktop/App.axaml, client/src/CcpClient.Desktop/App.axaml.cs |
+| `App` | 233 | client/src/CcpClient.Desktop/App.axaml, client/src/CcpClient.Desktop/App.axaml.cs |
 
 ### CcpClient.Desktop.Features.AvatarTube
 
