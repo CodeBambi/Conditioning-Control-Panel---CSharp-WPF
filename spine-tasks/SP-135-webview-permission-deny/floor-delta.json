@@ -1,6 +1,0 @@
-{
-  "packet": "SP-135-webview-permission-deny",
-  "unit": 14,
-  "headless": 0,
-  "reason": "WebViewPermissionTests: the published vtable order anchored against the shipping ProcessFailed slots, eight cross-platform deny-decision facts, three Windows-COM subscription facts (slot 23 / fires / detach at 24), the typed zero-pointer refusal and the WebView2 host census"
-}

@@ -241,7 +241,7 @@ at 0.50, roughly midway between the measured pass and the measured wrong state (
 
 `capture.ps1` ran OUTSIDE `%TEMP%/ccp-real-desktop.lease` until this packet, while doing exactly
 what `RealDesktopCollection`'s fixtures do. It now takes it, byte-compatible with
-`RealDesktopLease.TryTake` (`RealDesktopCollection.cs:110-118`): `FileMode.Create` /
+`RealDesktopLease.TryTake` (`RealDesktopCollection.cs:141-149`): `FileMode.Create` /
 `FileAccess.Write` / `FileShare.Read`, with `pid=<n>` written RAW into the stream — no
 `StreamWriter`, no BOM, no trailing newline, because `HolderProcessId` requires the file to start
 literally `pid=` (`:148`). The holder is read back with `FileShare.ReadWrite` as `:144` does; a
@@ -351,7 +351,7 @@ opened. Both gates were run alone and never beside a capture.
   a capture.
 - `CopyFromScreen` reads the composited desktop, so unlike SP-115's `PrintWindow` it is not
   structurally blind to transparent-versus-black. It IS blind to a foreign top-most window owning
-  the point, and the lease cannot exclude one (`RealDesktopCollection.cs:44-48`). Unchanged residue.
+  the point, and the lease cannot exclude one (`RealDesktopCollection.cs:45-49`). Unchanged residue.
 - **`rack-row-dot-off` cannot see a missing dot.** It reads the open row's fill through a hollow
   ring, so an unrendered dot passes it. Only `rack-row-dot-armed` constrains that the dot exists,
   and only by area above its threshold.
@@ -415,7 +415,7 @@ must opt into comments.
 Review confirmed the rest independently: no product byte changed, the probe-refusal arithmetic
 (351 px against a 965 px viewport, 5.2 rows below the fold), all four harness defects genuinely
 present at base and genuinely fixed, the lease byte contract exact against
-`RealDesktopCollection.cs:113,144,148`, the tolerances correctly below 10, and 0.714 vs 0.224 as a
+`RealDesktopCollection.cs:144,175,179`, the tolerances correctly below 10, and 0.714 vs 0.224 as a
 real filled disc against an antialiased ring (pi/4 = 0.785 in a 14x14 cell) rather than noise. It
 also checked that the seeded-regression discrimination is genuine rather than `selected-fill` being
 insensitive: that check reads a Background the seed never touched, and it does fail 1.000 -> 0.000

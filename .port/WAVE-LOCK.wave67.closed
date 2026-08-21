@@ -1,0 +1,34 @@
+WAVE: 67
+PACKETS: SP-134-desktop-preflight SP-135-webview-permission-deny
+LANES: 2
+AUTHORED-AGAINST: a320601b4
+LANE-BASE: derived with git merge-base after the lanes exist, never asserted here
+GATE: validate-wave.mjs WAVE OK; FloorWrapperGuardTests 3/3; floor 2573/152
+D-RANGES: SP-134 D279-D288, SP-135 D289+
+OPENED: 2026-08-21T12:31:24Z
+NOTE: the real desktop may be contended by the shipping WPF product during this wave.
+  That is SP-134 s subject. A red real-desktop fact here is evidence, not noise.
+CLOSED: 2026-08-22 (written by hand at the land; approximate, as in wave 66)
+LANDED: SP-134 efa5a74aa (PASS), SP-135 0f4b14e29 (PASS)
+LANE-BASE (derived): 1a5136beb for both, via git merge-base
+FLOOR: 2573 -> 2599 unit (12 + 14 declared), 152 headless unchanged
+MERGE: ONE conflict, client/docs/wpf-surface-reachability.md - both lanes appended a
+  section at the same point with DISJOINT D ranges. Resolved by keeping BOTH, in id
+  order. D279-D295 each present exactly once, verified mechanically rather than by eye.
+  ORCHESTRATOR DEFECT AT THIS LAND: the first resolution script assumed LF, the file is
+  CRLF, and a shell || fallback let the merge commit run anyway - conflict markers were
+  committed, then caught and amended before any push. The line-ending trap this repo
+  enforces on everyone else.
+VERIFICATION: CLEAN, and unlike wave 66 it is clean WITH the shipping product running.
+  Five consecutive full floor runs green at 2599/152 - four via check-floor, one via the
+  census regeneration, which is a different entry point. ConditioningControlPanel v6.8.1
+  pid 16712 was present throughout: the SAME process that made wave 66 six-red-of-nine.
+  The in-collection control asserts every reading was OWNED with zero losses across each
+  2.5 s span, so the pre-flight positively OBSERVED the product present and NOT
+  re-asserting. That is D281's idle case, measured rather than inferred from absence.
+NOT OBSERVED: no contended refusal was seen at this land. The refusal path rests on the
+  eleven fixtured verdict facts and SP-134's staged red at b3868c168, not on a real
+  contention here. D250 stays WIP: no browser has raised a permission prompt in this
+  repository, and none was started.
+RESIDUAL: wave 65 has no .closed lock in .port/. Not reconstructed here - writing one
+  now would be inventing a record rather than keeping one.

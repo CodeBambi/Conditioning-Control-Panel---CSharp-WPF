@@ -18,11 +18,11 @@ node client/tools/coverage/census.mjs
 
 | | |
 |---|---|
-| **shipped types with ZERO executed lines** | **40** |
-| shipped types with at least one executed line | 646 |
-| census universe (shipped types reaching this census) | 686 |
-| instrumented lines inside the zero-execution types | 2337 |
-| of the zero-execution types, nested | 27 |
+| **shipped types with ZERO executed lines** | **41** |
+| shipped types with at least one executed line | 651 |
+| census universe (shipped types reaching this census) | 692 |
+| instrumented lines inside the zero-execution types | 2361 |
+| of the zero-execution types, nested | 28 |
 | of the zero-execution types, top-level | 13 |
 
 The nested/top-level split is a breakdown, not an exclusion: a nested type is counted as its
@@ -57,12 +57,12 @@ a sequence point. Measured from the shipped assembly's own TypeDef and MethodDef
 
 | | |
 |---|---|
-| type definitions in `CcpClient.Desktop.dll` | 1392 |
-| of those, authored name shape (would survive C2/C3) | 929 |
-| of those, reaching this census | 686 |
-| **INVISIBLE rather than zero** | **243** |
-| — no method body at all: interfaces without default members, enums, abstract-only | 219 |
-|     interfaces 71, enums 67, structs 45, classes 36 | |
+| type definitions in `CcpClient.Desktop.dll` | 1407 |
+| of those, authored name shape (would survive C2/C3) | 943 |
+| of those, reaching this census | 692 |
+| **INVISIBLE rather than zero** | **251** |
+| — no method body at all: interfaces without default members, enums, abstract-only | 227 |
+|     interfaces 72, enums 68, structs 45, classes 42 | |
 | — has a method body, but no source line maps to it | 24 |
 
 The second category is the subtle one and it is worth naming precisely, because it is easy to
@@ -96,7 +96,7 @@ member-less one landed in the zero list and the one-member control did not. The 
 is `DtrhProtocol.DtrhPageMessage.Exit`, which `DtrhProtocolTests.cs:24` parses from
 `{"type":"exit"}` on a green theory row — and which this census still calls zero.
 
-**15 of the 40 rows below carry this marker.** They are NOT
+**16 of the 41 rows below carry this marker.** They are NOT
 excluded, because excluding them would be widening a rule to shorten a list. They are marked,
 because a census that cannot tell you which of its own rows are weak evidence is worse than one
 that can. Treat a `construction-invisible` row as *unproven in both directions*.
@@ -119,7 +119,7 @@ this whole census exists to refuse.
 | mark | count | what it means |
 |---|---|---|
 | `other-os-gated` | 4 | the file's code selects an OS this run was not on, so the MACHINE may explain the zero — check the other OS before believing the row |
-| `same-os-code` | 12 | the file's code selects `windows`, the OS this run WAS on, so **the machine does not explain the zero at all** — the type would be MORE dead elsewhere, not less |
+| `same-os-code` | 13 | the file's code selects `windows`, the OS this run WAS on, so **the machine does not explain the zero at all** — the type would be MORE dead elsewhere, not less |
 
 The distinction matters most on the largest dead surface below. A `same-os-code` row is not
 excused by anything: its platform predicate is satisfied here and the code still never ran.
@@ -140,7 +140,7 @@ not a defect in either.
 
 | project | exit | total | passed | failed | skipped |
 |---|---|---|---|---|---|
-| CcpClient.Tests | 0 | 2573 | 2571 | 0 | 2 |
+| CcpClient.Tests | 0 | 2599 | 2597 | 0 | 2 |
 | CcpClient.HeadlessTests | 0 | 152 | 152 | 0 | 0 |
 
 ## The shipped-type rule
@@ -149,14 +149,14 @@ The exclusion rule is BIGGER than the answer, so it is the risk. Every clause is
 one sentence and states what it removed. Widening a clause to shorten the list would be
 `allowedSkips`-as-quarantine wearing a new hat.
 
-Universe: **4306** `<class>` entries across every cobertura report.
+Universe: **4344** `<class>` entries across every cobertura report.
 
 | clause | what it removes | removed | defence |
 |---|---|---|---|
-| **C1** | any entry outside package `CcpClient.Desktop` | 2142 | The row asks about SHIPPED types, and CcpClient.Desktop is the assembly that gets published; CcpClient.Tests and CcpClient.HeadlessTests are not shipped, and an unexecuted test class is the floor's question (a test count), not this census's. |
+| **C1** | any entry outside package `CcpClient.Desktop` | 2168 | The row asks about SHIPPED types, and CcpClient.Desktop is the assembly that gets published; CcpClient.Tests and CcpClient.HeadlessTests are not shipped, and an unexecuted test class is the floor's question (a test count), not this census's. |
 | **C2** | any entry with a dot-segment matching `^<` | 758 | No C# identifier may begin with '<', so a dot-segment that does was emitted by the compiler and written by nobody: <>c, <>c__DisplayClassN_M, <Method>d__N, <<Method>b__N_M>d, <>c<TModel>, <Module>, <PrivateImplementationDetails>, and the [GeneratedRegex] tree including its nested RunnerFactory/Runner. |
 | **C3** | any entry whose FINAL dot-segment matches `^XamlClosure_[0-9]+$` | 4 | Avalonia's XAML compiler emits these nested classes for deferred content and no source file declares them; they are the only compiler-generated shape in this assembly that does not begin with '<'. Anchored at both ends so a type someone actually named XamlClosure_Registry survives. |
-| **kept** | merged by fully-qualified name into types | 1402 entries → 686 types | a partial class is ONE type; coverage is unioned |
+| **kept** | merged by fully-qualified name into types | 1414 entries → 692 types | a partial class is ONE type; coverage is unioned |
 | *(attribution)* | C2/C3 entries whose lines return to their declaring shipped type | 754 re-attributed, 0 dropped | the compiler moved those source lines out of the type; attribution moves them back |
 
 ### Clauses deliberately NOT written
@@ -169,8 +169,8 @@ Universe: **4306** `<class>` entries across every cobertura report.
 ### C1's counterfactual, measured rather than argued
 
 C1 removes the unshipped test assemblies. Published so the clause is not taken on trust: of
-**2130** authored-shape types in `CcpClient.Tests` and `CcpClient.HeadlessTests`,
-**55** have zero executed lines. That number is a diagnostic about test-side
+**2156** authored-shape types in `CcpClient.Tests` and `CcpClient.HeadlessTests`,
+**59** have zero executed lines. That number is a diagnostic about test-side
 helpers and never enters the answer above.
 
 ### UNCLASSIFIED — the rule is incomplete (0)
@@ -179,7 +179,7 @@ An entry that survives C1-C3 but is not under CcpClient.Desktop.* was neither cl
 
 None. Every entry surviving the clauses is under `CcpClient.Desktop.*`.
 
-## The 40 shipped types with zero executed lines
+## The 41 shipped types with zero executed lines
 
 Sorted ordinally by fully-qualified name. `lines` is the instrumented line count inside the
 type — the size of what nothing drove.
@@ -219,7 +219,7 @@ type — the size of what nothing drove.
 
 | type | lines | source |
 |---|---|---|
-| `DtrhHostWindow` `same-os-code(windows)` | 822 | client/src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml, client/src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs |
+| `DtrhHostWindow` `same-os-code(windows)` | 845 | client/src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml, client/src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs |
 | `DtrhHostWindow.LogSinkAdapter` `same-os-code(windows)` | 2 | client/src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs |
 | `DtrhLoomWindow.NullDtrhVideo` | 6 | client/src/CcpClient.Desktop/Features/Dtrh/DtrhLoomWindow.axaml.cs |
 | `DtrhProcessFailed.AttachOutcome` `same-os-code(windows)` `construction-invisible` | 1 | client/src/CcpClient.Desktop/Features/Dtrh/DtrhProcessFailed.cs |
@@ -238,6 +238,7 @@ type — the size of what nothing drove.
 | `LibVlcDtrhVideo` | 160 | client/src/CcpClient.Desktop/Features/Dtrh/LibVlcDtrhVideo.cs |
 | `SoundFlowDtrhAudio` | 68 | client/src/CcpClient.Desktop/Features/Dtrh/SoundFlowDtrhAudio.cs |
 | `SoundFlowDtrhAudio.SoundFlowPlayer` | 21 | client/src/CcpClient.Desktop/Features/Dtrh/SoundFlowDtrhAudio.cs |
+| `WebViewPermissionDeny.AttachOutcome` `same-os-code(windows)` `construction-invisible` | 1 | client/src/CcpClient.Desktop/Features/Dtrh/WebViewPermissionDeny.cs |
 
 ### CcpClient.Desktop.Features.Goon
 

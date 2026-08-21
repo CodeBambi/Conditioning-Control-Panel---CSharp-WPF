@@ -9,7 +9,7 @@ base `145632a1`. **No repository file has been changed at this point except this
 I built the client (`0 Warning(s) 0 Error(s)`) and ran ONE read-only UIA reconnaissance pass
 against the live shell on the real desktop, holding `%TEMP%/ccp-real-desktop.lease` (opened
 `Create/Write/FileShare.Read`, `pid=` written, released in `finally` — byte-compatible with
-`RealDesktopLease.TryTake`, `client/tests/CcpClient.Tests/RealDesktopCollection.cs:110`). The
+`RealDesktopLease.TryTake`, `client/tests/CcpClient.Tests/RealDesktopCollection.cs:139`). The
 script lives in the scratchpad, not in the repo. It clicked nothing and read no pixels.
 
 Measured (scale 1.75, window `100,140,1925,1330`):
@@ -155,7 +155,7 @@ run will observe pin + delta and I will state both numbers. I will not open `flo
   animation, not the rack's scroll behaviour, not any of the other 13 rows, not Linux/WSLg.
 - `CopyFromScreen` reads the composited desktop, so unlike SP-115's `PrintWindow` it is not blind
   to transparent-versus-black — but it IS blind to a foreign topmost window owning the point, and
-  the lease cannot exclude one (`RealDesktopCollection.cs:44-48`). That residue stands.
+  the lease cannot exclude one (`RealDesktopCollection.cs:45-49`). That residue stands.
 
 ## 7. Stop conditions I will honour
 
