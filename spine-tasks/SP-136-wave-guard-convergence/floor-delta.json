@@ -1,0 +1,6 @@
+{
+  "packet": "SP-136-wave-guard-convergence",
+  "unit": 9,
+  "headless": 0,
+  "reason": "WaveGuardConvergenceTests: glob-equals-literal through both guards, the shared decision against C#-side pinned verdicts, the one-sided-mutation red, the anti-shadow read, the historical predicate detected as drift in both directions, WAVE-OK-implies-suite-green over the live corpus, enumeration set equality, the SP-073 grandfather re-applied after consuming, and the projection's exit-code and fail-closed contract"
+}
