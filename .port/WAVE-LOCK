@@ -1,0 +1,10 @@
+WAVE: 67
+PACKETS: SP-134-desktop-preflight SP-135-webview-permission-deny
+LANES: 2
+AUTHORED-AGAINST: a320601b4
+LANE-BASE: derived with git merge-base after the lanes exist, never asserted here
+GATE: validate-wave.mjs WAVE OK; FloorWrapperGuardTests 3/3; floor 2573/152
+D-RANGES: SP-134 D279-D288, SP-135 D289+
+OPENED: 2026-08-21T12:31:24Z
+NOTE: the real desktop may be contended by the shipping WPF product during this wave.
+  That is SP-134 s subject. A red real-desktop fact here is evidence, not noise.
