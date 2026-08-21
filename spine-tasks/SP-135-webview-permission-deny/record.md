@@ -107,16 +107,37 @@ screen's double-locked opt-in and presses record; it was not run, and SP-132's h
 the voice screen by design. The three windows are never shown in any test, so the attach has never
 been observed against a real adapter.
 
-### Guards watched red at the committed head `b3e4a48f9` — and TWO of the four mutations found real holes in my own tests
+### Guards watched red at the committed head `39e00f4f3`, every mutation re-run there
 
-| Mutation | Result |
+`PROMPT.md:71` asks for red **at the committed head**, so all six mutations below were re-run at
+`39e00f4f3` — the last commit touching any executable surface — and the tree was restored and
+confirmed clean after each. (The commit carrying this correction is documentation-only: filtering its
+`client/src` diff of `///` lines yields zero lines.)
+
+| Mutation, applied at `39e00f4f3` | Result there |
 |---|---|
-| `AddPermissionRequestedSlot` 23 to 22 | **4 red**: `PublishedVtableOrder_...` (`Expected: 23 / Actual: 22`) and all three subscription facts, which get `Unavailable` instead of `Attached` because slot 22 is `remove_ScriptDialogOpening`, whose filler thunk answers E_NOTIMPL |
-| `DenyState` 2 to 1 (Allow) | **FIRST RUN: 1 red only — a self-consistency hole in my own tests.** The deny facts compared the observed write against `WebViewPermissionDeny.DenyState`, so flipping the constant made them tautological. Fixed: they now assert the transcribed literal `PublishedDenyState = 2`, and the product constant is checked against that literal once. **Re-run: 7 red** |
-| `AttachPermissionDeny();` call site deleted from `GoonHostWindow` (the method left in place) | **FIRST RUN: 0 red — all 14 green.** The census guard asserted the hook EXISTED, not that it is CALLED: a hook that never runs, which is this session's signature defect appearing inside the guard written to catch it. Fixed: the guard now requires the call site. **Re-run: 1 red** |
-| autoplay carve-out removed | **1 red**: `TheAnswer_LeavesAutoplayAtTheBrowserDefault` |
+| `AddPermissionRequestedSlot` 23 -> 22 | **4 red** — `PublishedVtableOrder_...` (`Expected: 23 / Actual: 22`) plus all three subscription facts, which get `Unavailable` instead of `Attached` because slot 22 is `remove_ScriptDialogOpening`, whose filler thunk answers E_NOTIMPL |
+| `DenyState` 2 -> 1 (Allow) | **7 red** |
+| autoplay carve-out removed | **1 red** — `TheAnswer_LeavesAutoplayAtTheBrowserDefault` |
+| `AttachPermissionDeny();` call site deleted from **`GoonHostWindow`** (method left in place) | **1 red** — the census fact |
+| ...the same deletion in **`DtrhHostWindow`** | **1 red** — the fix is as wide as the finding, not Goon-only |
+| ...the same deletion in **`DtrhLoomWindow`** | **1 red** |
 
-Both holes were found by mutation rather than by review, and both are fixed in the follow-up commit.
+**Two of these did NOT red when first tried at `b3e4a48f9`, and both were defects in this packet's own
+guards.** That history is the valuable part, and it belongs to that earlier tree rather than to the
+head:
+
+1. **`DenyState` 2 -> 1 reddened ONE fact at `b3e4a48f9`.** The deny facts compared the observed
+   `put_State` write against `WebViewPermissionDeny.DenyState` itself, so moving the constant moved
+   the expectation with it. They now assert the literal transcribed from `WebView2.h:2002-2004`, and
+   the product constant is checked against that literal once. Fixed in `3cf8e8838`; **7 red at head.**
+2. **Deleting the `AttachPermissionDeny();` call site reddened NOTHING at `b3e4a48f9` — all 14
+   green.** The census asserted the hook EXISTED, not that it is CALLED: a hook that exists and never
+   runs, which is exactly the defect this packet was written to avoid, inside the guard meant to catch
+   it. The census now requires the call site. Fixed in `3cf8e8838`; **red at head for all three
+   hosts.** The declaration cannot false-positive on that string, since it carries no semicolon.
+
+Both were found by mutating rather than by reading, which is the only way either gets found.
 
 ## 4. Hosts covered, and hosts NOT covered
 
@@ -270,19 +291,34 @@ post-change `:162` correctly all along, so the same fact was cited two different
 Writing a citation against the tree you started from is the failure mode; **checking it against the
 tree you are committing is the fix**, and it is the same class this session keeps finding.
 
-**And the insertions moved two citations written by OTHER packets. Both are reported, NOT fixed,
-because both sit outside this packet's File Scope:**
+**Two citations written by OTHER packets are stale at this head. Both are reported, NEITHER is
+touched, because both sit outside this packet's File Scope — and only ONE of them is mine:**
 
-| Stale citation | Points at | Correct number now | Why untouched |
-|---|---|---|---|
-| `client/docs/wpf-surface-reachability.md:1597` cites `GoonHostWindow.axaml.cs:529` | `_sentBootMessages = true;` | **`:579`** | that is an OLDER divergence row; this packet's doc grant is "divergences ONLY, D289 onward" |
-| `client/src/CcpClient.Desktop/Features/Chaos/ChaosTunnelWindow.cs:110` cites `DtrhHostWindow.axaml.cs:1257` (the synthetic `MessageEvent` dispatch shape) | the end of `SendToPage`'s dispatch block | **`:1301`** (exactly +44, this packet's insertions above it) | `Features/Chaos/**` is outside File Scope entirely |
+| Stale citation | What it DENOTES | Where that construct is now | Provenance | Why untouched |
+|---|---|---|---|---|
+| `client/docs/wpf-surface-reachability.md:1597` cites `GoonHostWindow.axaml.cs:529` | `_sentBootMessages = true;` | **`:579`** (+50) | **this packet broke it**: `:529` at base `1a5136beb`, `:579` at head | that is an OLDER divergence row, and this packet's doc grant is "divergences ONLY, D289 onward" |
+| `Features/Chaos/ChaosTunnelWindow.cs:110` cites `DtrhHostWindow.axaml.cs:1257` — *"the landed shape — WPF `PostWebMessageAsJson` parity"* | the `InvokeScript(...dispatchEvent(new MessageEvent('message',...)))` call | **`:1294`** | **NOT this packet.** `:1257` was that exact line at `05fed4ddd`, where the comment was written — **accurate then**. Other packets' edits had already moved it to `:1249` by my base, so it arrived stale | `Features/Chaos/**` is outside File Scope entirely |
 
-Both were verified by reading the base blob and the current file, not inferred from the diff size.
-Each is a one-line correction for whoever owns those files.
+**The second row was WRONG in the first version of this record, and the way it was wrong is the point.**
+It claimed the citation denoted "the end of `SendToPage`'s dispatch block", that my insertions broke
+it, and that the fix was `:1301`, "exactly +44". All three failed. I had read the base blob **at the
+stale number `:1257`**, found a closing brace there, and written a description of what I found — so
+**my literal and my description agreed with each other while both disagreed with what the comment
+denotes.** That is SP-134's shape, committed inside the paragraph reporting mine. The arithmetic was
+wrong too: `numstat` gives **45**, not 44 (+3, +2, +1, +39), so base `:1257` maps to head `:1302`, and
+head `:1301` is `_dtrh.Inbox.Enqueue(json);` — the queue fallback. **As written, that row would have
+handed the `Features/Chaos` owner a correction pointing at the wrong line.**
 
-**The general point, which is D295's neighbour:** a packet that inserts lines into a shared file
-silently invalidates every `File.cs:line` citation below the insertion, anywhere in the repository.
-This packet grew three files and broke two foreign citations plus three of its own. The citation
-self-test (SP-131/SP-133) classifies drift in the WPF tree; **nothing checks port-internal citations
-into port files**, which is why these were found by hand.
+**So the method is stated as what it must be, not as what I did.** A citation is checked by
+**resolving what it DENOTES** — finding the named construct in both trees and reading off its line
+number — never by reading whatever text now occupies the cited number and describing that. Row 1 did
+this and is right; row 2 did not and was wrong. Both were re-verified the correct way for this
+version: `05fed4ddd`, base and head blobs each searched for the named construct.
+
+**And hand-verification is not a substitute for a checker: I hand-verified two citations and got one
+wrong.** Which makes the general point sharper than "insertions invalidate line numbers below them".
+That is one way a citation and its referent come apart; a pin that is self-consistent and file-wrong
+is another; **both are invisible to any check that reads the number instead of resolving the thing.**
+The citation self-test (SP-131/SP-133) classifies drift in the WPF tree; **nothing in this repository
+resolves port-internal citations into port files**, which is why these were found by hand, and why one
+of them was found wrong by review rather than by me.
