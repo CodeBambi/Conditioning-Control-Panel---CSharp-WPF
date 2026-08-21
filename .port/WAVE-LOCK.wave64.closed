@@ -1,0 +1,17 @@
+WAVE: 64
+PACKETS: SP-128-graded-run-awards SP-129-goon-game-census
+LANES: 2
+BASE: 2d135a0de
+GATE: validate-wave.mjs WAVE OK; FloorWrapperGuardTests 3/3; floor 2399/144
+D-RANGES: SP-128 D226-D239, SP-129 D240+
+OPENED: 2026-08-21T20:15:00Z
+CLOSED: 2026-08-21T04:58:00Z
+LANDED: SP-128 dec59f632 (PASS), SP-129 36eed470f (PASS)
+FLOOR: 2399 -> 2457 unit (deltas 26 + 32 = 58), 144 headless unchanged
+GATE AT LAND: FLOOR OK 2457/2457 and 144/144; warning gate 0W/0E across 4 projects
+DIVERGENCES: D226-D232 (SP-128) and D240-D249 (SP-129), disjoint ranges allocated at authoring; merge clean
+NOTE: the BASE line above names the AUTHORING commit; both lanes actually branched from 71ab1bac2, the lock-opening commit. Filed as a board row.
+NOTE: the OPENED line above (20:15:00Z) is not a real UTC time - it disagrees with this
+  file's own creation and with CLOSED, which would make the wave appear to close before it
+  opened. Recorded, not silently corrected. Same class as the BASE line: a field asserted
+  by hand that nothing derives or checks.
