@@ -20,7 +20,7 @@ namespace CcpClient.Tests;
 /// machine-wide lease would serialise pure arithmetic against the desktop for no evidence — the
 /// same call, for the same reason, that <c>VideoLetterboxTests.cs:9-11</c> makes. That does leave
 /// this file carrying two classes with one <c>[Collection]</c> attribute between them, which is
-/// exactly the lexical blind spot <c>RealDesktopCollectionGuardTests.cs:38-41</c> already names for
+/// exactly the lexical blind spot <c>RealDesktopCollectionGuardTests.cs:29-35</c> already names for
 /// <c>RealDesktopLeaseTests.cs</c>: the attribute is per-FILE to that guard, so a real-desktop
 /// class added to this file later would be accepted without joining anything. Neither class here
 /// reaches the desktop, so nothing is mis-bound today, and this paragraph is the record of it
@@ -171,7 +171,7 @@ public class DesktopPreflightVerdictTests
 
         Assert.NotNull(refusal);
         Assert.Contains("THIS IS THE SHIPPING WPF PRODUCT", refusal, StringComparison.Ordinal);
-        Assert.Contains("RealDesktopCollection.cs:44-48", refusal, StringComparison.Ordinal);
+        Assert.Contains("RealDesktopCollection.cs:45-49", refusal, StringComparison.Ordinal);
         Assert.Contains("FlashService.cs:206-243", refusal, StringComparison.Ordinal);
         Assert.Contains("ChaosModeService.cs:930", refusal, StringComparison.Ordinal);
         Assert.Contains("has a session RUNNING", refusal, StringComparison.Ordinal);

@@ -242,7 +242,7 @@ public sealed class RealDesktopLease : IDisposable
 /// (<c>VideoOverlayCoexistenceTests</c> four times, <c>PointerCapabilityTests</c> once,
 /// <c>InputCapabilityTests</c> once); all of them passed 5/5 in isolation. The cause was the
 /// shipping WPF product on the same desktop. <see cref="RealDesktopCollection"/> names that residue
-/// in advance (<c>:44-48</c>) and admits it rather than hiding it. What was missing is that it
+/// in advance (<c>:45-49</c>) and admits it rather than hiding it. What was missing is that it
 /// ANNOUNCES itself.</para>
 ///
 /// <para><b>What it is NOT.</b> Not a skip, not a quarantine, not a retry, not an
@@ -339,6 +339,16 @@ public static class DesktopPreflight
     /// The floor under a real observation. A span of <see cref="ObservationSpanMs"/> at
     /// <c>TestWait</c>'s 10 ms poll yields ~250 rounds; this is an order of magnitude below that,
     /// so it binds "the loop really ran" without binding the machine's speed.
+    ///
+    /// <para><b>Where this is and is NOT enforced, because the asymmetry is deliberate.</b>
+    /// <see cref="Refusal"/> does NOT consult this. It refuses on zero rounds, on zero owned
+    /// readings and on a rig that could not be built — so a sampler that degenerated to a HANDFUL
+    /// of rounds still passes the FIXTURE. That case is caught one level down, by the in-collection
+    /// control in <c>DesktopPreflightTests</c>, which is a hard red on the same run rather than a
+    /// softer signal. The split is on purpose: a fixture refusal fans out across every fact in the
+    /// collection, so it is reserved for "the desktop is contended" and for "there is no
+    /// observation at all", while "the observation is too thin to mean anything" is a defect in
+    /// this suite and belongs to a test that names it.</para>
     /// </summary>
     public const int MinimumSamples = 20;
 
@@ -620,7 +630,7 @@ public static class DesktopPreflight
         text.Append("beat onward. The counts above are what tells them apart — the refusal is deliberately ");
         text.Append("ANY-sample, because a majority rule would miss the cadence this pre-flight exists to catch.");
         text.Append($"{Environment.NewLine}  This is NOT a flake, is NOT retried and is NOT skipped ");
-        text.Append("(RealDesktopCollection.cs:35-38). A contended desktop cannot certify an OS-level fact in ");
+        text.Append("(RealDesktopCollection.cs:36-39). A contended desktop cannot certify an OS-level fact in ");
         text.Append("either direction: wave-66 measured 3 green and 6 red across 9 floor runs with the same window ");
         text.Append("present, and the failing test moved between runs.");
         return text.ToString();
@@ -648,7 +658,7 @@ public static class DesktopPreflight
         if (loss.ProcessName.Equals(ShippingProduct, StringComparison.OrdinalIgnoreCase))
         {
             return $"{Environment.NewLine}      *** THIS IS THE SHIPPING WPF PRODUCT — the residue "
-                + "RealDesktopCollection.cs:44-48 names in advance. It re-asserts HWND_TOPMOST on a ~1 s cadence "
+                + "RealDesktopCollection.cs:45-49 names in advance. It re-asserts HWND_TOPMOST on a ~1 s cadence "
                 + "(Services/Flash/FlashService.cs:206-243, driven from Services/Chaos/ChaosModeService.cs:937-940). "
                 + "An IDLE or PAUSED copy cannot do this — RunTick returns at ChaosModeService.cs:930 unless a "
                 + "session is spawning and unpaused — so this window is not merely OPEN, it has a session RUNNING. "
@@ -656,7 +666,7 @@ public static class DesktopPreflight
         }
 
         return $"{Environment.NewLine}      *** A foreign application: not the shipping WPF product and not ours. "
-            + "No in-process mechanism can exclude one (RealDesktopCollection.cs:44-48). ***";
+            + "No in-process mechanism can exclude one (RealDesktopCollection.cs:45-49). ***";
     }
 
     private static string Blind(Observation observation) =>

@@ -78,6 +78,21 @@ Everything else is **evidence carried by the refusal, never a refusal itself**: 
 owner's process/pid/title/class (wave-66's own identification route, `GetForegroundWindow` plus
 `GetWindowThreadProcessId`), the first-loss round and elapsed ms, and readings-lost-out-of-taken.
 
+**`MinimumSamples` is NOT one of the fixture's refusal conditions, and that is deliberate.**
+`Refusal` consults only `Samples == 0`, `OwnedReadings == 0` and `RigFailure`, so a sampler that
+degenerated to a HANDFUL of rounds still passes the fixture; it is caught one level down by the
+in-collection control, which is a hard red on the same run rather than a softer signal — and that
+is exactly what R6 demonstrates. The split is on purpose: a fixture refusal fans out across all 213
+facts in the collection, so it is reserved for "the desktop is contended" and "there is no
+observation at all", while "the observation is too thin to mean anything" is a defect in this suite
+and belongs to a test that names it. This is now stated in the constant's own doc comment rather
+than left to be inferred.
+
+**The foreground guarantee is structural, not disciplinary.** Neither `SetForegroundWindow` nor
+`BringWindowToTop` is declared in the `DllImport` block at all — both names appear only inside doc
+comments — so `Lift` cannot call them even by mistake. Given that one of them was measured stealing
+the foreground (§4), the absence is the guarantee.
+
 ### Timing route
 
 `TestTimingGuardTests.cs:20-46` bans every sleeping and elapsed-time construct across
@@ -124,7 +139,7 @@ Four classes, each with a different sentence, decided by pid first and process n
 |---|---|---|
 | leaked rig | `pid == Environment.ProcessId`, not the sentinel | *"THIS PROCESS owns that window… the leak is in this suite and not on the machine"* |
 | our harness/product | `CcpClient.Tests`, `CcpClient.Desktop`, `CcpVerify`, `testhost` | cites `verification-harness.md:39` and says to *"hunt a harness bug, not a foreign application"* |
-| the shipping product | `ConditioningControlPanel` | carries `RealDesktopCollection.cs:44-48`, `FlashService.cs:206-243`, **and the idle-versus-running distinction** (`ChaosModeService.cs:930`), so a reader is not left wondering why an app they have had open all week only broke the suite today |
+| the shipping product | `ConditioningControlPanel` | carries `RealDesktopCollection.cs:45-49`, `FlashService.cs:206-243`, **and the idle-versus-running distinction** (`ChaosModeService.cs:930`), so a reader is not left wondering why an app they have had open all week only broke the suite today |
 | foreign | anything else | says so, and cites that no in-process mechanism can exclude one |
 
 ## 6. Before and after: FAILURE SETS, not counts
@@ -137,6 +152,10 @@ Four classes, each with a different sentence, decided by pid first and process n
 | A3 | final `check-floor.mjs`, `b3868c168` + docs | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; the ONLY gate line is `FLOOR VIOLATION — total drift: 2585 (pin total 2573)`, which is the declared delta | **empty** |
 
 | A4 | `check-floor.mjs` after the doc commit `13ae62e03` | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; same single pin-drift line | **empty** |
+
+| A5 | `check-floor.mjs` after the code-review corrections | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; warning gate 0/0; same single pin-drift line | **empty** |
+
+A5 is the gate after the review corrections in §10b. **The delta did not move: still +12/0, still 2585/152.** Every correction was prose, a line number, or a doc comment; the only code change with any behavioural surface is the pair of emitted citation strings in the refusal, which `DesktopPreflightTests.cs:174` pins and which moved together.
 
 A4 exists because both edited documents are read at runtime by tests (`verification-harness.md` is
 named in nine `client/tests` files), and CLAUDE.md warns that a late doc edit can red the suite.
@@ -197,7 +216,7 @@ follows the cadence and not the presence — which is the measured false positiv
 
 | # | mutation | result |
 |---|---|---|
-| R2 | any-sample -> majority-of-readings (`Losses.Count > 0` -> `LostReadings > readings/2`) | **RED**: `AForeignOwnerAtASingleReadingOutOfHundreds_StillRefuses_BecauseTheContenderReAssertsOnACadence` and three others, all `Assert.NotNull() Failure: Value is null` |
+| R2 | any-sample -> majority-of-readings (`Losses.Count > 0` -> `LostReadings > readings/2`) | **RED**: `Failed: 5, Passed: 6` — `AForeignOwnerAtASingleReadingOutOfHundreds_StillRefuses_BecauseTheContenderReAssertsOnACadence` and the four other facts built on a contended observation, all `Assert.NotNull() Failure: Value is null`. (My first report of this row said "and three others" from a `head -12` truncation of the run output; the count was corrected at review and re-derived by hand — every fact whose observation carries a minority loss must fail, which is 5 of the 11.) |
 | R3 | the `PREFLIGHT-BLIND` branch made unreachable | **RED**: `Failed: 3, Passed: 8` — the two blind facts and the never-owned-a-point vacuity fact |
 | R4 | the `pid == Environment.ProcessId` branch removed | **RED**: `AWindowOfOURSThatIsNotTheSentinel_IsNamedAsALeakedRig_NotAsSomethingOnTheMachine`, `Failed: 1, Passed: 10` |
 | R5 | the `FlashService.cs:206-243` citation dropped from the refusal | **RED**: `TheShippingWpfProduct_CarriesItsStandingCitationAndTheIdleVersusRunningDistinction`, `Failed: 1, Passed: 10` |
@@ -210,16 +229,21 @@ evidence.
 ## 8. The fan-out, measured
 
 xunit v3 attributes a collection-fixture constructor failure to every test in the collection.
-Measured at R1: **212 `[Fact]`/`[Theory]` declarations across 14 classes become 234 attributed
+Measured at R1: **213 `[Fact]`/`[Theory]` declarations across 15 classes become 234 attributed
 FAILED cases** (theory expansion), each carrying the identical named refusal, and **the TRX result
 count is preserved at 2585** — so `check-floor.mjs` reds on the desktop rather than on pin
-arithmetic.
+arithmetic. The measurement self-checks: `234 + 2349 + 2 = 2585`, so no test is dropped.
+
+The census, counted by hand and re-counted at review: Glyph 40+13+9, Video 29+5, Pointer 28+6,
+Input 23+5, Overlay 16, Tray 16, Flash 15, BubbleCount 6, Lease 1, **DesktopPreflight 1** = 213.
+**My plan and my first draft of this record said 212 across 14 — short by exactly this packet's own
+control class, which is a fair way to be wrong and still wrong.** `RackPresentationTests` (11) and
+`VideoLetterboxTests` (9) are NOT members despite mentioning the collection: the first only in a doc
+comment at `:286`, the second says so itself at `:9-11`.
 
 This is the price of "fails once, AT THE FIXTURE": one CAUSE, 234 attributed reds. The alternative
-gives literally one red and lets 212 OS-level facts run against a desktop that cannot certify them
-in either direction. `RackPresentationTests` (11) and `VideoLetterboxTests` (9) are NOT members
-despite mentioning the collection — the first only in a doc comment at `:286`, the second says so
-itself at `:9-11`.
+gives literally one red and lets 213 OS-level facts run against a desktop that cannot certify them
+in either direction.
 
 ## 9. Floor
 
@@ -234,12 +258,12 @@ The 12 are 11 pure verdict facts in `DesktopPreflightVerdictTests` (confirmed by
 
 ## 10. Guard interactions, stated rather than discovered later
 
-- `RealDesktopCollection.cs` is in `RealDesktopCollectionGuardTests.ExemptFileNames` (`:49-54`,
+- `RealDesktopCollection.cs` is in `RealDesktopCollectionGuardTests.ExemptFileNames` (`:50-54`,
   applied at `:163` and `:220`), so a sentinel calling `CreateWindowExW` there trips neither the
   membership walk nor the census. `DesktopPreflightTests.cs` creates no window and names no listed
   helper, so it is invisible to both by construction.
 - `DesktopPreflightTests.cs` holds two classes and one `[Collection]` attribute between them. That
-  is the lexical blind spot `RealDesktopCollectionGuardTests.cs:38-41` already names for
+  is the lexical blind spot `RealDesktopCollectionGuardTests.cs:29-35` already names for
   `RealDesktopLeaseTests.cs`. Neither class here reaches the desktop, so nothing is mis-bound; it
   is written into the file's own summary rather than left to be inferred.
 - `client/tests/floor/vacuous-shape-ledger.json` is `fileScopeMustNotChange`, so **no new fact may
@@ -248,6 +272,42 @@ The 12 are 11 pure verdict facts in `DesktopPreflightVerdictTests` (confirmed by
   (`Assert.Equal(expected, observation.Observed)` and four more against the same `expected`) rather
   than branching on the platform, and `DesktopPreflight.HostCanBeObserved` exists so the platform
   predicate lives outside any fact body.
+
+## 10b. I shifted the file by one line and my own citations did not follow
+
+Adding `using System.Runtime.InteropServices;` at line 1 moved every line of
+`RealDesktopCollection.cs` **+1**. The two paragraphs the whole packet cites moved with it, and the
+numbers did not:
+
+| claim | was | is |
+|---|---|---|
+| *"Not a retry … not a skip and not an `allowedSkips` entry"* | `:35-38` | **`:36-39`** |
+| *"What it does NOT cover … a FOREIGN topmost window"* | `:44-48` | **`:45-49`** |
+
+Those stale numbers had reached **five places**: two emitted refusal strings in
+`RealDesktopCollection.cs` (`:623`, `:651`, `:659`), the assertion in `DesktopPreflightTests.cs:174`
+that PINS one of them, `verification-harness.md`, and D279/D284. All corrected. Two further
+citations were wrong independently of the shift and are corrected too:
+`RealDesktopCollectionGuardTests.cs:38-41` is really **`:29-35`** (`:38-41` is the paragraph close
+plus the class declaration), and `ExemptFileNames` is at **`:50-54`**, not `:49-54`.
+
+**Two stale citations are OUTSIDE this packet's File Scope and are left for the orchestrator**,
+because my insertion is what rotted them and I may not edit either file:
+
+- `client/docs/task-board.md:336-337` — cites `RealDesktopCollection.cs:44-48`; the board is a
+  shared chokepoint reconciled at land.
+- `spine-tasks/SP-122-rack-presentation/record.md:354` and `plan.md:158` — another packet's folder;
+  historical artifacts, arguably correct as written at their own commit.
+
+`spine-tasks/SP-134-desktop-preflight/plan.md` also still carries the pre-shift numbers. It is left
+alone deliberately: it is a point-in-time checkpoint that was accurate when written, and this
+record is the authoritative artifact.
+
+**This is the fourth self-inflicted citation-shift in this session's lane.** The general shape is
+that a single-line insertion at the top of a file silently invalidates every line citation into it,
+including citations held as string literals and asserted by tests — which is exactly where a stale
+number is least visible, because the test still passes as long as the literal and the assertion
+agree with each other and disagree with the file.
 
 ## 11. What this does NOT prove
 
@@ -269,5 +329,16 @@ The 12 are 11 pure verdict facts in `DesktopPreflightVerdictTests` (confirmed by
   cannot itself distinguish them.
 - **`capture.ps1` does not get this pre-flight.** It takes the same lease and runs no sentinel, so
   a headed capture remains covered only against peer processes.
+- **The wave-66 attribution is INHERITED, not established here.** That the cause of those nine runs
+  was the shipping WPF product is the wave-66 land's own finding, restated in `PROMPT.md:10-11`.
+  SP-134 demonstrated the MECHANISM on a contender it staged and controlled (§7); it did not
+  reproduce wave-66, and no run in this packet was contended in the detected sense. Both documents
+  now say so in the same words; an earlier draft of them stated the attribution as settled, which
+  was my confidence inherited from the packet rather than earned by it.
 - **It is falsifiable**: if wave-66's condition recurs and the pre-flight reports clean while those
   three tests fail, the detector is wrong.
+- **This fixture now costs a permanent ~2.5 s on every floor run**, in `RealDesktopLease`'s
+  constructor. Board row 48's second named live mechanism is that lengthening a test changes which
+  facts run concurrently with it, so this pre-flight is now part of that mechanism. The flake that
+  mechanism produces predates this packet and is outside its scope; it is named here only so the
+  connection is on the record rather than rediscovered.
