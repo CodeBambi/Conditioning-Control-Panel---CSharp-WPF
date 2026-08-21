@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // self-test.mjs — the facts that bind detect.mjs (SP-088).
 //
-// WHY THIS EXISTS, AND WHY IT IS NOT IN THE .NET SUITE
-// client/tests/floor/check-floor.mjs discovers only csproj entries under tests/ in
-// client/CcpClient.sln (:80-107) and runs them (:253). A node file under client/tools/
-// is invisible to it. This packet's file scope is client/tools/citations/** and the
-// wave's scopes are pairwise disjoint, so the one-line .cs bridge that would put these
-// facts on the floor belongs to a different packet. See the SCOPE PROBLEM section of
-// spine-tasks/SP-088-upstream-citation-drift-detector/record.md: NO STANDING GATE IN
-// THIS REPOSITORY RUNS THIS FILE.
+// WHY THIS EXISTS, AND HOW IT REACHES THE .NET SUITE (SP-133)
+// check-floor.mjs discovers only csproj entries under tests/ in client/CcpClient.sln
+// (:80-107) and runs them (:364), so a node file under client/tools/ is invisible to it
+// and NOTHING RAN THIS FILE from SP-088 until SP-133. It now runs on every floor run:
+// client/tests/CcpClient.Tests/CitationSelfTestGateTests.cs spawns
+//   node --test-reporter=tap client/tools/citations/self-test.mjs
+// and reds the suite on a failing fact. THAT MAKES THE TAP TRANSCRIPT A CONTRACT: the
+// bridge anchors each fact by its Fn: ID PREFIX, so renaming an ID reds it on purpose.
 //
 // RUN IT
 //   node client/tools/citations/self-test.mjs
@@ -628,13 +628,13 @@ test("F14: a citation naming CCP.*/tests but credited to a shipping path is coun
 
 // ================================================ F15-F24 the SP-131 needle mode
 //
-// THESE INHERIT THE SAME NAMED LIMIT AS F1-F14: NO STANDING GATE IN THIS REPOSITORY RUNS
-// THIS FILE (see the header). Wiring it into one is a separate board row with its own
-// acceptance and was explicitly out of SP-131's scope. What IS on the floor is
-// client/tests/CcpClient.Tests/CitationNeedleTests.cs, which pins the exit contract of BOTH
-// modes, the coverage block, and every needle resolving at exactly one line in the FROZEN
-// baseline snapshot — but not the mechanism below, which is why the mechanism is fixtured
-// here and why that gap is stated rather than implied away.
+// THESE ARE THE CLASSIFICATION HALF, AND SP-133 IS WHAT PUT THEM ON THE FLOOR: until then
+// no standing gate ran this file, so their green held only as of the last hand-run.
+// client/tests/CcpClient.Tests/CitationNeedleTests.cs pins the exit contract of BOTH modes,
+// the coverage block, and every needle resolving at exactly one line in the FROZEN baseline
+// snapshot — but NOT the mechanism below (moved / gone / ambiguous / out-of-range and the
+// coverage arithmetic). That mechanism is fixtured here and gated by
+// CitationSelfTestGateTests, which reds the unit suite when any fact below fails.
 //
 // Every fixture is a temp-dir repository, exactly as F1-F14. Nothing here reads the real
 // inventory, the real WPF tree or the real port sources.
