@@ -247,16 +247,16 @@ observed totals are **2463 unit / 144 headless**. I will not open `client/tests/
    of the corpus to seed. They cannot be seeded here.** `IntakeHostContext.cs` is a **port** file
    (`client/src/CcpClient.Desktop/Features/Intake/IntakeHostContext.cs`); there is no such file in
    `ConditioningControlPanel/`. `upstream-citation-inventory.json` is keyed on WPF paths only, and
-   the detector's whole universe is `ConditioningControlPanel/**` (`detect.mjs:386-390`,
-   `:406-410`). The surviving citation of it, `PersistenceStore.cs:204` -> `IntakeHostContext.cs:212-214`,
+   the detector's whole universe is `ConditioningControlPanel/**` (`detect.mjs:463-467`,
+   `:482-487`). The surviving citation of it, `PersistenceStore.cs:204` -> `IntakeHostContext.cs:212-214`,
    is a port file citing a port file. **Resolution:** seed the `IntakeHostService.cs` half (nine
    needles covering all seven rotted citations' subjects), and record the port-internal half as a
    divergence naming the exact structural reason plus where that class already lives (SP-129's §10.5
    port-anchor table). I will not widen the inventory's key space to port paths. **CORRECTED after
    the plan gate — the conclusion holds, the mechanism was misstated.** For a port path that
-   *exists*, the UNRESOLVED loop skips it at `detect.mjs:509`; the spurious row would be
-   `CITATION-GONE` (`:580-593`), plus `DELTA-MISMATCH` on any entry carrying `changedAtSync`, because
-   numstat is scoped `-- ConditioningControlPanel/` at `:319`.
+   *exists*, the UNRESOLVED loop skips it at `detect.mjs:586`; the spurious row would be
+   `CITATION-GONE` (`:653-670`), plus `DELTA-MISMATCH` on any entry carrying `changedAtSync`, because
+   numstat is scoped `-- ConditioningControlPanel/` at `:396`.
 2. **The packet says SP-129's table is `key | path | line | needle` and tells me to store a needle
    and NOT a line.** Both are true and they are not in conflict once the endpoints are derived; §2
    records exactly which half I took and which I dropped.
@@ -264,7 +264,7 @@ observed totals are **2463 unit / 144 headless**. I will not open `client/tests/
    missing `src:src/CcpClient.Desktop/Features/Progression/GradedRunAwards.cs`,
    `docs:trainer-card-census.md` and `docs:wpf-surface-reachability.md`, which all cite it today.
    **CORRECTED after the plan gate: the existing detector does NOT class that as `NEW-CITATION`, or
-   as anything at all.** `detect.mjs:564-574` skips any path already in `entryByPath`, and no class
+   as anything at all.** `detect.mjs:640-651` skips any path already in `entryByPath`, and no class
    in `runDetector` diffs an existing entry's citer list — the recorded `citedBy` is only copied into
    rows for display. **A stale `citedBy` on an entry that still exists is invisible to all six
    classes.** The resolution is unchanged and is scope-correct either way — regenerating the

@@ -149,7 +149,19 @@
 //     records as rotted are of this form (enumerated at 3c38c3973; D232 and the repaired
 //     comment at IntakeQuizRun.cs:136-137 both say seven, and both are wrong — see D264).
 //     The COUNT of bare references is re-derived and printed on every run, in both modes.
-//   - It does not re-derive an entry's `citedBy`. NEW-CITATION (:564-574) skips any path
+//   - IT DOES NOT SEE CITATIONS INTO THE PORT'S OWN TOOLING, in either mode, and this packet
+//     proved it the hard way. CITATION_WITH_LINE matches only `.cs` and `.xaml`, and the corpus
+//     is client/src/** plus client/docs/** and nothing else. So a citation into client/tools/**,
+//     and ANY citation into a .mjs file, is invisible to all six default classes and to all four
+//     needle classes. SP-131's own citations INTO THIS FILE rotted inside it: six of them, all
+//     correct at e3aee3e21 and all invalidated by SP-131's own commit a70371e21, which inserted
+//     this header without re-deriving them. A human reviewer caught them; the tool could not,
+//     because the tool cannot see itself.
+//     THE SAME FACT, SEEN FROM THE OTHER SIDE, AND IT IS ONE PROPERTY AND NOT TWO: it is exactly
+//     why editing this header, or spine-tasks/**, can never move the coverage counts — which is
+//     what makes those counts a stable fixed point. A reader told only the reassuring half has
+//     been told half a fact. See D260's seventh blind spot.
+//   - It does not re-derive an entry's `citedBy`. NEW-CITATION (:640-651) skips any path
 //     already in the inventory, and no class anywhere in runDetector diffs an existing
 //     entry's citer list — the recorded citedBy is only copied into rows for display. A
 //     citation ADDED to a file the inventory already carries is therefore invisible to all
@@ -755,7 +767,7 @@ const NEEDLE_CLASS_ORDER = [
 
 /** A FILE-QUALIFIED citation carrying an explicit line span: `Name.cs:426`, `Name.cs:427-429`,
  *  with or without a path prefix. The FILE half is character-for-character CITATION_TOKEN's own
- *  pattern (:171) and not a second, drifting copy of it — the two must agree about what a
+ *  pattern (:248) and not a second, drifting copy of it — the two must agree about what a
  *  citation token is, or the needle mode would resolve names the default mode cannot. */
 const CITATION_WITH_LINE = /([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:cs|xaml)\b):(\d+)(?:-(\d+))?/g;
 
@@ -826,7 +838,7 @@ export function runNeedleReview({ repoRoot, since, inventoryPath } = {}) {
   verifyEndpoint(root, endpoint, "comparison endpoint");
 
   // Resolve citation tokens against the SHIPPING universe only, by the same rule and the same
-  // index the default mode uses (:406-410): an ambiguous basename picks nothing.
+  // index the default mode uses (:482-487): an ambiguous basename picks nothing.
   const isWpfSource = (name) => /\.(?:cs|xaml)$/i.test(name);
   const shippingUniverse = walkFiles(wpfRoot, isWpfSource)
     .map((p) => p.slice(root.length + 1))
@@ -1049,9 +1061,13 @@ export function formatNeedleCoverage(coverage) {
     // is the next thing to go stale silently.
     `  bare :NNN continuations: ${citations.bare} in the port — NOT CHECKED, in either mode. ` +
       `A bare reference names no file, and the nearest-preceding-citation-token heuristic was ` +
-      `measured and rejected (this file's header carries the measurement and its SHA). LARGEST gap.`,
+      `measured and rejected (this file's header carries the measurement and its SHA). LARGEST gap:`,
+    "    FIVE of the SEVEN citations that motivated this mode — D232's rotted corpus, the reason it",
+    "    exists — are of that form, so the mode cannot reach them. It reaches the other two.",
     "  also not checked: a citation that was wrong the day it was written (no needle knows what a",
-    "  citation intended), and an entry's citedBy, which no class re-derives once the entry exists.",
+    "  citation intended); an entry's citedBy, which no class re-derives once the entry exists; and",
+    "  any citation into client/tools/** or into a .mjs file, which is outside the corpus entirely —",
+    "  SP-131's own citations into detect.mjs rotted inside it, unseen by this tool.",
   ].join("\n");
 }
 

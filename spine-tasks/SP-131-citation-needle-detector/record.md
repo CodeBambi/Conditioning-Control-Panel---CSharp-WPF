@@ -87,7 +87,7 @@ Measured at `474e9a803` from `node client/tools/citations/detect.mjs --needles`:
 | file-qualified citations with a line | **3534** in the port, **49** into the needled path — **23** confirmed, **26** uncovered, **0** out of range |
 | bare `:NNN` continuations | **2285** — NOT CHECKED, in either mode |
 
-**Six enumerated blind spots**, each printed or stated, none generalised from a sample:
+**Seven enumerated blind spots**, each printed or stated, none generalised from a sample. The seventh was found by the code reviewer, not by me:
 
 1. **Bare `:NNN` continuations are never resolved to a file.** The nearest-preceding-citation-token
    heuristic was measured at `e3aee3e21` and rejected: it credits **200** of them to
@@ -99,11 +99,23 @@ Measured at `474e9a803` from `node client/tools/citations/detect.mjs --needles`:
 3. A citation **wrong the day it was written** cannot be caught — four of D232's seven were.
 4. **No per-citation verdict** is ever issued (the cut class).
 5. **Port-internal citations** are outside the inventory's key space (D263).
-6. **An entry's `citedBy` is never re-derived.** `detect.mjs:564-574` skips any path already in the
+6. **An entry's `citedBy` is never re-derived.** `detect.mjs:640-651` skips any path already in the
    inventory and no class diffs an existing entry's citer list, so a citation ADDED to a known file is
    invisible to all six default classes. Measured instance: the `IntakeHostService.cs` entry's
    `citedBy` omits `GradedRunAwards.cs`, `trainer-card-census.md` and `wpf-surface-reachability.md`,
    all of which cite it. Recorded, not repaired.
+7. **The tool cannot see citations into the port's own TOOLING.** `CITATION_WITH_LINE`
+   (`detect.mjs:772`) matches only `.cs` and `.xaml`, and the corpus is `client/src/**` plus
+   `client/docs/**` (`:493-494` default mode, `:852-853` needle mode). A citation into
+   `client/tools/**`, or any citation into a `.mjs` file, is invisible to all six default classes
+   and to all four needle classes. **Found by the code reviewer, not by me, and proved by this
+   packet's own diff** — see the section below.
+
+**The fixed point is robust for a reason worth naming, and it is the same fact as blind spot 7.**
+`client/tools/**` and `spine-tasks/**` are outside the corpus, so editing `detect.mjs`'s header or
+this record can never move the counts. That is the reassuring half. The other half is that the tool
+therefore cannot see a citation rot inside its own tooling — and one did, in this packet. A reader
+told only the first half has been told half a fact.
 
 **The coverage figures include these very rows.** Measured before the divergences were written the
 same run reported 3526/46/22/24/2255; the difference is D261, D262 and D264, which quote citations
@@ -230,6 +242,17 @@ of this tool is evidence about **nine subjects in one file**, and nothing else.
 **The mode compares a needle's POSITION, not its meaning.** It cannot tell that a citation points at
 the wrong thing, only that the thing it was pointed at has moved. A citation wrong from birth stays
 invisible.
+
+## The sharpest argument for the next packet
+
+Twice in this packet my own writing entered the corpus I was measuring. The first time — the
+divergence rows moving the citation counts — I caught it and converged to a fixed point. The second
+time — this header shifting the very lines my rows cite — I did not, and a reviewer had to.
+**The difference is that I had a mechanism watching the counts and none watching the citations, and
+the reason I had none is blind spot 7: the tool I built would have caught this if it could see
+itself.** Extending the corpus to `client/tools/**` and the token class to `.mjs` is a small change
+to `CITATION_WITH_LINE` and two `walkFiles` calls, and it is the highest-value next step this packet
+can point at. It is a board row, not a silent widening, so it is named here and not done here.
 
 ## Stamping note
 
