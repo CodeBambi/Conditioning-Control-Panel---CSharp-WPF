@@ -13,7 +13,7 @@ namespace CcpClient.Desktop.Features.Goon;
 /// <para><b>THE TRAP THIS FILE IS THE ANSWER TO.</b> The page already refuses these four — and
 /// every one of its sentences is FALSE in this build. Opened, verbatim:
 /// <c>ui/strings.js:41</c> <i>"hosting is a supporter perk"</i> (the dimmed Host item,
-/// <c>ui/screens/title.js:71-84</c>); <c>ui/sheets.js:120-170</c> maps every reachable Join
+/// <c>ui/screens/title.js:71-84</c>); <c>ui/sheets.js:116-170</c> maps every reachable Join
 /// failure to <i>"could not reach the server / check your connection"</i>, <i>"warming up …
 /// try again in a minute"</i> or <i>"signed out"</i>; <c>ui/strings.js:731</c>
 /// (<c>S.voice.screenNoPerk</c>, appended by <c>ui/screens/voice.js:138-140</c> when
@@ -93,7 +93,7 @@ public static class GoonDoors
             + "reach another player's machine. Joining is free upstream; here it is absent.",
             "goon-game-census.md §6.1 / wpf-surface-reachability.md D243 — one owner decision "
             + "covers both doors.",
-            "The page can only report a network, server or account fault (ui/sheets.js:120-170) "
+            "The page can only report a network, server or account fault (ui/sheets.js:116-170) "
             + "— \"could not reach the server\", \"warming up\", \"signed out\". All three blame "
             + "something that exists; nothing here does."),
         new GoonDoorRefusal(
@@ -102,8 +102,11 @@ public static class GoonDoors
             "Recording one opens a microphone. This build opens no capture device of any kind "
             + "and grants no microphone permission to the page (the shipping app grants it "
             + "unprompted; this host does not).",
-            "goon-game-census.md §6.3 / wpf-surface-reachability.md D244 — the microphone sits "
-            + "against an open question in capability-inventory.md:69.",
+            "goon-game-census.md §6.3 / wpf-surface-reachability.md D244. capability-inventory.md:69 "
+            + "ends \"Audio capture is never opened.\" — a PROHIBITION, not an open question; what is "
+            + "undecided is only its scope, because it sits inside 'Webcam, face, and gaze tracking' "
+            + "(:66) in a bullet about frames and biometric derivatives. Either way :70 gates a "
+            + "microphone as expanding sensors, which needs owner review.",
             "The voice screen says \"sending your voice to an opponent is a supporter perk\" "
             + "(ui/strings.js:731 via ui/screens/voice.js:138-140). Upstream gates only the "
             + "SENDING; here the whole feature is absent."),

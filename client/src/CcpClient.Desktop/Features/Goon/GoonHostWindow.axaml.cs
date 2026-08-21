@@ -510,7 +510,7 @@ public partial class GoonHostWindow : Window
             + "received is an empty frame-shape stub — this build has no media channel to fill it)");
 
         SendToPage(GoonProtocol.BuildFullscreen(WindowState == WindowState.FullScreen));
-        SetStatus("goon: init + manifest sent — practice is playable; four doors refuse (see the rail)");
+        SetStatus("goon: init + manifest sent — practice is ready; four doors refuse (see the rail)");
     }
 
     /// <summary>Upstream's own fallback when no display name is set

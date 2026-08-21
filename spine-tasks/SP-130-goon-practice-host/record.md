@@ -23,8 +23,8 @@ and the row lines below are the corrected ones).
 
 ### Page -> host — 9 handled
 
-`ready` (`:42`, sent at `bridge.js:106`), `log` (`:42`, `bridge.js:97-101`), `heartbeat` (`:43`,
-`boot.js:2604-2614` — `paint` is OMITTED not zeroed at `:2606-2610`, and is nullable here for that
+`ready` (`:42`, sent at `bridge.js:106`), `log` (`:42`, `bridge.js:98-102`), `heartbeat` (`:43`,
+`boot.js:2605-2612` — `paint` is OMITTED not zeroed at `:2606-2610`, and is nullable here for that
 reason), `pong` (`:43`, `boot.js:377`), `boot-error` (`:43`, `bridge.js:109`), `fullscreen-set`
 (`:43`, `boot.js:2508-2511`), `exit` (`:44`, `boot.js:2448`), `exit-done` (`:44`, `boot.js:2464`),
 `net-post` (`:47`, `bridge.js:169-179`).
@@ -43,12 +43,12 @@ typed out-of-vocabulary outcome, logged by name and never acted on.
 
 Upstream reads them off `ConsentSheetMsg` — *"the engine's own defaults, never a fork"* (`:310`) —
 so the port transcribes three constants and ports none of `GoonContracts.cs`. The page's own
-standalone frame sends `toyCap: 0` (`bridge.js:474`); the HOST's value is 0.7 and this is a host.
+standalone frame sends `toyCap: 0` (`bridge.js:445`); the HOST's value is 0.7 and this is a host.
 
 ## 3. How each of the four doors refuses
 
 The page already refuses all four **and every one of its sentences is false in this build**:
-`ui/strings.js:41` ("hosting is a supporter perk"), `ui/sheets.js:120-170` (network / warming-up /
+`ui/strings.js:41` ("hosting is a supporter perk"), `ui/sheets.js:116-170` (network / warming-up /
 signed-out), `ui/strings.js:731` via `ui/screens/voice.js:138-140` ("sending your voice … is a
 supporter perk"), `ui/strings.js:751-752` via `ui/screens/assets.js:83` ("running in a plain
 browser"). There is no host->page route for a true sentence: `ui/sheets.js:164-170`'s `detail` slot

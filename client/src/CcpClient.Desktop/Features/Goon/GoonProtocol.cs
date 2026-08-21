@@ -20,8 +20,9 @@ namespace CcpClient.Desktop.Features.Goon;
 ///
 /// <para><b>1 OUT, TYPED BUT NEVER EMITTED:</b> <c>ping</c> (<c>:32</c>). The page answers it
 /// with <c>pong</c> (<c>boot.js:377</c>), but this host ships no paint-stall watchdog prod
-/// (upstream's is <c>GoonHostService.cs:74-80</c>). Classified rather than silently absent —
-/// the <see cref="Intake.IntakeProtocol"/> authoring discipline.</para>
+/// (upstream posts one at <c>GoonHostService.cs:1540</c>, off the paint-stall rule whose
+/// constants are at <c>:74-80</c>). Classified rather than silently absent — the
+/// <see cref="Intake.IntakeProtocol"/> authoring discipline.</para>
 ///
 /// <para><b>1 OUT, THE REFUSAL:</b> <c>net-post-result {id,status,body}</c> (<c>:34</c>).
 /// Upstream proxies the page's server calls; <b>this host refuses them in-process</b>. See
@@ -29,9 +30,9 @@ namespace CcpClient.Desktop.Features.Goon;
 /// point, not a convenience.</para>
 ///
 /// <para><b>9 IN (page→host):</b> <c>ready</c> (<c>:42</c>; sent at <c>bridge.js:106</c>),
-/// <c>log</c> (<c>:42</c>; <c>bridge.js:97-101</c>), <c>heartbeat {t,paint,vis}</c> and
+/// <c>log</c> (<c>:42</c>; <c>bridge.js:98-102</c>), <c>heartbeat {t,paint,vis}</c> and
 /// <c>pong</c> and <c>boot-error</c> and <c>fullscreen-set</c> (<c>:43</c>;
-/// <c>boot.js:2604-2614</c>, <c>:377</c>, <c>bridge.js:109</c>, <c>boot.js:2508-2511</c>),
+/// <c>boot.js:2605-2612</c>, <c>:377</c>, <c>bridge.js:109</c>, <c>boot.js:2508-2511</c>),
 /// <c>exit</c> / <c>exit-done</c> (<c>:44</c>; <c>boot.js:2448</c>, <c>:2464</c>), and
 /// <c>net-post {id,path,body}</c> (<c>:47</c>; <c>bridge.js:169-179</c>).</para>
 ///
@@ -111,7 +112,7 @@ public static class GoonProtocol
     /// D257.</item>
     /// <item><c>identity.unifiedId</c> empty (upstream <c>App.UnifiedUserId ?? ""</c> at
     /// <c>:317</c>): there is no account. The page reads <c>anonymous</c> with <c>=== true</c>
-    /// (<c>boot.js:333</c>), so an absent field is correctly NOT anonymous — a host has an
+    /// (<c>boot.js:335</c>), so an absent field is correctly NOT anonymous — a host has an
     /// account upstream, and this one has no accounts at all.</item>
     /// </list>
     /// </summary>
@@ -214,7 +215,7 @@ public static class GoonProtocol
     /// <para><b>The status is deliberately not shopped for.</b> No page-rendered status tells
     /// the truth here — <c>0</c> gives "could not reach the server", <c>404</c> gives "warming
     /// up", <c>403 no_host_access</c> gives "hosting is a supporter perk"
-    /// (<c>ui/sheets.js:120-170</c>) — and there is no host-supplied free-text slot
+    /// (<c>ui/sheets.js:116-170</c>) — and there is no host-supplied free-text slot
     /// (<c>lastErrorDetail</c> is written only for HTTP 402, <c>net/signaling.js:542</c>). That
     /// is precisely why the true sentence lives in host chrome. <c>501</c> is used because it is
     /// the honest HTTP word for "this build does not implement it", and the refusal's own
@@ -251,7 +252,7 @@ public static class GoonProtocol
 
         /// <summary><c>GoonContracts.cs:297</c> — <c>ToyCap = 0.7</c>, "can only LOWER the
         /// receiver's own cap", reaching the frame at <c>GoonHostService.cs:344</c>. (The page's
-        /// standalone frame sends 0 at <c>bridge.js:474</c>; the HOST's value is 0.7 and this is
+        /// standalone frame sends 0 at <c>bridge.js:445</c>; the HOST's value is 0.7 and this is
         /// a host.)</summary>
         public const double ToyCap = 0.7;
 
@@ -270,7 +271,7 @@ public static class GoonProtocol
         /// <summary>Boot completed; the host flushes init + manifest (<c>bridge.js:106</c>).</summary>
         public sealed record Ready(int Protocol) : GoonPageMessage;
 
-        /// <summary>Tunnelled page log, 400-char clamped page-side (<c>bridge.js:97-101</c>).</summary>
+        /// <summary>Tunnelled page log, 400-char clamped page-side (<c>bridge.js:98-102</c>).</summary>
         public sealed record Log(string? Msg) : GoonPageMessage;
 
         /// <summary><c>{t, paint?, vis}</c> — <c>paint</c> is OMITTED, not zeroed, on a host
