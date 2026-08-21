@@ -107,7 +107,7 @@ public class PersistenceStoreTests
 
     /// <summary>
     /// Stop is not a flush: it performs no I/O even with unsaved state. This is why callers
-    /// that need the final write call <c>FlushAsync</c> first (IntakeHostContext.cs:126-127)
+    /// that need the final write call <c>FlushAsync</c> first (IntakeHostContext.cs:212-214)
     /// and why the save-slot erase path deliberately does not.
     /// </summary>
     [Fact]

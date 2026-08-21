@@ -18,7 +18,7 @@ from the bytes are named in §7.
 | What | Where, opened | Exact bytes |
 |---|---|---|
 | The constant | `ConditioningControlPanel/Services/Quiz/IntakeHostService.cs:55` | `private const double TopMarksPercent = 90.0;` |
-| Why not 100 | `IntakeHostService.cs:49-54` | *"Deliberately NOT full marks and deliberately the same 90 the classic quiz used … a banded descent scores partly on pacing, so 100% is not a thing a real run reaches"* |
+| Why not 100 | `IntakeHostService.cs:49-53` | *"Deliberately NOT full marks and deliberately the same 90 the classic quiz used … a banded descent scores partly on pacing, so 100% is not a thing a real run reaches"* |
 | The grade | `IntakeHostService.cs:426` | `var pct = run.MaxScore > 0 ? run.TotalScore / run.MaxScore * 100.0 : 0.0;` |
 | The predicate | `IntakeHostService.cs:434` | `perfect: run.MaxScore > 0 && pct >= TopMarksPercent,` |
 | The award | `Services/GamificationBridge.cs:598`, `:600` | `if (e.Perfect)` → `Ach?.TryUnlockExclusive("top_of_the_class");` — **unconditional inside the perfect branch**, no category test |
@@ -52,7 +52,7 @@ behaviour:
    run in an already-recorded category short-circuits here and never reaches the count. This is
    not incidental: with `Add` returning false the third clause is not evaluated at all.
 3. `set.Count >= 3` — `≥`, so a fourth distinct category also satisfies it (and
-   `TryUnlockExclusive` is idempotent, `AchievementService.cs:1114`).
+   `TryUnlockExclusive` is idempotent, `AchievementService.cs:1115`).
 
 ### 1.3 `held_back` — deliberately fail-streak-only, and therefore NOT BUILT here
 
@@ -61,7 +61,7 @@ behaviour:
 | The constant | `Services/GamificationBridge.cs:42` | `private const int HeldBackFailStreak = 3;             // "fail 3 in a row" (classic quiz only)` |
 | The counter + award | `GamificationBridge.cs:592-595` | `p.QuizFailStreak++;` → `if (p.QuizFailStreak >= HeldBackFailStreak)` → `Ach?.TryUnlockExclusive("held_back");` |
 | The deliberateness, first site | `GamificationBridge.cs:574-575` | *"still fail-streak only. An intake has no fail state, so this can only ever come from the classic quiz. Left as-is deliberately (product decision)."* |
-| The deliberateness, second site | `Services/Quiz/IntakeHostService.cs:419-421` | *"held\_back is deliberately left unwired (product decision): an intake has no fail state to be held back by, so `passed` is always true here and the bridge's fail streak is never incremented from this path."* |
+| The deliberateness, second site | `Services/Quiz/IntakeHostService.cs:418-420` | *"held\_back is deliberately left unwired (product decision): an intake has no fail state to be held back by, so `passed` is always true here and the bridge's fail streak is never incremented from this path."* |
 | The producer that proves it | `IntakeHostService.cs:433` | the literal `passed: true,` |
 
 **Arithmetic:** `held_back ⇔ (consecutive runs with passed == false) ≥ 3`, and the streak resets
@@ -162,7 +162,7 @@ banners, no leaderboard, no fail streak, no pass counter.
 ### 3.1 The one residue member the award path genuinely needs — stated as a finding
 
 An award path with nothing to award INTO is a no-op, and upstream's idempotence
-(`AchievementService.cs:1114`, *"if (\_progress.IsUnlocked(id)) return false"*) is unportable
+(`AchievementService.cs:1115`, *"if (\_progress.IsUnlocked(id)) return false"*) is unportable
 without a persisted record of what was awarded. Census §6.1 puts exactly this inside the
 buildable unit: *"an award ledger with `IsUnlocked(id)`/`TryUnlockExclusive(id)` over the existing
 `PersistenceStore<TModel>`"*.
@@ -178,9 +178,9 @@ This is the packet's *"if the award path genuinely needs one, that is a finding 
 ### 3.2 The entitlement question, which the census did not price
 
 **Found by opening the code, not stated anywhere in the packet.** All four graded-run
-achievements are `IsExclusive = true` (`CCP.Core/Models/Achievement.cs:669, 679, 689, 699`), and
+achievements are `IsExclusive = true` (`CCP.Core/Models/Achievement.cs:670, 680, 690, 700`), and
 upstream awards them through `TryUnlockExclusive`, which refuses unless
-`App.Patreon?.HasPremiumAccess == true` (`AchievementService.cs:1107`, gate at `:1116-1121`).
+`App.Patreon?.HasPremiumAccess == true` (`AchievementService.cs:1107`, gate at `:1116-1120`).
 `GamificationBridge.cs:88` labels the whole group *"(patron: …)"*.
 
 The port has **no Patreon authority at all**. `IntakePassService.NoEntitlementSource` answers
@@ -211,7 +211,7 @@ and watch, and the demonstration is recorded in `record.md` with the observed fa
 |---|---|---|
 | G1 | `TopOfTheClass_Awards_OnTheFirstTopMarksRun` | delete the `TryAward(TopOfTheClassId)` call at the head of the perfect branch |
 | G2 | `NotTopMarks_AwardsNothing_AndRecordsNoCategory` | drop the `if (!topMarks) return` guard (upstream `:598`) |
-| G3 | `TopOfTheClass_IsAwardedOnce_AcrossRepeatedTopMarksRuns` | remove the `IsAwarded` pre-check (upstream `AchievementService.cs:1114`) |
+| G3 | `TopOfTheClass_IsAwardedOnce_AcrossRepeatedTopMarksRuns` | remove the `IsAwarded` pre-check (upstream `AchievementService.cs:1115`) |
 | G4 | `HonorRoll_FiresAtTheThirdDistinctCategory_AndNotTheSecond` | `HonorRollCategories` 3 → 2 (and → 4) |
 | G5 | **`HonorRoll_DoesNotFireEarly_WhenProducersDisagreeAboutCase`** — `"sissy"`, `"Sissy"`, `"bambi"` ⇒ 2 distinct, NO award | remove the entry normalisation **or** flip the comparer to `Ordinal` (either alone reds it) |
 | G6 | **`DistinctCategories_StayCaseInsensitive_AcrossThePersistedRoundTrip`** — a `graded_run_awards.json` on disk holding `"Sissy"`, then a perfect `"sissy"` run ⇒ still 1 | **`CategoryComparer` `OrdinalIgnoreCase` → `Ordinal`, with the entry normalisation left fully intact.** This is the comparer-specific pin the packet asks for: the disk value never passes the entry point, so only the comparer can catch it |
@@ -262,25 +262,104 @@ of this packet — it builds the perfect branch whole and leaves the passed bran
 - **D230** — `MarkDirty` → save-on-change.
 - **D231** — the passed branch (`teachers_pet`, `held_back`) left whole, with its cost.
 
-## 7. Discrepancies found so far (census CLOSED — reported, never edited)
+## 7. Citation audit (census CLOSED — reported, never edited)
 
-1. **Census §3 row B10 cites the second held\_back site as `IntakeHostService.cs:418-420`.** The
-   text is at **`:419-421`**; `:418` is a bare `//`. Range shifted by one.
-2. **Census §6.1 sizes the handler as `GamificationBridge.cs:578-611` — 34 lines.** The method's
-   closing brace is `:612`, so the body is `:578-612` (35). Internally consistent with its own
-   range; noted for exactness, not as an error.
-3. **Census §3 row B10 cites the deliberateness comment as `GamificationBridge.cs:574-576`.** The
-   sentence is `:574-575`; `:576` is `/// </list>`. Same one-line range-end shape.
-4. **Everything else I re-derived matched**: `:40`, `:41`, `:42`, `:55`, `:426`, `:427-429`,
-   `:434`, `:540`, `:169`, `:29`, `:32-35`, `:566-567`, `:571`, `:572-573`, `:578`, `:598`,
-   `:600`, `:602-603`, `:605`, `:609`, `:71-74`. **No wrong citation found in the census.**
-5. **Two stale citations in the PORT's own source, both pointing at `IntakeHostContext.cs:126-127`
-   for a "FlushAsync before StopAsync" that today lives at `:172-175`** —
-   `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs:204` and
-   `client/tests/CcpClient.Tests/PersistenceStoreTests.cs:110`. Already wrong at `71ab1bac2`,
-   independently of this packet; my change moves the target further. **Reported, not fixed** —
-   neither is the award path, and a drive-by comment repair in another packet's subsystem is
-   scope drift. This is the D223 class inside the port's own tree.
+**Corrected at the plan gate. My first draft of this section accused the census of a
+one-line error at `IntakeHostService.cs:418-420` and the accusation was WRONG — mine was the
+wrong citation, not the census's.** Re-derived with `awk` on the numbered bytes: `:418` is
+`// held_back is deliberately left unwired (product decision): an intake has no`, `:419-420`
+finish the sentence, `:421` is the bare `//`. `trainer-card-census.md:180`'s `:418-420` is
+**exact**. The claim is corrected in §1.3 as well as here, so nothing downstream inherits it.
+
+That mistake was inherited rather than invented, and finding its source is item 2.
+
+### 7.1 The census re-derives cleanly — 22 of 22
+
+`:40`, `:41`, `:42`, `:55`, `:169`, `:29`, `:32-35`, `:71-74`, `:418-420`, `:426`, `:427-429`,
+`:434`, `:540`, `:566-567`, `:571`, `:572-573`, `:578`, `:598`, `:600`, `:602-603`, `:605`,
+`:609`. **No wrong citation found in `trainer-card-census.md`, including the one I accused.**
+
+Two ranges are over-inclusive by exactly one line at the tail and neither is an error:
+§6.1's `GamificationBridge.cs:578-611` stops one short of the method's closing brace at `:612`
+(34 lines by its own range), and B10's `:574-576` includes `/// </list>` after the sentence at
+`:574-575`. Both are defensible range choices, recorded for exactness only.
+
+### 7.2 THE REAL DEFECT: seven stale citations inside `IntakeGraded` — the class this packet builds on
+
+`client/src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs:123-159`. Its class header fixes
+the base file as `IntakeHostService.cs`, so every bare `:NNN` below resolves against it. Each
+target re-derived at `71ab1bac2`:
+
+I extracted SP-058's own stated baseline (`git show 0c9947a6:…IntakeHostService.cs`) and read the
+numbered bytes THERE too, so each citation is classified by whether it drifted or was born wrong:
+
+| Port line | Cites | Claims it is | At `0c9947a6` that is | Today | Class |
+|---|---|---|---|---|---|
+| `:127` | `:406-422` | the `RaiseQuizCompleted` block | `:406-411` is the **held\_back comment**; the emit is `:419-423` | `:431-435` | **BORN WRONG** (range head lands in the wrong block) + stale |
+| `:128` | `:435-441` | the mantra loop | contains the loop (`:439-441`) plus 4 lines of comment above it | `:451-453` | drifted |
+| `:136` | `:45-53` | the `TopMarksPercent` rationale | `:45-51` summary, `:52` const, `:53` blank | `:48-55` | drifted |
+| `:141` | `:414` | the grade | `:414` **IS** `var pct = …` | `:426` | **was exact**, drifted by 12 |
+| `:145` | `:417` | the perfect guard | `: run.Niche.Trim().ToLowerInvariant();` — the guard is `:422` | `:434` | **BORN WRONG by 5** (D223) + stale |
+| `:150` | `:418-420` | the category normalisation | `:418` blank, `:419-420` the raise call — normalisation is `:415-417` | `:427-429` | **BORN WRONG by 3** (D223) + stale, **and actively misleading today** |
+| `:156` | `:437-438` | the mantra credit | the two COMMENT lines above it — the credit is `:439` | `:451` | **BORN WRONG** (points at prose, not code) + stale |
+
+**A finding beyond D223, which recorded two.** There are **four** born-wrong citations in this
+block, not two: the census caught `:145` and `:150`; `:127` and `:156` were not examined by it
+(census §4.1 checked three comments, not seven). Three more merely drifted. So the block is
+**7 of 7 wrong today, 4 of 7 wrong the day it was written.**
+
+`:150` is the one that costs. Follow it today and you land on the `held_back` comment —
+semantically the OPPOSITE of what the port comment says sits there. That is where my `:419-421`
+came from: I reasoned from a port comment that pointed at the wrong block and shifted the real
+one by a line to make room for it. **A wrong citation propagated into a new packet within one
+reading.** This is the exact SP-127/D223 class, and it reproduced itself in front of me.
+
+**Cause, verified rather than assumed:** `git log 0c9947a6..HEAD -- Services/Quiz/IntakeHostService.cs`
+returns **exactly one commit** — `f7b4c317c` *"feat(media): remote media app-wide - Scrolller as
+an asset source beyond FYP"*, `+106/-1` on that file. SP-058's baseline was `0c9947a6` (v6.7.4),
+so one unrelated upstream commit invalidated the whole block at once.
+
+**Disposition: REPAIR all seven.** `Features/Intake/**` is in this packet's May-change list; the
+census guard's only port-side pin is the verbatim normalisation EXPRESSION
+(`trainer-card-census.md` §9.4, `port-normalisation-matches`), not these comments, so repairing
+them cannot move the closed guard. Repaired in the same commit as the award path, and recorded in
+`record.md` with this table.
+
+### 7.3 Same drift, same method: the completion-loop citations I am editing through
+
+`IntakeHostWindow.axaml.cs`'s `OnQuizResult` block carries the same block shift. Re-derived:
+
+| Port line | Cites | Today, re-derived |
+|---|---|---|
+| `:504` section header | the completion loop `:373-508` | `OnQuizResult` is `:393-568` |
+| `:508` order-pinned | XP `:389-397` | `:443-446` |
+| `:508` order-pinned | spend `:406` | `:465` |
+| `:508` order-pinned | draft `:421-427` | `:478-484` |
+| `:509` order-pinned | punch `:459` | `:519` |
+| `:509` order-pinned | reply `:496`/`:504` | `:556`/`:564` |
+| `:534` | XP formula `:389-397` | `:443-446` |
+| `:538` | `:45-53` const, `:406-422` emit, `:435-441` mantra credit | `:48-55`, `:431-435`, `:451-453` |
+| `:545` | spend `:406` | `:465` |
+| `:549` | draft `:421-427`, sink `:515-528` | `:478-484`, `UniqueSessionPath` `:575-588` |
+| `:559` | reply `:496` | `:556` |
+| `:564` | drafting-failed reply `:504` | `:564` — **the number happens to equal its own line; the target is `:564` upstream too, by coincidence** |
+| `:569` boot contract | `:236-295` | `OnPageReady` was `:237-297` at baseline; `:236-295` maps to **`:239-304`** today (verified: old `:237` → `:240`, old `:295` → `:304`) |
+
+**Repaired, all thirteen.** Twelve are inside the one method this packet edits; `:569` is the
+line immediately after it and its target was re-derived by the same arithmetic, so leaving it
+would be leaving a hole I had already measured. **Bound stated honestly: I did NOT audit the
+transport, protocol or teardown blocks of `IntakeHostWindow.axaml.cs`**, and given the
+single-commit cause above they are likely stale by the same shift. Named in `record.md` as
+remaining debt, not silently absorbed.
+
+### 7.4 Two more, in `Persistence/` — repaired (plan-gate finding 8)
+
+`client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs:204` and
+`client/tests/CcpClient.Tests/PersistenceStoreTests.cs:110` both cite
+`IntakeHostContext.cs:126-127` for a "FlushAsync before StopAsync" that today lives at
+`:172-175`. Already wrong at `71ab1bac2`; **this packet adds a fourth store to that Dispose and
+pushes the target further still.** Both files are in the May-change list, so declining the
+one-line repair would be a choice rather than a scope bar. **Repaired.**
 
 ## 8. What this plan does not promise
 

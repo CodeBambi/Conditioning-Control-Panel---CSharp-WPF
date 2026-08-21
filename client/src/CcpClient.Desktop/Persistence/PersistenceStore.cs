@@ -201,7 +201,7 @@ public sealed class PersistenceStore<TModel> : IBackgroundParticipant where TMod
     ///
     /// This is NOT a flush. A dirty store is not persisted here; callers that need the
     /// final write call <see cref="FlushAsync"/> BEFORE this (contract §11), which is why
-    /// IntakeHostContext.cs:126-127 does and DtrhSaveSlots.DeleteSlot deliberately does not
+    /// IntakeHostContext.cs:212-214 does and DtrhSaveSlots.DeleteSlot deliberately does not
     /// (it is erasing the file). Pinned by <c>PersistenceStoreTests</c> (SP-087).
     /// </remarks>
     public Task StopAsync()

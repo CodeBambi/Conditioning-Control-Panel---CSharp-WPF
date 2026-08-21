@@ -1,4 +1,5 @@
 using CcpClient.Desktop.Features.Dtrh;
+using CcpClient.Desktop.Features.Progression;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
 
@@ -19,8 +20,10 @@ public sealed class IntakeHostContext : IDisposable
         PersistenceStore<IntakeSettingsDocument> settingsStore,
         PersistenceStore<IntakePunchCardDocument> punchStore,
         PersistenceStore<AssetSelectionDocument> assetSelectionStore,
+        PersistenceStore<GradedRunAwardsDocument> awardsStore,
         IntakePassService pass,
         IntakePunchCard punchCard,
+        GradedRunAwards awards,
         DtrhLoom loom,
         IntakeDraftSink draftSink,
         IntakeSaveImageSink saveImageSink,
@@ -31,8 +34,10 @@ public sealed class IntakeHostContext : IDisposable
         SettingsStore = settingsStore;
         PunchStore = punchStore;
         AssetSelectionStore = assetSelectionStore;
+        AwardsStore = awardsStore;
         Pass = pass;
         PunchCard = punchCard;
+        Awards = awards;
         Loom = loom;
         DraftSink = draftSink;
         SaveImageSink = saveImageSink;
@@ -56,9 +61,18 @@ public sealed class IntakeHostContext : IDisposable
     /// Assets-tree row owns the write path) feeding the ONE active-pool definition.</summary>
     public PersistenceStore<AssetSelectionDocument> AssetSelectionStore { get; }
 
+    /// <summary>SP-128: the graded-run award record (`graded_run_awards.json`) — the store the
+    /// award consumer writes through.</summary>
+    public PersistenceStore<GradedRunAwardsDocument> AwardsStore { get; }
+
     public IntakePassService Pass { get; }
 
     public IntakePunchCard PunchCard { get; }
+
+    /// <summary>SP-128: the graded-run award consumer. A completed run's verdict reaches it from
+    /// <c>IntakeHostWindow.OnQuizResult</c> — upstream's <c>GamificationBridge.OnQuizCompleted</c>
+    /// (<c>Services/GamificationBridge.cs:578-609</c>).</summary>
+    public GradedRunAwards Awards { get; }
 
     /// <summary>The SHARED b4 loom store handle (&lt;dataDir&gt;/Spirals — never a second root).</summary>
     public DtrhLoom Loom { get; }
@@ -147,8 +161,23 @@ public sealed class IntakeHostContext : IDisposable
         // one asset_selection.json per install; the DTRH host opens its own reader).
         var assetSelectionStore = Persistence.AssetSelectionStore.Start(host, dataDir, "IntakeAssetSelection");
 
+        // SP-128: the graded-run award record, same shared <dataDir>, same typed-Degraded
+        // handling as the other two. Starting a store only READS, so a launch the pass gate
+        // refuses still writes no file here (the SP-095 rule the subject id obeys).
+        var awardsStore = new PersistenceStore<GradedRunAwardsDocument>(
+            host.Registry.OwnerFor("IntakeGradedRunAwards"),
+            new LogSinkAdapter(host),
+            Path.Combine(dataDir, "graded_run_awards.json"),
+            GradedRunAwardsDocument.CurrentSchemaVersion);
+        awardsStore.StartAsync(System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+        if (awardsStore.LastLoadOutcome is not LoadOutcome.Loaded and not LoadOutcome.Missing)
+        {
+            host.LogDiagnostic($"intake: graded-run awards load → {awardsStore.LastLoadOutcome?.GetType().Name} (typed Degraded — flagged defaults)");
+        }
+
         var pass = new IntakePassService(settingsStore, entitlement, null, host.LogDiagnostic);
         var punchCard = new IntakePunchCard(punchStore, null, host.LogDiagnostic);
+        var awards = new GradedRunAwards(awardsStore, host.LogDiagnostic);
         var loom = new DtrhLoom(participant.SpiralsRoot, host.LogDiagnostic);
         var draftSink = new IntakeDraftSink(participant.DraftedSessionsRoot, host.LogDiagnostic);
         var saveImageSink = new IntakeSaveImageSink(participant.IntakeSpiralsRoot, null, host.LogDiagnostic);
@@ -157,8 +186,8 @@ public sealed class IntakeHostContext : IDisposable
         var subjectIdPath = Path.Combine(dataDir, "intake_subject.txt");
 
         return new IntakeHostContext(
-            participant, settingsStore, punchStore, assetSelectionStore, pass, punchCard, loom, draftSink, saveImageSink,
-            subjectIdPath, host.LogDiagnostic);
+            participant, settingsStore, punchStore, assetSelectionStore, awardsStore, pass, punchCard, awards,
+            loom, draftSink, saveImageSink, subjectIdPath, host.LogDiagnostic);
     }
 
     /// <summary>Bind the loopback origin and take the payload probe (idempotent — the
@@ -166,13 +195,26 @@ public sealed class IntakeHostContext : IDisposable
     /// window opens, never on a refused launch.</summary>
     public void StartTransport() => _payloadProbe = Participant.Start();
 
-    /// <summary>Flush both stores (bounded) and stop the transport (idempotent).</summary>
+    /// <summary>
+    /// Flush the writing stores (bounded) and stop the transport (idempotent). A flush must
+    /// precede its stop — <see cref="PersistenceStore{TModel}.StopAsync"/> is not a flush
+    /// (persistence-migration-contract §11).
+    ///
+    /// <para>SP-128 added the awards store as the THIRD flushed store, reusing the existing
+    /// bounds unchanged (2 s flush inside a 3 s wait, 2 s stop) rather than inventing a new
+    /// timeout shape. Worst case rises from <b>12 s to 17 s</b> before the participant's own
+    /// dispose: three flushes at 3 s and four stops at 2 s. That is a bound, not an
+    /// expectation — every wait here observes an already-completed task unless a write is
+    /// genuinely in flight (SP-073).</para>
+    /// </summary>
     public void Dispose()
     {
         try { SettingsStore.FlushAsync(TimeSpan.FromSeconds(2)).Wait(TimeSpan.FromSeconds(3)); } catch { /* best-effort */ }
         try { PunchStore.FlushAsync(TimeSpan.FromSeconds(2)).Wait(TimeSpan.FromSeconds(3)); } catch { /* best-effort */ }
+        try { AwardsStore.FlushAsync(TimeSpan.FromSeconds(2)).Wait(TimeSpan.FromSeconds(3)); } catch { /* best-effort */ }
         try { SettingsStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { PunchStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
+        try { AwardsStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { AssetSelectionStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { Participant.Dispose(); } catch { /* best-effort */ }
     }

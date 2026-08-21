@@ -15,9 +15,9 @@ namespace CcpClient.Desktop.Features.Intake;
 /// the NativeWebDialog path is NOT ADMITTED for intake (the page's web-shim has no §3.3
 /// inbox transport — a dialog would run the page standalone and silently lose results);
 /// anything else = the honest unsupported surface. Boot contract (IntakeHostService.cs
-/// :236-292 + ChaosWebViewHost Post :242-254): host→page messages queue until the page's
+/// :239-301 + ChaosWebViewHost Post :242-254): host→page messages queue until the page's
 /// `ready`, then init flushes (the shim's preBuffer replays anything early,
-/// web-shim.js:56-62) followed by the fullscreen echo (:~295). Host→page = synthetic
+/// web-shim.js:56-62) followed by the fullscreen echo (:302). Host→page = synthetic
 /// MessageEvent dispatch on window.chrome.webview (SP-011 W4, byte-identical to DTRH).
 ///
 /// Window behaviors: per-instance profile (browser_data_intake parity →
@@ -501,12 +501,17 @@ public partial class IntakeHostWindow : Window
         }
     }
 
-    // ---------- the completion loop (:373-508) ----------
+    // ---------- the completion loop (:393-568) ----------
 
-    /// <summary>quiz-result → XP (computed, never granted) → pass spend → draft (marked
-    /// never-runnable) → punch stamp → session-drafted reply. The window STAYS OPEN.
-    /// Order pinned from the WPF evidence: XP :389-397, spend :406, draft :421-427,
-    /// punch :459, reply :496/:504.</summary>
+    /// <summary>quiz-result → XP (computed, never granted) → graded awards (RECORDED since
+    /// SP-128) → pass spend → draft (marked never-runnable) → punch stamp → session-drafted
+    /// reply. The window STAYS OPEN.
+    /// Order pinned from the WPF evidence: XP :443-446, spend :465, draft :478-484,
+    /// punch :519, reply :556/:564.
+    /// <para>Every bare <c>:NNN</c> in this method resolves against
+    /// <c>Services/Quiz/IntakeHostService.cs</c> and was RE-DERIVED at SP-128 against
+    /// <c>71ab1bac2</c>: the whole block had drifted when <c>f7b4c317c</c> added 106 lines to
+    /// that file, the only commit to touch it since SP-058's baseline <c>0c9947a6</c> (D232).</para></summary>
     private void OnQuizResult(JsonElement raw)
     {
         IntakeQuizRun? run;
@@ -531,22 +536,35 @@ public partial class IntakeHostWindow : Window
         }
 
         // 1. XP — COMPUTED, never granted (no greenfield XP store — typed seam;
-        // IntakeHostService.cs:389-397 formula).
+        // IntakeHostService.cs:443-446 formula).
         var xp = IntakeDraft.ComputeCompletionXp(run);
         _host.LogDiagnostic($"intake: completion XP computed, not granted ({xp}; no XP store — typed seam)");
 
-        // 1b. The graded verdict (SP-058; #870; :45-53 const, :406-422 emit, :435-441 mantra
-        // credit) — COMPUTED, never raised: no greenfield GamificationBridge or quest verifier
-        // (typed seams, the XP-computed-not-granted class). passed is always true (an intake
-        // has no fail state — held_back deliberately unwired upstream too).
-        _host.LogDiagnostic(
-            $"intake: graded verdict — top-marks {IntakeGraded.IsTopMarks(run)} ({IntakeGraded.ScorePercent(run):0.##}% of max; category {IntakeGraded.Category(run)}; mantra credit x{IntakeGraded.MantraCreditCount(run)}) — achievement/quest raises are typed seams (no gamification/quest subsystem)");
+        // 1b. The graded verdict (SP-058; #870; :48-55 const, :431-435 emit, :451-453 mantra
+        // credit) — RECORDED since SP-128. The verdict now reaches the award consumer, which
+        // ports GamificationBridge.cs:598-609: top_of_the_class at the 90% bar and honor_roll
+        // over 3 DISTINCT categories. The MANTRA credit is still a typed seam (no quest
+        // verifier). passed is always true (:433 — an intake has no fail state), so the passed
+        // branch (teachers_pet :588-589, held_back :592-595) is residue this port does not carry.
+        try
+        {
+            var award = IntakeGraded.Record(_context.Awards, run);
+            _host.LogDiagnostic(
+                $"intake: graded verdict — top-marks {IntakeGraded.IsTopMarks(run)} ({IntakeGraded.ScorePercent(run):0.##}% of max; category {award.Category}; {award.DistinctCategories} distinct cleared; mantra credit x{IntakeGraded.MantraCreditCount(run)} — quest raise still a typed seam) — awarded [{string.Join(", ", award.Awarded)}]");
+        }
+        catch (Exception ex)
+        {
+            // GamificationBridge.cs:611 isolates the whole handler for this reason: an award
+            // failure must never cost the user the run's artifact. The spend, the draft and the
+            // punch all follow, and they are what the run was for.
+            _host.LogDiagnostic($"intake: graded award failed ({ex.GetType().Name}) — the run continues (:611)");
+        }
 
-        // 2. The pass spend — HERE and nowhere else (:406; completion-only).
+        // 2. The pass spend — HERE and nowhere else (:465; completion-only).
         _context.Pass.ConsumeForCompletedIntake();
 
         // 3. Draft the session (marked never-runnable — the degraded-delivery contract) and
-        // sink it with collision suffixes (:421-427, :515-528).
+        // sink it with collision suffixes (:478-484, UniqueSessionPath :575-588).
         try
         {
             var draft = IntakeDraft.Generate(run, DateTimeOffset.UtcNow);
@@ -556,17 +574,17 @@ public partial class IntakeHostWindow : Window
             // pends silently — no session engine, the degraded contract).
             _context.PunchCard.EnsureCardStarted();
             _context.PunchCard.NotifyIntakeCompleted(draft.Id);
-            // 5. Reply (:496). The 12s "Run it now" toast is the unfiled session-library row.
+            // 5. Reply (:556). The 12s "Run it now" toast is the unfiled session-library row.
             SendToPage(IntakeProtocol.BuildSessionDrafted(true, draft.Name, path));
         }
         catch (Exception ex)
         {
-            _host.LogDiagnostic($"intake: drafting failed ({ex.GetType().Name}) — session-drafted ok:false (:504); the spend STANDS (the intake completed)");
+            _host.LogDiagnostic($"intake: drafting failed ({ex.GetType().Name}) — session-drafted ok:false (:564); the spend STANDS (the intake completed)");
             SendToPage(IntakeProtocol.BuildSessionDrafted(false, null, null));
         }
     }
 
-    // ---------- boot contract (:236-295) ----------
+    // ---------- boot contract (:239-304) ----------
 
     private void SendBootMessages()
     {

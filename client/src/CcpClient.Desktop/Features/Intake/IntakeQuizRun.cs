@@ -122,39 +122,69 @@ public sealed class IntakeQuizAnswer
 
 /// <summary>
 /// SP-058: the graded-run verdict (#870) — the v6.7.x delta's host obligation, ported as a
-/// COMPUTED verdict + typed seams. Upstream emits <c>QuizService.RaiseQuizCompleted(
+/// COMPUTED verdict. Upstream emits <c>QuizService.RaiseQuizCompleted(
 /// (int)Round(TotalScore), passed: true, perfect: MaxScore > 0 && pct >= TopMarksPercent,
-/// category: niche)</c> to the GamificationBridge (IntakeHostService.cs:406-422) and loops
-/// <c>App.Quests?.TrackMantraCompleted()</c> min(affirmed, 5) times (:435-441). Greenfield has
-/// NO achievement bridge and NO quest verifier — both raises are typed seams (the SP-054
-/// "XP computed, not granted" class), evidenced by the OnQuizResult log line. held_back is
-/// deliberately unwired upstream too (an intake has no fail state; passed is always true).
+/// category: niche)</c> to the GamificationBridge (IntakeHostService.cs:431-435) and loops
+/// <c>App.Quests?.TrackMantraCompleted()</c> min(affirmed, 5) times (:451-453).
+///
+/// <para>SP-128: the achievement half is NO LONGER A SEAM — <see cref="Record"/> feeds the
+/// verdict to <see cref="Progression.GradedRunAwards"/>, which awards <c>top_of_the_class</c>
+/// and <c>honor_roll</c> at upstream's thresholds (GamificationBridge.cs:598-609). The QUEST
+/// half is still a typed seam (no quest verifier in this port), and held_back is deliberately
+/// unwired upstream too (an intake has no fail state; passed is always true — :433).</para>
+///
+/// <para><b>CITATIONS REPAIRED AT SP-128.</b> Every bare <c>:NNN</c> below resolves against
+/// <c>Services/Quiz/IntakeHostService.cs</c>, and all seven were wrong: four were wrong the day
+/// they were written (D223 recorded two of them) and three drifted when <c>f7b4c317c</c>
+/// (<i>"feat(media): remote media app-wide"</i>) added 106 lines to that file — the ONLY commit
+/// to touch it since SP-058's stated baseline <c>0c9947a6</c>. The worst was the category
+/// citation, which pointed at the <c>held_back</c> comment, i.e. the semantic opposite of what
+/// it claimed. Re-derived against the bytes at <c>71ab1bac2</c>; see D232.</para>
 /// </summary>
 public static class IntakeGraded
 {
     /// <summary>"Top marks" bar as a percentage of the run's compliance score
-    /// (IntakeHostService.cs:45-53): deliberately NOT full marks — a banded descent scores
-    /// partly on pacing, so 100% is unreachable and a 100% bar would dead-letter the
-    /// achievements exactly as the collapsed quiz launcher did.</summary>
+    /// (IntakeHostService.cs:48-55 — the rationale at :49-53, the constant at :55):
+    /// deliberately NOT full marks — a banded descent scores partly on pacing, so 100% is
+    /// unreachable and a 100% bar would dead-letter the achievements exactly as the collapsed
+    /// quiz launcher did.</summary>
     public const double TopMarksPercent = 90.0;
 
-    /// <summary>The grade the certificate prints (:414): MaxScore-guarded percentage.</summary>
+    /// <summary>The grade the certificate prints (:426): MaxScore-guarded percentage.</summary>
     public static double ScorePercent(IntakeQuizRun run) =>
         run.MaxScore > 0 ? run.TotalScore / run.MaxScore * 100.0 : 0.0;
 
-    /// <summary>perfect = MaxScore > 0 && pct >= 90.0 (:417 — the guard ported verbatim; a
+    /// <summary>perfect = MaxScore > 0 && pct >= 90.0 (:434 — the guard ported verbatim; a
     /// zero-max run is never top marks).</summary>
     public static bool IsTopMarks(IntakeQuizRun run) =>
         run.MaxScore > 0 && ScorePercent(run) >= TopMarksPercent;
 
-    /// <summary>category = the run's niche, normalized (:418-420 — whitespace → the bambi
+    /// <summary>category = the run's niche, normalized (:427-429 — whitespace → the bambi
     /// fallback, trimmed, lower-invariant) so distinct-niche counting (honor_roll) can never
-    /// split on case or padding.</summary>
+    /// split on case or padding. The award consumer normalises AGAIN, on purpose: this call is
+    /// the producer's and upstream shows why a producer is the wrong place to rely on it
+    /// (GradedRunAwards remarks; D226).</summary>
     public static string Category(IntakeQuizRun run) =>
         string.IsNullOrWhiteSpace(run.Niche) ? IntakeNiche.Fallback : run.Niche.Trim().ToLowerInvariant();
 
-    /// <summary>The mantra-program credit count (:437-438): same min(affirmed, 5) cap as the
-    /// XP formula so endless laps can't farm program days.</summary>
+    /// <summary>The mantra-program credit count (:451, looped at :452-453): same min(affirmed, 5)
+    /// cap as the XP formula so endless laps can't farm program days. Still a typed seam — this
+    /// port has no quest verifier to credit.</summary>
     public static int MantraCreditCount(IntakeQuizRun run) =>
         Math.Min(run.AffirmedMantras?.Count ?? 0, 5);
+
+    /// <summary>
+    /// SP-128: hand this run's verdict to the award consumer — the port's stand-in for
+    /// <c>QuizService.RaiseQuizCompleted</c> (:431-435) reaching
+    /// <c>GamificationBridge.OnQuizCompleted</c> (GamificationBridge.cs:578).
+    ///
+    /// <para>The static event and its event args (<c>QuizService.cs:29</c>, <c>:32-35</c>) are
+    /// NOT ported: a process-wide static event is the mechanism, not the outcome, and this port
+    /// has exactly one producer. The property upstream's comment actually asserts — that the
+    /// handler <i>"reads a grade and a category and does not care which surface produced
+    /// them"</i> (GamificationBridge.cs:566-567) — is preserved in the CONSUMER'S SIGNATURE,
+    /// which takes those two values and nothing else.</para>
+    /// </summary>
+    public static Progression.GradedRunAwardOutcome Record(Progression.GradedRunAwards awards, IntakeQuizRun run) =>
+        awards.RecordGradedRun(IsTopMarks(run), Category(run));
 }
