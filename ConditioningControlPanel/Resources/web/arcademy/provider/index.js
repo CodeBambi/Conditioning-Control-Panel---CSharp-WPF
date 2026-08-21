@@ -131,18 +131,33 @@ export function createAssets(options = {}) {
     return added;
   }
 
-  /** Prewarm: decode-ahead without blocking anything. Silent on failure. */
+  /**
+   * Prewarm: decode-ahead without blocking anything. Silent on failure.
+   *
+   * BOUNDED, and that is load-bearing (0821, Lost & Found's dense-board pass).
+   * A `link rel=preload as=image` is a HIGH-priority fetch: firing one per
+   * manifest entry (a claim can ask for 130+ loops) puts the whole library in
+   * front of the media the player is actually looking at, and for gifs it also
+   * starts decoders the board has no budget for. A short warm queue is the
+   * point of a prewarm; a long one is a stampede that races the visible loads.
+   */
+  const PREWARM_MAX = 12;
   function prewarm(urls) {
     if (typeof document === 'undefined') return;
+    let n = 0;
     for (const url of urls) {
+      if (n >= PREWARM_MAX) break;
       if (!url || prewarmed.has(url)) continue;
       prewarmed.add(url);
+      n += 1;
       try {
         const head = document.head || document.documentElement;
         if (head) {
           const link = document.createElement('link');
           link.rel = 'preload';
           link.as = /\.(mp4|webm|m4v)(\?|#|$)/i.test(url) ? 'video' : 'image';
+          // a warm-up must never outrank what is already on screen
+          try { link.fetchPriority = 'low'; } catch { /* older engines */ }
           link.href = url;
           head.appendChild(link);
           continue;
@@ -177,23 +192,50 @@ export function createAssets(options = {}) {
     // target is never the tile the decoys are drawing from in the same frame
     const localTargets = localStills.slice().reverse();
 
-    prewarm(localLoops.slice(0, Math.max(4, want.loop)).concat(localStills.slice(0, Math.max(4, want.still + want.target))));
+    // A HANDFUL of each kind, not the whole manifest: see prewarm()'s header.
+    // The first draws are what this is for; everything after them is dressed
+    // progressively by the game anyway.
+    prewarm(localLoops.slice(0, Math.min(6, Math.max(4, want.loop)))
+      .concat(localStills.slice(0, Math.min(6, Math.max(4, want.still + want.target)))));
 
     // --- the remote side, if the gate is open ------------------------------
+    // The host's contract is "whatever is buffered NOW, and ask again after
+    // every reply" (ArcademyHostService assets-request header): a single ask on
+    // a cold buffer lands empty, its async batch arrives AFTER the first dress,
+    // and the sibling kind's ask is dropped by the host's single-flight latch.
+    // So each kind keeps asking (bounded, backed off) until its pool covers the
+    // spec or the asks run out - and onUpdate() below lets a game re-dress
+    // placeholder tiles as media actually lands.
+    const RETRY_MS = 1500;
+    const MAX_ASKS = 8;
+    const retryTimers = new Set();
+    const updateCbs = new Set();
+    function notifyUpdate() {
+      for (const fn of [...updateCbs]) { try { fn(); } catch { /* a bad listener never kills the pool */ } }
+    }
+    function askRemote(kind, count, attempt) {
+      if (released || disposed) return;
+      const id = channel.request({
+        kind, count, niches,
+        onBatch: (entries) => {
+          if (released || disposed) return;
+          if (absorbRemote(entries)) {
+            prewarm((remotePools[kind] || []).slice(-4));
+            notifyUpdate();
+          }
+          if ((remotePools[kind] || []).length < count && attempt < MAX_ASKS) {
+            const t = setTimeout(() => { retryTimers.delete(t); askRemote(kind, count, attempt + 1); }, RETRY_MS * Math.max(1, attempt));
+            retryTimers.add(t);
+          }
+        },
+      });
+      if (id) reqIds.push(id);
+    }
     if (!canvasSafe && remoteEnabled && remoteRatio > 0) {
-      const kinds = [];
-      if (want.loop) kinds.push(['loop', Math.min(24, Math.max(4, want.loop))]);
-      if (want.still + want.target) kinds.push(['still', Math.min(24, Math.max(4, want.still + want.target))]);
-      for (const [kind, count] of kinds) {
-        const id = channel.request({
-          kind, count, niches,
-          onBatch: (entries) => {
-            if (released || disposed) return;
-            if (absorbRemote(entries)) prewarm((remotePools[kind] || []).slice(-4));
-          },
-        });
-        if (id) reqIds.push(id);
-      }
+      // The goal per kind may exceed the host's 24-per-reply batch cap - the
+      // ask-again loop tops the pool up across replies, up to REMOTE_CAP.
+      if (want.loop) askRemote('loop', Math.min(REMOTE_CAP, Math.max(4, want.loop)), 1);
+      if (want.still + want.target) askRemote('still', Math.min(REMOTE_CAP, Math.max(4, want.still + want.target)), 1);
     } else if (canvasSafe && remoteEnabled) {
       log('canvasSafe claim: local-only pool (CORS two-pool law)');
     }
@@ -220,7 +262,11 @@ export function createAssets(options = {}) {
         const k = (kind === 'loop' || kind === 'gif') ? 'loop' : (kind === 'target' ? 'target' : 'still');
         if (released) return { url: placeholders[0] || null, remote: false };
         const remoteKind = k === 'target' ? 'still' : k;
-        if (wantRemote(remoteRatio, rng(), (remotePools[remoteKind] || []).length > 0, canvasSafe)) {
+        // The ratio is a MIX dial, not a veto: on the placeholder floor (no real
+        // local media of this kind) there is nothing to mix WITH, so the remote
+        // pool serves every draw it can cover.
+        const bareLocal = !(remoteKind === 'loop' ? localPools.loop.length : localPools.still.length);
+        if (wantRemote(bareLocal ? 1 : remoteRatio, rng(), (remotePools[remoteKind] || []).length > 0, canvasSafe)) {
           const list = remotePools[remoteKind];
           const url = list[Math.floor(rng() * list.length)];
           if (url && (!canvasSafe || isLocalUrl(url))) return { url, remote: true };
@@ -236,10 +282,20 @@ export function createAssets(options = {}) {
           placeholderFloor: !localPools.loop.length && !localPools.still.length,
         };
       },
+      /** Subscribe to "the pool just grew" (a remote batch landed). Returns an
+       *  unsubscribe; every subscription dies with release(). */
+      onUpdate(fn) {
+        if (typeof fn !== 'function' || released) return () => {};
+        updateCbs.add(fn);
+        return () => updateCbs.delete(fn);
+      },
       release() {
         if (released) return;
         released = true;
         reqIds = [];
+        updateCbs.clear();
+        for (const t of retryTimers) clearTimeout(t);
+        retryTimers.clear();
         claims.delete(pool);
       },
     };

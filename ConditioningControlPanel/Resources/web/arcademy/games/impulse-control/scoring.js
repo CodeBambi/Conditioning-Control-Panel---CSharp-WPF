@@ -1,212 +1,137 @@
 /* ============================================================================
- * games/impulse-control/scoring.js - the game-specific inputs to the ONE shared
- * rubric. PURE (no DOM, no store, no engine).
+ * games/impulse-control/scoring.js - THE DROP TUBE's ledger. PURE.
  *
- * The game NEVER grades itself (core/grades.js owns S/A/B/C). What it owns is
- * (a) a weighted composite 0..1 and (b) the dual hard gate, per the dossier's
- * "Grading (S/A/B/C inputs)" section and SYNTHESIS #14:
+ * Points are the in-class currency (the HUD number, the debrief headline, the
+ * flavor XP); the COMPOSITE is what grades.js turns into a letter. Both live
+ * here so a playtest tune is a one-place edit and the harness can prove the
+ * orderings without a DOM.
  *
- *   composite = .4 restraint + .3 speed + .2 lieResistance + .1 goHitRate
- *   sGate     = falseAlarmRate <= .02  AND  speedIndex <= 1.05  AND  cleanErrors == 0
+ * THE SHAPE OF THE GAME (owner spec):
+ *   - a good pop scores by reaction speed - faster is worth more, every
+ *     successful pop is worth SOMETHING (POINTS_FLOOR),
+ *   - clicking the X subtracts a LOT (X_PENALTY) and is the only error,
+ *   - a good bubble that drifts away scores 0 and is NOT an error,
+ *   - a survived X pays a flat restraint bonus.
  *
- * The gate is the brief encoded: speed alone can never buy an S past sloppy
- * restraint, restraint alone can never buy it past hesitation. It is DECLARED on
- * every class (grades.js only counts gates a game declared) so a failed gate caps
- * the letter at A.
+ * BASELINE (carried over from the assessment era, SYNTHESIS #15): the first
+ * class writes the player's median pop time as baselineMs on the per-game meta
+ * store; later classes fold speed against it, so "fast" means fast FOR YOU.
  *
- * BASELINE-RELATIVE SPEED (dossier "Baseline-relative scoring"). speedIndex is
- * session median RT / the player's PERSISTED baseline, so the game is fair on any
- * hardware and yesterday-you is the rival. First class has no persisted baseline:
- * it calibrates against its own baseline block (index ~1) and writes the number
- * to the per-game meta store (SYNTHESIS #15). Later classes decay the stored
- * number toward recent form so the bar tracks the player, not a lucky day.
- *
- * The baseline BLOCK is unscored: its RTs feed calibration only, never composite.
+ * THE DUAL S-GATE survives the rework: S demands an untouched X row AND
+ * genuine speed. Neither axis can buy the other.
  * ==========================================================================*/
 
-export const WEIGHTS = Object.freeze({ restraint: 0.4, speed: 0.3, lieResistance: 0.2, goHit: 0.1 });
+/* ------------------------- the constants block (playtest-tunable) -------- */
+export const RT_FLOOR_MS = 180;       // at or under this: a perfect pop
+export const POINTS_MAX = 100;        // a perfect pop
+export const POINTS_FLOOR = 10;       // any successful pop is worth something
+export const X_PENALTY = 250;         // clicking the X subtracts a LOT
+export const DENIED_BONUS = 40;       // a survived X pays restraint
+export const PERFECT_RT_MS = 260;     // at or under: the PERFECT stamp
+export const FAST_RT_MS = 420;        // at or under: the Quick stamp
 
-/** S-gate thresholds - the dossier's numbers, in one place. */
-export const S_GATE = Object.freeze({ maxFalseAlarmRate: 0.02, maxSpeedIndex: 1.05, maxCleanErrors: 0 });
+export const W_SPEED = 0.45;          // composite weights (sum 1.0)
+export const W_CATCH = 0.25;
+export const W_RESTRAINT = 0.30;
 
-/** Score curves: where a stat stops earning. */
-export const CURVES = Object.freeze({
-  farZero: 0.20,        // false-alarm rate at which the restraint term hits 0
-  speedBest: 0.90,      // speedIndex at or under this = full speed marks
-  speedZero: 1.40,      // speedIndex at or over this = no speed marks
-  latePenalty: 0.5,     // a late press costs half a miss on the goHit term
-});
+export const SGATE_SPEED_MIN = 0.75;  // the speed half of the dual gate
 
-/** Flavor XP (capped-flavor-bonus pattern; the shell caps the total at 15). */
-export const FLAVOR_XP = Object.freeze({ personalBest: 8, zeroFalseAlarms: 7, cap: 15 });
+export const ABS_SPEED_BEST_MS = 320; // no-baseline curve: 1.0 at/below this
+export const ABS_SPEED_WORST_MS = 900; //                   0.0 at/above this
 
-/** Baseline decay: how much a new session moves a stored baseline. */
-export const BASELINE = Object.freeze({
-  minSamples: 4,           // fewer clean RTs than this = do not trust the session
-  freshWeight: 0.25,       // a same-week session moves the baseline this much
-  weeklyWeight: 0.25,      // ...plus this per week of staleness, to 1.0
-  floorMs: 90,             // nobody's honest median is under this
-  ceilMs: 1500,
-});
+export const BASELINE_ALPHA = 0.35;   // fold rate for later classes
+export const FLAVOR_XP_PER_POINT = 1 / 25; // score -> bonus XP (shell caps it)
 
-const clamp01 = (n) => {
-  const v = Number(n);
-  return !Number.isFinite(v) ? 0 : v < 0 ? 0 : v > 1 ? 1 : v;
-};
-const num = (n, d) => (Number.isFinite(Number(n)) ? Number(n) : d);
+/* ----------------------------------------------------------------- helpers */
+export function clamp01(v) {
+  const x = Number(v);
+  if (!isFinite(x)) return 0;
+  return x < 0 ? 0 : x > 1 ? 1 : x;
+}
 
-/** Median of a numeric list (sorted copy; empty -> null). */
 export function median(list) {
-  const a = (Array.isArray(list) ? list : [])
-    .filter((v) => typeof v === 'number' && Number.isFinite(v))
-    .sort((x, y) => x - y);
+  const a = (list || []).filter((v) => isFinite(v)).slice().sort((x, y) => x - y);
   if (!a.length) return null;
-  const m = a.length >> 1;
-  return a.length % 2 ? a[m] : Math.round((a[m - 1] + a[m]) / 2);
+  const mid = a.length >> 1;
+  return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+}
+
+/** Points for one good pop at reaction time rt inside window win. */
+export function popPoints(rtMs, windowMs) {
+  const rt = Math.max(0, Number(rtMs) || 0);
+  const win = Math.max(RT_FLOOR_MS + 1, Number(windowMs) || 1600);
+  const speed = clamp01((win - rt) / (win - RT_FLOOR_MS));
+  return POINTS_FLOOR + Math.round((POINTS_MAX - POINTS_FLOOR) * speed);
+}
+
+/** The stamp a pop earns: 'perfect' | 'fast' | 'ok'. */
+export function popStamp(rtMs) {
+  if (rtMs <= PERFECT_RT_MS) return 'perfect';
+  if (rtMs <= FAST_RT_MS) return 'fast';
+  return 'ok';
 }
 
 /**
- * Aggregate the class's response log into the five dossier inputs.
- * @param {Object} tally  {goCount, hits, misses, lates, nogoCount, commissions,
- *                         isiCommissions, lieErrors, lieTrials, cleanErrors,
- *                         cleanTrials, rts:[]}
- * @param {number|null} baselineMs  the PERSISTED baseline (null on a first class)
- * @param {number|null} sessionBaselineMs  the baseline block's median
+ * Fold a session's median pop into the persisted baseline.
+ * First class establishes; later classes EWMA toward the session (a player
+ * genuinely getting faster drags their own bar down). `force` re-establishes.
  */
-export function metricsFrom(tally, baselineMs, sessionBaselineMs) {
+export function foldBaseline(meta, sessionMedianMs, force) {
+  if (sessionMedianMs == null || !isFinite(sessionMedianMs)) return null;
+  const prev = Number(meta && meta.baselineMs) || 0;
+  if (!prev || force) {
+    return { baselineMs: Math.round(sessionMedianMs), established: true };
+  }
+  const folded = prev * (1 - BASELINE_ALPHA) + sessionMedianMs * BASELINE_ALPHA;
+  return { baselineMs: Math.round(folded), established: false };
+}
+
+/** 0..1 speed index for a session median, baseline-relative when one exists. */
+export function speedIndex(medianRt, baselineMs) {
+  if (medianRt == null || !isFinite(medianRt)) return 0;
+  const base = Number(baselineMs) || 0;
+  if (base > 0) {
+    /* 1.0 at 80% of your baseline, 0.0 at 150% of it. */
+    const hi = base * 0.8, lo = base * 1.5;
+    return clamp01((lo - medianRt) / (lo - hi));
+  }
+  return clamp01((ABS_SPEED_WORST_MS - medianRt) / (ABS_SPEED_WORST_MS - ABS_SPEED_BEST_MS));
+}
+
+/**
+ * The whole ledger for a finished class.
+ * @param {Object} tally {goodShown, popped, drifted, deniedShown, deniedHeld,
+ *                        xClicked, rts:[], score}
+ * @param {Object} meta  persisted per-game meta ({baselineMs?, bestRtMs?})
+ * @returns {{medianRt, bestRt, speed, catchRate, restraint, composite,
+ *            sGate:{ok, reasons:[]}, score, flavorXp}}
+ */
+export function ledger(tally, meta) {
   const t = tally || {};
-  const goCount = Math.max(0, num(t.goCount, 0));
-  const nogoCount = Math.max(0, num(t.nogoCount, 0));
-  const hits = Math.max(0, num(t.hits, 0));
-  const lates = Math.max(0, num(t.lates, 0));
-  const commissions = Math.max(0, num(t.commissions, 0));
-  const isiCommissions = Math.max(0, num(t.isiCommissions, 0));
-  const rts = Array.isArray(t.rts) ? t.rts : [];
-
-  const goHitRate = goCount ? clamp01(hits / goCount) : 1;
-  const lateRate = goCount ? clamp01(lates / goCount) : 0;
-  // Restraint axis: NO-GO commissions AND presses into the rest gap, over the
-  // withhold opportunities. ISI presses have no denominator of their own, so they
-  // ride the same one - pressing at nothing is a restraint failure by definition.
-  const falseAlarmRate = clamp01((commissions + isiCommissions) / Math.max(1, nogoCount));
-
+  const rts = (t.rts || []).filter((v) => isFinite(v));
   const medianRt = median(rts);
-  // First class: no persisted yardstick, so the session's own honest control is
-  // the yardstick (index lands near 1 by construction - calibration, not credit).
-  const yard = num(baselineMs, 0) > 0 ? Number(baselineMs)
-    : (num(sessionBaselineMs, 0) > 0 ? Number(sessionBaselineMs) : null);
-  const speedIndex = (medianRt != null && yard) ? medianRt / yard : 1;
+  const bestRt = rts.length ? Math.min.apply(null, rts) : null;
 
-  const lieTrials = Math.max(0, num(t.lieTrials, 0));
-  const cleanTrials = Math.max(0, num(t.cleanTrials, 0));
-  const lieErrors = Math.max(0, num(t.lieErrors, 0));
-  const cleanErrors = Math.max(0, num(t.cleanErrors, 0));
-  const lieErrRate = lieTrials ? lieErrors / lieTrials : 0;
-  const cleanErrRate = cleanTrials ? cleanErrors / cleanTrials : 0;
-  // Resistance = how much WORSE the lies made you than your own clean baseline.
-  // No lies fired (tier 1) -> nothing to resist -> full marks, never a penalty.
-  const lieResistance = lieTrials ? clamp01(1 - Math.max(0, lieErrRate - cleanErrRate)) : 1;
+  const goodShown = Math.max(0, Number(t.goodShown) || 0);
+  const deniedShown = Math.max(0, Number(t.deniedShown) || 0);
+  const popped = Math.max(0, Number(t.popped) || 0);
+  const xClicked = Math.max(0, Number(t.xClicked) || 0);
 
-  return {
-    goCount, nogoCount, hits, lates, commissions, isiCommissions,
-    goHitRate, lateRate, falseAlarmRate, medianRt, baselineMs: yard, speedIndex,
-    lieTrials, cleanTrials, lieErrors, cleanErrors, lieErrRate, cleanErrRate, lieResistance,
-    bestRt: rts.length ? Math.min(...rts) : null,
-  };
-}
+  const speed = speedIndex(medianRt, meta && meta.baselineMs);
+  const catchRate = goodShown > 0 ? clamp01(popped / goodShown) : 0;
+  /* Every X click burns restraint hard - two X's on a 3-X night is 0.33,
+     not the 0.9 a 20-trial average would launder it to. */
+  const restraint = deniedShown > 0 ? clamp01(1 - xClicked / deniedShown) : 1;
 
-/** The four weighted terms, each 0..1. */
-export function terms(m) {
-  const restraint = clamp01(1 - (m.falseAlarmRate / CURVES.farZero));
-  const speed = clamp01((CURVES.speedZero - m.speedIndex) / (CURVES.speedZero - CURVES.speedBest));
-  const lieResistance = clamp01(m.lieResistance);
-  const goHit = clamp01(m.goHitRate - CURVES.latePenalty * m.lateRate);
-  return { restraint, speed, lieResistance, goHit };
-}
+  const composite = clamp01(W_SPEED * speed + W_CATCH * catchRate + W_RESTRAINT * restraint);
 
-/** The weighted composite 0..1 handed to core/grades.js. */
-export function composite(m) {
-  const s = terms(m);
-  return clamp01(
-    s.restraint * WEIGHTS.restraint
-    + s.speed * WEIGHTS.speed
-    + s.lieResistance * WEIGHTS.lieResistance
-    + s.goHit * WEIGHTS.goHit
-  );
-}
-
-/**
- * The DUAL hard gate (SYNTHESIS #14 made this legal; it is this game's identity).
- * Declared on every class, true only when BOTH axes hold and no clean error was
- * made. `reasons` is what the debrief shows when it failed.
- */
-export function sGate(m) {
   const reasons = [];
-  if (m.falseAlarmRate > S_GATE.maxFalseAlarmRate) reasons.push('restraint');
-  if (m.speedIndex > S_GATE.maxSpeedIndex) reasons.push('speed');
-  if (m.cleanErrors > S_GATE.maxCleanErrors) reasons.push('clean_errors');
-  return { ok: reasons.length === 0, reasons };
-}
+  if (xClicked > 0) reasons.push('restraint');
+  if (speed < SGATE_SPEED_MIN) reasons.push('speed');
+  const sGate = { ok: reasons.length === 0, reasons };
 
-/**
- * Capped flavor bonuses that stay INSIDE the class award (SYNTHESIS #4 - the
- * shell owns the XP table; a game may only contribute a capped flavor bonus).
- */
-export function flavorXp(m, prevBestMedianMs) {
-  let xp = 0;
-  const reasons = [];
-  const prev = num(prevBestMedianMs, 0);
-  if (m.medianRt != null && (!prev || m.medianRt < prev)) {
-    xp += FLAVOR_XP.personalBest; reasons.push('personal_best');
-  }
-  if (m.commissions + m.isiCommissions === 0 && m.nogoCount > 0) {
-    xp += FLAVOR_XP.zeroFalseAlarms; reasons.push('zero_false_alarms');
-  }
-  return { xp: Math.min(FLAVOR_XP.cap, xp), reasons };
-}
+  const score = Math.round(Number(t.score) || 0);
+  const flavorXp = Math.max(0, Math.round(Math.max(0, score) * FLAVOR_XP_PER_POINT));
 
-/**
- * Fold this session into the persisted baseline (weekly decay toward recent form).
- * @param {Object} meta  the per-game meta row {baselineMs, baselineUpdatedAt, ...}
- * @param {number|null} sessionMedianMs  the baseline BLOCK median (the honest control)
- * @param {number} nowMs
- * @param {boolean=} reset  recalibrate: take the session verbatim
- * @returns {{baselineMs:number, weight:number, established:boolean, changed:boolean}|null}
- */
-export function foldBaseline(meta, sessionMedianMs, nowMs, reset) {
-  const s = num(sessionMedianMs, 0);
-  if (!(s > 0)) return null;
-  const session = Math.round(Math.max(BASELINE.floorMs, Math.min(BASELINE.ceilMs, s)));
-  const m = meta || {};
-  const prev = num(m.baselineMs, 0);
-  if (reset || !(prev > 0)) {
-    return { baselineMs: session, weight: 1, established: !(prev > 0) || !!reset, changed: true };
-  }
-  const then = num(m.baselineUpdatedAt, 0);
-  const weeks = then > 0 ? Math.max(0, (num(nowMs, Date.now()) - then) / 604800000) : 4;
-  const weight = Math.max(BASELINE.freshWeight,
-    Math.min(1, BASELINE.freshWeight + weeks * BASELINE.weeklyWeight));
-  const next = Math.round(prev * (1 - weight) + session * weight);
-  return { baselineMs: next, weight, established: false, changed: next !== prev };
+  return { medianRt, bestRt, speed, catchRate, restraint, composite, sGate, score, flavorXp };
 }
-
-/**
- * The comeback hook: the ONE stat that slipped, named. Returns a lexicon key so
- * the mod skin owns the words.
- */
-export function slipKey(m, gate) {
-  const speedOff = m.speedIndex > 1.02;
-  const restraintOff = m.falseAlarmRate > S_GATE.maxFalseAlarmRate;
-  if (speedOff && restraintOff) return 'ic_slip_both';
-  if (speedOff) return 'ic_slip_speed';
-  if (restraintOff) return 'ic_slip_restraint';
-  return gate && gate.ok ? 'ic_slip_none' : 'ic_slip_none';
-}
-
-/** Percent off the personal record, for the slip line ("4% slower than your record"). */
-export function offRecordPct(m) {
-  if (m.medianRt == null || !m.baselineMs) return 0;
-  return Math.round((m.medianRt / m.baselineMs - 1) * 100);
-}
-
-export default { metricsFrom, terms, composite, sGate, flavorXp, foldBaseline, slipKey };

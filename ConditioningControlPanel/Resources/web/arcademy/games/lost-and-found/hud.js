@@ -164,6 +164,10 @@ export function createHud(o) {
     /** Keep the HUD target chip showing the current target look. */
     setTargetArt(look) { if (tart) paintLook(tart, look || {}); },
 
+    /** Chrome the trickster may flicker (glitch-to-asset). Read-only anchors:
+     *  the overlay is positioned OVER these on the wrap, never inside them. */
+    chromeEls() { return [tchip, clock, missChip].filter(Boolean); },
+
     /**
      * Remote media can land AFTER a card is on screen. Repaint every live card so
      * the briefing never shows a different target than the board does - getting

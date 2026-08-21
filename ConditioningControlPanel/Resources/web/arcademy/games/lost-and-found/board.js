@@ -29,6 +29,37 @@
  *    wrap, whose PERIOD is a pace (like a cadence), not an effect strength. Two
  *    elements, two transforms, no fighting. Under reduced motion the marquee is
  *    off and rows step discretely instead (see step()).
+ *
+ * ---------------------------------------------------------------------------
+ * 4. THE LIVE WINDOW - why a dense wall is not 200 animations (0821 perf pass).
+ *
+ * Chromium keeps ONE decoder and ONE animation clock per image RESOURCE, and
+ * every element showing that resource shares both. Two facts fall out, and the
+ * whole media layer is built on them:
+ *
+ *   COST scales with DISTINCT ANIMATED URLS, not with tiles. Each one is a
+ *   main-thread gif decode per frame (gif frames are inter-frame dependent, so
+ *   there is no skipping ahead), and each one dirties every tile wearing it -
+ *   x2-3 again for the toroidal wrap clones, each of which rasters through its
+ *   own hue-rotate filter. Past ~30-40 distinct animated urls the decode queue
+ *   never drains and Blink drops the whole page to a frame every ~0.75s.
+ *
+ *   SYNC is the same fact wearing a different hat: two tiles on the same url
+ *   CANNOT be desynchronised, because there is only one clock. A cache-busting
+ *   suffix (the retired `?ccpd=N` lane trick) splits the resource and does
+ *   desync them - by MULTIPLYING the decoder count, which is what put us at
+ *   ~192 live decoders on a hard board in the first place.
+ *
+ * So: the board deals at most `liveCap` DISTINCT animated urls (index.js draws
+ * them no-repeat, so no two live tiles ever share a clock -> nothing is ever in
+ * lockstep), every other seat wears a STILL, and the ordinary swap churn trades
+ * animated looks with still looks so the motion ROAMS across the wall. A seat
+ * never changes what it is showing outside the sanctioned swap primitive, so
+ * the hunt's "the target is a look" law is untouched.
+ *
+ * Videos are the cheap case (GPU decode, an independent clock each) and are
+ * preferred for live seats - but <video> has a per-page player budget of its
+ * own, so `videoCap` counts ELEMENTS (tiles x wrap clones), not tiles.
  * ==========================================================================*/
 
 import { GRADIENTS, HUES, PLAYTEST } from './constants.js';
@@ -45,13 +76,21 @@ const DUR_FAST_SEC = 12;
  * DOM layer - no canvas anywhere).
  * -------------------------------------------------------------------------- */
 const VIDEO_EXT_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
+const GIF_RE = /\.gif(\?|#|$)/i;
 
 /** Is this url a <video> tile rather than an <img>? */
 export function isVideoUrl(url) { return VIDEO_EXT_RE.test(String(url || '')); }
+/** Is this url an animated <img>? (webp is classed 'still' by the provider's
+ *  own kindOf(), so an animated webp is a known blind spot, not an oversight.) */
+export function isGifUrl(url) { return GIF_RE.test(String(url || '')); }
+/** Does this url cost a decoder + a clock? THE budget question. */
+export function isAnimatedUrl(url) { return isVideoUrl(url) || isGifUrl(url); }
 
-/** Build the media element for a url. Never throws; broken media self-removes. */
-export function mediaElFor(url) {
+/** Build the media element for a url. Never throws; broken media self-removes.
+ *  `o.low` marks a wrap clone: same pixels, lower fetch priority. */
+export function mediaElFor(url, o) {
   if (!url) return null;
+  const low = !!(o && o.low);
   if (isVideoUrl(url)) {
     const v = el('video', 'g-lf-media');
     if (!v) return null;
@@ -60,6 +99,15 @@ export function mediaElFor(url) {
     v.setAttribute('loop', '');
     v.setAttribute('playsinline', '');
     v.setAttribute('preload', 'metadata');
+    v.setAttribute('disablepictureinpicture', '');
+    try { v.disableRemotePlayback = true; } catch (e) { /* not everywhere */ }
+    // a video that will not decode must not hold a media-player slot forever
+    if (typeof v.addEventListener === 'function') {
+      v.addEventListener('error', () => {
+        try { v.removeAttribute('src'); if (v.load) v.load(); } catch (e) { /* ignore */ }
+        try { if (v.parentNode) v.remove(); } catch (e) { /* ignore */ }
+      });
+    }
     v.src = url;
     if (typeof v.play === 'function') {
       try { const p = v.play(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* autoplay policy */ }
@@ -70,6 +118,10 @@ export function mediaElFor(url) {
   if (!img) return null;
   img.alt = '';
   img.setAttribute('draggable', 'false');
+  // decoding:async keeps a first decode off the layout path; a wrap clone is
+  // the same resource as its primary, so it never needs to win a race.
+  img.setAttribute('decoding', 'async');
+  if (low) img.setAttribute('fetchpriority', 'low');
   // never leave a broken tile: drop the media, the gradient look still stands
   img.addEventListener('error', () => {
     try { if (img.parentNode) img.remove(); } catch (e) { /* ignore */ }
@@ -83,6 +135,23 @@ export function mediaElFor(url) {
  * `.g-lf-skin` layer if it is missing and reusing an unchanged media element
  * (a re-decode on every churn tick would strobe the board).
  */
+/**
+ * RETIRED: the `?ccpd=N` decode-lane trick.
+ *
+ * It rewrote a local gif's src with a cache-busting suffix so duplicate tiles
+ * would get their own Chromium resource - and their own animation clock. It
+ * worked, and that was the problem: a hard board draws ~194 decoys from a
+ * 60-gif local manifest (ArcademyHostService.LocalAssetSample), so 4 lanes per
+ * url meant ~190 DISTINCT animated resources, each decoding gif frames on the
+ * main thread. That is the "1 frame every 0.75 sec". Desync bought at 4x the
+ * decode cost is not desync, it is a stall.
+ *
+ * The live window replaces it: index.js draws live seats NO-REPEAT, so no two
+ * animated tiles share a url in the first place and there is nothing to split.
+ * Remote urls were never rewritten (signed urls / refetch cost) and still are
+ * not - that constraint outlived the trick that needed it.
+ */
+
 export function paintLook(host, look) {
   if (!host || !look || !host.appendChild) return null;
   let skin = null;
@@ -98,19 +167,49 @@ export function paintLook(host, look) {
   for (let g = 1; g <= GRADIENTS; g++) skin.classList.remove('g-lf-g' + g);
   skin.classList.add('g-lf-g' + (look.grad || 1));
   if (skin.style) skin.style.setProperty('--g-lf-hue', (look.hue || 0) + 'deg');
+  // hue 0 = no rotation, and `filter:none` spares the element its own render
+  // surface. One in seven tiles, x2-3 wrap clones - it adds up on a dense wall.
+  if (skin.classList) {
+    if (!(look.hue | 0)) skin.classList.add('g-lf-h0'); else skin.classList.remove('g-lf-h0');
+  }
 
   const existing = (skin.children && skin.children.length) ? skin.children[0] : null;
   if (existing && existing._lfUrl === look.url) return skin;
-  if (existing) { try { existing.remove(); } catch (e) { /* ignore */ } }
-  if (!look.url) return skin;
-  const media = mediaElFor(look.url);
+  if (!look.url) {
+    if (existing) { try { existing.remove(); } catch (e) { /* ignore */ } }
+    return skin;
+  }
+  /* RECYCLE the media element when the kind matches (0821 smoothness pass).
+   * The churn swaps looks constantly; tearing down and re-minting an element
+   * per repaint is an allocation + listener churn per swap for <img>, and a
+   * whole MEDIA PLAYER teardown/create for <video> - player creation is an
+   * IPC round-trip and the single most stall-prone thing a swap can do.
+   * Setting .src on the existing element is the same visual result. */
+  if (existing) {
+    const wantVid = isVideoUrl(look.url);
+    const isVid = existing.tagName === 'VIDEO';
+    if (wantVid === isVid) {
+      existing._lfUrl = look.url;
+      try {
+        existing.src = look.url;
+        if (isVid) {
+          if (existing.load) existing.load();
+          if (existing.play) { const p = existing.play(); if (p && p.catch) p.catch(() => {}); }
+        }
+        return skin;
+      } catch (e) { /* fall through to replace */ }
+    }
+    try { existing.remove(); } catch (e) { /* ignore */ }
+  }
+  const media = mediaElFor(look.url, { low: (host._lfRep | 0) > 0 });
   if (media) { media._lfUrl = look.url; skin.appendChild(media); }
   return skin;
 }
 
-/** Rows from a density: 12 -> 3, 16/20 -> 3-4, 30 -> 4, 40 -> 5. */
+/** Rows from a density: 12 -> 3, 30 -> 4, 48 -> 5, ~190 (hard wall) -> 10-11.
+ *  The old max of 6 silently squashed dense boards into fewer, longer rows. */
 export function rowsFor(density) {
-  return clamp(Math.round(Math.sqrt(Math.max(1, density) / 1.75)), 3, 6);
+  return clamp(Math.round(Math.sqrt(Math.max(1, density) / 1.75)), 3, 12);
 }
 
 /** Tiles per row - deliberately uneven so no two rows wrap in step. */
@@ -155,7 +254,6 @@ export function createBoard(o) {
   const reduced = !!opts.reduced;
   const lite = !!opts.lite;
   const say = typeof opts.log === 'function' ? opts.log : () => {};
-  const videoCap = lite ? PLAYTEST.VIDEO_TILE_CAP_LITE : PLAYTEST.VIDEO_TILE_CAP;
 
   const mosaic = el('div', 'g-lf-mosaic');
   const rows = [];        // [{ el, strip, tiles:[tile], reps, dir }]
@@ -163,6 +261,11 @@ export function createBoard(o) {
   const byEl = new Map(); // element copy -> tile
   let videoTiles = 0;
   let destroyed = false;
+  // THE LIVE LEDGER: canonical animated url -> { n, remote }. Its SIZE is the
+  // decoder count (one resource, one clock, however many tiles wear it), which
+  // is the number the budget is actually about.
+  const liveUse = new Map();
+  const desyncTimers = new Set(); // pending staggered media paints
 
   const sizes = rowSizes(density, rng);
   const sigs = signaturePool(rng);
@@ -188,7 +291,11 @@ export function createBoard(o) {
         i: idx, row: r, col: c,
         grad: sig.grad, hue: sig.hue,
         url: null, remote: false, isVideo: false,
+        // `live` = this seat's media costs a decoder + owns a clock. It is a
+        // LOOK field, so it rides swapLooks with everything else.
+        live: false,
         target: false, warm: false,
+        seq: 0,          // bumped on every look change; stale paints bail on it
         els: [],
       };
       tiles.push(tile);
@@ -206,6 +313,38 @@ export function createBoard(o) {
     if (mosaic && rowEl) mosaic.appendChild(rowEl);
     rows.push({ el: rowEl, strip, tiles: rowTiles, reps, durSec, dir: r % 2 ? 'r' : 'l' });
   });
+
+  /* ------------------------------------------------------------- budgets */
+  /* Every budget here counts what Chromium actually pays for. `maxReps` is the
+     multiplier the toroidal wrap applies to every live element, so it has to be
+     known before a single url is dealt - which is why this sits AFTER the build
+     rather than at the top of the factory. */
+  let maxReps = 1;
+  for (const r of rows) maxReps = Math.max(maxReps, (r.reps | 0) || 1);
+
+  /** Ceiling on DISTINCT animated urls (= decoders = clocks). See the header. */
+  const liveCap = reduced ? Math.max(0, PLAYTEST.LIVE_LOOP_CAP_REDUCED | 0)
+    : Math.max(0, Math.min(
+      lite ? PLAYTEST.LIVE_LOOP_CAP_LITE : PLAYTEST.LIVE_LOOP_CAP,
+      Math.max(PLAYTEST.LIVE_LOOP_MIN, Math.round(density * PLAYTEST.LIVE_LOOP_SHARE)),
+      Math.floor(PLAYTEST.LIVE_ELEMENT_CEIL / maxReps),
+    ));
+  /** <video> is budgeted a SECOND time, in ELEMENTS: a media player is a much
+   *  scarcer page resource than an image decoder, and the wrap clones are real
+   *  players too. (The 0821 "40% of density" rule shipped ~156 of them.) */
+  const videoCap = Math.max(0, Math.min(
+    lite ? PLAYTEST.VIDEO_TILE_CAP_LITE : PLAYTEST.VIDEO_TILE_CAP,
+    Math.floor(PLAYTEST.VIDEO_ELEMENT_CEIL / maxReps),
+    liveCap,
+  ));
+  // The per-tile sheen sweep is one compositor animation per ELEMENT; on a
+  // dense wall that is 400 of them for a decoration nothing reads.
+  if (mosaic && mosaic.classList && density > PLAYTEST.SHEEN_MAX_DENSITY) {
+    mosaic.classList.add('g-lf-dense');
+  }
+  say('board budgets: ' + density + ' tiles x' + maxReps + ' reps, live cap '
+    + liveCap + ', video cap ' + videoCap + (reduced ? ' (reduced motion)' : ''));
+
   if (opts.mount && mosaic && opts.mount.appendChild) {
     // The wall fills the window (immersion wave): the row count is only known
     // here, so it is PUBLISHED here and styles.js solves the tile height from it
@@ -249,21 +388,75 @@ export function createBoard(o) {
     for (const node of tile.els) paintLook(node, tile);
   }
 
+  /* --------------------------------------------------------- live ledger */
+  /** Drop this tile's claim on its animated url; the resource dies with the
+   *  last tile wearing it (that is when Chromium can stop decoding it). */
+  function releaseLive(tile) {
+    const url = tile._liveUrl;
+    if (!url) return;
+    tile._liveUrl = null;
+    const rec = liveUse.get(url);
+    if (!rec) return;
+    if (rec.n <= 1) liveUse.delete(url); else rec.n -= 1;
+  }
+  function acquireLive(tile, url, remote) {
+    tile._liveUrl = url;
+    const rec = liveUse.get(url);
+    if (rec) rec.n += 1; else liveUse.set(url, { n: 1, remote: !!remote });
+  }
+  /** Would giving this tile `url` mint a NEW decoder we cannot afford?
+   *  Adopting a url the wall already animates is free - same resource, same
+   *  clock - which is what lets a still-less library rest its sleepers on the
+   *  live set instead of on the bundled placeholder floor. */
+  function liveBlocked(tile, url) {
+    if (liveUse.has(url)) return false;
+    // a tile that is the LAST holder of its own url frees a slot as it moves
+    const rec = tile._liveUrl ? liveUse.get(tile._liveUrl) : null;
+    const freeing = rec && rec.n <= 1 ? 1 : 0;
+    return (liveUse.size - freeing) >= liveCap;
+  }
+
   /**
-   * Give a tile a url. Video tiles are budgeted (DTRH node discipline): past the
-   * cap we keep the gradient look rather than melting a low-end device.
+   * Give a tile a url; returns TRUE if the look took.
+   *
+   * Two budgets can refuse it (the live-decoder window and the <video> element
+   * ceiling) and a refusal is not a failure - the caller draws a still instead
+   * and the gradient look stands in the meantime. `o.paintDelayMs` defers only
+   * the PAINT: the url lands immediately (so target matching and the near-twin
+   * bookkeeping are correct the moment we return) while the element - and with
+   * it the decoder and the animation clock - starts on its own tick.
    */
-  function setUrl(tile, draw) {
-    if (!tile) return;
+  function setUrl(tile, draw, o) {
+    if (!tile) return false;
     const url = draw && draw.url ? draw.url : null;
     const isVid = isVideoUrl(url);
-    if (isVid && !tile.isVideo && videoTiles >= videoCap) return;   // budget: skip, keep the look
+    const anim = isAnimatedUrl(url);
+    if (anim && liveBlocked(tile, url)) return false;
+    if (isVid && !tile.isVideo && videoTiles >= videoCap) return false;
+
+    releaseLive(tile);
     if (tile.isVideo && !isVid) videoTiles = Math.max(0, videoTiles - 1);
     if (!tile.isVideo && isVid) videoTiles += 1;
     tile.isVideo = isVid;
+    tile.live = anim;
     tile.url = url;
     tile.remote = !!(draw && draw.remote);
-    repaint(tile);
+    if (anim) acquireLive(tile, url, tile.remote);
+    tile.seq = (tile.seq | 0) + 1;
+
+    // Seeded paint stagger: dressing a whole board on one tick starts every
+    // clock together (the lockstep blink) and hands the decoder a stampede.
+    const wait = o && (o.paintDelayMs > 0 || o.desyncMs > 0)
+      ? ((o.paintDelayMs | 0) || (o.desyncMs | 0)) : 0;
+    if (!wait) { repaint(tile); return true; }
+    const seq = tile.seq;
+    const t = setTimeout(() => {
+      desyncTimers.delete(t);
+      if (destroyed || tile.seq !== seq) return;   // a swap/melt got here first
+      repaint(tile);
+    }, wait);
+    desyncTimers.add(t);
+    return true;
   }
 
   /* ---------------------------------------------------------------- looks */
@@ -277,9 +470,14 @@ export function createBoard(o) {
    */
   function swapLooks(a, b) {
     if (!a || !b || a === b) return false;
-    const keep = { grad: a.grad, hue: a.hue, url: a.url, remote: a.remote, isVideo: a.isVideo, warm: a.warm, target: a.target };
-    a.grad = b.grad; a.hue = b.hue; a.url = b.url; a.remote = b.remote; a.isVideo = b.isVideo; a.warm = b.warm; a.target = b.target;
-    b.grad = keep.grad; b.hue = keep.hue; b.url = keep.url; b.remote = keep.remote; b.isVideo = keep.isVideo; b.warm = keep.warm; b.target = keep.target;
+    const keep = { grad: a.grad, hue: a.hue, url: a.url, remote: a.remote, isVideo: a.isVideo, live: a.live, warm: a.warm, target: a.target, liveUrl: a._liveUrl };
+    a.grad = b.grad; a.hue = b.hue; a.url = b.url; a.remote = b.remote; a.isVideo = b.isVideo; a.live = b.live; a.warm = b.warm; a.target = b.target;
+    b.grad = keep.grad; b.hue = keep.hue; b.url = keep.url; b.remote = keep.remote; b.isVideo = keep.isVideo; b.live = keep.live; b.warm = keep.warm; b.target = keep.target;
+    // The ledger's TOTALS are untouched by a swap (the same multiset of looks
+    // is on the wall), but each seat's own claim moves with its look.
+    a._liveUrl = b._liveUrl; b._liveUrl = keep.liveUrl;
+    // a deferred paint from before the swap must not land on the new look
+    a.seq = (a.seq | 0) + 1; b.seq = (b.seq | 0) + 1;
     if (a.target) a.warm = false;
     if (b.target) b.warm = false;
     repaint(a); repaint(b);
@@ -325,15 +523,17 @@ export function createBoard(o) {
     let strong = 0;
     for (const tile of candidates) {
       if (made >= want) break;
-      if (strong < urlCap && target.url) {
+      if (strong < urlCap && target.url
+        // The target's own url is free to copy when it is already on the wall
+        // (it always is - this IS the target's url), so a strong twin never
+        // mints a decoder. setUrl still arbitrates, so the budget cannot be
+        // side-stepped through this door either.
+        && setUrl(tile, { url: target.url, remote: target.remote })) {
         // same media, different hue: the honest local version of a near-twin
         used.delete(tile.grad + ':' + tile.hue);
-        tile.url = target.url;
-        tile.isVideo = isVideoUrl(target.url);
         tile.warm = true;
         used.add(tile.grad + ':' + tile.hue);
         strong += 1; made += 1;
-        repaint(tile);
         continue;
       }
       const hue = freeHues.shift();
@@ -356,6 +556,51 @@ export function createBoard(o) {
     rows,
     density,
     get videoTiles() { return videoTiles; },
+    get liveTiles() { return tiles.reduce((n, t) => n + (t.live ? 1 : 0), 0); },
+
+    /** The animated urls currently on the wall, each with its remote flag.
+     *  Two callers: index.js draws live seats NO-REPEAT against this (so no two
+     *  clocks are ever shared, i.e. nothing can blink in lockstep), and a
+     *  library with no stills to rest on parks its sleepers ON this set, where
+     *  they ride an existing decoder for free. */
+    liveUrls() {
+      const out = [];
+      for (const [url, rec] of liveUse) out.push({ url, remote: !!(rec && rec.remote) });
+      return out;
+    },
+    /** Budget telemetry: what the wall may spend and what it has spent. */
+    liveStats() {
+      return {
+        cap: liveCap, used: liveUse.size, maxReps,
+        tiles: tiles.reduce((n, t) => n + (t.live ? 1 : 0), 0),
+        videoCap, videoTiles,
+        elements: tiles.reduce((n, t) => n + (t.live ? t.els.length : 0), 0),
+      };
+    },
+    /**
+     * ROAMING: k (animated seat, still seat) pairs for the churn to trade, so
+     * the live window drifts across the wall like a marquee instead of sitting
+     * in the seats it was dealt. The target and its near-twins are excluded -
+     * their looks move on the RELOCATION schedule and nowhere else, or the
+     * board would be quietly relocating the hunt behind the game's back.
+     */
+    roamPairs(k, r) {
+      const want = Math.max(0, k | 0);
+      if (!want) return [];
+      const rnd = typeof r === 'function' ? r : rng;
+      const awake = [];
+      const asleep = [];
+      for (const t of tiles) {
+        if (t.target || t.warm || !t.url) continue;
+        (t.live ? awake : asleep).push(t);
+      }
+      const a = shuffle(awake, rnd);
+      const b = shuffle(asleep, rnd);
+      const n = Math.min(want, a.length, b.length);
+      const out = [];
+      for (let i = 0; i < n; i++) out.push([a[i], b[i]]);
+      return out;
+    },
 
     /** Every row element - engine row_drift's opts.targets. */
     rowEls() { return rows.map((r) => r.el).filter(Boolean); },
@@ -389,11 +634,29 @@ export function createBoard(o) {
     },
     clearMark(cls) { for (const t of tiles) api.mark(t, cls, false); },
 
-    /** Freeze / thaw our marquee (pause, suspend, the found ceremony). */
+    /** Freeze / thaw our marquee (pause, suspend, the found ceremony).
+     *  Video tiles freeze too: a suspend usually means the HOST wants the
+     *  decoder (a mandatory video is playing), and a paused <video> holds its
+     *  last frame for free - so the wall keeps its pixels and costs nothing.
+     *  Gif tiles cannot be paused from script at all; they are budgeted
+     *  instead, which is the whole point of the live window. */
     freeze(on) {
       for (const r of rows) {
         if (!r.strip || !r.strip.style) continue;
         try { r.strip.style.animationPlayState = on ? 'paused' : 'running'; } catch (e) { /* ignore */ }
+      }
+      if (!videoTiles) return;
+      for (const t of tiles) {
+        if (!t.isVideo) continue;
+        for (const n of t.els) {
+          const skin = n && n.children && n.children.length ? n.children[0] : null;
+          const media = skin && skin.children && skin.children.length ? skin.children[0] : null;
+          if (!media || media.tagName !== 'VIDEO') continue;
+          try {
+            if (on) { if (media.pause) media.pause(); }
+            else if (media.play) { const p = media.play(); if (p && p.catch) p.catch(() => {}); }
+          } catch (e) { /* ignore */ }
+        }
       }
     },
 
@@ -436,6 +699,19 @@ export function createBoard(o) {
     destroy() {
       destroyed = true;
       byEl.clear();
+      for (const t of desyncTimers) clearTimeout(t);
+      desyncTimers.clear();
+      liveUse.clear();
+      // A <video> that is merely detached can keep its media player (and its
+      // decoder) alive until GC gets around to it; unhook the source first.
+      for (const t of tiles) {
+        for (const n of t.els) {
+          const skin = n && n.children && n.children.length ? n.children[0] : null;
+          const media = skin && skin.children && skin.children.length ? skin.children[0] : null;
+          if (!media || media.tagName !== 'VIDEO') continue;
+          try { media.pause(); media.removeAttribute('src'); if (media.load) media.load(); } catch (e) { /* ignore */ }
+        }
+      }
       try { if (mosaic && mosaic.remove) mosaic.remove(); } catch (e) { /* ignore */ }
     },
   };

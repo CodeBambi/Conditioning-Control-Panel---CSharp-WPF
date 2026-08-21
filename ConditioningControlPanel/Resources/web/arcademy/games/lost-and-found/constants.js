@@ -48,9 +48,114 @@ export const PLAYTEST = Object.freeze({
   /** Wash pulse on a misclick streak is armed from this tier up (dossier T3). */
   MISCLICK_WASH_FROM_TIER: 3,
 
-  /** Live-media budgets. Video tiles are the expensive ones (DTRH discipline). */
-  VIDEO_TILE_CAP: 12,
+  /* ------------------------------------------------------------------------
+   * THE LIVE WINDOW (0821 perf pass - "1 frame every 0.75s" + "groups of gifs
+   * are still synched"). Read board.js's header for the physics; the short
+   * version is that the expensive unit is a DISTINCT ANIMATED URL, not a tile:
+   * Chromium keeps ONE decoder and ONE animation clock per image resource, and
+   * every element showing that resource shares it. So:
+   *   - N distinct animated urls  = N main-thread gif decoders  = the cost;
+   *   - two tiles on the SAME url = one clock = the lockstep blink = the sync.
+   * The board therefore deals a BOUNDED set of animated looks (each on its own
+   * url, so nothing is ever in lockstep) and dresses every other seat with a
+   * STILL. The ordinary swap churn then roams the animated seats across the
+   * wall, so motion drifts like a marquee instead of sitting in fixed seats.
+   * ---------------------------------------------------------------------- */
+  /** Ceiling on DISTINCT animated urls on the wall at once. This is the dial. */
+  LIVE_LOOP_CAP: 24,
+  LIVE_LOOP_CAP_LITE: 10,
+  /** Reduced motion: gifs ignore prefers-reduced-motion, so the only honest
+   *  answer is to deal none. 0 = a fully still wall (and the cheapest board). */
+  LIVE_LOOP_CAP_REDUCED: 0,
+  /** ...but never more than this SHARE of a small board (a 12-tile board with
+   *  24 animated tiles is just the old board), and never fewer than this many. */
+  LIVE_LOOP_SHARE: 0.6,
+  LIVE_LOOP_MIN: 8,
+  /** Hard ceiling on animated ELEMENTS (live tiles x wrap clones). Every tile
+   *  exists 2-3 times over for the toroidal wrap and each copy rasters
+   *  independently, so the element count - not the tile count - is what
+   *  starves the raster thread. */
+  LIVE_ELEMENT_CEIL: 56,
+  /** 0821 SMOOTHNESS PASS, measured on the owner's machine (Edge = the same
+   *  engine WebView2 runs): with >= ~2 playing <video> tiles on the wall, viz's
+   *  frame-interval heuristic drops the WHOLE PAGE to ~30Hz to match the video
+   *  cadence - rAF ticks at a locked 33.4ms while 1 video tile (or none) holds
+   *  16.7ms. At 30Hz every gif quantises onto a 33ms grid (the "framerate is
+   *  low" feel) and every churn burst lands in half the frame budget (the
+   *  "worse when things flip" feel). 24 heavy 448px gif decoders, drift AND
+   *  hue filters: a clean 60fps - the live window already made gifs cheap.
+   *  So the preference is INVERTED now: gifs carry the wall, video is the
+   *  fallback for gif-starved pools, and the governor below sheds video seats
+   *  if the half-rate lock engages anyway. (playbackRate nudges, will-change,
+   *  border-radius removal: all probed, none break the lock.) */
+  PREFER_VIDEO_LOOPS: false,
+  LIVE_DRAW_TRIES: 4,
+
+  /** Live-media budgets. Video tiles are the expensive ones - not for decode
+   *  (GPU) but for the viz half-rate lock above and the per-page media-player
+   *  budget. A gif-starved pool may still fill these seats; a mixed pool
+   *  almost never reaches them (gifs win the draw). */
+  VIDEO_TILE_CAP: 6,
   VIDEO_TILE_CAP_LITE: 4,
+  /** Simultaneous <video> ELEMENTS, wrap clones included. Chromium's per-page
+   *  media-player budget is the wall we hit; stay well under it. */
+  VIDEO_ELEMENT_CEIL: 32,
+
+  /* ------------------------------------------------------------------------
+   * THE FRAME GOVERNOR (0821 smoothness pass). A watchdog on the achieved rAF
+   * cadence: it learns the display's true frame interval (the best rolling
+   * median it ever sees), and when the page sits at half-rate for a while -
+   * the video cadence lock above, or a machine weaker than the tuning box -
+   * it sheds live seats through the ordinary swap primitives until the rate
+   * recovers: video seats first (they cause the lock), then gif seats (decode
+   * saturation on weak machines). Videos never grow back within a class (the
+   * lock would just re-engage); gif seats regrow one at a time after a long
+   * healthy streak. All of it is presentation-only - it never touches the
+   * target, a near-twin, or any graded state.
+   * ---------------------------------------------------------------------- */
+  GOVERNOR: true,
+  /** Locked = rolling median rAF gap >= baseline x this. (60Hz: 16.7 -> 26.7ms
+   *  trips on the 33.4ms lock with margin; a true 30Hz display just becomes
+   *  the baseline and never trips.) */
+  GOV_LOCK_X: 1.6,
+  /** How long the lock must hold before the first shed (ms). */
+  GOV_BAD_MS: 2200,
+  /** Wait between sheds so each one can prove itself (ms). */
+  GOV_SETTLE_MS: 1600,
+  /** Video seats are only worth shedding when gifs are actually carrying the
+   *  wall - a video-dominant pool at 30Hz has no gif judder to expose it. */
+  GOV_SHED_VIDEO_MIN_GIFS: 4,
+  GOV_VIDEO_FLOOR: 1,
+  /** Gif shedding (weak machines): seats per shed, and the floor. */
+  GOV_GIF_SHED_STEP: 2,
+  GOV_GIF_FLOOR: 10,
+  /** Regrow one gif seat after this long healthy, never past the dealt cap. */
+  GOV_GROW_MS: 9000,
+
+  /** Roaming: how many (animated <-> still) pairs each churn tick trades, so
+   *  the motion drifts across the wall instead of living in fixed seats. It
+   *  rides the churn timer, so it pauses with pause/suspend and during the
+   *  found ceremony for free. 0 = fixed seats. */
+  ROAM_PAIRS_PER_CHURN: 2,
+  /** A swap burst applies at most this many pairs per tick; the rest follow on
+   *  ~frame-spaced ticks. One synchronous batch used to repaint up to a dozen
+   *  tiles (x wrap clones) in a single frame - half the frame budget gone in
+   *  one gulp on a locked board. The pair CHOICE is unchanged (seeded); only
+   *  the apply is spread, and the target's pair always lands in the first
+   *  chunk so a relocation is never late. */
+  SWAP_APPLY_CHUNK: 3,
+
+  /** Progressive dressing. The board already staggers ASSEMBLY
+   *  (ASSEMBLE_STAGGER_MS); this staggers the MEDIA, so the decoders start in
+   *  a queue instead of a stampede, and every animated tile starts its clock on
+   *  its own tick. Row-ordered span + a per-tile jitter. */
+  DRESS_WINDOW_MS: 1600,
+  DRESS_JITTER_MS: 900,
+
+  /** The per-tile sheen sweep is a compositor animation on EVERY tile element
+   *  (density x wrap clones). Above this density it is dropped - the wall has
+   *  plenty of motion of its own by then. */
+  SHEEN_MAX_DENSITY: 64,
 
   /** Found ceremony length; the hunt resumes after it. */
   FOUND_CEREMONY_MS: 1800,
@@ -76,27 +181,37 @@ export const TIERS = Object.freeze({
   1: Object.freeze({
     heat: 0.18, drift: 0.15, swapMs: 9000, swapBurst: 1, burstChance: 0,
     sub: false, bubbles: false, crt: false, nearTwinShare: 0,
-    previewSec: 3.2, density: 16,
+    previewSec: 3.2, density: 22,
   }),
   2: Object.freeze({
     heat: 0.40, drift: 0.35, swapMs: 5000, swapBurst: 1, burstChance: 0.15,
     sub: true, bubbles: false, crt: true, nearTwinShare: 0,
-    previewSec: 2.8, density: 20,
+    previewSec: 2.8, density: 28,
   }),
   3: Object.freeze({
     heat: 0.62, drift: 0.55, swapMs: 3000, swapBurst: 1, burstChance: 0.35,
     sub: true, bubbles: true, crt: true, nearTwinShare: 0.25,
-    previewSec: 2.4, density: 30,
+    previewSec: 2.4, density: 42,
   }),
   4: Object.freeze({
     heat: 0.85, drift: 0.80, swapMs: 2000, swapBurst: 3, burstChance: 0.5,
     sub: true, bubbles: true, crt: true, nearTwinShare: 0.5,
-    previewSec: 1.8, density: 40,
+    previewSec: 1.8, density: 56,
   }),
 });
 
-/** Mobile / coarse-pointer density ladder (dossier: 12/12/18/24, bigger tiles). */
-export const MOBILE_DENSITY = Object.freeze({ 1: 12, 2: 12, 3: 18, 4: 24 });
+/** Mobile / coarse-pointer density ladder (bigger tiles; ~60% of desktop). */
+export const MOBILE_DENSITY = Object.freeze({ 1: 12, 2: 16, 3: 24, 4: 32 });
+
+/** Player-facing density ladder (`lf_density` setting) - multiplies the tier's
+ *  tile count. 0821 owner ruling (round 2): 'easy' = the original feel,
+ *  'medium' = the old x2.2 hard (~5 rows x 9 at tier 1), 'hard' = DOUBLE ROWS
+ *  AND DOUBLE COLUMNS of medium (~10 x 18) - tiles roughly x4, "almost squared". */
+export const DENSITY_LEVELS = Object.freeze({ easy: 1, medium: 2.2, hard: 8.8 });
+/** Absolute board ceiling (hard hits it above tier 1); rowsFor caps at 12 rows. */
+export const DENSITY_HARD_CAP = 200;
+/** Coarse pointers stop being honest input well before the wall does. */
+export const DENSITY_COARSE_CAP = 72;
 
 /** Within-class breathing: each find starts the band a little higher (DTRH). */
 export const HEAT_BAND = 0.10;

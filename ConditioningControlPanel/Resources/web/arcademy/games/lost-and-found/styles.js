@@ -105,6 +105,9 @@ export const CSS = [
      never fight our own filter. One layer each, no clobbering. */
   '.g-lf-skin { position:absolute; inset:0; filter:hue-rotate(var(--g-lf-hue,0deg));',
   '  transition:opacity .18s ease; }',
+  /* hue 0 rotates nothing, and `filter:none` spares the element the render
+     surface a filter forces. One tile in seven, x2-3 wrap clones. */
+  '.g-lf-skin.g-lf-h0 { filter:none; }',
   '.g-lf-media { width:100%; height:100%; object-fit:cover; display:block;',
   '  pointer-events:none; }',
   '.g-lf-g1 { background:linear-gradient(135deg,#3A2A55,#7A4A8F); }',
@@ -122,6 +125,15 @@ export const CSS = [
   '  transform:translateX(-100%); animation:g-lf-sheen 5.5s ease-in-out infinite;',
   '  animation-delay:calc(var(--g-lf-i,0) * .37s); }',
   '@keyframes g-lf-sheen { 0%{transform:translateX(-100%)} 45%,100%{transform:translateX(100%)} }',
+  /* DENSE WALL (board.js adds .g-lf-dense past PLAYTEST.SHEEN_MAX_DENSITY): the
+     sheen is one compositor animation per tile ELEMENT and a hard board carries
+     ~400 of them for a decoration nobody can read at that size. `contain:paint`
+     lets the compositor skip the wrap clones parked outside the strip's clip -
+     the tile is already position:relative + overflow:hidden, so nothing it
+     hosts (the almost overlay, the melt drip, engine glitch dressing) changes
+     its box. The found rim is the tile's OWN box-shadow and still paints. */
+  '.g-lf-mosaic.g-lf-dense .g-lf-tile::after { display:none; }',
+  '.g-lf-mosaic.g-lf-dense .g-lf-tile { contain:paint; }',
 
   /* THE CLAIM: found tile pops and burns a pink rim. One-shot; long over before
      the next relocation could dress this tile with a transform of its own. */
@@ -204,6 +216,122 @@ export const CSS = [
   '  font-family:var(--disp); font-size:10px; letter-spacing:.1em; background:var(--pink);',
   '  color:var(--ground); border:0; border-radius:999px; padding:11px 16px;',
   '  box-shadow:0 4px 14px rgba(255,105,180,.4); touch-action:none; }',
+
+  /* ------------------- TRICKSTER (House Rules, Deck III) ------------------ */
+  /* THE MELT: the skin sags off its seat like heated wax and a drip runs off
+     the bottom edge; at the animation midpoint trickster.js swaps the LOOK to
+     another tile (the honest primitive) and this seat re-solidifies. The sag
+     lives on .g-lf-skin (transform) - glitch_swap dresses the TILE, so the two
+     never fight (same layer discipline as the hue filter). */
+  '.g-lf-tile.g-lf-melting { z-index:2; }',
+  '.g-lf-tile.g-lf-melting .g-lf-skin { transform-origin:50% 100%;',
+  '  animation:g-lf-meltsag 1.15s cubic-bezier(.55,.05,.7,.4) 1 both; }',
+  '@keyframes g-lf-meltsag {',
+  '  0% { transform:scaleY(1); }',
+  '  45% { transform:scaleY(1.07) translateY(3%); border-radius:0 0 40% 45%; }',
+  '  100% { transform:scaleY(1.2) translateY(10%); opacity:.22; border-radius:0 0 58% 62%; } }',
+  '.g-lf-tile.g-lf-melting::before { content:""; position:absolute; z-index:2;',
+  '  left:22%; bottom:-16%; width:9%; height:30%; pointer-events:none;',
+  '  border-radius:45% 45% 60% 60%;',
+  '  background:linear-gradient(180deg, rgba(255,105,180,.55), rgba(255,105,180,0));',
+  '  animation:g-lf-drip 1.15s ease-in 1 both; }',
+  '@keyframes g-lf-drip {',
+  '  0% { transform:translateY(-70%) scaleY(.3); opacity:0; }',
+  '  35% { opacity:.85; }',
+  '  100% { transform:translateY(130%) scaleY(1.2); opacity:0; } }',
+  /* The receiving seat rises out of the liquid. Transform only - the skin owns
+     the hue filter in its base rule and keyframing filter would drop it. */
+  '.g-lf-tile.g-lf-reform .g-lf-skin { transform-origin:50% 100%;',
+  '  animation:g-lf-reform .7s cubic-bezier(.2,1.2,.4,1) 1; }',
+  '@keyframes g-lf-reform {',
+  '  0% { transform:scaleY(.72) translateY(14%); opacity:.4; }',
+  '  100% { transform:scaleY(1) translateY(0); opacity:1; } }',
+
+  /* GHOST CURSOR: a will-o-wisp cursor echo. pointer-events:none is LAW - it
+     is suggestion, never a control; it sits UNDER the dim and every card. */
+  '.g-lf-ghost { position:absolute; left:0; top:0; z-index:4; width:15px; height:19px;',
+  '  pointer-events:none; opacity:0; will-change:transform;',
+  '  clip-path:polygon(0 0, 0 82%, 22% 64%, 38% 100%, 50% 94%, 34% 60%, 60% 60%);',
+  '  background:linear-gradient(160deg, rgba(255,105,180,.9), rgba(184,166,232,.55));',
+  '  filter:drop-shadow(0 0 6px rgba(255,105,180,.6));',
+  '  transition:transform .38s ease-out, opacity .4s ease; }',
+  '.g-lf-ghost.g-lf-ghost-on { opacity:.32; }',
+  '.g-lf-ghost.g-lf-ghost-lure { opacity:.5;',
+  '  animation:g-lf-ghostpulse 1.6s ease-in-out infinite; }',
+  '@keyframes g-lf-ghostpulse {',
+  '  50% { filter:drop-shadow(0 0 11px rgba(255,105,180,.95)); } }',
+
+  /* GLITCH-TO-ASSET: a beat of the player\'s own library wearing the chrome\'s
+     seat. Overlay on the hud wrap, never inside a control; cannot take a click. */
+  '.g-lf-chromeglitch { position:absolute; z-index:10; pointer-events:none;',
+  '  overflow:hidden; border-radius:8px; border:1px solid var(--pink-deep);',
+  '  box-shadow:0 0 18px rgba(255,105,180,.4);',
+  '  animation:g-lf-chromejit .13s steps(2) 1; }',
+  '.g-lf-chromeglitch img { width:100%; height:100%; object-fit:cover; display:block;',
+  '  filter:saturate(1.35) contrast(1.15); }',
+  '@keyframes g-lf-chromejit {',
+  '  0% { transform:translate(1px,-1px) skewX(2deg); }',
+  '  50% { transform:translate(-1px,1px) skewX(-2deg); }',
+  '  100% { transform:translate(0,0); } }',
+
+  /* --------------------- CASINO (House Rules, Deck II) -------------------- */
+  /* THE MARQUEE: a bulb-chase frame around the wall. Dots are gradients, the
+     chase is a background-position crawl - four thin bars, cheap to paint.
+     pointer-events:none is LAW; it sits with the vignette (over tiles, under
+     every card and chip). Pace (--g-lf-mqt) and presence (--g-lf-mqa) ride the
+     class heat from casino.js; the bell turns it gold and outbids heat. */
+  '.g-lf-mq { position:absolute; left:0; right:0; bottom:0; top:var(--g-lf-top);',
+  '  z-index:5; pointer-events:none; opacity:var(--g-lf-mqa,.3);',
+  '  transition:opacity .6s ease; }',
+  '.g-lf-mq i { position:absolute; display:block;',
+  '  background-image:radial-gradient(circle, var(--g-lf-mqc,var(--pink)) 2.1px, transparent 3.2px); }',
+  '.g-lf-mq .mq-t, .g-lf-mq .mq-b { left:0; right:0; height:7px;',
+  '  background-size:17px 7px; background-repeat:repeat-x; }',
+  '.g-lf-mq .mq-l, .g-lf-mq .mq-r { top:0; bottom:0; width:7px;',
+  '  background-size:7px 17px; background-repeat:repeat-y; }',
+  /* The chase runs AROUND the frame: top ->, right v, bottom <-, left ^. The
+     seeded --g-lf-mqp phase means it never opens on the same bulb twice. */
+  '.g-lf-mq .mq-t { top:0; animation:g-lf-mqx var(--g-lf-mqt,1.8s) linear infinite var(--g-lf-mqp,0s); }',
+  '.g-lf-mq .mq-r { right:0; animation:g-lf-mqy var(--g-lf-mqt,1.8s) linear infinite var(--g-lf-mqp,0s); }',
+  '.g-lf-mq .mq-b { bottom:0; animation:g-lf-mqxr var(--g-lf-mqt,1.8s) linear infinite var(--g-lf-mqp,0s); }',
+  '.g-lf-mq .mq-l { left:0; animation:g-lf-mqyr var(--g-lf-mqt,1.8s) linear infinite var(--g-lf-mqp,0s); }',
+  '@keyframes g-lf-mqx { to { background-position-x:17px; } }',
+  '@keyframes g-lf-mqxr { to { background-position-x:-17px; } }',
+  '@keyframes g-lf-mqy { to { background-position-y:17px; } }',
+  '@keyframes g-lf-mqyr { to { background-position-y:-17px; } }',
+  /* The final bell: gold and glowing until the class ends. */
+  '.g-lf-mq.g-lf-mq-bell { --g-lf-mqc:var(--gold);',
+  '  filter:drop-shadow(0 0 6px rgba(245,193,92,.75)); }',
+  /* A find pays light: one pulse, brighter up the ladder (--g-lf-mqf). */
+  '.g-lf-mq.g-lf-mq-flash { animation:g-lf-mqflash .6s ease-out 1; }',
+  '@keyframes g-lf-mqflash {',
+  '  0% { opacity:1; filter:brightness(var(--g-lf-mqf,1.4)) drop-shadow(0 0 10px rgba(255,105,180,.9)); }',
+  '  100% { opacity:var(--g-lf-mqa,.3); filter:none; } }',
+  /* A loss sighs out; it never cuts to silence. */
+  '.g-lf-mq.g-lf-mq-out { opacity:0; transition:opacity 1.4s ease; }',
+  /* Reduced motion: the shell freezes the crawl; we keep a quiet static frame. */
+  'html.arc-reduced .g-lf-mq { opacity:.2; }',
+
+  /* THE ALMOST: a warm click ghosts the target\'s look through the clicked
+     twin with a slot-reel settle. Inside the seat (overflow hides it), over
+     the skin, under the marks; cannot take a click. */
+  '.g-lf-almost { position:absolute; inset:0; z-index:3; pointer-events:none;',
+  '  overflow:hidden; border-radius:8px;',
+  '  animation:g-lf-almostin .68s ease-out 1 both; }',
+  '@keyframes g-lf-almostin {',
+  '  0% { opacity:0; transform:translateY(16%); }',
+  '  30% { opacity:.55; transform:translateY(-3%); }',
+  '  60% { opacity:.48; transform:translateY(1%); }',
+  '  100% { opacity:0; transform:translateY(0); } }',
+
+  /* KEN-BURNS (Law III): the MEDIA inside a seat drifts; the seat, the skin
+     (hue filter / melt transform) and the hitbox never move. Phase staggers
+     off the tile index; the period is seeded per class (--g-lf-kbdur). */
+  '.g-lf-kb .g-lf-media { animation:g-lf-kb var(--g-lf-kbdur,18s) ease-in-out infinite alternate;',
+  '  animation-delay:calc(var(--g-lf-i,0) * -1.7s); }',
+  '@keyframes g-lf-kb {',
+  '  from { transform:scale(1.01) translate(0,0); }',
+  '  to { transform:scale(1.08) translate(2.2%,-1.8%); } }',
 ].join('\n');
 
 /** Inject once per document. Idempotent - re-entering the class is free. */

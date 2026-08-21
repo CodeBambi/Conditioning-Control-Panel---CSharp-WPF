@@ -64,7 +64,8 @@ games/<key>/index.js  one folder per game; games NEVER import each other
   daily-trigger/   the daily word (homeroom, flagship)  - bank/board/ladder/words-*
   lost-and-found/  the mosaic hunt (MEATY, flagship)    - board/grade/hud/util
   deja-vu/         the pair memory                      - script (the swap plan)
-  impulse-control/ the go/nogo assessment               - lex/lies/scoring/stimset/stream
+  impulse-control/ the Drop Tube (pop/withhold)         - lex/schedule/scoring/render/tube3d/tube2d
+                   (seeded three.js chute, vendored r185 in ../vendor/; tube2d = no-WebGL ladder)
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
@@ -226,7 +227,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     it will eat a test suite that boots repeatedly. `clearTimetableCache()` exists for that.
 26. **A `NeutralLexicon` value longer than 96 characters can never be mod-skinned.**
     `MergeModTable` drops any mod string over `Length > 96`, so the long Impulse Control
-    debrief rows (`ic_debrief_buzzer_body`, the `ic_slip_*` lines) always render English. If a
+    rows (the `ic_slip_*` lines, `ic_tube_rules`) always render English. If a
     mod must re-voice one, split it into two rows rather than raising the cap.
 
 27. **`[hidden]` IS A USER-AGENT RULE, SO ANY AUTHOR `display:` BEATS IT.** `.arc-loader,

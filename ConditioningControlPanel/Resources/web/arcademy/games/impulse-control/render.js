@@ -1,476 +1,426 @@
 /* ============================================================================
- * games/impulse-control/render.js - every pixel this class owns.
+ * games/impulse-control/render.js - every pixel of THE DROP TUBE.
  *
- * The approved look is the mockup's Impulse Control section (BUILD-CONTRACT §7 /
- * planning/arcademy/mockups): clinical letterhead strip, one centred aperture on
- * a radial ground, the flying ms readout, the attribution toast, the interference
- * log strip, and a mono footline. Classes are `.g-ic-*` (style.js).
+ * The stage owns the whole class root (game-immersion law: the window IS the
+ * machine). Layers, bottom to top:
+ *   .g-ic-bg        the faded fullscreen media loop (two <img> crossfading over
+ *                   a gradient that is ALWAYS painted - an empty pool still
+ *                   looks dressed)
+ *   canvas          the tube body (tube3d -> tube2d -> static, chosen here)
+ *   .g-ic-flourish  the spiral pop flourish (pointer-events:none)
+ *   .g-ic-basin     the reveal surface: THE bubble (the one interactive node)
+ *   .g-ic-hud       score / streak / progress, pinned to the bottom edge
+ *   .g-ic-break     intro card · .g-ic-debrief  the report
  *
- * FEEDBACK IS ASYMMETRIC BY DESIGN (dossier "Dopamine design"): a correct GO is
- * LOUD (ring punch + gold ms readout), a correct withhold is SERENE (the decoy
- * dissolves to ash, one calm tick). Speed is celebrated, restraint is soothed -
- * the two virtues are taught by feel before any words.
+ * INPUT TRUST: the bubble is the single tap target; every decorative layer is
+ * pointer-events:none. The reveal is class-toggle + src swap only - nothing
+ * ever delays the reveal paint (RT integrity).
  *
- * NO innerHTML anywhere: every node is created and textContent'd, so there is no
- * markup-injection surface for a mod string and the module runs unchanged against
- * the headless DOM double the scratch harness uses.
- *
- * The stamp / streak-meter / jackpot / near-miss beats are NOT reimplemented here
- * - they are shell primitives (SYNTHESIS #10) reached through ctx.ceremonies.
+ * All methods are throw-guarded: a cosmetic failure may never take the class
+ * down. Under the DOM double the tube resolves to its static tier and audio
+ * resolves to silence.
  * ==========================================================================*/
 
-import { injectStyle } from './style.js';
-import { IC_LEX } from './lex.js';
+import { ensureStyle } from './style.js';
+import { createTube2D } from './tube2d.js';
 
-function el(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = String(text);
-  return n;
+const FLAVOR_SRC = {
+  flash: './assets/flash.png',
+  spiral: './assets/spiral.png',
+  sub: './assets/subliminal.png',
+};
+const BUBBLE_SRC = './assets/bubble.png';
+const DENIED_SFX = './assets/denied.mp3';
+
+function url(rel) {
+  try { return new URL(rel, import.meta.url).href; } catch (e) { return rel; }
 }
 
-/** A mono "label value" chrome/footline cell. */
-function cell(label, value) {
-  const s = el('span');
-  s.appendChild(document.createTextNode(label + ' '));
-  const b = el('b', null, value == null ? '--' : String(value));
-  s.appendChild(b);
-  return { node: s, value: b };
-}
+export function createRender(o = {}) {
+  const root = o.root;
+  const t = o.t || ((k, f) => f);
+  const reduced = !!o.reduced;
+  const perf = !!o.perf;
+  const showRt = o.showRt !== false;
+  const log = o.log || (() => {});
+  /* the class seed rides down into the tube: every class grows its own skin,
+     and a retake (same seed, by law) wears the same one */
+  const seed = o.seed == null ? '' : String(o.seed);
 
-export function createRender({ root, t, ceremonies, showRt, reduced, log } = {}) {
-  const say = typeof log === 'function' ? log : () => {};
-  /* ONE resolver (see lies.js): IC_LEX is the canonical English for every ic_ row,
-     so the inline literals below are documentation, never an override. */
-  const lex = (k, f) => {
-    const dflt = IC_LEX[k] != null ? IC_LEX[k] : f;
-    try { return typeof t === 'function' ? t(k, dflt) : (dflt || k); }
-    catch (e) { return dflt || k; }
-  };
-  const cer = ceremonies || null;
-  const wantRt = showRt !== false;
-  const soft = !!reduced;
-  const timers = new Set();
-  const n = {};                        // the node map
+  ensureStyle();
 
-  injectStyle();
+  const doc = (typeof document !== 'undefined') ? document : null;
+  const el = (tag, cls, parent) => {
+    const n = doc ? doc.createElement(tag) : null;
+    if (!n) return null;
+    if (cls) n.className = cls;
+    if (parent) parent.appendChild(n);
+    return n;
+  };
 
-  const later = (fn, ms) => {
-    const id = setTimeout(() => { timers.delete(id); try { fn(); } catch (e) { /* noop */ } }, ms);
-    timers.add(id);
-    return id;
-  };
-  const flash = (node, cls, ms) => {
-    if (!node) return;
-    node.classList.remove(cls);
-    // A read forces the class removal to land before it is re-added, so a
-    // back-to-back response actually replays the animation (shell trap #4's
-    // lesson, one layer down).
-    void node.offsetWidth;
-    node.classList.add(cls);
-    later(() => node.classList.remove(cls), ms);
-  };
+  const nodes = {};
+  /* classList.toggle is missing under the DOM double - add/remove only */
+  const setCls = (n, cls, on) => { try { if (n) n.classList[on ? 'add' : 'remove'](cls); } catch (e) { /* noop */ } };
+  let tube = null;
+  let tubeDead = false;
+  let lastMood = null;   // replayed onto the 3d tube when its async import lands
+  let bgActive = 0;
+  let bgFade = 0.35;
+  let audioCtx = null;
+  let deniedAudio = null;
+  let onResize = null;
+
+  /* ------------------------------------------------------------------ sfx */
+  function chirp(freq, ms, gain) {
+    if (reduced && gain > 0.1) gain = 0.1;
+    try {
+      const AC = (typeof AudioContext === 'function') ? AudioContext
+        : (typeof webkitAudioContext === 'function' ? webkitAudioContext : null);
+      if (!AC) return;
+      if (!audioCtx) audioCtx = new AC();
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      g.gain.setValueAtTime(gain, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + ms / 1000);
+      osc.connect(g); g.connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + ms / 1000 + 0.02);
+    } catch (e) { /* silence is legal */ }
+  }
+  function deniedSting() {
+    try {
+      if (typeof Audio !== 'function') return;
+      if (!deniedAudio) { deniedAudio = new Audio(url(DENIED_SFX)); deniedAudio.volume = 0.45; }
+      deniedAudio.currentTime = 0;
+      const p = deniedAudio.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (e) { /* noop */ }
+  }
 
   /* ---------------------------------------------------------------- mount */
   function mount() {
-    root.textContent = '';
-    const wrap = el('div', 'g-ic');
+    const stage = el('div', 'g-ic', null);
+    if (!stage) return;
+    nodes.stage = stage;
 
-    /* chrome */
-    const chrome = el('div', 'g-ic-chrome');
-    const head = el('span');
-    head.appendChild(el('b', null, lex('ic_assessment', 'Reflex & Compliance Assessment')));
-    chrome.appendChild(head);
-    const subject = cell(lex('ic_subject', 'Subject'), '--');
-    const block = cell(lex('ic_assessment_block', 'Block'), '--');
-    const share = cell(lex('ic_nogo_share', 'NO-GO share'), '--');
-    chrome.appendChild(subject.node);
-    chrome.appendChild(block.node);
-    chrome.appendChild(share.node);
-    const warn = el('span', 'g-ic-warn', lex('ic_warn_armed', 'INTERFERENCE ARMED'));
-    chrome.appendChild(warn);
-    wrap.appendChild(chrome);
+    const bg = el('div', 'g-ic-bg', stage);
+    nodes.bgA = el('img', 'g-ic-bg-img', bg);
+    nodes.bgB = el('img', 'g-ic-bg-img', bg);
+    /* depth: melts the media's EDGES into atmosphere (centre stays legible),
+       then the veil vignettes the whole ground - wallpaper becomes depth */
+    nodes.depth = el('div', 'g-ic-bg-depth', bg);
+    nodes.veil = el('div', 'g-ic-bg-veil', bg);
 
-    /* arena - the whole hall is the tap surface */
-    const arena = el('div', 'g-ic-arena');
-    arena.setAttribute('role', 'button');
-    arena.setAttribute('tabindex', '0');
-    // Set dressing (pointer-events:none in CSS): the door you came in through.
-    arena.appendChild(el('span', 'g-ic-door'));
-    const aperture = el('div', 'g-ic-aperture');
-    const ring = el('span', 'g-ic-ring');
-    const ash = el('span', 'g-ic-ash');
-    const stim = el('span', 'g-ic-stim');
-    aperture.appendChild(ring);
-    aperture.appendChild(ash);
-    aperture.appendChild(stim);
-    arena.appendChild(aperture);
-    const rt = el('span', 'g-ic-rt');
-    arena.appendChild(rt);
-    const edge = el('span', 'g-ic-edge');
-    arena.appendChild(edge);
-    wrap.appendChild(arena);
+    nodes.tubewrap = el('div', 'g-ic-tubewrap', stage);
+    nodes.flourish = el('div', 'g-ic-flourish', stage);
 
-    /* toast + log + footline + streak meter */
-    const toast = el('div', 'g-ic-toast');
-    wrap.appendChild(toast);
-    const lielog = el('div', 'g-ic-lielog');
-    wrap.appendChild(lielog);
-    const meterHost = el('div', 'g-ic-meter');
-    wrap.appendChild(meterHost);
-    const base = el('div', 'g-ic-base');
-    const fMedian = cell(lex('ic_session_median', 'session median'), '--');
-    const fRecord = cell(lex('ic_personal_record', 'personal record'), '--');
-    const fRestraint = cell(lex('ic_restraint', 'restraint'), '--');
-    const fSplit = cell(lex('ic_induced', 'induced'), '0');
-    base.appendChild(fMedian.node);
-    base.appendChild(fRecord.node);
-    base.appendChild(fRestraint.node);
-    base.appendChild(fSplit.node);
-    wrap.appendChild(base);
+    const basin = el('div', 'g-ic-basin', stage);
+    nodes.basin = basin;
+    const bubble = el('div', 'g-ic-bubble', basin);
+    if (bubble) {
+      bubble.setAttribute('role', 'button');
+      bubble.setAttribute('aria-label', t('ic_pop', 'POP'));
+    }
+    nodes.bubble = bubble;
+    nodes.bubbleImg = el('img', 'g-ic-bubble-img', bubble);
+    const x = el('div', 'g-ic-x', bubble);
+    if (x) { el('i', 'g-ic-x-a', x); el('i', 'g-ic-x-b', x); }
+    nodes.x = x;
+    nodes.holdring = el('div', 'g-ic-holdring', bubble);
+    nodes.stamp = el('div', 'g-ic-stamp', stage);
 
-    root.appendChild(wrap);
+    const topline = el('div', 'g-ic-topline', stage);
+    nodes.title = el('span', 'g-ic-topname', topline);
+    if (nodes.title) nodes.title.textContent = t('ic_tube_title', 'The Drop Tube');
+    nodes.subject = el('span', 'g-ic-topsub', topline);
 
-    Object.assign(n, {
-      wrap, chrome, warn, arena, aperture, ring, ash, stim, rt, edge, toast, lielog,
-      meterHost, base,
-      subject: subject.value, block: block.value, share: share.value,
-      fMedian: fMedian.value, fRecord: fRecord.value, fRestraint: fRestraint.value, fSplit: fSplit.value,
-      breakCard: null,
-    });
-    return n;
-  }
+    const hud = el('div', 'g-ic-hud', stage);
+    nodes.hud = hud;
+    const left = el('div', 'g-ic-hud-cell g-ic-hud-left', hud);
+    nodes.counter = el('div', 'g-ic-counter', left);
+    nodes.thread = el('div', 'g-ic-thread', left);
+    nodes.threadFill = el('i', 'g-ic-thread-fill', nodes.thread);
+    const mid = el('div', 'g-ic-hud-cell g-ic-hud-mid', hud);
+    nodes.scoreLabel = el('div', 'g-ic-score-label', mid);
+    if (nodes.scoreLabel) nodes.scoreLabel.textContent = t('ic_score', 'Score');
+    nodes.score = el('div', 'g-ic-score', mid);
+    if (nodes.score) nodes.score.textContent = '0';
+    nodes.rt = el('div', 'g-ic-rt', mid);
+    const right = el('div', 'g-ic-hud-cell g-ic-hud-right', hud);
+    nodes.streakLabel = el('div', 'g-ic-streak-label', right);
+    if (nodes.streakLabel) nodes.streakLabel.textContent = t('ic_streak', 'streak');
+    nodes.pips = el('div', 'g-ic-pips', right);
+    if (nodes.pips) for (let i = 0; i < 5; i++) el('i', 'g-ic-pip', nodes.pips);
 
-  /* --------------------------------------------------------------- chrome */
-  function setChrome(o) {
-    const p = o || {};
-    if (p.subject != null && n.subject) n.subject.textContent = String(p.subject);
-    if (p.block != null && n.block) n.block.textContent = String(p.block);
-    if (p.nogoPct != null && n.share) n.share.textContent = Math.round(p.nogoPct) + '%';
-  }
-  /** The tier-2 taste-of-the-twist is TELEGRAPHED: the player is warned first -
-   *  and the whole room grows uneasy (a slow light pulse) while the warning is up. */
-  function telegraph(on) {
-    if (!n.warn) return;
-    if (on) n.warn.classList.add('on'); else n.warn.classList.remove('on');
-    if (n.wrap) {
-      if (on) n.wrap.classList.add('room-armed');
-      else n.wrap.classList.remove('room-armed');
+    root.appendChild(stage);
+
+    /* the tube: 3d, else 2d, else static - never a throw */
+    createTubeChain();
+
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      onResize = () => { try { if (tube) tube.resize(); } catch (e) { /* noop */ } };
+      window.addEventListener('resize', onResize);
     }
   }
 
-  /* ------------------------------------------------------------- stimulus */
-  let mediaNode = null;
-
-/** The provider serves mp4 on iOS (mp4-only filter), so a media stimulus is not
- *  always an image. An <img> pointed at an mp4 paints NOTHING, and a blank
- *  aperture is an unscoreable trial. */
-const VIDEO_RE = /\.(mp4|m4v|webm|mov)(\?|#|$)/i;
-
-  function paint(dressed) {
-    if (!n.stim) return;
-    n.stim.textContent = '';
-    mediaNode = null;
-    if (dressed && dressed.render === 'media' && dressed.url) {
-      const isVideo = VIDEO_RE.test(String(dressed.url));
-      const node = el(isVideo ? 'video' : 'img');
-      node.setAttribute('src', dressed.url);
-      if (isVideo) {
-        // muted + inline + loop: a stimulus must never ask for a gesture, and
-        // autoplay policy only lets a muted video start on its own.
-        node.setAttribute('muted', '');
-        node.setAttribute('loop', '');
-        node.setAttribute('playsinline', '');
-        node.setAttribute('autoplay', '');
-        node.muted = true;
-        try { if (typeof node.play === 'function') { const p = node.play(); if (p && p.catch) p.catch(() => {}); } }
-        catch (e) { /* a stimulus that will not play still paints its frame */ }
-      } else {
-        node.setAttribute('alt', '');
-      }
-      // A CSS-filter twin: no canvas read ever touches this node, which is what
-      // makes a CORS-tainted remote loop legal as a stimulus.
-      if (dressed.twinCls) node.className = dressed.twinCls;
-      n.stim.appendChild(node);
-      mediaNode = node;
-    } else if (dressed) {
-      n.stim.textContent = String(dressed.text == null ? '' : dressed.text);
-    }
-  }
-
-  function showStimulus(dressed, cls) {
-    paint(dressed);
-    n.stim.classList.remove('nogo');
-    if (cls === 'nogo') n.stim.classList.add('nogo');
-    n.stim.classList.add('on');
-    if (n.aperture) n.aperture.classList.add('hot');
-  }
-
-  /** The commitment trap: re-paint the SAME node as its twin, mid-presentation. */
-  function swapStimulus(dressed) {
-    paint(dressed);
-    n.stim.classList.add('nogo');
-  }
-
-  function hideStimulus() {
-    if (!n.stim) return;
-    n.stim.classList.remove('on');
-    if (n.aperture) n.aperture.classList.remove('hot');
-  }
-
-  /* ------------------------------------------------------------- feedback */
-  /** THE ROOM REACTS: a class on the stage wrap animates the spotlight layer
-   *  (style.js .room-*). Dresses existing beats only - never a timing change,
-   *  and reduced motion collapses every one of these to a cut in CSS. */
-  function roomBeat(kind, ms) {
-    if (n.wrap) flash(n.wrap, 'room-' + kind, ms);
-  }
-
-  /** Correct GO: LOUD. Ring punch, gold ms readout, the light brightens. */
-  function hit(o) {
-    const p = o || {};
-    flash(n.ring, 'go', soft ? 260 : 640);
-    roomBeat('go', soft ? 260 : 640);
-    if (wantRt && n.rt) {
-      n.rt.textContent = (p.rtMs == null ? '--' : Math.round(p.rtMs)) + ' ms';
-      n.rt.classList.remove('slow', 'best');
-      if (p.best) n.rt.classList.add('best');
-      else if (!p.underBaseline) n.rt.classList.add('slow');
-      flash(n.rt, 'on', soft ? 420 : 980);
-    }
-    if (p.edge) flash(n.edge, 'on', 480);
-  }
-
-  /** Correct withhold: SERENE. The decoy dissolves to ash, the light dims
-   *  approvingly - restraint is soothed at room scale. */
-  function withhold() {
-    flash(n.ash, 'on', soft ? 320 : 720);
-    roomBeat('calm', soft ? 400 : 1200);
-  }
-
-  /** An error: no shouting from the UI - but the spotlight snaps. The toast
-   *  does the attributing. */
-  function errorMark() {
-    if (n.aperture) flash(n.aperture, 'tight', 420);
-    roomBeat('snap', 460);
-  }
-
-  /** The clean-chain notch: the aperture ring tightens as the streak climbs. */
-  function tighten(on) {
-    if (!n.aperture) return;
-    if (on) n.aperture.classList.add('tight'); else n.aperture.classList.remove('tight');
-  }
-
-  function streak(filled) {
-    if (!cer || typeof cer.streakMeter !== 'function' || !n.meterHost) return null;
-    try { return cer.streakMeter({ target: n.meterHost, filled, gold: filled >= 10 }); }
-    catch (e) { say('streak meter: ' + (e && e.message)); return null; }
-  }
-
-  function stamp(text, tone) {
-    if (!cer || typeof cer.stamp !== 'function') return null;
-    try { return cer.stamp({ text, tone, target: n.arena }); }
-    catch (e) { say('stamp: ' + (e && e.message)); return null; }
-  }
-
-  function reward(kind, opts) {
-    if (!cer || typeof cer.reward !== 'function') return false;
-    try { return cer.reward(kind, Object.assign({ target: n.arena }, opts || {})); }
-    catch (e) { say('reward: ' + (e && e.message)); return false; }
-  }
-
-  /* ------------------------------------------------------------ the toast */
-  let toastTimer = 0;
-  /**
-   * The mid-class attribution toast. `title` is the lie's headline (bold), `body`
-   * the clinical sentence. Induced reads pink (the machine working); clean reads
-   * lavender (yours to fix). Never shaming, always itemised.
-   */
-  function toast(title, body, clean) {
-    if (!n.toast) return;
-    n.toast.textContent = '';
-    if (title) n.toast.appendChild(el('b', null, title + ' '));
-    if (body) n.toast.appendChild(document.createTextNode(body));
-    if (clean) n.toast.classList.add('clean'); else n.toast.classList.remove('clean');
-    n.toast.classList.add('on');
-    // An induced attribution tints the whole hall pink - the machine working.
-    // Clean errors leave the room neutral: that one's yours, not the room's.
-    if (!clean) roomBeat('lie', soft ? 400 : 950);
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = later(() => { if (n.toast) n.toast.classList.remove('on'); }, 4200);
-  }
-
-  /* ------------------------------------------- the live interference strip */
-  function logMark(pct, kind) {
-    if (!n.lielog) return null;
-    const i = el('i', kind === 'induced' ? 'err' : kind === 'clean' ? 'clean-err' : '');
-    i.style.setProperty('left', Math.max(0, Math.min(100, pct)) + '%');
-    n.lielog.appendChild(i);
-    return i;
-  }
-
-  function footline(o) {
-    const p = o || {};
-    if (n.fMedian) n.fMedian.textContent = p.medianRt == null ? '--' : Math.round(p.medianRt) + ' ms';
-    if (n.fRecord) n.fRecord.textContent = p.record == null ? '--' : Math.round(p.record) + ' ms';
-    if (n.fRestraint) n.fRestraint.textContent = p.restraintPct == null ? '--' : Math.round(p.restraintPct) + '%';
-    if (n.fSplit) n.fSplit.textContent = String(p.induced || 0) + ' / ' + String(p.clean || 0);
-  }
-
-  /* -------------------------------------------------------- break / cards */
-  function breakCard(o) {
-    const p = o || {};
-    clearBreak();
-    const card = el('div', 'g-ic-break');
-    if (p.title) card.appendChild(el('h3', null, p.title));
-    if (p.note) card.appendChild(el('p', null, p.note));
-    if (p.stampline) card.appendChild(el('p', 'g-ic-stampline', p.stampline));
-    if (n.arena) n.arena.appendChild(card);
-    n.breakCard = card;
-    return card;
-  }
-  function clearBreak() {
-    if (n.breakCard) { try { n.breakCard.remove(); } catch (e) { /* noop */ } n.breakCard = null; }
-  }
-
-  /* -------------------------------------------------------------- debrief */
-  /**
-   * The report the class exists to produce. Renders BEFORE endClass on purpose:
-   * ctx.endClass tears the class DOM down immediately (the shell owns the screen
-   * after that), so the interference log has to be readable first. `onSubmit`
-   * wires the button that actually ends the class.
-   *
-   * @param {Object} p {subject, medianRt, baselineMs, established, restraintPct,
-   *                    induced, clean, gate, slipLine, offPct, events, errors,
-   *                    durationMs, tier, buzzerLied}
-   */
-  function debrief(p, onSubmit, onRecalibrate) {
-    const d = p || {};
-    root.textContent = '';
-    const wrap = el('div', 'g-ic g-ic-debrief');
-    wrap.appendChild(el('h3', null, lex('ic_debrief', 'Debrief')));
-    wrap.appendChild(el('p', 'g-ic-sub',
-      lex('ic_subject', 'Subject') + ' #' + (d.subject || '0000')
-      + '   ' + lex('ic_assessment', 'Reflex & Compliance Assessment')));
-
-    /* the four cells */
-    const grid = el('div', 'g-ic-grid');
-    const putCell = (label, value, tone) => {
-      const c = el('div', 'g-ic-cell');
-      c.appendChild(el('span', null, label));
-      c.appendChild(el('b', tone || null, value));
-      grid.appendChild(c);
+  function createTubeChain() {
+    const fall2d = () => {
+      if (tubeDead) return;
+      try { tube = createTube2D({ mount: nodes.tubewrap, reduced, seed }); }
+      catch (e) { tube = createTube2D({ mount: null }); }
+      log('tube: ' + tube.kind);
     };
-    putCell(lex('ic_session_median', 'session median'),
-      d.medianRt == null ? '--' : Math.round(d.medianRt) + ' ms',
-      d.medianRt != null && d.baselineMs && d.medianRt <= d.baselineMs ? 'gold' : null);
-    putCell(lex('ic_baseline', 'baseline'), d.baselineMs ? Math.round(d.baselineMs) + ' ms' : '--');
-    putCell(lex('ic_restraint', 'restraint'), (d.restraintPct == null ? '--' : Math.round(d.restraintPct) + '%'),
-      d.restraintPct >= 98 ? 'gold' : null);
-    putCell(lex('ic_induced', 'induced') + ' / ' + lex('ic_clean', 'clean'),
-      String(d.induced || 0) + ' / ' + String(d.clean || 0),
-      (d.induced || 0) > 0 ? 'pink' : null);
-    wrap.appendChild(grid);
+    let p = null;
+    try {
+      p = import('./tube3d.js').then((m) => m.createTube3D({ mount: nodes.tubewrap, reduced, perf, seed }));
+    } catch (e) { p = null; }
+    if (p && typeof p.then === 'function') {
+      p.then((t3) => {
+        if (tubeDead) { try { t3.destroy(); } catch (e) { /* noop */ } return; }
+        tube = t3;
+        log('tube: 3d');
+        if (lastMood) { try { t3.setMood(lastMood); } catch (e) { /* noop */ } }
+      }).catch((e) => {
+        log('tube: webgl unavailable (' + ((e && e.message) || e) + ') - 2d fallback');
+        fall2d();
+      });
+    } else fall2d();
+  }
+  const tubeCall = (fn, a) => { try { if (tube && tube[fn]) tube[fn](a); } catch (e) { /* noop */ } };
 
-    /* the timeline: lie markers on top, errors underneath - the share hook */
-    wrap.appendChild(el('p', 'g-ic-sub', lex('ic_interference_log', 'Interference log')));
-    const tl = el('div', 'g-ic-timeline');
-    const span = Math.max(1, Number(d.durationMs) || 1);
-    for (const ev of (d.events || [])) {
-      const i = el('i');
-      i.style.setProperty('left', Math.max(0, Math.min(99, ((ev.atMs - (d.startedAt || 0)) / span) * 100)) + '%');
-      i.setAttribute('title', ev.label || ev.kind);
-      tl.appendChild(i);
-    }
-    for (const err of (d.errors || [])) {
-      const i = el('i', err.induced ? 'err' : 'clean-err');
-      i.style.setProperty('left', Math.max(0, Math.min(99, ((err.atMs - (d.startedAt || 0)) / span) * 100)) + '%');
-      tl.appendChild(i);
-    }
-    wrap.appendChild(tl);
-    wrap.appendChild(el('p', 'g-ic-legend', lex('ic_legend', 'top row: interference events   bottom row: your errors')));
+  /* ------------------------------------------------------------------- bg */
+  function setBgFade(v) {
+    bgFade = Math.max(0, Math.min(0.8, Number(v) || 0));
+    applyBg();
+  }
+  function applyBg() {
+    const act = bgActive === 0 ? nodes.bgA : nodes.bgB;
+    const idle = bgActive === 0 ? nodes.bgB : nodes.bgA;
+    if (act) { act.style.opacity = String(bgFade); act.classList.add('on'); }
+    if (idle) { idle.style.opacity = '0'; idle.classList.remove('on'); }
+  }
+  /** Swap the backdrop to a new url (crossfades when it loads). */
+  function swapBg(u) {
+    if (!u || !nodes.bgA) return;
+    const next = bgActive === 0 ? nodes.bgB : nodes.bgA;
+    const flip = () => { bgActive = bgActive === 0 ? 1 : 0; applyBg(); };
+    try {
+      let done = false;
+      next.onload = () => { if (!done) { done = true; flip(); } };
+      next.onerror = () => { done = true; };
+      next.src = u;
+      /* a cached image may never fire onload under some webviews */
+      if (next.complete) { if (!done) { done = true; flip(); } }
+    } catch (e) { /* keep the old backdrop */ }
+  }
 
-    /* the attributed lines - the actual product */
-    const lines = el('ul', 'g-ic-lines');
-    const pushLine = (induced, headline, body) => {
-      const li = el('li', induced ? 'induced' : null);
-      li.appendChild(el('b', null, headline + ' '));
-      li.appendChild(document.createTextNode(body));
-      lines.appendChild(li);
+  /* --------------------------------------------------------------- bubble */
+  function showLoad() {
+    tubeCall('loadPulse');
+  }
+  function setTravel(p) { tubeCall('setTravel', p); }
+
+  /** The reveal: paint is class + src only - never delayed. */
+  function revealBubble(b) {
+    const bub = nodes.bubble;
+    if (!bub) return;
+    bub.classList.remove('pop', 'fade', 'hit');
+    if (nodes.bubbleImg) nodes.bubbleImg.src = url(b.kind === 'denied' ? BUBBLE_SRC : (FLAVOR_SRC[b.flavor] || BUBBLE_SRC));
+    setCls(nodes.x, 'on', b.kind === 'denied');
+    if (nodes.holdring) {
+      nodes.holdring.classList.remove('on');
+      if (b.kind === 'denied') {
+        nodes.holdring.style.setProperty('--ic-hold', b.windowMs + 'ms');
+        /* restart the CSS countdown */
+        void (bub.offsetWidth);
+        nodes.holdring.classList.add('on');
+      }
+    }
+    bub.classList.add('on');
+    tubeCall('reveal');
+    if (!reduced) chirp(b.kind === 'denied' ? 190 : 620, 90, 0.05);
+  }
+
+  function popBubble(good) {
+    const bub = nodes.bubble;
+    if (bub) { bub.classList.remove('on'); bub.classList.add('pop'); }
+    tubeCall('pop', good);
+    chirp(good ? 880 : 240, 140, 0.12);
+  }
+  function fadeBubble() {
+    const bub = nodes.bubble;
+    if (bub) { bub.classList.remove('on'); bub.classList.add('fade'); }
+  }
+  function deniedPassed() {
+    const bub = nodes.bubble;
+    if (bub) { bub.classList.remove('on'); bub.classList.add('fade'); }
+    tubeCall('denyPass');
+    chirp(520, 160, 0.08);
+  }
+  function hitDenied() {
+    const bub = nodes.bubble;
+    if (bub) { bub.classList.remove('on'); bub.classList.add('hit'); }
+    if (nodes.stage) {
+      nodes.stage.classList.remove('shake');
+      void (nodes.stage.offsetWidth);
+      nodes.stage.classList.add('shake');
+    }
+    /* the tube takes the hit too: jolt + red flash + reversed flow (denyHit);
+       an older/static tier without it falls back to the plain pop beat */
+    try {
+      if (tube && typeof tube.denyHit === 'function') tube.denyHit();
+      else if (tube && typeof tube.pop === 'function') tube.pop(false);
+    } catch (e) { /* noop */ }
+    deniedSting();
+  }
+
+  /** The spiral flourish - the one effect drawn in-game (engine has no spiral). */
+  function flourish() {
+    if (!nodes.flourish || !doc) return;
+    try {
+      const img = doc.createElement('img');
+      img.className = 'g-ic-flourish-img';
+      img.src = url(FLAVOR_SRC.spiral);
+      nodes.flourish.appendChild(img);
+      setTimeout(() => { try { img.remove(); } catch (e) { /* noop */ } }, reduced ? 240 : 1000);
+    } catch (e) { /* noop */ }
+  }
+
+  /* ----------------------------------------------------------------- text */
+  function stamp(kind, text) {
+    const s = nodes.stamp;
+    if (!s) return;
+    s.textContent = text;
+    s.className = 'g-ic-stamp on ' + (kind || '');
+    void (s.offsetWidth);
+  }
+  function hud(h) {
+    /* the living material follows the class: progress + streak drive the
+       tube's pattern, spin and tint (setMood is cosmetic and throw-guarded) */
+    if (h.n != null && h.total) {
+      lastMood = { progress: Math.min(1, h.n / h.total), streak: h.streak || 0 };
+      tubeCall('setMood', lastMood);
+    }
+    if (nodes.score && h.score != null) nodes.score.textContent = String(Math.max(0, Math.round(h.score)));
+    if (nodes.rt) nodes.rt.textContent = (showRt && h.rt != null) ? Math.round(h.rt) + 'ms' : '';
+    if (nodes.counter && h.n != null) {
+      nodes.counter.textContent = t('ic_bubble_n', 'Bubble') + ' ' + h.n + ' / ' + h.total;
+    }
+    if (nodes.threadFill && h.n != null && h.total) {
+      nodes.threadFill.style.setProperty('--ic-prog', String(Math.min(1, h.n / h.total)));
+    }
+    if (nodes.pips && h.streak != null) {
+      const kids = nodes.pips.children || [];
+      for (let i = 0; i < kids.length; i++) {
+        setCls(kids[i], 'on', i < (h.streak % 5 === 0 && h.streak > 0 ? 5 : h.streak % 5));
+      }
+    }
+    if (nodes.subject && h.subject) nodes.subject.textContent = h.subject;
+  }
+
+  /* ------------------------------------------------------------ big cards */
+  function intro(o2) {
+    clearCard();
+    const card = el('div', 'g-ic-break', nodes.stage);
+    if (!card) return;
+    nodes.card = card;
+    const h = el('h2', 'g-ic-break-title', card);
+    if (h) h.textContent = o2.title;
+    const p = el('p', 'g-ic-break-note', card);
+    if (p) p.textContent = o2.note;
+    const hint = el('p', 'g-ic-break-hint', card);
+    if (hint) hint.textContent = o2.hint || '';
+  }
+  function clearCard() {
+    if (nodes.card) { try { nodes.card.remove(); } catch (e) { /* noop */ } nodes.card = null; }
+  }
+
+  function debrief(d, onSubmit, onRecal) {
+    clearCard();
+    if (nodes.hud) nodes.hud.classList.add('off');
+    if (nodes.bubble) nodes.bubble.classList.remove('on');
+    const wrap = el('div', 'g-ic-debrief', nodes.stage);
+    if (!wrap) return;
+    nodes.card = wrap;
+    const paper = el('div', 'g-ic-paper', wrap);
+    const head = el('div', 'g-ic-paper-head', paper);
+    const ttl = el('h2', null, head);
+    if (ttl) ttl.textContent = t('ic_debrief', 'Debrief');
+    const sub = el('span', 'g-ic-paper-sub', head);
+    if (sub) sub.textContent = t('ic_subject', 'Subject') + ' #' + d.subject;
+
+    const scoreRow = el('div', 'g-ic-paper-score', paper);
+    const sv = el('b', null, scoreRow);
+    if (sv) sv.textContent = String(Math.max(0, d.score));
+    const sl = el('span', null, scoreRow);
+    if (sl) sl.textContent = t('ic_score', 'Score');
+
+    const grid = el('div', 'g-ic-paper-grid', paper);
+    const cell = (label, value, cls) => {
+      const c = el('div', 'g-ic-cell ' + (cls || ''), grid);
+      const v = el('b', null, c);
+      if (v) v.textContent = value;
+      const l = el('span', null, c);
+      if (l) l.textContent = label;
     };
-    if (d.buzzerLied) {
-      // DECISIONS #7: ALWAYS attributed, whether or not it caused an error.
-      pushLine(true, lex('ic_debrief_buzzer_lied', 'That buzzer lied.'),
-        lex('ic_debrief_buzzer_body', 'A clean GO was answered with the error buzzer.'));
+    cell(t('ic_median_rt', 'median pop'), d.medianRt == null ? '-' : Math.round(d.medianRt) + 'ms');
+    cell(t('ic_best_rt', 'best pop'), d.bestRt == null ? '-' : Math.round(d.bestRt) + 'ms', d.newBest ? 'gold' : '');
+    cell(t('ic_baseline', 'baseline'), d.baselineMs ? Math.round(d.baselineMs) + 'ms' : '-');
+    cell(t('ic_popped', 'popped'), d.popped + ' / ' + d.goodShown);
+    cell(t('ic_x_held', 'X held'), String(d.deniedHeld), d.xClicked === 0 ? 'good' : '');
+    cell(t('ic_x_popped', 'X popped'), String(d.xClicked), d.xClicked > 0 ? 'bad' : 'good');
+
+    const line = el('p', 'g-ic-paper-line', paper);
+    if (line) line.textContent = d.line || '';
+    if (d.hint) {
+      const hint = el('p', 'g-ic-paper-hint', paper);
+      if (hint) hint.textContent = d.hint;
     }
-    for (const err of (d.errors || [])) {
-      const at = ((err.atMs - (d.startedAt || 0)) / 1000).toFixed(1) + 's';
-      if (err.induced) {
-        pushLine(true, lex('ic_err_' + err.kind, err.kind) + ' at ' + at + ' -',
-          (err.lieLabel ? err.lieLabel + ' fired ' + Math.max(0, Math.round(err.lieLagMs)) + 'ms prior. ' : '')
-          + lex('ic_debrief_induced_line', 'You heard it, and you obeyed.'));
-      } else {
-        pushLine(false, lex('ic_err_' + err.kind, err.kind) + ' at ' + at + ' -',
-          lex('ic_debrief_clean_line', "No interference was active. That one's yours."));
+
+    const row = el('div', 'g-ic-paper-actions', paper);
+    const submitBtn = el('button', 'btn g-ic-submit', row);
+    if (submitBtn) {
+      submitBtn.textContent = t('ic_submit', 'Submit report');
+      submitBtn.addEventListener('click', () => { try { onSubmit(); } catch (e) { /* noop */ } });
+    }
+    if (onRecal) {
+      const rec = el('button', 'btn ghost g-ic-recal', row);
+      if (rec) {
+        rec.textContent = t('ic_recalibrate', 'Recalibrate baseline');
+        let armed = false;
+        rec.addEventListener('click', () => {
+          if (!armed) { armed = true; rec.textContent = t('ic_recalibrate_confirm', 'Tap again to confirm'); return; }
+          rec.textContent = t('ic_recalibrated', 'Baseline cleared - the next class recalibrates.');
+          rec.disabled = true;
+          try { onRecal(); } catch (e) { /* noop */ }
+        });
       }
     }
-    if (!lines.children.length) {
-      pushLine(false, lex('ic_debrief_no_errors', 'No errors. Nothing to attribute.'),
-        (d.events || []).length ? '' : lex('ic_debrief_no_lies', 'No interference was active this round.'));
-    }
-    wrap.appendChild(lines);
+  }
 
-    /* the comeback hook + the actions */
-    const slip = el('p', 'g-ic-slip', d.slipLine || '');
-    wrap.appendChild(slip);
-    if (d.established) wrap.appendChild(el('p', 'g-ic-slip', lex('ic_baseline_new', 'Baseline established.')));
-
-    const actions = el('div', 'g-ic-actions');
-    const submit = el('button', 'btn primary', lex('ic_submit', 'Submit report'));
-    submit.type = 'button';
-    submit.addEventListener('click', () => { try { onSubmit(); } catch (e) { say('submit: ' + (e && e.message)); } });
-    actions.appendChild(submit);
-
-    /* recalibrate: a 2-click confirm, because it throws the yardstick away */
-    const recal = el('button', 'btn ghost', lex('ic_recalibrate', 'Recalibrate baseline'));
-    recal.type = 'button';
-    let armed = false;
-    recal.addEventListener('click', () => {
-      if (!armed) {
-        armed = true;
-        recal.textContent = lex('ic_recalibrate_confirm', 'Tap again to confirm');
-        later(() => { if (armed) { armed = false; recal.textContent = lex('ic_recalibrate', 'Recalibrate baseline'); } }, 4000);
-        return;
-      }
-      armed = false;
-      recal.disabled = true;
-      recal.textContent = lex('ic_recalibrated', 'Baseline cleared.');
-      try { onRecalibrate(); } catch (e) { say('recalibrate: ' + (e && e.message)); }
-    });
-    actions.appendChild(recal);
-    wrap.appendChild(actions);
-    wrap.appendChild(el('p', 'g-ic-hint', d.hint || ''));
-
-    root.appendChild(wrap);
-    n.debriefWrap = wrap;
-    n.submit = submit;
-    n.recal = recal;
-    return { wrap, submit, recal };
+  /* ------------------------------------------------------------ lifecycle */
+  function suspend(on) {
+    setCls(nodes.stage, 'suspended', !!on);
+    tubeCall('suspend', on);
+  }
+  function destroy() {
+    tubeDead = true;
+    try { if (tube) tube.destroy(); } catch (e) { /* noop */ }
+    tube = null;
+    try {
+      if (onResize && typeof window !== 'undefined' && window.removeEventListener) window.removeEventListener('resize', onResize);
+    } catch (e) { /* noop */ }
+    try { if (audioCtx && audioCtx.close) audioCtx.close(); } catch (e) { /* noop */ }
+    try { if (nodes.stage) nodes.stage.remove(); } catch (e) { /* noop */ }
   }
 
   return {
-    nodes: n,
-    mount, setChrome, telegraph,
-    showStimulus, swapStimulus, hideStimulus,
-    hit, withhold, errorMark, tighten, streak, stamp, reward,
-    toast, logMark, footline, breakCard, clearBreak, debrief,
-    get mediaNode() { return mediaNode; },
-    destroy() {
-      for (const id of Array.from(timers)) clearTimeout(id);
-      timers.clear();
-      try { root.textContent = ''; } catch (e) { /* noop */ }
-    },
+    nodes,
+    mount, intro, clearCard, debrief,
+    showLoad, setTravel, revealBubble, popBubble, fadeBubble, deniedPassed, hitDenied,
+    flourish, stamp, hud, swapBg, setBgFade,
+    suspend, destroy,
+    tubeKind: () => (tube ? tube.kind : 'none'),
   };
 }
-
-export default createRender;
