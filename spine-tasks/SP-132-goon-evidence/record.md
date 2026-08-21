@@ -117,7 +117,7 @@ seconds after the previous run), and the comment in `capture.ps1` says what is t
 
 ## 4. Every check demonstrated to fail on a capture of the wrong state
 
-All at the committed head `965ef0a29` (§4.3's last two rows at `2b4dcd5f0`, the guard-hardening
+All at the committed head `965ef0a29` (§4.3's last two rows at `08c3bf768`, the guard-hardening
 commit, and re-run there in full). Three real wrong-state captures, at the same rect.
 
 | # | Wrong state | How produced | `goon-page-backdrop` | `goon-page-explainer-card` |
@@ -178,7 +178,7 @@ run that **deleted both real gates still PASSED**, because the token survives in
 message that explains them. **A guard satisfiable by its own error text is the defect it exists to
 catch, one level up.** Every needle now binds the PowerShell REFUSAL — `-notmatch 'ready=true'`,
 `-match 'nav=failed'`, `-ne 'embedded'` — which prose about a refusal cannot satisfy, and all four
-variants above red at `2b4dcd5f0`.
+variants above red at `08c3bf768`.
 
 ---
 
