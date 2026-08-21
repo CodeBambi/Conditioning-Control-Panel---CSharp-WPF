@@ -124,35 +124,35 @@ cited line; the pin checks both sides.
 <!-- census:sites -->
 | # | upstream | needle | verdict | port trigger | port needle | T3 | notes |
 |---|---|---|---|---|---|---|---|
-| 1 | `Services/Flash/FlashService.cs:1453` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:298` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | A flash image appears. Upstream's LAYER arm; one of three mutually exclusive spawn arms in `SpawnFlashWindow` (`:1445`, `:1455`, `:1482`) that all call the same thing. |
-| 2 | `Services/Flash/FlashService.cs:1480` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:298` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | Same moment, upstream's shared-HOST arm. |
-| 3 | `Services/Flash/FlashService.cs:1516` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:298` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | Same moment, upstream's per-WINDOW arm. Nothing is lost by the collapse: all three arms call one method and the arm is a rendering choice, not a haptic one. |
-| 4 | `Services/Flash/FlashService.cs:1627` | `haptics.SetLayer(Services.Haptics.Core.HapticLayer.Luminance,` | present | `Effects/FlashSurfacePresenter.cs:298` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: latch + intensity | A flash image is on screen, for as long as it is. Shares the port statement with 1-3 but is a different command: a continuous layer at the image's average brightness, auto-zeroed after the flash's own lifetime. The port already holds the decoded BGRA bytes at this point (`Effects/FlashFrameSource.cs:111`, `:164`), so no second decode is needed. |
+| 1 | `Services/Flash/FlashService.cs:1453` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:307` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | A flash image appears. Upstream's LAYER arm; one of three mutually exclusive spawn arms in `SpawnFlashWindow` (`:1445`, `:1455`, `:1482`) that all call the same thing. |
+| 2 | `Services/Flash/FlashService.cs:1480` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:307` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | Same moment, upstream's shared-HOST arm. |
+| 3 | `Services/Flash/FlashService.cs:1516` | `App.Haptics?.FlashDecayVibeAsync()` | collapsed | `Effects/FlashSurfacePresenter.cs:307` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: intensity + ladder | Same moment, upstream's per-WINDOW arm. Nothing is lost by the collapse: all three arms call one method and the arm is a rendering choice, not a haptic one. |
+| 4 | `Services/Flash/FlashService.cs:1627` | `haptics.SetLayer(Services.Haptics.Core.HapticLayer.Luminance,` | present | `Effects/FlashSurfacePresenter.cs:307` | `_surfaces.Place(slot, request, frame, draw.Lifetime)` | fail: latch + intensity | A flash image is on screen, for as long as it is. Shares the port statement with 1-3 but is a different command: a continuous layer at the image's average brightness, auto-zeroed after the flash's own lifetime. The port already holds the decoded BGRA bytes at this point (`Effects/FlashFrameSource.cs:111`, `:164`), so no second decode is needed. |
 | 5 | `Services/Flash/FlashService.cs:1915` | `App.Haptics?.FlashClickVibeAsync()` | absent-by-decision | — | — | — | A flash is popped. Reached by THREE upstream routes, not one: the mouse click (`:1846`), the gaze pop (`:294`) and the layered-visual click (`:3632`). The port has no route of any kind. |
-| 6 | `Services/Video/VideoService.cs:2580` | `App.Haptics?.StartVideoBackgroundVibeAsync()` | collapsed | `Effects/MandatoryVideoEffect.cs:279` | `_surface.Begin(firing.Path, firing.MaxLength, OnClipEnded)` | fail: latch + intensity | A clip starts playing. Upstream's LibVLC engine, the fallback one. |
-| 7 | `Services/Video/VideoService.Browser.cs:452` | `App.Haptics?.StartVideoBackgroundVibeAsync()` | collapsed | `Effects/MandatoryVideoEffect.cs:279` | `_surface.Begin(firing.Path, firing.MaxLength, OnClipEnded)` | fail: latch + intensity | Same moment on upstream's DEFAULT engine, which `VideoService.cs:2407` routes to first. The port has one video path and no browser engine, so both engines' starts are one statement here. This is the site both prior counts missed. |
+| 6 | `Services/Video/VideoService.cs:2580` | `App.Haptics?.StartVideoBackgroundVibeAsync()` | collapsed | `Effects/MandatoryVideoEffect.cs:287` | `_surface.Begin(firing.Path, firing.MaxLength, OnClipEnded)` | fail: latch + intensity | A clip starts playing. Upstream's LibVLC engine, the fallback one. |
+| 7 | `Services/Video/VideoService.Browser.cs:452` | `App.Haptics?.StartVideoBackgroundVibeAsync()` | collapsed | `Effects/MandatoryVideoEffect.cs:287` | `_surface.Begin(firing.Path, firing.MaxLength, OnClipEnded)` | fail: latch + intensity | Same moment on upstream's DEFAULT engine, which `VideoService.cs:2407` routes to first. The port has one video path and no browser engine, so both engines' starts are one statement here. This is the site both prior counts missed. |
 | 8 | `Services/Video/VideoService.cs:2584` | `App.Haptics?.FunScript?.OnVideoStarted(path)` | absent-by-decision | — | — | — | A clip starts, and a `.funscript` sidecar next to it should drive the toy for the clip's length. |
 | 9 | `Services/Video/VideoService.Browser.cs:453` | `App.Haptics?.FunScript?.OnVideoStarted(_browserPath ?? "")` | absent-by-decision | — | — | — | Same, on the default engine. Not in any prior count. |
 | 10 | `Services/Video/VideoService.cs:4585` | `App.Haptics?.VideoTargetHitAsync()` | absent-by-decision | — | — | — | An attention target is caught during a clip. |
 | 11 | `Services/Video/VideoService.cs:4673` | `App.Haptics?.PostEvent(Services.Haptics.Core.HapticEventKind.ToyButtonReward)` | absent-by-decision | — | — | — | An attention check is satisfied by squeezing the toy instead of clicking. Absent twice over: the moment needs attention checks, and the reward needs toy INPUT. |
-| 12 | `Services/Video/VideoService.cs:6580` | `App.Haptics?.StopVideoBackgroundVibeAsync()` | present | `Effects/MandatoryVideoEffect.cs:374` | `RefreshSchedule()` | fail: latch | The clip stops holding the screen; `:374` is the first statement of the `OnClipEnded` handler declared at `:372`, cited as a statement because §2 defines a trigger point as one. **The port's second teardown path, `Effects/MandatoryVideoEffect.cs:299` (`OnDisarmed`), does NOT reach `OnClipEnded`** — `Effects/VideoSurfacePresenter.cs:466` clears the callback — so a limb must place the stop on BOTH or it repeats upstream's D203 defect. |
+| 12 | `Services/Video/VideoService.cs:6580` | `App.Haptics?.StopVideoBackgroundVibeAsync()` | present | `Effects/MandatoryVideoEffect.cs:416` | `RefreshSchedule()` | fail: latch | The clip stops holding the screen; `:416` is the first statement of the `OnClipEnded` handler declared at `:414`, cited as a statement because §2 defines a trigger point as one. **The port's second teardown path, `Effects/MandatoryVideoEffect.cs:337` (`OnDisarmed`), does NOT reach `OnClipEnded`** — `Effects/VideoSurfacePresenter.cs:466` clears the callback — so a limb must place the stop on BOTH or it repeats upstream's D203 defect. |
 | 13 | `Services/Video/VideoService.cs:6584` | `App.Haptics?.FunScript?.OnVideoStopped()` | absent-by-decision | — | — | — | The clip ends and any script following it must be dropped and its layer zeroed. |
-| 14 | `Services/Subliminal/SubliminalService.cs:230` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:197` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | A subliminal phrase is shown. Upstream's WITH-whisper-audio branch of `FlashSubliminal` (`:203`, guard `:220`). |
-| 15 | `Services/Subliminal/SubliminalService.cs:588` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:197` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | Same moment, upstream's silent branch, inside the helper `TriggerSubliminalWithHapticPattern` (`:577`). The port has no whisper audio, so the two branches are one path here. **What the collapse loses is the ANTICIPATION**: upstream fires the haptic first and delays the visual by `SubliminalAnticipationMs` (250 ms, or 1300 ms on Buttplug — `Services/Haptics/HapticService.cs:88`), and the port shows the card immediately. |
+| 14 | `Services/Subliminal/SubliminalService.cs:230` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:210` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | A subliminal phrase is shown. Upstream's WITH-whisper-audio branch of `FlashSubliminal` (`:203`, guard `:220`). |
+| 15 | `Services/Subliminal/SubliminalService.cs:588` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:210` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | Same moment, upstream's silent branch, inside the helper `TriggerSubliminalWithHapticPattern` (`:577`). The port has no whisper audio, so the two branches are one path here. **What the collapse loses is the ANTICIPATION**: upstream fires the haptic first and delays the visual by `SubliminalAnticipationMs` (250 ms, or 1300 ms on Buttplug — `Services/Haptics/HapticService.cs:88`), and the port shows the card immediately. |
 | 16 | `Services/Subliminal/SubliminalService.cs:297` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | absent-by-decision | — | — | — | The "Bambi Freeze" trigger phrase is shown. |
 | 17 | `Services/Subliminal/SubliminalService.cs:387` | `App.Haptics?.TriggerSubliminalPatternAsync(resetText)` | absent-by-decision | — | — | — | The "Bambi Reset" follow-up is shown. |
-| 18 | `Services/Subliminal/BouncingTextService.cs:516` | `App.Haptics?.BouncingTextBounceAsync()` | present | `Effects/BouncingTextField.cs:223` | `Bounces++` | fail: intensity | A bouncing word hits a screen edge. **In a module this port shipped** (SP-115), and in no prior count. The port's statement even sits at the same place in the sequence: upstream fires between the bounce bookkeeping and the 10 % text re-roll (`:516` against `:519`), and `:223` sits between `Bounces++` and the same re-roll at `Effects/BouncingTextField.cs:235`. |
+| 18 | `Services/Subliminal/BouncingTextService.cs:516` | `App.Haptics?.BouncingTextBounceAsync()` | present | `Effects/BouncingTextField.cs:230` | `Bounces++` | fail: intensity | A bouncing word hits a screen edge. **In a module this port shipped** (SP-115), and in no prior count. The port's statement even sits at the same place in the sequence: upstream fires between the bounce bookkeeping and the 10 % text re-roll (`:516` against `:519`), and `:230` sits between `Bounces++` and the same re-roll at `Effects/BouncingTextField.cs:251`. |
 <!-- /census:sites -->
 
 ### 3.1 The five port trigger points, gathered
 
 | port statement | serves sites | what a limb would do there |
 |---|---|---|
-| `Effects/FlashSurfacePresenter.cs:298` | 1, 2, 3, 4 | one decay ladder AND one luminance layer per placed image |
-| `Effects/MandatoryVideoEffect.cs:279` | 6, 7 | raise the continuous video layer |
-| `Effects/MandatoryVideoEffect.cs:374` (+ `:299`) | 12 | zero it, on every path that takes the clip off the screen |
-| `Effects/SubliminalsEffect.cs:197` | 14, 15 | one short pulse per card |
-| `Effects/BouncingTextField.cs:223` | 18 | one 60 ms pulse per bounce |
+| `Effects/FlashSurfacePresenter.cs:307` | 1, 2, 3, 4 | one decay ladder AND one luminance layer per placed image |
+| `Effects/MandatoryVideoEffect.cs:287` | 6, 7 | raise the continuous video layer |
+| `Effects/MandatoryVideoEffect.cs:416` (+ `:337`) | 12 | zero it, on every path that takes the clip off the screen |
+| `Effects/SubliminalsEffect.cs:210` | 14, 15 | one short pulse per card |
+| `Effects/BouncingTextField.cs:230` | 18 | one 60 ms pulse per bounce |
 
 ---
 
@@ -165,19 +165,19 @@ would be `absent-unexplained`, and there are none.
 <!-- census:decisions -->
 | site | decision | quote |
 |---|---|---|
-| 5 | `Effects/FlashSurfacePresenter.cs:294` | `serve pop / hydra / XP mechanics this port does not have` |
-| 8 | `Haptics/IHapticSink.cs:219` | `a script player this port has not ported at all` |
-| 9 | `Haptics/IHapticSink.cs:219` | `a script player this port has not ported at all` |
-| 10 | `Effects/MandatoryVideoEffect.cs:363` | `not ported and not shown as dead controls: attention` |
-| 11 | `Effects/MandatoryVideoEffect.cs:363` | `not ported and not shown as dead controls: attention` |
-| 11 | `Haptics/IHapticSink.cs:221` | `haptic INPUT` |
-| 13 | `Haptics/IHapticSink.cs:219` | `a script player this port has not ported at all` |
-| 16 | `Effects/SubliminalsEffect.cs:56` | `follow-up (<c>:276-404</c>)` |
-| 17 | `Effects/SubliminalsEffect.cs:56` | `follow-up (<c>:276-404</c>)` |
+| 5 | `Effects/FlashSurfacePresenter.cs:303` | `serve pop / hydra / XP mechanics this port does not have` |
+| 8 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
+| 9 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
+| 10 | `Effects/MandatoryVideoEffect.cs:405` | `not ported and not shown as dead controls: attention` |
+| 11 | `Effects/MandatoryVideoEffect.cs:405` | `not ported and not shown as dead controls: attention` |
+| 11 | `Haptics/IHapticSink.cs:235` | `haptic INPUT` |
+| 13 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
+| 16 | `Effects/SubliminalsEffect.cs:57` | `follow-up (<c>:276-404</c>)` |
+| 17 | `Effects/SubliminalsEffect.cs:57` | `follow-up (<c>:276-404</c>)` |
 <!-- /census:decisions -->
 
 **Site 5 — the flash pop.** The quoted sentence is the reason the port's flash surfaces are created
-`ClickThrough: true` unconditionally (`Effects/FlashSurfacePresenter.cs:297`): a surface that caught
+`ClickThrough: true` unconditionally (`Effects/FlashSurfacePresenter.cs:306`): a surface that caught
 clicks it does nothing with would swallow the user's input. **The moment this site fires on is a
 flash being popped**, and with every flash surface click-through there is no pop. **The quote covers all three
 upstream routes, because it names the MECHANIC rather than the input**: `pop / hydra / XP mechanics

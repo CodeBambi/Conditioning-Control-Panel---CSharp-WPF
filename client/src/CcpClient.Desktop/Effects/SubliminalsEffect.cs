@@ -1,4 +1,5 @@
-using CcpClient.Desktop.Capabilities;
+﻿using CcpClient.Desktop.Capabilities;
+using CcpClient.Desktop.Haptics;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
 using CcpClient.Desktop.Session;
@@ -79,7 +80,17 @@ public sealed class SubliminalsEffect : PacedSessionEffect<SubliminalFiring>
     private readonly PersistenceStore<SubliminalPresetDocument> _preset;
     private readonly ISubliminalSurface? _surface;
     private readonly Random _random;
+    private readonly IHapticLimb? _haptics;
 
+    /// <param name="owner">This module's operation owner.</param>
+    /// <param name="signal">The one boundary a state change is allowed to arrive on.</param>
+    /// <param name="clock">The clock the schedule paces on.</param>
+    /// <param name="pool">Where the phrases come from.</param>
+    /// <param name="preset">This module's persisted dials.</param>
+    /// <param name="random">The jitter's source; injected so a fact can pin the arithmetic.</param>
+    /// <param name="surface">Where the card goes.</param>
+    /// <param name="haptics">SP-126: the haptic limb, told once per card shown, with the card's own
+    /// words. Null is ABSENT rather than silent.</param>
     public SubliminalsEffect(
         AsyncOperationOwner owner,
         EffectSignal signal,
@@ -87,7 +98,8 @@ public sealed class SubliminalsEffect : PacedSessionEffect<SubliminalFiring>
         ISubliminalPhrasePool pool,
         PersistenceStore<SubliminalPresetDocument> preset,
         Random? random = null,
-        ISubliminalSurface? surface = null)
+        ISubliminalSurface? surface = null,
+        IHapticLimb? haptics = null)
         : base(owner, signal, clock, "subliminal-schedule")
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -96,6 +108,7 @@ public sealed class SubliminalsEffect : PacedSessionEffect<SubliminalFiring>
         _preset = preset;
         _random = random ?? new Random();
         _surface = surface;
+        _haptics = haptics;
     }
 
     /// <summary>
@@ -195,6 +208,19 @@ public sealed class SubliminalsEffect : PacedSessionEffect<SubliminalFiring>
     protected override void Deliver(SubliminalFiring firing)
     {
         _surface?.Show(firing.Card);
+
+        // SP-126, census sites 14 and 15. Upstream fires TriggerSubliminalPatternAsync from both
+        // branches of FlashSubliminal — the with-whisper one (SubliminalService.cs:230) and the
+        // silent one inside TriggerSubliminalWithHapticPattern (:588) — and this port has no whisper
+        // audio, so the two are one path here. The PHRASE travels rather than a duration, because
+        // the duration is keyed off the trigger's own wording (HapticService.cs:899-909).
+        //
+        // WHAT THE COLLAPSE LOSES, recorded rather than invented: upstream fires the haptic FIRST
+        // and delays the visual by SubliminalAnticipationMs (250 ms, 1300 on Buttplug —
+        // HapticService.cs:88); this port shows the card immediately. Reproducing the anticipation
+        // would mean delaying a shipped module's PICTURE by a quarter second to lead a vibration
+        // that no admitted provider can deliver, which is a visible regression bought for nothing.
+        _haptics?.SubliminalShown(firing.Card.Text);
         Fired?.Invoke(firing.Event);
     }
 

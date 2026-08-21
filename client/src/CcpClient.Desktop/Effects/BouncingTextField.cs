@@ -1,3 +1,5 @@
+﻿using CcpClient.Desktop.Haptics;
+
 namespace CcpClient.Desktop.Effects;
 
 /// <summary>One logo's motion state, in physical pixels and pixels per second.</summary>
@@ -78,6 +80,7 @@ public sealed class BouncingTextField
     private readonly Random _random;
     private readonly BouncingTextPresentation _presentation;
     private readonly Func<string, (int Width, int Height)> _measure;
+    private readonly IHapticLimb? _haptics;
 
     private double _x;
     private double _y;
@@ -95,11 +98,14 @@ public sealed class BouncingTextField
     /// <param name="measure">How wide and tall a word renders. Injected so the motion can be proven
     /// with no rasteriser at all.</param>
     /// <param name="random">Injected, so a trajectory can be pinned exactly.</param>
+    /// <param name="haptics">SP-126: the haptic limb, told once per wall bounce. Null is ABSENT
+    /// rather than silent — this field has no limb at all in a build that wires none.</param>
     public BouncingTextField(
         BouncingTextPresentation presentation,
         (int X, int Y, int Width, int Height) bounds,
         Func<string, (int Width, int Height)> measure,
-        Random random)
+        Random random,
+        IHapticLimb? haptics = null)
     {
         ArgumentNullException.ThrowIfNull(presentation);
         ArgumentNullException.ThrowIfNull(measure);
@@ -107,6 +113,7 @@ public sealed class BouncingTextField
         _presentation = presentation;
         _measure = measure;
         _random = random;
+        _haptics = haptics;
         Bounds = bounds;
 
         _text = SelectText();
@@ -221,6 +228,13 @@ public sealed class BouncingTextField
         }
 
         Bounces++;
+
+        // SP-126, census site 18. WPF fires BouncingTextBounceAsync() at
+        // Services/Subliminal/BouncingTextService.cs:516, between the bounce bookkeeping and the
+        // 10 % text re-roll at :519 — and this call sits in exactly that place in exactly that
+        // sequence, above the re-roll below. One 60 ms request at priority 0, which the on-time
+        // floor widens to a 130 ms on-time inside a 158 ms envelope (HapticPatterns.cs:36-65).
+        _haptics?.BounceHit();
 
         // WPF's corner rule: both axes in one step is a corner, and a single-axis bounce counts too
         // when the word is within the tolerance of one (:459-470).

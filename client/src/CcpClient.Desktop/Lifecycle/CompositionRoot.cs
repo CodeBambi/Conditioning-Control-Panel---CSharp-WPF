@@ -221,12 +221,25 @@ public sealed class CompositionRoot
         var store = new PersistenceStore<DemoSettings>(
             infra.OwnerFor("Persistence"), infra.Log, SettingsPathFactory(),
             DemoSettings.CurrentSchemaVersion, [new DemoMigrationV0ToV1()]);
+        // SP-126: the haptic participant is CONSTRUCTED here, above the session, because the session
+        // is constructed AGAINST its limb — and construction starts nothing (SP-003 contract §4.4),
+        // so hoisting it changes no behaviour at all. It is still REGISTERED last, below, which is
+        // what actually decides start and teardown order.
+        //
+        // A session that built its own sink instead would be a SECOND sink: harmless only while
+        // HapticSinkFactory.AdmittedRoutes is empty, and two live clients against one server the day
+        // a route is admitted.
+        var haptics = new Haptics.HapticParticipant(
+            infra, Path.GetDirectoryName(SettingsPathFactory())!,
+            sink: null,
+            _entitlementForParticipants is { } entitlement ? entitlement.ResolveAsync : null);
         // SP-118: built into a local first because the scheduler below is constructed AGAINST this
         // exact engine. A second SessionParticipant here would give the rack row and the scheduler
         // two different sessions, which is the shell-local-copy failure MainWindow already refuses.
         var session = new Session.SessionParticipant(
             infra, Path.GetDirectoryName(SettingsPathFactory())!,
-            SessionClockFactory?.Invoke(), FlashImagePoolFactory?.Invoke());
+            SessionClockFactory?.Invoke(), FlashImagePoolFactory?.Invoke(),
+            haptics: haptics.Limb);
         return
         [
             store,
@@ -288,10 +301,11 @@ public sealed class CompositionRoot
             // Construction connects to nothing, and neither does phase 3 while no provider route is
             // admitted: upstream guards its own auto-connect the same way and says why
             // (App.xaml.cs:2098-2105).
-            new Haptics.HapticParticipant(
-                infra, Path.GetDirectoryName(SettingsPathFactory())!,
-                sink: null,
-                _entitlementForParticipants is { } entitlement ? entitlement.ResolveAsync : null),
+            //
+            // SP-126: it is CONSTRUCTED above the session (which takes its limb) and REGISTERED here,
+            // last. Registration order is what decides phase-3 start and reverse-order teardown, so
+            // the limb and its sink are still released before anything that could drive them.
+            haptics,
         ];
     }
 

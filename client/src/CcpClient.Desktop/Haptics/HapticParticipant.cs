@@ -21,8 +21,10 @@ namespace CcpClient.Desktop.Haptics;
 /// This is the port's existing <see cref="IBackgroundParticipant"/>, registered LAST in
 /// <c>CompositionRoot.DefaultParticipants</c>, which buys four properties from machinery that
 /// already exists: phase 3 starts it after every store it might read; teardown stops it FIRST,
-/// because participant stop is reverse order, so the sink is gone before the session that would one
-/// day drive it; its document flushes in the reserved pre-drain slot; and — the one that matters
+/// because participant stop is reverse order, so the sink and its limb are released before the
+/// session that drives them (SP-126 — and the guarantee that nothing is left running does NOT rest
+/// on that order, because <see cref="ShutdownStopAsync"/> has already all-stopped in the pre-drain
+/// head slot below); its document flushes in the reserved pre-drain slot; and — the one that matters
 /// most here — <see cref="ShutdownStopAsync"/> occupies the HEAD of that same pre-drain slot, which
 /// is the port's analogue of upstream's own comment: <i>"Haptics FIRST and synchronously (bounded
 /// ~2s): a Lovense level has no server-side watchdog, so a toy we don't countermand keeps running
@@ -59,12 +61,19 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// A monotonic tick a test reads to prove ORDER — that the all-stop really ran before the things
     /// it must precede. Never used on a product path.
     /// </param>
+    /// <param name="clock">
+    /// SP-126: the LIMB's timing seam. It belongs to the app-scoped haptic owner rather than to a
+    /// session, which is upstream's own arrangement — the mixer's output loop is the haptic
+    /// service's and is independent of every module's timer
+    /// (<c>Services/Haptics/Core/HapticMixer.cs:224-247</c>). Null takes the real one.
+    /// </param>
     public HapticParticipant(
         ParticipantInfrastructure infra,
         string dataDirectory,
         IHapticSink? sink = null,
         Func<CancellationToken, Task<EntitlementOutcome>>? resolveEntitlement = null,
-        Func<long>? sequence = null)
+        Func<long>? sequence = null,
+        ISessionClock? clock = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -78,6 +87,21 @@ public sealed class HapticParticipant : IBackgroundParticipant
             infra.OwnerFor("HapticSettings"), infra.Log,
             Path.Combine(dataDirectory, HapticSettingsDocument.FileName),
             HapticSettingsDocument.CurrentSchemaVersion);
+
+        // SP-126. The gate is the master toggle AND the entitlement decision, asked HERE and never
+        // at a module, which is upstream's central refusal (HapticMixer.cs:191-204, :843) and the
+        // reason D204's activity readout keeps firing for a user who can feel nothing. The device
+        // roster is whatever the LAST observation named — null on every run of this build, because
+        // no route is admitted and nothing was ever asked of a server, so the limb evaluates and
+        // has nothing to address.
+        Limb = new HapticLimb(
+            Sink,
+            clock ?? new SystemSessionClock(ex => infra.Log.Log(
+                "haptic-limb: a scheduled evaluation faulted and was contained — "
+                + $"{ex.GetType().Name}: {ex.Message}")),
+            () => OutputAllowed && Enabled,
+            () => LastObservation?.DeviceKeys ?? [],
+            infra.Log.Log);
     }
 
     /// <inheritdoc/>
@@ -88,6 +112,17 @@ public sealed class HapticParticipant : IBackgroundParticipant
 
     /// <summary>The one sink. The panel reads its last outcome; nothing else may touch it.</summary>
     public IHapticSink Sink { get; }
+
+    /// <summary>
+    /// SP-126: the one limb, and the only thing that drives <see cref="Sink"/>.
+    ///
+    /// <para>It is owned HERE, beside the sink, for the reason this whole participant exists:
+    /// upstream's mixer is a member of the app-scoped haptic service, constructed at startup and
+    /// never engine-started, so it outlives every session and every module that commands it. The
+    /// composition root hands this object to the session, which threads it to the five statements
+    /// the census maps (<c>client/docs/haptic-limb-census.md</c> §3.1).</para>
+    /// </summary>
+    public HapticLimb Limb { get; }
 
     /// <summary>The persisted setting (public so the panel can save the box it was allowed to tick,
     /// the shape every module's store has).</summary>
@@ -158,15 +193,15 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// <list type="bullet">
     /// <item><b>Off</b> — the enable is off, OR nothing in this build can reach a device.</item>
     /// <item><b>Armed</b> — the enable is on and a device is really reachable.</item>
-    /// <item><b>Live</b> — <b>UNREACHABLE, and that is D179 made visible on the rack.</b> Live would
-    /// have to mean "something is being sent". Nothing is: the thirteen ported effect modules are
-    /// silent to this sink, where upstream drives it from THIRTEEN sites in three of them
-    /// (<c>Services/Flash/FlashService.cs:1453,1480,1516,1627,1915</c>;
-    /// <c>Services/Video/VideoService.cs:2580,4585,4673,6580</c>;
-    /// <c>Services/Subliminal/SubliminalService.cs:230,297,387,588</c> — the full enumeration and
-    /// the four adjacent-but-not-output sites are on <see cref="IHapticSink"/>). Giving them a
-    /// haptic limb is a later packet, and until then a lit dot here would claim a limb that does not
-    /// exist.</item>
+    /// <item><b>Live</b> — <b>STILL UNREACHABLE, and SP-126 did not change that.</b> Live would have
+    /// to mean "something is being SENT". Nothing is, and the reason is no longer that the modules
+    /// are silent: since SP-126 five statements in the effect spine command
+    /// <see cref="Limb"/> at the right moments with upstream's own envelopes. What stops a send is
+    /// one rung further out — <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, so no server
+    /// was ever asked, so <see cref="LastObservation"/> names no device, so
+    /// <see cref="HapticLimb.EvaluationsWithNoDevice"/> rises where <see cref="HapticLimb.Sends"/>
+    /// cannot. <b>A limb does not light this dot and must not</b>: both conjuncts below are about
+    /// what a SERVER said, and a limb touches neither.</item>
     /// </list>
     ///
     /// <para>Upstream passes a dot predicate for this row —
@@ -377,6 +412,13 @@ public sealed class HapticParticipant : IBackgroundParticipant
         // everyone). Today that costs nothing — the unadmitted sink's Dispose is empty — but the day
         // a route is admitted the sink holds a WebSocket or an HttpClient, and leaking one on the
         // failure path is how a process keeps a connection open after it has given up.
+        //
+        // SP-126: the LIMB is released BEFORE the sink, and the order is the same one this method
+        // has always been about. The limb holds scheduled one-shot wakes; a wake that fired after
+        // the sink went away would be a level-set into a disposed object on a pool thread, which is
+        // exactly the race upstream lost when its all-stop was only ever scheduled
+        // (HapticService.cs:957-962).
+        Limb.Dispose();
         Sink.Dispose();
 
         if (!_running)
@@ -395,6 +437,12 @@ public sealed class HapticParticipant : IBackgroundParticipant
     {
         AllStops++;
         AllStopSequence = _sequence?.Invoke() ?? -1;
+        // SP-126: the limb's own state goes FIRST and without touching the sink, which is upstream's
+        // gate-close arm exactly — drop every transient and zero every layer (HapticMixer.cs:264,
+        // ClearAll at :1044-1049), THEN stop the devices once (:265). A limb that all-stopped for
+        // itself would spend the stop budget twice on the teardown path, which is the defect
+        // upstream's one-shot latch fixed (:172-174).
+        Limb.Clear();
         var state = await Sink.StopAllAsync().ConfigureAwait(false);
         // Logged as a classification, not as a failure: on this build the all-stop refuses because
         // nothing was ever driven, and a line that read like an error every run would train a reader
