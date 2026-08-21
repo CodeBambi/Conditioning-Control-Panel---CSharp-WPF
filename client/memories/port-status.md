@@ -1,5 +1,20 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## Wave 68 RAN 2026-08-22, NOT LANDED — a fresh session certifies it
+
+- **SP-136** `worktree-agent-ae859c22c33d424fe` @ `78724f3d1`, unit **+12** / headless +0. Closes board row 32 (P0):
+  `validate-wave.mjs` could print `WAVE OK` on a packet that then RED the suite, because the validator asked glob-aware
+  coverage and the C# guard asked literal substring. The C# now holds no coverage predicate at all.
+- **SP-137** `worktree-agent-a4047a34f4dfbe4ad` @ `879e4800f`, unit **+5** / headless +0. Closes board row 337 (P1):
+  two sentences shown to users had gone false while nobody edited them.
+- **LAND ARITHMETIC: pin 2599 + 12 + 5 = 2616 unit, 152 headless unchanged.** SP-136's delta moved 9 -> 12 mid-review.
+- **Land obligations recorded by the lanes:** board row 32 to move off OPEN; `client/docs/port-workflow.md:15`'s range
+  into `FloorWrapperGuardTests.cs` is rotted by SP-136 and has no mechanical detector (replacements in its record §10);
+  both `floor-delta.json` files consumed and deleted.
+- **Base at hand-off `f891d600b`.** Orchestrator corrected a D294 overstatement it authored at the wave-67 land, and filed
+  the root cause: a divergence carries no STATUS, so "closed" is free prose in the ledger while `OPEN/WIP/BLOCKED/DONE` is
+  controlled vocabulary on the board, and nothing can notice them disagreeing.
+
 ## Wave 67 LANDED 2026-08-22 (`78986160e`) — floor 2599/152
 
 - **SP-134** built the obvious contended-desktop detector, MEASURED it, and rejected it: presence of

@@ -1258,3 +1258,43 @@ was needed. That is the wave-63 lesson working.
 **Header repair:** this file said `Next Task ID: SP-132` while SP-135 was already used — the exact
 stale-header failure `client/port.txt` warns about. Repaired to SP-136 from the body, per the rule
 to trust the body and never reissue a used ID.
+
+### Wave 68 (**RAN 2026-08-22** — two lanes, BOTH REPORTED, both PASS at final review, lock cleared. NOT LANDED: a fresh
+session certifies it, because the context that ran the work must never certify it.)
+
+| Packet | Branch | Head | Declared delta |
+|---|---|---|---|
+| SP-136-wave-guard-convergence | `worktree-agent-ae859c22c33d424fe` | `78724f3d1` | unit **+12**, headless +0 |
+| SP-137-claims-that-went-false | `worktree-agent-a4047a34f4dfbe4ad` | `879e4800f` | unit **+5**, headless +0 |
+
+Base `766be7ac0` for both. **Pin at hand-off is 2599 / 152; the land sums 12 + 5 = 17, giving 2616 / 152.**
+SP-136's delta MOVED from 9 to 12 during revision — sum the 12. Neither lane opened `floor.json`.
+
+**SP-136** made `validate-wave.mjs` the single owner of the chokepoint-coverage and wrapper-routing decisions, emitting them
+through a read-only `--emit-packet-scopes` projection that `FloorWrapperGuardTests` consumes; the C# guard lost three of its
+five contract-row regexes and now holds no coverage predicate at all. Twelve facts, all watched red at the committed head.
+Closes board row 32 (P0).
+
+**SP-137** corrected two sentences the port shows users that had gone false while nobody edited them: the Goon VoiceNotes
+refusal (falsified by SP-135's deny hook, still true on Linux) and the Haptics panel's absence line plus its Armed arm
+(falsified by SP-126's limb wiring). Three claim-to-code bindings. Closes board row 337 (P1).
+
+**REVIEW COST, RECORDED BECAUSE IT IS THE POINT.** Both packets were Review Level 3, and every stage was paired with
+independent adversarial verification. The gates returned REVISE **five** times across the two lanes, and the two most
+consequential findings came from review rather than from the lane that wrote the code:
+
+- **SP-136 closed the drift on check 4 and silently OPENED it on check 2.** Routing the SP-065 wrapper-routing verdict
+  through the projection deleted the C# side's independent predicate, and the refusal branch was then executed by no test
+  at all. One substitution silenced the wave gate and the floor guard together — an edit that WAS caught before the diff.
+  The lane's own conclusion: a fixture only guards the decision it covers, and consolidation is not free.
+- **SP-137's replacement for the Armed arm was self-refuting.** That arm renders only once a route is admitted, so text
+  saying "no provider route is admitted" was false in the only world where a user could read it.
+
+**TEN INSTANCES OF ONE SHAPE, three of them the orchestrator's.** A description outrunning its mechanism: a MIRROR note
+reading "do not let these two drift" throughout the drift; a record asserting the floor pin is name-anchored when it
+anchors counts; a class comment claiming a shadow makes a fact fail when only a REPLACING shadow does; "two bindings" left
+stale in five artifacts by the commit that made it three, one of them naming an id that never existed; a provenance claim
+that went false because the fix moved the artifact it described. And the sharpest: **D302 and D304's corrections did not
+RENDER** — a literal `||` inside a code span split each row into six cells, so GFM dropped D304's entire retraction. The
+notation naming the additive shadow destroyed the description of it, and this is the wave-64 defect at repository scale
+(27,859 characters across 17 board rows). The enforcement half is now recorded: count the delimiters, never read them.
