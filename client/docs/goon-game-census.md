@@ -179,7 +179,7 @@ comment at `:1502` calls it *"The Goon Game transfer cache"*.
 
 **So the surface's real C# footprint is 35 files / 16476 lines, and the row's 25 is 71.4% of it.**
 The row understates the code by four dev-cockpit files and a six-file subsystem, while overstating
-the shipped game by twenty-one.
+the shipped game by twenty.
 
 ### 1.5 The four design documents are the most portable artefact in the surface
 
@@ -292,7 +292,7 @@ must **expose the required primitive** at an opened `client/src/**` line.
 | # | Owner's phrase | WPF evidence (opened) | Required primitive | Port anchor | Label | Platform |
 |---|---|---|---|---|---|---|
 | B1 | Real-time 1v1 duels | `docs/GOON_GAME_PROTOCOL.md:141-142` — WebRTC data channel via `/v2/goon/signal`, then peer-to-peer; `Services/GoonGame/GoonWebRtcTransport.cs:12-19` | Two people on different machines see the same match state change within a second of each other | `none` — nothing in `client/src` opens a socket to anything but its own loopback (§2.3) | **OWNER-GATED** (§6.1) — it creates the port's first outbound network boundary | Windows: unproven. Linux: unproven. **Neither cell is dischargeable by engineering** |
-| B2 | media payload throwing | `GoonContracts.cs:44-54` (the nine elements); `docs/GOON_GAME_PROTOCOL.md:264-272` (charge costs, risk tiers, 1/30 s rate) | Throw one of nine effect kinds at the other seat, receiver-validated and receiver-resolved | The served page's own `exec/` renderers, over the shipped WebView host precedent (`client/src/CcpClient.Desktop/Features/Dtrh/DtrhCapabilityProbes.cs:21`) | **PARTIAL on the shipped WebView-host precedent** — missing member: the `init`/`manifest` bridge frames (§7). Delivery to a *second seat* is B1 | Windows: unproven — gate: a headed capture of the page in the port's WebView. **Linux: unproven** — gate: run the page in the Avalonia WebView on real X11/Wayland; no WSL distro here (`client/memories/port-status.md:89-93`) |
+| B2 | media payload throwing | `GoonContracts.cs:44-54` (the nine elements); `docs/GOON_GAME_PROTOCOL.md:264-272` (charge costs, risk tiers, 1/30 s rate) | Throw one of nine effect kinds at the other seat, receiver-validated and receiver-resolved | The served page's own `exec/` renderers, over the shipped WebView host precedent (`client/src/CcpClient.Desktop/Features/Dtrh/DtrhCapabilityProbes.cs:22`) | **PARTIAL on the shipped WebView-host precedent** — missing member: the `init`/`manifest` bridge frames (§7). Delivery to a *second seat* is B1 | Windows: unproven — gate: a headed capture of the page in the port's WebView. **Linux: unproven** — gate: run the page in the Avalonia WebView on real X11/Wayland; no WSL distro here (`client/memories/port-status.md:89-93`) |
 | B3 | heat build | `docs/GOON_GAME_PROTOCOL.md:268-272` — 1 pt/s x (1 + 0.15 x draft risk sum) x attention multiplier; charge cap 3 | A score and a charge budget that climb while you endure | Same served page; the arithmetic runs in `core/scoring.js` | **PARTIAL on the shipped WebView-host precedent** — same missing member as B2 | Windows: unproven. Linux: unproven — same gates |
 | B4 | sudden death | `docs/GOON_GAME_PROTOCOL.md:229-253` — the ladder is a pure function both sides compute; `Services/GoonGame/Rounds/` (5 files, 1098 lines) | Synchronised mini-rounds with a net-score ladder ending at −3 | Same served page (`core/suddenDeath.js`, `ui/sd/`) | **PARTIAL on the shipped WebView-host precedent** — in Practice the ladder runs locally against the scripted peer | Windows: unproven. Linux: unproven |
 | B5 | P2P own-media send (photos/videos/GIFs) | `docs/GOON_GAME_PROTOCOL.md:287-296` — second negotiated data channel `goon-media`, **media frames never ride relay or signaling**; `Services/GoonGame/GoonCacheBridge.cs` (892 lines) | Send your own image or video to the other person's screen | `none` | **OWNER-GATED** (§6.2) — user media leaving the machine | Windows: unproven. Linux: unproven |
@@ -301,7 +301,7 @@ must **expose the required primitive** at an opened `client/src/**` line.
 | B8 | 10 s voice notes with opt-in consent + push-to-talk (V) | `docs/GOON_VOICE_PLAN.md:61` `VN_MAX_MS = 10_000`, `:62` `VN_MAX_BYTES = 262_144`; **`GoonHostService.cs:489` `e.State = CoreWebView2PermissionState.Allow`** for `CoreWebView2PermissionKind.Microphone` (`:482`) | Record the user's real voice and play it on another person's machine | `none` — the port opens no capture device of any kind | **OWNER-GATED** (§6.3) — a **sensor**, and it sits against `client/docs/capability-inventory.md:69` | Windows: unproven. Linux: unproven — `capability-inventory.md:78` would additionally require a Linux capture proof |
 | B9 | share-link invite with no account needed | `docs/GOON_GAME_PROTOCOL.md:67-93` — a `/join` body with no `unified_id` mints a server-side guest id `g_` + 8 random bytes | Let a stranger with no account take the second seat from a URL | `none` | **OWNER-GATED** (§6.1) — a server mints an identity for a person who never installed anything. **Web-client only upstream** (`:88-90`) | Windows: unproven. Linux: unproven |
 | B10 | Discord rich presence | `GoonHostService.cs:1422` — `rp-state` dropped entirely unless `GoonRichPresence` is on; `:1428` `App.DiscordRpc?.SetGoonActivity(s)` | Publish to another service that this person is in a duel right now | `none` — no Discord, no IPC, no presence anywhere in `client/src` (§2.3) | **OWNER-GATED** (§6.5) — what is shown to others | Windows: unproven. Linux: unproven |
-| B11 | solo practice mode | `Resources/web/goon/ui/soloDriver.js:1-18` — a scripted opponent driving the GUEST half of a **loopback pair**; `ui/screens/title.js:5-6` *"Nothing on this screen touches the network"* | Play a full match alone, against a scripted opponent, with no second machine | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhCapabilityProbes.cs:21` (embedded WebView, shipped) + the payload-link glob at `CcpClient.Desktop.csproj:50-54` (shipped four times) | **PARTIAL on the shipped WebView-host precedent** — missing member: the `init` + `manifest` bridge frames (§7.1) | Windows: unproven — gate: a headed capture of a practice match. Linux: unproven — same gate on X11/Wayland |
+| B11 | solo practice mode | `Resources/web/goon/ui/soloDriver.js:1-18` — a scripted opponent driving the GUEST half of a **loopback pair**; `ui/screens/title.js:5-6` *"Nothing on this screen touches the network"* | Play a full match alone, against a scripted opponent, with no second machine | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhCapabilityProbes.cs:22` (embedded WebView, shipped) + the payload-link glob at `CcpClient.Desktop.csproj:50-54` (shipped four times) | **PARTIAL on the shipped WebView-host precedent** — missing member: the `init` + `manifest` bridge frames (§7.1) | Windows: unproven — gate: a headed capture of a practice match. Linux: unproven — same gate on X11/Wayland |
 | B12 | received partner media is ephemeral and never outlives the match | `TransferInboxStore.cs:62-72` — purged at the startup sweep, at page boot, and at window close; *"Do not 'optimize' persistence back in"* | A store that provably cannot survive the session | `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs:83` is the port's typed store and is the **opposite** shape — it exists to persist | **GAP: a deliberately non-durable media store with three purge points** — (a) primitive: bytes on disk that are wiped on crash-restart, on re-open and on close; (b) WPF keeps a second index beside the own-artifact one in one root; (c) the port would build it — **and it is only reachable if B5 lands** | Windows: unproven. Linux: unproven — pure filesystem, identical on both |
 
 ### 4.1 What the map says overall
@@ -565,7 +565,7 @@ BUILDABLE-IN-PART and clause 3 is not reached.
 | Item | Size |
 |---|---|
 | Payload to serve | **184 files, 164 of them loaded by the page**, 12 471 900 bytes — **linked read-only, zero bytes forked** (§5.3) |
-| Port code already present | The embedded WebView (`Features/Dtrh/DtrhCapabilityProbes.cs:21`), the loopback serving contract (`Features/Intake/IntakeHostWindow.axaml.cs:701-707` names it), and the payload glob shipped four times (`CcpClient.Desktop.csproj:50-54`) |
+| Port code already present | The embedded WebView (`Features/Dtrh/DtrhCapabilityProbes.cs:22`), the loopback serving contract (`Features/Intake/IntakeHostWindow.axaml.cs:701-707` names it), and the payload glob shipped four times (`CcpClient.Desktop.csproj:50-54`) |
 | Port code to add | A host window plus the bridge subset: **`init` + `manifest`** (host->page) and **`ready` + `log` + `heartbeat`/`pong` + `exit`/`exit-done`** (page->host). The frame catalogue is at `GoonHostService.cs:30-53` and the `init` shape is written out **field-for-field twice** — `GoonHostService.cs:300-350` and `bridge.js:371-440` — so it is transcribable, not reverse-engineered |
 | `caps` for this unit | `haptics:false`, `camera:false`, `assetCache:false`, `mediaTransfer:false`, `canHost:false`; `solo` defaults on (`bridge.js:391`) |
 | Upstream code to port | **none of the 25 as code.** Practice runs entirely in the page on the loopback pair (`ui/soloDriver.js:1-18`, `net/loopbackTransport.js:19-23`). What must be transcribed is **three consent defaults** the `init` frame carries — `LiveDurationSec` 720 (`GoonContracts.cs:97`), `ToyCap` 0.7 (`:297`), `PayloadMinGapMs` 30000 (`:108`) — because the host reads them off `ConsentSheetMsg` rather than inventing them (§1.3) |
@@ -681,6 +681,12 @@ none of them.
   by something. **What actually closes that class is §10.4.3**, which re-derives the label tally from
   the map's own rows and compares it against every restatement in this document *including the
   verdict's spelled-out one*. Bind a number to its claim, or accept that you have not bound it.
+- **THE NUMBER SWEEP IS BLIND TO CITATIONS BY CONSTRUCTION.** `File.ext:NNN` is one of its excluded
+  classes — it has to be, or every citation would demand a pin — so a **citation** corrected in one
+  place and left stale in another is invisible to it. Three such stale citations were found in this
+  document by hand after two review rounds. `EveryBodyCitationOfAPortAnchor_UsesTheLineThePinTable`
+  `Claims` now covers the port-anchor half; the WPF half rests on pinning each citation that carries
+  a finding, and on a reader.
 - **The number-pin is VOCABULARY-level, not claim-level.** §10.7's fact requires every numeric token
   to appear in a §10 table or in this section; it cannot tell *which* claim a number belongs to, so
   a number pinned for one purpose would satisfy the fact if it were later reused wrongly for
@@ -937,23 +943,35 @@ Every term is re-derived from the shipping bytes on every run.
   a list of literals: `File.ext:NNN` and `:NNN` citation forms, `§N.N` section references, `DNNN`
   divergence ids, `SP-NNN` packet ids, row ids, ISO dates, `vN.N` versions, hash-algorithm names,
   hex shas, and headings.
-- **WHERE THE SWEEP'S TWO SIDES CAN DIVERGE, enumerated — because BOTH holes this guard has shipped
-  were divergences between them, not bad classes.** The sweep is two functions over one document and
-  it is only ever as good as their agreement:
+- **WHERE THE SWEEP CAN LEAK, enumerated — and the list is AS COMPLETE AS FIVE ROUNDS OF
+  ADVERSARIAL TESTING HAVE MADE IT, which is not the same as complete.** Five structurally distinct
+  holes have been found in this one guard: positional, asymmetric, lexical, overbroad, and
+  self-referential. Every one was found by a mechanism rather than by reading, and every one was a
+  disagreement between the sweep's two halves rather than a bad exclusion class. **No numeral in
+  this table is written as a digit**, because the table sits inside §10 and the fifth hole was this
+  table feeding its own examples back into the vocabulary it documents.
 
   | Axis | Divergence that actually happened | State now |
   |---|---|---|
   | **Section boundaries** | The vocabulary side treated everything after `## 10.` as pinned, and §10 is the last section, so appended prose self-whitelisted | ONE `Sections()` walk feeds both sides, so they cannot disagree about where a section ends |
-  | **Class filtering** | The vocabulary side harvested digits RAW while the checking side stripped classes, so row ids and citation line numbers injected 7, 12, 16 and 24 — **this is how a stale 16% survived** | Both sides apply `ExcludedNumberClasses` |
-  | **What is admissible** | — | Vocabulary admits §9 lines and §10 **table rows only**; the checking side skips exactly those and reads everything else, §10 prose included |
+  | **Class filtering** | The vocabulary side harvested digits RAW while the checking side stripped classes, so row ids and citation line numbers injected seven, twelve, sixteen and twenty-four — **this is how a stale sixteen-percent survived** | Both sides apply `ExcludedNumberClasses` |
+  | **What is admissible** | **THE FIFTH HOLE, and this row is where it lived.** "Table row inside §10" did not distinguish a PIN table from a NARRATIVE one, so this axis table — the table documenting the guard's defects — re-injected the integers it was describing, and was the only source of one of them | Vocabulary admits §9 lines and table rows in **pin subsections §10.1-§10.6 only**. §10.7 is narrative and is CHECKED like body prose |
+  | **The `Line` column** | Not a divergence but the SAME SHAPE, and inherent to vocabulary-level pinning: §10.4/§10.5 pin a citation by its line number, and that number then whitelists the same integer anywhere in the document — exactly how row ids leaked before them | **Not fixed, and not fixable at this design.** Disclaimed by name in §9; the claim-level substitute is §10.4.3 |
   | **Token regex** | — | One literal regex, read by both |
   | **Normalisation** | — | One `Normalize()`, called by both |
 
-  An edit that changes one side must change the other. Three `TheNumberSweep_*` fixtures pin the
-  repaired behaviours, each watched red before it shipped.
+  An edit that changes one side must change the other. Four `TheNumberSweep_*` fixtures pin the
+  repaired behaviours, each watched red at the head that ships it.
 - **The label tally re-derives from the map's own rows** (§10.4.3) and is compared against every
   restatement in this document, **including the verdict's spelled-out one** — the check that catches
   a corrected tally which did not propagate to the section a reader stops at.
+- **A port anchor cited in body prose must use the line §10.5 pins for it.** This closes the one
+  stale-restatement class no other mechanism here can see: **a citation is a class the number sweep
+  deliberately EXCLUDES**, so a citation corrected in the pin table and left stale in the prose is
+  invisible to it. Scoped to §10.5 because a port anchor is single-purpose; the equivalent rule over
+  §10.4 would be noise, since `GoonHostService.cs` is legitimately cited at forty different lines.
+  **That asymmetry is a real residual: a stale WPF citation in body prose is still only caught by
+  pinning it**, which is why the citations carrying findings are pinned individually.
 - **The two `walk.mjs` copies are byte-identical**, and the sha256 quoted in §1 is re-computed.
 - Every behaviour row in §4 carries one of the four labels and a platform cell; §6.6's four privacy
   answers are present; every `## 6.x` owner-flagged section exists.

@@ -154,7 +154,68 @@ the check that catches "clause 1 fails (six OWNER-GATED rows)" against a map hol
 **Five of the six blocking items were numbers or citations correct in one part of my own document and
 stale in another** — corrections made mid-run that did not propagate to the summary and verdict
 sections a reader consults first. The sweep was the right mechanism; it had a hole on the side
-nobody was looking at. New pins added so the class is machine-checked rather than re-reviewed:
+nobody was looking at.
+
+### 3.5 Re-review — the fifth hole, and the class I discharged in the digit domain only
+
+**Two blockers, and both are the same lesson from opposite sides: a mechanism only covers the
+representation it can read.**
+
+**Blocker 1 — the row documenting the hole re-opened the hole.** §10.7's axis table said
+*"injected 7, 12, 16 and 24"*. §10.7 sits inside §10 and the row starts with a pipe, so
+`PinnedNumbers` admitted it and put `16` and `24` straight back into the vocabulary — and that row
+was the **only** source of `16` in it. The stale `16%` would have survived a green suite again.
+
+Two fixes, both required, because either alone leaves the hole open from the other side:
+
+1. **Structural.** Vocabulary admissibility is now scoped to **pin subsections §10.1-§10.6**, so a
+   narrative table anywhere in §10 contributes nothing and is itself CHECKED like body prose.
+   `TheNumberSweep_DoesNotAdmitNarrativeTableRowsInsideThePinSection` pins it.
+2. **Local.** Every numeral in that axis table is now spelled out, so the narrative survives without
+   feeding the vocabulary it documents.
+
+**The axis I had marked as never-having-diverged was the one that had just diverged.** §10.7 now
+also names the `Line`-column leak (a pinned citation's line number whitelists that integer
+everywhere — the same shape as the row ids, inherent to vocabulary-level pinning and not fixable at
+this design), and states that the list is **as complete as five rounds of adversarial testing have
+made it**, which is not the same as complete. Five structurally distinct holes have now been found
+in this one guard: positional, asymmetric, lexical, overbroad, and self-referential.
+
+**Blocker 2 — the retraction was WORDS, and I swept for DIGITS.** The closure-direction correction
+landed in the census and not in the other two deliverables, so
+`wpf-surface-reachability.md` — **the owner-facing artifact** — still told the owner the reachability
+count errs in the safe direction while the census said it errs in the dangerous one. Both are
+corrected: the four invisibility modes are all UNDER-report modes, so **five is a lower bound on
+reachability, not an upper one**, and only the comment stripper's own bias is conservative.
+
+**This falsifies §3.4's claim that the class sweep left hits only where the record describes
+corrections, and I am restating it rather than repairing it quietly** — the second process claim in
+this packet to be falsified by its own evidence, after the `sed -n` one. **What actually happened:
+round one's class sweep was a `grep` over DIGITS, so it discharged the class in the digit domain and
+nowhere else.** A re-sweep across all three deliverables in all three representations — digit, word
+and paraphrase — found four more live restatements that two review rounds had not:
+
+| Found | Representation | Why no mechanism saw it |
+|---|---|---|
+| *"overstating the shipped game by twenty-one"* (should be twenty) | **word** | The number sweep is digit-only by design |
+| `DtrhCapabilityProbes.cs:21` in rows B2, B11 and the §7.1 inventory (pinned at `:22`) | **citation** | `File.ext:NNN` is an EXCLUDED class in the number sweep — it has to be, or every citation would demand a pin |
+
+**What is mechanism-caught now, and what is not — stated because an unlabelled hand sweep is what
+let this through twice:**
+
+| Class | Caught by |
+|---|---|
+| A count, fraction or line total anywhere in the census | `EveryNumberInTheCensus_IsPinnedOrDisclaimed` + the §10 re-derivation facts |
+| A label tally restated anywhere, digits or spelled out | `TheLabelTally_MatchesTheBehaviourMap_EverywhereItIsRestated` |
+| An owner-decision count | `EveryOwnerFlaggedSection_ExistsAndIsNeverPriced` |
+| A **port-anchor** citation stale in body prose | `EveryBodyCitationOfAPortAnchor_UsesTheLineThePinTableClaims` (added this round, watched red at `census:568`) |
+| A **WPF** citation stale in body prose | **HAND ONLY**, unless that citation is individually pinned in §10.4. `GoonHostService.cs` is cited at forty lines legitimately, so a blanket rule would be noise |
+| A **worded** claim restated across deliverables (this round's blocker 2) | **HAND ONLY.** No mechanism here reads prose |
+| Anything in `wpf-surface-reachability.md` or `record.md` | **HAND ONLY.** Every fact in this guard reads the census; the other two deliverables are unguarded |
+
+The last two rows are the honest bound on this packet, and they are why the re-sweep script is
+committed at `spine-tasks/SP-129-goon-game-census/sweep-corrections.py` rather than described: the
+next reviewer can re-run it instead of trusting that I did. New pins added so the class is machine-checked rather than re-reviewed:
 `two-implementations` (the headline citation, which nothing had pinned), `assets-hook-comment`,
 `artifact-cap-history`, the three networking-identity citations, `ice-timeout`, §10.4.3's label
 tally and §10.4.4's nine frozen element wire codes.
@@ -232,11 +293,11 @@ the port could not build — there are seven whose primitive it may not build wi
 
 ## 8. Floor
 
-**Pin 2399 unit / 144 headless. Declared delta: `unit: 28, headless: 0`
+**Pin 2399 unit / 144 headless. Declared delta: `unit: 30, headless: 0`
 (`spine-tasks/SP-129-goon-game-census/floor-delta.json`).**
 
-**Observed: 2427 unit (0 failed, 2 skipped — exactly the two pinned Linux-gated names) and 144
-headless.** `2399 + 28 = 2427`, so the observed total is pin + declared delta, which is the expected
+**Observed: 2429 unit (0 failed, 2 skipped — exactly the two pinned Linux-gated names) and 144
+headless.** `2399 + 30 = 2429`, so the observed total is pin + declared delta, which is the expected
 result under iron rule 9 and not a failure. `client/tests/floor/floor.json` was never edited by this
 packet.
 
@@ -253,6 +314,13 @@ Warning gate: **0 warnings, 0 errors** across 4 projects, forced non-incremental
 No name was added to `allowedSkips`, no test was disabled, and nothing was special-cased to make a
 step pass.
 
+## 8.2 Red demonstrations, all re-run at the committed head
+
+**A red demonstration is evidence only against the tree that ships.** This packet reported one
+demonstration that did not reproduce at its committed head, because it was watched on an
+intermediate state. Every demonstration below was re-run at the head named beside it, after the
+commit, and the transcripts are in the final report.
+
 ## 9. What this packet does NOT prove
 
 - **Nothing was built, run, or rendered, and the WPF app was never executed.** No product code was
@@ -266,8 +334,9 @@ step pass.
 - **Linux is unproven for every row without exception** (`client/memories/port-status.md:89-93`), and
   Windows is unproven for every row too.
 - **The reachability split is a LEXICAL closure**, so a dependency reached by reflection, a source
-  generator, DI or a XAML-bound path would not appear. It is conservative in the over-reporting
-  direction, and its three known limits are in the census §9 and in the guard's own comments.
+  generator, DI or a XAML-bound path would not appear. **Those are UNDER-report modes, so the five
+  is a LOWER BOUND on reachability, not an upper one.** Only the comment stripper's own bias is
+  conservative. Its known limits are in the census §9 and in the guard's own comments.
 - **Four numbers in the census are disclaimed rather than pinned** — the repository-wide sweep's
   8339 / 10398 / 267 / 3969 — because that sweep runs over a tree containing the census itself, so
   three of the four change with every edit to the document.
@@ -279,11 +348,12 @@ step pass.
 | Path | What |
 |---|---|
 | `client/docs/goon-game-census.md` | The census (new) |
-| `client/tests/CcpClient.Tests/GoonGameCensusTests.cs` | The pin, 28 facts (new) |
+| `client/tests/CcpClient.Tests/GoonGameCensusTests.cs` | The pin, 30 facts (new) |
 | `client/docs/wpf-surface-reachability.md` | **Divergences only**, D240-D249 appended with a "What SP-129 does NOT establish" section |
 | `spine-tasks/SP-129-goon-game-census/plan.md` | Method, fixed before mapping; §13 the plan-gate rulings |
 | `spine-tasks/SP-129-goon-game-census/walk.mjs` | Byte-identical copy of SP-127's walk, unmodified |
-| `spine-tasks/SP-129-goon-game-census/floor-delta.json` | `unit: 28, headless: 0` |
+| `spine-tasks/SP-129-goon-game-census/floor-delta.json` | `unit: 30, headless: 0` |
+| `spine-tasks/SP-129-goon-game-census/sweep-corrections.py` | The cross-deliverable correction sweep (§3.5). A HAND method, committed so it can be re-run rather than trusted |
 
 Divergence ids used: **D240-D249**. Nothing at or below D239 was touched; D226-D239 remain the
 sibling packet's.

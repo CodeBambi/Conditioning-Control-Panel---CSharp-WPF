@@ -195,6 +195,54 @@ public sealed class GoonGameCensusTests
             + string.Join(Environment.NewLine, wrong));
     }
 
+    /// <summary>
+    /// A port anchor cited in the BODY must use the line §10.5 pins for it.
+    ///
+    /// <para><b>Why this exists, and why it is scoped to §10.5.</b> The pin table said
+    /// <c>DtrhCapabilityProbes.cs:22</c> while three body citations still said <c>:21</c> — the
+    /// same off-by-one, corrected in the pin and not swept into the prose. Neither the number sweep
+    /// nor the label tally can see that: a citation is a class the number sweep deliberately
+    /// EXCLUDES, so it is invisible to the one mechanism that would otherwise catch a stale
+    /// restatement. A hand sweep found these; this fact means the next one does not have to.</para>
+    ///
+    /// <para>Scoped to §10.5 (port anchors) rather than §10.4 (WPF citations) because a port anchor
+    /// is single-purpose — one declaration per file — so every body citation of it means the same
+    /// thing. <c>GoonHostService.cs</c> is legitimately cited at forty different lines, so the same
+    /// rule over §10.4 would be noise. <b>That asymmetry is a real residual, stated rather than
+    /// hidden:</b> a stale WPF citation in body prose is still only caught by pinning it.</para>
+    /// </summary>
+    [Fact]
+    public void EveryBodyCitationOfAPortAnchor_UsesTheLineThePinTableClaims()
+    {
+        var census = RequireReference().Census;
+        var pinned = ParseCitationTable(census, "### 10.5");
+        Assert.NotEmpty(pinned);
+
+        var allowed = pinned
+            .GroupBy(r => Path.GetFileName(r.Path), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.Line).ToHashSet(), StringComparer.Ordinal);
+
+        var wrong = new List<string>();
+        var lineNumber = 0;
+        foreach (var raw in census.Split('\n'))
+        {
+            lineNumber++;
+            foreach (Match m in Regex.Matches(raw, @"(?<file>[A-Za-z0-9_.\-]+\.(?:cs|axaml)):(?<line>\d+)"))
+            {
+                var file = m.Groups["file"].Value;
+                if (!allowed.TryGetValue(file, out var lines)) continue;
+                var cited = int.Parse(m.Groups["line"].Value, CultureInfo.InvariantCulture);
+                if (!lines.Contains(cited))
+                    wrong.Add($"census:{lineNumber} cites {file}:{cited}, but §10.5 pins that anchor at "
+                        + string.Join("/", lines.OrderBy(l => l)));
+            }
+        }
+
+        Assert.True(wrong.Count == 0,
+            "a port anchor is cited in the body at a line the pin table does not claim:" + Environment.NewLine
+            + string.Join(Environment.NewLine, wrong));
+    }
+
     [Fact]
     public void TheFractionsThatCarryTheFindings_RederiveExactly_WithNoThreshold()
     {
@@ -586,6 +634,8 @@ public sealed class GoonGameCensusTests
 
             ## 10. Pinned enumeration
 
+            ### 10.1 Directory counts
+
             | Key | Value |
             |---|---|
             | Services/GoonGame | 25 |
@@ -618,6 +668,8 @@ public sealed class GoonGameCensusTests
 
             ## 10. Pinned enumeration
 
+            ### 10.2 The split
+
             | Id | Path | Reached |
             |---|---|---|
             | G7 | x.cs | reference |
@@ -637,6 +689,49 @@ public sealed class GoonGameCensusTests
         // ...and the checking side therefore still catches a body claim that reuses them.
         var escapees = UnpinnedNumbers(doc + "\nBody prose: 7 of the 24 files, 16 percent.\n", pinned);
         Assert.Equal(3, escapees.Count);
+    }
+
+    /// <summary>
+    /// THE FIFTH HOLE, and the one whose shape is worth remembering: <b>the table documenting this
+    /// guard's defects re-created one of them.</b> §10.7 is narrative prose in table form, it sits
+    /// inside §10, and the previous rule admitted any table row inside §10 to the vocabulary — so
+    /// the axis row reading "injected 7, 12, 16 and 24" put 16 and 24 straight back in, and it was
+    /// the ONLY source of 16. Vocabulary admissibility is now scoped to pin subsections.
+    /// </summary>
+    [Fact]
+    public void TheNumberSweep_DoesNotAdmitNarrativeTableRowsInsideThePinSection()
+    {
+        const string doc = """
+            # Doc
+
+            ## 10. Pinned enumeration
+
+            ### 10.1 Directory counts
+
+            | Key | Value |
+            |---|---|
+            | a | 25 |
+
+            ### 10.7 What the guard enforces beyond the tables
+
+            | Axis | Divergence | State |
+            |---|---|---|
+            | Class filtering | injected 16 and 24 into the vocabulary | both sides strip |
+            """;
+
+        var pinned = PinnedNumbers(doc);
+
+        Assert.Contains("25", pinned);          // the pin subsection still pins
+        Assert.DoesNotContain("16", pinned);    // the narrative table does not
+        Assert.DoesNotContain("24", pinned);
+
+        // ...so a body claim reusing them is still caught, which is the whole point.
+        var escapees = UnpinnedNumbers(doc + "\nAUDIT: 16 percent of it, over 24 rounds.\n", pinned);
+        Assert.Equal(2, escapees.Count(e => e.Contains("AUDIT", StringComparison.Ordinal)));
+
+        // And the narrative row's OWN digits are now checked like any prose, which is the other
+        // half of the repair: §10.7 is no longer a place a number can hide.
+        Assert.Contains(escapees, e => e.Contains("both sides strip", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -711,6 +806,8 @@ public sealed class GoonGameCensusTests
             # Doc
 
             ## 10. Pinned enumeration
+
+            ### 10.1 Directory counts
 
             | Key | Value |
             |---|---|
@@ -1144,6 +1241,8 @@ public sealed class GoonGameCensusTests
 
         foreach (var (line, section) in Sections(census))
         {
+            // Pins now means a PIN SUBSECTION (§10.1-§10.6), never "anywhere inside §10" — see
+            // Sections(). A narrative table inside §10 contributes nothing to the vocabulary.
             var admissible = section == DocumentSection.Disclaimer
                           || (section == DocumentSection.Pins && line.TrimStart().StartsWith('|'));
             if (!admissible) continue;
@@ -1167,11 +1266,23 @@ public sealed class GoonGameCensusTests
 
     private enum DocumentSection { Body, Disclaimer, Pins }
 
-    /// <summary>Walks the census once, tagging each line with the section it sits in. Shared by both
-    /// halves of the number sweep so they can never disagree about where a section ends.</summary>
+    /// <summary>
+    /// Walks the census once, tagging each line with the section it sits in. Shared by both halves
+    /// of the number sweep so they can never disagree about where a section ends.
+    ///
+    /// <para><b><c>Pins</c> means a PIN SUBSECTION, not "anywhere inside §10".</b> §10.7 is
+    /// narrative prose that happens to use tables, and it sits inside §10 — so under the previous
+    /// rule its own axis table, <i>the table documenting this guard's holes</i>, re-injected the
+    /// very integers it was describing back into the pinned vocabulary. The documentation of the
+    /// defect recreated the defect. Only <c>### 10.1</c>-<c>### 10.6</c> and their <c>.N</c>
+    /// children are pin subsections; everything else inside §10 is Body and is CHECKED like any
+    /// other prose.</para>
+    /// </summary>
     private static IEnumerable<(string Line, DocumentSection Section)> Sections(string census)
     {
         var section = DocumentSection.Body;
+        var inPinSubsection = false;
+
         foreach (var raw in census.Split('\n'))
         {
             var line = raw.TrimEnd('\r');
@@ -1180,9 +1291,18 @@ public sealed class GoonGameCensusTests
                 section = Regex.IsMatch(line, @"^##\s+10\.\s") ? DocumentSection.Pins
                         : Regex.IsMatch(line, @"^##\s+9\.\s") ? DocumentSection.Disclaimer
                         : DocumentSection.Body;
+                inPinSubsection = false;
+            }
+            else if (line.StartsWith("### ", StringComparison.Ordinal))
+            {
+                inPinSubsection = Regex.IsMatch(line, @"^###\s+10\.[1-6](\.\d+)*\b");
             }
 
-            yield return (line, section);
+            var effective = section == DocumentSection.Pins && !inPinSubsection
+                ? DocumentSection.Body
+                : section;
+
+            yield return (line, effective);
         }
     }
 

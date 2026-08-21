@@ -1504,8 +1504,10 @@ in a private repository (`GoonSignalingClient.cs:16-17`). Every claim above is a
 **source**, and D249's "buildable" means the WebView and the payload glob exist and ship, **not**
 that the goon page renders in them: nobody has loaded it. The reachability split in D241 is a
 **lexical** closure over declared type names, so a dependency reached by reflection, by a source
-generator, by DI or through a XAML-bound path would not appear — and the count is deliberately
-conservative in the over-reporting direction. **Linux is unproven for every row without exception**
+generator, by DI or through a XAML-bound path would not appear. **Those are all UNDER-report modes,
+so the five is a LOWER BOUND on reachability, not an upper one** — the reachable set could be larger
+than five and no lexical method can see it. (Only the comment stripper's own bias is conservative: a
+block-comment continuation line is read as code, so a comment cannot hide an edge from it.) **Linux is unproven for every row without exception**
 (`client/memories/port-status.md:89-93`), and Windows is unproven for every row too. No headless
 frame was rendered and no headed capture was taken; `presentation-verified` and `draw-verified` are
 both untouched by this packet.
