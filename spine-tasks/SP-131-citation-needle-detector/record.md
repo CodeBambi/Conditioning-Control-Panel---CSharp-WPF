@@ -77,7 +77,7 @@ the shift; re-basing a citation is the reviewer's step.
 
 ## Coverage, printed every run in both modes
 
-Measured at `SP131_CONTENT_SHA` from `node client/tools/citations/detect.mjs --needles`:
+Measured at `474e9a803` from `node client/tools/citations/detect.mjs --needles`:
 
 | | |
 |---|---|
@@ -233,6 +233,6 @@ invisible.
 
 ## Stamping note
 
-`D260` and this file quote `SP131_CONTENT_SHA` for the commit the figures were measured at. That
+`D260` and this file quote `474e9a803` for the commit the figures were measured at. That
 placeholder is replaced in the immediately following commit, which changes only hexadecimal text and
 therefore cannot move a citation count — verified by re-running the tool after the substitution.
