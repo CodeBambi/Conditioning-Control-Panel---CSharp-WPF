@@ -1,5 +1,24 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## Wave 67 LANDED 2026-08-22 (`78986160e`) — floor 2599/152
+
+- **SP-134** built the obvious contended-desktop detector, MEASURED it, and rejected it: presence of
+  the shipping WPF product is harmless (a green 2573/2573 run under 12-of-12 foreground ownership),
+  and a presence-keyed guard would have reddened **212 tests on a good tree**. What shipped refuses
+  only on a foreign window TAKING a contended point during a 2500 ms span, naming process, pid,
+  title, class and rect. Re-assertion is the harm, not presence (`ChaosModeService.cs:930`).
+- **SP-135** closed the WebView2 permission gap on three of five hosts: `add_PermissionRequested` at
+  **vtable slot 23**, DENY at `put_State`, `SavesInProfile=false`. Slot derived from three sources
+  (two SDK MIDL headers, Avalonia's generated interop which carries the index in the field name, and
+  the `add_ProcessFailed = 25` anchor already shipping). **D250 STAYS WIP** — proved against a fake
+  `ICoreWebView2` in-process; no browser was ever started.
+- **The wave-66 story was corrected, not extended.** Board row 336's title AND its acceptance clause
+  were both wrong, and both were orchestrator-authored at the previous land.
+- **Open owner decisions unchanged (5):** login token, Subliminals' settings file, haptic driver, For
+  You Feed webcam/scrolller, and the six Goon Game network items. **New:** the VoiceNotes refusal text
+  is now FALSE on Windows and still true on Linux (D294) — a wording decision, not a deletion.
+- **Next task ID: SP-136.** CONTEXT.md's header had gone stale at SP-132; repaired from the body.
+
 ## UPSTREAM BASELINE MOVED: v6.8.0 → v6.8.1 (sync 2026-08-15, merge `1d1f8997`)
 
 - **The WPF reference tree now tracks `main` @ `87035e9a`, in-tree `<Version>6.8.1</Version>`** (was
