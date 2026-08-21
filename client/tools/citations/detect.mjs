@@ -141,11 +141,14 @@
 //     other entry. The coverage block prints that split on every run, in both modes.
 //   - It does not resolve BARE `:NNN` continuations to a file, in either mode. A bare
 //     reference names no file, and the nearest-preceding-citation-token heuristic was
-//     measured and REJECTED: it credits 200 of the port's bare references to
-//     IntakeHostService.cs alone and mis-binds on the first example examined
-//     (DtrhUserMedia.cs's `FlashService.GetMediaFiles :2855-2867`, a FlashService citation).
-//     This is the LARGEST gap in the needle mode — five of the seven citations D232 records
-//     as rotted are of this form — so the count is printed every run rather than implied away.
+//     measured and REJECTED. THE MEASUREMENT, at commit e3aee3e21 and stated with its SHA
+//     because no run re-derives it: the heuristic credits 200 of the port's bare references
+//     to IntakeHostService.cs alone, and mis-binds on the first example examined —
+//     DtrhUserMedia.cs's `FlashService.GetMediaFiles :2855-2867`, which is a FlashService
+//     citation. This is the LARGEST gap in the needle mode: FIVE of the seven citations D232
+//     records as rotted are of this form (enumerated at 3c38c3973; D232 and the repaired
+//     comment at IntakeQuizRun.cs:136-137 both say seven, and both are wrong — see D264).
+//     The COUNT of bare references is re-derived and printed on every run, in both modes.
 //   - It does not re-derive an entry's `citedBy`. NEW-CITATION (:564-574) skips any path
 //     already in the inventory, and no class anywhere in runDetector diffs an existing
 //     entry's citer list — the recorded citedBy is only copied into rows for display. A
@@ -1040,9 +1043,13 @@ export function formatNeedleCoverage(coverage) {
       `${citations.intoNeedled} into a needled path — ${citations.confirmed} confirmed ` +
       `(a needle's current line is inside the span), ${citations.uncovered} uncovered ` +
       `(no needle describes that span), ${citations.outOfRange} past the end of the file`,
+    // Every figure on this line is DERIVED by the run that prints it. The size of the rejected
+    // heuristic's mis-binding is a hand measurement at a named commit and therefore lives in this
+    // file's header with its SHA, not here: a number in derived output that the run did not derive
+    // is the next thing to go stale silently.
     `  bare :NNN continuations: ${citations.bare} in the port — NOT CHECKED, in either mode. ` +
-      `A bare reference names no file, and the nearest-preceding-token heuristic was measured and ` +
-      `rejected (it credits 200 of them to one path and mis-binds). This is the LARGEST gap.`,
+      `A bare reference names no file, and the nearest-preceding-citation-token heuristic was ` +
+      `measured and rejected (this file's header carries the measurement and its SHA). LARGEST gap.`,
     "  also not checked: a citation that was wrong the day it was written (no needle knows what a",
     "  citation intended), and an entry's citedBy, which no class re-derives once the entry exists.",
   ].join("\n");

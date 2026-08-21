@@ -47,8 +47,12 @@ needle at the comparison endpoint and contains none now. Measured at the `422866
 - `client/docs/trainer-card-census.md:180`
 - `client/docs/wpf-surface-reachability.md:1467` and `:1491`
 
-all four cite `IntakeHostService.cs:418-420` for the quote *"an intake has no fail state to be held
-back by"*. Lines 418-420 today are exactly that `held_back` comment, so **all four are correct**.
+all four cite `IntakeHostService.cs:418-420`. **CORRECTED after the plan gate:** three of them cite it
+for the quote *"an intake has no fail state to be held back by"*, and the fourth,
+`wpf-surface-reachability.md:1467`, is **D223**, which records `:418-420` as a *historical
+mis-citation about the normalisation* and already states today's lines — a different reason for the
+same verdict. Lines 418-420 today are exactly that `held_back` comment, so **all four are correct**
+and none is owed a repair; the 4/4 measurement and the cut both stand unchanged.
 They fire only because the *emit* needle happened to sit at `:419` at the old baseline. A 100%
 false-positive rate is the cry-wolf shape `detect.mjs:13-14` forbids by name, so **the class is cut,
 not softened**, and it is recorded as a divergence so the next author does not re-invent it.
@@ -167,8 +171,13 @@ bare continuations not checked.
 
 1. **Bare `:NNN` continuations are not checked at all.** 2255 of them exist. The nearest-preceding-
    token heuristic was measured and **rejected**: it credits **200** of them to `IntakeHostService.cs`
-   and mis-binds on the first example examined. Six of `IntakeGraded`'s seven rotted citations are of
-   this form, so this is the single largest gap and it is stated in the report, not implied away.
+   and mis-binds on the first example examined. **CORRECTED after the plan gate: FIVE, not six**, of
+   `IntakeGraded`'s seven rotted citations are of this form — enumerated at `3c38c3973`, bare =
+   `:435-441`, `:414`, `:417`, `:418-420`, `:437-438`; file-qualified = `IntakeHostService.cs:406-422`
+   and `IntakeHostService.cs:45-53`. The landed D232 and the repaired comment at
+   `IntakeQuizRun.cs:136-137` both say "seven bare", which is also wrong; both are outside this
+   packet's file scope, so the measured number is stated here and recorded as D264 rather than
+   inherited from either. This is still the single largest gap, and it is printed in the report.
 2. **Citations into the 296 entries with no needle** are untouched.
 3. **A citation that was wrong the day it was written** cannot be caught: no needle knows what a
    citation intended. Four of D232's seven were of this class.
@@ -243,16 +252,24 @@ observed totals are **2463 unit / 144 headless**. I will not open `client/tests/
    is a port file citing a port file. **Resolution:** seed the `IntakeHostService.cs` half (nine
    needles covering all seven rotted citations' subjects), and record the port-internal half as a
    divergence naming the exact structural reason plus where that class already lives (SP-129's §10.5
-   port-anchor table). I will not widen the inventory's key space to port paths — that would break
-   the default mode's UNRESOLVED search, its numstat scope and its two universes.
+   port-anchor table). I will not widen the inventory's key space to port paths. **CORRECTED after
+   the plan gate — the conclusion holds, the mechanism was misstated.** For a port path that
+   *exists*, the UNRESOLVED loop skips it at `detect.mjs:509`; the spurious row would be
+   `CITATION-GONE` (`:580-593`), plus `DELTA-MISMATCH` on any entry carrying `changedAtSync`, because
+   numstat is scoped `-- ConditioningControlPanel/` at `:319`.
 2. **The packet says SP-129's table is `key | path | line | needle` and tells me to store a needle
    and NOT a line.** Both are true and they are not in conflict once the endpoints are derived; §2
    records exactly which half I took and which I dropped.
 3. **A live finding, reported not fixed:** the inventory's `citedBy` for `IntakeHostService.cs` is
    missing `src:src/CcpClient.Desktop/Features/Progression/GradedRunAwards.cs`,
-   `docs:trainer-card-census.md` and `docs:wpf-surface-reachability.md`, which all cite it today. The
-   existing detector already classes that as `NEW-CITATION`; regenerating the inventory is not this
-   packet's scope. Recorded, not repaired.
+   `docs:trainer-card-census.md` and `docs:wpf-surface-reachability.md`, which all cite it today.
+   **CORRECTED after the plan gate: the existing detector does NOT class that as `NEW-CITATION`, or
+   as anything at all.** `detect.mjs:564-574` skips any path already in `entryByPath`, and no class
+   in `runDetector` diffs an existing entry's citer list — the recorded `citedBy` is only copied into
+   rows for display. **A stale `citedBy` on an entry that still exists is invisible to all six
+   classes.** The resolution is unchanged and is scope-correct either way — regenerating the
+   inventory is not this packet's job — but this is now a **sixth enumerated blind spot**, printed in
+   the coverage block, stated in `detect.mjs`'s do-not-do list and recorded in D260.
 
 ---
 
