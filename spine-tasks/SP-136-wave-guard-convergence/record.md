@@ -82,6 +82,35 @@ grandfathers everything below SP-073 and binds 56. Consuming the projection ther
 re-applying that grandfather afterwards, and that is pinned by fact 8 — dropping it would newly
 red sixty packets and look like a corpus problem rather than a guard problem.
 
+## 4b. THE FIRST CUT CLOSED CHECK 4 AND OPENED CHECK 2 — found at code review, reproduced, fixed
+
+**This is the packet's own defect class arriving one check to the left, and it is recorded rather
+than quietly repaired.** The first implementation also routed the SP-065 **wrapper-routing**
+verdict through the projection and deleted the C# side's independent test (`TestCommandRow()` and
+`DotnetTest().IsMatch(command) && !command.Contains(WrapperToken, ...)` at base `:53/:131/:139`).
+The consumer then trusted two booleans — `InvokesDotnetTest`, `RoutesThroughWrapper` — computed at
+exactly one site and pinned by **nothing**: no fixture case, no C#-side verdict, no synthetic
+packet carrying a bare `dotnet test`, and no mutation in the M1-M7b watch. **The refusal branch was
+executed by no test at all**, because every synthetic packet used
+`node client/tests/floor/check-floor.mjs`.
+
+Reproduced before fixing: the single substitution
+`routesThroughWrapper: command.includes(WRAPPER_TOKEN),` -> `routesThroughWrapper: true,` silences
+the wave gate's check 2 **and** `PacketsAtOrAboveSp065_RouteDotnetTestThroughTheFloorWrapper`
+together. **Before this packet's convergence, that same edit was caught by the C# guard.** So the
+first cut was a net loss on check 2 while being a net gain on check 4.
+
+Fixed by giving check 2 the same treatment check 4 got: `wrapperRoutingVerdict` is now the single
+implementation and the row parse goes through it; a **six-case fixture** lives in
+`validate-wave.mjs` with the verdicts pinned **again in C#** (`PinnedWrapperVerdicts`); a synthetic
+packet running a bare `dotnet test` drives `ComputeWrapperViolations` to a non-empty result; and a
+one-sided mutation on the routing call site reds. Three new facts, watched red as M8/M9/M10 below.
+
+**The general lesson, stated because it is the reusable part:** routing a decision through a shared
+projection *removes* a guard unless the decision is pinned by a fixture on both sides. Consolidation
+is not free. Every boolean the C# stopped computing needed a fixture, and I built one for the
+decision the packet named and not for the one it did not.
+
 ## 5. The one-sided-update demonstration
 
 `TheFloorGuard_RedsWhenONLYTheValidatorChanges` copies `validate-wave.mjs` to a temp directory,
@@ -91,7 +120,31 @@ substitutes its single coverage call site
 fact instead of silently mutating nothing), and drives
 `FloorWrapperGuardTests.ComputeChokepointViolations` with the mutated projection. The guard
 accepts the glob packet with the clean projection and rejects it with the mutated one, in the same
-test body. No shared constant can make that claim.
+test body. `TheWrapperGuard_RedsWhenONLYTheValidatorChanges` does the same for the SP-065 rule. No
+shared constant can make that claim.
+
+**MUTATION FIDELITY, corrected at review.** The first version substituted `p === chokepointPath`
+and the record claimed it "restores the exact literal-only semantics `FloorWrapperGuardTests.cs:224`
+used to carry". **It did not.** The historical predicate was whole-cell, substring, and
+case-INsensitive; `p === chokepointPath` is per-declared-value, exact-equality and case-SENSITIVE,
+so it is strictly stricter and would also have refused the `case-only-difference` and
+`windows-separators` cases the historical predicate accepted. It still reddened, but a mutation that
+misrepresents the defect it replays is worse evidence even when it reds. Now faithful:
+`declaredValues.join(", ").replace(/\\/g, "/").toLowerCase().includes(chokepointPath.toLowerCase())`,
+matching `DriftedLiteralCoverage` in the test file.
+
+**THE EXACT BOUND ON THIS PROOF, stated because it is narrower than the obvious reading.** It
+catches a **replacing** shadow — C# logic used *instead of* the projection's verdict. It does
+**not** catch an **additive** one (`covered = emitted.FloorPin.Covered || localPredicate`), because
+the clean run stays at zero violations and the mutated run still reaches exactly one, so the fact
+stays green; nor a **population-gated** one whose branch the SP-072/SP-073 fixtures never reach.
+The earlier class comment claimed this route was closed and that was **overstated**.
+
+The residue is bounded, and the bound is the reassuring part: an OR-shadow makes the C# strictly
+**more permissive** than the validator, so guard-rejects becomes a subset of validator-rejects, and
+**the SP-136 incident direction — `WAVE OK` printed while the base is red — cannot recur through
+it.** The inverse direction reds loudly at the pre-launch gate. That is a real gap, written down
+rather than claimed away.
 
 ## 6. Every new guard watched RED at the committed head `26a9b2ec4c3140a0ee25a35f5c5e64450f9c4d45`
 
@@ -109,8 +162,28 @@ clean by `git status --porcelain` after every one, and `HEAD` was unchanged thro
 | **M7a** the projection stops exiting 0 on a corpus it could read | `Failed: 10` — fact 9 among them |
 | **M7b** a failed projection reads as an EMPTY corpus instead of throwing | `Failed: 1` — fact 9 **only**, `Assert.Throws() Failure: No exception was thrown` |
 
-Coverage: fact 1 (M1, M4), 2 (M1), 3 (M1, M2, M4), 4 (M2, M3), 5 (M1), 6 (M4, M5), 7 (M5),
-8 (M2, M4, M6), 9 (M7a, M7b). **All nine watched red.**
+### Pass 5, at the review-fix head `6896a046c3a74dc2ef98caa3be2cfcd183b5fb4d`
+
+The three new wrapper-routing facts, the corrected coverage mutation, and the newly-tightened
+grandfather VALUE pin. Same discipline: applied, built, run, reverted, tree verified clean.
+
+| mutation | facts it reds |
+|---|---|
+| **M8** the shared routing verdict always says "routed" (the unpinned-boolean defect, exactly) | `Failed: 3` — all three wrapper facts |
+| **M9** the shared routing verdict stops recognising `dotnet test` at all | `Failed: 3` — all three wrapper facts |
+| **M10** the C# guard stops consuming the routing verdict (SP-065 refusal branch removed) | `Failed: 2` — `ABareDotnetTest_IsRejectedByBothGuards`, `TheWrapperGuard_RedsWhenONLYTheValidatorChanges` |
+| **M11** coverage mutation CORRECTED to the faithful historical semantics (replaces M1) | `Failed: 4` — facts 1, 2, 3, 5, the same set M1 reddened |
+| **M12** the delta bound RAISED to 100 | `Failed: 1` — the grandfather fact only |
+| **M13** the delta bound LOWERED to 72 | `Failed: 2` — the grandfather fact + `PacketsAtOrAboveSp073_...` |
+
+Coverage: fact 1 (M1/M11, M4), 2 (M1/M11), 3 (M1/M11, M2, M4), 4 (M2, M3), 5 (M1/M11),
+6 (M4, M5), 7 (M5), 8 (M2, M4, M6, M12, M13), 9 (M7a, M7b), wrapper-fixture (M8, M9),
+bare-`dotnet test` (M8, M9, M10), wrapper-mutation (M8, M9, M10). **All twelve watched red.**
+
+M1-M7b were watched at `26a9b2ec4`; M8-M13 at `6896a046c`. The commits between them
+(`88bb3333a`, `90feaf2d8`) are **docs-only** — `record.md` and one divergence-row wording — so the
+M1-M7b evidence stands unchanged against the current code. The final head at the end of this packet
+is stated in §13.
 
 **Recorded because it is evidence and not a nuisance:** a first attempt at M7 — disabling the
 oracle's exit-code check alone — did **not** red fact 9. `LoadAsync` fails closed at four
@@ -145,10 +218,17 @@ declared delta 9 = **2608 observed**. `sum-deltas.mjs` independently computes
 `CcpClient.Tests: 2599 +9 = 2608`, `CcpClient.HeadlessTests: 152 +0 = 152`.
 `client/tests/floor/floor.json` was never opened.
 
-Headless, observed separately because the wrapper stopped at the unit-project drift:
+**AFTER THE REVIEW FIX**, at `6896a046c` (the state being reported):
+`Passed! Failed: 0, Passed: 2609, Skipped: 2, Total: 2611 — CcpClient.Tests.dll`.
+Failure set = **{ }** — empty. `FLOOR VIOLATION — total drift: 2611 result(s) (pin total 2599)` is
+again the expected, declared arithmetic: **2599 + 12 = 2611**, and `sum-deltas.mjs` independently
+computes the same.
+
+Headless, observed separately because the wrapper stops at the unit-project drift:
 `Passed! Failed: 0, Passed: 152, Skipped: 0, Total: 152` — exactly the pin, delta 0.
 
-Warning gate: `WARNING GATE OK (SP-114): 0 warnings, 0 errors across 4 project(s), forced
+Warning gate at the same head: `WARNING GATE OK (SP-114): 0 warnings, 0 errors across 4 project(s)
+[CcpClient.Desktop, CcpClient.HeadlessTests, CcpClient.Tests, CcpVerify] in Debug, forced
 non-incremental.`
 
 ## 8. The baseline failure is a KNOWN STRAND and this is its fourth sighting — a re-observation, not a sign-off
@@ -216,6 +296,25 @@ remains TRUE; only the line range rotted.
 the citation (`detect.mjs:152-156`: the detector cannot see citations into `client/tools/**` or any
 `.mjs`, and this one is into `client/tests/**`). Reported, not fixed.
 
+## 10b. THE CONVERGENCE IS NOT UNIFORMLY PINNED, and here is exactly where it is thin
+
+1. **`FirstDeltaBoundPacketNumber = 73` is held UNILATERALLY.** `FirstBoundPacketNumber = 65` is
+   cross-checked against `projection.FirstBoundPacketNumber`; 73 appears at exactly one site and
+   the validator carries no delta bound at all, so there is nothing to cross-check it against.
+   Mitigated rather than closed: the grandfather fixture now brackets it at **SP-072 / SP-073**, so
+   the **value** is pinned in both directions — watched red at 100 (M12) and at 72 (M13). The
+   earlier SP-010 / SP-903 pair pinned only the *existence* of a bound and would have let any value
+   from 11 to 903 pass unchanged. A cross-check remains impossible without teaching the validator a
+   rule it does not apply, which would be inventing a rule to make a test possible.
+2. **The figures 60 / 128 / 56 live only in COMMENTS** (`WaveGuardConvergenceTests.cs` and
+   `FloorWrapperGuardTests.cs` doc comments, and this record). Nothing asserts them. Adding
+   compliant packets raises 128 and 56 while 60 stays frozen, so those comments will drift and
+   nothing will red. They are descriptive measurements taken at `766be7ac0`, not invariants, and
+   they should be read as dated rather than current.
+3. **The SP-065 wrapper rule was unpinned in the first cut** and is now pinned — see §4b. That gap
+   existed in a committed state of this branch and is recorded rather than erased.
+4. **The additive/population-gated shadow residue** on the one-sided-update proof — see §5.
+
 ## 11. What this work does NOT prove
 
 - **Nothing here renders, composites, focuses a window, plays audio, or animates.** These are file-
@@ -231,13 +330,30 @@ the citation (`detect.mjs:152-156`: the detector cannot see citations into `clie
 - **`node` is now a hard requirement of two floor facts.** A machine without it FAILS them rather
   than skipping — the same disposition `CitationNeedleTests.cs:344-374` takes. Nothing was added to
   `allowedSkips`; `floor.json` was never opened.
-- The convergence is proven over the **live 128-packet corpus and 13 pinned fixture cases**. It is
-  not proven over inputs in neither set — which is precisely why the C# side keeps no second
-  implementation to disagree *with*, rather than resting on corpus coverage alone.
+- The convergence is proven over the **live 128-packet corpus, 13 pinned coverage cases and 6
+  pinned wrapper-routing cases**. It is not proven over inputs in none of those — which is
+  precisely why the C# side keeps no second implementation to disagree *with*, rather than resting
+  on corpus coverage alone.
+- **The wedged-child path is unexercised.** `TheProjection_..._AndFailsClosedOnAFailedProjection`
+  covers a failed projection (non-zero exit, empty stdout, bad JSON, wrong schema). It does NOT
+  reach the `TestWait` window expiring and the child being killed in `WaveScopeOracle.RunAsync`;
+  no fact here does, and the test was renamed so its name stops implying otherwise.
 - The four `.mjs`-internal citations in the new divergence rows are invisible to the citation
   detector by its own statement, so they carry no mechanical protection against rot.
 
 ## 12. Floor delta declared
 
-`spine-tasks/SP-136-wave-guard-convergence/floor-delta.json` — **unit +9, headless 0**.
-Pin 2599 / 152; observed 2608 / 152; `2599 + 9 = 2608`.
+`spine-tasks/SP-136-wave-guard-convergence/floor-delta.json` — **unit +12, headless 0**.
+Pin 2599 / 152; observed **2611 / 152**; `2599 + 12 = 2611`. (It was +9 before the review fix added
+the three wrapper-routing facts.) `client/tests/floor/floor.json` was never opened.
+
+## 13. Commit trail
+
+| commit | what |
+|---|---|
+| `2047f76c2` | plan checkpoint (Review Level 3 stop, no product edit) |
+| `26a9b2ec4` | the convergence — head for red-watch passes 1-4 (M1-M7b) |
+| `88bb3333a` | record, and one divergence-row wording fix (docs only) |
+| `90feaf2d8` | the strand's second sighting (docs only) |
+| `6896a046c` | review fix: the SP-065 routing decision pinned, three accuracy corrections — head for red-watch pass 5 (M8-M13) |
+| final | see the branch tip; the final floor numbers in §7 are from the tip |
