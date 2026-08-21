@@ -1,0 +1,16 @@
+WAVE: 66
+PACKETS: SP-132-goon-evidence SP-133-citation-selftest-gate
+LANES: 2
+AUTHORED-AGAINST: 1f54e3e0b
+LANE-BASE: derived with git merge-base after the lanes exist, never asserted here
+GATE: validate-wave.mjs WAVE OK; FloorWrapperGuardTests 3/3; floor 2547/152
+D-RANGES: SP-132 D265-D274, SP-133 D275+
+OPENED: 2026-08-21T08:24:49Z
+CLOSED: 2026-08-21T21:05:00Z (approx; see the commit for the honest note on this field)
+LANDED: SP-132 effcfea74 (PASS), SP-133 2cac29506 (PASS)
+LANE-BASE (derived): 79d08a27b for both, via git merge-base
+FLOOR: 2547 -> 2573 unit (18 + 8), 152 headless unchanged
+VERIFICATION: NOT CLEAN. Nine full runs: 3 green, 6 red, every failure a real-desktop
+  collection fact, all passing 5/5 in isolation. Cause identified positively: the shipping
+  WPF product held the foreground. Documented residue (RealDesktopCollection.cs:44-48).
+  Filed as a P1 row. The owner application was NOT closed and no test was quarantined.
