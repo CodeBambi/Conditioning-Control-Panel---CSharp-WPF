@@ -395,7 +395,13 @@ public sealed class GradedRunAwardsTests : IDisposable
     [Fact]
     public void IntakeGraded_Record_TreatsAZeroMaxRunAsNeverTopMarks()
     {
-        // The MaxScore > 0 guard (:434) reaches the award path, not just ScorePercent.
+        // Pins the OUTCOME — a zero-max run reaches the award path and awards nothing.
+        //
+        // WHAT IT DOES NOT PIN, stated because the name could be read as more: upstream's
+        // `run.MaxScore > 0 &&` conjunct (:434) is REDUNDANT with the percentage it guards —
+        // ScorePercent's own ternary already returns 0.0 for a zero max (:426) — so removing
+        // that conjunct leaves this fact green. It is ported verbatim anyway, because a
+        // zero-max run has no grade at all; plan.md 1.1 books the redundancy.
         var (_, awards) = NewAwards();
 
         var outcome = IntakeGraded.Record(awards, Run(5, 0, "bambi"));

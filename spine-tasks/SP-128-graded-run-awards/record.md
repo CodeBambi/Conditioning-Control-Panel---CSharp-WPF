@@ -29,8 +29,12 @@ claims, and an upstream change reports here rather than surfacing later.
 
 `perfect ⇔ MaxScore > 0 ∧ (TotalScore / MaxScore)·100 ≥ 90.0`. **`≥`, not `>`.** The arithmetic
 was already in the port verbatim (`IntakeQuizRun.cs`) and this slice added none of it — it added
-the award. The `MaxScore > 0` guard now reaches the award path too, pinned by
-`IntakeGraded_Record_TreatsAZeroMaxRunAsNeverTopMarks`.
+the award. `IntakeGraded_Record_TreatsAZeroMaxRunAsNeverTopMarks` pins the OUTCOME at the award
+path — a zero-max run awards nothing — and **not** the `MaxScore > 0` conjunct itself, which is
+redundant with the percentage it guards (`:426`'s ternary already returns `0.0`) and therefore
+unpinned by anything: removing it leaves every fact here green. Corrected at code review, which
+installed exactly that edit and watched 40 facts stay green. It is ported verbatim regardless,
+because a zero-max run has no grade at all.
 
 ### 1.2 `honor_roll` — three DISTINCT categories, and the clause order is behaviour
 

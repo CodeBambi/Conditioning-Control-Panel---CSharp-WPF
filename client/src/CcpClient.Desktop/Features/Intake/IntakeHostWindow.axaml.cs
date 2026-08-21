@@ -15,7 +15,7 @@ namespace CcpClient.Desktop.Features.Intake;
 /// the NativeWebDialog path is NOT ADMITTED for intake (the page's web-shim has no §3.3
 /// inbox transport — a dialog would run the page standalone and silently lose results);
 /// anything else = the honest unsupported surface. Boot contract (IntakeHostService.cs
-/// :239-301 + ChaosWebViewHost Post :242-254): host→page messages queue until the page's
+/// :240-301 + ChaosWebViewHost Post :242-254): host→page messages queue until the page's
 /// `ready`, then init flushes (the shim's preBuffer replays anything early,
 /// web-shim.js:56-62) followed by the fullscreen echo (:302). Host→page = synthetic
 /// MessageEvent dispatch on window.chrome.webview (SP-011 W4, byte-identical to DTRH).
@@ -584,7 +584,7 @@ public partial class IntakeHostWindow : Window
         }
     }
 
-    // ---------- boot contract (:239-304) ----------
+    // ---------- boot contract (:240-304) ----------
 
     private void SendBootMessages()
     {
