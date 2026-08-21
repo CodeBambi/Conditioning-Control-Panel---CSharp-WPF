@@ -17,8 +17,8 @@ namespace CcpClient.Desktop.Features.Dtrh;
 ///
 /// <para>THE ONE CARVE-OUT IS AUTOPLAY (kind 9), LEFT AT THE BROWSER DEFAULT — untouched, never
 /// answered. Every WebView2 host in this client already passes
-/// <c>--autoplay-policy=no-user-gesture-required</c> (<c>DtrhHostWindow.axaml.cs:631</c>,
-/// <c>GoonHostWindow.axaml.cs:302</c>, <c>DtrhLoomWindow.axaml.cs:151</c>,
+/// <c>--autoplay-policy=no-user-gesture-required</c> (<c>DtrhHostWindow.axaml.cs:637</c>,
+/// <c>GoonHostWindow.axaml.cs:312</c>, <c>DtrhLoomWindow.axaml.cs:162</c>,
 /// <c>IntakeHostWindow.axaml.cs:246</c>) and both payloads start their own media programmatically
 /// (<c>dtrh/engine/audioBus.js</c>, <c>goon/exec/videos.js</c>, <c>goon/ui/hud.js</c>). Denying
 /// autoplay would silence the pages and contradict a policy this port has already set: a functional

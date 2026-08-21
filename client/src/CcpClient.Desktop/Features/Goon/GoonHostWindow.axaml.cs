@@ -382,7 +382,7 @@ public partial class GoonHostWindow : Window
     /// <summary>SP-135 — the D250 close, on the surface D250 was named for: every permission the
     /// page asks the BROWSER for is answered DENY, so the prompt never reaches the user and the
     /// microphone is refused rather than merely un-granted. Autoplay alone is left at the browser
-    /// default (this host passes --autoplay-policy=no-user-gesture-required at :302 and the page
+    /// default (this host passes --autoplay-policy=no-user-gesture-required at :312 and the page
     /// starts its own media: goon/exec/videos.js, goon/ui/hud.js). NOT watchdog-guarded, unlike
     /// <see cref="AttachProcessFailedSignal"/>. A failed attach is typed and LOGGED — the residual
     /// stays visible instead of turning into silence.</summary>

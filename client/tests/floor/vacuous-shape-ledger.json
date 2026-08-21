@@ -1024,7 +1024,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm. This is the fact that proves the pointer handed to slot 23 is the handler that denies - it invokes that CCW through its own vtable and observes DENY arrive at put_State - so it cannot be expressed without the CCW it needs"
+      "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm as the entry above. This is the fact that proves the pointer handed to slot 23 is the handler that denies - it invokes that CCW through its own vtable and observes DENY arrive at put_State - so it cannot be expressed without the CCW it needs. The deny DECISION it corroborates is asserted platform-independently by the eight TheAnswer_* facts, which drive WebViewPermissionDeny.AnswerRequest (pure vtable traffic, no CCW) and carry no platform predicate at all"
     },
     {
       "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
@@ -1036,7 +1036,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm. Detach can only be exercised on a subscription that exists, and the subscription needs the CCW"
+      "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm as the two entries above. Detach can only be exercised on a subscription that exists, and the subscription needs the CCW; making it cross-platform by reflecting the signal's internal constructor was possible and was REJECTED, because a token this fact invented rather than received would make Assert.Equal(DefaultToken, remove.TokenSeen) tautological and lose the attach-to-detach round trip. The deny decision itself needs no CCW and is asserted everywhere by the eight TheAnswer_* facts over WebViewPermissionDeny.AnswerRequest"
     }
   ]
 }

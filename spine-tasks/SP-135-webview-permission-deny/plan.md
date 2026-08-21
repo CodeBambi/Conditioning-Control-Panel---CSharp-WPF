@@ -199,3 +199,21 @@ not a failure.
 ## 8. Divergence ids
 
 D289 onward in `client/docs/wpf-surface-reachability.md`, divergence rows only.
+
+## 9. Reconciliation with what was delivered (added after implementation; `record.md` is authoritative)
+
+This file is the **pre-implementation** checkpoint and is kept as written. Four of its predictions did
+not survive contact, and are corrected here so no reader has to notice the difference for themselves:
+
+1. **The delta is +14, not +13**, and the floor reads **2587 / 152**, not 2586 / 152. Consolidating
+   the Windows-only subscription facts and splitting the deny DECISION out of the CCW path changed
+   the count.
+2. **§3's "immediately after the existing" is false for the Loom.** `DtrhLoomWindow.axaml.cs` had no
+   `AttachProcessFailedSignal` and no signal field, so it needed a new field and a new dispose line.
+3. **The line citations in §2 are BASE-tree numbers** (`DtrhHostWindow.axaml.cs:631`,
+   `GoonHostWindow.axaml.cs:302`, `DtrhLoomWindow.axaml.cs:151`). This packet's own insertions moved
+   them to `:637`, `:312` and `:162`; `record.md` carries the post-change numbers. There are FOUR
+   hosts passing that switch, not three, and a FIFTH `NativeWebView` host (`ChaosTunnelWindow.cs`)
+   that does not pass it.
+4. **§1's Avalonia `offset=184` was computed by me** from the field order, not declared in metadata.
+   The load-bearing facts are the field index and the slot-index suffix in the identifier; both hold.

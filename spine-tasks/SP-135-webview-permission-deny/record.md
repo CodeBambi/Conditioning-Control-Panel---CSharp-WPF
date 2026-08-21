@@ -72,7 +72,7 @@ Every published kind was checked against both payloads before excluding autoplay
 | camera (2), geolocation (3), notifications (4), other-sensors (5), MIDI (11), local-fonts (10), window-management (12) | no occurrences of `navigator.geolocation`, `Notification.requestPermission`, `requestMIDIAccess` or `queryLocalFonts` anywhere under `Resources/web` | nothing |
 | clipboard-read (6) | **the only clipboard call is `navigator.clipboard.writeText`** (`goon/ui/screens/host.js:119-120`) — clipboard WRITE, which is not kind 6 | nothing |
 | multiple-automatic-downloads (7), file-read-write (8) | no `showSaveFilePicker` / `showOpenFilePicker` / `download=` anywhere in either payload | nothing |
-| **autoplay (9)** | **both payloads start media programmatically** — `dtrh/engine/audioBus.js`, `goon/exec/videos.js`, `goon/ui/hud.js` — and all four WebView2 hosts already pass `--autoplay-policy=no-user-gesture-required` (`DtrhHostWindow.axaml.cs:631`, `GoonHostWindow.axaml.cs:302`, `DtrhLoomWindow.axaml.cs:151`, `IntakeHostWindow.axaml.cs:246`; **`ChaosTunnelWindow.cs` is a fifth `NativeWebView` host and does NOT pass it**) | **silence, and a contradiction with a policy this port already set** — a functional regression rather than a tightening. This is the one load-bearing carve-out |
+| **autoplay (9)** | **both payloads start media programmatically** — `dtrh/engine/audioBus.js`, `goon/exec/videos.js`, `goon/ui/hud.js` — and all four WebView2 hosts already pass `--autoplay-policy=no-user-gesture-required` (`DtrhHostWindow.axaml.cs:637`, `GoonHostWindow.axaml.cs:312`, `DtrhLoomWindow.axaml.cs:162`, `IntakeHostWindow.axaml.cs:246`; **`ChaosTunnelWindow.cs` is a fifth `NativeWebView` host and does NOT pass it**) | **silence, and a contradiction with a policy this port already set** — a functional regression rather than a tightening. This is the one load-bearing carve-out |
 
 ## 3. Evidence: it fires, and what that does and does not mean
 
@@ -170,36 +170,44 @@ appended to `client/tests/floor/vacuous-shape-ledger.json` (82 entries -> 85, `3
 `client/tests/floor/**` stayed closed. The entries as landed:
 
 ```json
-{
-  "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheSubscription_LandsOnSlot23_AndTypesEveryFailure",
-  "path": "CcpClient.Tests/WebViewPermissionTests.cs",
-  "line": 277,
-  "method": "WebViewPermissionTests.TheSubscription_LandsOnSlot23_AndTypesEveryFailure",
-  "shapes": ["early-return"],
-  "expectDetected": true,
-  "verdict": "not-vacuous",
-  "reason": "the CCW this fact needs (Marshal.GetComInterfaceForObject) is a Windows COM facility; the non-Windows arm asserts the product's typed unsupported-platform refusal in WindowsOrTypedUnsupported() before returning, so neither arm is silent. The deny DECISION is asserted platform-independently by the eight TheAnswer_* facts in the same file"
-},
-{
-  "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheHandlerAttachedAtSlot23_Fires_AndDeniesTheMicrophone",
-  "path": "CcpClient.Tests/WebViewPermissionTests.cs",
-  "line": 309,
-  "method": "WebViewPermissionTests.TheHandlerAttachedAtSlot23_Fires_AndDeniesTheMicrophone",
-  "shapes": ["early-return"],
-  "expectDetected": true,
-  "verdict": "not-vacuous",
-  "reason": "same Windows-CCW precondition; the non-Windows arm asserts the typed refusal. This is the fact that proves the pointer handed to slot 23 is the handler that denies"
-},
-{
-  "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
-  "path": "CcpClient.Tests/WebViewPermissionTests.cs",
-  "line": 335,
-  "method": "WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
-  "shapes": ["early-return"],
-  "expectDetected": true,
-  "verdict": "not-vacuous",
-  "reason": "same Windows-CCW precondition; detach can only be exercised on a subscription that exists, and the non-Windows arm asserts the typed refusal"
-}
+[
+  {
+    "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheSubscription_LandsOnSlot23_AndTypesEveryFailure",
+    "path": "CcpClient.Tests/WebViewPermissionTests.cs",
+    "line": 277,
+    "method": "WebViewPermissionTests.TheSubscription_LandsOnSlot23_AndTypesEveryFailure",
+    "shapes": [
+      "early-return"
+    ],
+    "expectDetected": true,
+    "verdict": "not-vacuous",
+    "reason": "SP-135. The CCW this fact needs (Marshal.GetComInterfaceForObject) is a Windows COM facility, so the subscription cannot be exercised elsewhere. The non-Windows arm is NOT silent: WindowsOrTypedUnsupported() asserts the product's typed unsupported-platform refusal and its detail text before returning, so every supported OS lands in an asserting arm. The deny DECISION carries no such predicate at all - it was extracted into WebViewPermissionDeny.AnswerRequest (pure vtable traffic, no CCW) precisely so the eight TheAnswer_* facts in this file run on every platform, which took this file from twelve shaped sites to three"
+  },
+  {
+    "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheHandlerAttachedAtSlot23_Fires_AndDeniesTheMicrophone",
+    "path": "CcpClient.Tests/WebViewPermissionTests.cs",
+    "line": 309,
+    "method": "WebViewPermissionTests.TheHandlerAttachedAtSlot23_Fires_AndDeniesTheMicrophone",
+    "shapes": [
+      "early-return"
+    ],
+    "expectDetected": true,
+    "verdict": "not-vacuous",
+    "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm as the entry above. This is the fact that proves the pointer handed to slot 23 is the handler that denies - it invokes that CCW through its own vtable and observes DENY arrive at put_State - so it cannot be expressed without the CCW it needs. The deny DECISION it corroborates is asserted platform-independently by the eight TheAnswer_* facts, which drive WebViewPermissionDeny.AnswerRequest (pure vtable traffic, no CCW) and carry no platform predicate at all"
+  },
+  {
+    "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
+    "path": "CcpClient.Tests/WebViewPermissionTests.cs",
+    "line": 335,
+    "method": "WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
+    "shapes": [
+      "early-return"
+    ],
+    "expectDetected": true,
+    "verdict": "not-vacuous",
+    "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm as the two entries above. Detach can only be exercised on a subscription that exists, and the subscription needs the CCW; making it cross-platform by reflecting the signal's internal constructor was possible and was REJECTED, because a token this fact invented rather than received would make Assert.Equal(DefaultToken, remove.TokenSeen) tautological and lose the attach-to-detach round trip. The deny decision itself needs no CCW and is asserted everywhere by the eight TheAnswer_* facts over WebViewPermissionDeny.AnswerRequest"
+  }
+]
 ```
 
 **The finding underneath it (D295):** `floor.json` has a per-packet delta file precisely so
@@ -228,9 +236,13 @@ timeout inside the product's construction path, not a `TestWait`, so it is sensi
 contention in a parallel run. It also passed in all three earlier full floor runs of this session.
 **I did not touch it, did not quarantine it, and did not add it to `allowedSkips`** — it is recorded
 here because a count that moves once and goes unmentioned is how a flake becomes a habit. What I
-cannot rule out: that this packet's facts contribute LOAD to the same process (each `FakeCom` marshals
-61 delegate stubs, and roughly twenty are built per run), which would make them a contributor to a
-latent timing flake rather than its cause.
+cannot rule out on principle: that this packet's facts contribute LOAD to the same process (each
+`FakeCom` marshals 61 delegate stubs, and roughly twenty are built per run). **The measurement says
+that is unlikely to be material**: summed from the clean run's own TRX, all 14 facts in this file take
+**454 ms of a 49 s suite** — under 1%. So the honest statement is that the flake is a pre-existing
+wall-clock-budget fact that failed once under a parallel run, not that this packet caused it; the
+self-suspicion stays on the record because suspecting your own change first is the right order, but
+it should be reported next to the number rather than instead of it.
 
 ## 9. Spec-versus-code discrepancies
 
@@ -246,3 +258,31 @@ latent timing flake rather than its cause.
 4. **The plan cited Avalonia's vtable byte offset (184).** That offset was computed by me from the
    field order; the metadata declares no explicit offsets. The field index and the slot-index suffix
    in the identifier are the facts, and both hold. Corrected in §1.
+
+## 10. Citation drift, including the kind this packet caused in files it may not touch
+
+**Three citations in my own new file were stale on commit** and are fixed: `WebViewPermissionDeny.cs`
+cited the autoplay switch at the BASE line numbers `DtrhHostWindow.axaml.cs:631`,
+`GoonHostWindow.axaml.cs:302`, `DtrhLoomWindow.axaml.cs:151`, which this packet's own insertions had
+already moved to **`:637`, `:312`, `:162`**. `GoonHostWindow.axaml.cs`'s own `at :302` is now `:312`,
+and §2's table above carries the post-change numbers. `DtrhLoomWindow.axaml.cs:178` had cited the
+post-change `:162` correctly all along, so the same fact was cited two different ways in one diff.
+Writing a citation against the tree you started from is the failure mode; **checking it against the
+tree you are committing is the fix**, and it is the same class this session keeps finding.
+
+**And the insertions moved two citations written by OTHER packets. Both are reported, NOT fixed,
+because both sit outside this packet's File Scope:**
+
+| Stale citation | Points at | Correct number now | Why untouched |
+|---|---|---|---|
+| `client/docs/wpf-surface-reachability.md:1597` cites `GoonHostWindow.axaml.cs:529` | `_sentBootMessages = true;` | **`:579`** | that is an OLDER divergence row; this packet's doc grant is "divergences ONLY, D289 onward" |
+| `client/src/CcpClient.Desktop/Features/Chaos/ChaosTunnelWindow.cs:110` cites `DtrhHostWindow.axaml.cs:1257` (the synthetic `MessageEvent` dispatch shape) | the end of `SendToPage`'s dispatch block | **`:1301`** (exactly +44, this packet's insertions above it) | `Features/Chaos/**` is outside File Scope entirely |
+
+Both were verified by reading the base blob and the current file, not inferred from the diff size.
+Each is a one-line correction for whoever owns those files.
+
+**The general point, which is D295's neighbour:** a packet that inserts lines into a shared file
+silently invalidates every `File.cs:line` citation below the insertion, anywhere in the repository.
+This packet grew three files and broke two foreign citations plus three of its own. The citation
+self-test (SP-131/SP-133) classifies drift in the WPF tree; **nothing checks port-internal citations
+into port files**, which is why these were found by hand.
