@@ -157,8 +157,8 @@ Planned rows (final wording at write time):
 - **D278** — the residual: `CitationNeedleTests.cs:30-31` still says no standing gate runs the file
   and cites `self-test.mjs:5-12`. That file is `fileScopeMustNotChange` for this packet, so the
   prose is left stale and named here; the line citation still resolves because the replacement block
-  preserves the line span. Also names the two board rows (`task-board.md:49`, `:330`) that the land
-  should close, which are the orchestrator's to edit.
+  preserves the line span. Also names board row `task-board.md:330` as CLOSED by this packet and `:49`
+  as AMENDED BUT NOT CLOSED: `:49` asks for `detect.mjs` to be run against the real tree at the sync checkpoint, which this packet deliberately did not attempt. Both are the orchestrator's to edit.
 
 ## 10. Risks and open findings, stated before the work
 
@@ -217,6 +217,10 @@ superseded prediction as a finding. See `record.md` for the executed result.
 2. **Both `Assert.True(mutated != run.StdOut, ...)` sites now say what they are.** The line-ending
    rejoin makes them near-tautological; the real anti-vacuity guard is the helper throwing, and the
    comment says so at the assertion so a later reader does not trust the wrong line.
-3. **Filed, not built:** four `Problems()` branches have no fact behind them (the SKIP/TODO directive
-   path, the missing-counter path, `pass + fail != tests`, and the missing-plan-line path). Cheap to
-   pin because `Parse`/`Problems` are pure. A board row, not this packet.
+3. **Filed, not built, and my count was wrong: SIX `Problems()` branches have no fact behind them,
+   not four.** The four I named: the SKIP/TODO directive path (`:342-346`), the missing-counter path
+   (`:348-352`), `pass + fail != tests` (`:373-377`) and the missing-plan-line path (`:380-384`). The
+   two I missed: the ZERO-RESULT-LINES path (`:330-336`), because no fact ever feeds `Parse` an empty
+   transcript, and the PLAN-VS-TESTS path (`:368-371`), because `DropOneResultLine` leaves
+   `Plan == tests`, so the truncation fact reaches `:362` and never `:368`. Cheap to pin because
+   `Parse`/`Problems` are pure. A board row, not this packet.

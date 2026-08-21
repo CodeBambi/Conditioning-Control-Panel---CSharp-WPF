@@ -161,20 +161,25 @@ magnitude**, and the first correction of it was wrong too: on one pair I wrote "
 the runner's resolution", which is a categorical claim from a single sample. Corrected here and in
 D277 as a band with its sample count.
 
-Five pairs, same command shape (`--no-build`, one filtered to exclude the class, one not),
+Six pairs, same command shape (`--no-build`, one filtered to exclude the class, one not),
 alternating, at the runner's whole-second resolution:
 
 | Source | without the class (2547) | with the class (2555) |
 |---|---|---|
 | this lane, three pairs | 46, 50, 47 s | 46, 45, 48 s |
-| independent, at code review, two pairs | 47, 48 s | 50, 50 s |
+| independent, at review, three pairs | 47, 48, 47 s | 50, 50, 47 s |
 
-The two review pairs are a repeatable **+2 to +3 s**; the three taken here go both ways (-5, +1, 0)
-and do not resolve a difference. **What five pairs settle is the order of magnitude: 24 s of work
-inside one fact costs the suite single-digit seconds, not 24. What they do not settle is the exact
-tax.** The mechanism is the same either way: the shared run (28.08 s here, 24.19 s at review) sits in
-one collection and xunit runs collections in parallel, so it overlaps the rest of the suite instead
-of extending it end to end.
+Two of the three review pairs are +2 to +3 s, the third (taken at final review) is 47/47, and the
+three taken here go both ways (-5, +1, 0). No pair separates the two populations on its own.
+**What the pairs settle is the order of magnitude: 24 s of work inside one fact costs the suite
+single-digit seconds, not 24. What they do not settle is the exact tax.**
+
+**And the band is a fact about THIS MACHINE, not about the bridge.** Every pair was measured on a
+16-core box, where xunit's collection parallelism is what absorbs the run. On a 4-core runner the
+24 s would not be absorbable and the tax would approach its full size. The mechanism is the same
+either way: the shared run (24.19 s to 28.08 s across observed TRX) sits in one collection, and
+xunit runs collections in parallel, so it overlaps the rest of the suite instead of extending it
+end to end.
 
 Parallelising the self-test itself was rejected on a fact rather than a preference: all 25 fixture
 bodies are synchronous `execFileSync`-driven git repositories, so node's in-file `concurrency` buys
@@ -214,17 +219,48 @@ was never opened.
 Warning gate: `WARNING GATE OK (SP-114): 0 warnings, 0 errors across 4 project(s)`, forced
 non-incremental.
 
-## 7b. One unrelated failure seen during the measurement runs, NOT repaired
+## 7b. THE FLAKE: a second sighting on board row 48, and my first analysis of it was wrong
 
 `CcpClient.Tests.SoundArbitrationTests.Construction_AbandonedThenFaults_CountStillDrops_CapNeverRefusesForever`
 failed **once in ten runs** of the unit project during the cost measurement, with
 `Assert.Equal() Failure: Values differ / Expected: 1 / Actual: 0` (227 ms), in a filtered run. It
 passed in the other nine, including both full floor runs and both red demonstrations.
 
-It is outside this packet's file scope, it shares nothing with the citation facts, and its name
-("abandoned then faults") points at a finalizer/GC-timed subject rather than at anything this packet
-touches. **Reported rather than repaired, and deliberately not re-run until it went green**: an
-intermittent failure that is looked at once and dismissed is how a real defect becomes folklore.
+**My first draft of this section said it "shares nothing with the citation facts" and pointed at "a
+finalizer/GC-timed subject". Both clauses are false, and my own TRX disproves them.** Corrected here
+because the correction makes this packet look WORSE, which is exactly why it has to land.
+
+**What the evidence actually says** (measured A/B on this head, at code review):
+
+- The node run's window **fully contains** the SoundArbitration block: all **52** of its facts run
+  inside it. That inverts the exoneration board row 48 records for SP-124, whose *"TRX shows all
+  four of its node spawns started after that test ended"*.
+- **16 tests in flight on 16 CPUs** at the target fact's midpoint.
+- Child-process test-seconds overlapping that block: **4.04 s without this class, 11.30 s with it**,
+  a **2.8x increase in concurrent out-of-process load**. This is not a light child: 25 temp git
+  repositories, each running `git` several times plus `detect.mjs` as a further child.
+- `Expected: 1 / Actual: 0` is `SoundArbitrationTests.cs:1560`,
+  `Assert.Equal(1, Volatile.Read(ref h.ConstructCount)); // the refusal started no pool thread`.
+  **That is a thread-pool injection failure inside the 200 ms construction budget. Nothing
+  GC-timed is involved.**
+
+**It is a DIFFERENT FACT from the one board row 48 names, with OPPOSITE POLARITY.** The row names
+`Construction_LockUnavailableAtCompletion_AbandonsWithoutCounting_NothingWasParked` at
+`Expected: 0 / Actual: 1` (`:1625`), once in eight runs; this is
+`Construction_AbandonedThenFaults_...` at `Expected: 1 / Actual: 0`. **The row's own acceptance
+says a second sighting is escalation, not noise - this is that sighting, on a new fact.** And the
+row's second named mechanism, *"lengthening any neighbouring test changes which facts run
+concurrently with it"*, is now **demonstrated rather than merely unexcluded**.
+
+**The RATE is unresolvable and no verdict is offered.** One in ten here against one in eight there
+is statistically indistinguishable. **I do not claim this packet caused it, and I do not claim it is
+unrelated.** What is established is the mechanism and the containment; what is not established is
+whether the added load changes the frequency.
+
+**Reported rather than repaired, and deliberately not re-run until it went green**: an intermittent
+failure looked at once and dismissed is how a real defect becomes folklore. `SoundArbitrationTests`
+is outside this packet's file scope, and `allowedSkips` would be exactly the wrong instrument -
+board row 48 already says so, because the test is red-on-starved by deliberate authorial choice.
 
 ## 8. What this does NOT prove
 
@@ -245,6 +281,6 @@ intermittent failure that is looked at once and dismissed is how a real defect b
 
 D275 (the gate, and what it pins), D276 (the two red demonstrations with the head SHA), D277 (the
 measured cost), D278 (five residuals: the stale `CitationNeedleTests.cs:30-31` prose, `floor.json`'s
-`lastMovedBy`, board rows `:49` and `:330`, the un-widened detector, and the repaired
+`lastMovedBy`, board row `:330` CLOSED while `:49` is AMENDED NOT CLOSED, the un-widened detector, and the repaired
 `check-floor.mjs:253` citation), plus a "What SP-133 does NOT establish" section. All in
 `client/docs/wpf-surface-reachability.md`.
