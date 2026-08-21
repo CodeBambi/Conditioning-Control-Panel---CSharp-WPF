@@ -206,12 +206,12 @@ citations out of the document at test time. `HapticSiteCensusTests` is green (13
 | `Effects/FlashSurfacePresenter.cs` (§4's click-through prose) | 297 | **306** | same |
 | `Effects/FlashSurfacePresenter.cs` (sites 1-4's trigger) | 298 | **307** | same |
 | `Effects/MandatoryVideoEffect.cs` (sites 6, 7) | 279 | **287** | 8 lines added above: using, field, ctor parameter and its doc |
-| `Effects/MandatoryVideoEffect.cs` (site 12's second path, `OnDisarmed`) | 299 | **337** | the above, plus the `VideoStarted` arm and `OnDisarmed`'s D203 remarks |
+| `Effects/MandatoryVideoEffect.cs` (site 12's second path, `OnDisarmed`) | 299 | **337** | the above, plus the `VideoStarted` arm and `OnDisarmed`'s D203 remarks. **Two places: the site row's notes AND §3.1's gathered list** |
 | `Effects/MandatoryVideoEffect.cs` (sites 10, 11's decision quote) | 363 | **405** | the above |
-| `Effects/MandatoryVideoEffect.cs` (site 12's trigger) | 374 | **416** | the above |
+| `Effects/MandatoryVideoEffect.cs` (site 12's trigger) | 374 | **416** | the above. **Two places: the trigger column AND the site's own notes**, which also carry the handler's DECLARATION line, 372 → **414** |
 | `Effects/SubliminalsEffect.cs` (sites 16, 17's decision quote) | 56 | **57** | one `using` line |
 | `Effects/SubliminalsEffect.cs` (sites 14, 15's trigger) | 197 | **210** | the using, the field, the ctor parameter and the ctor's param docs |
-| `Effects/BouncingTextField.cs` (site 18's trigger) | 223 | **230** | the using, the field, the ctor parameter and its doc |
+| `Effects/BouncingTextField.cs` (site 18's trigger) | 223 | **230** | the using, the field, the ctor parameter and its doc. **Two places: the trigger column AND the site's own notes** |
 | `Effects/BouncingTextField.cs` (site 18's re-roll, in the notes) | 235 | **251** | the above plus the `BounceHit` call and its comment |
 | `Haptics/IHapticSink.cs` (sites 8, 9, 13's decision quote) | 219 | **232** | the SP-126 paragraph rewrite, granted separately |
 | `Haptics/IHapticSink.cs` (site 11's decision quote) | 221 | **235** | same |
@@ -226,7 +226,10 @@ the closed tree. The orchestrator opened that paragraph for correction and I rew
 figure is no longer there — the range now lands on the CORRECTED text, which states in its own words
 that the paragraph used to say thirteen and why. That cell is a claim about content rather than a
 line number that moved, so it is reported here for whoever next opens the census rather than changed
-under a data-only grant.
+under a data-only grant. **Review confirmed this was right to leave, with a reason worth keeping:** a
+pure line-number edit — the only edit the grant permits — would have made that cell WORSE, because it
+would then attribute the thirteen-figure to text that explicitly disclaims carrying it. A proper fix
+needs prose, which is outside the grant.
 
 ---
 
@@ -258,3 +261,64 @@ Everything above is **pure-logic unit work**. No headless frame was rendered and
 was taken, so nothing here verifies interaction, rendering, audio, focus, window behaviour or
 animation, and `presentation-verified` and `draw-verified` are both untouched. The compile is a
 compile. Linux is unchanged and unproven, and for this capability it refuses identically on both.
+
+---
+
+## 11. REVISION AFTER CODE REVIEW
+
+Review returned REVISE on one blocking finding and three non-blocking items. Nothing in the
+evaluator, the envelopes, the site set, the stop placement or the floor delta was re-opened, and the
+count is unchanged at **+47 / 0**.
+
+### BLOCKING — two ordering claims were asserted by nothing but their own names
+
+`HapticParticipant.RunAllStopAsync` comments that the limb's state goes FIRST and the devices stop
+after; `StopAsync` carries five lines about releasing the limb before the sink. **Review moved
+`Limb.Clear()` below `Sink.StopAllAsync()` and swapped `Limb.Dispose()` with `Sink.Dispose()`, and
+the whole haptic surface stayed green both times** — because both assertions were END-STATE
+(`Layer == 0`, `ActivePulses == 0`), which the reversed order satisfies equally. Only the
+`AndOnlyStopsThemOnce` half was genuinely pinned, by `Assert.Equal(1, sink.StopAlls)`.
+
+That is not tidiness: **a reversed `Clear()` re-opens the exact window this packet's divergence
+exists to close** — a wake firing between the all-stop and the clear would level-set a device the
+all-stop had just silenced — and nothing would have said so.
+
+**Fixed by observing the order AT THE INSTANT IT HAPPENS**, in the currency each claim is about,
+using the idiom `HapticParticipant`'s own `sequence`/`AllStopSequence` pair already documents:
+
+- `RecordingHapticSink` gained `ObserveAtStopAll` / `StateAtStopAll` and `ObserveAtDispose` /
+  `StateAtDispose` — two read-only probes invoked once each, inside `StopAllAsync` and inside
+  `Dispose`. **It still records and still transforms nothing**; a probe reads the caller's state and
+  changes none of it.
+- **Witness 1** records what the limb was holding when the all-stop reached the sink:
+  `layer=0;pulses=0`.
+- **Witness 2** is behavioural rather than a flag: at the instant the sink is disposed, the probe
+  tries to command the limb and reports `limb-still-accepts=False`. That is the hazard itself, not a
+  proxy for it.
+- The participant in this fact now takes a **`FrozenClock`**, so every wake is held and the fact is
+  about the teardown order rather than about whatever a thread-pool timer managed to do behind it.
+  The rack-dot fact takes the same clock, for the same reason.
+
+**Both reversals were re-applied and both now RED, at different assertion lines** — line 374 for the
+all-stop order and line 393 for the dispose order — so neither half can be deleted while the other
+keeps the fact green. Reverted; 116/116 haptic facts green.
+
+The test is renamed `TEARDOWNORDER_TheLimbIsClearedBEFORETheDevicesStopAndReleasedBEFORETheSink`,
+which is now a claim the assertions enforce.
+
+### Non-blocking, all three taken
+
+1. **Three stale port line numbers survived in the census**, two of them in rows §8 above claimed
+   were moved — each had been moved in ONE of the two places the number appears, and none is
+   guard-pinned so nothing caught it. Fixed under the same data-only grant, and §8's rows now name
+   both places explicitly: `haptic-limb-census.md:138` notes `:374`→`:416` and the handler's
+   declaration `:372`→`:414`; `:144` notes `:223`→`:230`; `:152` §3.1 `(+ :299)`→`(+ :337)`.
+   Re-enumerated every port citation in the document afterwards; the upstream shorthands (`:294`
+   gaze pop, `:297` Bambi Freeze, and the rest) were confirmed upstream and left alone.
+2. **The dangling cref** in `RecordingHapticSink.cs` pointed at `RecordingHapticSinkGuardTests`,
+   which exists nowhere. Replaced with the real guard,
+   `HapticLimbTests.TheRecordingSinkRecordsRAWAndTransformsNOTHING`, as plain `<c>` rather than a
+   `cref` so it cannot rot silently again in a project that generates no documentation.
+3. **`BouncingTextField.cs`'s bounce comment** said the 60 ms request widens "to a 130 ms tap"; 130
+   is the ON-TIME and the envelope is 158 ms, which `APulseBelowTheOnTimeFloorIsWidenedToIt` already
+   pins correctly. Reworded on ONE line, deliberately, so no citation below it moves.

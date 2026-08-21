@@ -12,8 +12,8 @@ namespace CcpClient.Tests;
 /// rounds, quantises, coalesces, de-duplicates, re-orders or drops. The exact
 /// <see cref="IReadOnlyList{T}"/> reference the product handed over is what is stored, so a fact
 /// asserting a level is asserting the number the product computed and not a number this class
-/// produced. <see cref="RecordingHapticSinkGuardTests"/> executes that claim rather than trusting
-/// it.</para>
+/// produced. <c>HapticLimbTests.TheRecordingSinkRecordsRAWAndTransformsNOTHING</c> executes that
+/// claim rather than trusting it.</para>
 ///
 /// <para><b>Why a double is admissible here at all.</b> The product sink refuses everything and no
 /// device key exists to address, so on a product path a level is COMPUTED and never sent — which is
@@ -48,6 +48,29 @@ internal sealed class RecordingHapticSink : IHapticSink
 
     /// <summary>How many all-stops arrived.</summary>
     public int StopAlls { get; private set; }
+
+    /// <summary>
+    /// Read AT THE INSTANT <see cref="StopAllAsync"/> runs, so a fact can assert what the caller had
+    /// already done BY THEN rather than what the end state looks like afterwards.
+    ///
+    /// <para><b>This exists because an end-state assertion cannot see an ordering.</b> A fact that
+    /// only checked <c>Layer == 0</c> after teardown passes identically whether the limb was cleared
+    /// before the devices were stopped or after — and "after" re-opens the exact window the stop is
+    /// there to close, because a wake firing in between would level-set a device the all-stop had
+    /// just silenced. It is the same idiom <c>HapticParticipant</c>'s own <c>sequence</c> /
+    /// <c>AllStopSequence</c> pair carries, in the currency this ordering is actually about.</para>
+    /// </summary>
+    public Func<string>? ObserveAtStopAll { get; set; }
+
+    /// <summary>Whatever <see cref="ObserveAtStopAll"/> answered, or null when nothing was asked.</summary>
+    public string? StateAtStopAll { get; private set; }
+
+    /// <summary>Read at the instant <see cref="Dispose"/> runs, for the same reason: the sink must
+    /// not still be reachable by a limb that can accept commands.</summary>
+    public Func<string>? ObserveAtDispose { get; set; }
+
+    /// <summary>Whatever <see cref="ObserveAtDispose"/> answered, or null when nothing was asked.</summary>
+    public string? StateAtDispose { get; private set; }
 
     /// <summary>Whether the sink has been disposed.</summary>
     public bool Disposed { get; private set; }
@@ -94,11 +117,16 @@ internal sealed class RecordingHapticSink : IHapticSink
     public Task<CapabilityState> StopAllAsync()
     {
         StopAlls++;
+        StateAtStopAll ??= ObserveAtStopAll?.Invoke();
         return Task.FromResult(LastOutcome = new CapabilityState.Available("recorded all-stop"));
     }
 
     /// <inheritdoc/>
-    public void Dispose() => Disposed = true;
+    public void Dispose()
+    {
+        StateAtDispose ??= ObserveAtDispose?.Invoke();
+        Disposed = true;
+    }
 
     /// <summary>One level-set, verbatim.</summary>
     /// <param name="DeviceKey">The key the caller addressed.</param>

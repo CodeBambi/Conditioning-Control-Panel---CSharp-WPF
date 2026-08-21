@@ -233,7 +233,7 @@ public sealed class BouncingTextField
         // Services/Subliminal/BouncingTextService.cs:516, between the bounce bookkeeping and the
         // 10 % text re-roll at :519 — and this call sits in exactly that place in exactly that
         // sequence, above the re-roll below. One 60 ms request at priority 0, which the on-time
-        // floor widens to a 130 ms tap (HapticService.cs:820-821, HapticPatterns.cs:36-65).
+        // floor widens to a 130 ms on-time inside a 158 ms envelope (HapticPatterns.cs:36-65).
         _haptics?.BounceHit();
 
         // WPF's corner rule: both axes in one step is a corner, and a single-axis bounce counts too

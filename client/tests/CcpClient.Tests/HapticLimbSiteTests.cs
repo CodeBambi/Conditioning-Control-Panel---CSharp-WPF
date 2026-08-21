@@ -305,7 +305,8 @@ public class HapticLimbSiteTests
             new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), new NullLog()),
             scratch.Path,
             resolveEntitlement: _ => Task.FromResult<EntitlementOutcome>(
-                new EntitlementOutcome.Entitled(EntitlementTier.Supporter, "confirmed")));
+                new EntitlementOutcome.Entitled(EntitlementTier.Supporter, "confirmed")),
+            clock: new FrozenClock());
 
         await participant.StartAsync(TestContext.Current.CancellationToken);
         participant.RequestEnable(true);
@@ -335,11 +336,18 @@ public class HapticLimbSiteTests
     }
 
     [Fact]
-    public async Task THEALLSTOPClearsTheLimbBEFOREItStopsTheDevices_AndOnlyStopsThemOnce()
+    public async Task TEARDOWNORDER_TheLimbIsClearedBEFORETheDevicesStopAndReleasedBEFORETheSink()
     {
         // Upstream's gate-close arm: drop everything and zero every layer (HapticMixer.cs:264,
         // ClearAll at :1044-1049), THEN stop the toys ONCE (:265). A limb that all-stopped for itself
         // would spend the stop budget twice on the teardown path.
+        //
+        // BOTH ORDERINGS BELOW ARE ASSERTED AT THE INSTANT THEY HAPPEN, and that is the point of this
+        // fact rather than a flourish. An end-state check — Layer == 0, ActivePulses == 0 — is
+        // satisfied identically by the REVERSED order, so a fact built only from end state would let
+        // Limb.Clear() slide below Sink.StopAllAsync() and stay green. That reversal re-opens the
+        // exact window this stop exists to close: a wake firing in between would level-set a device
+        // the all-stop had just silenced.
         using var scratch = new Scratch();
         var sink = new RecordingHapticSink();
         var participant = new HapticParticipant(
@@ -347,24 +355,46 @@ public class HapticLimbSiteTests
             scratch.Path,
             sink,
             _ => Task.FromResult<EntitlementOutcome>(
-                new EntitlementOutcome.Entitled(EntitlementTier.Supporter, "confirmed")));
+                new EntitlementOutcome.Entitled(EntitlementTier.Supporter, "confirmed")),
+            // Frozen, so every wake the limb schedules is HELD: this fact is about the order of the
+            // teardown and about nothing a timer did behind it.
+            clock: new FrozenClock());
 
         await participant.StartAsync(TestContext.Current.CancellationToken);
         participant.RequestEnable(true);
         participant.Limb.VideoStarted();
         Assert.True(participant.Limb.Layer > 0);
 
+        // WITNESS 1 — what the limb was holding at the instant the all-stop reached the sink.
+        sink.ObserveAtStopAll = () =>
+            $"layer={HapticLevel.Of(participant.Limb.Layer)};pulses={participant.Limb.ActivePulses}";
+
         await participant.ShutdownStopAsync();
 
+        Assert.Equal("layer=0;pulses=0", sink.StateAtStopAll);
         Assert.Equal(0, participant.Limb.Layer);
         Assert.Equal(0, participant.Limb.ActivePulses);
         Assert.Equal(1, participant.AllStops);
         Assert.Equal(1, sink.StopAlls);
 
+        // WITNESS 2 — behavioural, not a flag: at the instant the sink goes away the limb must
+        // already REFUSE to be commanded. Swapping Limb.Dispose() and Sink.Dispose() leaves every
+        // end-state assertion green while restoring exactly the hazard the order prevents, which is
+        // a scheduled wake level-setting into a disposed sink on a pool thread.
+        sink.ObserveAtDispose = () =>
+        {
+            participant.Limb.SetLayer(HapticEnvelopes.VideoBackgroundLevel());
+            return $"limb-still-accepts={participant.Limb.Layer > 0}";
+        };
+
         // The latch: a second all-stop on the teardown path costs nothing.
         await participant.StopAsync();
+
+        Assert.Equal("limb-still-accepts=False", sink.StateAtDispose);
+        Assert.True(sink.Disposed);
         Assert.Equal(1, participant.AllStops);
         Assert.Equal(1, sink.StopAlls);
+        Assert.Empty(sink.Commands);
     }
 
     // =====================================================================================
@@ -703,6 +733,23 @@ public class HapticLimbSiteTests
         {
             action();
             return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>A clock that never advances and never fires. Every wake a limb schedules on it is
+    /// HELD, so a teardown fact observes the ORDER of a teardown rather than whatever a thread-pool
+    /// timer managed to do behind it.</summary>
+    private sealed class FrozenClock : ISessionClock
+    {
+        public DateTimeOffset UtcNow => new(2026, 8, 21, 0, 0, 0, TimeSpan.Zero);
+
+        public IDisposable Schedule(TimeSpan due, Action fire) => new Held();
+
+        private sealed class Held : IDisposable
+        {
+            public void Dispose()
+            {
+            }
         }
     }
 
