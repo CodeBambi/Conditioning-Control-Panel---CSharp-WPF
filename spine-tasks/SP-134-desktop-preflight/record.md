@@ -150,19 +150,18 @@ Four classes, each with a different sentence, decided by pid first and process n
 | A1 | `check-floor.mjs` at lane (first attempt) | pid 16712 up, parked | red | **`TestTimingGuardTests.NoWallClockWaitsOutsideTheApprovedHelper`** — my own comment, §3 |
 | A2 | `check-floor.mjs` at lane, after the comment fix | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; floor reported the expected pin drift | **empty** |
 | A3 | final `check-floor.mjs`, `b3868c168` + docs | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; the ONLY gate line is `FLOOR VIOLATION — total drift: 2585 (pin total 2573)`, which is the declared delta | **empty** |
-
 | A4 | `check-floor.mjs` after the doc commit `13ae62e03` | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; same single pin-drift line | **empty** |
-
 | A5 | `check-floor.mjs` after the code-review corrections | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; warning gate 0/0; same single pin-drift line | **empty** |
+| A6 | **final** `check-floor.mjs`, after the final-review corrections | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; warning gate 0/0; same single pin-drift line | **empty** |
 
-A5 is the gate after the review corrections in §10b. **The delta did not move: still +12/0, still 2585/152.** Every correction was prose, a line number, or a doc comment; the only code change with any behavioural surface is the pair of emitted citation strings in the refusal, which `DesktopPreflightTests.cs:174` pins and which moved together.
+**The delta never moved across A2-A6: +12/0, observed 2585/152, failure set empty every time.** Every post-review correction was prose, a line number or a doc comment; the only code changes with any behavioural surface were the three emitted citation literals and the one assertion literal paired with them, and those moved together.
 
 A4 exists because both edited documents are read at runtime by tests (`verification-harness.md` is
 named in nine `client/tests` files), and CLAUDE.md warns that a late doc edit can red the suite.
 The doc commit therefore gets its own gate rather than inheriting A3's.
 
 **No run in this packet was re-run to obtain a different answer.** A1 was fixed, not retried; every
-other row is a single run. **Six floor-scale runs were made and none was contended** in the sense
+other row is a single run. **Seven floor-scale runs were made (B1, A1-A6) and none was contended** in the sense
 this packet detects: pid 16712 was parked throughout, which the pre-flight correctly does not
 refuse on (§4, §7-R1b). The two runs that WERE contended are R1 and R1b, both staged deliberately.
 
@@ -273,41 +272,90 @@ The 12 are 11 pure verdict facts in `DesktopPreflightVerdictTests` (confirmed by
   than branching on the platform, and `DesktopPreflight.HostCanBeObserved` exists so the platform
   predicate lives outside any fact body.
 
-## 10b. I shifted the file by one line and my own citations did not follow
+## 10b. The citation-shift class, including the instance that happened INSIDE the fix for it
 
-Adding `using System.Runtime.InteropServices;` at line 1 moved every line of
-`RealDesktopCollection.cs` **+1**. The two paragraphs the whole packet cites moved with it, and the
-numbers did not:
+`RealDesktopCollection.cs` grew twice in this lane, and the total shift is **+31 lines**, not +1:
+
+| insertion | where | size | what it invalidates |
+|---|---|---|---|
+| `using System.Runtime.InteropServices;` | line 1 | +1 | every citation into the file |
+| the pre-flight call in `RealDesktopLease`'s constructor (`:107-111`) | ABOVE `TryTake` | +30 | every citation from `TryTake` down |
+
+Measured end to end: `TryTake` was `:108` at base `1a5136beb` and is `:139` at head, and base
+`:110`/`:113`/`:118`/`:144`/`:148` map exactly onto head `:141`/`:144`/`:149`/`:175`/`:179`,
+verified line for line.
+
+**The generalisation I wrote first was too narrow, and that narrowness is what let the class recur.**
+I wrote *"a single-line insertion at the top of a file"*. The truth is that **an insertion ANYWHERE
+invalidates every citation below it, by that insertion's own size** — and the second row above is
+neither at the top nor one line.
+
+### The recurrence, inside the commit that documents the class
+
+`ec51bd6c6` inserted a 10-line `MinimumSamples` doc comment at `:342` **and, in the same commit,
+wrote a sentence locating the emitted refusal strings at `:623`, `:651`, `:659`** — their positions
+at `b3868c168`, i.e. before that very commit's own insertion. At head they are **`:633`, `:661`,
+`:669`**. What the stale numbers pointed at:
+
+| stale | what is actually at that line now |
+|---|---|
+| `:623` | `}` |
+| `:659` | `{` |
+| **`:651`** | **a DIFFERENT refusal branch — the our-own-harness one** |
+
+The third is the damaging one. A number pointing at a brace is self-evidently wrong; a number
+pointing at a neighbouring branch of the same method **reads as correct, so the reader lands
+somewhere plausible and stops looking.**
+
+### What this packet corrected
 
 | claim | was | is |
 |---|---|---|
 | *"Not a retry … not a skip and not an `allowedSkips` entry"* | `:35-38` | **`:36-39`** |
 | *"What it does NOT cover … a FOREIGN topmost window"* | `:44-48` | **`:45-49`** |
+| the three emitted refusal strings | `:623`, `:651`, `:659` | **`:633`, `:661`, `:669`** |
 
-Those stale numbers had reached **five places**: two emitted refusal strings in
-`RealDesktopCollection.cs` (`:623`, `:651`, `:659`), the assertion in `DesktopPreflightTests.cs:174`
-that PINS one of them, `verification-harness.md`, and D279/D284. All corrected. Two further
-citations were wrong independently of the shift and are corrected too:
-`RealDesktopCollectionGuardTests.cs:38-41` is really **`:29-35`** (`:38-41` is the paragraph close
-plus the class declaration), and `ExemptFileNames` is at **`:50-54`**, not `:49-54`.
+The first two had reached five places: three emitted strings in `RealDesktopCollection.cs`, the
+assertion at `DesktopPreflightTests.cs:174` that PINS one of them, `verification-harness.md:74`
+(pre-existing, rotted by my insertion), and D279/D284. Two more were wrong independently of the
+shift and are corrected too: `RealDesktopCollectionGuardTests.cs:38-41` is really **`:29-35`**, and
+`ExemptFileNames` is at **`:50-54`**, not `:49-54`.
 
-**Two stale citations are OUTSIDE this packet's File Scope and are left for the orchestrator**,
-because my insertion is what rotted them and I may not edit either file:
+### The repair is an ALIGNMENT, not a closure
 
-- `client/docs/task-board.md:336-337` — cites `RealDesktopCollection.cs:44-48`; the board is a
-  shared chokepoint reconciled at land.
-- `spine-tasks/SP-122-rack-presentation/record.md:354` and `plan.md:158` — another packet's folder;
-  historical artifacts, arguably correct as written at their own commit.
+`DesktopPreflightTests.cs:174` compares a literal against `RealDesktopCollection.cs:661`, which is
+**also a literal**. Neither side reads the file. All that happened here is that three numbers were
+re-aligned so they agree again at the new offset: **the pin still cannot detect its own rot**, and
+it will pass just as happily the next time the file moves. A check that closes this must READ the
+cited file and assert what is at that line. The gap is repository-wide rather than this lane's —
+`detect.mjs` scans `client/src/**` and `client/docs/**` into `ConditioningControlPanel/**`, so an
+intra-`client/tests/**` citation is invisible to all ten of its classes.
 
-`spine-tasks/SP-134-desktop-preflight/plan.md` also still carries the pre-shift numbers. It is left
-alone deliberately: it is a point-in-time checkpoint that was accurate when written, and this
-record is the authoritative artifact.
+### Out of scope: six citations in three files, rotted by this lane
 
-**This is the fourth self-inflicted citation-shift in this session's lane.** The general shape is
-that a single-line insertion at the top of a file silently invalidates every line citation into it,
-including citations held as string literals and asserted by tests — which is exactly where a stale
-number is least visible, because the test still passes as long as the literal and the assertion
-agree with each other and disagree with the file.
+All six are consequences of the `+31`. I may not edit any of them, so they are handed over whole:
+
+| file | line | citation | correct at head |
+|---|---|---|---|
+| `client/docs/task-board.md` | 336 | `RealDesktopCollection.cs:44-48` | `:45-49` |
+| `spine-tasks/SP-122-rack-presentation/record.md` | 244 | `:110-118`, `TryTake`'s `FileMode.Create` | `:141-149`; **`:110` is now my pre-flight's refusal throw** |
+| `spine-tasks/SP-122-rack-presentation/record.md` | 354 | `:44-48` | `:45-49` |
+| `spine-tasks/SP-122-rack-presentation/record.md` | 418 | `:113,144,148` | `:144,175,179`; at head `:113` is blank and `:148` is `refusal = null;` |
+| `spine-tasks/SP-122-rack-presentation/plan.md` | 12 | `:110`, `RealDesktopLease.TryTake` | `TryTake` is `:139` |
+| `spine-tasks/SP-122-rack-presentation/plan.md` | 158 | `:44-48` | `:45-49` |
+
+**My own first audit found two of these, not six** — precisely because I was looking for the
+consequences of a one-line insertion at the top of the file instead of a 31-line shift through the
+middle of it. The under-scoped generalisation did not merely fail to prevent the recurrence; it
+scoped the cleanup too.
+
+`spine-tasks/SP-134-desktop-preflight/plan.md` also still carries pre-shift numbers, deliberately:
+it is a point-in-time checkpoint that was accurate when written, and this record is the
+authoritative artifact.
+
+**This class recurred four times in this lane, the fourth time inside the commit that documents
+it.** Every number in this section was verified by reading the line back out of the file **in the
+state the edit leaves it**, not the state it was in when the sentence was drafted.
 
 ## 11. What this does NOT prove
 
