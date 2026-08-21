@@ -117,7 +117,8 @@ seconds after the previous run), and the comment in `capture.ps1` says what is t
 
 ## 4. Every check demonstrated to fail on a capture of the wrong state
 
-All at the committed head `HEADSHA`. Three real wrong-state captures, at the same rect.
+All at the committed head `965ef0a29` (§4.3's last two rows at `2b4dcd5f0`, the guard-hardening
+commit, and re-run there in full). Three real wrong-state captures, at the same rect.
 
 | # | Wrong state | How produced | `goon-page-backdrop` | `goon-page-explainer-card` |
 |---|---|---|---|---|
@@ -164,9 +165,20 @@ that rendered from a page that never booted. It would have looked exactly like c
 | `goon-page-backdrop` demoted to `draw-verified` | `EveryGoonCheck_ClaimsPresentationVerified` |
 | its tolerance widened 6 -> 8 | `NoGoonCheckAcceptsTheColourOfAnotherDeclaredState`, naming `dashboard-background` |
 | its tolerance widened to 16 | also `NoGoonCheckAcceptsTheColourOfTheLoaderItMustReject` |
-| the `ready=true` gate moved below `CopyFromScreen` | `TheGoonCapture_ConfirmsTheHandshakeBeforeItReadsAnyPixel` |
+| the `ready` gate DELETED (poll condition AND refusal) | `TheGoonCapture_ConfirmsTheHandshakeBeforeItReadsAnyPixel` |
+| the `modal=open` gate deleted | same |
+| the `nav=failed` refusal deleted | same |
+| `CopyFromScreen` hoisted above the whole gate | same |
 | `.webmanifest` added to the served tree's allowed set | `TheServedTrees415Set_IsDerivedFromTheWire_NotRestated` |
 | the DTRH borrow reverted to SP-130's construction | `TheTwelveHotlinkedAssets_FallThroughToTheDtrhTree` |
+
+**AND ONE THAT DID NOT RED, WHICH IS WHY THIS SECTION IS WORTH RUNNING RATHER THAN DESCRIBING.**
+At `965ef0a29` the ordering guard needled the bare tokens (`ready=true`, `screen=title`). A seeded
+run that **deleted both real gates still PASSED**, because the token survives inside the `Fail`
+message that explains them. **A guard satisfiable by its own error text is the defect it exists to
+catch, one level up.** Every needle now binds the PowerShell REFUSAL — `-notmatch 'ready=true'`,
+`-match 'nav=failed'`, `-ne 'embedded'` — which prose about a refusal cannot satisfy, and all four
+variants above red at `2b4dcd5f0`.
 
 ---
 

@@ -709,23 +709,26 @@ public sealed class GoonServingTests : IDisposable
     {
         var script = CaptureScriptCode();
 
-        // 'GoonProbe' is the AutomationId the window publishes; needling THAT rather than the
-        // probe line's own prefix binds the harness to the product element it reads, and the
-        // prefix appears only in prose, which this comment-stripped view does not contain.
+        // EACH NEEDLE IS THE REFUSAL ITSELF, NOT THE FIELD NAME — and that distinction was earned.
+        // The first version needled the bare token (`ready=true`), and a seeded run that DELETED
+        // both real gates still passed, because the token survived inside the Fail message that
+        // explains them. A guard satisfiable by its own error text is the defect it is meant to
+        // catch, one level up. `-notmatch '<field>'` is the PowerShell refusal, so it cannot be
+        // satisfied by prose about the refusal.
         var probeRead = script.IndexOf("'GoonProbe'", StringComparison.Ordinal);
-        var surfaceAssert = script.IndexOf("surface=(?<s>", StringComparison.Ordinal);
-        var navAssert = script.IndexOf("nav=failed", StringComparison.Ordinal);
-        var readyAssert = script.IndexOf("ready=true", StringComparison.Ordinal);
-        var screenAssert = script.IndexOf("screen=title", StringComparison.Ordinal);
-        var modalAssert = script.IndexOf("modal=open", StringComparison.Ordinal);
+        var surfaceAssert = script.IndexOf("-ne 'embedded'", StringComparison.Ordinal);
+        var navAssert = script.IndexOf("-match 'nav=failed'", StringComparison.Ordinal);
+        var readyAssert = script.IndexOf("-notmatch 'ready=true'", StringComparison.Ordinal);
+        var screenAssert = script.IndexOf("-notmatch 'screen=title'", StringComparison.Ordinal);
+        var modalAssert = script.IndexOf("-notmatch 'modal=open'", StringComparison.Ordinal);
         var pixelRead = script.IndexOf("CopyFromScreen", StringComparison.Ordinal);
 
         Assert.True(probeRead >= 0, "capture.ps1 no longer reads the goon window's GoonProbe element");
-        Assert.True(surfaceAssert >= 0, "capture.ps1 no longer checks which surface the host selected");
+        Assert.True(surfaceAssert >= 0, "capture.ps1 no longer refuses a surface other than 'embedded' — payload-missing and unsupported would be photographed");
         Assert.True(navAssert >= 0, "capture.ps1 no longer refuses on a FAILED navigation — it would photograph an error page");
-        Assert.True(readyAssert >= 0, "capture.ps1 no longer asserts the page reported ready=true");
-        Assert.True(screenAssert >= 0, "capture.ps1 no longer asserts the page reached screen=title");
-        Assert.True(modalAssert >= 0, "capture.ps1 no longer asserts the captured first-run card is actually open");
+        Assert.True(readyAssert >= 0, "capture.ps1 no longer REFUSES on ready!=true — a page that never completed the handshake would be captured as though it had");
+        Assert.True(screenAssert >= 0, "capture.ps1 no longer REFUSES on a screen other than the title");
+        Assert.True(modalAssert >= 0, "capture.ps1 no longer REFUSES when the captured first-run card is not open");
         Assert.True(pixelRead >= 0, "capture.ps1 no longer reads the screen at all");
 
         var confirmations = new[]
