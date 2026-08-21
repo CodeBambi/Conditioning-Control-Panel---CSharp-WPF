@@ -15,6 +15,49 @@
   the root cause: a divergence carries no STATUS, so "closed" is free prose in the ledger while `OPEN/WIP/BLOCKED/DONE` is
   controlled vocabulary on the board, and nothing can notice them disagreeing.
 
+
+### HANDOFF: the exact next action is to LAND WAVE 68. Nothing else is claimable first.
+
+Opening a new `WAVE-LOCK` before landing would make the next session hit phase C and EXIT AT ONCE,
+leaving wave 68 unlanded. That is why no wave 69 was authored. There is no live lock and no
+`.port/STOP`; the loop is not halted, it is waiting for a certifying context.
+
+- **Base `0ce57a51a`**, verified green at 2599/152 immediately before push.
+- **`sum-deltas --check` BEFORE `--apply`.** If `check-floor` disagrees with the sum, HALT — that is a
+  pause condition, never a pin adjustment.
+- **The one expected conflict:** both lanes append to `client/docs/wpf-surface-reachability.md` with
+  DISJOINT id ranges (SP-136 D296-D305, SP-137 D306-D310), so keep BOTH blocks in id order and remove
+  only the markers. **That file is CRLF** — a resolver assuming LF silently fails to match, which is
+  how the wave-67 land came to commit conflict markers. Verify by counting markers afterwards, never
+  by trusting an exit code.
+
+**Four land obligations the lanes named and could not perform themselves:**
+
+1. `client/tests/floor/floor.json` to **2616** by summing the declared deltas (12 + 5, NOT 9 + 5).
+2. Consume and delete both `spine-tasks/SP-13{6,7}-*/floor-delta.json`.
+3. Move **board row 32** off OPEN (closed by SP-136) and **row 337** off OPEN (closed by SP-137).
+4. Repair `client/docs/port-workflow.md:15` — its range into `FloorWrapperGuardTests.cs` is rotted by
+   SP-136 and **no mechanical detector covers it**. Replacements in SP-136 `record.md` §10: the walk is
+   `:99-131`, the SP-065 rule `:180-241`.
+
+**The flake you will probably meet:** `SoundArbitrationTests.Construction_AbandonedThenFaults_...`,
+`Expected: 1, Actual: 0`, five sightings, board row 341. It is **thread-pool starvation under concurrent
+load**, not desktop contention — that class carries no collection attribute. Passing in isolation is not
+a pass. Re-observe and report it; do not retry it away. `ConstructionBudget` is TEST-side; filing it as a
+product timeout sends the next investigator to the wrong subsystem.
+
+### AFTER the land, one capability row is unblocked and claimable by code alone
+
+**Board row 202 is NOT owner-blocked.** The owner answered the entitlement posture on 2026-08-18
+(borrow the shipping app's login) and the mechanism is verified against source. Its acceptance — a typed
+entitlement capability backed by a DPAPI read of `auth_token.dat` on Windows, honestly `Unavailable` on
+Linux, a decrypt failure surfacing as `Unavailable` and never `NotEntitled` — needs nothing further from
+the owner. **It is the first capability gap in several waves closable without an owner answer**, and it
+is what stops DTRH and Graded Intake refusing everybody including the owner. It sat unclaimed for four
+days behind a stale standing line in the orchestrator's own digest; that defect is filed and the derived
+register is `client/docs/owner-decisions.md`. What remains owner-gated is only `:206` — whether the port
+may TRANSMIT the borrowed bearer and read a second cross-app file — which gates the profile-backed tier
+read, not row 202.
 ## Wave 67 LANDED 2026-08-22 (`78986160e`) — floor 2599/152
 
 - **SP-134** built the obvious contended-desktop detector, MEASURED it, and rejected it: presence of
