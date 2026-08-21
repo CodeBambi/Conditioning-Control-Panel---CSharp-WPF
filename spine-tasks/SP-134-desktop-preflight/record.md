@@ -136,6 +136,12 @@ Four classes, each with a different sentence, decided by pid first and process n
 | A2 | `check-floor.mjs` at lane, after the comment fix | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; floor reported the expected pin drift | **empty** |
 | A3 | final `check-floor.mjs`, `b3868c168` + docs | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; headless TRX `total="152" failed="0"`; the ONLY gate line is `FLOOR VIOLATION — total drift: 2585 (pin total 2573)`, which is the declared delta | **empty** |
 
+| A4 | `check-floor.mjs` after the doc commit `13ae62e03` | pid 16712 up, parked | `Passed! Failed: 0, Passed: 2583, Skipped: 2, Total: 2585`; same single pin-drift line | **empty** |
+
+A4 exists because both edited documents are read at runtime by tests (`verification-harness.md` is
+named in nine `client/tests` files), and CLAUDE.md warns that a late doc edit can red the suite.
+The doc commit therefore gets its own gate rather than inheriting A3's.
+
 **No run in this packet was re-run to obtain a different answer.** A1 was fixed, not retried; every
 other row is a single run. **Six floor-scale runs were made and none was contended** in the sense
 this packet detects: pid 16712 was parked throughout, which the pre-flight correctly does not
