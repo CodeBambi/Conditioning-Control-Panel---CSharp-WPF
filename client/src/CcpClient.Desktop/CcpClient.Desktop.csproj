@@ -71,6 +71,17 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <!-- SP-130 goon payload serving: the FIFTH instance of the SP-023 linked-glob pattern
+         above, and byte-identical in shape. 184 files stay READ-ONLY and OWNED by the legacy
+         tree (goon-game-census.md 5.3 proposes exactly this glob and proposes copying
+         nothing); 164 of them are what the page actually loads. The practice host serves
+         them through Features/Goon/GoonParticipant.cs, and presence is probed by
+         Features/Goon/GoonServingRoots.cs (typed Present/Missing/Incomplete). -->
+    <Content Include="..\..\..\ConditioningControlPanel\Resources\web\goon\**\*">
+      <Link>payload\goon\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <Content Include="..\..\..\ConditioningControlPanel\Resources\web\vendor\**\*">
       <Link>payload\vendor\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

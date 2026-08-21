@@ -69,6 +69,13 @@ public partial class MainWindow : Window
         // flag reaches this same object's coordinator rather than building a second one, which is
         // the LoomLaunch/DtrhLaunch convention two waves already depend on.
         Intake = new Features.Intake.IntakeLaunch(host, this, intakeHarness);
+        // SP-130: the ONE Goon construction site (Features/Goon/GoonLaunch.cs). Same
+        // convention: --goon-demo reaches THIS object rather than building a second one.
+        // No entitlement argument, and that is upstream's fact rather than an omission --
+        // the Goon card is an unconditional door (Views/Tabs/PlayTabView.xaml:547-549) and
+        // the paid rungs live inside, on hosting and sending (GoonHostService.cs:894,:909),
+        // where Features/Goon/GoonDoors.cs refuses them.
+        Goon = new Features.Goon.GoonLaunch(host, this);
 
         // SP-013 demonstrator popup manager. It has no user path now that the demonstrator card
         // is retired: it is infrastructure only (A-014 integration rule), kept because
@@ -112,7 +119,7 @@ public partial class MainWindow : Window
 
         _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
-        _pages[ShellRoutes.Play] = new PlayPage(Dtrh);
+        _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
         _pages[ShellRoutes.System] = new SystemPage(host);
 
@@ -207,6 +214,10 @@ public partial class MainWindow : Window
     /// <summary>The one Graded Intake launch path (public so tests drive the real seam, and so
     /// <c>--intake-demo</c> reaches the SAME coordinator the user path builds).</summary>
     public Features.Intake.IntakeLaunch Intake { get; }
+
+    /// <summary>The one Goon practice launch path (public so tests drive the real seam, and so
+    /// <c>--goon-demo</c> reaches the SAME launcher the user path builds).</summary>
+    public Features.Goon.GoonLaunch Goon { get; }
 
     /// <summary>Demonstrator popup manager (SP-013); public so tests drive the real wiring.</summary>
     public FeaturePopupManager Popups => _popups;

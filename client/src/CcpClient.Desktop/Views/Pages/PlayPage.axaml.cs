@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using CcpClient.Desktop.Features.Dtrh;
+using CcpClient.Desktop.Features.Goon;
 
 namespace CcpClient.Desktop.Views.Pages;
 
@@ -30,10 +31,18 @@ public partial class PlayPage : UserControl
     /// caption for a refusal and must never be reused as one.</summary>
     public const string FaultBandTitleText = LaunchFaultText.DtrhHeadline;
 
-    public PlayPage(DtrhLaunch dtrh)
+    public PlayPage(DtrhLaunch dtrh, GoonLaunch goon)
     {
         ArgumentNullException.ThrowIfNull(dtrh);
+        ArgumentNullException.ThrowIfNull(goon);
         InitializeComponent();
+
+        // SP-130: the Goon door. Synchronous, because GoonLaunch.Practice is - there is no gate
+        // to resolve (upstream's card is ungated, PlayTabView.xaml:547-549) and no async read to
+        // wait on. It never throws: a fault arrives on Faulted and is rendered below rather than
+        // vanishing into an unobserved task, which is SP-097's lesson applied to a second door.
+        GoonPracticeButton.Click += (_, _) => goon.Practice();
+        goon.Faulted += RenderGoonFault;
 
         // Fire-and-forget on purpose: the gate resolves asynchronously (it reads the shipping
         // app's login) and a click handler may not block the UI thread. The awaited work
@@ -112,4 +121,25 @@ public partial class PlayPage : UserControl
         GateBandText.Text = message;
         GateBand.IsVisible = true;
     }
+
+    /// <summary>
+    /// The Goon launch threw. Its own line under its own card: a fault is not a refusal, and the
+    /// four Goon refusals are not faults - they live on the host window's rail and are reached by
+    /// a launch that WORKED. Rendering either as the other is exactly what the DTRH card's two
+    /// separate bands above exist to prevent.
+    /// </summary>
+    private void RenderGoonFault(Exception exception)
+    {
+        GoonFaultText.Text = LaunchFaultText.Compose(GoonFaultHeadline, exception);
+        GoonFaultText.IsVisible = true;
+    }
+
+    /// <summary>WPF's own failure headline for this card, verbatim from
+    /// <c>MainWindow/MainWindow.Lab.cs:207</c> minus its trailing colon (the colon joins headline
+    /// to detail in <see cref="LaunchFaultText.Compose"/>, exactly as WPF's concatenation does).
+    /// Note the verb: the Goon card says "open", where the DTRH and intake cards say "start".
+    /// It is not kept in <see cref="LaunchFaultText"/> because that file is outside this
+    /// packet's file scope; the composed body still runs through the shared helper, so the
+    /// empty-line layout hazard it guards cannot arrive by this route.</summary>
+    public const string GoonFaultHeadline = "Couldn't open the Goon Game";
 }
