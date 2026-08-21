@@ -461,4 +461,6 @@ the three wrapper-routing facts.) `client/tests/floor/floor.json` was never open
 | `90feaf2d8` | the strand's second sighting (docs only) |
 | `6896a046c` | review fix: the SP-065 routing decision pinned, three accuracy corrections — head for red-watch pass 5 (M8-M13) |
 | `abce9e40c` | record of the reopened check and the corrected claims — head for red-watch pass 6 (M2'-M7b'), where ALL TWELVE facts were watched red |
-| final | the durable-row corrections D302/D304 and this trail; text-only, no code and no re-pin |
+| `13fa348d0` | durable-row corrections D302/D304, the pass-6 re-watch, and §10c/§10d; text-only |
+| `51b10a295` | the rendering fix — both corrected rows carried a literal `\|\|` and were dropping their fourth column; text-only |
+| `LANDED HEAD` | `51b10a295` unless a later text-only commit follows; every commit after `6896a046c` touches `.md` files ONLY, so the code watched in pass 6 at `abce9e40c` is the code that ships |
