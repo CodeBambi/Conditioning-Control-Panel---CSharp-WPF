@@ -78,7 +78,7 @@ totals disagreed, and they do not. Both numbers are measured from today's bytes 
 
 This is not an inference. The shipping source says it, in two files I opened.
 
-`ConditioningControlPanel/Services/GoonGame/GoonHostService.cs:24-26`:
+`ConditioningControlPanel/Services/GoonGame/GoonHostService.cs:25-27`:
 
 > *"The C# engine under Services/GoonGame stays the reference implementation; the page is a second
 > client of the same server (/v2/goon/\*) and of the same deterministic specs (see
@@ -175,7 +175,7 @@ git ls-files | grep -i goon | grep -v Resources/web/goon/ | grep -v Services/Goo
 not a foreign subsystem hiding inside the surface's directory, but the surface's own subsystem
 hiding outside it, invisible to a directory-shaped row. Its only consumers outside itself are the
 three Goon files and one hook in the Assets tab (`MainWindow/MainWindow.Assets.cs:1504`), whose own
-comment at `:1501` calls it *"The Goon Game transfer cache"*.
+comment at `:1502` calls it *"The Goon Game transfer cache"*.
 
 **So the surface's real C# footprint is 35 files / 16476 lines, and the row's 25 is 71.4% of it.**
 The row understates the code by four dev-cockpit files and a six-file subsystem, while overstating
@@ -257,7 +257,7 @@ outbound network boundary at all today.**
 ## 3. The already-shipped check: all nine duel elements are native in the port
 
 Plan §5.2 makes this check mandatory rather than opportunistic, because it is the check the haptic
-count of 14 missed and the one that produced SP-127's sharpest sub-finding. Here it lands
+count that missed a shipped module, and the one that produced SP-127's sharpest sub-finding. Here it lands
 differently, and in the port's favour.
 
 `GoonContracts.cs:44-54` freezes the draft pool — the nine things a duel throws:
@@ -431,9 +431,13 @@ mailbox), `/relay` (fallback transport, *"server MUST NOT inspect or persist `da
 (both clients post the signed result; the server stores the pair under both unified ids). Two more
 appear in §12: `/v2/goon/report` and `/v2/goon/blocked`.
 
-**What travels.** Every call is a POST carrying `unified_id` in the body plus `X-Auth-Token` and
-`X-Client-Version` headers — constructed at `GoonHostService.cs:805-811`, which I opened. Display
-name and app version cross in `hello`. **Media never rides these routes**
+**What travels**, with the citation split because the two halves sit in different places and this is
+the paragraph the owner will read as the description of what leaves the machine. **The headers** are
+attached by the host's proxy at `GoonHostService.cs:805-811` — `X-Auth-Token` at `:810`,
+`X-Client-Version` at `:811`. **The identity is in the BODY**, and the host writes it only for the
+peer-card call (`:1190`, `unified_id = App.UnifiedUserId`); every room-scoped call the C# client
+makes builds its own, e.g. `GoonSignalingClient.cs:235`, alongside `display_name` (`:236`) and
+`app_version` (`:237`). Display name and app version also cross in `hello`. **Media never rides these routes**
 (`docs/GOON_GAME_PROTOCOL.md:293-295`, hard rule).
 
 **Then the machine talks to another machine.** Primary transport is a WebRTC data channel over
@@ -546,7 +550,7 @@ read it as a shipped sensor.
 
 ## 7. Verdict: BUILDABLE-IN-PART — with the inventory and the residue
 
-Applying plan §4.3 in order: clause 1 fails (six OWNER-GATED rows). **Clause 2 fires** — the subset
+Applying plan §4.3 in order: clause 1 fails (seven OWNER-GATED rows). **Clause 2 fires** — the subset
 {B11, B2, B3, B4} is entirely PARTIAL and is independently user-observable — so the verdict is
 BUILDABLE-IN-PART and clause 3 is not reached.
 
@@ -605,7 +609,7 @@ That is the honest bound on the one soft predicate here.
 ### 7.3 What the next packet should NOT be
 
 **Not "port `Services/GoonGame/`".** §1.3: 80.0% of it is a second implementation of a game the payload
-already contains, plus a developer cockpit; the shipped user path is four files, and Practice needs
+already contains, plus a developer cockpit; the shipped user path is five files, and Practice needs
 none of them.
 
 ---
@@ -614,7 +618,7 @@ none of them.
 
 | Row phrase | Verdict |
 |---|---|
-| `Services/GoonGame/` (25 new files) | **Exact, and 16% of it is the shipped game** (§1.3) |
+| `Services/GoonGame/` (25 new files) | **Exact, and 20.0% of it is the shipped game** (§1.3) |
 | `Resources/web/goon/` (184 new payload files) | **Exact; 97.8% this surface, 164 served** (§5) |
 | "real-time 1v1 duels: media payload throwing, heat build, sudden death" | Confirmed |
 | "P2P own-media send … 64 MB video cap" | Confirmed; the cap is 64 **MiB**, covers images too, and two further caps go unmentioned (§4.2) |
@@ -624,7 +628,7 @@ none of them.
 | "Discord rich presence" | Confirmed |
 | "solo practice mode" | Confirmed — **and it is the buildable unit** (§7.1) |
 | "received partner media is ephemeral and never outlives the match" | Confirmed, with three purge points (§6.6 Q1) |
-| "Size XL — decompose before scheduling" | **The instruction was right; the size is not a single number.** The decomposition is §7.1 (buildable now, no owner input) against §7.2 (six owner decisions). Not one XL row |
+| "Size XL — decompose before scheduling" | **The instruction was right; the size is not a single number.** The decomposition is §7.1 (buildable now, no owner input) against §7.2's residue. **That residue is seven OWNER-GATED rows resolving to FIVE owner decisions**, and the mapping is stated rather than left for the reader to reconcile: B1+B9 → §6.1 (one network boundary), B5+B6 → §6.2 (a cap has no subject until user media travels), B8 → §6.3, B7 → §6.4, B10 → §6.5. Not one XL row |
 
 ---
 
@@ -650,9 +654,11 @@ none of them.
   all three are in the guard's own comments: a `\bGoonSuddenDeath\b` needle cannot match
   `GoonSuddenDeathRunner`; a token sweep over `Goon`-prefixed names cannot see `ConsentSheetMsg`
   (this one changed the headline from 4 to 5); and a trailing `//` comment on a code line reads as
-  code unless the stripper is string-aware. **The count is conservative in the safe direction** —
-  block-comment continuation lines that do not start with `*` are treated as code, so the closure can
-  over-report but not silently under-report.
+  code unless the stripper is string-aware. **The STRIPPER's bias is conservative** — a block-comment
+  continuation line that does not start with `*` is treated as code, so a comment cannot hide an edge
+  from it. **That does not make the closure safe overall, and the earlier draft of this bullet
+  overclaimed by saying so**: the four invisibility modes listed above are all UNDER-report modes and
+  no lexical method can see them. **The count is a lower bound on reachability, not an upper one.**
 - **`GoonHostService` does reach outside this surface**, and the trace above only covers
   `Goon`-prefixed names: it consumes `App.DiscordRpc`, `App.Patreon`, `App.Settings`, `UpdateService`
   and `Services/Media/Transfer/`. Those are named where they matter (§1.4, §6) but were not
@@ -660,12 +666,21 @@ none of them.
 - **The 20-file serving difference in §5.2 rests on `index.html` not referencing `test/`** and on
   `package.json`'s own statement that browsers never read it. A dynamically constructed import that
   a static read cannot see would change that number.
-- **The four repository-wide sweep outputs in §2.1 are DISCLAIMED, not pinned: 8339 text files
-  scanned, 10398 binaries skipped, 267 files matched, 3969 lines matched.** They cannot re-derive,
-  and the reason is worth stating rather than hiding: that sweep runs over the repository root, which
-  contains **this document**, so every edit to the census changes three of the four numbers. They are
-  reported as the transcript of one run from one worktree, and a reader must re-run the printed
-  invocation to check them.
+- **The repository-wide sweep's numbers in §2.1 are DISCLAIMED, not pinned: 8339 text files scanned,
+  10398 binaries skipped, 267 files matched, 3969 lines matched, and its per-directory grouping
+  (`ConditioningControlPanel` 186, `spine-tasks` 55, `client` 10, `Tests` 4, `Tools` 2, and the
+  single hits).** They cannot re-derive, and the reason is worth stating rather than hiding: that
+  sweep runs over the repository root, which contains **this document and this packet's own folder**,
+  so editing the census changes them. They are reported as the transcript of one run from one
+  worktree, and a reader must re-run the printed invocation to check them.
+- **THE NUMBER SWEEP CANNOT SEE NUMBERS SPELLED AS WORDS.** "four", "six", "seven", "twelve" are
+  invisible to it, and that is how two stale tallies survived a green suite at code review. The
+  blind spot is stated rather than papered over, and the reason it is not simply closed is worth
+  reading: extending the sweep to word forms would give the *appearance* of coverage without the
+  substance, because the pin is vocabulary-level (below) and every small integer is already pinned
+  by something. **What actually closes that class is §10.4.3**, which re-derives the label tally from
+  the map's own rows and compares it against every restatement in this document *including the
+  verdict's spelled-out one*. Bind a number to its claim, or accept that you have not bound it.
 - **The number-pin is VOCABULARY-level, not claim-level.** §10.7's fact requires every numeric token
   to appear in a §10 table or in this section; it cannot tell *which* claim a number belongs to, so
   a number pinned for one purpose would satisfy the fact if it were later reused wrongly for
@@ -793,6 +808,13 @@ by 3 and 5 lines. Here a citation that drifts by **one** line reds the suite.
 | live-duration-default | Services/GoonGame/GoonContracts.cs | 97 | LiveDurationSecDefault = 720 |
 | toy-cap-default | Services/GoonGame/GoonContracts.cs | 297 | ToyCap { get; set; } = 0.7 |
 | payload-gap-default | Services/GoonGame/GoonContracts.cs | 108 | PayloadMinGapMs = 30000 |
+| two-implementations | Services/GoonGame/GoonHostService.cs | 25 | The C# engine under Services/GoonGame stays |
+| assets-hook-comment | MainWindow/MainWindow.Assets.cs | 1502 | The Goon Game transfer cache |
+| artifact-cap-history | Services/GoonGame/TransferInboxStore.cs | 80 | 24→64 MB |
+| auth-token-header | Services/GoonGame/GoonHostService.cs | 810 | X-Auth-Token |
+| client-version-header | Services/GoonGame/GoonHostService.cs | 811 | X-Client-Version |
+| unified-id-in-body | Services/GoonGame/GoonSignalingClient.cs | 235 | unified_id |
+| ice-timeout | Services/GoonGame/GoonContracts.cs | 104 | IceTimeoutMs = 10000 |
 | score-formula | docs/GOON_GAME_PROTOCOL.md | 267 | 0.15 |
 | payload-rate | docs/GOON_GAME_PROTOCOL.md | 272 | Payload rate: 1 / 30 s |
 | host-gate-refusal | docs/GOON_GAME_PROTOCOL.md | 47 | 403 |
@@ -817,6 +839,41 @@ Re-derived by walking each path and counting lines on every run.
 | surface-csharp-total-lines | 16476 |
 | payload-served-share-percent | 89.1 |
 | shared-vendor-tree-files | 9 |
+| intake-vo-goon-named-files | 7 |
+| ice-timeout-seconds | 10 |
+| voice-note-max-seconds | 10 |
+
+### 10.4.3 The behaviour map's label tally, re-derived from its own rows
+
+Added at code review. Three numbers in the first draft of this census were correct in one section and
+stale in another, and **the verdict paragraph cited an OWNER-GATED tally its own map contradicted**.
+These re-derive by counting labels in §4's rows, and the guard compares them against every
+restatement in the document, including the verdict's spelled-out one.
+
+| Key | Value |
+|---|---|
+| behaviour-rows | 12 |
+| label-covered | 0 |
+| label-partial | 4 |
+| label-gap | 1 |
+| label-owner-gated | 7 |
+
+### 10.4.4 The frozen element wire codes, re-derived from the enum
+
+`docs/GOON_GAME_PROTOCOL.md:256-257` calls these frozen and append-only, so a renumbering upstream is
+a wire break and must red the suite rather than drift.
+
+| Key | Value |
+|---|---|
+| element-code-Flashes | 0 |
+| element-code-Videos | 1 |
+| element-code-Subliminals | 2 |
+| element-code-Bubbles | 3 |
+| element-code-LockCards | 4 |
+| element-code-ToyPatterns | 5 |
+| element-code-BrainDrain | 6 |
+| element-code-BouncingText | 7 |
+| element-code-Spiral | 8 |
 
 ### 10.4.2 Payload composition by extension
 
@@ -878,8 +935,25 @@ Every term is re-derived from the shipping bytes on every run.
 - **Every numeric token in this document is pinned or disclaimed.** One fact extracts all of them
   and requires each to appear in §10's tables or in §9. Exclusions are **enumerated CLASSES**, never
   a list of literals: `File.ext:NNN` and `:NNN` citation forms, `§N.N` section references, `DNNN`
-  divergence ids, `SP-NNN` packet ids, ISO dates, `vN.N` versions, hex shas, and byte-arithmetic
-  spans inside a code span that §10.4 already pins by line.
+  divergence ids, `SP-NNN` packet ids, row ids, ISO dates, `vN.N` versions, hash-algorithm names,
+  hex shas, and headings.
+- **WHERE THE SWEEP'S TWO SIDES CAN DIVERGE, enumerated — because BOTH holes this guard has shipped
+  were divergences between them, not bad classes.** The sweep is two functions over one document and
+  it is only ever as good as their agreement:
+
+  | Axis | Divergence that actually happened | State now |
+  |---|---|---|
+  | **Section boundaries** | The vocabulary side treated everything after `## 10.` as pinned, and §10 is the last section, so appended prose self-whitelisted | ONE `Sections()` walk feeds both sides, so they cannot disagree about where a section ends |
+  | **Class filtering** | The vocabulary side harvested digits RAW while the checking side stripped classes, so row ids and citation line numbers injected 7, 12, 16 and 24 — **this is how a stale 16% survived** | Both sides apply `ExcludedNumberClasses` |
+  | **What is admissible** | — | Vocabulary admits §9 lines and §10 **table rows only**; the checking side skips exactly those and reads everything else, §10 prose included |
+  | **Token regex** | — | One literal regex, read by both |
+  | **Normalisation** | — | One `Normalize()`, called by both |
+
+  An edit that changes one side must change the other. Three `TheNumberSweep_*` fixtures pin the
+  repaired behaviours, each watched red before it shipped.
+- **The label tally re-derives from the map's own rows** (§10.4.3) and is compared against every
+  restatement in this document, **including the verdict's spelled-out one** — the check that catches
+  a corrected tally which did not propagate to the section a reader stops at.
 - **The two `walk.mjs` copies are byte-identical**, and the sha256 quoted in §1 is re-computed.
 - Every behaviour row in §4 carries one of the four labels and a platform cell; §6.6's four privacy
   answers are present; every `## 6.x` owner-flagged section exists.

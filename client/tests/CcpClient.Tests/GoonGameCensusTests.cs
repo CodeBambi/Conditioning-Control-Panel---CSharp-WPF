@@ -289,6 +289,12 @@ public sealed class GoonGameCensusTests
                 (totalLines + cockpit.Sum(p => LineCount(reference.Wpf, p)) + transferLines).ToString(),
             ["payload-served-share-percent"] = Percent(payload.Count - harness, payload.Count),
             ["shared-vendor-tree-files"] = CountFilesUnder(reference.Wpf, "Resources/web/vendor").ToString(),
+            ["intake-vo-goon-named-files"] = RelativeFilesUnder(reference.Wpf, "Resources/web/intake")
+                .Count(p => p.Contains("goon", StringComparison.OrdinalIgnoreCase)).ToString(),
+            ["ice-timeout-seconds"] = (MillisecondConstant(reference.Wpf,
+                "Services/GoonGame/GoonContracts.cs", "IceTimeoutMs") / 1000).ToString(),
+            ["voice-note-max-seconds"] = (MillisecondConstant(reference.Wpf,
+                "docs/GOON_VOICE_PLAN.md", "VN_MAX_MS") / 1000).ToString(),
         };
 
         AssertAgrees(declared, actual, "§10.4.1");
@@ -338,6 +344,15 @@ public sealed class GoonGameCensusTests
         Assert.Equal(declared["duel-elements"], elements.ToString());
         Assert.Equal(declared["duel-elements-with-port-module"], anchors.ToString());
         Assert.Equal(elements, anchors);
+
+        // The FROZEN wire codes. The protocol calls them append-only, so a renumbering upstream is a
+        // wire break and must red the suite rather than drift quietly through this document.
+        var codes = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (Match member in Regex.Matches(body.Groups["body"].Value,
+                     @"^\s*(?<name>[A-Z][A-Za-z0-9_]*)\s*=\s*(?<code>\d+)", RegexOptions.Multiline))
+            codes[$"element-code-{member.Groups["name"].Value}"] = member.Groups["code"].Value;
+
+        AssertAgrees(ParseKeyValueTable(reference.Census, "### 10.4.4"), codes, "§10.4.4");
     }
 
     [Fact]
@@ -447,6 +462,18 @@ public sealed class GoonGameCensusTests
 
         Assert.Contains("deliberately not priced", census, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("never priced", census, StringComparison.OrdinalIgnoreCase);
+
+        // The §6 heading states a DECISION count in words, and §8 restates it. A seven-row residue
+        // resolving to five decisions is legitimate, but the two tallies must agree with the
+        // sections that exist — an earlier draft said "six" and matched neither.
+        var decisionSections = OwnerFlaggedHeadings
+            .Count(h => Regex.IsMatch(h, @"^### 6\.[1-5]$"));
+        var heading = Regex.Match(census, @"^## 6\. OWNER-FLAGGED — (?<count>[a-z]+) decisions", RegexOptions.Multiline);
+        Assert.True(heading.Success, "§6's heading no longer states a decision count");
+        Assert.Equal(NumberWord(decisionSections), heading.Groups["count"].Value);
+
+        foreach (Match m in Regex.Matches(census, @"resolving to (?<count>[A-Z]+) owner decisions"))
+            Assert.Equal(NumberWord(decisionSections).ToUpperInvariant(), m.Groups["count"].Value);
     }
 
     /// <summary>The bytes are linked read-only out of the legacy tree and never forked. A census
@@ -571,6 +598,104 @@ public sealed class GoonGameCensusTests
         // reference, File.cs:line citation, hex sha.
         Assert.Single(escapees);
         Assert.Contains("77", escapees[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// THE SECOND HOLE, pinned so it cannot come back. The vocabulary side used to harvest digit
+    /// runs raw while the checking side stripped <see cref="ExcludedNumberClasses"/>, so a row id
+    /// or a citation line number silently whitelisted its own integer across the whole document.
+    /// Both sides now strip the same classes.
+    /// </summary>
+    [Fact]
+    public void TheNumberSweep_DoesNotAdmitRowIdsOrCitationLineNumbersToTheVocabulary()
+    {
+        const string doc = """
+            # Doc
+
+            ## 9. What this does NOT prove
+
+            - the server is private (`GoonSignalingClient.cs:16-17`)
+
+            ## 10. Pinned enumeration
+
+            | Id | Path | Reached |
+            |---|---|---|
+            | G7 | x.cs | reference |
+            | G12 | y.cs | reference |
+            | G24 | z.cs | reference |
+            """;
+
+        var pinned = PinnedNumbers(doc);
+
+        // The row ids and the citation range must contribute NOTHING to the vocabulary.
+        Assert.DoesNotContain("7", pinned);
+        Assert.DoesNotContain("12", pinned);
+        Assert.DoesNotContain("16", pinned);
+        Assert.DoesNotContain("17", pinned);
+        Assert.DoesNotContain("24", pinned);
+
+        // ...and the checking side therefore still catches a body claim that reuses them.
+        var escapees = UnpinnedNumbers(doc + "\nBody prose: 7 of the 24 files, 16 percent.\n", pinned);
+        Assert.Equal(3, escapees.Count);
+    }
+
+    /// <summary>
+    /// The stale-restatement class, closed mechanically. Three numbers in the first draft of this
+    /// census were correct in one section and stale in another, and the verdict paragraph cited an
+    /// OWNER-GATED tally its own behaviour map contradicted. The label counts are re-derived from
+    /// the map's rows and compared against EVERY restatement of them in the document, so a
+    /// correction that does not propagate reds the suite instead of surviving in a summary.
+    /// </summary>
+    [Fact]
+    public void TheLabelTally_MatchesTheBehaviourMap_EverywhereItIsRestated()
+    {
+        var census = RequireReference().Census;
+        var rows = BehaviourRows(census);
+        Assert.NotEmpty(rows);
+
+        var derived = Labels.ToDictionary(
+            label => label,
+            label => rows.Count(r => Regex.IsMatch(r, $@"\*\*{Regex.Escape(label)}\b")),
+            StringComparer.Ordinal);
+
+        _output.WriteLine(string.Join(", ", derived.Select(kv => $"{kv.Key}={kv.Value}")));
+        Assert.Equal(rows.Count, derived.Values.Sum());
+
+        var pinned = ParseKeyValueTable(census, "### 10.4.3");
+        AssertAgrees(
+            pinned,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["behaviour-rows"] = rows.Count.ToString(),
+                ["label-covered"] = derived["COVERED"].ToString(),
+                ["label-partial"] = derived["PARTIAL"].ToString(),
+                ["label-gap"] = derived["GAP"].ToString(),
+                ["label-owner-gated"] = derived["OWNER-GATED"].ToString(),
+            },
+            "§10.4.3");
+
+        // Every "<LABEL>: N of M" restatement in the document, wherever it sits.
+        var mismatches = new List<string>();
+        foreach (Match m in Regex.Matches(census, @"\*\*(?<label>COVERED|PARTIAL|GAP|OWNER-GATED):\s*(?<n>\d+) of (?<m>\d+)\*\*"))
+        {
+            var label = m.Groups["label"].Value;
+            if (int.Parse(m.Groups["n"].Value) != derived[label])
+                mismatches.Add($"\"{label}: {m.Groups["n"].Value} of {m.Groups["m"].Value}\" but the map holds {derived[label]}");
+            if (int.Parse(m.Groups["m"].Value) != rows.Count)
+                mismatches.Add($"\"{label}: … of {m.Groups["m"].Value}\" but the map has {rows.Count} rows");
+        }
+
+        // ...and the verdict paragraph's own tally, which is where the stale six survived.
+        foreach (Match m in Regex.Matches(census, @"clause 1 fails \((?<count>[a-z]+) OWNER-GATED rows\)"))
+        {
+            var spelled = NumberWord(derived["OWNER-GATED"]);
+            if (!m.Groups["count"].Value.Equals(spelled, StringComparison.OrdinalIgnoreCase))
+                mismatches.Add($"the verdict says \"{m.Groups["count"].Value} OWNER-GATED rows\" but the map holds {derived["OWNER-GATED"]} (\"{spelled}\")");
+        }
+
+        Assert.True(mismatches.Count == 0,
+            "a label tally is restated somewhere it does not match the behaviour map:" + Environment.NewLine
+            + string.Join(Environment.NewLine, mismatches));
     }
 
     /// <summary>
@@ -741,6 +866,16 @@ public sealed class GoonGameCensusTests
     /// a file that ends in a newline. Every file in these trees does.</summary>
     private static int LineCount(string wpf, string relative) =>
         ReadShippingFile(wpf, relative).Split('\n').Length is var n && n > 0 ? n - 1 : 0;
+
+    /// <summary>A millisecond constant re-derived from the shipping bytes, so a "10 s" in prose is
+    /// the source's own number divided by a thousand rather than a figure somebody typed.</summary>
+    private static int MillisecondConstant(string wpf, string relative, string name)
+    {
+        var text = ReadShippingFile(wpf, relative);
+        var m = Regex.Match(text, Regex.Escape(name) + @"\s*=\s*(?<v>[\d_]+)");
+        Assert.True(m.Success, $"{name} not found in {relative}");
+        return int.Parse(m.Groups["v"].Value.Replace("_", ""), CultureInfo.InvariantCulture);
+    }
 
     private static int SumLinesUnder(string wpf, string relative) =>
         RelativeFilesUnder(wpf, relative).Sum(p => LineCount(wpf, $"{relative}/{p}"));
@@ -984,7 +1119,10 @@ public sealed class GoonGameCensusTests
         new(@"\b\d{4}-\d{2}-\d{2}\b", RegexOptions.Compiled),                                                         // ISO dates
         new(@"\bv\d+(?:\.\d+)*\b", RegexOptions.Compiled),                                                            // versions
         new(@"\bsha-?\d+\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),                                        // hash algorithm names
-        new(@"\b[0-9a-f]{7,}\b", RegexOptions.Compiled),                                                              // hex shas
+        // A hex sha, and NOT a long decimal. The first version was `[0-9a-f]{7,}` flat, which also
+        // matched 12471900 — the payload's own byte total — and quietly dropped it from the
+        // vocabulary the moment both sides started stripping classes. At least one a-f is required.
+        new(@"\b(?=[0-9a-f]{7,}\b)[0-9a-f]*[a-f][0-9a-f]*\b", RegexOptions.Compiled),                                 // hex shas
         new(@"\bB\d+\b|\bG\d+\b|\bX\d+\b|\bR\d+\b|\bQ\d+\b", RegexOptions.Compiled),                                  // row ids
         new(@"^#{1,6}\s.*$", RegexOptions.Compiled | RegexOptions.Multiline),                                         // headings
     ];
@@ -1010,7 +1148,17 @@ public sealed class GoonGameCensusTests
                           || (section == DocumentSection.Pins && line.TrimStart().StartsWith('|'));
             if (!admissible) continue;
 
-            foreach (Match m in Regex.Matches(line, @"\d[\d,_ ]*(?:\.\d+)?"))
+            // THE SAME CLASS FILTER THE CHECKING SIDE USES, and the reason it is here is a hole
+            // this guard shipped once. Harvesting digit runs RAW while UnpinnedNumbers strips
+            // classes is an ASYMMETRY, and an asymmetry is the literal-exclusion escape hatch by
+            // another route: row ids (G7, G12, G24) and citation line numbers
+            // (GoonSignalingClient.cs:16-17) injected 7, 12, 16 and 24 into the vocabulary and
+            // whitelisted those integers EVERYWHERE in the document. That is how a stale "16%"
+            // survived a green suite. The two sides must strip the same classes or neither does.
+            var admitted = line;
+            foreach (var excluded in ExcludedNumberClasses) admitted = excluded.Replace(admitted, " ");
+
+            foreach (Match m in Regex.Matches(admitted, @"\d[\d,_ ]*(?:\.\d+)?"))
                 vocabulary.Add(Normalize(m.Value));
         }
 
@@ -1066,6 +1214,15 @@ public sealed class GoonGameCensusTests
 
         return escapees;
     }
+
+    /// <summary>Small integers spelled out, so a tally restated in words is comparable with one
+    /// re-derived as a number. The census writes verdict tallies in words.</summary>
+    private static string NumberWord(int value) => value switch
+    {
+        0 => "zero", 1 => "one", 2 => "two", 3 => "three", 4 => "four", 5 => "five", 6 => "six",
+        7 => "seven", 8 => "eight", 9 => "nine", 10 => "ten", 11 => "eleven", 12 => "twelve",
+        _ => value.ToString(CultureInfo.InvariantCulture),
+    };
 
     private static string Normalize(string number) =>
         number.Replace(",", "").Replace("_", "").Replace(" ", "").TrimEnd('.');

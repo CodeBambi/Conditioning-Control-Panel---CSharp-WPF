@@ -21,8 +21,15 @@ deviation except where the deviation is stated below and in the census itself.
   whose `.claude/worktrees/` holds full tree copies — would be visible rather than silent.
 - **No file list was hand-assembled at any point.** Every count came from a directory walk or from
   `git ls-files`, and every count in the census names the invocation that produced it.
-- **Every cited line was opened with `sed -n` before it was written.** That discipline caught three
-  upstream defects (§4) and, at the guard step, one defect in my own citations (§3.2).
+- **Every cited FILE was opened with `sed -n` before it was written, and that is the accurate,
+  weaker claim.** An earlier draft of this record said "every cited line", which is falsified by two
+  of my own citations: the headline `GoonHostService.cs:24-26` was really `:25-27` (I read the quote
+  from a range that began on a bare `///` and ended one line short of text I reproduced verbatim),
+  and `MainWindow.Assets.cs:1501` was really `:1502`. **A process claim that survives its own
+  counterexample is worth less than an accurate weaker one.** What the discipline did catch is three
+  upstream defects (§4) and, at the guard step, several of my own (§3).
+  **What actually caught the two it missed was `EveryPinnedCitation_IsOnTheExactLineItClaims`** —
+  once each citation was pinned. Both are now pinned (`two-implementations`, `assets-hook-comment`).
 
 ## 2. The verified inventory, with this-surface fractions
 
@@ -36,7 +43,7 @@ totals today, and both walks agree with `git ls-files`.
 
 **The headline is that the numbers are right and the scope they imply is wrong.** The game exists
 twice — a C# reference implementation under `Services/GoonGame/` and a JavaScript implementation in
-the payload — and the duel a user plays is the JavaScript one. `GoonHostService.cs:24-26` says so in
+the payload — and the duel a user plays is the JavaScript one. `GoonHostService.cs:25-27` says so in
 its own words; `GoonVectorDumper.cs:11-13` says the C# side is the oracle the page's tests assert
 against.
 
@@ -75,7 +82,7 @@ Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1
 
 The census was restored from a backup taken before the injection and the suite returned to green.
 `TheNumberSweep_StillSeesProseAppendedAfterThePinSection` now pins the repaired behaviour so the hole
-cannot come back. **No exclusion is a literal**: the seven classes are citation forms, bare `:NNN`
+cannot come back. **No exclusion is a literal**: the classes are citation forms, bare `:NNN`
 continuations, section references, divergence ids, packet ids, ISO dates, versions, hash-algorithm
 names, hex shas, row ids and headings, each enumerated as a regex in the fact.
 
@@ -99,11 +106,58 @@ Both are disclosed in the census §1.3 and §9 rather than quietly corrected.
 
 | Found by | Defect |
 |---|---|
-| `EveryPinnedCitation_IsOnTheExactLineItClaims` | `MainWindow.Assets.cs:1503` is a comment; the call is `:1504`. I had miscounted a `sed` range against a `grep -n` I had already run. Corrected in two places |
+| `EveryPinnedCitation_IsOnTheExactLineItClaims` | `MainWindow.Assets.cs:1503` is a comment; the call is `:1504`. I had miscounted a `sed` range against a `grep -n` I had already run. **The correction reached the call-site citation and MISSED the adjacent comment citation** (`:1501`, really `:1502`) — found only at code review, because only the call site was pinned. Both are pinned now (§3.4) |
 | `EveryPortAnchor_IsOnTheExactLineItClaims` | `DtrhCapabilityProbes.cs:21` is the doc comment; `EmbeddedCapability` is `:22` |
 | `TheFractionsThatCarryTheFindings_...` | `ToString("0.0")` used the ambient culture and produced `20,0`. A guard that would have passed on an en-US box and failed on a comma-locale one. Now `CultureInfo.InvariantCulture` |
 | `EveryBehaviourRow_CarriesOneOfTheFourLabels...` | Row B6 carried "consequent of B5", which is not in the closed vocabulary. B6 is OWNER-GATED (a cap has no subject until user media travels), so the label was corrected and §4.1's tally moved from 6 to 7 |
 | `VacuousShapeGuardTests` (the floor) | `TheLocationsOutsideTheRowsTwoDirectories_...` carried a `File.Exists` in the fact body — a `fs-predicate` silencing shape whose ledger is outside this packet's write scope. The predicate was moved into a helper rather than excused, exactly as SP-127 §13 records |
+
+### 3.4 Code review — the SECOND hole in the same guard, on the side nobody was looking at
+
+**The number sweep had a symmetric twin of §3.1's hole, and it explains three of the six blocking
+items.** `PinnedNumbers` harvested digit runs from §9/§10 raw, while `UnpinnedNumbers` stripped
+`ExcludedNumberClasses` first. So row ids (`G7`, `G12`, `G24`) and citation line numbers
+(`GoonSignalingClient.cs:16-17`) injected **7, 12, 16 and 24** into the pinned vocabulary and
+whitelisted those integers everywhere in the document. **That is how a stale `16%` survived.**
+
+**Excluding a class on the checking side while admitting it on the vocabulary side is the literal-
+exclusion escape hatch by another route.** Both sides now strip the same classes. Demonstrated red
+against the old behaviour with the reviewer's own case:
+
+```
+$ dotnet test ... --filter "TheNumberSweep_DoesNotAdmitRowIdsOrCitationLineNumbersToTheVocabulary"
+  Assert.DoesNotContain() Failure: Item found in set
+Failed!  - Failed: 1, Passed: 0
+```
+
+and with the reviewer's audit string, the repaired sweep now names the stale number:
+
+```
+$ printf '\nAUDIT DEMO: 7 of the 25 files ship, 16 percent of 24 rounds, 12 duel elements.\n' >> census
+line 947: 16 — in "AUDIT DEMO: 7 of the 25 files ship, 16 percent of 24 rounds, 12 duel elements."
+Failed!  - Failed: 1, Passed: 0
+```
+
+**Fixing the vocabulary side exposed a regression in the fix itself**: the hex-sha class
+`[0-9a-f]{7,}` also matched `12471900`, the payload's own byte total, and dropped it from the
+vocabulary the moment both sides began stripping. The class now requires at least one `a-f`.
+
+**Where the two sides can still diverge is now enumerated in the census §10.7**, and the sweep's two
+blind spots are stated in §9: it is **vocabulary-level, not claim-level**, and it **cannot see
+numbers spelled as words**. The word-form blind spot is disclaimed rather than closed, and the census
+says why: extending the sweep to word forms would look like coverage without being it, because every
+small integer is already pinned by something. **What actually closes that class is the new
+§10.4.3 label-tally fact**, which re-derives the four label counts from the map's own rows and
+compares them against every restatement in the document *including the verdict's spelled-out one* —
+the check that catches "clause 1 fails (six OWNER-GATED rows)" against a map holding seven.
+
+**Five of the six blocking items were numbers or citations correct in one part of my own document and
+stale in another** — corrections made mid-run that did not propagate to the summary and verdict
+sections a reader consults first. The sweep was the right mechanism; it had a hole on the side
+nobody was looking at. New pins added so the class is machine-checked rather than re-reviewed:
+`two-implementations` (the headline citation, which nothing had pinned), `assets-hook-comment`,
+`artifact-cap-history`, the three networking-identity citations, `ice-timeout`, §10.4.3's label
+tally and §10.4.4's nine frozen element wire codes.
 
 ## 4. Three defects found in the SHIPPING SOURCE, and one in the board row
 
@@ -178,11 +232,11 @@ the port could not build — there are seven whose primitive it may not build wi
 
 ## 8. Floor
 
-**Pin 2399 unit / 144 headless. Declared delta: `unit: 26, headless: 0`
+**Pin 2399 unit / 144 headless. Declared delta: `unit: 28, headless: 0`
 (`spine-tasks/SP-129-goon-game-census/floor-delta.json`).**
 
-**Observed: 2425 unit (0 failed, 2 skipped — exactly the two pinned Linux-gated names) and 144
-headless.** `2399 + 26 = 2425`, so the observed total is pin + declared delta, which is the expected
+**Observed: 2427 unit (0 failed, 2 skipped — exactly the two pinned Linux-gated names) and 144
+headless.** `2399 + 28 = 2427`, so the observed total is pin + declared delta, which is the expected
 result under iron rule 9 and not a failure. `client/tests/floor/floor.json` was never edited by this
 packet.
 
@@ -225,11 +279,11 @@ step pass.
 | Path | What |
 |---|---|
 | `client/docs/goon-game-census.md` | The census (new) |
-| `client/tests/CcpClient.Tests/GoonGameCensusTests.cs` | The pin, 26 facts (new) |
+| `client/tests/CcpClient.Tests/GoonGameCensusTests.cs` | The pin, 28 facts (new) |
 | `client/docs/wpf-surface-reachability.md` | **Divergences only**, D240-D249 appended with a "What SP-129 does NOT establish" section |
 | `spine-tasks/SP-129-goon-game-census/plan.md` | Method, fixed before mapping; §13 the plan-gate rulings |
 | `spine-tasks/SP-129-goon-game-census/walk.mjs` | Byte-identical copy of SP-127's walk, unmodified |
-| `spine-tasks/SP-129-goon-game-census/floor-delta.json` | `unit: 26, headless: 0` |
+| `spine-tasks/SP-129-goon-game-census/floor-delta.json` | `unit: 28, headless: 0` |
 
 Divergence ids used: **D240-D249**. Nothing at or below D239 was touched; D226-D239 remain the
 sibling packet's.
