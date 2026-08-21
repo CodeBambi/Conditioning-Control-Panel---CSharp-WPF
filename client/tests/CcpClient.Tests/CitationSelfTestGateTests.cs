@@ -175,6 +175,10 @@ public sealed partial class CitationSelfTestGateTests
         var mutated = MutateOneFactToFailing(run.StdOut, MutationSubjectId);
         var problems = Transcript.Parse(0, mutated, string.Empty).Problems();
 
+        // Belt, not braces, and near-tautological on its own: MutateOneFactToFailing rejoins with
+        // "\n" while the captured stdout carries "\r\n", so these two differ even on a no-op edit.
+        // THE REAL ANTI-VACUITY GUARD IS THAT HELPER THROWING when it finds no passing result line
+        // for the subject, which is what fired under mutation A. Do not read this line as the check.
         Assert.True(mutated != run.StdOut, "the mutation changed nothing, so this fact would prove nothing");
         Assert.True(problems.Count > 0,
             $"a transcript reporting {MutationSubjectId} as FAILED was read as clean at exit 0: the bridge would "
@@ -209,6 +213,9 @@ public sealed partial class CitationSelfTestGateTests
         var truncated = DropOneResultLine(run.StdOut, MutationSubjectId);
         var problems = Transcript.Parse(0, truncated, string.Empty).Problems();
 
+        // Same caveat as AFailingFact_IsReadAsRed_EvenAtExitZero: the line-ending rejoin makes this
+        // comparison near-tautological. DropOneResultLine THROWING when it removes nothing is the
+        // guard that actually stops this fact from passing vacuously.
         Assert.True(truncated != run.StdOut, "the truncation changed nothing, so this fact would prove nothing");
         Assert.True(problems.Count > 0, "a transcript missing a result line was read as clean on the summary's word alone");
         Assert.Contains(problems, p => p.Contains("but its own summary claims", StringComparison.Ordinal));

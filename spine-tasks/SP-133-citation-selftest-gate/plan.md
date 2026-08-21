@@ -207,3 +207,16 @@ superseded prediction as a finding. See `record.md` for the executed result.
 7. **A stale citation was found and repaired in passing.** `self-test.mjs:6` credited
    `check-floor.mjs:253` for running the discovered projects; the run is at `:364`. Recorded as D278
    item 5.
+
+## 13. Amendments after the code gate (APPROVE + three items)
+
+1. **D277's first correction overstated itself.** "Not observable at the runner's resolution" was one
+   pair reported as categorical. Restated as a band with its sample count: five pairs, three here
+   and two independent at review, `without` 46/50/47/47/48 s and `with` 46/45/48/50/50 s. The
+   order-of-magnitude correction holds; the exact tax does not resolve at n=5 and 1 s resolution.
+2. **Both `Assert.True(mutated != run.StdOut, ...)` sites now say what they are.** The line-ending
+   rejoin makes them near-tautological; the real anti-vacuity guard is the helper throwing, and the
+   comment says so at the assertion so a later reader does not trust the wrong line.
+3. **Filed, not built:** four `Problems()` branches have no fact behind them (the SKIP/TODO directive
+   path, the missing-counter path, `pass + fail != tests`, and the missing-plan-line path). Cheap to
+   pin because `Parse`/`Problems` are pure. A board row, not this packet.
