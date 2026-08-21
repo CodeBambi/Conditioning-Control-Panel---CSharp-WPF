@@ -77,7 +77,7 @@ CAPTURE PASS
 **Why `ready=true` is the acknowledgement and the host's own flag is not.** `session.ready` is
 written in ONE place in the payload — `boot.js:418`, inside `settle()`, behind a guard at `:416`
 that returns unless BOTH `gotInit` (`:322`) and `gotManifest` (`:354`) are set. It means the page
-PARSED both frames. `GoonHostWindow.BootMessagesSent` is set at `GoonHostWindow.axaml.cs:490`
+PARSED both frames. `GoonHostWindow.BootMessagesSent` is set at `GoonHostWindow.axaml.cs:529`
 **before either message is dispatched**, so it would read true even if both dispatches faulted;
 proving the host spoke would have proved nothing. `solo=true`, `name=Player` and `canhost=false`
 are values THIS host computed and posted, read back out of the page, so they also rule out the
@@ -96,7 +96,7 @@ window's own probe published.
 | Check | Region | Colour | Tol | Min | Real capture |
 |---|---|---|---|---|---|
 | `goon-page-backdrop` | 0.30, 0.02, 0.40, 0.035 | `#1C0B1F` | 6 | 0.98 | **1.0000** |
-| `goon-page-explainer-card` | 0.35, 0.40, 0.05, 0.025 | `#1C0923` | 8 | 0.95 | **0.9895** |
+| `goon-page-explainer-card` | 0.35, 0.40, 0.05, 0.025 | `#1C0923` | 8 | 0.95 | **0.98913** |
 
 ### 3.3 WHAT `first-run` IS — the name has to be honest
 
@@ -125,7 +125,7 @@ commit, and re-run there in full). Three real wrong-state captures, at the same 
 | A | **payload-missing** | `payload/goon` RENAMED in the build output. **No source change at all** — the product's own typed honest surface | **0.0000** | **0.0000** |
 | B | **the boot LOADER** | the `manifest` send seeded out of `SendBootMessages`, reverted after | **0.0000** | **0.0000** |
 | C | **the DASHBOARD** | a real `capture.ps1 -Surface dashboard` capture — a different surface entirely | **0.0000** | **0.0000** |
-| — | the real capture | | 1.0000 | 0.9895 |
+| — | the real capture | | 1.0000 | 0.98913 |
 
 `CcpVerify` exits 2 on A, B and C, naming `goon-page-backdrop` first.
 
@@ -172,6 +172,15 @@ that rendered from a page that never booted. It would have looked exactly like c
 | `.webmanifest` added to the served tree's allowed set | `TheServedTrees415Set_IsDerivedFromTheWire_NotRestated` |
 | the DTRH borrow reverted to SP-130's construction | `TheTwelveHotlinkedAssets_FallThroughToTheDtrhTree` |
 
+**A SECOND GUARD THAT COULD NOT FAIL, found at code review.** The colour guard excluded every
+`goon-` SURFACE rather than only same-state siblings — equivalent today, because there is one goon
+state, but a future `goon-duel/played` check would have escaped the comparison silently, which is
+the whole failure mode it exists for. Demonstrated both ways against a seeded
+`goon-duel/played` check pinned 2 away from `goon-page-backdrop`: the **prefix rule PASSED** it, the
+shipped **surface+state rule FAILS** it by name —
+*"'goon-page-backdrop' (#1C0B1F, tolerance 6) accepts 'SEED-goon-duel-played' (#1E0D21) — they are
+2 apart per channel"*. Both the seed and the reverted rule were removed.
+
 **AND ONE THAT DID NOT RED, WHICH IS WHY THIS SECTION IS WORTH RUNNING RATHER THAN DESCRIBING.**
 At `965ef0a29` the ordering guard needled the bare tokens (`ready=true`, `screen=title`). A seeded
 run that **deleted both real gates still PASSED**, because the token survives inside the `Fail`
@@ -205,9 +214,43 @@ chime were blank or silent.
 
 **Fixed, with the precedent it already had.** `GoonParticipant` now uses the `IntakeParticipant`
 overlay-first BORROW verbatim (`IntakeParticipant.cs:94-100`): goon tree as overlay, dtrh tree as
-payload fallback. This is **not a new admission surface** — the intake origin has borrowed these
-same `bubbles/sfx` files since SP-054, and `IntakeServingTests.The_Borrow_Falls_Through_To_The_Dtrh_Tree`
-is that exact proof. Every §4 control still applies to the fallback.
+payload fallback.
+
+### 5.1 WHAT THE FIX GIVES UP, AT ITS REAL SIZE
+
+**Measured, not characterised — and the first draft of this record did not measure it.**
+
+| | |
+|---|---|
+| dtrh payload files | **1542** |
+| shadowed by the goon tree (`index.html`, `boot.js`, `bridge.js`) | **3** |
+| **newly reachable at `/dtrh/*` on the goon origin** | **1539** |
+| of those, actually SERVE | **1537** |
+| of those, answer 415 (`.md`) | **2** |
+
+The fallback admits **the whole DTRH payload tree**, not the twelve files that motivated it, and
+SP-130's *"nothing else is reachable on this origin"* is deliberately given up. **One line reverts
+it.**
+
+**My earlier wording here said only "this is not a new admission surface".** That sentence is true
+about the MECHANISM and reads far narrower than the fact, and nowhere did I state 1539 or pin it.
+**That is this packet's own standard turned on me: I asserted the surface was not new without
+measuring the surface.** It is now measured, stated, and pinned by
+`TheBorrowsAdmissionSurface_IsMeasured_AndBoundedToTheDtrhPayloadTree`, which is deliberately
+brittle — a change to that number is an admission surface that moved, not a constant to update.
+
+**Why the trade is still right, beside the number rather than instead of it:**
+
+- the mechanism is **verbatim** the intake origin's, which has borrowed these same `bubbles/sfx`
+  files since SP-054 (`IntakeServingTests.The_Borrow_Falls_Through_To_The_Dtrh_Tree`)
+- this construction is **narrower than that one** in one respect: `/media/*` keeps the goon tree's
+  own root (`GoonServingRoots.MediaRoot`) rather than the dtrh one
+- every §4 control is re-asserted on this origin — GET-only, MIME allowlist + 415, traversal
+  refusal, nosniff — and the `.md` files in that tree still 415
+- **no user media is admitted at all**: `/umedia/*` keeps its own root on its own port
+- the fallback root is **located by what does not resolve through it** — a file at the build-output
+  root and a file in a sibling payload tree both 404, so the root is `payload/dtrh` and neither
+  `AppContext.BaseDirectory` nor `payload/`
 
 **SP-130's stated property is deliberately given up, and one line reverts it if the reviewer
 disagrees.** Both directions are pinned at the wire: `TheTwelveHotlinkedAssets_FallThroughToTheDtrhTree`
@@ -231,6 +274,16 @@ to make the capture trustworthy.
    still fires during teardown, and the throw escaped the UI lifetime as
    `panic: System.ArgumentException: Visual does not belong to a visual tree`. Guarded on
    `VisualRoot`, the `FeaturePopupWindow.axaml.cs:288-292` precedent.
+
+**And a third in the product, found at code review rather than by running it — the same class as
+(1), one level further in.** `_pageStateInFlight` is released only INSIDE the continuation, and a
+continuation only runs if a task was returned. **An `InvokeScript` that threw on the calling
+thread** — a disposed adapter, a dead browser process — **would pin the flag at 1 and the probe
+would never read again.** Fail-closed at the harness, which is why nothing caught it, but it is
+precisely *"a probe that stops observing is a probe that lies"*. Now a `try/catch` that releases the
+flag, records `pagestate-faulted=<type>` and republishes. **It has no automated coverage**: reaching
+it needs a live `_web`, which means a real embedded browser, and no test in this repository builds
+one. Stated rather than implied.
 
 And a third, in the harness rather than the product: the poll loop **died with a raw `.NET`
 exception** — *"The target element corresponds to UI that is no longer available"* — when the goon
@@ -266,6 +319,17 @@ feature-scoped File Scope will miss them every time.
 
 ---
 
+### 7.1 `--goon-demo` HAS NO END-TO-END COVERAGE
+
+Stated plainly because the chain being complete is not the same as the chain being exercised. The
+flag is pinned only by CLASSIFICATION — `HarnessEntryPointGuardTests` proves the literal is
+registered, and `HarnessEntryPointGateTests` proves a `Demo` entry is not refused without
+`CCP_DATA_ROOT`. **No test and no capture ever launches with it.** `capture.ps1` deliberately drives
+the real user path instead (Play door, then PRACTICE), which is the stronger evidence and the reason
+the flag was not needed for rung 2 — but the consequence is that **the flag itself is exercised by
+nothing**, and a break in the `Program.cs` -> `BuildAvaloniaApp` -> `new App(...)` -> `Practice()`
+chain would be found by a person running it, not by this suite.
+
 ## 8. Discrepancies found, and how each was resolved
 
 | Found | Resolution |
@@ -283,9 +347,13 @@ feature-scoped File Scope will miss them every time.
 
 ## 9. Floor
 
-Pin **2547 unit / 152 headless**. Declared delta **+17 unit / +0 headless**
-(`floor-delta.json`). Observed at the final run: **2564 unit / 152 headless** — that is
-`2547 + 17` and `152 + 0`, exactly, with **zero named failures in either project**.
+Pin **2547 unit / 152 headless**. Declared delta **+18 unit / +0 headless**
+(`floor-delta.json`). Observed at the final run: **2565 unit / 152 headless** — that is
+`2547 + 18` and `152 + 0`, exactly, with **zero named failures in either project**.
+
+**The delta moved from 17 to 18 at code review**, when the admission surface (§5.1) was measured and
+needed a fact rather than a sentence. The `_pageStateInFlight` fix added none, for the reason given
+in §6.
 **`client/tests/floor/floor.json` was never opened.** The warnings gate is 0 warnings / 0 errors
 across all four projects, forced non-incremental.
 

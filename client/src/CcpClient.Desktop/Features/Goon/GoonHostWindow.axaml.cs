@@ -586,7 +586,7 @@ public partial class GoonHostWindow : Window
 
     /// <summary>
     /// The expression evaluated IN THE PAGE. It reads the page's own object graph — <c>__gg</c>,
-    /// exposed at <c>boot.js:2645-2664</c> for exactly this purpose ("the C# side can evaluate
+    /// exposed at <c>boot.js:2645-2664</c> for exactly this purpose, and said so at <c>:2642</c> ("the C# side can evaluate
     /// window.__gg.session") — and the screen id the router writes onto the document element
     /// (<c>ui/router.js:222</c>).
     ///
@@ -615,9 +615,10 @@ public partial class GoonHostWindow : Window
 
     /// <summary>
     /// Ask the page for its own state. Driven by the page's OWN cadence — its <c>boot ok</c> frame
-    /// (<c>boot.js:431</c>) and thereafter its 2 s heartbeat (<c>boot.js:2587</c>) until an answer
-    /// reports ready — never a timer this host chose. One read at a time; a fault is recorded as a
-    /// fault rather than left looking like "not ready yet".
+    /// (<c>boot.js:431</c>) and thereafter EVERY 2 s heartbeat (<c>boot.js:2587</c>), for as long as
+    /// the window lives — never a timer this host chose, and never stopping once an answer looks
+    /// final. That last part IS the D272 fix and the comment below says why. One read at a time; a
+    /// fault is recorded as a fault rather than left looking like "not ready yet".
     /// </summary>
     private void ReadPageState()
     {
@@ -631,7 +632,27 @@ public partial class GoonHostWindow : Window
             return;
         }
 
-        _ = _web.InvokeScript(PageStateScript).ContinueWith(
+        // THE IN-FLIGHT FLAG MUST BE RELEASED ON A SYNCHRONOUS THROW TOO. It is cleared inside the
+        // continuation, and a continuation only runs if a task was returned: an InvokeScript that
+        // threw on the calling thread — a disposed adapter, a dead browser process — would pin the
+        // flag at 1 and this probe would NEVER READ AGAIN. That is D272(1) exactly, one level
+        // further in: a probe that stops observing is a probe that lies, and the harness would be
+        // deciding a capture on a frozen line. Fail-closed downstream is not a reason to leave it.
+        Task<string?> pending;
+        try
+        {
+            pending = _web.InvokeScript(PageStateScript);
+        }
+        catch (Exception ex)
+        {
+            Volatile.Write(ref _pageStateInFlight, 0);
+            _pageState = $"pagestate-faulted={ex.GetType().Name}";
+            _host.LogDiagnostic($"goon: page-state read threw synchronously ({ex.GetType().Name}: {ex.Message}) — probe re-armed");
+            PublishProbe();
+            return;
+        }
+
+        _ = pending.ContinueWith(
             t =>
             {
                 Volatile.Write(ref _pageStateInFlight, 0);

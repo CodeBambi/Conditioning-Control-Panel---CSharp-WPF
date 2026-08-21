@@ -413,6 +413,66 @@ public sealed class GoonServingTests : IDisposable
     }
 
     /// <summary>
+    /// <b>THE SIZE OF WHAT THE BORROW GAVE UP, MEASURED (D266).</b>
+    ///
+    /// <para>SP-130 served the goon tree as BOTH roots so that "nothing else is reachable on this
+    /// origin". D266 gives that property up to fix twelve 404s, and the honest way to record a
+    /// trade is at its real size rather than at the size of its justification: the fallback admits
+    /// <b>the WHOLE DTRH payload tree</b>, not the twelve files that motivated it.</para>
+    ///
+    /// <para>Saying "this is not a new admission surface, the intake origin has borrowed these same
+    /// files since SP-054" is true about the MECHANISM and reads far narrower than the fact. So the
+    /// number is pinned here, and a change to it must be re-approved rather than absorbed: <b>this
+    /// guard is deliberately brittle, because the thing it counts is a security surface.</b></para>
+    ///
+    /// <para>What the borrow does NOT admit is pinned too, because "the dtrh tree" would otherwise
+    /// be an unfalsifiable description of an unbounded set. Two probes locate the fallback root
+    /// exactly: a file at the BUILD OUTPUT root and a file in a SIBLING payload tree both 404, so
+    /// the root is <c>payload/dtrh</c> and neither <c>AppContext.BaseDirectory</c> nor
+    /// <c>payload/</c>. Traversal is refused as before, and <c>/umedia/*</c> keeps its own root on
+    /// its own port, so <b>no user media is admitted by this change at all</b>.</para>
+    /// </summary>
+    [Fact]
+    public async Task TheBorrowsAdmissionSurface_IsMeasured_AndBoundedToTheDtrhPayloadTree()
+    {
+        var dtrhRoot = Desktop.Features.Dtrh.DtrhParticipant.PayloadRoot;
+        var dtrh = Directory.EnumerateFiles(dtrhRoot, "*", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(dtrhRoot, f).Replace('\\', '/'))
+            .ToArray();
+        var goon = ServedRelatives().ToHashSet(StringComparer.Ordinal);
+        var newlyReachable = dtrh.Where(r => !goon.Contains(r)).ToArray();
+
+        // THE NUMBER. 1542 dtrh files, 3 of them shadowed by the goon tree's own index.html /
+        // boot.js / bridge.js, so 1539 files that were unreachable on this origin before D266 are
+        // reachable at /dtrh/* now. 1537 of them SERVE; the 2 .md files answer 415.
+        Assert.Equal(184, goon.Count);
+        Assert.Equal(1542, dtrh.Length);
+        Assert.Equal(3, dtrh.Length - newlyReachable.Length);
+        Assert.Equal(
+            NewlyReachableAtThisBaseline,
+            newlyReachable.Length);
+
+        // WHERE the fallback root is, located by what does NOT resolve through it. Both files
+        // really exist in the build output, outside both payload trees.
+        Assert.Equal(404, (await Get(Route("CcpClient.Desktop.dll"))).Status);   // not the base directory
+        Assert.Equal(404, (await Get(Route("intake/index.html"))).Status);       // not payload/
+        Assert.Equal(403, (await Get("/dtrh/..%2F..%2Fsettings.json")).Status);  // and still no traversal
+
+        // A borrowed file that really is in the newly reachable set serves, so the count above is
+        // not a count of paths nobody can reach.
+        var probe = await Get(Route("assets/bubbles/bubble.png"));
+        Assert.Equal(200, probe.Status);
+        Assert.Contains("assets/bubbles/bubble.png", newlyReachable);
+    }
+
+    /// <summary>
+    /// The DTRH payload files that D266 made reachable on the goon origin: 1542 in the tree, minus
+    /// the 3 the goon tree shadows. <b>A change here is not a number to update — it is an admission
+    /// surface that moved, and it needs the same review the borrow itself got.</b>
+    /// </summary>
+    private const int NewlyReachableAtThisBaseline = 1539;
+
+    /// <summary>
     /// The OTHER half of overlay-first, and the half a borrow can silently break: the goon tree
     /// still SHADOWS. Both trees carry <c>index.html</c>, <c>boot.js</c> and <c>bridge.js</c> at
     /// the same route path, and if the fallback ever won, the goon origin would serve the DTRH
@@ -659,10 +719,15 @@ public sealed class GoonServingTests : IDisposable
     ///
     /// <para>So the rule is now general and is derived from the manifest rather than from a list
     /// somebody remembered to update: <b>no goon check may accept the colour that any check of a
-    /// DIFFERENT surface+state declares.</b> Same-state siblings are excluded deliberately — two
-    /// regions of one screen may well be similar colours, and that is not a confusion between
-    /// states. Adding any surface to this manifest automatically widens what this guard defends
-    /// against.</para>
+    /// DIFFERENT surface+state declares.</b> Only SAME-STATE siblings are excluded — two regions of
+    /// one screen may well be similar colours, and that is not a confusion between states. Adding
+    /// any surface to this manifest automatically widens what this guard defends against.</para>
+    ///
+    /// <para><b>The exclusion is keyed on surface+state, not on the <c>goon-</c> prefix, and that
+    /// is a correction.</b> Excluding every <c>goon-</c> surface is equivalent TODAY, because there
+    /// is exactly one goon state — but a future <c>goon-duel/played</c> check would then escape the
+    /// comparison SILENTLY, which is the whole failure mode this guard exists for. The narrower
+    /// rule costs nothing and does not rot.</para>
     /// </summary>
     [Fact]
     public void NoGoonCheckAcceptsTheColourOfAnotherDeclaredState()
@@ -671,15 +736,19 @@ public sealed class GoonServingTests : IDisposable
         var goon = GoonChecks();
         Assert.NotEmpty(goon);
 
-        var others = all
-            .Where(c => !c.Surface.StartsWith("goon-", StringComparison.Ordinal))
-            .ToArray();
-        Assert.True(others.Length >= 3,
-            $"only {others.Length} non-goon check(s) in the manifest — this guard would be nearly vacuous");
+        // Non-vacuity over the whole manifest rather than over a surviving set: a goon check
+        // compared against nothing would pass loudly and mean nothing.
+        Assert.True(all.Count - goon.Length >= 3,
+            $"only {all.Count - goon.Length} non-goon check(s) in the manifest — this guard would be nearly vacuous");
 
         foreach (var check in goon)
         {
             var expected = CcpVerify.CheckManifest.ParseColor(check.ExpectedColor, $"check '{check.Name}':");
+            // SURFACE+STATE, never the prefix: a second goon STATE must still be compared against,
+            // and only the checks sharing this one's exact screen are exempt.
+            var others = all.Where(c =>
+                !string.Equals(c.Surface, check.Surface, StringComparison.Ordinal)
+                || !string.Equals(c.State, check.State, StringComparison.Ordinal));
             foreach (var other in others)
             {
                 var otherColour = CcpVerify.CheckManifest.ParseColor(other.ExpectedColor, $"check '{other.Name}':");

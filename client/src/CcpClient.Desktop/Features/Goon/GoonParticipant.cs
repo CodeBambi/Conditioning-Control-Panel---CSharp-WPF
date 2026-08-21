@@ -31,12 +31,26 @@ namespace CcpClient.Desktop.Features.Goon;
 /// <para>So the construction is now the <see cref="Intake.IntakeParticipant"/> OVERLAY-FIRST BORROW
 /// verbatim (<c>IntakeParticipant.cs:94-100</c>): the goon tree is the overlay and shadows
 /// everything it has, and the dtrh tree is the payload fallback the twelve hotlinks resolve
-/// against. This is not a new admission surface — the intake origin has borrowed these same
-/// <c>bubbles/sfx</c> files since SP-054, and
-/// <c>IntakeServingTests.The_Borrow_Falls_Through_To_The_Dtrh_Tree</c> is that exact proof. Every
-/// §4 control is unchanged and still applies to the fallback: GET-only, MIME allowlist + 415,
-/// traversal refusal, nosniff. <c>GoonServingTests</c> pins BOTH halves at the wire — the goon
-/// tree still shadows, and exactly the borrowed set falls through.</para>
+/// against.</para>
+///
+/// <para><b>WHAT THIS GIVES UP, AT ITS REAL SIZE — measured, not characterised.</b> The fallback
+/// admits the WHOLE DTRH payload tree, not the twelve files that motivated it: <b>1542 dtrh files
+/// minus the 3 this tree shadows (<c>index.html</c>, <c>boot.js</c>, <c>bridge.js</c>) = 1539 files
+/// that were unreachable on this origin before and are reachable at <c>/dtrh/*</c> now</b>, of
+/// which 1537 serve and 2 (<c>.md</c>) answer 415. SP-130's "nothing else is reachable on this
+/// origin" is deliberately given up, and one line reverts it.
+/// <c>GoonServingTests.TheBorrowsAdmissionSurface_IsMeasured_AndBoundedToTheDtrhPayloadTree</c>
+/// pins that number so it cannot grow without review.</para>
+///
+/// <para><b>Why it is acceptable anyway</b>, beside the number rather than instead of it: the
+/// MECHANISM is not new — the intake origin has borrowed these same <c>bubbles/sfx</c> files since
+/// SP-054 (<c>IntakeServingTests.The_Borrow_Falls_Through_To_The_Dtrh_Tree</c>) — and this
+/// construction is NARROWER than that one in one respect, because <c>/media/*</c> keeps the goon
+/// tree's own root rather than the dtrh one. Every §4 control is unchanged and still applies to the
+/// fallback: GET-only, MIME allowlist + 415, traversal refusal, nosniff. <b>No user media is
+/// admitted at all</b> — <c>/umedia/*</c> keeps its own root on its own port. And
+/// <c>GoonServingTests</c> pins both halves at the wire: the goon tree still shadows, and exactly
+/// the borrowed set falls through.</para>
 ///
 /// <para><b>The inherited cost, measured rather than assumed (D258).</b> The goon tree holds
 /// eight extensions plus two extensionless files; <see cref="LoopbackServer"/>'s §4.4-pinned
