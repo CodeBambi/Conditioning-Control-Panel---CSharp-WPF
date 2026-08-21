@@ -172,6 +172,23 @@ that rendered from a page that never booted. It would have looked exactly like c
 | `.webmanifest` added to the served tree's allowed set | `TheServedTrees415Set_IsDerivedFromTheWire_NotRestated` |
 | the DTRH borrow reverted to SP-130's construction | `TheTwelveHotlinkedAssets_FallThroughToTheDtrhTree` |
 
+**A THIRD, AND IT WAS IN THE PIN ADDED TO CLOSE THE FIRST.** The admission-surface fact shipped
+with `Assert.Equal(1542, dtrh.Length)`, and xunit's numeric overload takes no message: the whole
+failure text was *"Expected: 1542, Actual: 1543"*. **In a CI row that is indistinguishable from a
+stale constant, and the obvious action is to bump it — which is precisely what the pin exists to
+prevent.** The property was written in the const's doc and in §5.1, and *the assertion that fires
+carried neither*. **A guard's meaning has to travel in the MESSAGE, because the message is the
+only part a reader sees at the moment they decide what to do.** Every assertion in that fact is
+now `Assert.True(cond, message)`, each naming what moved and that it needs the borrow's own
+review, and the two bounding probes name WHICH root they exclude. Verified by reproducing the
+reviewer's trip — one file added under `payload/dtrh` now emits *"the DTRH payload tree is 1543
+files, not 1542 — every file added to it becomes reachable on the GOON origin too … Do NOT bump
+the number to make this pass"* — and by seeding the dangerous widening itself (fallback root
+moved from `payload/dtrh` to `payload/`), which emits *"intake/index.html answered 200, not 404 —
+a file in a SIBLING PAYLOAD TREE resolved through the fallback"* and reds the twelve-asset fact
+alongside it. **Three instances of one class in one packet: two found by me, the third by review,
+in the guard I added to close the first.**
+
 **A SECOND GUARD THAT COULD NOT FAIL, found at code review.** The colour guard excluded every
 `goon-` SURFACE rather than only same-state siblings — equivalent today, because there is one goon
 state, but a future `goon-duel/played` check would have escaped the comparison silently, which is
@@ -340,7 +357,9 @@ chain would be found by a person running it, not by this suite.
 | The plan cited `title.js:28` for the logo | Corrected to `:31`; `:28` is the brand comment |
 | The plan said no test reads `verification-harness.md` at runtime | **False, and the conclusion survives anyway.** `WarningGateGuardTests.cs:239` does `File.ReadAllText` on it — but asserts only that it contains the `check-warnings.mjs` invocation string, so the "eight checks today" enumeration at `:50` is unguarded and a goon check reds nothing. **That line is now stale and the doc is outside File Scope — reported, not edited** |
 | `VacuousShapeGuardTests` flagged three new facts (`fs-predicate`, `assertions-all-nested`), and its ledger is in must-not-change | **Fixed the SHAPE, not the ledger**: existence predicates moved into named helpers that return the offending FILES, and each fact given a top-level assertion. The facts are stronger for it — a failure now names which file was missing instead of reporting a bare false |
+| `PointerCapabilityTests.AClickAtAPointAnsweredBEFORETheTargetMoved_StillReachesTheSAMETargetOneStepLater` failed once in one floor run | **Same class, same resolution**: 30/30 in isolation and green in the next full floor run. A real-desktop INPUT test, contended by this packet's own headed captures and the sibling lane. Reported rather than absorbed, and **not** an `allowedSkips` candidate — "something else had the desktop just then" is a property of the MOMENT, not of the machine |
 | `SoundArbitrationTests` failed twice in one floor run | **Not mine and not reproducible**: 52/52 in isolation and green in the next full floor run. Load flakes from the concurrent headed runs. Reported rather than absorbed |
+| **`client/docs/upstream-payload-inventory.json:27`'s note ends *"duel playability is owed to a headed run"* — and THIS PACKET MADE THAT STALE.** The headed run is made: the page loads and the handshake completes. What is still owed is a **HUMAN** playing a duel, which is a different debt and reads as satisfiable by automation as written | **Outside File Scope — reported, not edited**, and named here so it is carried rather than discovered. The same class as `verification-harness.md:50` below and `MainWindow.axaml.cs:74`/`:220` in D265: prose that this packet's own work falsified. `UpstreamPayloadInventoryTests` checks SHAPE only and never reads that note, so nothing reds and it will rot silently — which is exactly how the entry got stale in the other direction at the wave-65 land |
 | `capture.ps1`'s `Get-Window` finds a window by process id ALONE, which is ambiguous the moment a process has two top-level windows | The goon phase looks up BY NAME and closes by its own handle; **the four landed captures' path is left exactly as it was**, because it cannot be re-verified from inside this packet. The orchestrator holds the row |
 
 ---
@@ -361,7 +380,7 @@ across all four projects, forced non-incremental.
 
 ## 10. Files changed
 
-- **New:** `client/tests/CcpClient.Tests/GoonServingTests.cs` (17 facts)
+- **New:** `client/tests/CcpClient.Tests/GoonServingTests.cs` (18 facts)
 - **Product:** `Features/Goon/GoonParticipant.cs` (the borrow, D266), `Features/Goon/GoonHostWindow.axaml(.cs)` (the probe seam, D267), `Features/Goon/GoonLaunch.cs` (class doc corrected — the flag it called unbuilt now exists), `Program.cs` + `App.axaml.cs` (`--goon-demo`), `Lifecycle/HarnessEntryPoints.cs` (**the one granted line**)
 - **Harness:** `client/tools/verify/capture.ps1` (the `goon-page` phase), `client/tools/verify/checks.json` (two checks)
 - **Docs:** `client/docs/wpf-surface-reachability.md` (D265-D274 only; **D259 superseded, never edited in place**)
@@ -381,6 +400,14 @@ across all four projects, forced non-incremental.
 - **The D250 microphone residual is still open.** The capture walks around the voice screen
   deliberately. Its permission-prompt detector is best-effort: whether WebView2 projects that
   prompt into the host UIA tree at all is unverified, and the harness says so on every run.
+- **Neither `--goon-demo` nor the `_pageStateInFlight` fix is exercised end-to-end by anything.**
+  The flag is pinned only by classification (§7.1) and the in-flight fix needs a live embedded
+  browser to reach (§6). **A break anywhere in either chain is found by a person running it, not
+  by this suite.**
+- **The 1539 is a FILESYSTEM count, not a wire sweep.** It is derived by walking the two payload
+  trees, and three wire probes anchor it — two exclusions and one positive fetch — which is
+  proportionate to the risk, but **the number itself was never observed at the socket.** Nothing
+  here asks the running server for 1539 paths and counts the answers.
 - **The harness guards in `GoonServingTests` §6 are LEXICAL.** They prove the gate has not been
   deleted or moved below the capture. They cannot prove it still bites — §4 is what proves that,
   and only for the states listed there.

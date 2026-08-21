@@ -426,11 +426,14 @@ public sealed class GoonServingTests : IDisposable
     /// guard is deliberately brittle, because the thing it counts is a security surface.</b></para>
     ///
     /// <para>What the borrow does NOT admit is pinned too, because "the dtrh tree" would otherwise
-    /// be an unfalsifiable description of an unbounded set. Two probes locate the fallback root
-    /// exactly: a file at the BUILD OUTPUT root and a file in a SIBLING payload tree both 404, so
-    /// the root is <c>payload/dtrh</c> and neither <c>AppContext.BaseDirectory</c> nor
-    /// <c>payload/</c>. Traversal is refused as before, and <c>/umedia/*</c> keeps its own root on
-    /// its own port, so <b>no user media is admitted by this change at all</b>.</para>
+    /// be an unfalsifiable description of an unbounded set. Two probes EXCLUDE two candidate roots:
+    /// a file at the BUILD OUTPUT root and a file in a SIBLING payload tree both 404, so the
+    /// fallback root is neither <c>AppContext.BaseDirectory</c> nor <c>payload/</c>. <b>Two
+    /// negatives exclude; they do not identify.</b> The POSITIVE identification is a different fact
+    /// — <see cref="TheTwelveHotlinkedAssets_FallThroughToTheDtrhTree"/> compares served bytes
+    /// against <c>DtrhParticipant.PayloadRoot</c> — and the two together bound it. Traversal is
+    /// refused as before, and <c>/umedia/*</c> keeps its own root on its own port, so <b>no user
+    /// media is admitted by this change at all</b>.</para>
     /// </summary>
     [Fact]
     public async Task TheBorrowsAdmissionSurface_IsMeasured_AndBoundedToTheDtrhPayloadTree()
@@ -442,26 +445,61 @@ public sealed class GoonServingTests : IDisposable
         var goon = ServedRelatives().ToHashSet(StringComparer.Ordinal);
         var newlyReachable = dtrh.Where(r => !goon.Contains(r)).ToArray();
 
-        // THE NUMBER. 1542 dtrh files, 3 of them shadowed by the goon tree's own index.html /
-        // boot.js / bridge.js, so 1539 files that were unreachable on this origin before D266 are
-        // reachable at /dtrh/* now. 1537 of them SERVE; the 2 .md files answer 415.
-        Assert.Equal(184, goon.Count);
-        Assert.Equal(1542, dtrh.Length);
-        Assert.Equal(3, dtrh.Length - newlyReachable.Length);
-        Assert.Equal(
-            NewlyReachableAtThisBaseline,
-            newlyReachable.Length);
+        // THE NUMBERS, AND EVERY ONE OF THEM CARRIES ITS MEANING IN THE MESSAGE.
+        //
+        // xunit's numeric Assert.Equal has no message overload, so it emits "Expected: 1542,
+        // Actual: 1543" and nothing else. In a CI row that is indistinguishable from a stale
+        // constant, and the obvious action is to bump it -- which is exactly what this pin exists
+        // to PREVENT. The property cannot live only in the const's doc and in record.md: the
+        // failure text is the only part a reader sees at the moment they decide what to do. Hence
+        // Assert.True(cond, message) throughout, which is the idiom the rest of this file uses.
+        const string Review =
+            "This is the borrow's ADMISSION SURFACE (D266), not a constant to update. It is the set "
+            + "of DTRH payload files reachable at /dtrh/* on the goon origin, and it MOVED. Do NOT "
+            + "bump the number to make this pass: re-derive it, and give the new surface the same "
+            + "review the borrow itself got (record.md 5.1, GoonParticipant's class doc).";
 
-        // WHERE the fallback root is, located by what does NOT resolve through it. Both files
-        // really exist in the build output, outside both payload trees.
-        Assert.Equal(404, (await Get(Route("CcpClient.Desktop.dll"))).Status);   // not the base directory
-        Assert.Equal(404, (await Get(Route("intake/index.html"))).Status);       // not payload/
-        Assert.Equal(403, (await Get("/dtrh/..%2F..%2Fsettings.json")).Status);  // and still no traversal
+        Assert.True(goon.Count == 184,
+            $"the GOON payload tree is {goon.Count} files, not 184 - the overlay half of the borrow "
+            + $"changed shape. {Review}");
+        Assert.True(dtrh.Length == 1542,
+            $"the DTRH payload tree is {dtrh.Length} files, not 1542 - every file added to it becomes "
+            + $"reachable on the GOON origin too, which is a widening nobody requested here. {Review}");
+        Assert.True(dtrh.Length - newlyReachable.Length == 3,
+            $"{dtrh.Length - newlyReachable.Length} dtrh path(s) are shadowed by the goon tree, not 3 "
+            + "(index.html, boot.js, bridge.js). A shadow that APPEARED hides a dtrh file the page may "
+            + $"expect; a shadow that VANISHED exposes one. {Review}");
+        Assert.True(newlyReachable.Length == NewlyReachableAtThisBaseline,
+            $"{newlyReachable.Length} DTRH files are now reachable at /dtrh/* on the goon origin, "
+            + $"against the reviewed baseline of {NewlyReachableAtThisBaseline}. {Review}");
 
-        // A borrowed file that really is in the newly reachable set serves, so the count above is
-        // not a count of paths nobody can reach.
+        // WHAT THE FALLBACK ROOT IS NOT. Two negatives EXCLUDE two candidate roots; they do not
+        // identify one -- the positive identification is TheTwelveHotlinkedAssets_FallThroughTo-
+        // TheDtrhTree, which compares served bytes against DtrhParticipant.PayloadRoot. Both files
+        // below really exist in the build output, outside both payload trees, and the resolver
+        // answers 404 BEFORE the 415 allowlist (LoopbackServer.cs:220-222 resolves overlay ->
+        // payload -> 404), so a file that DID resolve would answer 415 and these probes would fail.
+        var atBuildRoot = await Get(Route("CcpClient.Desktop.dll"));
+        Assert.True(atBuildRoot.Status == 404,
+            $"CcpClient.Desktop.dll answered {atBuildRoot.Status}, not 404 - a file at the BUILD OUTPUT "
+            + $"ROOT resolved through the fallback, so the payload root is AppContext.BaseDirectory. {Review}");
+
+        var siblingTree = await Get(Route("intake/index.html"));
+        Assert.True(siblingTree.Status == 404,
+            $"intake/index.html answered {siblingTree.Status}, not 404 - a file in a SIBLING PAYLOAD "
+            + "TREE resolved through the fallback, so the payload root is payload/ and every intake, "
+            + $"tunnel and vendor file is reachable on the goon origin too. {Review}");
+
+        var traversal = await Get("/dtrh/..%2F..%2Fsettings.json");
+        Assert.True(traversal.Status == 403,
+            $"a traversal out of the payload root answered {traversal.Status}, not 403 - the containment "
+            + $"check that keeps the borrow bounded to a TREE is not holding. {Review}");
+
+        // And the count is not a count of paths nobody can reach: one of them really serves.
         var probe = await Get(Route("assets/bubbles/bubble.png"));
-        Assert.Equal(200, probe.Status);
+        Assert.True(probe.Status == 200,
+            $"assets/bubbles/bubble.png answered {probe.Status}, not 200 - the borrow is measured above "
+            + "but does not actually serve, so the number counts paths nobody can reach");
         Assert.Contains("assets/bubbles/bubble.png", newlyReachable);
     }
 
