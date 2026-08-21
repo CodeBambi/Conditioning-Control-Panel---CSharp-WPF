@@ -97,26 +97,51 @@ surface, and none was made.
 ## 6. Floor
 
 Pin **2457 unit / 144 headless**. Declared delta: **+83 unit / +8 headless**
-(`floor-delta.json`). Observed at the last full run: **2540 unit / 152 headless** = pin + delta,
-exactly. `floor.json` was never opened.
+(`floor-delta.json`). Observed at the final run: **2540 unit / 152 headless** = pin + delta,
+exactly, with **zero named failures in either project**. The delta did not move when the
+asset-manifest edits landed (§7.1) — those repaired two existing guards and added no test.
+`floor.json` was never opened. The warnings gate is 0/0 across all four projects, run `--cold`
+because the diff touches a csproj.
 
 ## 7. Blockers and scope
 
-1. **`Assets/assets.manifest.json` needs 184 new copied entries, and it is outside File Scope.**
-   `AssetVerifier.VerifyCopied` (`Manifest/AssetManifest.cs:296-327`) sweeps every file under each
-   copied top-level root and fails any without a manifest entry, so the new `payload/goon/**` files
-   fail `AssetManifestTests.CopiedDirection_RealManifest_…` and `SelfCheck_RealAssembly_ExitZero_…`.
-   The remedy is exactly two edits: 184 entries in
-   `client/src/CcpClient.Desktop/Assets/assets.manifest.json` (the shape SP-023/SP-054/SP-061 used
-   for dtrh/intake/tunnel) and the pinned copied count in
-   `client/tests/CcpClient.Tests/AssetManifestTests.cs:144` from **3700** to **3884**. Every prior
-   payload packet carried `assets.manifest.json` in its File Scope; this one does not. **Not made.
-   Reported.**
-2. **`--goon-demo` granted but not built.** The demo flags are parsed in
+### 7.1 The asset manifest — reported, then GRANTED and made (bounded to two edits)
+
+`AssetVerifier.VerifyCopied` (`Manifest/AssetManifest.cs:296-327`) sweeps every file under each
+copied top-level root and fails any without a manifest entry, so the new `payload/goon/**` files
+red `AssetManifestTests.CopiedDirection_RealManifest_…` and `SelfCheck_RealAssembly_ExitZero_…`.
+This was raised as a blocker and NOT crossed; the orchestrator granted exactly two edits, and
+exactly two were made:
+
+1. `client/src/CcpClient.Desktop/Assets/assets.manifest.json` — **184 copied entries appended**,
+   nothing else touched. The diff is **2760 insertions / 0 deletions in a single trailing hunk**,
+   and the generator proves that itself: it re-emits the untouched document first and refuses to
+   write unless that re-emission is byte-identical to what is on disk (the file is CRLF, so the
+   emitter is too). Entry shape is the SP-061 tunnel precedent verbatim — `id`
+   `goon.payload/<rel>`, `source: copied`, `required: true`, `heads: [desktop]`,
+   `overridePolicy: none`, `trust: full`, and a provenance origin pinning the tree:
+   `git tree 64634d4abaa84980bc615dba4f16c2509e722ce0`, added in `ee56ac46a`, last touched
+   `f7b4c317c`, all three read out of git rather than assumed.
+2. `client/tests/CcpClient.Tests/AssetManifestTests.cs:144` — `Assert.Equal(3700, …)` ->
+   `Assert.Equal(3884, …)`, that line only (diff: 1 insertion / 1 deletion).
+
+**Where the 184 came from.** It is not typed and it is not inherited from a nearby assertion: the
+generator's `walk()` produces the relative paths, the entries are `relatives.map(...)`, and the
+number is `relatives.length` printed from the same call — `walked: 184 / entries added: 184`. The
+copied total is likewise printed by counting the array before and after: `copied: 3700 -> 3884`.
+The arithmetic and the walk agree; neither was derived from the other.
+
+**Root cause, recorded because it will recur.** Every prior payload packet — SP-023, SP-054,
+SP-061 — carried `assets.manifest.json` in its File Scope. A packet scoped by feature folder will
+miss it every time, because the manifest is organised by asset class, not by feature.
+
+### 7.2 Still open
+
+1. **`--goon-demo` granted, then REFUSED, and not built.** The demo flags are parsed in
    `client/src/CcpClient.Desktop/Program.cs:230,255` and threaded into `new App(...)` at `:335`. A
    flag added to `App.axaml.cs` alone would be a parameter nothing can set. Reported rather than
    half-wired (D259).
-3. **`client/docs/upstream-payload-inventory.json` types `goon` as `not-ported`** and this packet
+2. **`client/docs/upstream-payload-inventory.json` types `goon` as `not-ported`** and this packet
    makes it served. `UpstreamPayloadInventoryTests` checks well-formedness and tree presence only,
    never disposition, so the entry goes stale silently. Outside File Scope; the orchestrator holds it.
 
@@ -136,4 +161,7 @@ exactly. `floor.json` was never opened.
 - **New:** `client/src/CcpClient.Desktop/Features/Goon/{GoonServingRoots,GoonDoors,GoonProtocol,GoonParticipant,GoonLaunch}.cs`, `GoonHostWindow.axaml(.cs)`
 - **Modified:** `client/src/CcpClient.Desktop/CcpClient.Desktop.csproj` (the fifth linked read-only glob), and the three granted wiring touches — `Views/MainWindow.axaml.cs` (one construction site, one page argument, one property), `Views/Pages/PlayPage.axaml(.cs)` (one door, one fault line)
 - **Tests:** `client/tests/CcpClient.Tests/GoonPracticeTests.cs` (83), `client/tests/CcpClient.HeadlessTests/GoonPracticeHeadlessTests.cs` (8)
+- **Granted repair (§7.1):** `client/src/CcpClient.Desktop/Assets/assets.manifest.json`
+  (184 appended entries, 0 deletions) and `client/tests/CcpClient.Tests/AssetManifestTests.cs:144`
+  (one number)
 - **Docs:** `client/docs/wpf-surface-reachability.md` (D250-D259 only)
