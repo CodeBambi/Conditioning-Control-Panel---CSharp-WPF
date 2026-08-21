@@ -162,6 +162,27 @@ public sealed class GoonGameCensusTests
         var missing = MissingShippingPaths(reference.Wpf, declared.Keys);
         Assert.True(missing.Count == 0,
             "census §10.3 names paths that are not in the shipping tree: " + string.Join(", ", missing));
+
+        // COMPLETE, not merely existent. Four numbers in §10.4.1 and §10.6 — dev-cockpit-files,
+        // design-doc-files, surface-csharp-total-files and row-share-of-surface-percent — are
+        // COUNTS OF THESE ROWS, so an omitted row would understate every one of them and the
+        // existence check could never notice. The set is therefore re-derived from the bytes:
+        // every tracked path under ConditioningControlPanel/ whose PATH carries the surface's
+        // token, minus the two directories the board row already names, minus the intake
+        // voice-over family the census attributes as FOREIGN (§2.1) and counts separately as
+        // intake-vo-goon-named-files.
+        var derived = WalkFiles(reference.Wpf)
+            .Select(f => Path.GetRelativePath(reference.Wpf, f).Replace(Path.DirectorySeparatorChar, '/'))
+            .Where(rel => rel.Contains("goon", StringComparison.OrdinalIgnoreCase))
+            .Where(rel => !rel.StartsWith("Services/GoonGame/", StringComparison.Ordinal)
+                       && !rel.StartsWith("Resources/web/goon/", StringComparison.Ordinal)
+                       && !rel.StartsWith("Resources/web/intake/", StringComparison.Ordinal))
+            .OrderBy(rel => rel, StringComparer.Ordinal)
+            .ToList();
+
+        _output.WriteLine("§10.3 derived from the bytes: " + string.Join(", ", derived));
+
+        Assert.Equal(derived, declared.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList());
     }
 
     // ======================================================================================
@@ -172,8 +193,12 @@ public sealed class GoonGameCensusTests
     public void EveryPinnedCitation_IsOnTheExactLineItClaims()
     {
         var reference = RequireReference();
-        var rows = ParseCitationTable(reference.Census, "### 10.4");
+        var rows = ParseCitationTable(reference.Census, "### 10.4", out var unparsed);
         Assert.NotEmpty(rows);
+        Assert.True(unparsed.Count == 0,
+            "§10.4 holds a table row that is not a citation — a narrative row in a pin table still "
+            + "feeds the vocabulary, which is how §10.4 and §10.5 leaked:" + Environment.NewLine
+            + string.Join(Environment.NewLine, unparsed));
 
         var wrong = CitationDrift(rows, relative => ReadShippingFile(reference.Wpf, relative));
         Assert.True(wrong.Count == 0,
@@ -186,8 +211,11 @@ public sealed class GoonGameCensusTests
     public void EveryPortAnchor_IsOnTheExactLineItClaims()
     {
         var reference = RequireReference();
-        var rows = ParseCitationTable(reference.Census, "### 10.5");
+        var rows = ParseCitationTable(reference.Census, "### 10.5", out var unparsed);
         Assert.NotEmpty(rows);
+        Assert.True(unparsed.Count == 0,
+            "§10.5 holds a table row that is not a citation:" + Environment.NewLine
+            + string.Join(Environment.NewLine, unparsed));
 
         var wrong = CitationDrift(rows, relative => ReadRepoFile(reference.Root, Path.Combine(PortRootParts) + "/" + relative));
         Assert.True(wrong.Count == 0,
@@ -283,19 +311,22 @@ public sealed class GoonGameCensusTests
             ["payload-served-files"] = (payload.Count - harness).ToString(),
             ["payload-harness-files"] = harness.ToString(),
             ["payload-total-bytes"] = TotalBytes(reference.Wpf, "Resources/web/goon").ToString(),
+
+            // §10.6's last two keys. EveryDuelElement_HasAShippedPortModule also derives them, for
+            // a different property (that the two counts are EQUAL). They are derived here as well
+            // rather than excused from the reverse check: an exclusion list is the escape hatch,
+            // and a second independent derivation of the same number is redundancy, not waste.
+            ["duel-elements"] = DuelElementCodes(reference.Wpf).Count.ToString(),
+            ["duel-elements-with-port-module"] = PortElementAnchors(reference.Census, reference.Wpf).ToString(),
         };
 
-        var mismatches = new List<string>();
-        foreach (var (key, value) in actual)
-        {
-            _output.WriteLine($"{key}: census {(declared.TryGetValue(key, out var d) ? d : "<absent>")}, derived {value}");
-            if (!declared.TryGetValue(key, out var claimed) || claimed != value)
-                mismatches.Add($"{key}: census says {(declared.TryGetValue(key, out var c) ? c : "<absent>")}, the bytes say {value}");
-        }
-
-        Assert.True(mismatches.Count == 0,
-            "census §10.6 fractions do not re-derive:" + Environment.NewLine
-            + string.Join(Environment.NewLine, mismatches));
+        // THROUGH THE SHARED HELPER, and the reason is a hole that shipped. This fact used to
+        // hand-roll its own mismatch loop over `actual` only, so a row DECLARED in §10.6 that
+        // nothing re-derives passed silently — and §10.6 is the largest pin table, holding the
+        // headline fractions. AssertAgrees already carried the reverse check ("census pins it,
+        // nothing re-derives it"), which is exactly why §10.4.1 caught the same injection and this
+        // one did not. The property existed and was lost by re-implementing instead of reusing.
+        AssertAgrees(declared, actual, "§10.6");
     }
 
     /// <summary>The line totals and group counts the census states in PROSE. SP-127's pin covered
@@ -393,16 +424,9 @@ public sealed class GoonGameCensusTests
     {
         var reference = RequireReference();
         var declared = ParseKeyValueTable(reference.Census, "### 10.6");
-        var contracts = ReadShippingFile(reference.Wpf, "Services/GoonGame/GoonContracts.cs");
-
-        var body = Regex.Match(contracts, @"enum\s+GoonElement\s*\{(?<body>[^}]*)\}", RegexOptions.Singleline);
-        Assert.True(body.Success, "GoonContracts.cs no longer declares enum GoonElement");
-
-        var elements = Regex.Matches(body.Groups["body"].Value, @"^\s*([A-Z][A-Za-z0-9_]*)\s*=\s*\d+",
-                                     RegexOptions.Multiline).Count;
-        var anchors = ParseCitationTable(reference.Census, "### 10.5")
-            .Count(r => !r.Key.Equals("webview-anchor", StringComparison.Ordinal)
-                     && !r.Key.Equals("entitlement-anchor", StringComparison.Ordinal));
+        var codes = DuelElementCodes(reference.Wpf);
+        var elements = codes.Count;
+        var anchors = PortElementAnchors(reference.Census, reference.Wpf);
 
         _output.WriteLine($"GoonElement members: {elements}; port anchors in §10.5: {anchors}");
         Assert.Equal(declared["duel-elements"], elements.ToString());
@@ -411,12 +435,10 @@ public sealed class GoonGameCensusTests
 
         // The FROZEN wire codes. The protocol calls them append-only, so a renumbering upstream is a
         // wire break and must red the suite rather than drift quietly through this document.
-        var codes = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (Match member in Regex.Matches(body.Groups["body"].Value,
-                     @"^\s*(?<name>[A-Z][A-Za-z0-9_]*)\s*=\s*(?<code>\d+)", RegexOptions.Multiline))
-            codes[$"element-code-{member.Groups["name"].Value}"] = member.Groups["code"].Value;
-
-        AssertAgrees(ParseKeyValueTable(reference.Census, "### 10.4.4"), codes, "§10.4.4");
+        AssertAgrees(
+            ParseKeyValueTable(reference.Census, "### 10.4.4"),
+            codes.ToDictionary(kv => $"element-code-{kv.Key}", kv => kv.Value, StringComparer.Ordinal),
+            "§10.4.4");
     }
 
     [Fact]
@@ -980,6 +1002,41 @@ public sealed class GoonGameCensusTests
     private static int LineCount(string wpf, string relative) =>
         ReadShippingFile(wpf, relative).Split('\n').Length is var n && n > 0 ? n - 1 : 0;
 
+    /// <summary>The frozen <c>GoonElement</c> wire codes, name -&gt; code, read from the enum.</summary>
+    private static Dictionary<string, string> DuelElementCodes(string wpf)
+    {
+        var contracts = ReadShippingFile(wpf, "Services/GoonGame/GoonContracts.cs");
+        var body = Regex.Match(contracts, @"enum\s+GoonElement\s*\{(?<body>[^}]*)\}", RegexOptions.Singleline);
+        Assert.True(body.Success, "GoonContracts.cs no longer declares enum GoonElement");
+
+        var codes = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (Match m in Regex.Matches(body.Groups["body"].Value,
+                     @"^\s*(?<name>[A-Z][A-Za-z0-9_]*)\s*=\s*(?<code>\d+)", RegexOptions.Multiline))
+            codes[m.Groups["name"].Value] = m.Groups["code"].Value;
+
+        return codes;
+    }
+
+    /// <summary>
+    /// §10.5's rows that are per-element port modules, identified by DERIVING the element names
+    /// from the upstream enum rather than by listing the anchors that are not elements.
+    ///
+    /// <para>The first version excluded two anchors BY NAME, which meant every new port anchor
+    /// added to §10.5 silently inflated the element count and broke an unrelated pin — a literal
+    /// exclusion list wearing a different hat, and the same escape-hatch shape this guard has been
+    /// drilled on five times. Keying off the enum makes the set self-maintaining: an element added
+    /// upstream demands an anchor, and an anchor that is not an element is simply not counted.</para>
+    /// </summary>
+    private static int PortElementAnchors(string census, string wpf)
+    {
+        var elements = DuelElementCodes(wpf).Keys
+            .Select(n => n.ToLowerInvariant())
+            .ToHashSet(StringComparer.Ordinal);
+
+        return ParseCitationTable(census, "### 10.5")
+            .Count(r => elements.Contains(r.Key.ToLowerInvariant()));
+    }
+
     /// <summary>A millisecond constant re-derived from the shipping bytes, so a "10 s" in prose is
     /// the source's own number divided by a thousand rather than a figure somebody typed.</summary>
     private static int MillisecondConstant(string wpf, string relative, string name)
@@ -1403,9 +1460,14 @@ public sealed class GoonGameCensusTests
         return result;
     }
 
-    private static List<CitationRow> ParseCitationTable(string document, string heading)
+    private static List<CitationRow> ParseCitationTable(string document, string heading) =>
+        ParseCitationTable(document, heading, out _);
+
+    private static List<CitationRow> ParseCitationTable(
+        string document, string heading, out List<string> unparsed)
     {
         var rows = new List<CitationRow>();
+        unparsed = [];
         var lines = document.Split('\n');
         var index = Array.FindIndex(lines, l => l.TrimEnd('\r').StartsWith(heading, StringComparison.Ordinal));
         if (index < 0) return rows;
@@ -1417,10 +1479,19 @@ public sealed class GoonGameCensusTests
             if (!line.StartsWith('|')) continue;
 
             var cells = SplitRow(line);
-            if (cells.Count < 4) continue;
             if (cells[0] is "Key") continue;
             if (cells[0].Length > 0 && cells[0].All(c => c is '-' or ':')) continue;
-            if (!int.TryParse(cells[2], out var lineNumber)) continue;
+
+            // A ROW THAT DOES NOT PARSE IS REPORTED, NEVER SKIPPED. Skipping is how §10.4 and §10.5
+            // leaked: a two-cell narrative row dropped out here silently while its digits still
+            // reached the pinned vocabulary — hole five's shape, in the two subsections a
+            // three-subsection probe did not reach. Every table row inside a citation pin table
+            // must BE a citation.
+            if (cells.Count < 4 || !int.TryParse(cells[2], out var lineNumber))
+            {
+                unparsed.Add($"line {i + 1}: {line}");
+                continue;
+            }
 
             // Markdown escapes inside a needle are the DOCUMENT's syntax, not the source's. `\|`
             // would truncate the row and `\*` would italicise the cell, so both are written escaped

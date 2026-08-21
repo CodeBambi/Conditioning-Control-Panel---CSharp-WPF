@@ -220,6 +220,60 @@ next reviewer can re-run it instead of trusting that I did. New pins added so th
 `artifact-cap-history`, the three networking-identity citations, `ice-timeout`, §10.4.3's label
 tally and §10.4.4's nine frozen element wire codes.
 
+### 3.6 Final review — a claim about a guard, generalised from one sample
+
+**The sixth hole was not in the sweep. It was in the sentence describing what the sweep covers.**
+
+The previous round added: *"defence in depth arriving by design rather than by luck"*, on the
+strength of **one probe of one pin subsection**. A reviewer ran the same probe on three and found
+§10.6 — the largest pin table, holding the headline fractions — **wide open**. Running it on all ten
+found **two more**, §10.4 and §10.5.
+
+| Leak | Cause |
+|---|---|
+| §10.6 | `TheFractionsThatCarryTheFindings…` hand-rolled its own mismatch loop over derived keys only. **The shared `AssertAgrees` helper it should have called already carried the reverse check** *"census pins it, nothing re-derives it"* — which is exactly why §10.4.1 caught the same injection. The property existed in the codebase and was lost by re-implementing instead of reusing. Now routed through the helper, which immediately found two §10.6 keys nothing in that fact derived |
+| §10.4, §10.5 | `ParseCitationTable` SKIPPED a row it could not parse. A two-cell narrative row dropped out silently while its digits still reached the vocabulary. An unparseable row in a citation table is now reported, never skipped |
+
+**Ten of ten, zero leaking**, re-verified by re-running the probe over every subsection after the
+fixes. §10.7 now carries the per-subsection table naming which fact catches each, and says plainly
+that the earlier sentence generalised from a sample.
+
+**The lesson, written down because it is the one I most need to keep:** I have been careful all
+packet about not overstating what the PORT proves — every Linux cell a named gate, every "buildable"
+bounded, the closure a lower bound. **I applied a weaker standard to what my own guards cover.** A
+claim about coverage needs the coverage enumerated. The reviewer's method was not cleverer than
+mine; it was the same probe, run more than once.
+
+**A fourth exclusion-list-in-disguise was found while fixing this.** `PortElementAnchors` counted
+§10.5 rows by excluding two anchors BY NAME, so adding any new port anchor would silently inflate
+the element count and break an unrelated pin. It now derives the element names from the upstream
+enum, so the set is self-maintaining.
+
+### 3.7 Final review — the transport's privacy property, and an asymmetry of care
+
+`§6.1` and D243 named the transport's endpoints and its mechanism (*"no TURN"*) and **not its
+consequence**. The token `IP` appeared nowhere in either document — nor, checked, anywhere in
+`Services/GoonGame/` or `docs/GOON_GAME_PROTOCOL.md`; upstream argues the no-TURN decision on cost
+alone (`GoonWebRtcTransport.cs:29-30`). So the analysis was the census's to add, and it is now in
+both: **without a relay, a successful ICE punch is a direct connection in which each peer learns the
+other's public IP address**, composed with a `/join` route that is free and needs no account.
+Bounded in three directions (relay fallback discloses nothing, the STUN servers already observe the
+address, and this is inherent to P2P rather than a defect), and **priced at nothing**, per D225.
+
+**What made it blocking is worth keeping.** §6.3 quotes the microphone's entire mitigation verbatim
+to avoid overstating; §6.7 spends a subsection proving the camera has no producer. Both are careful
+in the direction of not alarming the reader. The peer connection got no equivalent care in the other
+direction. **A document scrupulous about not alarming and casual about not informing is not
+neutral** — it is tilted, and an owner deciding from it inherits the tilt.
+
+### 3.8 Final review — three undisclosed residuals, all closed
+
+| Residual | Disposition |
+|---|---|
+| §10.3's rows were existence-checked only, while four numbers COUNT those rows | **Completed against the bytes**, not disclosed: the set is now re-derived by walking `ConditioningControlPanel/` for paths carrying the surface token, minus the two directories the row names and minus the intake voice-over family. The enumeration was in fact complete — now proven rather than asserted, and the second census-reading pin is gone rather than merely labelled |
+| `GoonWebRtcTransport.cs:21-23` was unpinned and underwrites §6.7's **safety** conclusion | **Pinned** as `data-channel-only` and `no-mic-or-camera-to-peer`, with `no-turn-by-design` beside them |
+| §7.1 named `manifest` as one word, and it is an inventory of the user's own media | **Decomposed in §7.1.1.** It turns out to be the cheapest item in the unit: `GoonHostService.cs:362` calls `DtrhAssetManifest.Build()` verbatim, and the port already ships that enumerator (`DtrhUserMedia.cs`) and an identical frame (`DtrhProtocol.cs:271`). The only delta is `received`, which is empty by construction here |
+
 ## 4. Three defects found in the SHIPPING SOURCE, and one in the board row
 
 - **D247 — a wrong citation in the shipping source.** `Views/Tabs/PlayTabView.xaml:604` cites

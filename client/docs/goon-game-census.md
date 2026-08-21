@@ -444,10 +444,30 @@ makes builds its own, e.g. `GoonSignalingClient.cs:235`, alongside `display_name
 public STUN with **no TURN** (`GoonWebRtcTransport.cs:29-31`), falling back to the server relay ring
 after a 10 s ICE timeout.
 
+**AND "no TURN" HAS A PRIVACY CONSEQUENCE THE SOURCE DOES NOT STATE, so this census states it.**
+`GoonWebRtcTransport.cs:29-30` argues the no-TURN decision on cost — *"running relay infrastructure
+for media is exactly what the plan refuses"* — and the token `IP` appears nowhere in
+`Services/GoonGame/` or in `docs/GOON_GAME_PROTOCOL.md`. But a relay is the thing that hides a
+peer's address, so without one **a successful ICE punch is a direct machine-to-machine connection in
+which each side learns the other's public IP address.** That is not a defect and not a divergence:
+it is inherent to peer-to-peer without a relay, and it is the price of the decision the source
+argues for on other grounds.
+
+**What sharpens it is the composition with this surface's own front door.** `/join` is free, tier-
+checked nowhere, and needs no account — the server mints a guest identity for, in B9's words, a
+person who never installed anything. So the second seat can be an account-less stranger holding a
+pasted link, and on the P2P path that stranger and the user learn each other's addresses. Bounded
+honestly in three directions: on relay fallback there is no direct connection and no mutual
+disclosure (though media transfer is then silently absent, `docs/GOON_GAME_PROTOCOL.md:293-295`);
+the STUN servers themselves are third parties that already observe the user's address; and none of
+this is any different from every other P2P application — it is stated because **the owner cannot
+weigh a boundary that has not been named**, not because it is unusual.
+
 **What the owner must decide, and no amount of engineering answers:** whether the port takes on an
-outbound network boundary at all, when it has none today (§2.3); whether it accepts a peer
-connection to an arbitrary second machine; and whether match results are written to a server-side
-ledger.
+outbound network boundary at all, when it has none today (§2.3); whether it accepts a **direct**
+peer connection to an arbitrary second machine, knowing what that discloses in both directions and
+that the second machine may belong to someone with no account; and whether match results are written
+to a server-side ledger.
 
 ### 6.2 The user's own photos and videos leave the machine
 
@@ -566,7 +586,26 @@ BUILDABLE-IN-PART and clause 3 is not reached.
 |---|---|
 | Payload to serve | **184 files, 164 of them loaded by the page**, 12 471 900 bytes — **linked read-only, zero bytes forked** (§5.3) |
 | Port code already present | The embedded WebView (`Features/Dtrh/DtrhCapabilityProbes.cs:22`), the loopback serving contract (`Features/Intake/IntakeHostWindow.axaml.cs:701-707` names it), and the payload glob shipped four times (`CcpClient.Desktop.csproj:50-54`) |
-| Port code to add | A host window plus the bridge subset: **`init` + `manifest`** (host->page) and **`ready` + `log` + `heartbeat`/`pong` + `exit`/`exit-done`** (page->host). The frame catalogue is at `GoonHostService.cs:30-53` and the `init` shape is written out **field-for-field twice** — `GoonHostService.cs:300-350` and `bridge.js:371-440` — so it is transcribable, not reverse-engineered |
+| Port code to add | A host window plus the bridge subset: **`init` + `manifest`** (host->page) and **`ready` + `log` + `heartbeat`/`pong` + `exit`/`exit-done`** (page->host). The frame catalogue is at `GoonHostService.cs:30-53` and the `init` shape is written out **field-for-field twice** — `GoonHostService.cs:300-350` and `bridge.js:371-440` — so it is transcribable, not reverse-engineered. **`manifest` is decomposed in §7.1.1 — it is the smallest item here, not the largest** |
+
+#### 7.1.1 What answering `manifest` actually costs — decomposed, because it is a media inventory
+
+`manifest { images, videos, skipped, truncated }` is a **port-side inventory of the user's own
+media**, and user media is precisely what §6.2 is owner-gated on, so compressing it to one word
+would hide the item a plan gate most needs to size. Decomposed, it is **the cheapest thing in this
+unit**, because the port already ships both halves:
+
+| Piece | Upstream | Port | Verdict |
+|---|---|---|---|
+| The enumerator | `GoonHostService.cs:362` calls `DtrhAssetManifest.Build()` — the comment at `:359-361` says it *"Reuses the DtRH manifest builder verbatim (asset-tree deselection, size caps, sampling) — one enumerator for every web core"* | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhUserMedia.cs` is **the port of that same file**, carrying its extensions, caps, walk depth, skipped-count and downsample, plus SP-055's single active-pool definition | **ALREADY SHIPPED** |
+| The frame | `GoonHostService.cs:372-378` posts `{type, images, videos, skipped, truncated, received}` | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhProtocol.cs:271` builds `{type, images, videos, skipped, truncated}` — **field-for-field identical** | **ALREADY SHIPPED, minus one field** |
+| The one field that differs | `received` (`:377`), the accepted-artifact list | absent | **NOT NEEDED for this unit**: the inbox is purged at page boot (`TransferInboxStore.cs:62-72`, and `GoonHostService.cs:368` does it immediately before listing precisely so the rows *"are always empty"*), and a practice-only build has no media channel to fill it. It is a frame-shape stub |
+
+**So `manifest` is a field rename and a `received: []`, over an enumerator and a frame the port
+already ships and already tests.** It reads the user's own media directory, which the port already
+does for DTRH under a contract already in force, so by §4.2's test it is **sizable, not
+owner-gated** — it expands no contract. What it must NOT become is a route by which that inventory
+leaves the machine; that is §6.2, and this unit has no channel to leave by.
 | `caps` for this unit | `haptics:false`, `camera:false`, `assetCache:false`, `mediaTransfer:false`, `canHost:false`; `solo` defaults on (`bridge.js:391`) |
 | Upstream code to port | **none of the 25 as code.** Practice runs entirely in the page on the loopback pair (`ui/soloDriver.js:1-18`, `net/loopbackTransport.js:19-23`). What must be transcribed is **three consent defaults** the `init` frame carries — `LiveDurationSec` 720 (`GoonContracts.cs:97`), `ToyCap` 0.7 (`:297`), `PayloadMinGapMs` 30000 (`:108`) — because the host reads them off `ConsentSheetMsg` rather than inventing them (§1.3) |
 | OS interop required | Only what DTRH already ships: an embedded WebView. **Linux unproven, and that is the one real gate** |
@@ -821,6 +860,11 @@ by 3 and 5 lines. Here a citation that drifts by **one** line reds the suite.
 | client-version-header | Services/GoonGame/GoonHostService.cs | 811 | X-Client-Version |
 | unified-id-in-body | Services/GoonGame/GoonSignalingClient.cs | 235 | unified_id |
 | ice-timeout | Services/GoonGame/GoonContracts.cs | 104 | IceTimeoutMs = 10000 |
+| data-channel-only | Services/GoonGame/GoonWebRtcTransport.cs | 21 | DATA CHANNEL ONLY |
+| no-mic-or-camera-to-peer | Services/GoonGame/GoonWebRtcTransport.cs | 22 | for mic or camera to reach the peer |
+| no-turn-by-design | Services/GoonGame/GoonWebRtcTransport.cs | 29 | No TURN by design |
+| manifest-builder-reuse | Services/GoonGame/GoonHostService.cs | 362 | DtrhAssetManifest.Build() |
+| manifest-frame-received | Services/GoonGame/GoonHostService.cs | 377 | received |
 | score-formula | docs/GOON_GAME_PROTOCOL.md | 267 | 0.15 |
 | payload-rate | docs/GOON_GAME_PROTOCOL.md | 272 | Payload rate: 1 / 30 s |
 | host-gate-refusal | docs/GOON_GAME_PROTOCOL.md | 47 | 403 |
@@ -845,7 +889,7 @@ Re-derived by walking each path and counting lines on every run.
 | surface-csharp-total-lines | 16476 |
 | payload-served-share-percent | 89.1 |
 | shared-vendor-tree-files | 9 |
-| census-cites-goonhostservice-lines | 15 |
+| census-cites-goonhostservice-lines | 18 |
 | intake-vo-goon-named-files | 7 |
 | ice-timeout-seconds | 10 |
 | voice-note-max-seconds | 10 |
@@ -911,6 +955,7 @@ a wire break and must red the suite rather than drift.
 | spiral | Effects/SpiralOverlayEffect.cs | 47 | class SpiralOverlayEffect |
 | webview-anchor | Features/Dtrh/DtrhCapabilityProbes.cs | 22 | EmbeddedCapability |
 | entitlement-anchor | Entitlement/EntitlementTierSource.cs | 39 | record TierLookup |
+| manifest-frame-anchor | Features/Dtrh/DtrhProtocol.cs | 271 | type = "manifest" |
 
 ### 10.6 The fractions that carry the findings — pinned EXACTLY, no threshold
 
@@ -964,13 +1009,36 @@ Every term is re-derived from the shipping bytes on every run.
   An edit that changes one side must change the other. Four `TheNumberSweep_*` fixtures pin the
   repaired behaviours, each watched red at the head that ships it.
 
-  **Inside a pin subsection the vocabulary is still soft, and a DIFFERENT mechanism bounds it.**
-  A reviewer probed the new boundary: a narrative table row placed inside §10.1 does still reach
-  the vocabulary, and the sweep stays green. It is caught anyway, because §10.1's rows are read as
-  directory roots and `EveryDirectoryCount_IsRederivedFromTheShippingBytes_NotReadOutOfTheCensus`
-  hard-fails on the invented root with *"HALF-PRESENT reference tree … Corrupt checkout"*. **That is
-  defence in depth arriving by design rather than by luck**, and it is recorded here so a future
-  editor knows the two mechanisms hold each other up before "simplifying" either one.
+  **Inside a pin subsection the vocabulary is still soft, and a DIFFERENT mechanism bounds it — in
+  every subsection, now, and the "now" is the point.** An earlier draft of this bullet asserted
+  defence in depth *"arriving by design rather than by luck"* on the strength of **one probe of one
+  subsection** (§10.1). A reviewer ran the same probe on three and found §10.6 — the largest pin
+  table, holding the headline fractions — **wide open**. Running it on all ten found **two more**,
+  §10.4 and §10.5. **A claim about what a mechanism covers needs the coverage enumerated, not
+  sampled**, and generalising from a sample is the failure this document spends its length warning
+  about, committed in the sentence describing that failure.
+
+  So: every pin subsection was probed by injecting a two-cell narrative row carrying an invented
+  number into it, one at a time, and here is what actually catches it. **The last three rows were leaks, closed in this
+  revision.**
+
+  | Subsection | Caught by |
+  |---|---|
+  | §10.1 | `EveryDirectoryCount_IsRederivedFromTheShippingBytes_NotReadOutOfTheCensus` |
+  | §10.2 | `TheSurfaceFileSet_IsExactlyWhatTheWalkFinds` |
+  | §10.3 | `TheLocationsOutsideTheRowsTwoDirectories_AllExistInTheShippingTree` |
+  | §10.4.1 | `EveryDerivedLineCountStatedInProse_RederivesFromTheBytes` |
+  | §10.4.2 | `ThePayloadExtensionHistogram_RederivesFromTheBytes` |
+  | §10.4.3 | `TheLabelTally_MatchesTheBehaviourMap_EverywhereItIsRestated` |
+  | §10.4.4 | `EveryDuelElement_HasAShippedPortModule` |
+  | §10.4 | `EveryPinnedCitation_IsOnTheExactLineItClaims` — **was a leak**: a row that did not parse as a citation was silently skipped, so a narrative row fed the vocabulary and nothing complained. An unparseable row in a citation table is now reported, never skipped |
+  | §10.5 | `EveryPortAnchor_IsOnTheExactLineItClaims` — **was a leak**, same cause, same fix |
+  | §10.6 | `TheFractionsThatCarryTheFindings_RederiveExactly_WithNoThreshold` — **was a leak**, and the cause should sting: this fact hand-rolled its own mismatch loop over derived keys only, while the shared `AssertAgrees` helper it should have called already carried the reverse check *"census pins it, nothing re-derives it"*. **The property existed in the codebase and was lost by re-implementing instead of reusing.** It now calls the helper |
+
+  **Ten of ten, zero leaking**, re-verified by re-running the probe over every subsection after the
+  fixes. This is defence in depth by design *now*; it was not before, and the difference was only
+  visible to an enumeration. A future editor should know the two mechanisms hold each other up
+  before "simplifying" either one.
 - **The label tally re-derives from the map's own rows** (§10.4.3) and is compared against every
   restatement in this document, **including the verdict's spelled-out one** — the check that catches
   a corrected tally which did not propagate to the section a reader stops at.
@@ -979,11 +1047,11 @@ Every term is re-derived from the shipping bytes on every run.
   deliberately EXCLUDES**, so a citation corrected in the pin table and left stale in the prose is
   invisible to it. Scoped to §10.5 because a port anchor is single-purpose; the equivalent rule over
   §10.4 would be noise, because one WPF file is legitimately cited at many different lines — this
-  document cites `GoonHostService.cs` at **15** distinct lines in `File.cs:NNN` form, plus further
+  document cites `GoonHostService.cs` at **18** distinct lines in `File.cs:NNN` form, plus further
   bare `:NNN` continuations, and every one means something different:
 
   ```
-  grep -o "GoonHostService\.cs:[0-9]*" client/docs/goon-game-census.md | sort -u | wc -l   ->  15
+  grep -o "GoonHostService\.cs:[0-9]*" client/docs/goon-game-census.md | sort -u | wc -l   ->  18
   ```
 
   **That asymmetry is a real residual: a stale WPF citation in body prose is still only caught by
