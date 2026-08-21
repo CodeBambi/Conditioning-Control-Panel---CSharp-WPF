@@ -77,7 +77,7 @@ the shift; re-basing a citation is the reviewer's step.
 
 ## Coverage, printed every run in both modes
 
-Measured at `474e9a803` from `node client/tools/citations/detect.mjs --needles`:
+Measured at `d280560b5` from `node client/tools/citations/detect.mjs --needles`:
 
 | | |
 |---|---|
@@ -152,7 +152,7 @@ with its own acceptance and was explicitly out of this packet's scope, so the me
 moved/gone/ambiguous/out-of-range classification and the coverage arithmetic — is **not on the floor**.
 What is on the floor is the contract and the data.
 
-**Every new assertion was watched red at the committed head `ae7168d8f`**, one mutation at a time,
+**Every new assertion was watched red at the committed head `d280560b5`**, one mutation at a time,
 each reverted from git afterwards. **21 of 21 reverts reddened the fact that names them**:
 
 | Revert | Fact that red |
@@ -256,6 +256,8 @@ can point at. It is a board row, not a silent widening, so it is named here and 
 
 ## Stamping note
 
-`D260` and this file quote `474e9a803` for the commit the figures were measured at. That
+`D260` and this file quote `d280560b5` for the commit the figures and the red demonstrations were
+taken at. All 21 demonstrations were run twice: once at `ae7168d8f` before the code review, and
+again in full at `d280560b5` after the anchor sweep moved every line number in `detect.mjs`. That
 placeholder is replaced in the immediately following commit, which changes only hexadecimal text and
 therefore cannot move a citation count — verified by re-running the tool after the substitution.
