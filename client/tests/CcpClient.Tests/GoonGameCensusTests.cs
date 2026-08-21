@@ -86,6 +86,11 @@ public sealed class GoonGameCensusTests
     private static readonly string[] OwnerFlaggedHeadings =
     [
         "### 6.1", "### 6.2", "### 6.3", "### 6.4", "### 6.5", "### 6.6", "### 6.7",
+
+        // §6.8 is deliberately NOT a decision section — it is the contract-silent roots question,
+        // which is why DecisionSections below counts §6.1-§6.5 only. Pinned here so it cannot be
+        // dropped silently: it is the one item in §6 the owner queue would otherwise lose.
+        "### 6.8",
     ];
 
     private readonly ITestOutputHelper _output;
@@ -578,6 +583,72 @@ public sealed class GoonGameCensusTests
         Assert.True(offenders.Count == 0,
             "the census appears to propose forking payload bytes:" + Environment.NewLine
             + string.Join(Environment.NewLine, offenders));
+    }
+
+    /// <summary>
+    /// Every table in the census is well-formed, and no pipe-row sits outside one.
+    ///
+    /// <para><b>Why this exists.</b> This document has thirty facts pinning its CONTENT and, until
+    /// this one, nothing checking its STRUCTURE. A sub-subsection inserted into the middle of the
+    /// §7.1 inventory table split it in two, and the four rows after the split — including
+    /// <c>Owner decisions required | none</c>, the line that prices the buildable unit — lost their
+    /// header and delimiter and rendered as lazy continuation lines of the preceding paragraph.
+    /// <b>Markdown fails SILENTLY</b>: a malformed table is not an error, it is invisible prose.
+    /// That is why it survived four review rounds, two hand sweeps and thirty content facts.</para>
+    ///
+    /// <para>Under GFM a table needs a delimiter row immediately after its header, so the rule is
+    /// exactly that: every maximal run of pipe-rows must have a delimiter as its SECOND line. A run
+    /// of one is an orphan row and fails the same way. Fenced code blocks are skipped — a fence can
+    /// legitimately contain a line starting with a pipe.</para>
+    /// </summary>
+    [Fact]
+    public void EveryTableInTheCensusIsWellFormed_AndNoPipeRowSitsOutsideOne()
+    {
+        var malformed = MalformedTables(RequireReference().Census);
+
+        Assert.True(malformed.Count == 0,
+            "the census holds pipe-rows that are not a well-formed table — under GFM these render "
+            + "as prose, silently, which is how the inventory table's pricing row was lost:"
+            + Environment.NewLine + string.Join(Environment.NewLine, malformed));
+    }
+
+    [Fact]
+    public void TheTableStructureCheck_CatchesASplitTableAndAnOrphanRow()
+    {
+        const string good = """
+            | Key | Value |
+            |---|---|
+            | a | 1 |
+            """;
+        Assert.Empty(MalformedTables(good));
+
+        // A table interrupted by a paragraph, resuming without a header — the §7.1 defect.
+        const string split = """
+            | Key | Value |
+            |---|---|
+            | a | 1 |
+
+            Some prose about something else.
+            | b | 2 |
+            | c | 3 |
+            """;
+        Assert.Single(MalformedTables(split));
+
+        // A lone pipe-row with no table at all.
+        const string orphan = """
+            text
+
+            | orphan | row |
+            """;
+        Assert.Single(MalformedTables(orphan));
+
+        // A fence may legitimately open a line with a pipe.
+        const string fenced = """
+            ```
+            | not | a | table |
+            ```
+            """;
+        Assert.Empty(MalformedTables(fenced));
     }
 
     [Fact]
@@ -1519,6 +1590,47 @@ public sealed class GoonGameCensusTests
             .Select(l => l.Trim())
             .Where(l => Regex.IsMatch(l, @"^\|\s*B\d+\s*\|"))
             .ToList();
+
+    /// <summary>Maximal runs of pipe-rows whose second line is not a GFM delimiter row. Fenced
+    /// code blocks are skipped.</summary>
+    private static List<string> MalformedTables(string document)
+    {
+        var bad = new List<string>();
+        var lines = document.Split('\n');
+        var fenced = false;
+        var i = 0;
+
+        while (i < lines.Length)
+        {
+            var trimmed = lines[i].Trim();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal)) { fenced = !fenced; i++; continue; }
+            if (fenced || !trimmed.StartsWith('|')) { i++; continue; }
+
+            var start = i;
+            while (i < lines.Length)
+            {
+                var t = lines[i].Trim();
+                if (t.StartsWith("```", StringComparison.Ordinal) || !t.StartsWith('|')) break;
+                i++;
+            }
+
+            var run = i - start;
+            var delimiter = run >= 2 && IsDelimiterRow(lines[start + 1]);
+            if (!delimiter)
+                bad.Add($"line {start + 1}: a run of {run} pipe-row(s) with no delimiter row after the "
+                    + $"header — first row reads \"{lines[start].Trim()[..Math.Min(90, lines[start].Trim().Length)]}\"");
+        }
+
+        return bad;
+    }
+
+    private static bool IsDelimiterRow(string line)
+    {
+        var cells = SplitRow(line.Trim());
+        return cells.Count > 0
+            && cells.All(c => c.Length > 0 && c.Contains('-', StringComparison.Ordinal)
+                              && c.All(ch => ch is '-' or ':'));
+    }
 
     private static List<string> UnescapedPipesInCodeSpans(string document)
     {

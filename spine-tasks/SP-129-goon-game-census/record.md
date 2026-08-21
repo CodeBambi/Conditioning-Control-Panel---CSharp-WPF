@@ -274,6 +274,55 @@ neutral** — it is tilted, and an owner deciding from it inherits the tilt.
 | `GoonWebRtcTransport.cs:21-23` was unpinned and underwrites §6.7's **safety** conclusion | **Pinned** as `data-channel-only` and `no-mic-or-camera-to-peer`, with `no-turn-by-design` beside them |
 | §7.1 named `manifest` as one word, and it is an inventory of the user's own media | **Decomposed in §7.1.1.** It turns out to be the cheapest item in the unit: `GoonHostService.cs:362` calls `DtrhAssetManifest.Build()` verbatim, and the port already ships that enumerator (`DtrhUserMedia.cs`) and an identical frame (`DtrhProtocol.cs:271`). The only delta is `received`, which is empty by construction here |
 
+### 3.9 Final review, second pass — both defects were introduced by the fix for the last one
+
+Everything the previous round asked for held. **Both new blockers were created by the §7.1.1
+insertion itself**, which is worth recording as a class: a fix inserted into the middle of a
+structure is a different risk from a fix appended to it.
+
+**Blocker 1 — §7.1.1 split the §7.1 inventory table in two.** The four rows after the split lost
+their header and delimiter and became lazy continuation lines of the preceding paragraph. Under GFM
+they were not a table at all. **The row that vanished into prose was
+`| Owner decisions required | none — nothing leaves the machine, no sensor opens, nothing is sold |`
+— the line that prices the buildable unit**, against a completion criterion reading *"a verdict with
+an inventory, not an estimate."*
+
+**Markdown fails SILENTLY.** A malformed table is not an error; it is invisible prose. That is why
+this survived four review rounds, two hand sweeps and thirty content facts — **thirty facts pinned
+what the document SAYS and none pinned how it is BUILT.** §7.1.1 now sits below the completed table,
+and `EveryTableInTheCensusIsWellFormed_AndNoPipeRowSitsOutsideOne` asserts every maximal run of
+pipe-rows has a delimiter as its second line, with fenced blocks skipped. Watched red against the
+live break before the fix:
+
+```
+line 609: a run of 4 pipe-row(s) with no delimiter row after the header — first row reads
+"| `caps` for this unit | `haptics:false`, `camera:false`, `assetCache:false`, `mediaTransf"
+```
+
+**Blocker 2 — my own headline failure mode, in the most consequential sentence in the document.**
+§7.1.1 concluded that the manifest is `sizable` partly because the port already reads user media
+*"under a contract already in force"*. **Every mechanical leg verifies and the inversion is right**
+— the enumerator, the frame and the single `received` delta all check out. **The contract leg does
+not.** The only clause governing what a web core may expose is `capability-inventory.md:260`, and it
+is DTRH-scoped, as are the other two user-media clauses at `:282` and `:293`; neither owner document
+carries a product-wide web-core contract. **No clause covers a Goon host's roots, because no Goon
+host exists.**
+
+The verdict survives on a narrower footing, now stated: **`sizable` rests on none of §4.2's five
+triggers firing, not on a grant covering this use.** This is `census.md:24` — *"a right number that
+means something else gets trusted"* — **happening to the author of that sentence, in the one place
+it would cost most: the flip of a user-media capability from owner-gated to sizable.** Recorded in
+the census rather than quietly corrected, because the failure mode is this document's subject.
+
+**§6.8 added to the owner queue**, marked **contract-silent, not owner-gated**: the roots a Goon
+host would expose are governed by nothing, and silence is not a grant. Priced at nothing, like every
+other item in §6, and deliberately outside the five decision sections (the guard counts §6.1-§6.5
+for the heading tally and pins §6.8's existence separately).
+
+**The lesson, one level up from the last one.** Two rounds ago: a claim about coverage needs the
+coverage enumerated. This round: **I had enumerated what my numbers claim and never enumerated what
+my document's structure guarantees.** The answer was not more care. It was the guard.
+
 ## 4. Three defects found in the SHIPPING SOURCE, and one in the board row
 
 - **D247 — a wrong citation in the shipping source.** `Views/Tabs/PlayTabView.xaml:604` cites
@@ -347,11 +396,11 @@ the port could not build — there are seven whose primitive it may not build wi
 
 ## 8. Floor
 
-**Pin 2399 unit / 144 headless. Declared delta: `unit: 30, headless: 0`
+**Pin 2399 unit / 144 headless. Declared delta: `unit: 32, headless: 0`
 (`spine-tasks/SP-129-goon-game-census/floor-delta.json`).**
 
-**Observed: 2429 unit (0 failed, 2 skipped — exactly the two pinned Linux-gated names) and 144
-headless.** `2399 + 30 = 2429`, so the observed total is pin + declared delta, which is the expected
+**Observed: 2431 unit (0 failed, 2 skipped — exactly the two pinned Linux-gated names) and 144
+headless.** `2399 + 32 = 2431`, so the observed total is pin + declared delta, which is the expected
 result under iron rule 9 and not a failure. `client/tests/floor/floor.json` was never edited by this
 packet.
 
@@ -402,11 +451,11 @@ commit, and the transcripts are in the final report.
 | Path | What |
 |---|---|
 | `client/docs/goon-game-census.md` | The census (new) |
-| `client/tests/CcpClient.Tests/GoonGameCensusTests.cs` | The pin, 30 facts (new) |
+| `client/tests/CcpClient.Tests/GoonGameCensusTests.cs` | The pin, 32 facts (new) |
 | `client/docs/wpf-surface-reachability.md` | **Divergences only**, D240-D249 appended with a "What SP-129 does NOT establish" section |
 | `spine-tasks/SP-129-goon-game-census/plan.md` | Method, fixed before mapping; §13 the plan-gate rulings |
 | `spine-tasks/SP-129-goon-game-census/walk.mjs` | Byte-identical copy of SP-127's walk, unmodified |
-| `spine-tasks/SP-129-goon-game-census/floor-delta.json` | `unit: 30, headless: 0` |
+| `spine-tasks/SP-129-goon-game-census/floor-delta.json` | `unit: 32, headless: 0` |
 | `spine-tasks/SP-129-goon-game-census/sweep-corrections.py` | The cross-deliverable correction sweep (§3.5). A HAND method, committed so it can be re-run rather than trusted |
 
 Divergence ids used: **D240-D249**. Nothing at or below D239 was touched; D226-D239 remain the

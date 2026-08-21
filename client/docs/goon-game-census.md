@@ -568,6 +568,31 @@ read it as a shipped sensor.
 
 ---
 
+### 6.8 CONTRACT-SILENT, NOT OWNER-GATED — what roots a Goon host would expose
+
+**This is not a sixth owner-gated decision and it is not folded into any size. It is a contract
+question with no clause on either side of it**, surfaced here because the owner is the only person
+who can close it and because it was found by checking a claim this census had already made (§7.1.1).
+
+The port's only clause about what a web core may serve is
+`client/docs/capability-inventory.md:260`, and it is **DTRH-scoped**: it enumerates roots for *that*
+host — bundled game files, user media, bundled Chaos art, saved Loom GIFs, the active mod's DTRH
+subfolder — under `## Down the Rabbit Hole` (`:226`) → `### Page boot and content` (`:254`). The
+other two user-media clauses in that section (`:282`, `:293`) are scoped the same way. **Neither
+owner document carries a product-wide web-core or payload-host contract**, so a second web core's
+roots are governed by nothing.
+
+**The honest position is that the contract is SILENT, not permissive**, and the difference matters
+in exactly one direction: silence is not a grant. §7.1.1's `sizable` verdict does not depend on
+reading it as one — it rests on §4.2's triggers not firing — but a port that stood up a Goon host
+would be the first web core the port has whose exposed roots no clause describes.
+
+**What the owner may wish to decide, and nothing here presumes an answer:** whether the roots clause
+at `:260` is DTRH-specific by intent or is meant to bind every web core; and if the latter, whether
+it is restated product-wide before a second core exists rather than after. **Priced at nothing**,
+like every other item in §6.
+
+
 ## 7. Verdict: BUILDABLE-IN-PART — with the inventory and the residue
 
 Applying plan §4.3 in order: clause 1 fails (seven OWNER-GATED rows). **Clause 2 fires** — the subset
@@ -587,6 +612,10 @@ BUILDABLE-IN-PART and clause 3 is not reached.
 | Payload to serve | **184 files, 164 of them loaded by the page**, 12 471 900 bytes — **linked read-only, zero bytes forked** (§5.3) |
 | Port code already present | The embedded WebView (`Features/Dtrh/DtrhCapabilityProbes.cs:22`), the loopback serving contract (`Features/Intake/IntakeHostWindow.axaml.cs:701-707` names it), and the payload glob shipped four times (`CcpClient.Desktop.csproj:50-54`) |
 | Port code to add | A host window plus the bridge subset: **`init` + `manifest`** (host->page) and **`ready` + `log` + `heartbeat`/`pong` + `exit`/`exit-done`** (page->host). The frame catalogue is at `GoonHostService.cs:30-53` and the `init` shape is written out **field-for-field twice** — `GoonHostService.cs:300-350` and `bridge.js:371-440` — so it is transcribable, not reverse-engineered. **`manifest` is decomposed in §7.1.1 — it is the smallest item here, not the largest** |
+| `caps` for this unit | `haptics:false`, `camera:false`, `assetCache:false`, `mediaTransfer:false`, `canHost:false`; `solo` defaults on (`bridge.js:391`) |
+| Upstream code to port | **none of the 25 as code.** Practice runs entirely in the page on the loopback pair (`ui/soloDriver.js:1-18`, `net/loopbackTransport.js:19-23`). What must be transcribed is **three consent defaults** the `init` frame carries — `LiveDurationSec` 720 (`GoonContracts.cs:97`), `ToyCap` 0.7 (`:297`), `PayloadMinGapMs` 30000 (`:108`) — because the host reads them off `ConsentSheetMsg` rather than inventing them (§1.3) |
+| OS interop required | Only what DTRH already ships: an embedded WebView. **Linux unproven, and that is the one real gate** |
+| Owner decisions required | **none** — nothing leaves the machine, no sensor opens, nothing is sold |
 
 #### 7.1.1 What answering `manifest` actually costs — decomposed, because it is a media inventory
 
@@ -602,14 +631,34 @@ unit**, because the port already ships both halves:
 | The one field that differs | `received` (`:377`), the accepted-artifact list | absent | **NOT NEEDED for this unit**: the inbox is purged at page boot (`TransferInboxStore.cs:62-72`, and `GoonHostService.cs:368` does it immediately before listing precisely so the rows *"are always empty"*), and a practice-only build has no media channel to fill it. It is a frame-shape stub |
 
 **So `manifest` is a field rename and a `received: []`, over an enumerator and a frame the port
-already ships and already tests.** It reads the user's own media directory, which the port already
-does for DTRH under a contract already in force, so by §4.2's test it is **sizable, not
-owner-gated** — it expands no contract. What it must NOT become is a route by which that inventory
-leaves the machine; that is §6.2, and this unit has no channel to leave by.
-| `caps` for this unit | `haptics:false`, `camera:false`, `assetCache:false`, `mediaTransfer:false`, `canHost:false`; `solo` defaults on (`bridge.js:391`) |
-| Upstream code to port | **none of the 25 as code.** Practice runs entirely in the page on the loopback pair (`ui/soloDriver.js:1-18`, `net/loopbackTransport.js:19-23`). What must be transcribed is **three consent defaults** the `init` frame carries — `LiveDurationSec` 720 (`GoonContracts.cs:97`), `ToyCap` 0.7 (`:297`), `PayloadMinGapMs` 30000 (`:108`) — because the host reads them off `ConsentSheetMsg` rather than inventing them (§1.3) |
-| OS interop required | Only what DTRH already ships: an embedded WebView. **Linux unproven, and that is the one real gate** |
-| Owner decisions required | **none** — nothing leaves the machine, no sensor opens, nothing is sold |
+already ships and already tests.**
+
+**And the reason it is `sizable` needs stating precisely, because an earlier draft of this paragraph
+got it wrong in the one place it would cost most.** That draft said the port already reads the
+user's media directory for DTRH *"under a contract already in force"*, and concluded `sizable`
+partly from that grant. **The grant does not reach this surface.** The only owner clause governing
+what a web core may expose is `client/docs/capability-inventory.md:260` — *"The host exposes only
+the required roots: bundled game files, user media, bundled Chaos art, saved Loom GIFs, and the
+active mod's DTRH subfolder"* — and it sits under `## Down the Rabbit Hole` (`:226`) →
+`### Page boot and content` (`:254`). All three user-media clauses there (`:260`, `:282`, `:293`)
+are **DTRH-scoped**, and neither owner document carries a product-wide web-core or payload-host
+contract. **No clause covers a Goon host's roots, because no Goon host exists.**
+
+**The verdict is unchanged and the reason is narrower: `sizable` rests on none of §4.2's five
+triggers firing, not on an existing grant covering this use.** No sensor opens, no new class of
+data is stored, no destination is added, nothing is shared with another person, nothing is sold —
+the bytes are enumerated on the machine and handed to a page running on the same machine. That is
+the test §4.2 actually specifies, and it is the whole of what carries this row.
+
+**This is `census.md:24` — "a right number that means something else gets trusted" — happening to
+its own author, in the sentence that flips a user-media capability from owner-gated to sizable.**
+Every mechanical leg of the inversion verifies; it was the contract leg that asserted a grant it did
+not have. Recorded rather than quietly corrected, because the failure mode is this document's
+subject.
+
+What `manifest` must NOT become is a route by which that inventory leaves the machine; that is §6.2,
+and this unit has no channel to leave by. **The roots a Goon host would expose are a separate,
+contract-silent question — §6.8.**
 
 **THE THINNEST JOINT IN THIS DERIVATION, named rather than asserted.** Clause 2's *"independently
 user-observable"* is the one predicate that is a judgement, and this unit sits on its edge in a
