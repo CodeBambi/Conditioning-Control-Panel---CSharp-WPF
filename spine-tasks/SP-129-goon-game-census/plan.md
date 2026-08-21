@@ -584,3 +584,114 @@ a share it published as 96.5%, so the claim would have survived drift to 91%.
 **I do not know, at the moment of writing this, whether R1 or R2 is right, what fraction of either is
 this surface, what the networking actually does, or what the verdict will be.** That is the point of
 committing this file first.
+
+---
+
+## 13. Revision 2 — the plan-gate rulings, adopted BEFORE any mapping began
+
+Plan **APPROVED** at the gate; the reviewer verified every §11 citation against this worktree and
+returned six rulings plus one practical hazard. They change RULES, so they are written here rather
+than left in a message, and they bind the census. Nothing under `Services/GoonGame/` or
+`Resources/web/goon/` had been opened when this section was written, so §12's abstention still
+holds.
+
+### 13.1 (Ruling 1) The attribution buckets get a precedence order, a residue bucket, and a fifth label
+
+§5.1's four buckets are **neither provably exhaustive nor disjoint**, which the gate caught and I had
+not: a dead file, a stray asset or an unreferenced helper fits none of them, and a file can satisfy
+both `FOREIGN` and `SHARED`. **A mis-fit file must never be forced into `THIS SURFACE` by the absence
+of anywhere else to put it** — that is the one direction that inflates the numerator.
+
+Also, `FOREIGN` was the wrong label for a vendored dependency: a library required to render THIS
+surface's page is a **dependency of this surface**, not another surface's behaviour. The disposition
+was right; the label was stretched.
+
+**Replacement rule — evaluated in this order, first match wins. One bucket per file, always.**
+
+| # | Bucket | Assigned iff |
+|---|---|---|
+| 1 | **ALREADY SHIPPED IN THE PORT** | It corresponds to a module `client/src/**` already carries (§5.2 walk). Highest precedence because it is the most decision-relevant and the check most often skipped. |
+| 2 | **SHARED** | At least one compile-time consumer outside this surface names its types (M4). **The consumer list is printed.** Outranks `FOREIGN`, because a file with outside consumers is a subsystem question whichever surface authored it. |
+| 3 | **FOREIGN** | It implements a **different surface's** behaviour and merely shares a directory, a tree or a merge with this one. |
+| 4 | **VENDORED** | Third-party bytes the surface **depends on** to run — a library, a font, a polyfill — authored outside this product. **Not this surface's implementation, but required to serve it.** |
+| 5 | **THIS SURFACE** | It implements one of §4.1's noun phrases, or exists only to serve a file that does, **and** buckets 1-4 do not apply. The two-part test (noun phrase AND consumer closure) and its printed evidence are unchanged. |
+| 6 | **UNATTRIBUTED — \<reason\>** | None of the above fits. **The reason is written out per file.** A non-empty residue is a finding to report, never a bucket to empty by reassignment. |
+
+The published fraction is `THIS SURFACE / total`, with buckets 1-4 and 6 enumerated beside it.
+
+### 13.2 (Ruling 1c) The fraction and the serving cost are printed adjacent, never one without the other
+
+§5.3 and §7 must print, side by side and in the same table: **the this-surface fraction** and **the
+full count of files that must be served to render the surface** (`THIS SURFACE` + `VENDORED` + any
+other bucket the page loads). They answer different questions, and a reader who sees only the
+fraction would under-read the serving cost — the SP-127 trap running in mirror image.
+
+### 13.3 (Ruling 2) The walk is BOTH run in place AND committed as a byte-identical copy
+
+My argument that a copy is weaker was wrong in one direction, and the correction is right: **a copy
+whose sha256 is asserted equal to the original's is exactly as strong, and it additionally survives
+the SP-127 folder being deleted or changed.** So:
+
+- `spine-tasks/SP-129-goon-game-census/walk.mjs` is committed, **byte-identical**, sha256
+  `460c93558d7112f4caf35ffc5669bdc609f1f2ee7afec92d5e2a8b3e8bf54fa5`. It is **not modified**.
+- The census asserts the hash equality of the two paths and **states which path each invocation
+  actually used**.
+
+### 13.4 (Ruling 3) Historical fractions are DISCLAIMED, not pinned — said explicitly
+
+§8.2's "every fraction is pinned EXACTLY, no `>` threshold anywhere" collides with M2's merge-delta
+measurements, which are **historical** (`git diff --diff-filter=A` against one commit) and cannot
+re-derive from today's bytes. Read with §8.2's fourth bullet the resolution is already
+"pinned or disclaimed", and the gate is right that leaving it implicit would later force a choice
+between a false pin and a weakened one. **Stated explicitly and binding:**
+
+| Kind of number | Disposition |
+|---|---|
+| Re-derivable from today's shipping bytes | **PINNED EXACTLY** in §9. No `>` threshold, no tolerance. |
+| Historical — a merge delta, a `git diff`, a count at a past commit | **DISCLAIMED BY NAME** in the "does not prove" section, with its denominator and the command that produced it. **Never pinned**, because a pin that cannot re-derive is a pin that will one day be wrong and green. |
+
+There is still no third state.
+
+### 13.5 (Ruling 3b) The numeric-token sweep — build it, watch it red, and never weaken it to ship it
+
+Adopted: one fact extracts **every numeric token** from `client/docs/goon-game-census.md` and asserts
+each is either present in the §9 pin table or named in the "does not prove" section. This is exactly
+the property SP-127 lost and the only mechanism that would have caught it.
+
+**The constraint, and it is the whole value of the fact:** every exclusion is a **CLASS enumerated in
+the fact** — the `File.cs:NNN` citation form, ISO dates, version numbers, section references — and
+**never a list of individual literals.** A literal-exclusion list is an escape hatch that eats the
+property. **I will add an unpinned number to the census and watch the fact go red naming it, before
+shipping it**, and the transcript goes in `record.md`. **If the exclusion classes cannot be kept
+honest without becoming a literal list, I ship no weakened version**: I record it as a finding, with
+a board row, and say why.
+
+### 13.6 (Ruling 4) The owner-flagged sections follow D225's shape exactly
+
+`client/docs/wpf-surface-reachability.md:1469` is the standing precedent and the census follows it
+without deviation: it **names the endpoint, the exact service file and the request lines, and every
+toggle**, while stating **"OWNER-GATED and deliberately not priced."** Describing a boundary is not
+broadening it under `constitution.md:37`; refusing to describe it makes the owner's decision
+undecidable. So §6.2 stands, and the shape of every gated section in this census is D225's.
+
+### 13.7 (Ruling 5) The audio tension is quoted WITH its container
+
+`capability-inventory.md:69` is quoted **together with its section header** `## Webcam, face, and
+gaze tracking` (`:66`) and with the subject of the bullet it terminates (frames, crops, tensors,
+landmarks, per-frame biometric derivatives). Whether *"Audio capture is never opened."* is a
+product-wide prohibition on the microphone or a property of the vision pipeline is **genuinely open
+on the text**, and the census presents the scope question rather than a bare sentence. **The
+resolution is the owner's**, and the census says so in those words.
+
+### 13.8 (Ruling 6) The floor.json read-disclosure is carried verbatim into `record.md`
+
+Not paraphrased and not summarised, so the final reviewer reads it rather than inferring it.
+
+### 13.9 (Hazard) The walk runs FROM THIS WORKTREE, and the `.claude/` hit count is printed
+
+U0 is the repository root. **The MAIN checkout's `.claude/worktrees/` holds full copies of the
+tree** — two exist right now — so the same U0 walk run from there would double-count everything.
+This worktree's own `.claude/` holds only `README.md`, `agents`, `settings*.json`, `skills`. So the
+census **records that the walk ran from this worktree, names the worktree path, and prints the
+`.claude/` hit count** for every U0-wide sweep, so a future re-run cannot inflate silently and a
+reader can tell immediately whether it did.
