@@ -232,6 +232,13 @@ public class GoonPracticeHeadlessTests
         // And it says what IS missing, per door.
         Assert.Contains("no outbound network connection", rendered, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("opens no capture device", rendered, StringComparison.OrdinalIgnoreCase);
+
+        // ...AND the residual that keeps that sentence honest (D250). A host that opens nothing is
+        // not a build in which nothing can open: the voice screen is reachable and its recorder
+        // calls getUserMedia, so WebView2's own prompt can still ask. Asserting only the tightening
+        // let the rail claim "voice notes are not in this build" while the page's recorder stayed
+        // live — the guard enforced the overstatement rather than catching it (wave-65 land).
+        Assert.Contains("the browser can still ask you", rendered, StringComparison.OrdinalIgnoreCase);
         return Task.CompletedTask;
     });
 

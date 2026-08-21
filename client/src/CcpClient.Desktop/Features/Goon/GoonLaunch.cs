@@ -8,8 +8,12 @@ namespace CcpClient.Desktop.Features.Goon;
 /// SP-130: THE one place a <see cref="GoonHostWindow"/> is constructed — the
 /// <see cref="Navigation.LoomLaunch"/> / <see cref="Dtrh.DtrhLaunch"/> /
 /// <see cref="Intake.IntakeLaunch"/> pattern: one construction site, several callers, no second
-/// launcher. Both callers go through it: the Play page's Goon card (the user path) and the
-/// <c>--goon-demo</c> flag in <c>App.axaml.cs</c> (the headed-evidence path).
+/// launcher. There is exactly ONE caller today: the Play page's Goon card (the user path). A
+/// <c>--goon-demo</c> flag was granted for the headed-evidence path and is NOT BUILT (D259) —
+/// wiring it needs <c>Program.cs</c> (where <c>--intake-demo</c> is parsed and threaded into
+/// <c>App</c>), a fourth file outside that grant, so a flag in <c>App.axaml.cs</c> alone would
+/// have been a dial nothing could turn. Corrected at the wave-65 land: the earlier wording here
+/// described that flag in the present tense as though it existed.
 ///
 /// <para><b>There is no gate here, and that is the ported fact, not an omission.</b> Upstream's
 /// Goon card is an unconditional door — <c>Views/Tabs/PlayTabView.xaml:547-549</c> refuses to

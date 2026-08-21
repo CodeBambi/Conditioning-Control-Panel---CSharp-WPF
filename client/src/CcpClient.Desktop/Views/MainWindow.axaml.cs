@@ -70,7 +70,8 @@ public partial class MainWindow : Window
         // the LoomLaunch/DtrhLaunch convention two waves already depend on.
         Intake = new Features.Intake.IntakeLaunch(host, this, intakeHarness);
         // SP-130: the ONE Goon construction site (Features/Goon/GoonLaunch.cs). Same
-        // convention: --goon-demo reaches THIS object rather than building a second one.
+        // convention: any second caller would reach THIS object rather than build another.
+        // (--goon-demo was granted and is NOT built -- D259; see GoonLaunch's class doc.)
         // No entitlement argument, and that is upstream's fact rather than an omission --
         // the Goon card is an unconditional door (Views/Tabs/PlayTabView.xaml:547-549) and
         // the paid rungs live inside, on hosting and sending (GoonHostService.cs:894,:909),
@@ -215,8 +216,9 @@ public partial class MainWindow : Window
     /// <c>--intake-demo</c> reaches the SAME coordinator the user path builds).</summary>
     public Features.Intake.IntakeLaunch Intake { get; }
 
-    /// <summary>The one Goon practice launch path (public so tests drive the real seam, and so
-    /// <c>--goon-demo</c> reaches the SAME launcher the user path builds).</summary>
+    /// <summary>The one Goon practice launch path (public so tests drive the real seam, and so any
+    /// future second caller reaches the SAME launcher the user path builds — <c>--goon-demo</c> was
+    /// granted and is NOT built, D259).</summary>
     public Features.Goon.GoonLaunch Goon { get; }
 
     /// <summary>Demonstrator popup manager (SP-013); public so tests drive the real wiring.</summary>

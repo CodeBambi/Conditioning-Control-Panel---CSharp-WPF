@@ -22,10 +22,10 @@
     },
     {
       "name": "goon",
-      "disposition": "not-ported",
+      "disposition": "served",
       "fileCountAtBaseline": 184,
-      "boardRow": "Goon Game 1v1 duel host (v6.7 — new upstream product surface) [P1 OPEN]",
-      "note": "The tree whose silent arrival (v6.6.3 -> v6.7.4, suite stayed 683/683 green) motivated this guard. Upstream Services/GoonGame/GoonHostService.cs is the host."
+      "note": "The tree whose silent arrival (v6.6.3 -> v6.7.4, suite stayed 683/683 green) motivated this guard, and it went stale in the opposite direction at the wave-65 land: SP-130 began serving it while this entry still read not-ported, and UpstreamPayloadInventoryTests validates SHAPE only -- it never compares a disposition to the csproj or the build output, so the stale entry stayed green. Flipped by the orchestrator at the land, from a blind audit. SERVING THE TREE IS NOT PLAYING THE GAME: no test has loaded the page, and duel playability is owed to a headed run.",
+      "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/goon/** -> payload/goon), the fifth instance of that pattern; served read-only through the same Features/Dtrh/LoopbackServer.cs the DTRH tree uses, bound by Features/Goon/GoonParticipant; presence probed by Features/Goon/GoonServingRoots (typed Missing/Present). Landed SP-130, wave 65: 184 upstream files = 184 goon.payload/ manifest entries = 184 files in the build output, hash-compared, zero bytes forked into client/."
     },
     {
       "name": "intake",

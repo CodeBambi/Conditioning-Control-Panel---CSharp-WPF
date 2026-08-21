@@ -98,18 +98,23 @@ public static class GoonDoors
             + "something that exists; nothing here does."),
         new GoonDoorRefusal(
             GoonDoor.VoiceNotes,
-            "Voice notes are not in this build.",
-            "Recording one opens a microphone. This build opens no capture device of any kind "
-            + "and grants no microphone permission to the page (the shipping app grants it "
-            + "unprompted; this host does not).",
+            "Sending a voice note is not in this build.",
+            "The CROSSING is what is missing: there is no peer to send one to. The host opens no "
+            + "capture device and grants the page no microphone permission (the shipping app grants "
+            + "it unprompted; this host does not) — a TIGHTENING over upstream, not a guarantee. "
+            + "The residual is WebView2's own prompt: the voice screen is reachable from the title "
+            + "menu and its recorder asks the browser for the microphone directly "
+            + "(ui/voice/recorder.js:591), so the browser can still ask you. Closing that needs a "
+            + "PermissionRequested-deny hook (D250).",
             "goon-game-census.md §6.3 / wpf-surface-reachability.md D244. capability-inventory.md:69 "
             + "ends \"Audio capture is never opened.\" — a PROHIBITION, not an open question; what is "
             + "undecided is only its scope, because it sits inside 'Webcam, face, and gaze tracking' "
             + "(:66) in a bullet about frames and biometric derivatives. Either way :70 gates a "
             + "microphone as expanding sensors, which needs owner review.",
             "The voice screen says \"sending your voice to an opponent is a supporter perk\" "
-            + "(ui/strings.js:731 via ui/screens/voice.js:138-140). Upstream gates only the "
-            + "SENDING; here the whole feature is absent."),
+            + "(ui/strings.js:731 via ui/screens/voice.js:138-140). Upstream gates the SENDING and "
+            + "so does this build — but the page's own recording, playback and deletion stay LIVE "
+            + "and local (ui/screens/voice.js:118-124), so the screen is not absent."),
         new GoonDoorRefusal(
             GoonDoor.MediaSetup,
             "Sending your own media is not in this build.",
@@ -118,9 +123,14 @@ public static class GoonDoors
             + "machine's own page and goes nowhere else.",
             "goon-game-census.md §6.2 / wpf-surface-reachability.md D248 — user media reaching "
             + "another person is an owner decision.",
-            "The assets screen says \"compression lives in the app … this page is running in a "
-            + "plain browser\" (ui/strings.js:751-752, ui/screens/assets.js:83). It is running "
-            + "in the app; upstream has no card for \"in the app, no cache\"."),
+            "Upstream's standalone card — \"compression lives in the app … this page is running "
+            + "in a plain browser\" (ui/strings.js:751-752) — is NOT shown here. It sits behind "
+            + "if (!store) (ui/screens/assets.js:82-84) and boot.js:2187 creates the store "
+            + "unconditionally, so with assetCache:false the screen runs showUnavailable() and "
+            + "renders a LOCAL MEDIA card instead (ui/screens/assets.js:543-548 — \"No host cache "
+            + "does NOT mean no library any more\"). This door is the one of the four whose page "
+            + "text is not wrong, only absent. Corrected at the wave-65 land, where the earlier "
+            + "wording cited a branch this build cannot reach."),
     ];
 
     /// <summary>True when <paramref name="door"/> is refused by <paramref name="refusals"/>.</summary>
