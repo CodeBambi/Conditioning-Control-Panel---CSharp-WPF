@@ -132,6 +132,13 @@ baseline**.
 **AFTER**, at `26a9b2ec4`:
 `Passed! Failed: 0, Passed: 2606, Skipped: 2, Total: 2608 — CcpClient.Tests.dll`.
 Failure set = **{ }** — empty.
+
+**FINAL VERIFICATION**, at `88bb3333a`, two consecutive full runs: the first carried
+`Failed: 1` and the second `Failed: 0`, both `Total: 2608`. The one failure was identified from the
+preserved TRX (`ccp-floor-Y2lLDG`) as the **same** `SoundArbitrationTests` strand already in the
+BEFORE set, byte-identical message — **not** one of this packet's facts, and not a new name. It is
+written up as observation B in §8 with its own isolation runs. So across every run in this packet
+the failure set is a subset of { that one strand } and contains nothing else.
 `node client/tests/floor/check-floor.mjs` reports `FLOOR VIOLATION — total drift: 2608 result(s)
 (pin total 2599)`. **That is the expected and declared outcome, not a failure:** pin 2599 +
 declared delta 9 = **2608 observed**. `sum-deltas.mjs` independently computes
@@ -150,10 +157,25 @@ Prior sightings: `SP-133/record.md:220-245` ("failed once in ten runs") and
 `SP-135/record.md:248-262` (first full run after the ledger edit, 3/3 clean in isolation). Mine is
 the third recorded and the fourth overall.
 
-**My observation, in full.** It appeared on the baseline run with another lane building
-concurrently through the 3-slot gate. Re-run in isolation through the same wrapper,
-`--filter FullyQualifiedName~SoundArbitrationTests`: **`Passed! Failed: 0, Passed: 52, Total: 52`**.
-It did **not** recur on the after-run (`Failed: 0` over the full 2608). The assertion is
+**I observed it TWICE in this packet, so these are the fourth and fifth sightings overall. Neither
+is signed off as "a known flake"; each gets its own isolation run and its own line, per the
+standing rule.**
+
+- **Observation A (baseline, at `766be7ac0`, before any edit).**
+  `Failed: 1, Passed: 2596, Skipped: 2, Total: 2599`. Isolation re-run through the same wrapper,
+  `--filter FullyQualifiedName~SoundArbitrationTests`: **`Passed! Failed: 0, Passed: 52, Total: 52`**.
+- **Observation B (final verification, at `88bb3333a`).** It RECURRED:
+  `Failed: 1, Passed: 2605, Skipped: 2, Total: 2608`, TRX `ccp-floor-Y2lLDG`,
+  `Assert.Equal() Failure: Values differ / Expected: 1 / Actual: 0` — byte-identical message and
+  the same test name as observation A. **Identified from the preserved TRX rather than assumed**,
+  precisely so it could be distinguished from a failure of my own. Isolation re-run **three times**:
+  **52/52, 52/52, 52/52.** The immediately following full floor run at the same head was clean
+  (`Failed: 0, Passed: 2606, Skipped: 2, Total: 2608`, TRX `ccp-floor-hHHyi0`).
+- Across this packet: **4 full-suite runs of the unit project, 2 clean and 2 carrying this one
+  failure**, all four with lane-mates building concurrently through the 3-slot gate. That is a
+  markedly higher rate than SP-133's "once in ten runs" and is worth carrying into the escalation.
+
+The assertion is
 `SoundArbitrationTests.cs:1560`, `Assert.Equal(1, Volatile.Read(ref h.ConstructCount));` — a
 thread-pool injection failure inside `ConstructionBudget = TimeSpan.FromMilliseconds(200)`
 (`:1106`), which is a real wall-clock timeout in the PRODUCT's construction path and not a
