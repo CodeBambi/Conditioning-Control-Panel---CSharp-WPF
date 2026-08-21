@@ -141,7 +141,7 @@ public class AssetManifestTests
         // spine-tasks/SP-061-chaos-tunnel-backdrop/record.md Step 1).
         var entries = LoadRealManifest();
         var copied = entries.Where(e => e.Source == AssetSource.Copied).ToArray();
-        Assert.Equal(3700, copied.Length);
+        Assert.Equal(3884, copied.Length);
         Assert.Contains(copied, e => e.Id == "dtrh.payload/bridge.js"
             && e.Path == "payload/dtrh/bridge.js" && e.Required && e.Trust == "full");
         Assert.Contains(copied, e => e.Id == "dtrh.overlay/bridge.js"

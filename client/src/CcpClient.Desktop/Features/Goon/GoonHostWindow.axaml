@@ -1,0 +1,51 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Features.Goon.GoonHostWindow"
+        Title="Goon Game — Practice"
+        Width="1280" Height="800"
+        WindowStartupLocation="CenterScreen"
+        Background="#0b0b16">
+  <!--
+    SP-130 Goon practice host shell (the landed IntakeHostWindow pattern). The embedded
+    NativeWebView is the WINDOWS surface (WebView2). The Linux NativeWebDialog path is NOT
+    ADMITTED: the goon page's bridge speaks window.chrome.webview only (bridge.js:45-47,
+    :65-67, :93-95), so a dialog would run the page STANDALONE — it would synthesize its own
+    init (bridge.js:473) and silently ignore every one of this host's door refusals. Where the
+    embedded capability is not Available the honest surface shows: typed, never a substitute.
+
+    THE REFUSAL RAIL on the right is not decoration and is not dismissible. Four of the title
+    screen's items lead into goon-game-census.md §6 and the page's own refusals for all four
+    are FALSE in this build (see GoonDoors). This rail is where the true sentence lives, and it
+    is beside the page rather than behind a click for exactly that reason.
+  -->
+  <DockPanel>
+    <TextBlock x:Name="Status" DockPanel.Dock="Bottom"
+               Foreground="#ff9ad5" Background="#141422" Padding="6"
+               FontFamily="Consolas" FontSize="12"
+               Text="goon host booting" />
+
+    <Border x:Name="RefusalRail" DockPanel.Dock="Right"
+            Width="340" Background="#141422" BorderBrush="#2a2a44" BorderThickness="1,0,0,0">
+      <ScrollViewer>
+        <StackPanel Margin="16" Spacing="12">
+          <TextBlock Foreground="#ff9ad5" FontSize="16" FontWeight="Bold"
+                     Text="This build plays Practice only" />
+          <TextBlock x:Name="RailLead" Foreground="#c8c8dd" TextWrapping="Wrap" FontSize="12"
+                     Text="Practice is a complete duel against the scripted opponent. Four other menu items are not in this build, and the page's own explanations for them are wrong here — these are the real ones." />
+          <StackPanel x:Name="RefusalPanel" Spacing="12" />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <Panel>
+      <StackPanel x:Name="UnsupportedPanel" IsVisible="False" Margin="24" Spacing="8">
+        <TextBlock Foreground="#ff9ad5" FontSize="18" FontWeight="Bold"
+                   Text="Goon Game: honest unsupported" />
+        <TextBlock x:Name="UnsupportedDetail" Foreground="#c8c8dd" TextWrapping="Wrap" />
+      </StackPanel>
+      <!-- NativeWebView is created PROGRAMMATICALLY on the embedded path only (the SP-011 L4
+           lesson: in the tree it starts its adapter whenever the window shows). -->
+      <Panel x:Name="WebHost" />
+    </Panel>
+  </DockPanel>
+</Window>

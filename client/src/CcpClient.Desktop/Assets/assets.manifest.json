@@ -55605,6 +55605,2766 @@
       ],
       "overridePolicy": "none",
       "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/bubbles/video.png",
+      "source": "copied",
+      "path": "payload/goon/assets/bubbles/video.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/goon_game_logo.png",
+      "source": "copied",
+      "path": "payload/goon/assets/goon_game_logo.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/icons/apple-touch-icon.png",
+      "source": "copied",
+      "path": "payload/goon/assets/icons/apple-touch-icon.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/icons/icon-192.png",
+      "source": "copied",
+      "path": "payload/goon/assets/icons/icon-192.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/icons/icon-512.png",
+      "source": "copied",
+      "path": "payload/goon/assets/icons/icon-512.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/items/item_braindrain.png",
+      "source": "copied",
+      "path": "payload/goon/assets/items/item_braindrain.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/items/item_bubbles.png",
+      "source": "copied",
+      "path": "payload/goon/assets/items/item_bubbles.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/items/item_emote.png",
+      "source": "copied",
+      "path": "payload/goon/assets/items/item_emote.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/items/item_flash.png",
+      "source": "copied",
+      "path": "payload/goon/assets/items/item_flash.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/items/item_lockcard.png",
+      "source": "copied",
+      "path": "payload/goon/assets/items/item_lockcard.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/items/item_spiral.png",
+      "source": "copied",
+      "path": "payload/goon/assets/items/item_spiral.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/items/item_subliminal.png",
+      "source": "copied",
+      "path": "payload/goon/assets/items/item_subliminal.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/items/item_toy.png",
+      "source": "copied",
+      "path": "payload/goon/assets/items/item_toy.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/items/item_video.png",
+      "source": "copied",
+      "path": "payload/goon/assets/items/item_video.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/monitor_frame.png",
+      "source": "copied",
+      "path": "payload/goon/assets/monitor_frame.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/briefing-open-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/briefing-open-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/captcha-logged-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/captcha-logged-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/captcha-reject-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/captcha-reject-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/captcha-reject-2.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/captcha-reject-2.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/captcha-rewarp-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/captcha-rewarp-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/captcha-verify-ok-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/captcha-verify-ok-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/card-melt-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/card-melt-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/card-melt-2.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/card-melt-2.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/checkbox-tick-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/checkbox-tick-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/chime-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/chime-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/custody-log-tick-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/custody-log-tick-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/custody-log-tick-2.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/custody-log-tick-2.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/custody-stamp-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/custody-stamp-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/error-blip-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/error-blip-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/freeze-sting-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/freeze-sting-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/gaze-lock-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/gaze-lock-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/gaze-lock-2.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/gaze-lock-2.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/giggle-7.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/giggle-7.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/gold_toggle.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/gold_toggle.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/grid-settle-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/grid-settle-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/grid-tile-flicker-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/grid-tile-flicker-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/grid-tile-flicker-2.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/grid-tile-flicker-2.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/loom-spiral-down-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/loom-spiral-down-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/loom-spiral-up-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/loom-spiral-up-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/rank_settle.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/rank_settle.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/slip_dling.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/slip_dling.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/stamp_thud.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/stamp_thud.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/sticker-drag-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/sticker-drag-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/surface-bloom-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/surface-bloom-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/ticket_reveal.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/ticket_reveal.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/verify-lock-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/verify-lock-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/verify-resolve-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/verify-resolve-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/verify-rewind-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/verify-rewind-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/verify-rewind-2.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/verify-rewind-2.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/verify-tick-1.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/verify-tick-1.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/verify-tick-2.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/verify-tick-2.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/assets/sfx/void_pop.mp3",
+      "source": "copied",
+      "path": "payload/goon/assets/sfx/void_pop.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/boot.js",
+      "source": "copied",
+      "path": "payload/goon/boot.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/bridge.js",
+      "source": "copied",
+      "path": "payload/goon/bridge.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/caps.js",
+      "source": "copied",
+      "path": "payload/goon/core/caps.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/clock.js",
+      "source": "copied",
+      "path": "payload/goon/core/clock.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/contracts.js",
+      "source": "copied",
+      "path": "payload/goon/core/contracts.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/draft.js",
+      "source": "copied",
+      "path": "payload/goon/core/draft.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/match.js",
+      "source": "copied",
+      "path": "payload/goon/core/match.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/rng.js",
+      "source": "copied",
+      "path": "payload/goon/core/rng.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/rounds/bubbleRace.js",
+      "source": "copied",
+      "path": "payload/goon/core/rounds/bubbleRace.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/rounds/model.js",
+      "source": "copied",
+      "path": "payload/goon/core/rounds/model.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/rounds/quickDraw.js",
+      "source": "copied",
+      "path": "payload/goon/core/rounds/quickDraw.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/rounds/reactionDuel.js",
+      "source": "copied",
+      "path": "payload/goon/core/rounds/reactionDuel.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/rounds/staringContest.js",
+      "source": "copied",
+      "path": "payload/goon/core/rounds/staringContest.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/scheduler.js",
+      "source": "copied",
+      "path": "payload/goon/core/scheduler.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/scoring.js",
+      "source": "copied",
+      "path": "payload/goon/core/scoring.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/suddenDeath.js",
+      "source": "copied",
+      "path": "payload/goon/core/suddenDeath.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/core/wire.js",
+      "source": "copied",
+      "path": "payload/goon/core/wire.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/encode/encodeWorker.js",
+      "source": "copied",
+      "path": "payload/goon/encode/encodeWorker.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/encode/gifDecode.js",
+      "source": "copied",
+      "path": "payload/goon/encode/gifDecode.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/bouncingText.js",
+      "source": "copied",
+      "path": "payload/goon/exec/bouncingText.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/brainDrain.js",
+      "source": "copied",
+      "path": "payload/goon/exec/brainDrain.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/bubbles.js",
+      "source": "copied",
+      "path": "payload/goon/exec/bubbles.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/executor.js",
+      "source": "copied",
+      "path": "payload/goon/exec/executor.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/flashes.js",
+      "source": "copied",
+      "path": "payload/goon/exec/flashes.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/fx.css",
+      "source": "copied",
+      "path": "payload/goon/exec/fx.css",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/layers.js",
+      "source": "copied",
+      "path": "payload/goon/exec/layers.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/loadGovernor.js",
+      "source": "copied",
+      "path": "payload/goon/exec/loadGovernor.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/lockCards.js",
+      "source": "copied",
+      "path": "payload/goon/exec/lockCards.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/media.js",
+      "source": "copied",
+      "path": "payload/goon/exec/media.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/perfTier.js",
+      "source": "copied",
+      "path": "payload/goon/exec/perfTier.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/pinch.js",
+      "source": "copied",
+      "path": "payload/goon/exec/pinch.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/receivedStore.js",
+      "source": "copied",
+      "path": "payload/goon/exec/receivedStore.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/sanitize.js",
+      "source": "copied",
+      "path": "payload/goon/exec/sanitize.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/spiral.js",
+      "source": "copied",
+      "path": "payload/goon/exec/spiral.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/spiralField.js",
+      "source": "copied",
+      "path": "payload/goon/exec/spiralField.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/spiralGen.js",
+      "source": "copied",
+      "path": "payload/goon/exec/spiralGen.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/subliminals.js",
+      "source": "copied",
+      "path": "payload/goon/exec/subliminals.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/toys.js",
+      "source": "copied",
+      "path": "payload/goon/exec/toys.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/exec/videos.js",
+      "source": "copied",
+      "path": "payload/goon/exec/videos.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/goon.css",
+      "source": "copied",
+      "path": "payload/goon/goon.css",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/index.html",
+      "source": "copied",
+      "path": "payload/goon/index.html",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/manifest.webmanifest",
+      "source": "copied",
+      "path": "payload/goon/manifest.webmanifest",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/blocklist.js",
+      "source": "copied",
+      "path": "payload/goon/net/blocklist.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/codecs.js",
+      "source": "copied",
+      "path": "payload/goon/net/codecs.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/fakeSignaling.js",
+      "source": "copied",
+      "path": "payload/goon/net/fakeSignaling.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/loopbackTransport.js",
+      "source": "copied",
+      "path": "payload/goon/net/loopbackTransport.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/mediaChannel.js",
+      "source": "copied",
+      "path": "payload/goon/net/mediaChannel.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/mediaQueue.js",
+      "source": "copied",
+      "path": "payload/goon/net/mediaQueue.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/relayTransport.js",
+      "source": "copied",
+      "path": "payload/goon/net/relayTransport.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/session.js",
+      "source": "copied",
+      "path": "payload/goon/net/session.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/signaling.js",
+      "source": "copied",
+      "path": "payload/goon/net/signaling.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/transportBase.js",
+      "source": "copied",
+      "path": "payload/goon/net/transportBase.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/net/webrtcTransport.js",
+      "source": "copied",
+      "path": "payload/goon/net/webrtcTransport.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/package.json",
+      "source": "copied",
+      "path": "payload/goon/package.json",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/rng-vectors.json",
+      "source": "copied",
+      "path": "payload/goon/test/rng-vectors.json",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-assets.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-assets.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-avafx.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-avafx.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-coach.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-coach.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-core.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-core.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-encode.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-encode.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-exec.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-exec.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-flow.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-flow.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-hostgate.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-hostgate.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-hud.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-hud.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-invite.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-invite.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-net.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-net.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-report.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-report.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-transfer.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-transfer.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-voice-ui.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-voice-ui.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/selftest-voice.js",
+      "source": "copied",
+      "path": "payload/goon/test/selftest-voice.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/vectors-engine.js",
+      "source": "copied",
+      "path": "payload/goon/test/vectors-engine.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/vectors-rounds.js",
+      "source": "copied",
+      "path": "payload/goon/test/vectors-rounds.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/test/vectors.js",
+      "source": "copied",
+      "path": "payload/goon/test/vectors.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/announcer.js",
+      "source": "copied",
+      "path": "payload/goon/ui/announcer.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/arsenal.js",
+      "source": "copied",
+      "path": "payload/goon/ui/arsenal.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/assetsStore.js",
+      "source": "copied",
+      "path": "payload/goon/ui/assetsStore.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/attention.js",
+      "source": "copied",
+      "path": "payload/goon/ui/attention.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/audio.js",
+      "source": "copied",
+      "path": "payload/goon/ui/audio.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/avatar.js",
+      "source": "copied",
+      "path": "payload/goon/ui/avatar.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/avatarFx.js",
+      "source": "copied",
+      "path": "payload/goon/ui/avatarFx.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/avatarfx.css",
+      "source": "copied",
+      "path": "payload/goon/ui/avatarfx.css",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/closeness.js",
+      "source": "copied",
+      "path": "payload/goon/ui/closeness.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/coach.js",
+      "source": "copied",
+      "path": "payload/goon/ui/coach.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/debugOverlay.js",
+      "source": "copied",
+      "path": "payload/goon/ui/debugOverlay.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/discord.js",
+      "source": "copied",
+      "path": "payload/goon/ui/discord.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/droneBed.js",
+      "source": "copied",
+      "path": "payload/goon/ui/droneBed.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/drops.js",
+      "source": "copied",
+      "path": "payload/goon/ui/drops.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/emotes.js",
+      "source": "copied",
+      "path": "payload/goon/ui/emotes.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/hud.css",
+      "source": "copied",
+      "path": "payload/goon/ui/hud.css",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/hud.js",
+      "source": "copied",
+      "path": "payload/goon/ui/hud.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/inviteLink.js",
+      "source": "copied",
+      "path": "payload/goon/ui/inviteLink.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/localCompress.js",
+      "source": "copied",
+      "path": "payload/goon/ui/localCompress.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/mercy.js",
+      "source": "copied",
+      "path": "payload/goon/ui/mercy.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/opponent.js",
+      "source": "copied",
+      "path": "payload/goon/ui/opponent.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/options.js",
+      "source": "copied",
+      "path": "payload/goon/ui/options.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/perfProbe.js",
+      "source": "copied",
+      "path": "payload/goon/ui/perfProbe.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/prefs.js",
+      "source": "copied",
+      "path": "payload/goon/ui/prefs.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/report.js",
+      "source": "copied",
+      "path": "payload/goon/ui/report.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/router.js",
+      "source": "copied",
+      "path": "payload/goon/ui/router.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens.css",
+      "source": "copied",
+      "path": "payload/goon/ui/screens.css",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/assets.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/assets.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/countdown.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/countdown.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/draft.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/draft.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/host.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/host.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/join.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/join.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/lobby.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/lobby.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/mediaSetup.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/mediaSetup.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/recap.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/recap.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/title.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/title.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/screens/voice.js",
+      "source": "copied",
+      "path": "payload/goon/ui/screens/voice.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/sd/bubbles.js",
+      "source": "copied",
+      "path": "payload/goon/ui/sd/bubbles.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/sd/index.js",
+      "source": "copied",
+      "path": "payload/goon/ui/sd/index.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/sd/intro.js",
+      "source": "copied",
+      "path": "payload/goon/ui/sd/intro.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/sd/quickdraw.js",
+      "source": "copied",
+      "path": "payload/goon/ui/sd/quickdraw.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/sd/reaction.js",
+      "source": "copied",
+      "path": "payload/goon/ui/sd/reaction.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/sd/staring.js",
+      "source": "copied",
+      "path": "payload/goon/ui/sd/staring.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/sd/verdict.js",
+      "source": "copied",
+      "path": "payload/goon/ui/sd/verdict.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/sheets.js",
+      "source": "copied",
+      "path": "payload/goon/ui/sheets.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/soloDriver.js",
+      "source": "copied",
+      "path": "payload/goon/ui/soloDriver.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/strings.js",
+      "source": "copied",
+      "path": "payload/goon/ui/strings.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/throwPreview.js",
+      "source": "copied",
+      "path": "payload/goon/ui/throwPreview.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/toasts.js",
+      "source": "copied",
+      "path": "payload/goon/ui/toasts.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/voice/micHud.js",
+      "source": "copied",
+      "path": "payload/goon/ui/voice/micHud.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/voice/noteStore.js",
+      "source": "copied",
+      "path": "payload/goon/ui/voice/noteStore.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/voice/recorder.js",
+      "source": "copied",
+      "path": "payload/goon/ui/voice/recorder.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/voice/voiceService.js",
+      "source": "copied",
+      "path": "payload/goon/ui/voice/voiceService.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/wakeLock.js",
+      "source": "copied",
+      "path": "payload/goon/ui/wakeLock.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/ui/zipReader.js",
+      "source": "copied",
+      "path": "payload/goon/ui/zipReader.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/vendor/fflate/LICENSE",
+      "source": "copied",
+      "path": "payload/goon/vendor/fflate/LICENSE",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/vendor/fflate/fflate.module.js",
+      "source": "copied",
+      "path": "payload/goon/vendor/fflate/fflate.module.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/vendor/mp4-muxer/LICENSE",
+      "source": "copied",
+      "path": "payload/goon/vendor/mp4-muxer/LICENSE",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "goon.payload/vendor/mp4-muxer/mp4-muxer.mjs",
+      "source": "copied",
+      "path": "payload/goon/vendor/mp4-muxer/mp4-muxer.mjs",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Goon Game payload tree ConditioningControlPanel/Resources/web/goon @ git tree 64634d4abaa84980bc615dba4f16c2509e722ce0 (added in main commit ee56ac46a feat(goon): browser client wave 1 - core protocol port, page shell, C# host; last touched f7b4c317c feat(media): remote media app-wide), copied unmodified at build via linked Content glob (SP-130)",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
     }
   ]
 }

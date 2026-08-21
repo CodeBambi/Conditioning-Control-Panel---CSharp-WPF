@@ -189,5 +189,50 @@
         </Border>
       </Panel>
     </Border>
+
+    <!-- SP-130 - THE GOON DOOR. Upstream's Goon card sits on this same tab
+         (Views/Tabs/PlayTabView.xaml:550, opened by BtnStartGoon_Click at
+         MainWindow/MainWindow.Lab.cs:198) and carries NO lock band, because joining is free by
+         design: ":547-549" says the two paid rungs are named in a sub-line, "never a padlock
+         over an open door". This door is ungated for the same reason and is not a gate port.
+
+         WHAT THE DOOR SAYS IS WHAT IT DOES. It offers Practice and says so in its own label and
+         sub-line, because that is the whole of what this build has (goon-game-census.md 7.1 -
+         the buildable unit). The four owner-gated siblings are named on the host window's
+         refusal rail, typed, the moment it opens - never here as a teaser and never as a
+         "coming soon". -->
+    <Border Classes="hero" Margin="0,16,0,0">
+      <StackPanel Spacing="10">
+        <TextBlock x:Name="GoonTitle"
+                   Classes="hero-title"
+                   AutomationProperties.AutomationId="GoonTitle"
+                   Text="GOON GAME" />
+        <TextBlock Classes="page-blurb" MaxWidth="640" HorizontalAlignment="Left"
+                   Text="a duel of endurance against a scripted opponent: throw flashes, videos, subliminals and bubbles, build heat, and settle it in sudden death." />
+        <!-- The honest sub-line, in the door itself. -->
+        <TextBlock x:Name="GoonScopeLine"
+                   Classes="page-blurb"
+                   MaxWidth="640" HorizontalAlignment="Left"
+                   AutomationProperties.AutomationId="GoonScopeLine"
+                   Text="This build plays Practice only. Hosting, joining, voice notes and sending your own media are not in it, and the window says exactly what each one is missing." />
+        <Button x:Name="GoonPracticeButton"
+                Classes="hero-primary"
+                HorizontalAlignment="Left"
+                AutomationProperties.AutomationId="GoonPracticeButton"
+                AutomationProperties.Name="PRACTICE"
+                ToolTip.Tip="a complete duel, against the scripted opponent"
+                Content="PRACTICE" />
+        <!-- The launch fault surface, deliberately its own element: "the app broke" is not a
+             refusal, and the refusals are not faults (the same rule the DTRH card's two bands
+             follow above). -->
+        <TextBlock x:Name="GoonFaultText"
+                   Classes="fault-text"
+                   AutomationProperties.AutomationId="GoonFaultText"
+                   TextWrapping="Wrap"
+                   MaxWidth="640"
+                   IsVisible="False"
+                   Text="" />
+      </StackPanel>
+    </Border>
   </StackPanel>
 </UserControl>
