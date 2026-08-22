@@ -1,5 +1,32 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## THE BUILDABLE FRONTIER, measured 2026-08-22 — and why the port stops here without the owner
+
+**Of the five capability rows traced to code, NOT ONE is both buildable without an owner decision AND has a
+consumer.** That is the honest answer to "what is the next unbuilt capability", and it is not "nothing is left".
+
+| row | claim | traced to code |
+|---|---|---|
+| `:202` | entitlement bridge unbuilt | **BUILT** - gates DTRH at `DtrhLaunch.cs:197` |
+| `:83` | Bouncing Text blocked | **BUILT** - SP-115; `MoveTo` consumed per frame |
+| `:201` | no tray at all | **BUILT** - SP-096; `ITrayPresence`, D35, tests |
+| `:27` | Trainer Card buildable-in-part | **its named buildable unit BUILT** at SP-128 |
+| `:323` | achievement ledger unbuilt | **TRUE - and it has NO CONSUMER** |
+
+The ledger is genuinely absent, but `Wardrobe` and `TrainerCard` appear nowhere in authored `client/src`, so
+building it would gate 63 items that do not exist on a surface that does not exist. **The ledger follows its
+surface.** That surface needs assets and a rendering target, not just code.
+
+**THE BOUND ON THIS CLAIM, stated because the session's whole subject is claims outrunning their evidence:** five
+rows traced, not fifty-nine. The board carries 14 OPEN P0 and 45 OPEN P1 rows; most P0s are guard, flake and
+determinism work rather than capability. **I did not enumerate the remainder, so this says the buildable-with-
+consumer set is empty AMONG WHAT I CHECKED, not that it is empty.** The mechanical way to settle it is the row
+filed at `:342` - a machine-checkable predicate on absence rows - not another hand sweep.
+
+**What is genuinely blocking, and it is the owner:** the haptic driver, For You Feed's webcam and consent, the six
+Goon Game network items, the `:206` transmit question, the leaderboard identifier. See
+`client/docs/owner-decisions.md`. The port cannot reach WPF behavioural parity on these by writing more code.
+
 ## THE NEXT UNBUILT CAPABILITY, derived 2026-08-22 (this replaces "unnamed")
 
 - **It is the ACHIEVEMENT LEDGER, board line `:323`.** Verified against code, not read off the row:
