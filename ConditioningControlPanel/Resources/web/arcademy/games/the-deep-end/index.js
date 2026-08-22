@@ -111,6 +111,10 @@ import { compositeFor, hardGates, flavorXp } from './grade.js';
 import { DE_LEX } from './lex.js';
 import { makeTaggedRoll } from '../../core/rng.js';
 
+/** A url the <img> element cannot show (a webm/mp4 loop). Mirrors engine/util.js
+ *  VIDEO_URL_RE; games never import the engine, so the two-line rule is repeated. */
+const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
+
 const GAME_KEY = 'the_deep_end';
 
 const KEY_DIRS = Object.freeze({
@@ -593,14 +597,7 @@ export default {
         if (facesMode !== 'plain' && !tile.silt) {
           const face = el('span', 'g-de-face');
           const img = el('img', 'g-de-media');
-          try {
-            img.setAttribute('alt', '');
-            img.setAttribute('draggable', 'false');
-            img.decoding = 'async';
-            img.draggable = false;
-            img.addEventListener('load', () => { if (!dead) node.classList.add('is-loaded'); });
-            img.addEventListener('error', () => { if (!dead) faceBroken(node); });
-          } catch (e) { /* the double has no img semantics; fine */ }
+          armMedia(img, node, false);
           face.appendChild(img);
           node.appendChild(face);
           // seeded-enough desync of the ken-burns phase: the id is the spawn order
@@ -633,6 +630,49 @@ export default {
     function mediaOf(node) {
       const face = childOf(node, 'g-de-face');
       return face ? childOf(face, 'g-de-media') : null;
+    }
+    /** Wire a face's media node: is-loaded once it has a frame, faceBroken on
+     *  error. A <video> (a webm/mp4 loop - the only animated shape a remote
+     *  provider serves) is muted / looping / inline and nudged to play. */
+    function armMedia(img, node, video) {
+      if (!img) return;
+      try {
+        img.setAttribute('alt', '');
+        img.setAttribute('draggable', 'false');
+        img.draggable = false;
+        if (video) {
+          img.muted = true; img.loop = true; img.autoplay = true; img.playsInline = true;
+          img.setAttribute('muted', ''); img.setAttribute('loop', ''); img.setAttribute('autoplay', '');
+          img.setAttribute('playsinline', ''); img.setAttribute('preload', 'auto');
+          img.addEventListener('loadeddata', () => {
+            if (dead) return;
+            node.classList.add('is-loaded');
+            try { const p = img.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (e) { /* ignore */ }
+          });
+        } else {
+          img.decoding = 'async';
+          img.addEventListener('load', () => { if (!dead) node.classList.add('is-loaded'); });
+        }
+        img.addEventListener('error', () => { if (!dead) faceBroken(node); });
+      } catch (e) { /* the double has no img semantics; fine */ }
+    }
+    /** The media node that can SHOW this url: the face's <img>, swapped for a
+     *  <video> when the tier's url is a webm/mp4 loop (and back for a still).
+     *  Same class, same place in the face; the listeners are re-armed. */
+    function mediaNodeFor(node, url) {
+      const face = childOf(node, 'g-de-face');
+      if (!face) return null;
+      const cur = childOf(face, 'g-de-media');
+      const wantVideo = VIDEO_URL_RE.test(String(url || ''));
+      const isVideo = !!(cur && String(cur.tagName || '').toUpperCase() === 'VIDEO');
+      if (cur && wantVideo === isVideo) return cur;
+      const next = el(wantVideo ? 'video' : 'img', 'g-de-media');
+      armMedia(next, node, wantVideo);
+      try {
+        if (cur && typeof face.replaceChild === 'function') face.replaceChild(next, cur);
+        else face.appendChild(next);
+      } catch (e) { try { face.appendChild(next); } catch (e2) { /* ignore */ } }
+      return next;
     }
 
     /* ---- faces (pass 2): one url per tier, dealt lazily, frozen ----------- */
@@ -681,7 +721,8 @@ export default {
       }
       node.setAttribute('data-face', String(tier));
       node.classList.remove('is-loaded');
-      try { img.src = face.url; } catch (e) { /* ignore */ }
+      const media = mediaNodeFor(node, face.url) || img;
+      try { media.src = face.url; } catch (e) { /* ignore */ }
     }
     /** A url that failed: this tier goes plain for the rest of the class (no retry storm). */
     function faceBroken(node) {

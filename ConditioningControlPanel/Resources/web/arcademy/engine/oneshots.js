@@ -23,7 +23,7 @@ import {
   NODE_CAPS, DUCK, subFlashSpec, glitchSpec, gifBurstSpec,
   burstCountForHeat, burstOpacityForHeat,
 } from './curves.js';
-import { rand, pickFrom, hasDom } from './util.js';
+import { rand, pickFrom, hasDom, mediaEl } from './util.js';
 import { createEscapeGuard } from './escape.js';
 
 export function createOneshots(ctx) {
@@ -169,8 +169,9 @@ export function createOneshots(ctx) {
     function makeNode(genLeft, atX, atY) {
       if (cleared || live[counter] >= cap) return null;
       const url = opts.url || ctx.assetUrlSync(opts.assetKind || (kind === 'gif_burst' ? 'loop' : 'still'));
-      const node = document.createElement(url ? 'img' : 'div');
-      if (url) node.src = url;
+      // mediaEl: <img>, or a muted looping <video> when the pool handed us a
+      // webm/mp4 loop (the only animated shape a remote provider has)
+      const node = (url && mediaEl(url)) || document.createElement('div');
       node.className = 'ae-burst ae-burst-' + variant.name + (clickable ? ' ae-burst-clickable' : '');
       node.style.setProperty('--ae-x', (atX == null ? Math.round(rand(ctx.rng, 12, 88)) : atX) + '%');
       node.style.setProperty('--ae-y', (atY == null ? Math.round(rand(ctx.rng, 14, 86)) : atY) + '%');

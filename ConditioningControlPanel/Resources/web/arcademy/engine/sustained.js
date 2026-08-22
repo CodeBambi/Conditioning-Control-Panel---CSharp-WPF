@@ -19,7 +19,7 @@
 
 import { clamp01 } from '../core/caps.js';
 import { NODE_CAPS, washSpec, gifRainSpec, ambientSpec, driftSpec, bubbleSpec } from './curves.js';
-import { rand, hasDom } from './util.js';
+import { rand, hasDom, mediaEl } from './util.js';
 import { createEscapeGuard } from './escape.js';
 
 /** ambient_field kinds ported from DTRH fieldFx AMBIENT_KINDS (DOM subset). */
@@ -254,8 +254,7 @@ export function createSustained(ctx) {
     function spawn() {
       if (live.rain >= spec.max) return;
       const url = ctx.assetUrlSync(opts.assetKind || 'loop');
-      const node = document.createElement(url ? 'img' : 'div');
-      if (url) node.src = url;
+      const node = (url && mediaEl(url)) || document.createElement('div');   // <video> for a webm/mp4 loop
       node.className = 'ae-rain';
       node.style.setProperty('--ae-x', Math.round(rand(ctx.rng, 2, 88)) + '%');
       node.style.setProperty('--ae-size', Math.round(rand(ctx.rng, 90, 190)) + 'px');
