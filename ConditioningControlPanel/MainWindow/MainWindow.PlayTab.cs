@@ -97,9 +97,20 @@ namespace ConditioningControlPanel
                 SetLockband(tab.PlayLockFyp, TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp"));
                 // The Arcademy: T2, and NOT on the daily-free wheel (no key passed, so no FREE
                 // TODAY stamp to keep in step). Literal name for the same reason the descent's is
-                // literal - it is the brand, identical in all nine language files.
+                // literal - it is the brand, identical in all nine language files. The lockband is
+                // still computed because the card is only HIDDEN, not removed - when the door
+                // opens (ArcademyHostService.DoorAvailable) the band must already be right.
                 SetLockband(tab.PlayLockArcademy,
                     TierGate.RequiresLab(Services.Arcademy.ArcademyHostService.ProductName));
+
+                // --- The Arcademy: present or absent, never locked ---------------------------
+                // Same posture as Just Drop below, for the same reason: Semester 1 is merged but
+                // unannounced, and a lockband would advertise a feature nobody can buy yet.
+                // Flipping ArcademyHostService.DoorAvailable is the whole reveal.
+                if (tab.SlotArcademy != null)
+                    tab.SlotArcademy.Visibility = Services.Arcademy.ArcademyHostService.DoorAvailable
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
 
                 // --- FREE TODAY re-stamps ---------------------------------------------------
                 RefreshPlayFreeStamps(tab);
