@@ -14,10 +14,30 @@
  * The slide ramps 2000ms -> 500ms across the class (schedule.js); the grade
  * tier tightens the reveal window and the denied share instead of the slide.
  *
+ * THE HOUSE RULES WAVE. The class opens on a DRAWN rules sheet (render.js
+ * showHowto - Deck VI, images over text), and three decks ride the room:
+ *   casino.js     the lighting rig: the marquee ring, the sound ladder pitched
+ *                 by the chain, near-miss staging, the jackpot ladder, the
+ *                 royal at the end card
+ *   pressure.js   THE SURGE: the CCP effects ladder, rung = YOUR pop streak,
+ *                 stepped down behind hysteresis when the chain breaks
+ *   trickster.js  the lies: the mouth's tell, the crooked hold ring, the ghost
+ *                 cursor, the stat flicker
+ * This file owns none of that look; it owns the WIRING. It builds all three
+ * after render.mount(), hands each a null-safe engine + a pause-aware timer
+ * registry, and routes one read-only event per moment at the SAME call sites
+ * the ledger is updated. A deck that refuses to build is null and a log line;
+ * it is never a failed class. THE HOUSE LIES TO YOUR EYES, NEVER TO YOUR
+ * LEDGER: no deck writes score, streak, tally or grade, and the bubble stays
+ * the ONE tap target at the exact size and place index.js put it.
+ *
  * FILES
  *   schedule.js  the seeded bubble plan (pure): kinds, flavors, ramp, windows
  *   scoring.js   points + composite + the dual S-gate + baseline fold (pure)
- *   render.js    every pixel: backdrop, basin, HUD, cards; picks the tube tier
+ *   render.js    every pixel: backdrop, basin, lit HUD, rules sheet, ticket
+ *   casino.js    DECK II - the lighting rig + the sound ladder (FX)
+ *   pressure.js  DECK III - the streak-driven effects ladder + the tremor
+ *   trickster.js DECK III - the dark patterns, presentation only
  *   tube3d.js    the three.js chute (vendored r185, dynamic import)
  *   tube2d.js    the canvas chute -> static css chute (no-WebGL fallbacks)
  *   style.js     the self-injected stylesheet
@@ -25,16 +45,19 @@
  *
  * THE LAWS THIS FILE KEEPS
  *   - input trust: the bubble is the ONE tap target; every engine burst this
- *     class fires passes clickSafe:true and is decoration only.
+ *     class or a deck fires passes clickSafe:true and is decoration only.
  *   - RT integrity: the reveal paint is a class toggle + src swap, and the
- *     clock starts on that same call - nothing asynchronous sits between.
+ *     clock starts on that same call - nothing asynchronous sits between it
+ *     and `revealAt` (the deck event is routed AFTER the stamp is taken).
  *   - baseline-relative scoring on the per-game meta store (SYNTHESIS #15).
  *   - the class NEVER grades itself: it reports {metrics:{composite}, hardGates}
  *     and core/grades.js does the rest.
  *   - the debrief renders BEFORE endClass, because endClass tears this DOM down.
- *   - suspend(on) freezes EVERYTHING - timers, tube loop, CSS - and the bubble
- *     in flight is dealt again from the mouth on resume (never scored across
- *     a freeze).
+ *   - suspend(on) freezes EVERYTHING - decks first, then timers, tube loop and
+ *     CSS - and the bubble in flight is dealt again from the mouth on resume
+ *     (never scored across a freeze).
+ *   - the rules sheet obeys the shell's tutorial contract: shown every class by
+ *     default, and still ONCE PER NEW TIER when "Skip class tutorials" is on.
  *
  * CLOCK. `now()` and the timer helpers resolve `performance` / `setTimeout` off
  * the global at CALL time, so the scratch harness swaps in a fake clock and
@@ -51,6 +74,9 @@ import {
 } from './scoring.js';
 import { createRender } from './render.js';
 import { IC_LEX } from './lex.js';
+import { createIcCasino } from './casino.js';
+import { createIcPressure } from './pressure.js';
+import { createIcTrickster } from './trickster.js';
 
 /* ----------------------------------------------------------------- clock -- */
 function now() {
@@ -61,17 +87,57 @@ function now() {
   } catch (e) { /* fall through */ }
   return Date.now();
 }
+/**
+ * The class's timer registry. `after` is a one-shot, `every` a self-re-arming
+ * chain (NOT setInterval: the chain resolves setTimeout off the global at call
+ * time, so the fake clock drives it too, and one cancel kills the whole run).
+ * A repeat handle is a STRING, a one-shot an integer - `cancel` takes either.
+ */
 function createTimers() {
   const live = new Set();
+  const repeats = new Map();
+  let nextRepeat = 1;
   return {
     after(ms, fn) {
       const id = setTimeout(() => { live.delete(id); try { fn(); } catch (e) { /* noop */ } }, Math.max(0, Math.round(ms) || 0));
       live.add(id);
       return id;
     },
-    cancel(id) { if (id != null) { try { clearTimeout(id); } catch (e) { /* noop */ } live.delete(id); } },
-    killAll() { for (const id of Array.from(live)) { try { clearTimeout(id); } catch (e) { /* noop */ } } live.clear(); },
-    get size() { return live.size; },
+    every(ms, fn) {
+      const key = 'ic-every-' + (nextRepeat++);
+      const period = Math.max(16, Math.round(ms) || 16);
+      const rec = { timer: 0, dead: false };
+      repeats.set(key, rec);
+      const arm = () => {
+        rec.timer = setTimeout(() => {
+          if (rec.dead) return;
+          try { fn(); } catch (e) { /* noop */ }
+          if (!rec.dead) arm();
+        }, period);
+      };
+      arm();
+      return key;
+    },
+    cancel(id) {
+      if (id == null) return;
+      if (typeof id === 'string') {
+        const rec = repeats.get(id);
+        if (rec) { rec.dead = true; try { clearTimeout(rec.timer); } catch (e) { /* noop */ } repeats.delete(id); }
+        return;
+      }
+      try { clearTimeout(id); } catch (e) { /* noop */ }
+      live.delete(id);
+    },
+    killAll() {
+      for (const id of Array.from(live)) { try { clearTimeout(id); } catch (e) { /* noop */ } }
+      live.clear();
+      for (const [k, rec] of Array.from(repeats)) {
+        rec.dead = true;
+        try { clearTimeout(rec.timer); } catch (e) { /* noop */ }
+        repeats.delete(k);
+      }
+    },
+    get size() { return live.size + repeats.size; },
   };
 }
 function probe(query) {
@@ -83,6 +149,11 @@ function probe(query) {
   } catch (e) { /* noop */ }
   return false;
 }
+function clamp01(v) {
+  const x = Number(v);
+  if (!isFinite(x)) return 0;
+  return x < 0 ? 0 : x > 1 ? 1 : x;
+}
 
 const GAME_KEY = 'impulse_control';
 const PRESS_DEDUPE_MS = 120;      // one press = one response (pointerdown + click)
@@ -90,6 +161,19 @@ const INTRO_MS = 2200;
 const TRAVEL_TICK_MS = 40;        // glow position refresh during the slide
 const AUTO_SUBMIT_MS = 45000;     // the debrief files itself if nobody clicks
 const RESUME_DELAY_MS = 600;
+
+/* THE ONE DIAL. Heat rides the class progress AND the player's live chain -
+ * the owner's spec for this room: "the room heats up with YOUR chain". A chain
+ * of STREAK_HEAT_CAP is the whole streak half of the dial. */
+const STREAK_HEAT_CAP = 12;
+/* A cue's level may never exceed the tier's ceiling. The decks ask; the ceiling
+ * answers. (shell/audio.js multiplies by the player's own levels after this.) */
+const AUDIO_CEIL = Object.freeze([0.45, 0.6, 0.75, 0.9]);
+/* The kinds that paint OVER the basin: every one is welded clickSafe, because
+ * the bubble is the single tap target and no decoration may steal its press. */
+const CLICK_SAFE_KINDS = Object.freeze({
+  flash_burst: 1, gif_burst: 1, bubble_field: 1, gif_rain: 1,
+});
 
 /** Declarative asset needs: the backdrop pool. */
 const ASSET_SPEC = Object.freeze({ loops: 12, stills: 6, targets: 0, canvasSafe: false });
@@ -106,9 +190,14 @@ export default {
   title: 'Impulse Control',
 
   manifest: {
-    /* flash pops fire flash_burst, subliminal pops fire sub_flash; the spiral
-       flourish is drawn in-game (the engine has no spiral one-shot). */
-    effectsConsumed: ['flash_burst', 'sub_flash'],
+    /* flash pops fire flash_burst, subliminal pops fire sub_flash, the spiral
+       flourish is drawn in-game; the rest of the list is the decks' ladder
+       (casino cues through audio_trigger, pressure climbs wash -> crt ->
+       gif_burst -> glitch_swap -> gif_rain -> ambient_field). */
+    effectsConsumed: [
+      'flash_burst', 'sub_flash', 'gif_burst', 'glitch_swap', 'audio_trigger',
+      'wash', 'crt', 'gif_rain', 'ambient_field',
+    ],
     assetNeeds: ASSET_SPEC,
     boardSizes: null,
     keybinds: [{ verb: 'go', label_key: 'ic_go_key', default: 'Space' }],
@@ -129,11 +218,17 @@ export default {
       catch (e) { return f == null ? (IC_LEX[k] || k) : f; }
     };
     const timers = createTimers();
-    const reduced = probe('(prefers-reduced-motion: reduce)');
+    const reduced = probe('(prefers-reduced-motion: reduce)')
+      || !!(ctx.motion && ctx.motion.reducedMotion);
+    const dev = ctx.dev === true;
 
     let S = null;
     let ended = false;
+    let devSkipHowto = false;         // the rig's bypass (ctx.dev gates it)
     let destroyed = false;
+    let casino = null;
+    let pressure = null;
+    let trickster = null;
 
     const settingOf = (key, dflt) => {
       try {
@@ -141,17 +236,125 @@ export default {
         return Object.prototype.hasOwnProperty.call(bag, key) ? bag[key] : dflt;
       } catch (e) { return dflt; }
     };
-    const fire = (kind, opts) => {
-      try {
-        const e = ctx.engine;
-        if (e && typeof e.fire === 'function') return e.fire(kind, opts);
-      } catch (err) { say('fire ' + kind + ': ' + (err && err.message)); }
-      return null;
-    };
     const setHeat = (h) => {
       try { if (ctx.engine && typeof ctx.engine.setHeat === 'function') ctx.engine.setHeat(h); }
       catch (e) { /* noop */ }
     };
+
+    /* ==================================================================== *
+     * THE DECKS' SEAMS - a frozen class runs no deck, and a deck may never
+     * raise a ceiling it did not set.
+     * ==================================================================== */
+    /** True while nothing decorative may move: dead, gone, paused or frozen. */
+    const halted = () => destroyed || !S || S.paused || S.suspended;
+    /** bgIntensity 0 is the player's own exit: read it LIVE, never a snapshot. */
+    const capsOk = () => !(ctx.caps && Number(ctx.caps.bgIntensity) === 0);
+    const motionLevel = () => {
+      try {
+        const v = Number(ctx.motion && ctx.motion.motionLevel);
+        return isFinite(v) ? v : 2;
+      } catch (e) { return 2; }
+    };
+    const audioCeil = () => AUDIO_CEIL[Math.max(0, Math.min(3, (S ? S.gradeTier : 1) - 1))];
+
+    /** INPUT TRUST welded on: a burst over the basin can never take a press. */
+    function weld(kind, opts) {
+      const o = Object.assign({}, opts || {});
+      if (CLICK_SAFE_KINDS[kind]) {
+        o.clickSafe = true;
+        o.clickable = false;
+        delete o.onPop;
+      }
+      return o;
+    }
+    /**
+     * The engine as a deck sees it. Every member is null-safe (no engine, or a
+     * frozen class, answers null) and every one READS a clamped channel rather
+     * than raising it.
+     *
+     * STOP IS GLOBAL. `stop('wash')` kills EVERY wash this class holds, not
+     * just the caller's - the engine addresses sustains by KIND. Two decks both
+     * holding a wash must therefore step theirs DOWN by re-triggering at a low
+     * alpha; a deck that calls stop() takes the other deck's wash with it.
+     * (The Deep End paid for this lesson; the note travels with the seam.)
+     */
+    const deckEngine = {
+      fire(kind, opts) {
+        if (halted() || !ctx.engine || typeof ctx.engine.fire !== 'function') return null;
+        try { return ctx.engine.fire(kind, weld(kind, opts)) || null; }
+        catch (e) { say('deck fire(' + kind + ') failed'); return null; }
+      },
+      sustain(kind, opts) {
+        if (halted() || !ctx.engine || typeof ctx.engine.sustain !== 'function') return null;
+        try { return ctx.engine.sustain(kind, weld(kind, opts)) || null; }
+        catch (e) { say('deck sustain(' + kind + ') failed'); return null; }
+      },
+      stop(kind) {
+        try { if (ctx.engine && typeof ctx.engine.stop === 'function') ctx.engine.stop(kind); }
+        catch (e) { /* noop */ }
+      },
+      ceremony(kind, opts) {
+        if (halted() || !ctx.engine || typeof ctx.engine.ceremony !== 'function') return null;
+        try { return ctx.engine.ceremony(kind, opts || {}) || null; }
+        catch (e) { return null; }
+      },
+      channels() {
+        try { return (ctx.engine && typeof ctx.engine.channels === 'function') ? ctx.engine.channels() : null; }
+        catch (e) { return null; }
+      },
+      rewardRoll(opts) {
+        try { return (ctx.engine && typeof ctx.engine.rewardRoll === 'function') ? ctx.engine.rewardRoll(opts || {}) : null; }
+        catch (e) { return null; }
+      },
+      /** A cue through the ONE audio owner. `pitch` rides `extra` untouched -
+       *  shell/audio.js multiplies every frequency in the recipe by it, so the
+       *  casino's chime ratchets UP the chain instead of speeding up. */
+      audio(name, level, extra) {
+        const lv = Math.min(audioCeil(), level == null ? 0.4 : Number(level) || 0);
+        return deckEngine.fire('audio_trigger', Object.assign({ name, level: lv }, extra || {}));
+      },
+    };
+
+    /** The decks' registry: this class's own timers, dead while frozen. */
+    const deckTimers = {
+      after(ms, fn) { return timers.after(ms, () => { if (halted()) return; fn(); }); },
+      every(ms, fn) { return timers.every(ms, () => { if (halted()) return; fn(); }); },
+      clear(id) { timers.cancel(id); },
+    };
+
+    /** Call one deck, null-safe. A deck that throws is logged, never fatal. */
+    function deck(which, method, ...args) {
+      const d = which === 'casino' ? casino : which === 'pressure' ? pressure : trickster;
+      if (!d || typeof d[method] !== 'function') return undefined;
+      try { return d[method](...args); }
+      catch (e) { say(which + '.' + method + ' threw: ' + ((e && e.message) || e)); return undefined; }
+    }
+    /** Every deck sees every moment. Args are plain objects and READ-ONLY. */
+    function decks(method, ...args) {
+      deck('casino', method, ...args);
+      deck('pressure', method, ...args);
+      deck('trickster', method, ...args);
+    }
+
+    /* ---- HEAT: the one dial, and the owner's chain drives it ------------- */
+    function progressNow() {
+      if (!S) return 0;
+      const b = S.bubble;
+      if (b && isFinite(b.progress)) return clamp01(b.progress);
+      const total = S.plan ? S.plan.counts.total : 0;
+      if (total <= 1) return 0;
+      return clamp01(Math.max(0, S.idx) / (total - 1));
+    }
+    function heat() {
+      if (!S) return 0;
+      const h = clamp01(0.2 + 0.35 * progressNow() + 0.45 * Math.min(1, S.streak / STREAK_HEAT_CAP));
+      S.heat = h;
+      setHeat(h);
+      deck('casino', 'setHeat', h);
+      deck('pressure', 'setHeat', h);
+      deck('trickster', 'setHeat', h);
+      return h;
+    }
 
     /* ============================================================= START */
     function start(classSpec) {
@@ -188,6 +391,7 @@ export default {
         lastPressAt: -1e9,
         paused: false, suspended: false, running: false,
         score: 0, streak: 0, bestStreak: 0, sessionBestRt: null,
+        heat: 0.2,
         tally: {
           goodShown: 0, popped: 0, drifted: 0,
           deniedShown: 0, deniedHeld: 0, xClicked: 0,
@@ -195,22 +399,26 @@ export default {
         },
         swaps: 0,
         voided: false,           // a freeze voided the bubble at the cursor
+        howtoShown: false,
         debriefed: false,
         recalibrated: false,
         result: null,
       };
 
+      /* DEV SEAM (rig only). ctx.dev is never true in the shell, so production
+         behaviour is byte-identical: the rig starts a class already on rung N
+         so a shot can show the ladder without playing it. */
+      if (dev) {
+        const ds = Math.max(0, Math.min(30, Math.round(Number(spec.devStreak) || 0)));
+        if (ds > 0) { S.streak = ds; S.bestStreak = ds; }
+      }
+
       render.mount();
+      buildDecks(seed, gradeTier);
+
       const capBg = (() => { try { return Number(ctx.caps && ctx.caps.bgIntensity); } catch (e) { return 1; } })();
       render.setBgFade(Number(settingOf('ic_bg_fade', 0.35)) * (isFinite(capBg) && capBg >= 0 ? capBg : 1));
-      render.hud({ score: 0, n: 0, total: plan.counts.total, streak: 0, subject: '#' + S.subject });
-      render.intro({
-        title: t('ic_tube_title', 'The Drop Tube'),
-        note: t('ic_tube_rules', IC_LEX.ic_tube_rules),
-        hint: goHintLine(),
-      });
-
-      bindInputs();
+      hud({ n: 0, subject: '#' + S.subject });
 
       /* the backdrop pool: never blocks, never gates a reveal */
       try {
@@ -225,12 +433,132 @@ export default {
       } catch (e) { say('asset claim failed (' + ((e && e.message) || e) + ') - gradient backdrop only'); }
 
       S.running = true;
-      setHeat(0.2);
-      S.phaseTimer = timers.after(INTRO_MS, () => { render.clearCard(); nextBubble(); });
+      heat();
+
+      /* THE CLASS RULES SHEET first (Deck VI): drawn, not told. Then the short
+         incoming beat, then the tube opens. Inputs are bound after GO - the
+         sheet's button is the only way past it, so nothing the player presses
+         at the rules can eat a bubble that has not been dealt yet. */
+      howto(() => {
+        if (!S || destroyed || S.debriefed) return;
+        render.intro({
+          title: t('ic_tube_title', 'The Drop Tube'),
+          note: '',
+          hint: goHintLine(),
+        });
+        bindInputs();
+        S.phaseTimer = timers.after(INTRO_MS, () => {
+          if (!S || destroyed) return;
+          render.clearCard();
+          decks('start');
+          nextBubble();
+        });
+      });
 
       say('class started: tier ' + gradeTier + ', ' + plan.counts.total + ' bubbles ('
         + plan.counts.good + ' good / ' + plan.counts.denied + ' denied), slide '
-        + SLIDE_START_MS + '->' + SLIDE_END_MS + 'ms');
+        + SLIDE_START_MS + '->' + SLIDE_END_MS + 'ms, decks '
+        + (casino ? 'casino ' : '') + (pressure ? 'pressure ' : '') + (trickster ? 'trickster' : ''));
+    }
+
+    /* ------------------------------------------------------------- decks */
+    /** The UTC day the class was seeded on (the shell's seed opens with it) -
+     *  the casino's "tonight only" bulb temperature is a pure function of it. */
+    function utcDateOf(seed) {
+      const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(seed || ''));
+      if (m) return m[1];
+      try { return new Date().toISOString().slice(0, 10); } catch (e) { return '1970-01-01'; }
+    }
+    /** Build all three right after mount. A refused deck is null + a log line. */
+    function buildDecks(seed, gradeTier) {
+      const nodes = S.render.nodes || {};
+      const base = {
+        seed,
+        gradeTier,
+        reduced,
+        motionLevel: motionLevel(),
+        nodes,
+        engine: deckEngine,
+        timers: deckTimers,
+        capsOk,
+        log: say,
+      };
+      try {
+        casino = createIcCasino(Object.assign({}, base, {
+          utcDate: utcDateOf(seed),
+          t,
+        })) || null;
+      } catch (e) { casino = null; say('casino refused: ' + ((e && e.message) || e)); }
+      try {
+        pressure = createIcPressure(Object.assign({}, base, {
+          assets: ctx.assets || null,
+        })) || null;
+      } catch (e) { pressure = null; say('pressure refused: ' + ((e && e.message) || e)); }
+      try {
+        trickster = createIcTrickster(Object.assign({}, base, {
+          isHalted: halted,
+          /* the HOST's answer outranks a media probe (CLAUDE.md §5): a coarse
+             pointer gets no ghost cursor at all. */
+          coarse: !!(ctx.platform && ctx.platform.isTouch),
+          stats: () => ({
+            idx: S ? S.idx : -1,
+            total: S && S.plan ? S.plan.counts.total : 0,
+            streak: S ? S.streak : 0,
+            score: S ? S.score : 0,
+            phase: S ? S.stagePhase : 'debrief',
+          }),
+          t,
+        })) || null;
+      } catch (e) { trickster = null; say('trickster refused: ' + ((e && e.message) || e)); }
+    }
+
+    /* -------------------------------------------------------- rules sheet */
+    /** Tiers this player has already had the rules sheet for (persisted). */
+    function howtoSeenTiers() {
+      try {
+        const m = (ctx.store && typeof ctx.store.gameMeta === 'function')
+          ? (ctx.store.gameMeta(GAME_KEY) || {}) : {};
+        return Array.isArray(m.howtoTiers) ? m.howtoTiers.slice() : [];
+      } catch (e) { return []; }
+    }
+    /**
+     * The sheet, ahead of the incoming beat. Policy is the shell's "Skip class
+     * tutorials" contract: default shows every class; with the skip on, a class
+     * still explains itself ONCE per grade tier. Dismissal is the sheet's own
+     * button only - binding the POP key here would teach the player to press
+     * it at a bubble that has not been dealt.
+     */
+    function howto(onDone) {
+      const seen = howtoSeenTiers();
+      const skip = (dev && devSkipHowto)
+        || (ctx.hideTutorial === true && seen.indexOf(S.gradeTier) >= 0);
+      if (skip) { onDone(); return; }
+      if (!S.render || typeof S.render.showHowto !== 'function') { onDone(); return; }
+      let done = false;
+      let node = null;
+      try {
+        node = S.render.showHowto({
+          onGo: () => {
+            if (done || !S || destroyed) return;
+            done = true;
+            try {
+              const list = howtoSeenTiers();
+              if (list.indexOf(S.gradeTier) < 0) {
+                list.push(S.gradeTier);
+                if (ctx.store && typeof ctx.store.mergeGameMeta === 'function') {
+                  ctx.store.mergeGameMeta(GAME_KEY, { howtoTiers: list });
+                }
+              }
+            } catch (e) { /* best effort - the sheet just shows again next time */ }
+            try { S.render.hideHowto(); } catch (e) { /* noop */ }
+            onDone();
+          },
+          keyLabel: (() => { try { return ctx.keys.labelFor('go') || 'Space'; } catch (e) { return 'Space'; } })(),
+          coarse: !!(ctx.platform && ctx.platform.isTouch),
+        });
+      } catch (e) { say('rules sheet refused: ' + ((e && e.message) || e)); node = null; }
+      if (!node) { done = true; onDone(); return; }
+      S.howtoShown = true;
     }
 
     function goHintLine() {
@@ -252,6 +580,25 @@ export default {
       } catch (e) { /* keep the old one */ }
     }
 
+    /** The HUD, and the SHELL's 10-segment meter in its anchor (never forked). */
+    function hud(extra) {
+      if (!S) return;
+      const h = Object.assign({
+        score: S.score,
+        n: Math.max(0, S.idx + 1),
+        total: S.plan.counts.total,
+        streak: S.streak,
+      }, extra || {});
+      try { S.render.hud(h); } catch (e) { /* cosmetic */ }
+      try {
+        const cer = ctx.ceremonies;
+        const slot = S.render.nodes && S.render.nodes.meterSlot;
+        if (cer && typeof cer.streakMeter === 'function' && slot) {
+          cer.streakMeter({ target: slot, filled: S.streak });
+        }
+      } catch (e) { /* a ceremony must never be the thing that fails */ }
+    }
+
     /* ====================================================== INPUT SURFACE */
     let unbind = [];
     function bindInputs() {
@@ -262,6 +609,14 @@ export default {
           bub.addEventListener(evt, onPress);
           unbind.push(() => { try { bub.removeEventListener(evt, onPress); } catch (e) { /* noop */ } });
         }
+        /* HOVER is a decoration-only signal (the casino's "almost" over the X,
+           the trickster's ghost cursor). It changes no input and no ledger. */
+        const onEnter = () => decks('hover', true);
+        const onLeave = () => decks('hover', false);
+        bub.addEventListener('pointerenter', onEnter);
+        bub.addEventListener('pointerleave', onLeave);
+        unbind.push(() => { try { bub.removeEventListener('pointerenter', onEnter); } catch (e) { /* noop */ } });
+        unbind.push(() => { try { bub.removeEventListener('pointerleave', onLeave); } catch (e) { /* noop */ } });
       }
       try {
         const off = ctx.keys.on('go', () => press('key'));
@@ -286,9 +641,19 @@ export default {
       const b = S.plan.bubbles[S.idx];
       S.bubble = b;
       S.stagePhase = 'load';
-      S.render.hud({ score: S.score, n: S.idx + 1, total: S.plan.counts.total, streak: S.streak });
+      hud();
       S.render.showLoad();
-      setHeat(0.2 + 0.5 * b.progress);
+      heat();
+      /* the decks learn the KIND at the mouth - the trickster's tell needs it
+         this early. The casino and the pressure deck must render no tell. */
+      decks('load', {
+        idx: S.idx,
+        total: S.plan.counts.total,
+        progress: b.progress,
+        kind: b.kind,
+        flavor: b.flavor,
+        slideMs: b.slideMs,
+      });
       S.phaseTimer = timers.after(LOAD_MS, () => beginSlide(b));
     }
 
@@ -298,6 +663,7 @@ export default {
       S.slideStart = now();
       S.slideMs = b.slideMs;
       S.render.setTravel(0);
+      decks('slide', { idx: S.idx, slideMs: b.slideMs });
       const tick = () => {
         if (!S || S.stagePhase !== 'slide' || S.paused || S.suspended) return;
         const p = (now() - S.slideStart) / S.slideMs;
@@ -314,12 +680,23 @@ export default {
       if (b.kind === 'denied') S.tally.deniedShown++; else S.tally.goodShown++;
       S.render.revealBubble(b);
       S.revealAt = now();                       // the clock starts ON the paint call
+      /* RT INTEGRITY: the deck event is routed only AFTER the stamp is taken,
+         so no deck can ever sit between the paint and the clock. */
       S.windowTimer = timers.after(b.windowMs, () => windowEnd(b));
+      decks('reveal', {
+        idx: S.idx,
+        kind: b.kind,
+        flavor: b.flavor,
+        windowMs: b.windowMs,
+        progress: b.progress,
+        streak: S.streak,
+      });
     }
 
     function windowEnd(b) {
       if (!S || S.stagePhase !== 'reveal') return;
       S.stagePhase = 'gap';
+      const streakBefore = S.streak;
       if (b.kind === 'denied') {
         /* the X survived - restraint pays, and the backdrop turns over */
         S.score += DENIED_BONUS;
@@ -335,7 +712,10 @@ export default {
         S.render.stamp('', t('ic_missed', 'It drifted away'));
       }
       S.tally.score = S.score;
-      S.render.hud({ score: S.score, n: S.idx + 1, total: S.plan.counts.total, streak: S.streak });
+      hud();
+      heat();
+      if (b.kind === 'denied') decks('denyPass', { idx: S.idx, streak: S.streak, score: S.score });
+      else decks('drift', { idx: S.idx, streakBefore });
       S.phaseTimer = timers.after(b.gapMs, nextBubble);
     }
 
@@ -351,12 +731,18 @@ export default {
 
       if (b.kind === 'denied') {
         /* THE X. The one error in the game. */
+        const rt = Math.max(0, at - S.revealAt);
+        const streakBefore = S.streak;
         S.score -= X_PENALTY;
         S.tally.xClicked++;
         S.streak = 0;
         S.render.hitDenied();
         S.render.stamp('bad', t('ic_denied_hit', 'THAT WAS THE X'));
-        say('X clicked (' + source + ') at +' + Math.round(at - S.revealAt) + 'ms: -' + X_PENALTY);
+        S.tally.score = S.score;
+        hud();
+        heat();
+        decks('denyHit', { idx: S.idx, rt, penalty: X_PENALTY, streakBefore, score: S.score });
+        say('X clicked (' + source + ') at +' + Math.round(rt) + 'ms: -' + X_PENALTY);
       } else {
         const rt = Math.max(0, at - S.revealAt);
         const pts = popPoints(rt, b.windowMs);
@@ -380,18 +766,42 @@ export default {
         );
         beat(b.flavor);
         swapBackdrop();
-        S.render.hud({ score: S.score, n: S.idx + 1, total: S.plan.counts.total, streak: S.streak, rt });
+        S.tally.score = S.score;
+        hud({ rt });
+        heat();
+        /* the ledger has already moved: every number below is the TRUTH the
+           decks may light, and none of them may write it back. */
+        decks('pop', {
+          idx: S.idx,
+          rt,
+          pts,
+          streak: S.streak,
+          bestStreak: S.bestStreak,
+          stampKind: kind,
+          newRecord,
+          sessionBest: S.sessionBestRt,
+          recordRt: record,
+          windowMs: b.windowMs,
+          flavor: b.flavor,
+          score: S.score,
+        });
       }
-      S.tally.score = S.score;
       S.phaseTimer = timers.after(b.gapMs, nextBubble);
     }
 
     /** The pop's effect beat - one of exactly three, all decoration. */
     function beat(flavor) {
       if (flavor === 'flash') {
-        fire('flash_burst', { clickSafe: true, strength: 0.6 });
+        /* sized against the viewport (the engine's default 120-270px box is a
+           postage stamp on a chute this bright) and announced to the pressure
+           deck, which dims the tube under it for its hold (THE FLARE) */
+        let vmin = 720;
+        try { vmin = Math.min(window.innerWidth || 0, window.innerHeight || 0) || 720; } catch (e) { /* headless */ }
+        const holdMs = 900;
+        const went = deckEngine.fire('flash_burst', { clickSafe: true, strength: 0.6, sizePx: Math.round(vmin * 0.34), holdMs });
+        if (went) deck('pressure', 'beat', { flavor, holdMs });
       } else if (flavor === 'sub') {
-        fire('sub_flash', { clickSafe: true, strength: 0.6 });
+        deckEngine.fire('sub_flash', { clickSafe: true, strength: 0.6 });
       } else if (flavor === 'spiral') {
         S.render.flourish();
       }
@@ -404,6 +814,9 @@ export default {
       S.running = false;
       S.stagePhase = 'debrief';
       S.render.setTravel(null);
+      /* the ENGINE cools here, as it always has. The decks keep the heat they
+         earned until their own end()/destroy() sighs it out - zeroing them
+         first would take the casino's royal down with it. */
       setHeat(0);
 
       const sessionMedian = median(S.tally.rts);
@@ -413,6 +826,8 @@ export default {
 
       const record = Number(S.meta.bestRtMs) || 0;
       const newBest = led.bestRt != null && (record === 0 || led.bestRt < record);
+      /* a PERFECT class: the X row untouched and not one bubble left to drift */
+      const perfect = S.tally.xClicked === 0 && S.tally.drifted === 0;
 
       const line = (() => {
         if (fold && fold.established) return t('ic_baseline_new', IC_LEX.ic_baseline_new);
@@ -423,6 +838,26 @@ export default {
         if (slowSlip) return t('ic_slip_speed', IC_LEX.ic_slip_speed);
         return t('ic_slip_none', IC_LEX.ic_slip_none);
       })();
+
+      /* the casino decides the ROYAL and says so on the way out; the other two
+         get the same object and answer nothing. */
+      const endInfo = {
+        score: led.score,
+        popped: S.tally.popped,
+        goodShown: S.tally.goodShown,
+        drifted: S.tally.drifted,
+        deniedHeld: S.tally.deniedHeld,
+        xClicked: S.tally.xClicked,
+        medianRt: led.medianRt,
+        bestRt: led.bestRt,
+        newBest,
+        perfect,
+        sGateOk: !!led.sGate.ok,
+      };
+      const casinoEnd = deck('casino', 'end', endInfo);
+      deck('pressure', 'end', endInfo);
+      deck('trickster', 'end', endInfo);
+      const royal = !!(casinoEnd && casinoEnd.royal);
 
       S.render.debrief({
         subject: S.subject,
@@ -435,16 +870,39 @@ export default {
         goodShown: S.tally.goodShown,
         deniedHeld: S.tally.deniedHeld,
         xClicked: S.tally.xClicked,
+        perfect,
+        royal,
         line,
         hint: led.sGate.ok ? '' : t('ic_gate_hint', IC_LEX.ic_gate_hint),
       }, submit, recalibrate);
+
+      /* THE GRADE ARRIVES AS AN OBJECT (Deck VI): the shell's stamp, dropped
+         into the ticket's own stamp area. Null-safe - under the DOM double
+         ceremonies may not exist at all. */
+      try {
+        const cer = ctx.ceremonies;
+        const slot = S.render.nodes && S.render.nodes.ticketStamp;
+        if (cer && typeof cer.stamp === 'function' && slot) {
+          cer.stamp({
+            target: slot,
+            text: royal ? t('ic_royal', 'ROYAL')
+              : perfect ? t('ic_perfect_class', 'Perfect class')
+                : newBest ? t('ic_new_best', 'NEW BEST')
+                  : t('ic_debrief', 'Debrief'),
+            tone: (royal || perfect) ? 'gild' : 'good',
+            /* the shell's stamp self-removes after its hold: a grade that is
+               an OBJECT on the ticket has to outlive the ticket, not the hold */
+            hold: 600000,
+          });
+        }
+      } catch (e) { /* a ceremony must never be the thing that fails */ }
 
       say('debrief: score ' + led.score
         + ', median ' + (led.medianRt == null ? 'n/a' : Math.round(led.medianRt) + 'ms')
         + ', popped ' + S.tally.popped + '/' + S.tally.goodShown
         + ', X ' + S.tally.xClicked + '/' + S.tally.deniedShown
         + ', composite ' + led.composite.toFixed(3) + ', sGate ' + led.sGate.ok
-        + ', swaps ' + S.swaps);
+        + ', swaps ' + S.swaps + (perfect ? ', PERFECT' : '') + (royal ? ', ROYAL' : ''));
 
       S.autoTimer = timers.after(AUTO_SUBMIT_MS, submit);
     }
@@ -534,16 +992,22 @@ export default {
     /* =========================================================== LIFECYCLE */
     return {
       start(classSpec) {
-        try { start(classSpec); }
-        catch (e) {
+        try {
+          devSkipHowto = dev && !!(classSpec && classSpec.devSkipHowto);
+          start(classSpec);
+        } catch (e) {
           say('start failed: ' + ((e && e.message) || e));
           try { ctx.root.textContent = 'This class could not start.'; } catch (err) { /* noop */ }
         }
       },
 
+      /* THE EXITS ARE SACRED. The decks stop FIRST - a deck must never paint
+         one more frame over a class the player just froze - then the loop, then
+         the stage. Coming back is the same order reversed. */
       pause() {
         if (!S || S.paused) return;
         S.paused = true;
+        decks('pause');
         freeze();
         S.render.suspend(true);
       },
@@ -552,6 +1016,7 @@ export default {
         if (!S || !S.paused) return;
         S.paused = false;
         S.render.suspend(false);
+        if (!S.suspended) decks('resume');
         thaw();
       },
 
@@ -561,16 +1026,21 @@ export default {
         if (want === S.suspended) return;
         S.suspended = want;
         if (want) {
+          decks('pause');
           freeze();
           S.render.suspend(true);
         } else {
           S.render.suspend(false);
-          if (!S.paused) thaw();
+          /* a class the player ALSO paused stays frozen: the pause outranks
+             the host's thaw, and resume() is what wakes the decks then. */
+          if (!S.paused) { decks('resume'); thaw(); }
         }
       },
 
       destroy() {
         destroyed = true;
+        decks('destroy');
+        casino = null; pressure = null; trickster = null;
         timers.killAll();
         unbindInputs();
         if (S) {
@@ -580,7 +1050,19 @@ export default {
         S = null;
       },
 
-      /* Diagnostics for the scratch harness and a future debug overlay. */
+      /* Diagnostics for the scratch harness, the rig and a future debug
+         overlay. Never read by the shell. */
+      diagnostics() {
+        const dg = (d) => {
+          if (!d || typeof d.diagnostics !== 'function') return null;
+          try { return d.diagnostics(); } catch (e) { return null; }
+        };
+        return {
+          heat: S ? S.heat : 0,
+          streak: S ? S.streak : 0,
+          decks: { casino: dg(casino), pressure: dg(pressure), trickster: dg(trickster) },
+        };
+      },
       __state() { return S; },
       __submit() { submit(); },
     };

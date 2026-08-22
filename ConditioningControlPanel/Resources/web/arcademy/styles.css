@@ -346,7 +346,16 @@ html.arc-report-on body { overflow:hidden; }
    Games design edge-to-edge inside .arc-classroot and keep critical controls
    clear of the top ~56px, where the strip lives. */
 html.arc-class-on body { overflow:hidden; }
-.arc-classstage { position:fixed; inset:0; z-index:10; background:var(--ground); }
+/* THE STAGE IS A SEALED GROUP. z-index:10 already makes it a stacking context,
+   but a stacking context is NOT a backdrop root: a `backdrop-filter` anywhere
+   inside a game would otherwise take the DOCUMENT ROOT as its backdrop and have
+   its render surface composited against the whole page - which in an
+   accelerated webview hoists it over #arc-fx (z 40) and buries every engine
+   effect behind the class. `isolation:isolate` is the one-line fence: a game's
+   blur may sample the class and nothing above it. Never remove it, and never
+   put `isolation`/`filter`/`will-change` on .arc-fx itself - the engine's own
+   drain wash blurs the class THROUGH that layer and needs the root backdrop. */
+.arc-classstage { position:fixed; inset:0; z-index:10; background:var(--ground); isolation:isolate; }
 .arc-classroot {
   position:absolute; inset:0;
   background:var(--ground);

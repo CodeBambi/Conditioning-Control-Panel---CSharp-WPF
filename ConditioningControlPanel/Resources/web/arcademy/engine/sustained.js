@@ -52,7 +52,7 @@ export function createSustained(ctx) {
       node.className = 'ae-wash ae-wash-' + washKind + (ctx.reduced() ? ' ae-wash-static' : '');
       ctx.layers.back.appendChild(node);
       ctx.timers.own(node);
-      h = { el: node, hideTimer: 0 };
+      h = { el: node, hideTimer: 0, forever: false, heldAlpha: 0 };
       washHolds.set(washKind, h);
     }
     return h;
@@ -81,7 +81,20 @@ export function createSustained(ctx) {
     }
     if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
     h.el.style.opacity = String(alpha);
-    if (opts.sustainForever !== true) {
+    /* THE HELD WASH. sustainForever HOLDS the element at alpha until a later
+       trigger says otherwise. A later trigger that is NOT forever is one of
+       two things: a FLARE (a higher alpha - a jackpot's forced garnish, a
+       ceremony's accent) that must fall back to the HELD alpha when its hold
+       ends, or a STEP-DOWN (a lower alpha - the decks' whisper-out idiom) that
+       ends the hold and fades to 0. Before this, a jackpot over a held spiral
+       fell back to 0 and silently killed the class's wheel. */
+    if (opts.sustainForever === true) {
+      h.forever = true; h.heldAlpha = alpha;
+    } else if (h.forever && alpha > (h.heldAlpha || 0)) {
+      const back = h.heldAlpha;
+      h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = String(back); h.hideTimer = 0; });
+    } else {
+      h.forever = false; h.heldAlpha = 0;
       h.hideTimer = ctx.timers.after(holdMs, () => { h.el.style.opacity = '0'; h.hideTimer = 0; });
     }
     ctx.fx('wash', washKind);
@@ -89,7 +102,7 @@ export function createSustained(ctx) {
     return {
       kind: 'wash', variant: washKind, alpha, holdMs,
       retune() { /* alpha follows the next trigger; nothing to animate */ },
-      stop() { if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; } h.el.style.opacity = '0'; },
+      stop() { if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; } h.forever = false; h.heldAlpha = 0; h.el.style.opacity = '0'; },
     };
   }
 
@@ -362,6 +375,7 @@ export function createSustained(ctx) {
     if (kind === 'wash') {
       for (const [, h] of washHolds) {
         if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
+        h.forever = false; h.heldAlpha = 0;
         h.el.style.opacity = '0';
         if (immediate) ctx.timers.release(h.el);
       }

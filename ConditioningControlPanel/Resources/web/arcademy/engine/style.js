@@ -29,7 +29,10 @@ export const STYLE_TEXT = `
 .ae-wash-pink{background:radial-gradient(circle at 50% 55%,rgba(255,105,180,.55),rgba(255,105,180,.12) 60%,transparent 78%);
   mix-blend-mode:screen}
 .ae-wash-spiral{mix-blend-mode:screen;background-image:conic-gradient(from 0deg,rgba(255,105,180,.55),rgba(20,20,43,0) 25%,rgba(184,166,232,.5) 50%,rgba(20,20,43,0) 75%,rgba(255,105,180,.55));
-  animation:ae-spin 9s linear infinite}
+  animation:ae-spin 9s linear infinite;
+  /* a SQUARE wider than the viewport's diagonal (sqrt2 x vmax), centred: a
+     rotating inset:0 rectangle bares its corners every quarter turn */
+  inset:auto;left:50%;top:50%;width:150vmax;height:150vmax;margin:-75vmax 0 0 -75vmax}
 .ae-wash-drain{background:radial-gradient(circle at 50% 50%,rgba(0,0,0,.15),rgba(0,0,0,.72) 85%);
   backdrop-filter:blur(6px) saturate(.75);-webkit-backdrop-filter:blur(6px) saturate(.75)}
 .ae-wash-sublim{background:linear-gradient(0deg,rgba(184,166,232,.28),rgba(255,105,180,.18));mix-blend-mode:screen}
