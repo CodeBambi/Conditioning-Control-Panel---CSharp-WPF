@@ -286,8 +286,9 @@ are load-bearing.
 | **BEFORE** | base `115cf9811`, none of this packet present | **2616** (= the pin) | **8** | 152/152 |
 | **AFTER** (floor run 1) | `69ad4897e` | **2622** | **8** | 152/152 |
 | **AFTER** (floor run 2) | `ce1680561`, after the divergence rows | **2622** | **8** | 152/152 |
+| **AFTER** (floor run 3) | `3aaffdf74`, the final landed head | **2622** | **8** | 152/152 |
 
-**The failure SET is byte-identical across all three runs**, and it is the documented contended
+**The failure SET is byte-identical across all four runs**, and it is the documented contended
 real-desktop family:
 
 ```
