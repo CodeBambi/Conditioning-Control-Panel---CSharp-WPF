@@ -320,3 +320,24 @@ Format:
   bridge, is still the first capability gap closable with no answer from you**, and it is what stops DTRH and Graded
   Intake refusing everybody including you. The five genuinely open decisions are in `client/docs/owner-decisions.md`;
   the haptic driver remains the cheapest, since Lovense needs zero new packages.
+
+## 2026-08-22 — correcting the line I closed the last digest with, one hour after writing it
+
+- **Row 202 is not the next unbuilt thing. It is built, wired, gating and tested, and has been for weeks.** I ended
+  the wave-68 digest telling you the entitlement bridge was *the first capability gap closable with no answer from
+  you* and that it *stops DTRH and Graded Intake refusing everybody including you*. Then I went to write the packet
+  for it and found `client/src/CcpClient.Desktop/Entitlement/` already there: the typed Entitled/NotEntitled/
+  Unavailable outcome, the DPAPI read of your existing login, the honest Linux unavailable, composed at
+  `CompositionRoot.cs:353-355`, gating at `DtrhLaunch.cs:197` where nothing descends without `Proceed`, rendering the
+  refusal at `PlayPage.axaml.cs:64-86`, and 24 tests including the one the row demanded by name
+  (`DecryptFailure_IsUnavailable_NeverNotEntitled`).
+- **What that means for you in practice:** if you are logged into the shipping app, DTRH should already open. If it
+  does not, that is a BUG REPORT worth more than any packet I could author — and it is a different problem from the
+  one I have been describing.
+- **What it does not prove.** I checked the wiring by reading the code, not by launching the app. Nobody has run it
+  headed against your real token and watched DTRH open. That is the check worth doing, and it needs a person.
+- **The error is mine and it is the same one four times in one session.** I corrected your open-decisions list because
+  it had been copied summary-to-summary without ever being derived from the board — and then made exactly that
+  mistake about this row, inside the correction. A claim about a mechanism, restated until it sounded settled, that
+  one grep would have refuted. **I no longer have a verified answer to "what is the next unbuilt capability", and I
+  am not going to name one until I have derived it from the code.**

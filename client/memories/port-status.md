@@ -14,7 +14,7 @@
   conditions failed those three PLUS `VideoCapability` and `PointerCapability` (10+ vs 3). Foreground was `claude`
   pid 70944. New P2 row filed: SP-134's pre-flight detects topmost POINT ownership, not FOREGROUND ownership, so it
   reported clean throughout.
-- **Next unblocked capability work is still board row 202** (the entitlement bridge). No owner answer needed on Windows.
+- **CORRECTED same day: row 202 is NOT unbuilt.** `Entitlement/` ships the typed outcome, the DPAPI read and the Linux unavailable; composed at `CompositionRoot.cs:353-355`; gating at `DtrhLaunch.cs:197`/`:204`; rendered at `PlayPage.axaml.cs:64-86`; 24 tests. Row moved to WIP. **The claim that it was the next unbuilt capability was derived from a prior summary, never from `client/src`** - the fourth instance of that class in one session. **No verified answer to "what is the next unbuilt capability" currently exists; derive it from code before naming one.**
 
 ## Wave 68 RAN 2026-08-22, NOT LANDED — a fresh session certifies it
 
