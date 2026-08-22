@@ -1304,7 +1304,8 @@ public class QuestService : IDisposable
     }
 
     /// <summary>
-    /// Reset all quest progress (used on logout to clear account-specific data)
+    /// Reset all quest progress (used on account deletion and account SWITCH to clear
+    /// account-specific data — a plain logout preserves the file, see <see cref="StampOwner"/>)
     /// </summary>
     /// <param name="generateQuests">If false, skip quest generation (caller will generate after cloud sync)</param>
     public void ResetProgress(bool generateQuests = true)
@@ -1320,6 +1321,44 @@ public class QuestService : IDisposable
         }
 
         App.Logger?.Information("QuestService progress reset (generateQuests={Generate})", generateQuests);
+    }
+
+    /// <summary>
+    /// Record which unified account the current quest file belongs to, WITHOUT wiping it.
+    /// Called on logout instead of <see cref="ResetProgress"/> (BUG-BN8X9B9SZ5): active quest
+    /// progress exists nowhere but quests.json — the server only holds aggregate quest
+    /// stats — so wiping at logout turned "log out and back in" (our standard auth-recovery
+    /// advice!) into guaranteed loss of the day's quest progress. The stamp lets
+    /// <see cref="EnsureOwnedBy"/> do the wipe later, exactly when a DIFFERENT account signs in.
+    /// </summary>
+    public void StampOwner(string? unifiedId)
+    {
+        if (string.IsNullOrEmpty(unifiedId)) return;
+        if (Progress.OwnerUnifiedId == unifiedId) return;
+        Progress.OwnerUnifiedId = unifiedId;
+        Save();
+        App.Logger?.Information("Quest progress stamped as owned by {UnifiedId} (preserved across logout)", unifiedId);
+    }
+
+    /// <summary>
+    /// Make sure the local quest file belongs to <paramref name="unifiedId"/>. If it is stamped
+    /// for a different account, wipe it (the one case the old logout-time wipe was actually
+    /// protecting against — quest progress must not bleed between accounts on a shared install).
+    /// If it is unstamped (pre-fix file), adopt it. Safe to call repeatedly; called from the
+    /// profile-load path so every login route funnels through it, not just the login dialog.
+    /// </summary>
+    public void EnsureOwnedBy(string? unifiedId)
+    {
+        if (string.IsNullOrEmpty(unifiedId)) return;
+
+        var owner = Progress.OwnerUnifiedId;
+        if (!string.IsNullOrEmpty(owner) && owner != unifiedId)
+        {
+            App.Logger?.Information("Quest progress belongs to {Owner} but {UnifiedId} signed in — resetting quest file", owner, unifiedId);
+            ResetProgress(generateQuests: false);
+        }
+
+        StampOwner(unifiedId);
     }
 
     #region IDisposable

@@ -42,6 +42,15 @@ public class QuestProgress
     public bool DailyRolledUnresolved { get; set; }
     public bool WeeklyRolledUnresolved { get; set; }
 
+    // BUG-BN8X9B9SZ5: the unified account this quest file belongs to. Active quest progress is
+    // LOCAL-ONLY state (the server carries only aggregate quest stats/streaks), so it must
+    // survive a logout + same-account re-login — wiping it at logout destroyed a day's 3/3
+    // progress with nothing to restore it from. Logout now stamps the owner and keeps the file;
+    // the wipe happens on the NEXT login, and only when the account proves to be a different
+    // one (QuestService.EnsureOwnedBy). Null = never associated (pre-fix file or never logged
+    // in): treated as owned by whoever logs in next, matching the old behavior at worst.
+    public string? OwnerUnifiedId { get; set; }
+
     /// <summary>
     /// Get remaining daily rerolls (1 base + 2 for Patreon + skill tree bonuses)
     /// </summary>
