@@ -37,5 +37,4 @@ cross-platform UI only on real demand.
 
 ## Real codebase size
 
-~202,500 LOC C# + 30,369 XAML (excludes the three `.claude/worktrees/` repo copies that inflate
-naive counts ~4×).
+~202,500 LOC C# + 30,369 XAML (excludes generated and untracked copies that inflate naive counts).

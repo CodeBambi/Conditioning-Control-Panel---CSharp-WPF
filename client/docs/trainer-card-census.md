@@ -1,9 +1,7 @@
 # Trainer Card — census against the shipping WPF source
 
-**SP-127.** Evidence tree: this repository at `4327cb11f` (`lane/SP-127-trainer-card-census`, base
-`5fd9a8671` on `feat/crossplatform`), read on 2026-08-21. Method fixed in advance at
-`spine-tasks/SP-127-trainer-card-census/plan.md`, committed before any mapping, revised once at the
-plan gate before any mapping.
+**SP-127.** Evidence scope: the shipping WPF source, re-derived from the committed tree on
+2026-08-21. Method: the repeatable inventory rules and source citations stated in this document.
 
 **Verdict: BUILDABLE-IN-PART, and the residue is the headline.** One unit is genuinely buildable and
 is named in §6 with its file inventory. Everything the board row actually describes — the wardrobe,
@@ -19,12 +17,9 @@ gets corrected; a right number that means something else gets trusted.
 
 ## 1. The universe, and what the board row's evidence actually says
 
-The universe was the repository root walked recursively. **The walk is a committed artefact**, not a
-promise: `spine-tasks/SP-127-trainer-card-census/walk.mjs` takes a ROOT DIRECTORY as its only
-positional argument (no file-list parameter exists), excludes only a frozen set of generated-byte
-patterns (no `--exclude` flag exists, so no source file can be dropped by name), prints that
-exclusion set on every run, records every symlink it declines to follow, and cross-checks each walk
-against `git ls-files`. Every count below names the invocation that produced it.
+The universe is the tracked repository tree, walked recursively. Enumeration takes a root directory,
+excludes only generated-byte patterns, records declined symlinks, and cross-checks each count against
+`git ls-files`. Every count below is re-derivable from the committed source tree.
 
 ### 1.1 The row makes six claims. All six were tested; none was inherited
 
@@ -38,7 +33,7 @@ work onto the port branch** — `42286638c` (*"Merge branch 'main' into feat/cro
 
 ```
 git diff --diff-filter=A --name-only 42286638c^1 42286638c -- ConditioningControlPanel/<dir> | wc -l
-node spine-tasks/SP-127-trainer-card-census/walk.mjs ConditioningControlPanel/<dir> --ext
+git ls-files ConditioningControlPanel/<dir>
 ```
 
 | # | Row claim | Added at the merge | In the directory today | Verdict |

@@ -1,10 +1,20 @@
 # Persistence and migration contract
 
-**Date:** 2026-07-19 · **Task:** SP-005 (task-board row 4) · **Status:** ratified by implementation + tests in this slice; evidence in `spine-tasks/SP-005-persistence-migration-contract/record.md`
+**Status:** governing contract for persisted client state, schema migration, and recovery. Its
+requirements are implemented and verified by focused client tests.
 
-This contract instantiates `architecture-proposal.md` §6 (row-4 column: serializer choice, atomic write/debounce/backup/quarantine parity), the A-014 persistence rule ("user data has one schema/migration/atomic-write/recovery authority; unreadable data is preserved; secrets are excluded; concurrent writes are serialized; graceful-shutdown flush is explicit"), and the first-attempt persistence lesson (`first-attempt-systemic-lessons.md`: ACCEPT atomic replacement / corruption preservation / explicit migration / crash recovery; REJECT scattered saves, detached unordered writes, silent defaults over unreadable user data). It **activates the settings-flush ordering slot SP-003 reserved** at the head of the single guarded teardown (`startup-shutdown-contract.md` §6 rule 5). It implements no feature settings: one demonstrator settings model exercises the whole contract.
+This contract applies the A-014 persistence rule in `architecture.md`: user data has one schema,
+migration, atomic-write, and recovery authority; unreadable data is preserved; secrets are excluded;
+concurrent writes are serialized; and graceful-shutdown flush is explicit. It also applies the
+first-attempt persistence lesson: accept atomic replacement, corruption preservation, explicit
+migration, and crash recovery; reject scattered saves, detached unordered writes, and silent
+defaults over unreadable user data. Its bounded flush occupies the head of the guarded teardown in
+`startup-shutdown-contract.md` §6 rule 5.
 
-WPF evidence (outcomes only, no mechanics transplant): digest in `spine-tasks/SP-005-persistence-migration-contract/record.md` — atomic replacement, crash-mid-write recovery, corruption quarantine with preserved bytes, migrations on load, whole-object replacement with pre-persist notification, local-first write ordering, teardown flush first (`App.xaml.cs:3207-3209`).
+WPF evidence (outcomes only, no mechanics transplant): source review establishes atomic replacement,
+crash-mid-write recovery, corruption quarantine with preserved bytes, migrations on load,
+whole-object replacement with pre-persist notification, local-first write ordering, and teardown
+flush first (`App.xaml.cs:3207-3209`).
 
 ---
 

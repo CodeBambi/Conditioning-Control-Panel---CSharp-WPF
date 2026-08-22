@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// SP-027 slice b5: the native ProcessFailed signal — the W17-documented immediate
-/// detection route (webview-dtrh-spike.md: AdapterDestroyed NEVER fires on renderer kill;
-/// native ProcessFailed via TryGetPlatformHandle is the documented signal). WPF parity:
+/// SP-027 slice b5: the native ProcessFailed signal — the immediate detection route when
+/// AdapterDestroyed cannot observe a renderer kill. Native ProcessFailed via
+/// TryGetPlatformHandle is the supported Windows signal. WPF parity:
 /// DtrhHostService.cs:123 wires CoreWebView2.ProcessFailed → Recover.
 ///
 /// The pointer chain is VERIFIED, not guessed: NativeWebView.TryGetPlatformHandle()

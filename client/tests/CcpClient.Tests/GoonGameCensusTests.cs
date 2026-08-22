@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Xunit;
@@ -44,14 +43,6 @@ public sealed class GoonGameCensusTests
     private static readonly string[] CensusParts = ["client", "docs", "goon-game-census.md"];
     private static readonly string[] WpfRootParts = ["ConditioningControlPanel"];
     private static readonly string[] PortRootParts = ["client", "src", "CcpClient.Desktop"];
-
-    /// <summary>The two walk copies whose byte-identity the census asserts (§1). Both are compared
-    /// by sha256 against the value quoted in the document, so a drift in either is visible.</summary>
-    private static readonly string[] WalkOriginalParts =
-        ["spine-tasks", "SP-127-trainer-card-census", "walk.mjs"];
-
-    private static readonly string[] WalkCopyParts =
-        ["spine-tasks", "SP-129-goon-game-census", "walk.mjs"];
 
     /// <summary>The surface, as DIRECTORIES searched whole and recursively, every extension. NOT a
     /// file list — a file list is exactly how the haptic census lost <c>VideoService.Browser.cs</c>
@@ -444,19 +435,6 @@ public sealed class GoonGameCensusTests
             ParseKeyValueTable(reference.Census, "### 10.4.4"),
             codes.ToDictionary(kv => $"element-code-{kv.Key}", kv => kv.Value, StringComparer.Ordinal),
             "§10.4.4");
-    }
-
-    [Fact]
-    public void TheTwoWalkCopies_AreByteIdentical_AndMatchTheHashTheCensusQuotes()
-    {
-        var reference = RequireReference();
-
-        var original = Sha256Of(RequireRepoPath(reference.Root, Path.Combine(WalkOriginalParts)));
-        var copy = Sha256Of(RequireRepoPath(reference.Root, Path.Combine(WalkCopyParts)));
-        _output.WriteLine($"original {original}{Environment.NewLine}copy     {copy}");
-
-        Assert.Equal(original, copy);
-        Assert.Contains(original, reference.Census, StringComparison.OrdinalIgnoreCase);
     }
 
     // ======================================================================================
@@ -1001,13 +979,6 @@ public sealed class GoonGameCensusTests
     private static void RequirePath(string path, bool isDirectory, string because) =>
         Assert.True(isDirectory ? Directory.Exists(path) : File.Exists(path), because);
 
-    private static string RequireRepoPath(string root, string relative)
-    {
-        var path = Path.Combine(root, relative);
-        RequirePath(path, isDirectory: false, $"{relative} is required by this pin and is missing");
-        return path;
-    }
-
     private static string? FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -1141,9 +1112,6 @@ public sealed class GoonGameCensusTests
             $"census {section} does not re-derive:" + Environment.NewLine
             + string.Join(Environment.NewLine, mismatches));
     }
-
-    private static string Sha256Of(string path) =>
-        Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
 
     /// <summary>Recursive directory walk. Generated-byte directories are skipped; nothing is skipped
     /// by source-file name. Symlinked directories are not followed.</summary>

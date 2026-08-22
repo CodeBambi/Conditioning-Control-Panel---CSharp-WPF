@@ -1,8 +1,13 @@
 # Async lifecycle and fault policy
 
-**Date:** 2026-07-18 · **Task:** SP-004 (task-board row 3) · **Status:** ratified by implementation + tests in this slice; evidence in `spine-tasks/SP-004-async-lifecycle-fault-policy/record.md`
+**Status:** governing contract for owned asynchronous work and fault handling. Its requirements are
+implemented and verified by focused client tests.
 
-This contract instantiates `architecture-proposal.md` §6 (row-3 column: dispatcher discipline, cancellation generations, out-of-order completion policy) and the first-attempt async lessons (`first-attempt-systemic-lessons.md`: "Lifecycle completion must be owned and awaitable", "UI-thread ownership must be explicit", "Error swallowing hid product failure"). It extends — and does not disturb — the landed SP-003 lifecycle (`startup-shutdown-contract.md`): the runner's registry remains the sole owner set, and the single guarded teardown entry point remains the only teardown path. It implements no product features: it proves the async/fault shape through the SP-003 demonstrator participant.
+This contract applies `architecture.md` A-014 and the first-attempt async lessons: lifecycle
+completion is owned and awaitable, UI-thread ownership is explicit, and errors remain visible. It
+extends `startup-shutdown-contract.md`: the runner's registry remains the sole owner set, and the
+single guarded teardown entry point remains the only teardown path. It defines the async and fault
+shape; individual product features apply it through their own bounded slices.
 
 ---
 

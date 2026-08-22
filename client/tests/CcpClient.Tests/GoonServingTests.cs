@@ -19,7 +19,7 @@ namespace CcpClient.Tests;
 /// <para><b>The rung this reaches, and the two above it.</b> Serving bytes is not loading a page and
 /// loading a page is not playing a duel. Nothing in this file involves a browser, a monitor or the
 /// real-desktop lease, and nothing here is evidence that the page BOOTED — that claim needs a
-/// headed run and lives in <c>spine-tasks/SP-132-goon-evidence/record.md</c>, classed separately.
+/// headed run, classed separately.
 /// A duel is a HUMAN gate and is claimed nowhere.</para>
 ///
 /// <para><b>Why the assertions are on content and not on status codes.</b> A 200 proves a route
@@ -622,8 +622,7 @@ public sealed class GoonServingTests : IDisposable
     // ==================================================================================
     //
     // These are NOT the headed evidence. The evidence is a real capture of the running host on a
-    // real Windows desktop, checked by CcpVerify, with the wrong-state demonstrations recorded in
-    // spine-tasks/SP-132-goon-evidence/record.md. A headless assembly cannot photograph anything
+    // real Windows desktop, checked by CcpVerify. A headless assembly cannot photograph anything
     // and no fact here claims to. What these pin is the shape SP-122 established: a check that
     // cannot be captured, a check demoted out of its evidence class, a tolerance widened past the
     // colour it exists to reject, or a pixel read that no longer waits for the state.

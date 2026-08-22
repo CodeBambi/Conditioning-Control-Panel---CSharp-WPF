@@ -146,8 +146,8 @@ internal static class WasapiRenderReadback
 
                     var active = control.GetState(out var state) == 0 && state == AudioSessionStateActive;
                     // The per-session meter is a QueryInterface on the session control object.
-                    // MEASURED to work on this machine before it was relied on, never assumed:
-                    // see spine-tasks/SP-109-audio-capability/plan.md §0.
+                    // This path was verified before the capability depended on it; it is never
+                    // inferred from a successful playback call.
                     var meterReadable = false;
                     var peak = 0f;
                     if (session is IAudioMeterInformation meter && meter.GetPeakValue(out var value) == 0)

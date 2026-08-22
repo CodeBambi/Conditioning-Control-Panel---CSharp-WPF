@@ -589,42 +589,6 @@
       "reason": "counted for-loop with a constant in-test bound (600 beats); the loop cannot be empty without editing the literal (pre-approach consult carve-out: counted loops take a reason, not a NotEmpty)"
     },
     {
-      "key": "CcpClient.Tests/FloorWrapperGuardTests.cs::FloorWrapperGuardTests.AuditorPrompt_InvokesTheFloorWrapper_NeverBareDotnetTest",
-      "path": "CcpClient.Tests/FloorWrapperGuardTests.cs",
-      "line": 0,
-      "method": "FloorWrapperGuardTests.AuditorPrompt_InvokesTheFloorWrapper_NeverBareDotnetTest",
-      "shapes": [
-        "fs-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "fs usage is the Assert.True(File.Exists(promptPath)) never-skip checkpoint at depth 0 — the auditor pin refuses to skip by design"
-    },
-    {
-      "key": "CcpClient.Tests/FloorWrapperGuardTests.cs::FloorWrapperGuardTests.PacketsAtOrAboveSp065_RouteDotnetTestThroughTheFloorWrapper",
-      "path": "CcpClient.Tests/FloorWrapperGuardTests.cs",
-      "line": 40,
-      "method": "FloorWrapperGuardTests.PacketsAtOrAboveSp065_RouteDotnetTestThroughTheFloorWrapper",
-      "shapes": [
-        "fs-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS)"
-    },
-    {
-      "key": "CcpClient.Tests/FloorWrapperGuardTests.cs::FloorWrapperGuardTests.PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin",
-      "path": "CcpClient.Tests/FloorWrapperGuardTests.cs",
-      "line": 161,
-      "method": "FloorWrapperGuardTests.PacketsAtOrAboveSp073_DeclareAFloorDeltaAndNeverOwnTheSharedPin",
-      "shapes": [
-        "fs-predicate"
-      ],
-      "expectDetected": true,
-      "verdict": "not-vacuous",
-      "reason": "same shape and same disposition as the SP-065 sibling above: the fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0, and a missing spine-tasks/ FAILS rather than skips. Recorded during the 2026-08-14 multi-lane enablement: the shared EnumeratePackets helper deliberately does NOT own that existence check — this detector is lexical, so a never-skip checkpoint moved into a helper stops being visible here, and both guards keep the two-line check in their own bodies for exactly that reason"
-    },
-    {
       "key": "CcpClient.Tests/HarnessEntryPointGateTests.cs::HarnessEntryPointGateTests.HarnessEntries_AreSingledOut_TableDrivenOverRegistry",
       "path": "CcpClient.Tests/HarnessEntryPointGateTests.cs",
       "line": 20,

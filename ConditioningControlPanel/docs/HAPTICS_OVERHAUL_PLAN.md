@@ -1,6 +1,5 @@
 # Haptics Overhaul — Master Plan (2026-08-03)
 
-Branch: `feat/haptics-overhaul` (worktree `C:\Projects\ccp-wt-haptics`, off origin/main f516cb25 = v6.6.3).
 Status legend: [ ] todo, [x] done. Update this file as phases land.
 
 ## Locked decisions (owner-approved)
@@ -8,7 +7,7 @@ Status legend: [ ] todo, [x] done. Update this file as phases land.
 2. **No direct-BLE** (`LovenseBLE_Lib.dll`) in v1 — LAN Game Mode + Buttplug/Intiface only. BLE is v2.
 3. **All 5 Phase-4 features are in scope**: Toy Events input, FunScript, audio band-split, flash-luminance sync, temperament dial.
 4. **Routing matrix is by ROLE** (Reward / Punish / Ambient / All), not per-individual-toy columns.
-5. Only Opus agents implement; Fable coordinates. Premium gating stays (`App.Patreon?.HasPremiumAccess`) — now enforced in the service choke point too, not just UI.
+5. Implementation follows the current review workflow. Premium gating stays (`App.Patreon?.HasPremiumAccess`) — now enforced in the service choke point too, not just UI.
 
 ## Why (current-state audit, key findings)
 - `IHapticProvider.VibrateAsync(double intensity, int durationMs)` has **no device/actuator addressing** — root constraint. `ConnectedDevices` is display-only strings.
@@ -60,13 +59,13 @@ IHapticProviderV2:  LovenseProviderV2 (LAN JSON + Toy Events WS)
                     ButtplugProviderV2 (Buttplug 5.0.1)
                     MockProviderV2 (N virtual toys, capability presets, visualizer)
 ```
-Contracts live in `Services/Haptics/Core/HapticContracts.cs` (written by Fable — DO NOT redesign; extend via new members only if genuinely required, and note it here).
+Contracts live in `Services/Haptics/Core/HapticContracts.cs` (DO NOT redesign; extend via new members only if genuinely required, and note it here).
 
 Routing: config maps each `HapticEventKind` row → enabled + intensity + mode/pattern, targeted at a `ToyRole` column. Continuous layers route to roles too (Ambient default). A toy with Role=All hears everything.
 
 ## Phases & task list
 
-### Phase A — Engine core (Agent A)
+### Phase A — Engine core (Workstream A)
 Files: `Services/Haptics/Core/HapticMixer.cs`, `HapticDeviceManager.cs`, `MockProviderV2.cs`,
 `HapticPatterns.cs`, `MockToast.cs`; reworked `Services/Haptics/HapticService.cs`,
 `DtrhHapticDirector.cs`, `Models/HapticSettings.cs`.
@@ -106,7 +105,7 @@ Files: `Services/Haptics/Core/HapticMixer.cs`, `HapticDeviceManager.cs`, `MockPr
   `HapticMixer.SetPositionAsync(deviceKey, 0..1)` — Position is deliberately NOT driven by the
   generic mixer (it is placement, not intensity); FunScript owns it.
 
-### Phase B — LovenseProviderV2 (Agent B)
+### Phase B — LovenseProviderV2 (Workstream B)
 Files: `Services/Haptics/LovenseProviderV2.cs`, `Services/Haptics/LovenseToyEventsClient.cs`,
 `Services/Haptics/LovensePatterns.cs`. Legacy `LovenseProvider.cs` untouched (dies at integration).
 - [x] Per-toy registry from `GetToys` (both parse shapes), capabilities from `shortFunctionNames`, battery, nickname.
@@ -145,7 +144,7 @@ Files: `Services/Haptics/LovenseProviderV2.cs`, `Services/Haptics/LovenseToyEven
   (c) `battery`/`status` field types vary by firmware — both string and number are accepted, unverified.
   (d) PatternV2 `Setup`→`Play` timing (`startTime`/`offsetTime` semantics) is unexercised.
 
-### Phase C — ButtplugProviderV2 (Agent C)
+### Phase C — ButtplugProviderV2 (Workstream C)
 - [x] Swap csproj package to `Buttplug` 5.0.1; rewrite client against the real 5.x API (verify spec v3 vs v4 empirically).
 - [x] Per-device dispatch (scalar per feature index), device add/remove events under lock, real ping.
 - [x] Map Buttplug device features → `HapticActuator` list.
@@ -179,7 +178,7 @@ round-trip: `RequestDeviceList` sent through our retained connector (the client 
 Device id = Intiface display name (else model name), ':' stripped, `#n` for duplicates — the numeric
 Buttplug device index is session-scoped and unusable as a persisted key.
 
-### Phase D — Standalone fixes (Agent D, files disjoint from A/B/C)
+### Phase D — Standalone fixes (Workstream D, files disjoint from A/B/C)
 - [x] Wizard images → absolute pack URIs; wizard port text 30010-vs-20010 unified.
       All 4 PNGs verified present + embedded (`Resource Include="Resources\haptics_guide\*.png"`
       already covered them, no csproj edit needed). Wizard now says the app finds the port
@@ -360,7 +359,7 @@ Phase F UI decisions at the end of this section).
   conventions, not measured on hardware. (c) Toy Events button frames were never captured from a
   real toy (Phase B open item (a)), so the attention-check alternative is untested end to end.
 
-**Decisions made in the Phase F UI pass (the design agent needs these):**
+**Decisions made in the Phase F UI pass (the design workstream needs these):**
 - **Owner's mid-flight call: the tab was already too dense.** So of the five Phase F features,
   only the temperament picker is visible at rest. Toy input, FunScript, flash brightness and the
   audio DSP knobs each live in a `CollapsibleCard` Expander that is `IsExpanded="False"`, showing
@@ -456,8 +455,8 @@ brightness strength, the DtRH ambient/density pair, the Video-Haptic-Sync card (
 - [ ] Build clean; Mock play-test (automated UIA method — ABORT if an app instance we didn't start is running); real-toy pass by owner.
 - [ ] PR to main.
 
-## Verification bar (every agent)
-- `dotnet build` clean in THIS worktree (main builds; the other worktree's breakage was grace-pause WIP, not ours).
+## Verification bar (every workstream)
+- `dotnet build` clean in this checkout; unrelated incomplete changes do not establish a failure here.
 - No public-API breaks: all ~25 consumer call sites compile untouched (Phases A-D).
 - No settings resets: old `settings.json` haptics section round-trips.
 - WPF traps: converters in Window.Resources; check `IsLoaded`/`Template != null` before animations; no fire-and-forget without dispatcher-null + try/catch guard.

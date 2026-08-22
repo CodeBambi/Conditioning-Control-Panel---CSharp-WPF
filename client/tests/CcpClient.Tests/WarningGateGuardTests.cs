@@ -36,19 +36,6 @@ public partial class WarningGateGuardTests
     private static readonly string[] GateParts = ["client", "tests", "floor", "check-warnings.mjs"];
     private static readonly string[] FloorParts = ["client", "tests", "floor", "check-floor.mjs"];
     private static readonly string[] SolutionParts = ["client", "CcpClient.sln"];
-    private static readonly string[] WorkflowParts = ["client", "docs", "port-workflow.md"];
-    private static readonly string[] HarnessParts = ["client", "docs", "verification-harness.md"];
-    private static readonly string[] AuditorParts = ["client", "tools", "port-audit-prompt.md"];
-    private static readonly string[] WaveWorkflowParts = ["client", "tools", "wave", "port-wave.workflow.mjs"];
-
-    private const string GateInvocation = "node client/tests/floor/check-warnings.mjs";
-
-    /// <summary>The plain incremental build whose output a human reads by eye — the false green
-    /// `measure-02` documents. The wave workflow prescribed exactly this line until SP-114's final
-    /// review; the trailing newline in the assertion is what keeps the PROSE that quotes it (inside
-    /// the gate's own explanation) from reading as an instruction.</summary>
-    private const string BareBuildCommand =
-        "node client/tools/gate/with-slot.mjs --slots 3 -- dotnet build client/CcpClient.sln -c Debug --nologo";
 
     /// <summary>The diagnostic line SP-113's filter could not match, verbatim.</summary>
     private const string XunitWarningLine =
@@ -218,46 +205,6 @@ public partial class WarningGateGuardTests
         // The corpus inside the gate carries the same case, so `--self-test` covers it with no build.
         Assert.Contains("xUnit2013", gate, StringComparison.Ordinal);
         Assert.Contains(RetiredFilterPattern, gate, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TheGateIsNamedInTheWorkflowTheHarnessAndTheAuditorPrompt()
-    {
-        // A gate nobody is told to run is a script.
-        //
-        // The WAVE WORKFLOW is the one that decides whether this packet delivered anything at all:
-        // client/tools/wave/port-wave.workflow.mjs is the file that MECHANICALLY ISSUES the gate
-        // commands into every lane of every wave and into the code-review prompt. The SP-114 final
-        // review found the gate built, proven and documented while that file still prescribed a
-        // plain `dotnet build` whose output a human reads — the exact false green measure-02
-        // records. A gate named only in prose is a gate nobody runs.
-        //
-        // The blind auditor is the second: it is the one check meant to catch a lying land, and it
-        // was told to read build output with its own eyes.
-        var root = FindRepoRoot();
-        var workflow = File.ReadAllText(Path.Combine([root, .. WorkflowParts]));
-        var harness = File.ReadAllText(Path.Combine([root, .. HarnessParts]));
-        var auditor = File.ReadAllText(Path.Combine([root, .. AuditorParts]));
-        var waveWorkflow = File.ReadAllText(Path.Combine([root, .. WaveWorkflowParts]));
-
-        Assert.Contains(GateInvocation, workflow, StringComparison.Ordinal);
-        Assert.Contains(GateInvocation, harness, StringComparison.Ordinal);
-        Assert.Contains(GateInvocation, auditor, StringComparison.Ordinal);
-        Assert.Contains(GateInvocation, waveWorkflow, StringComparison.Ordinal);
-
-        // Both issuing sites, not just one: the lane RULES string and the code-review prompt each
-        // carry their own copy of the command pair, and a fix applied to one reads as done.
-        var issued = waveWorkflow.Split(GateInvocation).Length - 1;
-        Assert.True(issued >= 2,
-            $"port-wave.workflow.mjs issues the warning gate {issued} time(s); both the lane RULES string "
-            + "and the code-review prompt must carry it, or half of every wave still runs a plain build "
-            + "whose output a human reads.");
-
-        // ...and neither site may fall back to the bare build. The gate performs that build itself;
-        // a lane told to run both would build twice and read the second, incremental one, which is
-        // exactly the reading that reports 0 warnings over a tree that has them.
-        Assert.DoesNotContain(BareBuildCommand + "\n", waveWorkflow, StringComparison.Ordinal);
-        Assert.DoesNotContain(BareBuildCommand + "\r\n", waveWorkflow, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()

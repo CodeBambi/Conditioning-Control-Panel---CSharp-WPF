@@ -31,7 +31,7 @@ namespace CcpClient.Tests;
 /// languages. That alone is defeated by one edit: inline a pattern in the generator and the JSON
 /// guard stays green while the census widens. So
 /// <see cref="CensusGenerator_HoldsNoShapeLiteralOfItsOwn"/> reads <c>census.mjs</c> as text.
-/// Precedent for reading a tool's source: FloorWrapperGuardTests, AllowedSkipsBanGuardTests.</para>
+/// Precedent for reading a tool's source: AllowedSkipsBanGuardTests.</para>
 ///
 /// <para>WHAT THAT GUARD ACTUALLY ENFORCES, STATED EXACTLY BECAUSE IT USED TO OVERSTATE ITSELF. It
 /// forbids a NAMED list of literals in the generator's non-comment, non-document-emitting lines:

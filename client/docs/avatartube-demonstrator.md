@@ -20,8 +20,7 @@ cell): magenta marker + 2 pack bits + 3 clip bits + 4 frame bits, luminance-deco
 ambiguity rejection. Frame delays are **NON-UNIFORM** (430-1400ms — a uniform-delay asset
 cannot falsify multiplied speed; >= ~400ms so slow captures sample every hold >= 2x).
 Generation is deterministic (pure integer math, no PRNG/clock); committed assets are
-pixel-identical to regeneration (unit test) and SHA-256 recorded in
-`spine-tasks/SP-015-avatartube-animation/record.md`. Both packs are routed through SP-009's
+pixel-identical to regeneration (unit test) and SHA-256 verified by the asset checks. Both packs are routed through SP-009's
 manifest (5 embedded entries, case-exact IDs) — `--verify-assets` green on Debug AND Release.
 There is **no mod loader** — "mod switching" = two packs through the same manifest path
 (SP-009: schema covers mod, instances do not; real mod-loader semantics = named limit).

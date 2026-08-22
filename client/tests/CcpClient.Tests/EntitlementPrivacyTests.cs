@@ -191,9 +191,8 @@ public class EntitlementPrivacyTests
         // shipping app's entropy decrypting back through this same real path — is inherently
         // Windows-only, and an OS-gated fact needs either an allowedSkips name in
         // client/tests/floor/floor.json or a disposition in
-        // client/tests/floor/vacuous-shape-ledger.json. Both files are shared chokepoints
-        // outside this lane's File Scope, so that leg is measured MANUALLY and recorded in
-        // spine-tasks/SP-092-entitlement-capability/record.md rather than faked here.
+        // client/tests/floor/vacuous-shape-ledger.json. The positive Windows-only leg is
+        // manual verification; this portable test never claims to exercise it.
     }
 
     private static string FindRepoRoot()

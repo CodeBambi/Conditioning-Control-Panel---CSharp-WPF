@@ -65,15 +65,24 @@ This inventory records observable product behavior. WPF classes and APIs are evi
 
 ## Webcam, face, and gaze tracking
 
-- The product direction is local deep-learning inference: BlazeFace face detection, FaceMesh landmarks, and Iris eye/iris landmarks, with semantic blink/gaze/face events and an evidence-backed calibrated gaze engine.
+- The product provides two selectable gaze engines: the default local WPF-equivalent BlazeFace,
+  FaceMesh, and Iris pipeline, plus an admitted third-party deep-learning engine. Both expose the
+  same semantic blink/gaze/face events through a stable consumer contract.
 - Frames, crops, tensors, landmarks, gaze samples, and all per-frame biometric derivatives remain memory-only. They are never saved, logged, transmitted, included in screenshots, telemetry, AI prompts, or crash reports. Audio capture is never opened.
 - Expanding sensors, derived data, persistence, networking, diagnostics, or telemetry requires a consent-contract revision and owner review.
 - Camera starts only after current explicit consent and an explicit user start/accepted feature prompt. Opening the dashboard, restoring settings, or finding calibration never starts it.
 - UI exposes honest states: stopped, permission request, opening, model load/warm-up, tracking, face lost, busy, denied, removed, missing runtime/model, slow inference, and error.
 - Camera acquisition and model initialization are cancellable and off the UI thread. Stop/panic/revoke/exit/device removal closes capture and suppresses events without native disposal races.
 - Persist stable camera identity where available, calibrated monitor identity/geometry, model/feature/preprocessing identity, model hash/version, quality summary, numeric coefficients, and quick-recal offset. Never use only a transient camera index.
-- Calibration belongs to one physical monitor and admitted gaze feature/model. Camera, monitor geometry, model, feature, or preprocessing mismatch invalidates/suspends positional gaze until recalibrated. Silent engine fallback with incompatible calibration is forbidden.
-- Deep full-face gaze models remain a spike until their weights and training data are commercially distributable and they outperform the iris baseline under the same Windows/Linux calibration and hardware matrix.
+- Webcam settings visibly identify and select the active engine. The local WPF-equivalent engine is
+	the default; an unavailable third-party engine is shown with its reason and cannot be selected.
+- Calibration belongs to one physical monitor and one admitted engine/model. Camera, monitor
+	geometry, engine, model, feature, or preprocessing mismatch invalidates/suspends positional gaze
+	until recalibrated. Silent fallback to another engine is forbidden.
+- The third-party deep-learning engine remains unavailable until its named provider/model, local or
+	remote execution, commercial weight and training-data rights, outbound-data policy, and Windows/
+	Linux behavior are admitted. A remote engine requires separate owner approval before any frame,
+	crop, landmark, or biometric derivative can leave the device.
 - Normal operation needs no raw-frame preview. Any diagnostic preview requires separate justification and consent-safe handling.
 - Windows and Linux must provide real enumeration, capture, calibration, inference, semantic events, and teardown. Linux sandboxed delivery must prove XDG Camera portal/PipeWire behavior when in scope. A stub that says running is a failure.
 
@@ -81,7 +90,9 @@ This inventory records observable product behavior. WPF classes and APIs are evi
 
 - Test consent/revocation, stable device selection, denial/busy/black/frozen/unplug/read-failure/model/runtime errors, repeated lifecycle, and responsive startup.
 - Measure accuracy, latency, sustained FPS, CPU, memory, startup, and power on approved low/median/high hardware for each admitted engine.
-- Verify BlazeFace/FaceMesh/Iris, blink, gaze, face loss/recovery, calibrated-monitor restriction, quick recalibration, panic, and teardown on Windows and supported Linux X11/Wayland environments.
+- Verify both selectable engines for Blink/Gaze/face-loss/recovery behavior, calibrated-monitor
+	restriction, separate calibration, engine-switch invalidation, quick recalibration, panic, and
+	teardown on Windows and supported Linux X11/Wayland environments.
 - Audit filesystem, logs, network, telemetry, screenshots, and crash artifacts to prove no frame or biometric derivative escapes memory.
 
 ### Webcam evidence

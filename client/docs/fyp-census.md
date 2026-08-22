@@ -1,7 +1,7 @@
 # For You Feed — census against the shipping WPF source
 
 **SP-125.** Evidence tree: this repository at `b76856a7` (`feat/crossplatform`), read on 2026-08-21.
-Method fixed in advance at `spine-tasks/SP-125-fyp-census/plan.md`, committed before any mapping.
+Method: the repeatable inventory rules and source citations stated in this document.
 
 **Verdict: REFUSED, with the inventory below.** Not "too big" — *the wrong shape*. Two of the seven
 behaviours the owner used to define this surface are governed by decisions that are not the port's to

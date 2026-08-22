@@ -2,7 +2,7 @@
 Generato: 2026-05-27
 Versione codebase: v5.9.9-56-g3a4fcd3 (worktree branch `audit/ccbill-ai-addendum`, parent branch `worktree-agent-a69bd62036261efd1`, base `main` HEAD `3a4fcd3`)
 
-Scope: tutto e solo il client WPF in `ConditioningControlPanel/` (worktree root `C:/Projects/Conditioning-Control-Panel---CSharp-WPF/.claude/worktrees/agent-a69bd62036261efd1/`). Il server (`CCP-Server`) e il front-end web (`cclabs-web`) sono fuori scope: vengono citati solo come endpoint di destinazione delle chiamate fatte dal client.
+Scope: tutto e solo il client WPF in `ConditioningControlPanel/`. Il server (`CCP-Server`) e il front-end web (`cclabs-web`) sono fuori scope: vengono citati solo come endpoint di destinazione delle chiamate fatte dal client.
 
 Read-only review. Tutti i path sono assoluti dentro il worktree, con i numeri di riga riferiti allo snapshot al momento dell'audit.
 

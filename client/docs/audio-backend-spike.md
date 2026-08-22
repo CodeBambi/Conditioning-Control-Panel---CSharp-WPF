@@ -2,11 +2,11 @@
 
 **Date:** 2026-07-21 · **Task:** SP-017 (task-board row "Spike cross-platform audio channel backend") · **Status:** spike outcome, **selection PENDING-OWNER ratification** (like every spike row; the board row stays `WIP`)
 
-Quarantined spike host: `client/spikes/CcpSpike.Audio/` (console, NOT in `client/CcpClient.sln`; inherits only `client/Directory.Build.props`). Raw observation logs: `spine-tasks/SP-017-audio-backend-spike/evidence/run-windows.jsonl` (36 observations) and `run-wslg.jsonl` (26). Worker log, consult verdicts, and research citations: `spine-tasks/SP-017-audio-backend-spike/record.md`.
+Quarantined spike host: `client/spikes/CcpSpike.Audio/` (console, NOT in `client/CcpClient.sln`; inherits only `client/Directory.Build.props`). Raw observations are summarized in the evidence below and in `run-wslg.jsonl`.
 
-**Honesty framings (packet, binding):** (a) WSLg/PulseAudio = REAL Linux evidence for enumerate/select/fallback + event-verified completion + teardown + packaging; **latency/overlap-timing numbers are Windows-headed ONLY — Linux timing is a named limit** (WSLg jitter); (b) completion/interruption/pause/busy claims come only from backend-emitted events/positions cross-checked against a shared monotonic stopwatch — never from call returns or sleeps; (c) packages admitted via in-packet solo consult with exact versions/licenses/natives from live feeds; (d) NAudio 2.2.1 = Windows-reference baseline, never a cross-platform candidate; (e) no Wayland claim (§5.1 untouched).
+**Honesty framings (binding):** (a) WSLg/PulseAudio = REAL Linux evidence for enumerate/select/fallback + event-verified completion + teardown + packaging; **latency/overlap-timing numbers are Windows-headed ONLY — Linux timing is a named limit** (WSLg jitter); (b) completion/interruption/pause/busy claims come only from backend-emitted events/positions cross-checked against a shared monotonic stopwatch — never from call returns or sleeps; (c) packages are assessed against exact versions, licenses, and native dependencies from current primary sources; (d) NAudio 2.2.1 = Windows-reference baseline, never a cross-platform candidate; (e) no Wayland claim (§5.1 untouched).
 
-## 1. Admitted backends (package admission gate, solo Fable 5 consult 2026-07-21)
+## 1. Admitted backends (package admission evidence, 2026-07-21)
 
 | Backend | Version | Published | License | Native deps (Windows / Ubuntu 26.04) | Maintenance | Packaging implication (SP-010 natives-beside-exe) |
 |---|---|---|---|---|---|---|

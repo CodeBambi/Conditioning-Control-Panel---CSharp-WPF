@@ -154,8 +154,7 @@ public sealed class DtrhNativeEffects : IDisposable
 
     // ============================ SP-051 audited chain resolution ============================
 
-    /// <summary>The complete audited WPF ChaosSfx cue→fallback-chain table (SP-051 map,
-    /// spine-tasks/SP-051-chaossfx-chain-audit/record.md). Candidates are the chain member
+    /// <summary>The complete audited WPF ChaosSfx cue→fallback-chain table. Candidates are the chain member
     /// BASENAMES in override→fallback order (the greenfield pool is flat; WPF keeps them
     /// under Resources/sounds/ with chaos/ and bubbles/ prefixes — <see cref="ChaosSfxChain.WpfChain"/>
     /// keeps the WPF-relative spelling). Keyed by wire cue token, ordinal-exact

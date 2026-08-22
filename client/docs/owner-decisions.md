@@ -40,7 +40,7 @@ read, used and dropped.
 
 ---
 
-## Still genuinely waiting on you
+## Decision register
 
 ### 1. May the port transmit the borrowed token, and read a second cross-app file?
 `task-board.md:206` · scope: one further step, not the whole feature
@@ -73,20 +73,23 @@ So three of the four options are answerable as written; only the Buttplug one ne
 answer, the capability refuses every user and the panel says so in words a user reads. Everything above the
 device is already built: the effect modules command the haptic limb with your app's own numbers.
 
-### 3. For You Feed
-`task-board.md:45` · needs a consent-contract revision, not just a yes
+### 3. For You Feed gaze engines - resolved 2026-08-22
+`task-board.md:25` · implementation and provider admission remain `WIP`
 
-Three facts from your own code, none of them a description:
+The owner requires both the current WPF-equivalent local BlazeFace/FaceMesh/Iris pipeline and a
+third-party deep-learning gaze engine. The user chooses the active engine in webcam settings; the
+local WPF-equivalent path is the default until the alternative is admitted.
 
-- **It uses the webcam.** The feed starts the camera, checks consent, and follows your eyes
-  (`Services/Fyp/FypHostService.cs:903-1045`). Webcam is not one of the port's landed capabilities, and the
-  port's own contract requires real capture on **both** Windows and Linux, with a stub explicitly counted as
-  a failure.
-- **It fetches from a third party.** It POSTs to `https://api.scrolller.com/admin` across twelve
-  explicit-content niches, **weighted by what you linger on** — so what you look at shapes what leaves the
-  machine.
-- **Consent inside the feed unlocks remote media in five other surfaces** (Flash, Video, Wallpaper,
-  IntakeHost and the DTRH asset manifest), which is easy to miss when agreeing in one place.
+The selector is not permission to send webcam data anywhere. Before the third-party option can
+become available, its named provider and model, local or remote execution location, commercial
+weight and training-data rights, outbound-data policy, retention, and Windows/Linux support need
+recorded evidence. Each engine has distinct calibration identity and validity; changing engines
+requires selecting a valid calibration or recalibrating. No unavailable engine silently falls back
+or keeps the camera running under a different engine.
+
+For You Feed's separate remote-media decision is unchanged: its third-party content source and
+the consent that unlocks remote media in Flash, Video, Wallpaper, IntakeHost, and the DTRH asset
+manifest remain distinct from this camera-engine decision.
 
 ### 4. Goon Game, six items
 `task-board.md:322` · this is the port's first outbound network boundary

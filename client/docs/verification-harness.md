@@ -64,7 +64,7 @@ Every check in the manifest declares an evidence class:
 
 ### What `presentation-verified` covers for the Studio rack, and what it does not (SP-122)
 
-**Covered.** Composited pixels, read back off the real Windows desktop through a fenced `CopyFromScreen`, for four states of two rack surfaces, driven by real mouse input and confirmed by a UIA read before any pixel was taken. Five named checks, each shown FAILING twice over: once against a real capture of the opposite state, and once against the seeded `#FFE066FF -> #FF336633` regression `self-test.ps1` drives through `MainWindow.axaml`, where `rack-row-selected-marker` scored 0/189 while `rack-row-selected-fill` still passed — the seed moved one brush and exactly one check noticed. Fractions, pass state then wrong state: marker 0.862 / 0.000, fill 1.000 / 0.000, ground 1.000 / 0.000, dot-armed 0.714 / 0.224, dot-off 1.000 / 0.000. Numbers and transcripts: `spine-tasks/SP-122-rack-presentation/record.md`.
+**Covered.** Composited pixels, read back off the real Windows desktop through a fenced `CopyFromScreen`, for four states of two rack surfaces, driven by real mouse input and confirmed by a UIA read before any pixel was taken. Five named checks, each shown FAILING twice over: once against a real capture of the opposite state, and once against the seeded `#FFE066FF -> #FF336633` regression `self-test.ps1` drives through `MainWindow.axaml`, where `rack-row-selected-marker` scored 0/189 while `rack-row-selected-fill` still passed — the seed moved one brush and exactly one check noticed. Fractions, pass state then wrong state: marker 0.862 / 0.000, fill 1.000 / 0.000, ground 1.000 / 0.000, dot-armed 0.714 / 0.224, dot-off 1.000 / 0.000. The check manifest retains the measured thresholds.
 
 **NOT covered, and none of it should be read into the class.**
 
@@ -144,7 +144,7 @@ necessary.
 > `GetGUIThreadInfo(<i>ourThreadId</i>).hwndFocus` **still answered "our window"**. That read is
 > THREAD-LOCAL. The system-wide fact is `GetGUIThreadInfo(0)`, documented as the foreground thread,
 > and in the same instant it answered the other application's window
-> (`spine-tasks/SP-110-input-capturing-window/plan.md` §0, run 1).
+> in the same observed interval.
 
 - **`focus-verified`** — the check asserts that the operating system reports the window as **the
   foreground window** (`GetForegroundWindow`) **and** as **the foreground THREAD's keyboard focus**
@@ -227,7 +227,7 @@ When that happens the facts **fail loudly**, and how much they can say differs b
 
 ### SP-134: the residue above is still not excludable, and it is no longer silent
 
-**Wave-66 could not certify a green tree and spent nine full floor runs finding out why: three green, six red, every failure a `RealDesktopCollection` fact, and the failing test MOVED between runs — `VideoOverlayCoexistenceTests` four times, `PointerCapabilityTests` once, `InputCapabilityTests` once, all of them passing 5/5 in isolation.** **That the cause was the first bullet above — the shipping WPF product on the same desktop — is INHERITED, not established here**: it is the wave-66 land's own attribution, restated in `spine-tasks/SP-134-desktop-preflight/PROMPT.md:10-11`, and SP-134 did not test it. What SP-134 establishes is the mechanism by which such a window breaks these facts, and that the mechanism is detectable; the attribution of those particular nine runs remains a hypothesis, with its falsification condition stated at the end of this section. Excluding such a window is impossible and that sentence has not changed. **Detecting it is a different problem, and it was solved.** `RealDesktopLease`'s constructor now runs a pre-flight (`RealDesktopCollection.cs`, `DesktopPreflight`) after the lease is held and before the collection's first fact, and a contended desktop refuses there, by name, instead of surfacing two or three assertion failures that never mention the window responsible.
+**A prior full-floor investigation saw three green and six red runs, every failure a `RealDesktopCollection` fact, with the failing test moving between runs — `VideoOverlayCoexistenceTests` four times, `PointerCapabilityTests` once, `InputCapabilityTests` once, all of them passing 5/5 in isolation.** The shipping WPF product on the same desktop is a plausible cause, not an established fact. This document establishes instead how a competing window breaks these checks and how the mechanism is detected; that earlier attribution remains a hypothesis with a falsification condition stated at the end of this section. Excluding such a window is impossible. **Detecting it is a different problem, and it was solved.** `RealDesktopLease`'s constructor now runs a pre-flight (`RealDesktopCollection.cs`, `DesktopPreflight`) after the lease is held and before the collection's first fact, and a contended desktop refuses there, by name, instead of surfacing two or three assertion failures that never mention the window responsible.
 
 **The obvious detector was built, run, and rejected ON EVIDENCE — this is the part worth keeping.** "A foreign topmost window owns a contended point" was true on the authoring machine (`ConditioningControlPanel v6.8.1`, pid 16712: foreground in 12 of 12 samples, its `WS_EX_TOPMOST` main window owning all five probed points in 12 of 12, rect `(42,19)-(1605,962)` over the whole band) **and the floor run under exactly that contention was green, 2573/2573 and 152/152.** Presence is not the harm, and a detector built on it would have reddened the whole collection — 212 `[Fact]`/`[Theory]` declarations at that commit, 213 across 15 classes once this packet's own control joined — on a tree that was fine. The discriminator is one line upstream: `ChaosModeService.cs:930` returns from `RunTick` unless `_spawning && !_paused && !_manualPaused`, and `:787` returns from `KeepChromeTopmost` again unless `_spawning`, so an **idle or paused** copy cannot re-assert at all and is merely parked in the topmost band, while a **running session** re-asserts on a ~1 s cadence (`:937-940`, four ticks of the `:503` 250 ms timer, into `FlashService.cs:206-243`) and climbs back over whatever the suite raised. **That mechanism would also account for the same application present throughout producing three green and six red — but "would account for" is the honest verb.** SP-134 demonstrated the mechanism on a staged contender it controlled; it did not reproduce wave-66, and no run in this packet was contended in the detected sense.
 
@@ -328,9 +328,13 @@ Measured 2026-07-19 (SP-008 Step 4); budget = observed + stated headroom. Cold =
 
 Headroom rationale: ~4x on tier 1 (dominated by NuGet/SDK variance on cold CI-like machines), ~5x on tiers 2–3, ~5x on the self-test (two builds + two captures + two assertions). Re-measure when a tier adds a project or a surface.
 
-## K3 integration
+## Independent Visual Review
 
-The manifest is the shared contract between deterministic assertion and model review (`app-visual-verification` skill, exact model `kimi-coding/k3`): the review prompt names the manifest checks (name, region, property, tolerance) and asks K3 only for what pixels-with-tolerance cannot see (clipping, truncation, state pairing, glow bleed, contrast). First run recorded in `spine-tasks/SP-008-verification-harness/record.md`: card lit+unlit captures, VERDICT PASS. Interaction gates K3 cannot discharge (toggle behavior, tick advance) are covered by the tier-2 state drive (real right-click + tick-advance verification in `capture.ps1`), never by stills.
+The manifest is the shared contract between deterministic assertions and independent visual review:
+the review uses its named checks (name, region, property, tolerance) only for what
+pixel-with-tolerance assertions cannot assess, such as clipping, truncation, state pairing, glow
+bleed, and contrast. Interaction gates, including toggle behavior and tick advancement, require the
+tier-2 state drive in `capture.ps1`; still images never discharge them.
 
 ## Tier-4 milestone hook
 
@@ -381,9 +385,8 @@ flips with the machine; nothing is skipped and no assertion is relaxed.**
    cost falls entirely on `clip-decodable`**, and it is precisely two things — the source
    reader's video PROCESSOR is never exercised (the fixture is natively RGB32, so no conversion
    is ever required), and the format set the port can actually open is untested against anything
-   a user owns (D124: the playable set becomes what Windows can open rather than what LibVLC
-   can). Both are carried as NAMED uncovered mutation survivors, `M-y` and `M-w`, in
-   `spine-tasks/SP-111-video-capability/record.md` §4.
+  a user owns (D124: the playable set becomes what Windows can open rather than what LibVLC
+  can). Both remain NAMED uncovered mutation survivors, `M-y` and `M-w`.
 
    **One real clip closes both.** A packet that gains access to real media should add one
    COMPRESSED fixture before adding anything else, and must not assume the synthetic path proved

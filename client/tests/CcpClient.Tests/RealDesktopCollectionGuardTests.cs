@@ -15,7 +15,7 @@ namespace CcpClient.Tests;
 /// <para><b>WHY A SOURCE WALK.</b> <c>[Collection]</c> is reflectable, but "this class reaches the
 /// real window manager" is a property of a method body, which reflection cannot see without
 /// decoding IL. Same shape and same lineage as
-/// <see cref="ProcessEnvCollectionGuardTests"/> / <c>FloorWrapperGuardTests</c> /
+/// <see cref="ProcessEnvCollectionGuardTests"/> / <c>VacuousShapeGuardTests</c> /
 /// <c>TestTimingGuardTests</c>: repo-root walk, never skips, fails closed, file:line
 /// violations.</para>
 ///

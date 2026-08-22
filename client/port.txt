@@ -1,137 +1,94 @@
-Orchestrate the greenfield Avalonia port per @client/docs/port-session-prompt.md.
+# Greenfield Client Workflow Prompt
 
-YOU ARE ONE PHASE OF AN UNATTENDED LOOP (client/tools/port-loop.ps1). Do exactly ONE phase,
-then EXIT. A fresh session with a clean context runs the next phase. You author, judge, verify
-and land; SUBAGENTS in worktree lanes do the product work. You never hand-edit product code.
+Use this prompt to coordinate work on the greenfield Windows/Linux Avalonia client in `client/`.
+It is intentionally independent of any particular command-line tool, model, workflow engine, or
+historical task archive.
 
-Which phase is yours is decided by state, not by memory. Reconcile first (read-only), then:
-  A. Lanes finished, nothing integrated -> LAND IT: verify the merged state yourself, APPLY THE
-     SUMMED FLOOR DELTAS (below), merge, reconcile board/CONTEXT/memories/port-lessons, write the
-     digest, commit, push. Then EXIT.
-  B. No wave in flight, claimable work on the board -> AUTHOR + RUN ONE WAVE: advise on the
-     decomposition, write the packet(s), VALIDATE THE WAVE MECHANICALLY (below), commit the
-     authoring, write .port/WAVE-LOCK, then launch every lane IN ONE MESSAGE so they run
-     concurrently, and OWN THE WAIT (subagents are in-session; there is no detached engine any
-     more). When every lane has reported, record each lane's branch and head SHA, clear the lock,
-     and EXIT WITHOUT LANDING. A fresh session lands what you ran, because the context that did
-     the work must never certify it.
-  C. .port/WAVE-LOCK is live -> EXIT AT ONCE (another phase owns the wave).
-  D. No claimable work, or a pause condition -> pause protocol below, then EXIT.
+## Start With Reconciliation
 
-STANDING OWNER AUTHORIZATION (2026-08-14, verbatim: "always commit and push ... no need to ask
-for permission everytime"): COMMIT AND PUSH WITHOUT ASKING. Do not stop a phase to request
-permission to commit, and do not end a phase leaving verified work sitting unpushed - unpushed
-work is one disk failure from gone, and a fresh session cannot reconcile from a commit it cannot
-see. This authorizes the ROUTINE act of committing and pushing; it does not authorize skipping a
-gate, landing unverified work, force-pushing, rewriting published history, or pushing anything
-other than feat/crossplatform. The land discipline below is unchanged: what you push is the tree
-you verified LAST, and a red gate is still a halt.
+Before planning, editing, or delegating, inspect the current repository state:
 
-Continuous mode and the lifted gates are recorded in the board gate history and
-spine-tasks/CONTEXT.md (2026-07-18, 2026-07-21). VERIFY THAT AT RECONCILE; this file is not the
-grant and does not carry authority. If the board does not confirm it, treat gates as ACTIVE.
+1. Read `docs/constitution.md`, `client/docs/port-workflow.md`, the relevant client contracts, and
+  `client/docs/task-board.md`.
+2. Inspect `git status`, recent relevant history, active worktrees or workspaces, and any scoped
+  uncommitted changes. Preserve work whose owner or purpose is not yet clear.
+3. Identify the next unblocked board row, its dependencies, the governing behavior evidence, and
+  the exact verification it requires.
+4. Repair a stale authoritative document before relying on it. The task board is the only live
+  queue; old logs, summaries, and workflow state are evidence only.
 
-FRESH-MACHINE BOOTSTRAP (do first, every phase - cheap):
-1. git fetch origin && git checkout feat/crossplatform. If this machine has a stale local
-   feat/crossplatform (2026-08-04 incident: a from-scratch restart was force-overwritten),
-   do NOT pull/merge - git reset --hard origin/feat/crossplatform.
-2. Confirm .claude/settings.json sets worktree.baseRef to "head". Unset, every lane worktree
-   branches from the DEFAULT branch (main), which carries neither client/ nor the port history.
-   This failure is silent: the lane builds, and it builds the wrong tree.
-3. Durable shared memory = client/memories/ in this repo. Read port-status.md at session start;
-   update it whenever routes or state change materially, and commit.
-4. Record which MCP servers connect. A missing server is a named limit, never a blocker.
+Report the recovered state and choose one coherent next action: resume isolated work, review an
+existing change, implement one bounded row, or mark the work blocked with its exact missing
+evidence or owner decision.
 
-RECONCILE FROM DURABLE EVIDENCE, NEVER FROM THIS FILE. This file carries no live status on
-purpose. Authorities in order: owner decisions in client/docs/architecture.md and
-capability-inventory.md; client/docs/task-board.md (the only live queue); repository instruction
-files; skills; the packet; advisors. Reconcile from the board, spine-tasks/CONTEXT.md (waves +
-next task ID), git log, `git worktree list`, and client/memories/port-status.md. Where they
-disagree the repository wins, and you fix the smallest authoritative document before continuing.
-CONTEXT.md's "Next Task ID" HEADER has gone stale against its own body before: trust the body
-and port-status.md, repair the header in the same commit, never reissue a used ID.
+## Product Rules
 
-PACKETS stay at spine-tasks/SP-NNN-slug/PROMPT.md. That path, that filename, the SP-<n>- naming,
-and the `| testCommand | `...` |` contract row are ALL asserted by
-client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs, which FAILS CLOSED - a packet it cannot
-parse is a red suite, not a silent pass. Do not move the root. Lean means dropping STATUS.md,
-.DONE, .reviews/ and the repeated project boilerplate (that now lives in the agent prompts),
-never dropping the contract row. testCommand routes through the floor wrapper, never bare
-dotnet test.
+- Build the new product only under `client/`. The WPF product is read-only behavioral evidence;
+  preserve user-observable outcomes, never its implementation architecture.
+- Treat the port as a contract of visible behavior, not a code migration: the authoritative question
+  is how the user interacts with the feature and what is visible on screen, not how the WPF app
+  happened to be structured internally.
+- Research current official Avalonia documentation before selecting a v12 API, dependency, native
+  integration, platform behavior, or rendering approach.
+- A Windows build, stub, no-op fallback, or markup alone does not prove Windows and Linux support.
+  Record the exact unavailable platform gate when evidence cannot yet be obtained.
+- Do not broaden webcam, biometric, secret, path, logging, capture, moderation, consent, or
+  network boundaries without an owner decision.
+- Use deterministic test synchronization. Do not introduce wall-clock waits or process-wide
+  `CCP_DATA_ROOT`; set an isolated data root only for the individual operation that needs it.
+- The active workflow harness is not frozen. While porting to Avalonia it must keep working on the
+  task, learn from each verified result, and improve the current harness by creating or revising the
+  reusable skills, agents, role definitions, templates, or checks it needs. Reuse older proven
+  workflow assets when they still match the contract, and do not keep dead historical workflow state
+  that no longer helps the active work.
 
-MULTI-LANE MECHANICS (built 2026-08-14; these are the reason more than one lane is safe).
-THE SHARED FLOOR PIN IS YOURS ALONE. client/tests/floor/floor.json is the file every
-test-adding lane would otherwise bump, so it collides every wave, and "just set total to what
-the merged tree observes" is the vacuous-green class the pin exists to catch. So:
-- EVERY packet you author carries `| floorDelta | `spine-tasks/SP-NNN-slug/floor-delta.json` |`
-  naming its OWN folder, and lists client/tests/floor/floor.json in fileScopeMustNotChange.
-  FloorWrapperGuardTests fails the suite if either is missing. In a multi-packet wave, also list
-  client/docs/task-board.md there - two lanes editing the board in one wave is the defect.
-- BEFORE launching, run and require exit 0:
-    node client/tools/wave/validate-wave.mjs SP-0NN-a SP-0NN-b ...
-  It checks glob-aware File Scope disjointness, the contract rows, and task-ID reuse. A wave it
-  rejects is fixed in the PACKETS, never by editing the validator.
-- AT LAND, the deltas are summed, never guessed:
-    node client/tests/floor/sum-deltas.mjs --check  --packets SP-0NN-a,SP-0NN-b
-    node client/tests/floor/sum-deltas.mjs --apply  --packets SP-0NN-a,SP-0NN-b
-  Then run check-floor.mjs. sum-deltas sums DECLARATIONS and never observes a count; check-floor
-  observes and never sums. IF THEY DISAGREE, HALT - a lane declared something it did not do.
-  That is a pause condition, not a pin adjustment. Never run --apply without --packets: it would
-  sum already-landed deltas too.
-- A LANE'S floor run will NOT match the pin, by design. Expect observed == pin + declared delta.
-- GATE BUILDS AND TESTS so model concurrency and build concurrency stay different numbers:
-    node client/tools/gate/with-slot.mjs --slots 3 -- <command>
-  It passes the child's exit code through unchanged. 8 lanes is a model target; this machine is
-  8 physical cores / 31GB, and a lane worktree is ~10GB.
-OWNER DECISION 2026-08-15: RUN AT 8 LANES OR MORE. The correctness blockers are closed — wave 30
-landed end to end (lane write, commit, merge-back with git diff EMPTY against the verified tree,
-sum-deltas --apply on a real delta, blind audit PASS). What is still genuinely untested is
-CONCURRENCY: no two lanes have ever run at once. That is not a reason to go smaller, it is the
-reason to WATCH THE FIRST ONE. Expect the first concurrent wave to surface something, and expect
-it at the seams rather than in the product code: the floor pin (every lane declares, the land
-sums), worktree disk and RAM (~10GB per lane worktree, 8 physical cores, 31GB), and merge order.
-Gate every build and test through node client/tools/gate/with-slot.mjs --slots 3 so model
-concurrency and build concurrency stay different numbers.
+## Workflow Roles And Isolation
 
-SUBAGENTS (.claude/agents/). A model override is the only routing knob you have.
-Lanes: port-slice-executor (isolation: worktree), one packet each, 8 concurrent is normal.
-Review: port-plan-reviewer and port-code-reviewer (APPROVE / REVISE), port-final-reviewer
-(PASS / REVISE / REPLAN). Run exactly the levels the packet's Review Level declares.
-Advice: port-advisor (Opus) replaces the retired consult tool; port-advisor-critic (Fable) is
-the one costly seat, spent on architecture, dependencies, platform seams, privacy and
-decomposition. A council is you fanning those out in ONE round and synthesizing yourself.
-Evidence, read-only: wpf-archaeologist, greenfield-foundation-auditor, port-parity-auditor.
-NAMED LIMIT, record it, never hide it: every advisor seat is now Anthropic. The cross-vendor
-council that used to disagree with itself is GONE, so seat agreement is much weaker evidence
-than it was and the blind spots are correlated. Say so whenever a decision rests on advice, and
-prefer one claim you check yourself over any verdict.
+A compatible workflow harness may use any combination of generic roles:
 
-LAND DISCIPLINE (learned the hard way - client/docs/port-workflow.md, Tracker reconciliation):
-- Never trust a lane's or a reviewer's own evidence. Run the merged state yourself in a scratch
-  worktree (3 consecutive `node client/tests/floor/check-floor.mjs` runs, output redirected to
-  files) and prove `git diff` is EMPTY between the tree you verified and the integrated tip.
-- The land's LAST action verifies the tree actually being pushed. A reconciliation edit made
-  after the verification run is unverified - the wave-18 land shipped a red base exactly that
-  way. Re-run the guards that READ repository documents after any late doc or JSON edit.
-- Landed rows stay WIP until the owner ratifies; flip to DONE only with a RATIFIED citation.
-- Lanes write their record and their board row before reporting complete (SP-001's recorded gap).
+- A coordinator reconciles state, owns shared documents and shared merge points, and keeps scope
+  aligned with the task board.
+- A worker owns one bounded change in an isolated workspace or worktree.
+- A researcher gathers WPF behavior and current primary-source platform evidence without changing
+  product code.
+- An independent reviewer evaluates a completed change against its contract and evidence without
+  relying on the producing context.
 
-OWNER DIGEST (required, every phase that lands): append three lines to client/docs/port-digest.md
-- what landed, what it does NOT prove, and any owner question or decision it raised. Unattended
-running must not bury named limits in ten records nobody opens.
+No fixed number of workflows or workers is authorized or required. Launch as many concurrent,
+isolated workflows as current capacity safely supports only when every active change has disjoint
+file scope, a single explicit owner for each shared chokepoint, and enough CPU, memory, disk, and
+provider capacity. Build and test concurrency remains separately limited through
+`client/tools/gate/with-slot.mjs`.
 
-PAUSE PROTOCOL (the only stop). A saturated model is no longer a stop condition: the loop passes
---fallback-model, so the phase degrades and records which model it actually ran on. Pause when
-JUDGMENT is exhausted, not capacity: a safety or privacy question; ambiguity no repository source
-resolves; the same verification failing twice on the same cause; a lane that cannot leave its
-tree buildable; a WAVE-LOCK whose owner is gone; a failed blind audit. Then, in order: park
-in-flight work, write .port/handoff.md (state, evidence paths, exact next action), checkpoint
-client/memories/, write .port/STOP with the reason, EXIT. Never proceed past a gate the docs
-require unadvised; never flip owner-held rows; never invent scope beyond the agreed parity
-posture; constitution and port-workflow stop conditions always apply.
+## Implement, Review, And Verify
 
-MACHINE-SPECIFIC (desktop-only unless the owner designates equivalents - otherwise record as a
-named limit, never fake): Z:\CCP Vids real-media dir; DISPLAY3 headed-evidence monitor; the WSL2
-install used for Linux gates. The mechanical gate is `node client/tests/floor/check-floor.mjs`;
-a bare dotnet test is not it. Headed evidence runs set CCP_DATA_ROOT (SP-057) per run and NEVER
-process-wide: the SP-057 pin then skips and the suite reports a vacuous green instead of a red.
+Keep each change to one coherent board outcome. Before completion:
+
+1. Verify the relevant WPF behavior and current platform facts.
+2. Run focused checks while implementing, then the task's mechanical verification.
+3. Use a fresh independent review for architecture, dependencies, platform seams, privacy,
+  security, lifecycle, or other high-risk changes.
+4. Obtain headed evidence for visual, input, windowing, media, scaling, occlusion, or composition
+  claims. A headless result does not discharge a presentation claim.
+5. Update the matching task-board row with concise evidence or the exact blocker.
+
+The standard client checks are:
+
+```powershell
+node client/tests/floor/check-warnings.mjs
+node client/tests/floor/check-floor.mjs
+```
+
+Use `--cold` with the warning gate after project, build-property, target, or lock-file changes.
+The floor's exact count changes only with its corresponding test change and a concise reason in
+`client/tests/floor/floor.json`.
+
+When verified port lessons reveal a recurring coordination or technical problem, create or revise
+the reusable workflow assets available in the current harness, such as instructions, skills, role
+definitions, templates, or checks. Keep them evidence-based, narrowly scoped, and independent of a
+named vendor or model; do not add automation merely to preserve a historical process.
+
+Stop and seek an owner decision when evidence conflicts, a required platform gate is unavailable,
+verification fails repeatedly for the same cause, scope must expand beyond the board row, or a
+safety/privacy decision is unresolved. Do not substitute workflow output, consensus, or a green
+compile for product evidence.

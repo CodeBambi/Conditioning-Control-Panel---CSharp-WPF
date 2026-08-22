@@ -45,7 +45,7 @@ namespace CcpClient.Tests;
 /// the admission rule's other requirement (that a listing commit name the machine class), it
 /// cannot see a ban that is renamed AND re-declared AND re-listed in one coordinated edit, and
 /// it proves nothing about whether the remaining <c>allowedSkips</c> entries are honest. Shape
-/// precedent: FloorWrapperGuardTests / ProcessEnvCollectionGuardTests — repo-root walk, never
+/// precedent: ProcessEnvCollectionGuardTests — repo-root walk, never
 /// skips, fails closed on input it cannot parse, aggregated violations.</para>
 /// </summary>
 public sealed class AllowedSkipsBanGuardTests
@@ -491,13 +491,10 @@ public sealed class AllowedSkipsBanGuardTests
     }
 
     /// <summary>Resolves and reads the committed pin. The existence refusal lives HERE rather
-    /// than in a fact body, matching SP-086 (ProcessEnvCollectionGuardTests.cs:553-555) — and
-    /// against the opposite, equally live precedent recorded for
-    /// FloorWrapperGuardTests.PacketsAtOrAboveSp073 in vacuous-shape-ledger.json, which keeps
-    /// its checkpoint in the body so the lexical detector can SEE it. The consequence of the
-    /// choice made here is stated in record.md: this guard's never-skip checkpoint is invisible
-    /// to that ledger by construction, and is instead proven by the fact that a missing pin
-    /// throws out of every fact.</summary>
+    /// than in a fact body, matching ProcessEnvCollectionGuardTests.cs:553-555. In contrast,
+    /// lexical-shape checks keep their checkpoints inside fact bodies so the detector can see
+    /// them. This guard's never-skip checkpoint is deliberately outside that ledger and is
+    /// instead proven by the fact that a missing pin throws out of every fact.</summary>
     private static PinDocument CommittedPin()
     {
         var path = Path.Combine([FindRepoRoot(), .. PinParts]);

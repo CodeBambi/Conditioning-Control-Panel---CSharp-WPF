@@ -88,25 +88,40 @@
 - **Consequences:** Initial load, mode changes, mod changes, pause/resume, attach/detach, and teardown must each select exactly one active animation pipeline. A static fallback is valid only when it is visible and the decode failure is reported; it cannot be presented as animation parity.
 - **Acceptance:** The rendered-liveness contract in [`capability-inventory.md`](capability-inventory.md#avatartube) passes on Windows and Linux, including repeated lifecycle and all built-in mod transitions.
 
-### A-007: Pi task orchestration supplements the port workflow
+### A-007: Workflow coordination stays harness-neutral
 
-- **Problem and current need:** The port spans many behavior contracts, platform spikes, implementation slices, verification gates, and commits. Existing Pi workflows provide domain discipline, while `pi-task` adds deterministic spec phases, persisted crash recovery, sequential `/task-auto` orchestration, and executable verify/enforcement gates.
-- **Selected direction:** Admit project-pinned `@mjasnikovs/pi-task 0.18.24` as a development-only orchestration aid. `/task` is used for narrow task-board rows; `/task-auto` is used only for an owner-reviewed milestone document after one pilot task proves clean scope, verification, and commit behavior. The complete operating contract is [`port-workflow.md`](port-workflow.md).
-- **Authority boundary:** Generated task files and specs are subordinate to owner decisions, client architecture/capability docs, the live client task board, repository instructions, and required skills. The extension never decides product parity or marks headed behavior verified on its own.
-- **Security and licensing:** Pi packages execute with the user's full permissions and can change prompts, tools, files, commands, and git history. The package is AGPL-3.0-only, remains outside product/runtime dependencies, and is not distributed in CCP binaries. Its unauthenticated bidirectional remote server is disabled by default for this project workflow.
-- **State and reproducibility:** `.pi/settings.json` records the exact package version. `.pi/npm/` is generated installation state. `.pi-tasks/` is ignored local crash-recovery state; `client/docs/task-board.md` remains the authoritative queue and evidence ledger.
-- **Commit safety:** Auto-commit is disabled for the pilot and any dirty/shared worktree. It may be enabled later only in a clean dedicated branch/worktree after proving one-task/one-commit boundaries. A verify override is not completion evidence and cannot authorize automatic fix-in-place enforcement.
-- **Acceptance:** Pi meets the package peer requirement, the pinned extension installs with no package-audit findings, `/task` produces a correctly scoped spec, its `VERIFY` block actually runs, the resulting diff stays within scope, task-board evidence is reconciled, and no unrelated files enter the task commit. Only then may the first milestone use `/task-auto`.
+- **Problem and current need:** The port spans behavior contracts, platform spikes, implementation
+	slices, verification gates, and commits. It needs reproducible coordination without making a
+	local runner, prompt archive, vendor, or model a product dependency.
+- **Selected direction:** Follow the generic lifecycle in [`port-workflow.md`](port-workflow.md).
+	A compatible harness may provide reusable instructions, skills, role definitions, templates, or
+	checks, but the task board, contracts, and current repository evidence remain authoritative.
+- **State and reproducibility:** The task board is the only live queue. Local workflow state and
+	summaries are optional clues, never required inputs or durable evidence. Reconcile stale
+	documents from the source tree and verification results before relying on them.
+- **Commit safety:** A clean scoped diff and the task's required verification are prerequisites to
+	completion. Workflow output, a generated specification, or an automated verification request is
+	not itself evidence and cannot authorize unrelated changes.
+- **Acceptance:** A bounded row has explicit scope, product evidence, Windows/Linux expectations,
+	ownership for shared files, and passing required checks. The result remains understandable and
+	reproducible without a historical workflow archive.
 
-### A-008: Multi-model consultation is an evidence-aware review gate
+### A-008: Independent review is evidence-aware
 
-- **Problem and current need:** Port decisions repeatedly cross architecture, parity, platform, rendering, security, performance, and verification boundaries. One executor model can miss assumptions or overcommit to its first approach. The port benefits from deliberate second opinions and dissent, especially inside long `/task-auto` runs.
-- **Selected direction:** Admit project-pinned `@booplex/bpx-consult 0.10.1`. Use solo and gut-check for routine bounded review, council for high-impact decisions and gates, and debate for unresolved competing approaches. The extension is available in the main Pi session and whitelisted into `pi-task` child sessions. Detailed checkpoints and question format live in [`port-workflow.md`](port-workflow.md#consultation-gates).
-- **Council design:** The project roster covers architect, critic, simplifier, tester, security, and performance perspectives across verified GPT 5.6 Sol/Luna, Fable 5, and Kimi K3 routes; Kimi K3 synthesizes the result. Automatic stuck review triggers after three consecutive tool failures or repeated identical calls. Automatic on-done review remains off; completion consultation is explicit and task-shaped.
-- **Authority boundary:** Consultation is advisory. Owner decisions, documented contracts, source code, current official documentation, tests, measurements, and headed evidence outrank advisor confidence or consensus. Splits and failed members are surfaced, not averaged into permission to proceed.
-- **Privacy and cost:** Consult forwards a fitted session transcript to external advisor providers. Never expose secrets, signed URLs, private content, camera data, or sensitive logs. Questions must be focused, model-initiated calls are capped, and repeated consultation requires new evidence or a narrower decision.
-- **Context integrity:** Every result's kept/compressed/clipped/dropped ledger is reviewed when the decision depends on long-session history. Material clipping requires a fresh focused consult. A confidence score is not valid when decisive context was absent.
-- **Acceptance:** Exact package/version and Node/Pi requirements are verified; every configured seat is probe-tested; a pilot `/task` demonstrates pre-approach and pre-completion consultation; advice and dissent are reconciled against empirical evidence; sensitive data is absent; and the client task board records the resulting decision rather than the full transcript.
+- **Problem and current need:** Port decisions repeatedly cross architecture, parity, platform,
+	rendering, security, performance, and verification boundaries. A producing context can miss
+	assumptions or overcommit to its first approach.
+- **Selected direction:** Use a fresh independent review for high-risk or cross-cutting decisions.
+	The review identifies the governing contract, changed files, verification result, unresolved
+	platform implications, and missing evidence.
+- **Authority boundary:** Review is advisory. Owner decisions, documented contracts, source code,
+	current official documentation, tests, measurements, and headed evidence outrank confidence,
+	agreement, or consensus.
+- **Privacy and context integrity:** Do not disclose secrets, signed URLs, private content, camera
+	data, or sensitive logs to review tooling. A conclusion based on clipped or missing decisive
+	context requires a new focused review or direct evidence.
+- **Acceptance:** The task board records the resulting product decision or blocker, not a review
+	transcript. Advice and dissent are reconciled against empirical evidence before integration.
 
 ### A-009: Explicit audio channels and truthful playback lifecycle
 
@@ -124,14 +139,35 @@
 - **Network/privacy boundary:** Disclose actual endpoint and transmitted data. Treat non-loopback Ollama as remote; invalid endpoint sends nothing; remote HTTP is rejected unless an explicit product decision permits it. Camera/biometric data never enters AI. Secrets use approved OS-backed storage and diagnostics are content-free.
 - **Acceptance:** Provider outcome, cancellation, switching, moderation, strict commands, memory, endpoint, offline, secret, and awareness tests in `capability-inventory.md` pass on Windows/Linux.
 
-### A-011: Local deep-learning camera pipeline with one admitted gaze feature
+### A-011: Selectable local and third-party deep-learning gaze engines
 
-- **Problem:** WPF's local BlazeFace/FaceMesh/Iris pipeline is useful and privacy-preserving. The first attempt extended it with full-face deep gaze but shipped only a Windows implementation, silently fell back between incompatible calibrated features, and referenced model weights whose training-data rights may not permit commercial distribution.
-- **Selected direction:** Preserve local deep face/landmark/iris inference as the baseline direction. Separate acquisition, preprocessing/inference, semantic events, calibration, and consumers conceptually without copying old classes. Admit exactly one default gaze feature/model pair only after Windows/Linux accuracy, performance, packaging, and legal provenance pass.
-- **Deep gaze:** Full-face appearance gaze is a research spike until weights and training data are commercially distributable and it measurably beats the iris baseline under identical calibration/hardware tests. Do not expose a model selector merely because the first attempt had one.
-- **Privacy:** Memory-only frames and biometric derivatives are non-negotiable. Persist only explicit consent metadata, settings, and compact numeric calibration tied to camera, monitor, model hash/version, feature, and preprocessing. Any expansion bumps consent and requires owner review.
-- **Platform impact:** Windows and Linux need real capture backends and honest permission/failure states. Sandboxed Linux must prove XDG portal/PipeWire if supported. ONNX Runtime and OpenCvSharp are candidates requiring exact version/license/native-size/runtime spikes; no package is admitted by documentation alone.
-- **Acceptance:** Consent, capture, model provenance, calibration, semantic events, privacy audit, performance, failure, and teardown criteria in `capability-inventory.md` pass on both target platforms.
+- **Problem:** WPF's local BlazeFace/FaceMesh/Iris pipeline is useful and privacy-preserving. A
+	third-party deep-learning engine may improve gaze quality, but an earlier Windows-only experiment
+	silently fell back between incompatible calibrated features and lacked adequate model-rights
+	evidence.
+- **Selected direction:** Preserve the local WPF-equivalent BlazeFace/FaceMesh/Iris pipeline as
+	the default engine, and offer an admitted third-party deep-learning engine as a visible choice in
+	webcam settings. Separate acquisition, preprocessing/inference, semantic events, calibration,
+	and consumers conceptually without copying old classes. Both engines provide the same semantic
+	event contract.
+- **Engine selection:** The persisted selected engine names its exact model/version and execution
+	location. Calibration is keyed to camera, monitor, engine, model hash/version, feature, and
+	preprocessing. Switching engines invalidates incompatible positional calibration and requires a
+	valid calibration or explicit recalibration; it never silently falls back.
+- **Third-party admission:** The alternative remains unavailable until its provider/model, local or
+	remote execution, commercial weight and training-data rights, performance, packaging, and Windows/
+	Linux behavior pass a documented admission spike. A remote engine requires separate owner approval
+	before frames, crops, landmarks, or biometric derivatives leave the device.
+- **Privacy:** Memory-only frames and biometric derivatives remain non-negotiable for the local
+	engine. Persist only explicit consent metadata, the selected engine/model identity, and compact
+	numeric calibration. Any remote transmission or broader persistence requires owner review.
+- **Platform impact:** Windows and Linux need real capture backends and honest permission/failure
+	states for each admitted engine. Sandboxed Linux must prove XDG portal/PipeWire if supported.
+	ONNX Runtime and OpenCvSharp are candidates requiring exact version/license/native-size/runtime
+	spikes; no package is admitted by documentation alone.
+- **Acceptance:** Both engines must pass consent, capture, model provenance, calibration, semantic
+	events, privacy audit, performance, failure, engine-switch, and teardown criteria in
+	`capability-inventory.md` on both target platforms.
 
 ### A-012: Official WPF migration guidance is the translation baseline, not the product architecture
 
@@ -140,17 +176,32 @@
 - **Accepted technical guidance:** CSS-like selectors/classes/pseudo-classes instead of WPF triggers; `DataTemplates` collections and `TreeDataTemplate`; strongly typed `StyledProperty`/`DirectProperty` choices; pointer events and routing strategies; direct `ICommand` rather than `RoutedCommand`; asynchronous dispatcher use; Avalonia animation/frame APIs; explicit asset URI conversion; separate-package/missing controls; and `TopLevel.Screens` platform services.
 - **Accepted methodology from the older [expert guide](https://avaloniaui.net/blog/the-expert-guide-to-porting-wpf-applications-to-avalonia):** audit dependencies and platform-specific code before implementation, inventory complex views/capabilities, reach a visible vertical slice early, work incrementally, keep small commits, and test functionality/performance on every target platform.
 - **Rejected methodology:** The greenfield client does not preserve the old code structure merely because the article says "port, not refactor"; it does not comment out/uncomment the WPF project into a new build, use per-line/per-view estimates as plans, adopt XPF/Hybrid, or add community controls without admission. Owner decisions A-001 through A-011 and behavior-first contracts remain higher authority.
-- **Consequence:** Skills and `/task` specs must separate archaeology from translation. The cheat sheet suggests a candidate Avalonia equivalent but never proves behavior, Linux support, performance, focus/input, window semantics, or visual correctness. Targeted tests and headed evidence remain mandatory.
+- **Consequence:** Workflow instructions and task specifications must separate archaeology from
+	translation. The cheat sheet suggests a candidate Avalonia equivalent but never proves behavior,
+	Linux support, performance, focus/input, window semantics, or visual correctness. Targeted tests
+	and headed evidence remain mandatory.
 - **Sources:** Official migration index last updated April 2026; cheat sheet last updated June 2026; expert guide published August 2024.
 
-### A-013: AvaloniaUI.MCP is an optional advisory lint and UX ideation source
+### A-013: Optional advisory tooling cannot establish client evidence
 
-- **Problem:** Pi can now call [`decriptor/AvaloniaUI.MCP`](https://github.com/decriptor/AvaloniaUI.MCP), which advertises XAML validation, diagnostics, performance, accessibility, theming, controls, animations, testing, and WPF migration assistance. It could accelerate dashboard and UX review, but its output looks authoritative even when stale or generic.
-- **Verified upstream state:** The repository has one public commit dated June 2025, no GitHub release, targets .NET 9, uses preview MCP `0.3.0`, and pins Avalonia `11.3.1`. XAML validation is XML parsing plus hand-written heuristics, not compilation with the client's Avalonia v12 toolchain. Generators include stale WPF constructs and questionable Avalonia APIs. Startup config contains a fixed external Sentry DSN with tracing/profiling.
-- **Selected use:** After contract extraction and current official v12 research, agents may use the MCP for a bounded second opinion on small redacted AXAML fragments, selectors, bindings, layout, accessibility, diagnostics, and heuristic performance. Its control catalogue and UX tools may suggest candidate primitives or questions for dashboard/cards/popups, but do not establish product design or API validity.
-- **Forbidden use:** Do not directly adopt its generated project/architecture, WPF conversion, themes/palettes, custom controls, storyboards/animations, services, data/authentication, tests, package choices, performance scores, or migration claims. It cannot replace CCP's visual grammar, K3 rendered-image review, the real compiler, tests, profiling, or headed Windows/Linux acceptance.
-- **Privacy and admission:** Do not send proprietary code, secrets, local paths, user content, camera data, private endpoints, or sensitive logs until the installed server is inspected and outbound telemetry is disabled. MCP unavailability never blocks a task. Accepted/rejected findings are summarized in task evidence.
-- **Decision chain for UI:** behavior/visual contract -> current official v12 sources -> smallest hand-authored implementation -> optional redacted MCP review -> compile/tests/headed interaction -> K3 screenshot review.
+- **Problem:** External lint, analysis, and UX-ideation tools can produce plausible output that is
+	stale, generic, incomplete, or incompatible with the client's Avalonia version.
+- **Selected use:** After contract extraction and current official v12 research, a compatible
+	harness may use inspected, privacy-safe advisory tooling for a bounded second opinion on
+	redacted AXAML fragments, selectors, bindings, layout, accessibility, diagnostics, or heuristic
+	performance. Its suggestions identify questions or candidate primitives; they do not establish
+	product design or API validity.
+- **Forbidden use:** Do not directly adopt generated project structure, WPF conversion, themes,
+	custom controls, animations, services, tests, package choices, performance scores, or migration
+	claims. Advisory output cannot replace the real compiler, tests, profiling, or headed
+	Windows/Linux acceptance.
+- **Privacy and admission:** Do not send proprietary code, secrets, local paths, user content,
+	camera data, private endpoints, or sensitive logs until the tool is inspected and its outbound
+	behavior is approved. Its unavailability never blocks a task. Accepted or rejected findings are
+	summarized in task evidence.
+- **Decision chain for UI:** behavior/visual contract -> current official v12 sources -> smallest
+	hand-authored implementation -> optional redacted advisory review -> compile/tests/headed
+	interaction -> screenshot review.
 
 ### A-014: Foundation behavior must be explicit and end-to-end
 

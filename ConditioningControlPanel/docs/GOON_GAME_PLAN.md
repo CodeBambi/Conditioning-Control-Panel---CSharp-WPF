@@ -26,12 +26,12 @@ Status legend: [ ] todo, [x] done. Update this file as phases land.
    recap offers an anonymized-by-default share-card image for Discord.
 9. **No media through the server, ever** — payloads are *references* resolved against the
    receiver's own local library. Server does matchmaking/signaling + one ledger write.
-10. Only Opus agents implement; Fable coordinates. (Same rule as haptics.)
+10. Implementation follows the protocol and current review workflow. (Same rule as haptics.)
 
 ## Platform-agnostic mandate (added 2026-08-03, mid-Wave-1)
 Mobile (CCP-Mobile, Expo/React Native) and a webapp are planned follow-on clients.
 The C# implementation is ONE client of the protocol, not the protocol itself:
-- **The protocol is the product.** After Wave-1, Fable writes
+- **The protocol is the product.** After Wave-1, maintain the
   `docs/GOON_GAME_PROTOCOL.md`: a language-neutral spec of every message schema,
   the signaling + relay + ledger REST contracts (lifted from Phase A's
   documented JSON), the clock-sync procedure, the seed-XOR commit, the scoring
@@ -97,7 +97,7 @@ Client layout (all new code under `Services/GoonGame/`):
 
 ```
 Services/GoonGame/
-  GoonContracts.cs        — message schemas, enums, consts (Fable-authored; DO NOT redesign)
+  GoonContracts.cs        — message schemas, enums, consts (contract-owned; DO NOT redesign)
   GoonTransport.cs        — SIPSorcery peer connection + data channel, signaling client,
                             relay fallback, reconnect, MatchClock (NTP-style sync)
   GoonMatchService.cs     — App.GoonGame; match state machine:
@@ -241,11 +241,11 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
 
 ## Phases & task list
 
-### Phase 0 — Contracts (Fable, before any agent)
+### Phase 0 — Contracts (before implementation)
 - [ ] `Services/GoonGame/GoonContracts.cs`: envelopes, enums, tick/payload/round schemas,
-      banned-verb list, tuning consts. Agents extend via new members only, noted here.
+      banned-verb list, tuning consts. Extend only through new members, noted here.
 
-### Phase A — Transport (Agent A)
+### Phase A — Transport (Workstream A)
 - [x] SIPSorcery peer + data channel; signaling client against `/v2/goon/*`; ICE with
       public STUN; 10 s ICE timeout → relay fallback; reconnect-with-resume (5 s grace).
 - [x] `MatchClock` (ping rounds, median offset, 30 s re-sync) + fire-at-timestamp scheduler.
@@ -260,7 +260,7 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
   there — `HandleChannelOpen` is idempotent and called directly when `readyState == open`.
 - **64-bit seeds ride the wire as decimal STRINGS** (read back from string or number) —
   bare JSON numbers above 2^53 silently lose low bits in `JSON.parse`, which would hand a
-  web/RN player a different bubble layout. TS reads with `BigInt(s)`. APPROVED by Fable;
+  web/RN player a different bubble layout. TS reads with `BigInt(s)`. Approved decision;
   this is the one non-obvious line for the protocol doc.
 - Files: `GoonWire.cs` (t-discriminated serializer, 16 KB frame cap, never throws),
   `GoonRng.cs` (xoshiro256** + splitmix64, `NewSeedContribution` CSPRNG, `CombineSeeds`,
@@ -286,7 +286,7 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
   relay needs own rate budget (~1 call/2 s, 20 min), 16 KB/frame, 128-frame ring, never
   inspects `data`. Bare 404 with no body = "not deployed yet" → warming-up UI, not "bad code".
 
-### Phase B — Match engine (Agent B)
+### Phase B — Match engine (Workstream B)
 - [x] `GoonMatchService` state machine + consent lobby model + draft model + drafted-element
       session ramp (deterministic from match seed) + mercy/abandon/result handshake
       (result = both clients sign; mismatch recorded as disputed, cosmetics still granted
@@ -320,7 +320,7 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
   `ReportInteractionCheck(passed)` (no-cam, 90 s cadence), `LocalAttentionMode`/
   `LocalToyConnected` before hosting/joining, Esc ladder → `DeclareMercy()` (works in every
   phase, never touches panic/lockdown).
-- **Integration (Fable)**: inject `seed => new GoonRng(seed)` at construction (service has a
+- **Integration**: inject `seed => new GoonRng(seed)` at construction (service has a
   private splitmix64 fallback for standalone use); wire runner ← `GoonSuddenDeathRunner`.
 - **Economy receipt gap**: cost-violating payloads currently report `rejected_rate` (the
   documented status set has no `rejected_cost`) — decide with the protocol doc whether to
@@ -328,17 +328,17 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
 - **Abandon semantic (current)**: 60 s without ticks records the DISCONNECTING side as the
   loser (`Abandon`). Confirm vs. a no-result abandon during play-test (open question).
 
-### Phase C — Payload executor (Agent C)
+### Phase C — Payload executor (Workstream C)
 - [ ] `GoonPayloadExecutor`: envelope → service fan-out; receiver-side resolve (tags →
       own library), rate limiter, text cap/strip, haptics via v2 mixer only; stop-all on
       match end (RC `StopAllRemoteEffects` shape, minus RC-specific state).
 
-### Phase D — Sudden death (Agent D)
+### Phase D — Sudden death (Workstream D)
 - [x] Round harness on shared clock + seed; quick-draw lock card; staring contest
       (cam/cam) with reaction-check fallback; bubble race; escalation ladder + net-3 exit.
 
 **Decisions made in Phase D (integration + Phase E need these):**
-- Files: `GoonSuddenDeath.cs` (`GoonSuddenDeathRunner` implements Agent B's
+- Files: `GoonSuddenDeath.cs` (`GoonSuddenDeathRunner` implements Workstream B's
   `IGoonSuddenDeathRunner` directly — no adapter; + pure antisymmetric `GoonRoundJudge`),
   `Rounds\GoonRoundModel.cs` (specs, input-feed interfaces `IGoonRoundInputs`
   {LockCard, Attention, Reaction, Bubbles}, `IGoonRoundPresenter`, fake feeds for tests),
@@ -348,7 +348,7 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
   mistakes / false-start flag).
 - **Determinism**: round seed = XOR of per-round contributions (minted once, reused across
   schedule retries — bumping FireAt never changes the seed); fixed draw order per round is
-  documented in the agent report → transcribe into the protocol doc. Ladder is pure:
+  documented in the implementation report → transcribe into the protocol doc. Ladder is pure:
   `KindFor(roundNo, modes)`, `DifficultyFor = 1 + (roundNo-1)/3`; guest validates the
   host's proposed kind, warns on mismatch, but follows (no deadlock). Host retries a late
   seed-half once with +2 s; missing half/result → `Aborted`, never a fabricated win.
@@ -356,7 +356,7 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
   phrase pool (that's per-mod/per-user → two players would get different cards). Cards run
   `Strict=false` so Esc stays mapped to Mercy. `LockCardService` untouched — Phase E renders
   via `ShowLockCard(spec.Phrase, spec.Repeats, customStrict:false)` + `LockCardCompleted`.
-- **Phase E wiring table** (render hook + input feed per round) is in the agent report:
+- **Phase E wiring table** (render hook + input feed per round) is in the implementation notes:
   staring beats through Flash/compositor + webcam blink feed; reaction duel needs a GG HUD
   overlay (`ArmReactionDuel`/`FireReactionStimulus`, feints from difficulty 2, false start =
   round loss); bubble race spawns spec bubbles via BubbleService + pop-index callback; plus
@@ -372,7 +372,7 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
       cards, #FF69B4). Converters in Window.Resources; `DispatcherPriority.Normal`.
 - [ ] Logo/branding assets (nano-banana batch `goon-game-logo`, in progress).
 
-### Phase F — Server (separate repo, parallel with A)
+### Phase F — Server (separate repo, parallel with Workstream A)
 - [ ] Endpoints + TTL keys + weekly pass + ledger. Deploy from `proxy/` dir ONLY.
 
 ### Phase G — Ship prep
@@ -383,8 +383,8 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
       run (automated UIA method — ABORT if an unowned instance is running).
 - [ ] Patch notes (no em-dashes), primer `docs/primers/GOON_GAME_PRIMER.md`.
 
-## Verification bar (every agent)
-- `dotnet build` clean in the GG worktree.
+## Verification bar (every workstream)
+- `dotnet build` clean in the repository checkout.
 - No settings resets; new settings nested + `[JsonProperty]` everywhere (haptics lesson).
 - WPF traps: converters in Window.Resources; `IsLoaded`/`Template != null` before
   animations; no fire-and-forget without dispatcher-null + try/catch; screen-enum guard.

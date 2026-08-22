@@ -14,16 +14,6 @@ planning/
 # Root-anchored so legit deeper-tree files matching the pattern aren't excluded.
 /ConditioningControlPanel/System.Drawing.*
 
-# Claude Code config. Shared skills/agents are tracked (same policy as .pi/ below);
-# session state and local settings are not.
-.claude/*
-!.claude/README.md
-!.claude/agents/
-!.claude/skills/
-ConditioningControlPanel/.claude/
-.github/agents/wpf-ui-specialist.agent.md
-AGENTS.md
-
 # Build logs
 build-output.log
 
@@ -46,26 +36,9 @@ release/
 # User data (don't commit personal settings or content)
 settings.json
 logs/
-**/.claude/settings.local.json
-# Shared Claude Code project settings ARE tracked: worktree.baseRef must travel
-# between machines or lanes silently branch from main instead of the port branch.
-# This negation must stay below the bare `settings.json` rule above to win.
-!.claude/settings.json
 
-# Claude Code port orchestration run state (.port/): WAVE-LOCK, LOOP-LOCK, STOP,
-# handoff.md and phase/audit logs. This is per-machine execution state, never shared.
-# It MUST be ignored: the phase prompt writes .port/WAVE-LOCK while a wave runs, and an
-# unignored .port/ leaves `git status` dirty, which makes the fail-closed blind audit
-# report a false FAIL on a perfectly good tree — the exact class that halted a run under
-# the old engine. The durable queue is client/docs/task-board.md, not this directory.
+# Local workflow runtime state.
 .port/
-
-# Pi port orchestration
-# Share the exact project package declaration, but not installed npm contents or
-# crash-safe task run state. Pi restores the pinned package after project trust.
-!.pi/settings.json
-.pi/npm/
-.pi-tasks/
 
 # Asset folders (users add their own content)
 assets/images/*
@@ -211,17 +184,7 @@ ConditioningControlPanel/tools/*
 # VC_redist.x64.exe is 25 MB and build-installer.bat fetches it on demand.
 redist/
 
-# pi-spine runtime (NOTE: .pi/ is intentionally NOT ignored - this repo tracks .pi skills/agents/settings)
-.spine-scratch/
-.spine/runtime/
-.spine/batch-state.json
-.spine/batch-history.json
-.spine/run-metrics.jsonl
 .worktrees/
-
-# Session metadata (engine/pi runtime debris — never track; SP-023 land standing order)
-.pi/loops/
-.pi/tasks/
 # ...except the WebView2 Evergreen bootstrapper, which IS committed: 1.6 MB, and
 # WebView2 is now load-bearing for FYP, Exclusives, DtRH, Goon Game and the default
 # video engine, so an installer build must never silently skip it because a download
@@ -241,10 +204,3 @@ package-lock.json
 # describes explicit screenshots; topics.json describes unannounced features. Media is large
 # and some of it is suggestive. Nothing in here belongs on GitHub.
 marketing/
-.spine/runtime/loop/
-.spine/STOP
-
-# Packet completion markers are LOCAL execution state. Every packet says "create .DONE last;
-# do NOT commit it" — 72 were committed anyway and were untracked 2026-08-22. Gated in
-# client/tests/floor/check-floor.mjs, because an ignore rule alone does not untrack.
-spine-tasks/**/.DONE

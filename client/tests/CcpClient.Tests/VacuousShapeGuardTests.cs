@@ -10,7 +10,7 @@ namespace CcpClient.Tests;
 /// A NEW unclassified silencing shape fails HERE with file:line; a stale ledger entry
 /// (renamed/deleted test, changed shape set) fails too — the ledger edit is the review
 /// friction that keeps the class non-recurring (four recurrences in the timing lineage
-/// is the evidence; TestTimingGuardTests / FloorWrapperGuardTests are the precedent:
+/// is the evidence; TestTimingGuardTests / ProcessEnvCollectionGuardTests are the precedent:
 /// repo-root walk, never skips, file:line violations).
 ///
 /// HONESTY (framing b): this is a SHAPE guard. It is lexical, and lexical detection of

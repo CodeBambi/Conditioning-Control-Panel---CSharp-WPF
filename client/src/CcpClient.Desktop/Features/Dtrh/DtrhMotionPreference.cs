@@ -89,9 +89,8 @@ public static class DtrhMotionPreference
         }
     }
 
-    // GET shape only (consult correction 3): BOOL* out-param. The SET shape (by-value
-    // pvParam, SPIF_UPDATEINIFILE|SPIF_SENDCHANGE) lives in the harness toggle script
-    // under spine-tasks/SP-053-reduced-motion-probe/evidence/ — never in product code.
+    // GET shape only: BOOL* out-param. The SET shape (by-value pvParam,
+    // SPIF_UPDATEINIFILE|SPIF_SENDCHANGE) is intentionally absent from product code.
     [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]

@@ -8,14 +8,14 @@ This is the per-window behavior inventory the board row requires before any shar
 
 1. **The acceptance's "exercise every row on Windows and supported Linux backends before approving shared chrome" is a NAMED GATE on the board row, not discharged by this manifest.** None of the 79 manifest windows exists in the greenfield client yet; the dashboard is a NEW surface used only to demonstrate the observation procedures (§7) — no manifest row, including W-01, is discharged by it. The gate stays on the row (annotate-don't-rewrite, SP-007 Wayland-gate pattern). §3 defines the observation procedure per field so the gate is dischargeable later.
 2. **Evidence class per WPF row is CODE-DERIVED, not runtime-verified.** WPF is read-only behavioral evidence: values below are extracted from XAML attributes, property assignments, and call sites. WPF framework defaults (stated in §1.3) are code-derived inferences, labeled `d(...)`. Runtime-verified evidence exists only for the greenfield dashboard demonstrator (§7, from this task) and prior SP-007/SP-008/SP-010 greenfield evidence.
-3. **The owner question "which Linux distributions, display backends, and window managers define the window-behavior acceptance matrix" is NOT answered here.** Platform-matrix columns (§5) stay "pending owner question". WSLg/X11 is recorded as the only observed Linux environment — session facts (SP-006 session-probe: `WAYLAND_DISPLAY` + `DISPLAY` both set; the client runs as an X11 client via XWayland), never backend claims. Wayland (architecture-proposal §5.1) is untouched; there is deliberately no Wayland column.
+3. **The owner question "which Linux distributions, display backends, and window managers define the window-behavior acceptance matrix" is NOT answered here.** Platform-matrix columns (§5) stay "pending owner question". WSLg/X11 is recorded as the only observed Linux environment — session facts (SP-006 session-probe: `WAYLAND_DISPLAY` + `DISPLAY` both set; the client runs as an X11 client via XWayland), never backend claims. Wayland is governed by the pending evidence in `architecture.md` A-002; there is deliberately no Wayland column.
 4. **The §7 dashboard demonstrator is observation-only** — zero product-code change. A field not observable on the one existing window records "observation procedure defined, not demonstrable on this window", never an invented value.
 
 ## 1. Method and reading rules
 
-### 1.1 Enumeration (completeness-checkable; full method + raw lists in `spine-tasks/SP-012-window-behavior-manifest/record.md`)
+### 1.1 Enumeration (completeness-checkable)
 
-Mechanical sweeps over `ConditioningControlPanel/` excluding `CCP.*` (first attempt), `tests/`, `bin/`, `obj/`: (1) every `*.xaml` with a `<Window` root → 76; (2) every code-only `System.Windows.Window` subclass → 25; (3) every ad-hoc `new Window` site → 39 (38 distinct surfaces after dedup); (4) transitive sweep `class X : Y` where Y is any enumerated window class → **zero** indirect subclasses. Total: **139 distinct surfaces**. Re-runnable commands are in record.md.
+Mechanical sweeps over `ConditioningControlPanel/` excluding `CCP.*` (first attempt), `tests/`, `bin/`, `obj/`: (1) every `*.xaml` with a `<Window` root → 76; (2) every code-only `System.Windows.Window` subclass → 25; (3) every ad-hoc `new Window` site → 39 (38 distinct surfaces after dedup); (4) transitive sweep `class X : Y` where Y is any enumerated window class → **zero** indirect subclasses. Total: **139 distinct surfaces**. The rules above are the repeatable method; generated lists are not source authority.
 
 ### 1.2 Field vocabulary
 
@@ -211,7 +211,7 @@ The opaque full-screen backdrop shape the §1.2 category vocabulary did not have
 |---|---|---|---|---|---|---|---|---|---|---|
 | W-80 | **Chaos tunnel backdrop** (ad-hoc, `Chaos/ChaosTunnelService.cs:182`) | none coded (CD) | modeless — `.Show()` (`:204`) | **non-activating:** `ShowActivated=false` (`:189`), `Focusable=false` (`:190`), `WS_EX_NOACTIVATE` (`:563`) — clicks reach the page for power-up raycasting (NO `WS_EX_TRANSPARENT`, `:31`) | `ShowInTaskbar=false` (`:188`) + `WS_EX_TOOLWINDOW` (`:563`) → no taskbar, hidden from Alt-Tab | **`Topmost=false` (`:187`) + sunk to `HWND_BOTTOM` after show (`:206`, `:433-441`)** — deterministically below every Topmost bubble/FX/video/HUD window; z-guard keeps MainWindow BELOW the tunnel while a run is live (1500ms timer + `WM_WINDOWPOSCHANGING` rewrite hook, `:444-539`) | `NoResize` (`:191`) | `Manual` at (0,0), primary-screen sized (`:194-196`) | `WindowStyle.None`, **`AllowsTransparency=false` — OPAQUE** (`:180-186`; a WebView2 child HWND does not paint in a layered window) | **own-lifecycle warm window:** `Preload()` builds under the countdown (`:66-80`), `Show()` posts run-start (`:82-99`), `CloseActive()` = page exit anim → close on `exit-done` or 1200ms watchdog force (`:141-163`); warm window REUSED across RunAgain (re-arm guard `:289-294`); one logical instance (static service), gated on `ChaosTunnelEnabled` (`:58`) |
 
-**W-80 greenfield status (RV, 2026-08-12, SP-061):** ported under `client/src/CcpClient.Desktop/Features/Chaos/` and runtime-verified headed on Windows — pixel-proven layering both directions (a real Topmost `DtrhVideoWindow` occludes the rendering tunnel; the tunnel visible where nothing covers it), non-activation proven across show/re-show cycles, profile byte-identical under `CCP_DATA_ROOT` (evidence: `spine-tasks/SP-061-chaos-tunnel-backdrop/evidence/wh/`). Ported deltas vs the CD row: the preventive `WM_WINDOWPOSCHANGING` rewrite hook is NOT ported — the 1500ms timer corrects a rise within one cadence (observed live), so a re-activated dashboard can paint over the backdrop for up to ~1.5s before the demote lands; Linux is a typed-Unavailable surface this row (no page-side bridge transport + no keep-below control on the NativeWebDialog toplevel).
+**W-80 greenfield status (RV, 2026-08-12, SP-061):** ported under `client/src/CcpClient.Desktop/Features/Chaos/` and runtime-verified headed on Windows — pixel-proven layering both directions (a real Topmost `DtrhVideoWindow` occludes the rendering tunnel; the tunnel visible where nothing covers it), non-activation proven across show/re-show cycles, and profile bytes verified under `CCP_DATA_ROOT`. Ported deltas vs the CD row: the preventive `WM_WINDOWPOSCHANGING` rewrite hook is NOT ported — the 1500ms timer corrects a rise within one cadence (observed live), so a re-activated dashboard can paint over the backdrop for up to ~1.5s before the demote lands; Linux is a typed-Unavailable surface this row (no page-side bridge transport + no keep-below control on the NativeWebDialog toplevel).
 
 ## 5. Platform matrix
 
@@ -221,7 +221,7 @@ The opaque full-screen backdrop shape the §1.2 category vocabulary did not have
 | WSLg/X11 (Ubuntu 26.04; XWayland session) | **Observed** — session facts only (`WAYLAND_DISPLAY=wayland-0` + `DISPLAY=:0`; the client runs as an X11 client per SP-006 session-probe facts); never a backend claim |
 | Linux distros / display backends / window managers acceptance matrix | **Pending owner question** (task-board "Decisions needed": "Which Linux distributions, display backends, and window managers define the window-behavior acceptance matrix?") |
 
-There is deliberately no Wayland column — architecture-proposal §5.1 (`Avalonia.Wayland` opt-in) is an open owner question; its absence here IS the posture (pre-approach consult).
+There is deliberately no Wayland column — its evidence and any `Avalonia.Wayland` decision remain open under `architecture.md` A-002; its absence here IS the posture.
 
 ## 6. Shared-chrome implications (constraints only — no chrome design)
 
@@ -240,7 +240,7 @@ What this manifest CONSTRAINS for any future shared-chrome decision:
 
 ## 7. Dashboard observability demonstrator (observation-only)
 
-**Executed 2026-07-20** against the ONE existing greenfield window (the SP-007 dashboard, `client/src/CcpClient.Desktop/Views/MainWindow.axaml`, Debug build) on Windows (headed) and WSLg/X11, with **zero product-code change**. Harness: `spine-tasks/SP-012-window-behavior-manifest/scratch/window-demo.ps1` (Windows) + `scratch/wslg-demo.sh` (WSLg); transcripts + captures in `spine-tasks/SP-012-window-behavior-manifest/artifacts/`. All values below are **RV** (runtime-verified) unless marked "session facts" (WSLg property-level reads, never backend claims).
+**Executed 2026-07-20** against the ONE existing greenfield window (the SP-007 dashboard, `client/src/CcpClient.Desktop/Views/MainWindow.axaml`, Debug build) on Windows (headed) and WSLg/X11, with **zero product-code change**. The stated checks and reproducible `scratch/wslg-demo.sh` procedure are the evidence; captures are ephemeral. All values below are **RV** (runtime-verified) unless marked "session facts" (WSLg property-level reads, never backend claims).
 
 | Field | Windows (headed, RV) | WSLg/X11 (session facts) |
 |---|---|---|

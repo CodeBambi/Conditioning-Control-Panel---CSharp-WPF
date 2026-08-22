@@ -16,7 +16,7 @@ namespace CcpClient.Desktop.Effects;
 /// mouse message at all, owns one window, places it once, and defines <c>Confirmed</c> as
 /// <c>IsForegroundWindow &amp;&amp; SystemKeyboardFocusIsThisWindow</c>, which is the exact inverse
 /// of what a bubble needs. That census was re-verified line by line before this module was written
-/// (<c>spine-tasks/SP-113-pointer-surface/plan.md</c> §1) and it holds in every particular.</para>
+/// and it holds in every particular.</para>
 ///
 /// <para><b>The answer, and it is the shape of this file.</b> <see cref="ISessionEffect"/> fits
 /// unchanged (fifth time). <see cref="OwnedSessionEffect"/> fits unchanged. This module takes no

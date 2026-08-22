@@ -80,7 +80,7 @@ identity) is what this contract ports.
   `KeyBinding.CommandParameter={Binding CardId}` resolved); mutated title renders on the
   card while right-click over the title text still toggles; no `ContextMenu`/
   `ContextFlyout` exists or opens.
-- Windows-headed smoke (`spine-tasks/SP-014-quick-toggle-dispatch/`): real SendInput
+- Windows-headed smoke: real SendInput
   right-click toggles, ring pixel flip, persistence file proof, **toggle while the SP-013
   modeless popup is open**, no-context-menu negative, title-region click parity. The
   no-context-menu negative is a composite that covers BOTH menu configurations: the

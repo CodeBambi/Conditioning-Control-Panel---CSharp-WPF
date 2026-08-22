@@ -41,9 +41,7 @@ internal static class FlashDrawObservations
 
     private static readonly Lazy<Measurements> LazyRun = new(Measure, LazyThreadSafetyMode.ExecutionAndPublication);
 
-    /// <summary>Where the evidence bitmaps are written. Named, stable, and documented in
-    /// <c>spine-tasks/SP-100-flash-draws/record.md</c> so the orchestrator's headed capture has
-    /// something to compare against.</summary>
+    /// <summary>Where headed verification writes its stable evidence bitmaps.</summary>
     internal static string EvidenceFolder => Path.Combine(Path.GetTempPath(), "ccp-sp100-flash-draws");
 
     internal static Measurements Run => LazyRun.Value;

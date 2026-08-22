@@ -10,8 +10,7 @@ namespace CcpClient.Tests;
 /// of the running shell on a real Windows desktop, checked by <c>CcpVerify</c> against
 /// <c>client/tools/verify/checks.json</c>, with every check shown failing on a real capture of the
 /// opposite state and on a real seeded regression in <c>MainWindow.axaml</c>
-/// (<c>spine-tasks/SP-122-rack-presentation/record.md</c>). A headless assembly cannot photograph
-/// anything and no fact here claims to.</para>
+/// . A headless assembly cannot photograph anything and no fact here claims to.</para>
 ///
 /// <para><b>What it IS.</b> The things that can rot silently between headed runs: a rack check
 /// that stops being <c>presentation-verified</c>, a surface the capture script can no longer be

@@ -17,7 +17,7 @@ namespace CcpClient.Tests;
 /// product calling the fake, not sampled by the test from outside.
 ///
 /// WHAT THESE FACTS DO NOT PROVE (the other half of the correction, established by reading
-/// the call sites and recorded in spine-tasks/SP-087-.../record.md, never asserted here):
+/// the call sites and never asserted here):
 /// that the calling thread is the UI thread. CcpClient.Tests has no Avalonia dispatcher and
 /// must not acquire one; thread affinity is the portable half a dispatcher-free test can
 /// honestly prove, and it is the half that transfers to Linux unchanged.

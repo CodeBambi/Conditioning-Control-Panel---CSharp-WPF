@@ -26,7 +26,7 @@ namespace CcpClient.Tests;
 /// is precisely what is not enough. And <c>CcpClient.HeadlessTests</c> is a separate assembly
 /// that <c>CcpClient.Tests</c> does not reference, so its types are not loadable here. Only a
 /// lexical repo-root walk sees both trees. Shape precedent: DataRootChokePointGuardTests /
-/// HarnessEntryPointGuardTests / FloorWrapperGuardTests — repo-root walk, never skips, fails
+/// HarnessEntryPointGuardTests — repo-root walk, never skips, fails
 /// closed on input it cannot parse, file:line violations.</para>
 ///
 /// <para>THE ASSEMBLY BOUNDARY, AND WHY THE TWO HALVES DIFFER. xunit collections do not span
@@ -135,7 +135,7 @@ public partial class ProcessEnvCollectionGuardTests
     private const string SelfControl = nameof(ProcessEnvCollectionGuardTests);
 
     private const string UnparseableRefusal =
-        "this guard refuses to read input it cannot parse as a pass (precedent: FloorWrapperGuardTests.cs:92-101)";
+        "this guard refuses to read input it cannot parse as a pass";
 
     [GeneratedRegex(@"\bnew\s+CompositionRoot\b")]
     private static partial Regex RootConstruction();
@@ -165,8 +165,8 @@ public partial class ProcessEnvCollectionGuardTests
         var violations = new List<string>();
 
         // Attribute membership aggregates over ALL declarations of a class name: partials are
-        // real in this suite (HarnessEntryPointGuardTests.cs:18, FloorWrapperGuardTests.cs:32)
-        // and the attribute may sit on any one of them.
+        // real in this suite (HarnessEntryPointGuardTests.cs:18), and the attribute may sit on
+        // any one of them.
         var carries = new Dictionary<string, bool>(StringComparer.Ordinal);
         var anchor = new Dictionary<string, string>(StringComparer.Ordinal);
         var bound = new SortedSet<string>(StringComparer.Ordinal);

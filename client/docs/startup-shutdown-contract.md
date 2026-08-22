@@ -1,8 +1,11 @@
 # Startup, shutdown, and integration contract
 
-**Date:** 2026-07-18 · **Task:** SP-003 (task-board row 2) · **Status:** ratified by implementation + tests in this slice; evidence in `spine-tasks/SP-003-startup-shutdown-contract/record.md`
+**Status:** governing contract for startup, shutdown, and integration. Its requirements are
+implemented and verified by focused client tests.
 
-This contract instantiates `architecture-proposal.md` §3/§6 (row-2 column) and the A-014 foundation rules for how the greenfield client starts, validates, and stops. It governs every later row that starts or stops code. It implements no product features: it proves the lifecycle shape with the placeholder window and one demonstrator background participant.
+This contract applies the A-014 foundation rules in `architecture.md` for how the greenfield client
+starts, validates, and stops. It governs every feature that starts or stops code and proves the
+lifecycle shape with a minimal window and demonstrator background participant.
 
 ---
 
@@ -71,7 +74,9 @@ Rules:
 2. Participants stop in **reverse start order**.
 3. Teardown never throws: an individual participant's stop failure is logged and teardown continues to the remaining participants.
 4. The startup-failure path and the panic path both leave **no orphaned background participant**: anything phase 3 started is provably stopped.
-5. Graceful-shutdown flush of persisted state (settings) is **ACTIVATED** (SP-005, 2026-07-19): the persistence store's bounded flush occupies this reserved slot at the head of the teardown sequence, before participant stop — semantics, panic-path policy, and the dirty-at-shutdown test are defined in [`persistence-migration-contract.md`](persistence-migration-contract.md) §11; evidence in `spine-tasks/SP-005-persistence-migration-contract/record.md`.
+5. Graceful-shutdown flush of persisted state occupies this reserved slot at the head of the teardown
+  sequence, before participant stop. Its semantics, panic-path policy, and dirty-at-shutdown tests
+  are defined in [`persistence-migration-contract.md`](persistence-migration-contract.md) §11.
 
 ## 7. Container-admission decision: manual construction, no DI container
 

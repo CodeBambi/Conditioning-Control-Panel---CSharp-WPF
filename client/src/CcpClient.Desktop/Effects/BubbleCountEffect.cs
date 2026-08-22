@@ -63,8 +63,8 @@ public enum BubbleCountResolution
 /// three waves before this one, and each had exactly one consumer, the module that introduced it. A
 /// capability with one consumer is a capability shaped around one caller. This row plays a clip
 /// through SP-111's video capability and asks its question through SP-110's input capability, and
-/// what that cost is written up in <c>spine-tasks/SP-112-second-consumer/record.md</c> rather than
-/// implied by the code compiling.</para>
+/// its compatibility is established by the capability contracts and focused tests rather than by a
+/// successful compile.</para>
 ///
 /// <para><b>The two capabilities, and what each is asked for.</b> The clip goes up on the SHARED
 /// <see cref="IVideoSurface"/> — the same instance Mandatory Video plays on, which is what makes the

@@ -30,7 +30,6 @@ public sealed record SubliminalFiring(SubliminalEvent Event, SubliminalCard Card
 /// most valuable feature — because the session spine had exactly one implementation and thirteen
 /// more were queued behind it. This is the module that had to be written to find out whether the
 /// first one's shape was a template or an accident. What it found is in
-/// <c>spine-tasks/SP-101-second-effect/record.md</c>; what it changed is
 /// <see cref="PacedSessionEffect{TFiring}"/>, which is now where the shared body lives.</para>
 ///
 /// <para><b>Where it genuinely differs from Flash Images</b>, each difference being a place a copied

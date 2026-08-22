@@ -1,8 +1,14 @@
 # Runtime capability contract
 
-**Date:** 2026-07-19 · **Task:** SP-006 (task-board row 5) · **Status:** ratified by implementation + tests in this slice; evidence in `spine-tasks/SP-006-truthful-capability-contract/record.md`
+**Status:** governing contract for capability availability and runtime probes. Its requirements are
+implemented and verified by focused client tests.
 
-This contract instantiates `architecture-proposal.md` §6 (row-5 column: typed capability states and runtime probes) and the first-attempt capability lesson (`first-attempt-systemic-lessons.md`: "Capability must be an observed result, not an OS or registration guess" — dispositions: REJECT capability-by-platform, capability-by-registration, capability-by-assets-present; ADAPT graceful fallback only for explicitly optional behavior). It activates the row-3/row-5 boundary sentence in `async-lifecycle-fault-contract.md` §2: row 3 owns OPERATION outcomes; **this contract owns capability-availability states**. It implements no feature capabilities: it proves the honesty shape with two demonstrator capabilities (§8) chosen because they resist gaming.
+This contract applies `architecture.md` A-014 and the first-attempt capability lesson: capability
+must be an observed result, not an OS or registration guess. It rejects capability-by-platform,
+capability-by-registration, and capability-by-assets-present; graceful fallback is allowed only for
+explicitly optional behavior. `async-lifecycle-fault-contract.md` §2 owns operation outcomes;
+**this contract owns capability-availability states**. Demonstrator capabilities in §8 prove the
+honesty shape without standing in for product capability claims.
 
 ---
 

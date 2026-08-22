@@ -1,12 +1,10 @@
 # The haptic limb, censused — every upstream command site, mapped to a port trigger point
 
-SP-120. Companion to `spine-tasks/SP-120-haptic-limb-census/record.md` (method, reconciliation and
-the priced vocabulary menu) and to `client/docs/wpf-surface-reachability.md` D202-D206 (the
-divergences). **No product code was written for this document**; `client/src/**` was closed to the
-packet that produced it.
+SP-120. Companion to `client/docs/wpf-surface-reachability.md` D202-D206 (the divergences).
+The method, reconciliation, and priced vocabulary menu are stated here. **No product code was
+written for this document**; `client/src/**` was outside its scope.
 
-The method was committed before the first mapping, at
-`spine-tasks/SP-120-haptic-limb-census/plan.md`. This file is the DATA; the LOGIC that pins it is
+The method is stated before the mapping below. This file is the DATA; the LOGIC that pins it is
 `client/tests/CcpClient.Tests/HapticSiteCensusTests.cs`, which re-derives the candidate set from the
 shipping bytes at test time and refuses to trust any total written here.
 
@@ -76,8 +74,8 @@ sites rather than their one and four call paths, and it is applied identically t
 
 ### 2.1 THE HELPER CLAUSE IN THE COMMITTED PLAN SAID THE OPPOSITE, AND IT IS STRUCK HERE
 
-**The number moved because a rule changed, and this section is where that is visible.** The method
-committed before any mapping (`spine-tasks/SP-120-haptic-limb-census/plan.md:140-141`) reads:
+**The number moved because a rule changed, and this section is where that is visible.** The earlier
+rule read:
 
 > *"A helper called from two places is **one site per call site of the helper**, and the helper's own
 > body is not a site — otherwise the same command is counted twice."*
@@ -137,8 +135,8 @@ cited line; the pin checks both sides.
 | 11 | `Services/Video/VideoService.cs:4673` | `App.Haptics?.PostEvent(Services.Haptics.Core.HapticEventKind.ToyButtonReward)` | absent-by-decision | — | — | — | An attention check is satisfied by squeezing the toy instead of clicking. Absent twice over: the moment needs attention checks, and the reward needs toy INPUT. |
 | 12 | `Services/Video/VideoService.cs:6580` | `App.Haptics?.StopVideoBackgroundVibeAsync()` | present | `Effects/MandatoryVideoEffect.cs:416` | `RefreshSchedule()` | fail: latch | The clip stops holding the screen; `:416` is the first statement of the `OnClipEnded` handler declared at `:414`, cited as a statement because §2 defines a trigger point as one. **The port's second teardown path, `Effects/MandatoryVideoEffect.cs:337` (`OnDisarmed`), does NOT reach `OnClipEnded`** — `Effects/VideoSurfacePresenter.cs:466` clears the callback — so a limb must place the stop on BOTH or it repeats upstream's D203 defect. |
 | 13 | `Services/Video/VideoService.cs:6584` | `App.Haptics?.FunScript?.OnVideoStopped()` | absent-by-decision | — | — | — | The clip ends and any script following it must be dropped and its layer zeroed. |
-| 14 | `Services/Subliminal/SubliminalService.cs:230` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:210` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | A subliminal phrase is shown. Upstream's WITH-whisper-audio branch of `FlashSubliminal` (`:203`, guard `:220`). |
-| 15 | `Services/Subliminal/SubliminalService.cs:588` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:210` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | Same moment, upstream's silent branch, inside the helper `TriggerSubliminalWithHapticPattern` (`:577`). The port has no whisper audio, so the two branches are one path here. **What the collapse loses is the ANTICIPATION**: upstream fires the haptic first and delays the visual by `SubliminalAnticipationMs` (250 ms, or 1300 ms on Buttplug — `Services/Haptics/HapticService.cs:88`), and the port shows the card immediately. |
+| 14 | `Services/Subliminal/SubliminalService.cs:230` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:209` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | A subliminal phrase is shown. Upstream's WITH-whisper-audio branch of `FlashSubliminal` (`:203`, guard `:220`). |
+| 15 | `Services/Subliminal/SubliminalService.cs:588` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:209` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | Same moment, upstream's silent branch, inside the helper `TriggerSubliminalWithHapticPattern` (`:577`). The port has no whisper audio, so the two branches are one path here. **What the collapse loses is the ANTICIPATION**: upstream fires the haptic first and delays the visual by `SubliminalAnticipationMs` (250 ms, or 1300 ms on Buttplug — `Services/Haptics/HapticService.cs:88`), and the port shows the card immediately. |
 | 16 | `Services/Subliminal/SubliminalService.cs:297` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | absent-by-decision | — | — | — | The "Bambi Freeze" trigger phrase is shown. |
 | 17 | `Services/Subliminal/SubliminalService.cs:387` | `App.Haptics?.TriggerSubliminalPatternAsync(resetText)` | absent-by-decision | — | — | — | The "Bambi Reset" follow-up is shown. |
 | 18 | `Services/Subliminal/BouncingTextService.cs:515` | `App.Haptics?.BouncingTextBounceAsync()` | present | `Effects/BouncingTextField.cs:230` | `Bounces++` | fail: intensity | A bouncing word hits a screen edge. **In a module this port shipped** (SP-115), and in no prior count. The port's statement even sits at the same place in the sequence: upstream fires between the bounce bookkeeping and the 10 % text re-roll (`:515` against `:518`), and `:230` sits between `Bounces++` and the same re-roll at `Effects/BouncingTextField.cs:251`. |
@@ -151,7 +149,7 @@ cited line; the pin checks both sides.
 | `Effects/FlashSurfacePresenter.cs:307` | 1, 2, 3, 4 | one decay ladder AND one luminance layer per placed image |
 | `Effects/MandatoryVideoEffect.cs:287` | 6, 7 | raise the continuous video layer |
 | `Effects/MandatoryVideoEffect.cs:416` (+ `:337`) | 12 | zero it, on every path that takes the clip off the screen |
-| `Effects/SubliminalsEffect.cs:210` | 14, 15 | one short pulse per card |
+| `Effects/SubliminalsEffect.cs:209` | 14, 15 | one short pulse per card |
 | `Effects/BouncingTextField.cs:230` | 18 | one 60 ms pulse per bounce |
 
 ---
@@ -172,8 +170,8 @@ would be `absent-unexplained`, and there are none.
 | 11 | `Effects/MandatoryVideoEffect.cs:405` | `not ported and not shown as dead controls: attention` |
 | 11 | `Haptics/IHapticSink.cs:235` | `haptic INPUT` |
 | 13 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
-| 16 | `Effects/SubliminalsEffect.cs:57` | `follow-up (<c>:276-404</c>)` |
-| 17 | `Effects/SubliminalsEffect.cs:57` | `follow-up (<c>:276-404</c>)` |
+| 16 | `Effects/SubliminalsEffect.cs:56` | `follow-up (<c>:276-404</c>)` |
+| 17 | `Effects/SubliminalsEffect.cs:56` | `follow-up (<c>:276-404</c>)` |
 <!-- /census:decisions -->
 
 **Site 5 — the flash pop.** The quoted sentence is the reason the port's flash surfaces are created
@@ -377,8 +375,7 @@ each:
 
 ## 9. THE VOCABULARY LAYER, PRICED — SUMMARY ONLY
 
-Full pricing, on seven fixed axes chosen before the options were known, is in
-`spine-tasks/SP-120-haptic-limb-census/record.md` §6, and this summary carries the same facts.
+Full pricing on seven fixed axes is summarized below.
 **The decision is the owner's and this packet does not take it.**
 
 | option | seam | files | reproduces | does NOT reproduce |

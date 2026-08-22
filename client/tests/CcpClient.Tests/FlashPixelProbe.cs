@@ -161,9 +161,7 @@ internal static class FlashPixelProbe
     /// majority colour <c>0x26171E</c> at the identical count every time: the same static content
     /// behind the window, which refutes a VARYING foreign occluder as well as a foreign owner of the
     /// point. Decomposed: <c>GdiFlush</c> alone is 8 in 300 — no effect, GDI batching is not the
-    /// mechanism — and <c>DwmFlush</c> alone is 0 in 300. Evidence:
-    /// <c>spine-tasks/SP-116-flake-characterisation/sweep-control.log</c> and
-    /// <c>sweep-control-postfix.log</c>.</para>
+    /// mechanism — and <c>DwmFlush</c> alone is 0 in 300.</para>
     ///
     /// <para><b>Why this is not a wait, a retry or a widened window.</b> <c>DwmFlush</c> blocks
     /// until the compositor's NEXT PRESENT has consumed the outstanding surface updates — it is an

@@ -32,7 +32,7 @@ Official sources (all fetched 2026-07-19, verified current):
 - **Linux Wayland:** WSLg is XWayland-only (SP-006 session-probe facts, re-observed this task:
   the app's own capability surface reports "linux wayland session with X11 offered via XWayland…
   session facts only — not a claim about the selected Avalonia backend"). `Avalonia.Wayland` opt-in
-  is open owner question §5.1 (architecture-proposal). Wayland evidence is a named gate — this task
+  is an open owner question under `architecture.md` A-002. Wayland evidence is a named gate — this task
   records X11 session facts only and never fakes Wayland.
 - **Windows 150% scaling:** all three monitors on this machine report scale 1.0 (recorded fact);
   `TopLevel.RenderScaling` is get-only in 12.1.0 (source-verified) and no supported Windows override

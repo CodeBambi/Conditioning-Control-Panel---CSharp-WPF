@@ -36,8 +36,7 @@
     },
 
     // SP-122 — THE RACK. Every check below reads a real capture of the Studio rack's Flash Images
-    // row; every one has been shown FAILING on a real capture of the opposite state, and both
-    // fractions are recorded in spine-tasks/SP-122-rack-presentation/record.md.
+    // row; every one has been shown FAILING on a real capture of the opposite state.
     //
     // TOLERANCES ARE SIZED BELOW 10 ON PURPOSE, and this is the tolerance rule in its natural
     // habitat. RadioButton.rack-row:pointerover is #FF241E2A (MainWindow.axaml:98-100), 11/10/11
@@ -120,8 +119,7 @@
     // SP-132 -- THE GOON PAGE. The first checks in this manifest that read pixels the PRODUCT DID
     // NOT PAINT: a payload page rendered by a real WebView2 inside the Goon practice host, driven
     // there by real input (Play door, then PRACTICE) and confirmed through UIAutomation before any
-    // pixel was taken. Every fraction below is measured; the captures are named in
-    // spine-tasks/SP-132-goon-evidence/record.md.
+    // pixel was taken. Every fraction below is measured.
     //
     // WHAT `first-run` IS, EXACTLY, because the name has to be honest. The page's screen id is
     // `title` (ui/router.js:222 writes it onto the document element) and over it sits the title

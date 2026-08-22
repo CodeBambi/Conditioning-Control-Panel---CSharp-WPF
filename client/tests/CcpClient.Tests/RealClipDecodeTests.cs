@@ -24,9 +24,8 @@ namespace CcpClient.Tests;
 /// <c>f21a7c011</c>, 122 commits before this packet existed: <b>ffmpeg</b> (gyan.dev full build
 /// 2025-06-04) encoding <c>lavfi</c>'s synthetic <c>testsrc2</c> pattern through <b>x264</b>, 96x96
 /// at 10 fps for 2 s, H.264 + AAC, <c>+faststart</c>. Its SHA-256 and its recipe are recorded in
-/// <c>client/docs/video-handoff-spike.md:21</c> and
-/// <c>spine-tasks/SP-018-video-handoff-spike/record.md:82</c>. <b>Media Foundation produced no byte
-/// of it</b>, and it is synthetic, so nothing personal and nothing copyrighted is committed.
+/// <c>client/docs/video-handoff-spike.md:21</c>. <b>Media Foundation produced no byte of it</b>,
+/// and it is synthetic, so nothing personal and nothing copyrighted is committed.
 /// <see cref="TheFixtureIsTheFfmpegArtefactWhoseProvenanceIsRecorded_NotAnythingMediaFoundationCouldHaveMade"/>
 /// pins that mechanically rather than trusting this paragraph.</para>
 ///
@@ -53,8 +52,7 @@ namespace CcpClient.Tests;
 /// </summary>
 public class RealClipDecodeTests
 {
-    /// <summary>The recipe's own output, byte for byte
-    /// (<c>spine-tasks/SP-018-video-handoff-spike/record.md:82</c>).</summary>
+    /// <summary>The recipe's own output, byte for byte.</summary>
     private const string FixtureSha256 = "eb14abd63a02a22029c513a4b512e2cecad34b2b0c9e31994030753c5d769fbc";
 
     private const int ClipWidth = 96;

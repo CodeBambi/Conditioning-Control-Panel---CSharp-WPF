@@ -1,8 +1,16 @@
 # AI operation contract
 
-**Date:** 2026-07-21 · **Task:** SP-016 (task-board row 46: "Define provider-neutral AI operation contract") · **Status:** DEFINE-ONLY. No providers, no network calls, no UI, no moderation engine are implemented in this slice. Typed vocabulary + seam declarations + mechanics tests are the deliverable; provider spikes and the companion row come after. Evidence: `spine-tasks/SP-016-ai-operation-contract/record.md`.
+**Status:** governing contract. Provider seams and mechanics tests exist; a declared seam is not a
+claim that a provider, network route, UI, or moderation engine is available. Evidence comes from
+the cited WPF sources and focused client tests.
 
-This contract instantiates the first-attempt AI lesson (`first-attempt-lessons.md`: "AI provider and effect boundaries were not explicit enough" — ADAPT provider-neutral transport, client-side moderation, explicit local memory, opt-in commands; REJECT string-inferred failures, no cancellation, silent endpoint fallback, remote host called "local", lenient command repair, partial/no-op effects reported as success, awareness context transmission without explicit consent). It **reuses** SP-004 ownership/generation/outcome machinery (`async-lifecycle-fault-contract.md`) and SP-005's declared-only secret seam (`persistence-migration-contract.md` §9); it invents no new async machinery. It obeys SP-006's honesty rule: a declared seam is **not** a capability claim (`runtime-capability-contract.md` §4).
+This contract applies the AI lesson in `first-attempt-lessons.md`: use provider-neutral transport,
+client-side moderation, explicit local memory, and opt-in commands; reject string-inferred failures,
+missing cancellation, silent endpoint fallback, lenient command repair, partial or no-op effects
+reported as success, and awareness transmission without explicit consent. It reuses the ownership,
+generation, and outcome machinery in `async-lifecycle-fault-contract.md` and the declared-only
+secret seam in `persistence-migration-contract.md` §9. A declared seam is **not** a capability claim
+under `runtime-capability-contract.md` §4.
 
 WPF and the first Avalonia attempt are read-only behavioral evidence / lessons-only. Nothing here imports their mechanics; every section cites evidence (`File.cs:line` or `AI_AUDIT.md`) or is marked **greenfield-decision**.
 

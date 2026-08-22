@@ -1,6 +1,6 @@
 # AI provider spike — cancellable providers and strict commands
 
-**Date:** 2026-07-21 · **Task:** SP-019 (task-board row: "Spike cancellable AI providers and strict commands") · **Status:** spike evidence; zero product-code change. Quarantined host `client/spikes/CcpSpike.AiProvider/` (NOT in `client/CcpClient.sln`; ProjectReference to `CcpClient.Desktop` only, to exercise SP-016's REAL `AiEnvelopeValidator` / vocabulary). Evidence: `spine-tasks/SP-019-ai-provider-spike/record.md`.
+**Date:** 2026-07-21 · **Task:** SP-019 (task-board row: "Spike cancellable AI providers and strict commands") · **Status:** spike evidence; zero product-code change. Quarantined host `client/spikes/CcpSpike.AiProvider/` (NOT in `client/CcpClient.sln`; ProjectReference to `CcpClient.Desktop` only, to exercise SP-016's real `AiEnvelopeValidator` and vocabulary). The observations and limits are stated inline below.
 
 This spike exercises the SP-016 contract (`ai-operation-contract.md`) against a deterministic fake OpenAI-compatible loopback endpoint — the primary instrument, because a live model cannot produce timeout/429/refusal/malformed/mid-stream-cancel ON DEMAND. The strict command envelope is fuzzed against the real validator with a canary executor proving zero execution.
 
@@ -36,11 +36,11 @@ This spike exercises the SP-016 contract (`ai-operation-contract.md`) against a 
 
 ### 8. Loopback Ollama
 
-**NAMED LIMIT:** Ollama is ABSENT on this box — `GET http://localhost:11434/api/version` connection failure on Windows AND WSL2; no `ollama` binary on PATH. No real-Ollama round-trip exercisable this session. The Ollama request/response archaeology is recorded in record.md §1.1 (`LocalAiService.cs:439-455,478-535`).
+**NAMED LIMIT:** Ollama is ABSENT on this box — `GET http://localhost:11434/api/version` connection failure on Windows AND WSL2; no `ollama` binary on PATH. No real-Ollama round-trip was exercised. The request/response shape comes from `LocalAiService.cs:439-455,478-535`.
 
 ### 9. Cloud (first-party proxy)
 
-**NAMED LIMIT:** no credentials exist on this box and none were invented. The cloud auth/request shapes are archaeology-only (record.md §1.1: `AiService.cs:27,360-466`).
+**NAMED LIMIT:** no credentials exist on this box and none were invented. The cloud auth/request shapes are WPF archaeology only (`AiService.cs:27,360-466`).
 
 ### 10. Strict command schema fuzz — zero execution
 

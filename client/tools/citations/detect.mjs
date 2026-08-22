@@ -158,7 +158,7 @@
 //     this header without re-deriving them. A human reviewer caught them; the tool could not,
 //     because the tool cannot see itself.
 //     THE SAME FACT, SEEN FROM THE OTHER SIDE, AND IT IS ONE PROPERTY AND NOT TWO: it is exactly
-//     why editing this header, or spine-tasks/**, can never move the coverage counts — which is
+//     why editing this header or another non-corpus file can never move the coverage counts — which is
 //     what makes those counts a stable fixed point. A reader told only the reassuring half has
 //     been told half a fact. See D260's seventh blind spot.
 //   - It does not re-derive an entry's `citedBy`. NEW-CITATION (:640-651) skips any path

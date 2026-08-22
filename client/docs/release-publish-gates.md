@@ -1,6 +1,6 @@
 # Release and publish gates
 
-**Status:** active deliverable of task-board row 9 (SP-010). Owner decisions applied: A-014 Release rule (Debug, Release, and published artifacts are separate gates; one version source drives assemblies, update metadata, and packaging) and YAGNI constraint (no installer, no updater, no packaging mechanism without a consumer). This contract instantiates `architecture-proposal.md` §6 (row-9 column: version authority location, publish strategy). It discharges two inherited named gates: row 8's deferred publish third (same `--verify-assets` invocation against the published artifact) and rows 2/3's headed-Linux (WSLg) smoke debt, including SP-007's graceful-close gap.
+**Status:** active deliverable of task-board row 9 (SP-010). Owner decisions applied: A-014 Release rule (Debug, Release, and published artifacts are separate gates; one version source drives assemblies, update metadata, and packaging) and YAGNI constraint (no installer, no updater, no packaging mechanism without a consumer). This contract applies [architecture.md](architecture.md)'s A-014 version-authority and publish strategy. It discharges two inherited named gates: row 8's deferred publish third (same `--verify-assets` invocation against the published artifact) and rows 2/3's headed-Linux (WSLg) smoke debt, including SP-007's graceful-close gap.
 
 ---
 

@@ -4,8 +4,7 @@
     SP-018 quarantined video-handoff spike host. NOT referenced by client/CcpClient.sln.
     Inherits client/Directory.Build.props (single <Version> authority) — nothing else.
     Console host: acceptance is native-decoder-event-verified probe evidence, not a test project.
-    Package admission per spine-tasks/SP-018-video-handoff-spike/record.md §1.5
-    (solo Fable 5 consult, 2026-07-21): LibVLCSharp 3.10.0 + VideoLAN.LibVLC.Windows 3.0.23.1;
+    Package admission verified on 2026-07-21: LibVLCSharp 3.10.0 + VideoLAN.LibVLC.Windows 3.0.23.1;
     Linux native = distro libvlc via apt (no official Linux nuget exists — verified).
     Browser layer (Step 3) reuses SP-011-admitted Avalonia.Controls.WebView 12.0.1.
   -->

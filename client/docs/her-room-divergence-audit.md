@@ -188,4 +188,4 @@ Evidence classes: **U** = unit/headless both platforms · **WH** = Windows heade
 
 ---
 
-*Method, consult transcripts (routes + actual-model provenance), engine-review presence, and slice-record cross-references: `spine-tasks/SP-060-her-room-divergence-audit/record.md`. The contract file `ai-operation-contract.md` is untouched by design — contract changes follow the owner's decrees on §4, not this audit (ENABLER 2).*
+*Method: direct WPF route analysis, deterministic-provider observations, and the evidence stated in this audit. The contract file `ai-operation-contract.md` is untouched by design — contract changes follow the owner's decrees on §4, not this audit (ENABLER 2).*

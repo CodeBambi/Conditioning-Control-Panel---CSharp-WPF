@@ -25,9 +25,8 @@ namespace CcpClient.HeadlessTests;
 ///
 /// <para><b>Evidence class, said plainly.</b> Draw-verified and nothing more. A headless frame
 /// resolves styles; it does not composite, so no fact here claims any of these colours reached a
-/// screen. What claims that is the four captures and the seeded-regression run recorded in
-/// <c>spine-tasks/SP-122-rack-presentation/record.md</c>, and a headless frame never discharges
-/// them.</para>
+/// screen. Headed captures and interaction checks establish presentation; a headless frame never
+/// discharges them.</para>
 /// </summary>
 public class RackPresentationAnchorHeadlessTests
 {

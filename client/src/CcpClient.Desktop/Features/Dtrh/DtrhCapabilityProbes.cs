@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// <summary>
 /// The DTRH host's capability probes (runtime-capability-contract; dtrh-admission.md §5).
 /// Mechanism verified against the Avalonia.Controls.WebView 12.0.1 binary itself
-/// (spine-tasks/SP-023 record Step 2): on Windows the package locates the WebView2 runtime
+/// : on Windows the package locates the WebView2 runtime
 /// via the EdgeUpdate ClientState registry key, then loads the runtime's
 /// EmbeddedBrowserWebView.dll and resolves its CreateWebViewEnvironmentWithOptionsInternal
 /// export; on Linux it dlopens libwebkit2gtk-4.1 + libgtk-3. The probes exercise exactly

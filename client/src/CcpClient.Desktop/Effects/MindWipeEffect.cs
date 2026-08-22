@@ -15,8 +15,7 @@ namespace CcpClient.Desktop.Effects;
 /// audio and "would have looked completely finished. It was rejected on purpose, because nothing in
 /// this project can actually verify that a sound played". That was true then. It is no longer true:
 /// <see cref="IAudioPresence"/> earns its <c>Available</c> from the operating system's own render
-/// session and its own peak meter, and <c>spine-tasks/SP-109-audio-capability/record.md</c> names
-/// exactly where that chain stops and what is left to a human. <b>This module is the first thing in
+/// session and its own peak meter. Audible output still needs a human check. <b>This module is the first thing in
 /// the port whose output nobody in the process can see, and it is the first whose dot depends on
 /// asking something outside it.</b></para>
 ///

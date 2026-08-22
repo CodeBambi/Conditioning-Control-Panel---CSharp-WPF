@@ -1,6 +1,6 @@
 # AI companion and awareness admission (SP-030)
 
-**Date:** 2026-07-22 · **Task:** SP-030 (task-board row "Implement AI companion and awareness integration", P0) · **Authority:** owner decree 2026-07-21 ("I approve to continue as the owner lift all gates!") lifted the approval gates and approved the AI companion network/memory decisions to proceed per the SP-016 contract + SP-019 spike; this document is the **engineering record the decree cannot write** — every design claim traces to the SP-016 contract (`ai-operation-contract.md`), the SP-019 spike (`ai-provider-spike.md`), WPF archaeology (`File.cs:line`), or is marked **greenfield-decision**. Owner asynchronous review/veto remains. **Design-record only — zero product code** (the SP-022 admission pattern).
+**Date:** 2026-07-22 · **Task:** SP-030 (task-board row "Implement AI companion and awareness integration", P0) · **Authority:** owner decree 2026-07-21 ("I approve to continue as the owner lift all gates!") lifted the approval gates and approved the AI companion network/memory decisions to proceed per the SP-016 contract and provider observations; every design claim traces to the SP-016 contract (`ai-operation-contract.md`), the provider observations (`ai-provider-spike.md`), WPF archaeology (`File.cs:line`), or is marked **greenfield-decision**. Owner asynchronous review/veto remains. **Design-record only — zero product code** (the SP-022 admission pattern).
 
 **Feeds:** the P0 row "Implement AI companion and awareness integration" — executes as slices **c1…c7** (§8).
 
@@ -13,7 +13,7 @@
 | Claim domain | Source | Key citations |
 |--------------|--------|---------------|
 | Operation mechanics (outcomes, cancellation, switching, moderation boundary, envelope, diagnostics) | SP-016 contract §§1–13 (owner-ratified) | `client/docs/ai-operation-contract.md` |
-| Proven provider mechanics (cancel/timeout/retry/refusal/malformed/remote-rejection/fuzz/redaction) | SP-019 spike items 1–7, 10–11 (Windows + Linux) | `client/docs/ai-provider-spike.md` |
+| Proven provider mechanics (cancel/timeout/retry/refusal/malformed/remote-rejection/fuzz/redaction) | Provider observations 1–7, 10–11 (Windows + Linux) | `client/docs/ai-provider-spike.md` |
 | Named limits honored as placeholders | SP-019 limits 1–8 | same |
 | Cloud endpoint + auth shapes | WPF archaeology | `Services/AiService.cs:27,332-352,355-361,479-499` (V2 `X-Auth-Token` + unified-ID body; V1 legacy `Bearer` + 404 fallback; 30s timeout `:64`) |
 | Provider switching (rejected live-switch shape) | WPF archaeology | `Services/AIService/AiServiceStrategy.cs:22-58`; setting `CCP.Core/Models/CompanionPromptSettings.cs:27` |

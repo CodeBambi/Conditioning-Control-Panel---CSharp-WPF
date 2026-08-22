@@ -138,7 +138,7 @@ public class AssetManifestTests
         // WITH the reason, never to silence a sweep failure.
         // 3682 -> 3700 at SP-061: the tunnel backdrop trees (`payload/tunnel` 9 +
         // `payload/vendor/three` 9 — the import-map resolution closure, derived in
-        // spine-tasks/SP-061-chaos-tunnel-backdrop/record.md Step 1).
+        // the current payload inventory).
         var entries = LoadRealManifest();
         var copied = entries.Where(e => e.Source == AssetSource.Copied).ToArray();
         Assert.Equal(3884, copied.Length);

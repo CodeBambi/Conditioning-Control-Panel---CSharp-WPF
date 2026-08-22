@@ -1,43 +1,77 @@
-# Conditioning-Control-Panel — Constitution
+# Conditioning Control Panel Constitution
 
-**Last Updated:** 2026-08-14
-
-Standing orders for every lane worker and reviewer on the greenfield Avalonia port. Task packets override nothing here; they narrow it.
-
-**Engine amendment, 2026-08-14.** pi-spine and the `consult` extension are retired. Execution moved to Claude Code: lanes are `port-slice-executor` subagents in git worktrees, review is `port-plan-reviewer` / `port-code-reviewer` / `port-final-reviewer`, and advice is `port-advisor` with `port-advisor-critic` as the adversarial seat, all defined under `.claude/agents/`. pi-spine could not be retargeted: every lane worker and reviewer it spawns is the literal string `pi`, with no config, env, or plugin seam to substitute another CLI. `.pi/`, `.spine/`, and the 74 existing `spine-tasks/SP-*/` packets remain on disk as history and are read-only. Everything below this line that does not name an engine is unchanged and still binds.
-
-**Named limit created by that amendment, recorded rather than hidden:** every advisor and reviewer seat is now an Anthropic model. The cross-vendor council that used to disagree with itself is gone, so agreement between seats is much weaker evidence than it was and blind spots are correlated. Weight the mechanical checks (the floor wrapper, a 0W/0E build, the scoped diff, tree identity at land) above any verdict.
-
----
+Standing rules for work on the greenfield Avalonia client under `client/`. These rules are
+workflow-harness neutral. A task may narrow scope, but it cannot override this document.
 
 ## Mission
 
-Build a new Avalonia v12 desktop client for Conditioning Control Panel under repository-root `client/`, targeting Windows and Linux only. Port user-observable purpose and outcomes — never old mechanics.
+Build a Windows and Linux Avalonia client that preserves the legacy product's user-observable
+purpose and outcomes. The legacy WPF product is behavioral evidence, not an implementation template.
 
----
-
-## Authority order (descending)
+## Authority
 
 1. Owner decisions in `client/docs/architecture.md` and `client/docs/capability-inventory.md`.
-2. `client/docs/task-board.md` — the only live product queue. Packets execute board rows; they do not replace the board.
-3. Repository instructions (`CLAUDE.md`, `.claude/CLAUDE.md` if present).
-4. Relevant project skills under `.claude/skills/`: `port-plan`, `port-feature`, `wpf-parity`, `avalonia-research`, `dashboard-design`, `overlay-clickthrough`, `unified-compositor-engine`, `first-attempt` lessons docs.
-5. The task packet (`PROMPT.md`).
-6. Advisor subagents (`port-advisor`, `port-advisor-critic`), MCP, and model suggestions.
+2. `client/docs/task-board.md`, the only live product queue.
+3. Repository instructions and this constitution.
+4. Task-specific contracts, research, and verification evidence.
+5. Workflow notes and review output.
 
-Empirical evidence can prove a document stale; fix the smallest authoritative document, then continue. Lower sources never override higher ones.
+When evidence proves a higher source stale, correct the smallest authoritative source before
+continuing. Lower sources do not override higher ones.
 
-## Hard rules
+## Boundaries
 
-- **Read-only zones:** `ConditioningControlPanel/` (legacy WPF = behavioral evidence). **It must track `main` EXACTLY; verify with `git rev-parse main:ConditioningControlPanel` against `HEAD:ConditioningControlPanel`, not with an empty `git diff`.** The first Avalonia attempt `CCP.*` was **DELETED at SP-141 (2026-08-22)** and is no longer a zone - it survives only as git history, and the rule against importing its classes, interfaces, timers, DI topology or status claims stands for anyone reading that history. Never modify `.pi/`, `.spine/`, the existing `spine-tasks/SP-*/` packets, or `CLAUDE.md`. The retired engine's trees stay as history and evidence.
-- **Write zones:** new product code, tests, assets, build scripts under `client/` only. Durable port docs under `client/docs/` when the packet allows it. Task state under the task's own `spine-tasks/SP-*/` folder.
-- **Avalonia v12 facts** come only from current official sources via the `avalonia-research` skill. No guessed APIs, no v11 assumptions, no MCP-generated authority.
-- **WPF parity** claims need narrow behavioral evidence via `wpf-parity`. Port the outcome, not the class.
-- **Windows AND Linux** (X11/Wayland distinguished where behavior differs) or a documented product blocker. Compilation, a stub, a no-op fallback, or a Windows-only test never proves cross-platform support.
-- **Privacy/security:** never broaden webcam, biometric, secret, path, logging, capture, moderation, consent, or network boundaries. Never send secrets, user media, camera data, or sensitive logs to advisors or MCPs.
-- **Verification is task-specific and honest.** A failed check is never accepted to keep a wave moving. Headed/visual gates that automation cannot prove leave the row `WIP`/`BLOCKED` with the exact manual gate named.
-- **Advisory gates:** call `port-advisor` at the checkpoints the packet names (pre-approach, pre-completion), and add `port-advisor-critic` for architecture, dependencies, platform seams, privacy, security, and decomposition. An advisor cannot mark work done; the owner and the board can. A required gate left unasked is a failed gate, not a silent pass, and agreement between two Anthropic seats is weak evidence: prefer one claim you check yourself.
-- **Review levels** 0-3 are declared per packet and drive `port-plan-reviewer` (plan), `port-code-reviewer` (diff), and `port-final-reviewer` (completion, PASS / REVISE / REPLAN). A lane never adjudicates its own completion, and a reviewer never edits the lane.
-- **Board reconciliation:** the matching `client/docs/task-board.md` row must carry concise evidence or the exact blocker before work counts as done. In **serial** waves the lane edits the board before reporting complete; in **parallel** waves (board not in File Scope) the lane records evidence in its own packet folder and the orchestrator reconciles the board at land time — never two lanes editing the board in one wave. Packet state never substitutes for the board.
-- **No new wall-clock waits in tests.** Every test wait is a deterministic signal or the shared bounded-window helper with its loud classifier; hard-coded deadline literals, `Thread.Sleep`, `DateTime`/`Environment.TickCount64` polls, and bare `Task.Delay` waits outside the approved helper fail the timing guard. *(SP-059 draft, applied by the orchestrator at land 2026-08-12 — policy-touching text is never applied by the worker. Known remainder: injected timeout **budgets** passed into product code under test are not yet swept or guarded — see the board's fourth-occurrence row.)*
-- **One task, one commit slice.** No unrelated files, no scope creep, no TODO placeholders.
+- New product code, tests, assets, and build work belong under `client/`.
+- `ConditioningControlPanel/` is the shipping WPF product and read-only behavioral evidence for
+  greenfield work. Do not copy its architecture, platform interop, service locator, timers, or
+  implementation details into the new client.
+- Verify current official Avalonia documentation before choosing an Avalonia v12 API, dependency,
+  platform integration, lifecycle mechanism, rendering path, or native interop approach.
+- Keep Windows and Linux evidence separate. Compilation, a stub, a no-op fallback, markup, or a
+  single-platform test does not prove cross-platform support. Distinguish X11 and Wayland where
+  behavior differs.
+- Do not broaden webcam, biometric, secret, path, logging, capture, moderation, consent, or network
+  boundaries without an owner decision. Do not expose sensitive user data to external services.
+
+## Work And Review
+
+- Reconcile the repository and task board before starting work; never trust a historical prompt,
+  status summary, or local workflow state over current evidence.
+- Keep each change to one coherent outcome with explicit permitted scope, exclusions, platform
+  expectations, verification, and ownership of shared files.
+- A worker implements in an isolated workspace or worktree. A fresh independent reviewer is used
+  for high-risk, architecture, dependency, platform, privacy, security, lifecycle, or cross-cutting
+  work. No producer certifies its own completion.
+- There is no fixed cap on concurrent workflows. Concurrent work requires disjoint file scope,
+  isolated workspaces, one explicit owner per shared chokepoint, adequate current resources, and
+  practical task-specific validation. Build/test concurrency stays separately constrained through
+  `client/tools/gate/with-slot.mjs`.
+- When verified lessons reveal a recurring coordination or technical problem, create or revise the
+  reusable workflow assets supported by the current harness, such as instructions, skills, role
+  definitions, templates, or checks. Keep the improvement evidence-based, narrowly scoped, and
+  independent of a named vendor or model.
+- The matching board row records concise evidence or the exact blocker before work is represented as
+  complete. Shared board and floor state have a single named owner.
+
+## Verification
+
+- A failed check is never accepted to keep work moving. Use focused checks during implementation and
+  the task's mechanical and headed gates before completion.
+- Run `node client/tests/floor/check-warnings.mjs` followed by
+  `node client/tests/floor/check-floor.mjs` when the change requires the standard client gates.
+  Use `--cold` for project, property, target, or lock-file changes.
+- Headed/visual claims require headed evidence when composited pixels, geometry, scaling, occlusion,
+  z-order, input, focus, media, animation, or window behavior matters. A headless result does not
+  discharge presentation evidence.
+- No new wall-clock waits in tests. Use deterministic signals or the approved bounded helper; do not
+  use `Thread.Sleep`, bare `Task.Delay`, or clock-poll loops. Never export `CCP_DATA_ROOT`
+  process-wide.
+- When a required platform or manual gate cannot run, leave the work `WIP` or `BLOCKED` with the
+  exact missing gate. Do not claim support from a build alone.
+
+## Change Discipline
+
+One task is one coherent commit slice. Do not mix unrelated files, weaken a guard to make a step
+pass, introduce placeholders in place of behavior, or extend scope beyond the approved board row.
+Pause and seek an owner decision when evidence conflicts, a safety decision remains unresolved, or
+the required acceptance cannot be honestly demonstrated.

@@ -1,4 +1,3 @@
-# Harness captures are ephemeral evidence — never committed (SP-008; artifacts live in
-# spine-tasks records as transcripts, not binary blobs).
+# Verification captures are ephemeral evidence and are never committed.
 *
 !.gitignore

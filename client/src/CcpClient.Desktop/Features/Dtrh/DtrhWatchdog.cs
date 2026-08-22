@@ -6,17 +6,17 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// 10s mid-run / 20s hub (:833-836), guarded on page-ready and not-exiting (:830), relaunch
 /// once per session then give up cleanly (:858-876) — never a restart loop.
 ///
-/// W17 (webview-dtrh-spike.md): killing the WebView2 renderer processes leaves a BLACK
-/// surface whose bridge keeps beating ~28s before going silent, and AdapterDestroyed NEVER
-/// fires. The detection stack is therefore TWO signals: the native ProcessFailed signal
+/// A renderer-process kill can leave a black surface whose bridge keeps beating briefly before
+/// going silent, while AdapterDestroyed never fires. The detection stack is therefore TWO signals:
+/// the native ProcessFailed signal
 /// (DtrhProcessFailed — immediate, Windows-embedded only) and this watchdog's heartbeat
 /// silence (the net on both platforms — it also catches a wedged JS main thread, the case
 /// ProcessFailed never sees). On the watchdog-only path (Linux dialog) detection lands at
 /// the black-but-beating window (~28s) PLUS the silence threshold — a named limit, never
 /// claimed as fast.
 ///
-/// Recovery-episode latch (pre-approach consult CORRECTION 1 — a latent WPF bug, not
-/// ported): one kill burst fires MULTIPLE ProcessFailed events; without a latch the second
+/// Recovery-episode latch (a latent WPF bug is not ported): one kill burst fires MULTIPLE
+/// ProcessFailed events; without a latch the second
 /// event would consume the relaunch AND tear down the replacement. While a relaunch is
 /// pending (until the new instance reports ready) every further failure signal is dropped.
 ///

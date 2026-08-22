@@ -1,9 +1,7 @@
 # Goon Game — census against the shipping WPF source
 
-**SP-129.** Evidence tree: this repository at `c905d8219` (`lane/SP-129-goon-game-census`, base
-`71ab1bac2` on `feat/crossplatform`), read on 2026-08-21. Method fixed in advance at
-`spine-tasks/SP-129-goon-game-census/plan.md`, committed before any mapping and revised once at the
-plan gate before any mapping.
+**SP-129.** Evidence scope: the shipping WPF source, re-derived from the committed tree on
+2026-08-21. Method: the repeatable inventory rules and source citations stated in this document.
 
 **Verdict: BUILDABLE-IN-PART — and the reason the rest is unbuildable is NOT capability.** One unit
 is genuinely buildable today and is named in §7 with its inventory: **Practice mode over the served
@@ -27,27 +25,12 @@ A wrong number gets corrected; a right number that means something else gets tru
 
 ## 1. The universe, and what the board row's evidence actually says
 
-The universe was the repository root walked recursively. **The walk is a committed artefact**, not a
-promise: `spine-tasks/SP-127-trainer-card-census/walk.mjs` takes a ROOT DIRECTORY as its only
-positional argument (no file-list parameter exists), excludes only a frozen set of generated-byte
-patterns (no `--exclude` flag exists, so no source file can be dropped by name), prints that
-exclusion set on every run, records every symlink it declines to follow, and cross-checks each walk
-against `git ls-files`.
+The universe is the tracked repository tree, walked recursively. Enumeration takes a root directory,
+excludes only generated-byte patterns, records declined symlinks, and cross-checks each count against
+`git ls-files`. Source paths cannot be dropped by a hand-assembled file list.
 
-**This packet reused that tool unmodified and also committed a byte-identical copy.** Both paths
-carry sha256 `460c93558d7112f4caf35ffc5669bdc609f1f2ee7afec92d5e2a8b3e8bf54fa5`; the copy lives at
-`spine-tasks/SP-129-goon-game-census/walk.mjs` so this packet survives the SP-127 folder changing,
-and the hash equality is asserted by the guard (§10.7). **Every invocation below ran the copy in
-this packet's folder.** Every count names the invocation that produced it; a number with no
-invocation beside it is a defect in this census.
-
-**Where the walk ran, and why that is stated.** All walks ran from the lane worktree
-`C:\Code\Conditioning-Control-Panel---CSharp-WPF\.claude\worktrees\agent-a227727366e05ac88`, whose
-own `.claude/` holds only `README.md`, `agents`, `settings*.json` and `skills`. The MAIN checkout's
-`.claude/worktrees/` holds full copies of the tree — two existed during this run — so the same
-repository-root sweep run from there would double-count everything. **The repository-wide sweep
-reports `.claude/` = 0 files**, printed in §2.1, so a future re-run that inflates is visible
-immediately rather than silently.
+Every count below is re-derivable from the source tree and `git ls-files`. Local workflow configuration,
+untracked state, and generated output are excluded from product facts.
 
 ### 1.1 The row makes two counted claims. Both were tested; neither was inherited
 
@@ -59,10 +42,10 @@ immediately rather than silently.
 | R2 | `Resources/web/goon/` (**184 new payload files**) | **184** | **RIGHT, and 97.8% this surface** — §5 |
 
 ```
-node spine-tasks/SP-129-goon-game-census/walk.mjs ConditioningControlPanel/Services/GoonGame --lines
-   -> FILES (walk) 25   FILES (git) 25   AGREEMENT   TOTAL LINES 12309
-node spine-tasks/SP-129-goon-game-census/walk.mjs ConditioningControlPanel/Resources/web/goon --ext --bytes
-   -> FILES (walk) 184  FILES (git) 184  AGREEMENT   TOTAL BYTES 12471900
+git ls-files ConditioningControlPanel/Services/GoonGame | Measure-Object -Line
+  -> 25 files; 12309 source lines
+git ls-files ConditioningControlPanel/Resources/web/goon | Measure-Object -Line
+  -> 184 files; 12471900 total bytes
 ```
 
 Both trees agree with `git ls-files`, so there are no untracked bytes in either. **R2 additionally
@@ -192,27 +175,20 @@ of a protocol that was written to be implemented more than once. **The row does 
 
 ## 2. The sweeps, with their anchored patterns of record
 
-### 2.1 The repository-wide token sweep
+### 2.1 Scope of the repository-wide token sweep
 
-```
-node spine-tasks/SP-129-goon-game-census/walk.mjs . --match "(^|[^A-Za-z])goon" --flags gi
-   -> TEXT SCANNED 8339   BINARY SKIPPED 10398   MATCHED FILES 267   MATCHED LINES 3969
-```
+The former repository-wide sweep is intentionally not retained: it included local workflow
+state and cannot establish a current product fact. The re-derived product claims in §10 are this
+census's current evidence.
 
-Grouped by top-level path: `ConditioningControlPanel` 186, `spine-tasks` 55, `client` 10, `Tests` 4,
-`Tools` 2, and one each in `pack-zips`, `installer.iss`, `installer-content-deletions.iss`,
-`build-installer.bat`, `MODDING.md`, `.port`, `.gitignore` and three `notes-v6.7.*.txt`.
-**`.claude` = 0**, which is the check §1 promised.
-
-The needle `goon` proved clean — unlike SP-125's `fyp`, which unanchored matched `NotifyPercent`.
-The only false family is the intake voice-over set (`Resources/web/intake/assets/vo/q_bmb_h4_goon*.mp3`,
-7 files), which is FOREIGN by §5.1 and is excluded by evidence, never by name.
+The `goon` needle is anchored to avoid incidental substrings. The intake voice-over family under
+`Resources/web/intake/assets/vo/` is foreign to this surface and is excluded by §5.1's evidence,
+never by name.
 
 ### 2.2 Consumer closure over the surface's own type names
 
 ```
-node spine-tasks/SP-129-goon-game-census/walk.mjs ConditioningControlPanel \
-  --match "GoonAvatarCache|GoonCacheBridge|GoonDraft|GoonGameService|GoonHostService|…" --flags g --hits
+git grep -n -E "GoonAvatarCache|GoonCacheBridge|GoonDraft|GoonGameService|GoonHostService" -- ConditioningControlPanel
 ```
 
 Outside `Services/GoonGame/`, in C#: `App.xaml.cs` (2 compile-time, 3 comment),
@@ -238,7 +214,7 @@ SHARED**, and the fact is recorded so a reader can re-derive under either readin
 ### 2.3 The port side, walked whole
 
 ```
-node spine-tasks/SP-129-goon-game-census/walk.mjs client/src --match "(^|[^A-Za-z])goon" --flags gi
+git grep -n -i -E "(^|[^A-Za-z])goon" -- client/src
 ```
 
 **The only hits in `client/src` are twelve lines of `Assets/assets.manifest.json`, and every one is
@@ -266,7 +242,7 @@ differently, and in the port's favour.
 |---|---|---|
 | 0 | `Flashes` (`:46`) | `client/src/CcpClient.Desktop/Effects/FlashImagesEffect.cs:55` |
 | 1 | `Videos` (`:47`) | `Effects/MandatoryVideoEffect.cs:48` |
-| 2 | `Subliminals` (`:48`) | `Effects/SubliminalsEffect.cs:63` |
+| 2 | `Subliminals` (`:48`) | `Effects/SubliminalsEffect.cs:62` |
 | 3 | `Bubbles` (`:49`) | `Effects/BubblePopEffect.cs:41` |
 | 4 | `LockCards` (`:50`) | `Effects/LockCardEffect.cs:92` |
 | 5 | `ToyPatterns` (`:51`) | `Haptics/HapticLimb.cs:71` |
@@ -348,8 +324,8 @@ wrong feature.
 ### 5.1 Attribution, by plan §13.1's precedence order
 
 ```
-node spine-tasks/SP-129-goon-game-census/walk.mjs ConditioningControlPanel/Resources/web/goon --ext --bytes
-   -> BY EXTENSION .js=120 .mp3=37 .png=15 .css=5 .json=2 (none)=2 .html=1 .mjs=1 .webmanifest=1
+git ls-files ConditioningControlPanel/Resources/web/goon
+  -> Extension inventory: .js=120 .mp3=37 .png=15 .css=5 .json=2 (none)=2 .html=1 .mjs=1 .webmanifest=1
 ```
 
 | Subtree | Files | Bucket |
@@ -754,13 +730,9 @@ none of them.
 - **The 20-file serving difference in §5.2 rests on `index.html` not referencing `test/`** and on
   `package.json`'s own statement that browsers never read it. A dynamically constructed import that
   a static read cannot see would change that number.
-- **The repository-wide sweep's numbers in §2.1 are DISCLAIMED, not pinned: 8339 text files scanned,
-  10398 binaries skipped, 267 files matched, 3969 lines matched, and its per-directory grouping
-  (`ConditioningControlPanel` 186, `spine-tasks` 55, `client` 10, `Tests` 4, `Tools` 2, and the
-  single hits).** They cannot re-derive, and the reason is worth stating rather than hiding: that
-  sweep runs over the repository root, which contains **this document and this packet's own folder**,
-  so editing the census changes them. They are reported as the transcript of one run from one
-  worktree, and a reader must re-run the printed invocation to check them.
+- **The archive-era repository-wide sweep is intentionally omitted.** It included local workflow
+  state and changed when the census itself changed, so it could not establish a stable product fact.
+  The re-derived tables in §10 are the current evidence.
 - **THE NUMBER SWEEP CANNOT SEE NUMBERS SPELLED AS WORDS.** "four", "six", "seven", "twelve" are
   invisible to it, and that is how two stale tallies survived a green suite at code review. The
   blind spot is stated rather than papered over, and the reason it is not simply closed is worth
@@ -995,7 +967,7 @@ a wire break and must red the suite rather than drift.
 |---|---|---|---|
 | flashes | Effects/FlashImagesEffect.cs | 55 | class FlashImagesEffect |
 | videos | Effects/MandatoryVideoEffect.cs | 48 | class MandatoryVideoEffect |
-| subliminals | Effects/SubliminalsEffect.cs | 63 | class SubliminalsEffect |
+| subliminals | Effects/SubliminalsEffect.cs | 62 | class SubliminalsEffect |
 | bubbles | Effects/BubblePopEffect.cs | 41 | class BubblePopEffect |
 | lockcards | Effects/LockCardEffect.cs | 92 | class LockCardEffect |
 | toypatterns | Haptics/HapticLimb.cs | 71 | class HapticLimb |

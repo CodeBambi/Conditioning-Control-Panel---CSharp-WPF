@@ -27,7 +27,7 @@
 
 ## 2. Payload identity (the "exact payload" claim — checkable)
 
-- Source (served READ-ONLY, never copied, never written): `ConditioningControlPanel/Resources/web/dtrh/` — **1536 files, ~383MB**; git root tree SHA `40be29df822bbfece639b435b0820419aed54c19`; per-entry blob/tree SHAs + last-touching commit (9e9fc875) in `spine-tasks/SP-011-webview-dtrh-spike/record.md`.
+- Source (served READ-ONLY, never copied, never written): `ConditioningControlPanel/Resources/web/dtrh/` — **1536 files, ~383MB**; git root tree SHA `40be29df822bbfece639b435b0820419aed54c19`; the source identity is derived directly from Git.
 - `bridge.js` blob `13af3f4d` served **BYTE-UNCHANGED** in every run (loopback request log shows `payload:bridge.js`; no overlay shadow exists).
 - Tracked overlay dir (served overlay-first, every deviation a reviewable file): `overlay/probe.html` (transport checks), `overlay/matrix.html` (workers/WebAudio/autoplay). Both are NEW paths — they never shadow a payload file.
 - `spike.html`/`spike.js` provenance: WPF-era M0 probe (commit ecfe184c) exercising exactly this pipeline — reused, not reinvented. `m2test.js` needs a full economy host → host-row scope, not reused.
@@ -104,4 +104,4 @@ Two GET-only loopback origins on 127.0.0.1, ephemeral ports (random 49152–6553
 
 - Spike host + overlay + tooling: `client/spikes/CcpSpike.WebView/` (quarantined; inherits `client/Directory.Build.props` — stated per packet).
 - Run logs + captures: `client/spikes/CcpSpike.WebView/scratch/` (gitignored, regenerable; key captures referenced above).
-- Worker session record (consult verdicts, engine-review log, transcripts): `spine-tasks/SP-011-webview-dtrh-spike/record.md`.
+- Verification output is regenerable and remains outside source control.
