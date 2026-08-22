@@ -1,0 +1,1 @@
+{ "packet": "SP-140-real-clip-decode", "unit": 6, "headless": 0, "reason": "RealClipDecodeTests: six facts decoding a real ffmpeg-encoded H.264/MP4 clip through MediaFoundationClipSource — provenance/anti-circularity pin, the video processor (M-y), full decode to end of stream, picture-and-motion, positive stride, container rate and duration" }
