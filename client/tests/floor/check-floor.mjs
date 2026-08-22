@@ -338,9 +338,60 @@ function runProject(project, runDir) {
   return { exitCode, output, resultsDir };
 }
 
+// Build/run residue must never be COMMITTED under spine-tasks/. Deleted at 2026-08-22 (76 *.trx
+// at 49.8 MB, plus 72 .DONE markers every packet's own text says not to commit) — and .gitignore
+// already listed *.trx, which is precisely why a gate is needed: an ignore rule does NOT untrack a
+// file that is already tracked, so the residue sat there invisibly. This is the same class SP-141
+// deleted from ConditioningControlPanel/ (~90 committed logs and traces); it recurred one directory
+// over and nothing noticed.
+//
+// Deliberately NARROW. It does not ban *.log or the *.png/*.bmp captures under spine-tasks, because
+// records CITE those by name and the captures are the headed evidence behind presentation-verified
+// claims. Banning them would trade a disk-space win for citation rot.
+const RESIDUE_GLOBS = [
+  "spine-tasks/**/*.trx",
+  "spine-tasks/**/.DONE",
+  "spine-tasks/**/*.nettrace",
+  "spine-tasks/**/*.etlx",
+  "spine-tasks/**/*.binlog",
+  "spine-tasks/**/*.speedscope.json",
+];
+
+function assertNoCommittedResidue() {
+  let tracked;
+  try {
+    tracked = execFileSync("git", ["ls-files", "-z", ...RESIDUE_GLOBS], {
+      cwd: path.resolve(CLIENT, ".."),
+      encoding: "utf8",
+    });
+  } catch {
+    return; // no git (tarball checkout) — the floor is not the place to die over that
+  }
+  const files = tracked.split("\0").filter(Boolean);
+  if (files.length === 0) return;
+  const shown = files.slice(0, 8).join("\n    ");
+  fail(
+    `${files.length} build/run residue file(s) are COMMITTED under spine-tasks/:\n    ${shown}` +
+      (files.length > 8 ? `\n    ...and ${files.length - 8} more` : "") +
+      "\n  These are generated artifacts, not evidence. Untrack them: git rm --cached <paths>." +
+      "\n  Note a .gitignore entry alone does NOT untrack an already-tracked file, which is how" +
+      "\n  the previous 148 got in. Cited *.log and the *.png/*.bmp captures are deliberately NOT" +
+      "\n  covered here — records reference those by name.",
+  );
+}
+
 export function main() {
   const runStartMs = Date.now();
   const pin = readPin();
+  try {
+    assertNoCommittedResidue();
+  } catch (err) {
+    if (err instanceof FloorError) {
+      console.error(`FLOOR CHECK FAILED (residue):\n  ${err.message}`);
+      return 1;
+    }
+    throw err;
+  }
   let projects;
   try {
     projects = discoverTestProjects(fs.readFileSync(SLN_PATH, "utf8"), pin);

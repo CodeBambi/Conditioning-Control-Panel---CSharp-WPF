@@ -243,3 +243,8 @@ package-lock.json
 marketing/
 .spine/runtime/loop/
 .spine/STOP
+
+# Packet completion markers are LOCAL execution state. Every packet says "create .DONE last;
+# do NOT commit it" — 72 were committed anyway and were untracked 2026-08-22. Gated in
+# client/tests/floor/check-floor.mjs, because an ignore rule alone does not untrack.
+spine-tasks/**/.DONE
