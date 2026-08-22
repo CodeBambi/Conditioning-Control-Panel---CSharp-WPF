@@ -118,6 +118,20 @@ public interface IAudioPresence : IDisposable
     CapabilityState Silence(string slot);
 
     /// <summary>
+    /// Is this slot still SOUNDING — a player present AND actually playing?
+    ///
+    /// <para>Deliberately not "is the slot occupied". A slot holds its player until something
+    /// displaces it or silences it; there is no natural-completion sweep, so an occupied slot is
+    /// routinely one whose clip finished long ago. A caller that skips work while a slot is
+    /// occupied would fall silent after its first clip, which is a worse defect than the one that
+    /// question is usually being asked to fix.</para>
+    ///
+    /// <para>A backend with no player, no device, or no such slot answers false. This is a
+    /// question, never a claim that anything is audible to a human.</para>
+    /// </summary>
+    bool IsSounding(string slot);
+
+    /// <summary>
     /// Ask the OS what it believes is happening, RIGHT NOW. A live round trip — never throws, and a
     /// build with no read-back answers <see cref="AudioRenderObservation.NotAsked"/> rather than a
     /// shaped zero.

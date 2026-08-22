@@ -156,6 +156,17 @@ public abstract class AudioCueEffect : PacedSessionEffect<AudioCueFiring>
     /// check sits with them — upstream applies it one call later, inside <c>PlayAudio</c>
     /// (<c>:770</c>, <c>:211</c>), which is the same outcome and one less object built.
     /// </summary>
+    /// <summary>
+    /// Does a window that comes due while this module's own clip is still playing get SKIPPED
+    /// rather than displacing it? Default false, which is the displacing behaviour the audio slot
+    /// has always had.
+    ///
+    /// <para>Only Brain Drain turns this on. Its clips are long enough to outlive a window (500 ms
+    /// in high-refresh mode, 5 s otherwise), so displacement chops a track mid-word; Mind Wipe's
+    /// clips are meant to replace each other.</para>
+    /// </summary>
+    protected virtual bool SkipWhileSounding => false;
+
     protected sealed override AudioCueFiring? Compose()
     {
         // "Endpoint down — stay quiet, don't spin" (MindWipeService.cs:771). Not counted, not
@@ -167,6 +178,19 @@ public abstract class AudioCueEffect : PacedSessionEffect<AudioCueFiring>
         }
 
         if (_pool.ActiveCount == 0)
+        {
+            return null;
+        }
+
+        // A module that must not interrupt itself skips the window entirely while its own clip is
+        // still sounding — the roll is not even taken, so this cannot be read as "rolled and lost".
+        // Upstream guards the same way and in the same place, before the draw
+        // (BrainDrainService.PlayAudioNow: `lock (_audioLock) { if (_waveOut != null) return; }`).
+        //
+        // OPT-IN, because displacement is CORRECT for the other module here. Mind Wipe is meant to
+        // cut itself off — upstream fixed only Brain Drain — and a guard applied to the shared base
+        // would have quietly changed a behaviour nobody asked about.
+        if (SkipWhileSounding && _presence.IsSounding(Id))
         {
             return null;
         }

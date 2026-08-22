@@ -86,6 +86,47 @@ public class AudioModuleSpineTests
         Assert.Equal(rig.MindWipeClip, cue.Path);
     }
 
+    /// <summary>
+    /// A Brain Drain clip plays to its end, and Mind Wipe still cuts itself off. Both halves in
+    /// one fact, because the guard is an OPT-IN and a version applied to the shared base would
+    /// pass the first half while silently changing the second.
+    ///
+    /// <para>Inherited from upstream 1f8fe465b (#983): the port copied the pre-fix displacement,
+    /// where every winning roll evicted and stopped the slot's current player. A clip longer than
+    /// one window — 500 ms in high-refresh mode, 5 s otherwise — was audibly chopped mid-track.
+    /// Upstream fixed ONLY Brain Drain, so Mind Wipe's displacement is still correct.</para>
+    /// </summary>
+    [Fact]
+    public async Task ASoundingBrainDrainClipIsNotDisplaced_ButMindWipeStillReplacesItsOwn()
+    {
+        await using var rig = await Rig.StartAsync();
+        rig.EnableBrainDrain();
+        rig.EnableMindWipe();
+        rig.Rolls.AlwaysWin();
+        rig.Engine.Start();
+
+        // First window: both modules put a clip on their own slot.
+        rig.Clock.Advance(MindWipeSchedule.Window);
+        var afterFirst = rig.Audio.Cues.Count;
+        Assert.Contains(rig.Audio.Cues, c => c.Slot == BrainDrainEffect.EffectId);
+        Assert.Contains(rig.Audio.Cues, c => c.Slot == MindWipeEffect.EffectId);
+
+        // Both clips are still playing when the next window comes due.
+        rig.Audio.Sounding.Add(BrainDrainEffect.EffectId);
+        rig.Audio.Sounding.Add(MindWipeEffect.EffectId);
+        rig.Clock.Advance(MindWipeSchedule.Window);
+
+        var added = rig.Audio.Cues.Skip(afterFirst).ToList();
+        Assert.DoesNotContain(added, c => c.Slot == BrainDrainEffect.EffectId);
+        Assert.Contains(added, c => c.Slot == MindWipeEffect.EffectId);
+
+        // And the skip is a PAUSE, not a stop: once the clip ends, the next window plays again.
+        rig.Audio.Sounding.Remove(BrainDrainEffect.EffectId);
+        var beforeResume = rig.Audio.Cues.Count;
+        rig.Clock.Advance(MindWipeSchedule.Window);
+        Assert.Contains(rig.Audio.Cues.Skip(beforeResume), c => c.Slot == BrainDrainEffect.EffectId);
+    }
+
     [Fact]
     public async Task StopSilencesTheModulesOwnSlot_AndOnlyItsOwn()
     {
@@ -578,6 +619,12 @@ public class AudioModuleSpineTests
     /// </summary>
     private sealed class RecordingAudioPresence : IAudioPresence
     {
+        /// <summary>Slots the fake reports as still sounding. The real presence asks the
+        /// PLAYER, which a fake has none of, so the test drives it directly.</summary>
+        internal readonly HashSet<string> Sounding = new(StringComparer.Ordinal);
+
+        public bool IsSounding(string slot) => Sounding.Contains(slot);
+
         private readonly bool _rendering;
 
         public RecordingAudioPresence(bool rendering) => _rendering = rendering;

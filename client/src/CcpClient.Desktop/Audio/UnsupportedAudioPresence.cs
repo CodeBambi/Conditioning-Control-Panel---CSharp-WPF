@@ -63,6 +63,9 @@ public sealed class UnsupportedAudioPresence : IAudioPresence
     /// Refuses, and the refusal is not pedantry: reporting <c>Available</c> from a stop that stopped
     /// nothing would let a caller's teardown pin read green on a build that never played anything.
     /// </summary>
+    /// <summary>Nothing was ever started here, so nothing is sounding.</summary>
+    public bool IsSounding(string slot) => false;
+
     public CapabilityState Silence(string slot)
     {
         ArgumentException.ThrowIfNullOrEmpty(slot);

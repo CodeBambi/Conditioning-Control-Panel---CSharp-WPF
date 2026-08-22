@@ -56,6 +56,10 @@ namespace CcpClient.Desktop.Effects;
 /// </summary>
 public sealed class BrainDrainEffect : AudioCueEffect
 {
+    /// <summary>A clip plays to its end; a window that comes due mid-clip is skipped, not
+    /// taken. Upstream 1f8fe465b (#983) — the port had copied the pre-fix displacement.</summary>
+    protected override bool SkipWhileSounding => true;
+
     /// <summary>WPF's rack key for this module (<c>StudioTabView.xaml.cs:513</c>).</summary>
     public const string EffectId = "braindrain";
 

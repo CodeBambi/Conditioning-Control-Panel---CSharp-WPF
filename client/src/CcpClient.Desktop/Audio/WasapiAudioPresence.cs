@@ -267,6 +267,40 @@ public sealed class WasapiAudioPresence : IAudioPresence
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Is this slot still sounding? Asks the PLAYER for its state rather than asking the
+    /// dictionary whether a key exists.
+    ///
+    /// <para>That distinction is the whole point. Slots are cleared only by displacement or by
+    /// <see cref="Silence"/> — nothing sweeps a player that simply reached the end of its clip —
+    /// so a finished player sits in its slot indefinitely. Reading occupancy as "still playing"
+    /// would answer true forever after the first cue.</para>
+    /// </summary>
+    public bool IsSounding(string slot)
+    {
+        if (string.IsNullOrEmpty(slot))
+        {
+            return false;
+        }
+
+        IAudioPlayer? player;
+        lock (_gate)
+        {
+            _slots.TryGetValue(slot, out player);
+        }
+
+        // A disposed or faulted player must read as silent rather than throw: this is a question
+        // asked on the schedule path, and a throw there would take the module down.
+        try
+        {
+            return player?.State == AudioPlayerState.Playing;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
     public CapabilityState Silence(string slot)
     {
         ArgumentException.ThrowIfNullOrEmpty(slot);

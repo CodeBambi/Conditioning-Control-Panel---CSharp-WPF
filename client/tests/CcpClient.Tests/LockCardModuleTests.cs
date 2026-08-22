@@ -963,6 +963,8 @@ public class LockCardModuleTests
 
     private sealed class NullAudioPresence : IAudioPresence
     {
+        public bool IsSounding(string slot) => false;
+
         public bool IsRendering => false;
 
         public CapabilityState? LastOpen => null;
