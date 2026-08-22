@@ -39,15 +39,25 @@ namespace CcpClient.Desktop.Session;
 /// slow. <see cref="ReleaseWork"/> is called from a cancellation callback on a teardown thread and
 /// must therefore be lock-free and safe against a thread holding the gate.</para>
 ///
-/// <para><b>And that rule is load-bearing in a way SP-106 got wrong once and had to undo.</b> The
-/// operation owner cancels a generation while holding ITS OWN lock
-/// (<c>Lifecycle/OperationRegistry.cs:163-166</c>, <c>:148-158</c>), and the cancellation callback
-/// runs synchronously on that thread — so any lock this class takes inside such a callback is taken
-/// UNDER the owner's. <see cref="Dot"/> takes them the other way round: it holds
-/// <see cref="Gate"/> and calls <c>IsLive</c>, which takes the owner's (<c>:177-183</c>). Taking
-/// <see cref="Gate"/> in a cancellation callback therefore inverts lock order between two threads
-/// that both really exist — a dot repaint on the UI thread against a teardown stop off it. See
-/// <see cref="ReleaseIfStillOurs"/>.</para>
+/// <para><b>The rule stands, and its original justification no longer does — read both halves.</b>
+/// Until SP-142 the operation owner cancelled a generation while holding ITS OWN lock and ran the
+/// cancellation callback synchronously beneath it, so any lock this class took inside such a
+/// callback was taken UNDER the owner's, while <see cref="Dot"/> takes them the other way round
+/// (it holds <see cref="Gate"/> and calls <c>IsLive</c>, which takes the owner's,
+/// <c>Lifecycle/OperationRegistry.cs:215-221</c>). <b>That inversion is GONE:</b> the owner now
+/// cancels outside its own lock (<c>OperationRegistry.cs:173-190</c>, <c>:196-205</c>), so a
+/// cancellation callback holds no lock of the owner's and taking <see cref="Gate"/> inside one no
+/// longer inverts anything. No deadlock was ever observed — the convention below was the only thing
+/// preventing one — but SP-106 was reverted for exactly that inversion, so the history is kept.</para>
+///
+/// <para><b>The lock-free callback discipline is NOT retired with it.</b> Its remaining reason is
+/// independent of who holds which lock: the callback runs on whatever thread called
+/// <c>Cancel</c>/<c>Begin</c> — a teardown thread, the UI thread, or a pool thread, and a subclass
+/// may not assume which — it runs inside the canceller's call, so anything it blocks on blocks that
+/// caller, and a callback that takes locks is fragile against every future caller rather than
+/// against one known ordering. <b>Keep <see cref="ReleaseWork"/> lock-free.</b> What SP-142 changed
+/// is that closing the residual window in <see cref="ReleaseIfStillOurs"/> under <see cref="Gate"/>
+/// is now POSSIBLE; it is deliberately still not done. See <see cref="ReleaseIfStillOurs"/>.</para>
 /// </summary>
 public abstract class OwnedSessionEffect : ISessionEffect
 {
@@ -343,10 +353,13 @@ public abstract class OwnedSessionEffect : ISessionEffect
     private async Task<OperationOutcome> ParkUntilCancelledAsync(CancellationToken token, int generation)
     {
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        // Lock-free callback on purpose: it runs on a teardown thread, UNDER the operation owner's
-        // own lock (OperationRegistry.cs:163-166 cancels inside it), so anything it takes would be
-        // taken beneath that one. It goes through ReleaseIfStillOurs rather than straight to
-        // ReleaseWork so a dead generation cannot take a live one's work down.
+        // Lock-free callback on purpose. The original reason is spent — the owner cancelled inside
+        // its own lock until SP-142 and now cancels outside it (OperationRegistry.cs:173-190,
+        // :196-205), so this no longer runs beneath that lock — but the rule stays for the reason
+        // that outlived it: this runs synchronously inside whatever thread called Cancel/Begin (a
+        // teardown thread, the UI thread, a pool thread; a subclass may not assume which), so
+        // anything it blocks on blocks that caller. It goes through ReleaseIfStillOurs rather than
+        // straight to ReleaseWork so a dead generation cannot take a live one's work down.
         using var registration = token.Register(() =>
         {
             ReleaseIfStillOurs(generation);
@@ -378,7 +391,8 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// <para><b>Lock-free, as the callback contract at the top of this class requires.</b>
     /// <see cref="_generation"/> is an <c>int</c> written under <see cref="Gate"/>, and a lock
     /// release is a memory barrier, so a <see cref="Volatile.Read"/> here observes the newest value
-    /// without taking a lock this callback must not want.</para>
+    /// without taking a lock this callback should not want. The contract's reason is now the
+    /// caller-blocking one, not the lock-ordering one — see the class doc.</para>
     ///
     /// <para><b>THE RESIDUAL THIS LEAVES OPEN, AND WHY IT IS NOT CLOSED HERE.</b> The read and the
     /// release are two steps, so a narrow window survives: a stale tail can read its own generation,
@@ -386,26 +400,27 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// the new work — and then withdraw it. Much narrower than the window this guard closes, and
     /// still open.</para>
     ///
-    /// <para><b>Closing it under <see cref="Gate"/> was attempted at SP-106 and REVERTED, because it
-    /// inverts lock order against the operation owner.</b> Both chains are real and both threads
-    /// exist in the product:</para>
+    /// <para><b>Closing it under <see cref="Gate"/> was attempted at SP-106 and REVERTED, because at
+    /// the time it inverted lock order against the operation owner.</b> Both chains were real:</para>
     /// <list type="bullet">
-    /// <item><b>owner lock, then effect lock:</b> <see cref="Disarm"/> calls <c>_owner.Cancel()</c>;
-    /// <c>Cancel()</c> takes the owner's lock and cancels INSIDE it
-    /// (<c>Lifecycle/OperationRegistry.cs:163-166</c>), which runs the registration above
-    /// synchronously on that thread — and a gate-taking guard would then want this class's lock.
-    /// <see cref="Arm"/> reaches the same cycle through <c>_owner.Begin()</c>
-    /// (<c>OperationRegistry.cs:148-158</c>).</item>
+    /// <item><b>owner lock, then effect lock:</b> <see cref="Disarm"/> calls <c>_owner.Cancel()</c>,
+    /// which THEN took the owner's lock and cancelled INSIDE it, running the registration above
+    /// synchronously on that thread — and a gate-taking guard would then have wanted this class's
+    /// lock. <see cref="Arm"/> reached the same cycle through <c>_owner.Begin()</c>.</item>
     /// <item><b>effect lock, then owner lock:</b> <see cref="Dot"/> holds <see cref="Gate"/> across
     /// <c>_owner.IsLive(...)</c>, which takes the owner's lock
-    /// (<c>OperationRegistry.cs:177-183</c>).</item>
+    /// (<c>Lifecycle/OperationRegistry.cs:215-221</c>) — this half is unchanged.</item>
     /// </list>
-    /// <para>A dot repaint on the UI thread (<c>Views/Pages/StudioPage.axaml.cs</c>'s refresh)
-    /// concurrent with a teardown stop off it would hang shutdown — the class SP-071/SP-073 built
-    /// the bounded-teardown machinery to prevent. <b>The real fix is the owner cancelling outside
-    /// its own lock</b>, which lives in <c>Lifecycle/**</c> and is outside SP-106's File Scope;
-    /// until then the residual above is recorded rather than traded for a deadlock. Hoisting
-    /// <see cref="ReleaseWork"/> out of such a lock would be this same code with more words.</para>
+    /// <para><b>SP-142 removed the first chain: the owner now cancels OUTSIDE its own lock</b>
+    /// (<c>Lifecycle/OperationRegistry.cs:173-190</c> and <c>:196-205</c>, pinned by
+    /// <c>AsyncLifecycleTests</c>'s three ordering facts). A cancellation callback therefore holds
+    /// no lock of the owner's, the cycle a dot repaint could have completed against a teardown stop
+    /// no longer exists, and <b>closing the residual window under <see cref="Gate"/> is now
+    /// possible</b>. It is deliberately NOT closed here: SP-142 was scoped to remove the inversion
+    /// and nothing else, so the window stays open by decision and a follow-up row owns it. No
+    /// deadlock was ever observed at any point — what SP-106 hit was an inversion reachable in
+    /// principle by two threads that both exist, and the suite could not see it because every test
+    /// drives arm/disarm on one thread.</para>
     ///
     /// <para><b>Protected rather than private</b> so the predicate can be pinned directly: both
     /// arms of it are asserted in <c>MovingEffectSpineTests</c> against a probe subclass, which is

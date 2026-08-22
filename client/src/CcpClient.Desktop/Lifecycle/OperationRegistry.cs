@@ -144,26 +144,64 @@ public sealed class AsyncOperationOwner
     /// Starts a new generation: cancels the previous generation's token and increments
     /// the counter. Called by the participant's start path (phase 3); every later
     /// completion captured under an older generation is stale.
+    ///
+    /// <para><b>The retired generation is cancelled OUTSIDE <c>_gate</c> (SP-142), and that is a
+    /// correctness rule rather than a style choice.</b> <c>CancellationTokenSource.Cancel()</c> runs
+    /// its registrations SYNCHRONOUSLY on the calling thread, so cancelling under the lock ran
+    /// FOREIGN callbacks with this owner's lock held: any lock such a callback took was taken
+    /// beneath <c>_gate</c>, while <see cref="IsLive"/> is reached the other way round from under a
+    /// caller's own lock (<c>Session/OwnedSessionEffect.cs:143-152</c> holds the effect gate across
+    /// it). <b>No deadlock was ever observed</b> — the only thing preventing one was an unenforced
+    /// convention that every cancellation callback stay lock-free, restated in three doc sites and
+    /// binding thirteen <c>OwnedSessionEffect</c> subclasses — and SP-106 was reverted for exactly
+    /// that inversion. The state transition below is still ONE critical section, so no caller can
+    /// observe a generation that was never installed.</para>
+    ///
+    /// <para><b>The retired source is deliberately NOT disposed.</b> Disposing it is what would make
+    /// the out-of-lock cancel racy: a concurrent <see cref="Cancel"/> captures the same reference
+    /// under the lock and would meet a disposed source — <c>ObjectDisposedException</c> at best, a
+    /// registration list pulled out from under a running callback at worst. It owns nothing to
+    /// release: no timer, no linked registration (the three <c>CreateLinkedTokenSource</c> sites in
+    /// this tree are all <c>using</c>-scoped and deregister themselves), and no caller touches
+    /// <c>CancellationToken.WaitHandle</c> — so <c>Dispose</c> frees only what the GC frees once the
+    /// cancelled source goes unreachable. Nor is a teardown disposal being skipped: this type has
+    /// never implemented <c>IDisposable</c> and the FINAL generation's source was never disposed
+    /// either, so the treatment is now uniform rather than newly absent.
+    /// ponytail: if a generation source ever gains a timer, a linked registration or a WaitHandle,
+    /// the dispose comes back — with an ownership protocol, never with a try/catch.</para>
     /// </summary>
     public int Begin()
     {
+        CancellationTokenSource? retired;
+        int generation;
         lock (_gate)
         {
-            _generationCts?.Cancel();
-            _generationCts?.Dispose();
+            retired = _generationCts;
             _generation++;
             _generationCts = new CancellationTokenSource();
-            return _generation;
+            generation = _generation;
         }
+
+        // Outside the lock, for the reason above. The retired generation's callbacks therefore run
+        // with the NEW generation already installed, which is the honest answer at that instant —
+        // and is what AsyncLifecycleTests pins deterministically on a single thread.
+        retired?.Cancel();
+        return generation;
     }
 
-    /// <summary>Cancels the current generation. Idempotent; does not invalidate outcome application (only a new Begin does).</summary>
+    /// <summary>Cancels the current generation. Idempotent; does not invalidate outcome application
+    /// (only a new Begin does). Cancels OUTSIDE <c>_gate</c> for the reason given on
+    /// <see cref="Begin"/>: the registered callbacks run synchronously on the calling thread and
+    /// must never run under this owner's lock.</summary>
     public void Cancel()
     {
+        CancellationTokenSource? current;
         lock (_gate)
         {
-            _generationCts?.Cancel();
+            current = _generationCts;
         }
+
+        current?.Cancel();
     }
 
     /// <summary>Outcome-application check (contract §3.3): same generation, regardless of cancellation.</summary>
