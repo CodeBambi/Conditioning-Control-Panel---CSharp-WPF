@@ -345,7 +345,7 @@ port now carries a bug upstream has retired, and **no test on either side will s
 - `c35cd309e fix(auth): heal a diverged auth token instead of retrying the dead one (#240)` — the port
   has this surface (`Entitlement/HostAuthTokenReader.cs`), so this is a live parity question, not archaeology.
 
-`BrainDrain` is an `OwnedSessionEffect` subclass in the port, so three of these land on ported code.
+**CORRECTED 2026-08-22, same day: NONE of these land on ported code — the defensible count is ZERO.** This sentence said three (and the board row escalated it to four, with no new evidence). It was derived from the subclass NAME. The port's `BrainDrain` is the **audio half only** (`Effects/BrainDrainEffect.cs:68`, `:94-99`) and all three upstream `braindrain` fixes land in the VISUAL half, which this build does not implement at all. See the closed P0 on the board for the other three verdicts. **A port that never implemented the buggy path did not inherit the bug.**
 
 ### Bucket 2 — new surfaces
 
