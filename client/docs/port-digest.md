@@ -341,3 +341,24 @@ Format:
   mistake about this row, inside the correction. A claim about a mechanism, restated until it sounded settled, that
   one grep would have refuted. **I no longer have a verified answer to "what is the next unbuilt capability", and I
   am not going to name one until I have derived it from the code.**
+
+## 2026-08-22 — your videos play: 54 of 54, measured, not argued
+
+- **WHAT LANDED.** Floor 2616 -> **2622**. You pointed the port at `C:\Code\ccp media` and it opened **all 54** of
+  your videos and decoded a frame from **all 54**, the `.mov` included. Zero refusals. That answers a question this
+  port has carried since the video work began: it decodes through Windows' own Media Foundation where the shipping
+  app uses LibVLC, and the recorded risk was that *a container Windows cannot open refuses where the shipping app
+  would play it*. **On your library that risk is theoretical.** A VP8 `.webm` was tried specifically hoping to find a
+  counter-example, and Windows opened that too.
+- **AND THE NEW TEST CATCHES SOMETHING THE OLD ONE COULD NOT.** Every video fact until now ran against an
+  uncompressed AVI the suite writes itself. Deleting one line of the decoder reds five of the six new facts while
+  all three old AVI facts stay green - the old fixture is structurally blind to the video processor. That is the
+  difference between a test that exists and a test that guards.
+- **WHAT IT DOES NOT PROVE, and one of these matters to you.** No frame reached a screen; every claim is about a
+  buffer in memory. **Cadence, order and timing are completely unmeasured - a clip playing at half speed or
+  backwards passes every one of these facts.** Only the FIRST frame of each file was decoded, so a video that breaks
+  nine minutes in still counts as a success here. One format is now proven, not the format set.
+- **ONE THING FOR YOU.** Your largest video produces a **14.7 MB frame at 2560x1440** and the port scales it in
+  managed nearest-neighbour code at a declared 30 fps. Nobody has ever measured that path, and it is now known to be
+  reachable from your own media rather than in theory. Filed as a measurement task, not a defect - it may well be
+  fine.
