@@ -626,6 +626,13 @@ namespace ConditioningControlPanel.Services
                 var unifiedId = App.Settings?.Current?.UnifiedId;
                 if (!string.IsNullOrEmpty(unifiedId))
                 {
+                    // BUG-BN8X9B9SZ5: quests.json now SURVIVES a logout (its progress exists
+                    // nowhere else), stamped with the departing account's id. Every login path
+                    // funnels through this load, so this is where a different account's sign-in
+                    // finally wipes the previous account's quest file — and a same-account
+                    // re-login keeps its 3/3 progress intact.
+                    App.Quests?.EnsureOwnedBy(unifiedId);
+
                     // READ BEFORE WRITE. SyncProfileAsync is a POST: it uploads local state and
                     // only then reads the merged result back out of the response. That made LOAD a
                     // write — the first thing a machine did on launch was tell the server what it
@@ -3409,21 +3416,32 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var requestData = new { unified_id = unifiedId, confirmation = "DELETE" };
+                var requestBody = JsonConvert.SerializeObject(new { unified_id = unifiedId, confirmation = "DELETE" });
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/delete-account");
                 AddAuthHeader(request);
-                request.Content = new StringContent(
-                    JsonConvert.SerializeObject(requestData),
-                    Encoding.UTF8,
-                    "application/json"
-                );
+                request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    await HandleUnauthorizedAsync(response);
+                    // On 401, attempt auth recovery and retry once — only when the session was
+                    // genuinely recovered (#879 discipline; see ExportDataAsync for why the
+                    // recovery alone isn't enough without the retry).
+                    if (await HandleUnauthorizedAsync(response) && !string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
+                    {
+                        App.Logger?.Information("Delete account: retrying after auth token recovery");
+                        var retryRequest = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/delete-account");
+                        AddAuthHeader(retryRequest);
+                        retryRequest.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+                        response = await _httpClient.SendAsync(retryRequest);
+                        json = await response.Content.ReadAsStringAsync();
+                    }
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
                     var errorResult = JsonConvert.DeserializeObject<DeleteAccountErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Delete account failed: {Error}", errorMsg);
@@ -3455,21 +3473,34 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var requestData = new { unified_id = unifiedId };
+                var requestBody = JsonConvert.SerializeObject(new { unified_id = unifiedId });
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/export-data");
                 AddAuthHeader(request);
-                request.Content = new StringContent(
-                    JsonConvert.SerializeObject(requestData),
-                    Encoding.UTF8,
-                    "application/json"
-                );
+                request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    await HandleUnauthorizedAsync(response);
+                    // On 401, attempt auth recovery and retry once — but ONLY if the session was
+                    // genuinely recovered (same discipline as the skill purchase, #879). Without
+                    // the retry, a SUCCESSFUL recovery still surfaced "Invalid or missing auth
+                    // token" to the user, because this method returned the original 401's error
+                    // after healing the token it would have needed one line later.
+                    if (await HandleUnauthorizedAsync(response) && !string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
+                    {
+                        App.Logger?.Information("Export data: retrying after auth token recovery");
+                        var retryRequest = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/export-data");
+                        AddAuthHeader(retryRequest);
+                        retryRequest.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+                        response = await _httpClient.SendAsync(retryRequest);
+                        json = await response.Content.ReadAsStringAsync();
+                    }
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
                     var errorResult = JsonConvert.DeserializeObject<DeleteAccountErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Export data failed: {Error}", errorMsg);
