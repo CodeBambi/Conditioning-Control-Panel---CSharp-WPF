@@ -989,6 +989,11 @@ public class LockCardModuleTests
 
     private sealed class StubCuePool : IAudioCuePool
     {
+        /// <summary>Counts re-scans so a fact can assert the folder was actually re-read.</summary>
+        internal int Invalidations { get; private set; }
+
+        public void Invalidate() => Invalidations++;
+
         public int ActiveCount => 0;
 
         public string Folder => "none";

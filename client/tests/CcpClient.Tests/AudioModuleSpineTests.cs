@@ -127,6 +127,45 @@ public class AudioModuleSpineTests
         Assert.Contains(rig.Audio.Cues.Skip(beforeResume), c => c.Slot == BrainDrainEffect.EffectId);
     }
 
+    /// <summary>
+    /// Arming Brain Drain re-reads its clip folder; arming Mind Wipe does not.
+    ///
+    /// <para>Inherited from upstream `fix(braindrain): clips never hot-reloaded`. The port cached
+    /// the folder on first read and had NO production caller for the invalidation at all — the
+    /// concrete pool had the method, but it was never on IAudioCuePool, so nothing the product
+    /// holds could reach it. A clip dropped in mid-session stayed invisible until the process was
+    /// restarted; stopping and restarting the session did not help, because nothing re-scanned on
+    /// arm.</para>
+    ///
+    /// <para>Brain Drain only, and that asymmetry is upstream's: its folder is a drop target
+    /// outside the app and it re-scans on every session start (BrainDrainService.cs:227), while
+    /// Mind Wipe re-scans from its panel and never from Start.</para>
+    /// </summary>
+    [Fact]
+    public async Task ArmingBrainDrainRereadsItsClipFolder_AndArmingMindWipeDoesNot()
+    {
+        await using var rig = await Rig.StartAsync();
+        Assert.Equal(0, rig.BrainDrainPool.Invalidations);
+        Assert.Equal(0, rig.MindWipePool.Invalidations);
+
+        rig.EnableBrainDrain();
+        rig.EnableMindWipe();
+        rig.Engine.Start();
+
+        // The user dropped a clip in while the app was running; the arm is what picks it up.
+        Assert.Equal(1, rig.BrainDrainPool.Invalidations);
+
+        // Untouched, because upstream leaves it untouched. A re-scan here would be a behaviour
+        // the shared base invented.
+        Assert.Equal(0, rig.MindWipePool.Invalidations);
+
+        // And it is per ARM, not once per process: stop, start, and the folder is read again.
+        rig.Engine.Stop();
+        rig.Engine.Start();
+        Assert.Equal(2, rig.BrainDrainPool.Invalidations);
+        Assert.Equal(0, rig.MindWipePool.Invalidations);
+    }
+
     [Fact]
     public async Task StopSilencesTheModulesOwnSlot_AndOnlyItsOwn()
     {
@@ -509,7 +548,8 @@ public class AudioModuleSpineTests
 
         private Rig(
             ApplicationHost host, SessionParticipant session, ManualSessionClock clock,
-            RecordingAudioPresence audio, ScriptedRolls rolls, string mindWipeClip, string directory)
+            RecordingAudioPresence audio, ScriptedRolls rolls, string mindWipeClip, string directory,
+            StubCuePool mindWipePool, StubCuePool brainDrainPool)
         {
             Host = host;
             Session = session;
@@ -518,6 +558,8 @@ public class AudioModuleSpineTests
             Rolls = rolls;
             MindWipeClip = mindWipeClip;
             _directory = directory;
+            MindWipePool = mindWipePool;
+            BrainDrainPool = brainDrainPool;
         }
 
         public ApplicationHost Host { get; }
@@ -531,6 +573,10 @@ public class AudioModuleSpineTests
         public ScriptedRolls Rolls { get; }
 
         public string MindWipeClip { get; }
+
+        public StubCuePool MindWipePool { get; }
+
+        public StubCuePool BrainDrainPool { get; }
 
         public SessionEngine Engine => Session.Engine;
 
@@ -559,13 +605,15 @@ public class AudioModuleSpineTests
             var clock = new ManualSessionClock();
             var audio = new RecordingAudioPresence(rendering);
             var rolls = new ScriptedRolls();
+            var mindWipePool = new StubCuePool(withClips ? mindWipeClip : null, Path.Combine(dir, "sounds", "mindwipe"));
+            var brainDrainPool = new StubCuePool(withClips ? brainDrainClip : null, Path.Combine(dir, "sounds", "braindrain"));
 
             var session = new SessionParticipant(
                 infra, dir, clock, new StubPool(3), new NullFlashSurface(), new NullSubliminalSurface(),
                 static () => true, new NullPinkFilterSurface(), new NullSpiralSurface(),
                 audio,
-                new StubCuePool(withClips ? mindWipeClip : null, Path.Combine(dir, "sounds", "mindwipe")),
-                new StubCuePool(withClips ? brainDrainClip : null, Path.Combine(dir, "sounds", "braindrain")),
+                mindWipePool,
+                brainDrainPool,
                 // The roll, injected. A fact says "every window wins" or "every window loses" without
                 // pinning a seed, and without any double re-deriving the module's probability.
                 rolls.MindWipe,
@@ -575,7 +623,7 @@ public class AudioModuleSpineTests
             Assert.IsType<StartupOutcome.Success>(
                 await host.StartParticipantsAsync(TestContext.Current.CancellationToken));
 
-            return new Rig(host, session, clock, audio, rolls, mindWipeClip, dir);
+            return new Rig(host, session, clock, audio, rolls, mindWipeClip, dir, mindWipePool, brainDrainPool);
         }
 
         public void EnableMindWipe(int perHour = MindWipeSchedule.DefaultPerHour) =>
@@ -720,6 +768,11 @@ public class AudioModuleSpineTests
     /// chooses rather than a folder it has to arrange.</summary>
     private sealed class StubCuePool : IAudioCuePool
     {
+        /// <summary>Counts re-scans so a fact can assert the folder was actually re-read.</summary>
+        internal int Invalidations { get; private set; }
+
+        public void Invalidate() => Invalidations++;
+
         private readonly string? _clip;
 
         public StubCuePool(string? clip, string folder)

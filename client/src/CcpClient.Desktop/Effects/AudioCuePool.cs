@@ -20,6 +20,16 @@ public interface IAudioCuePool
     /// <c>Services/LockCard/BrainDrainService.cs:181</c>), so the caller must render null as
     /// "nothing to play", never as a failure and never as a firing.</summary>
     string? Draw();
+
+    /// <summary>
+    /// Drop the cached enumeration so the next read re-scans the folder.
+    ///
+    /// <para>On the INTERFACE, and that omission was the defect: the concrete pool has always had
+    /// this method, but nothing the product holds could reach it, so no shipping code ever called
+    /// it and a clip dropped into the folder mid-session stayed invisible until the process was
+    /// restarted. A method only the tests can call is not a re-scan mechanism.</para>
+    /// </summary>
+    void Invalidate();
 }
 
 /// <summary>

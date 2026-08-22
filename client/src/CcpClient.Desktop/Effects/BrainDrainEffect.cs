@@ -58,6 +58,11 @@ public sealed class BrainDrainEffect : AudioCueEffect
 {
     /// <summary>A clip plays to its end; a window that comes due mid-clip is skipped, not
     /// taken. Upstream 1f8fe465b (#983) — the port had copied the pre-fix displacement.</summary>
+    /// <summary>The clip folder is a drop target outside the app, so a clip added mid-session
+    /// appears at the next start rather than only after a relaunch. Upstream
+    /// BrainDrainService.cs:227; the port had no re-scan caller at all.</summary>
+    protected override bool RescanOnArm => true;
+
     protected override bool SkipWhileSounding => true;
 
     /// <summary>WPF's rack key for this module (<c>StudioTabView.xaml.cs:513</c>).</summary>

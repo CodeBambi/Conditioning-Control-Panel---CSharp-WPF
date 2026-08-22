@@ -165,6 +165,19 @@ public abstract class AudioCueEffect : PacedSessionEffect<AudioCueFiring>
     /// in high-refresh mode, 5 s otherwise), so displacement chops a track mid-word; Mind Wipe's
     /// clips are meant to replace each other.</para>
     /// </summary>
+    /// <summary>
+    /// Does arming re-scan the clip folder? Default false, which is the cache-once behaviour the
+    /// pool has always had.
+    ///
+    /// <para>Brain Drain turns this on because its folder is a plain drop target that lives
+    /// OUTSIDE the app: a user adds a clip while the app runs and expects it to appear. Upstream
+    /// re-scans on every session start for exactly that reason and records the cost as free next
+    /// to what a start already does (BrainDrainService.cs:222-227). Mind Wipe does NOT - upstream
+    /// re-scans it only from its own panel, never from Start - so this stays opt-in rather than
+    /// becoming a behaviour the shared base hands to both.</para>
+    /// </summary>
+    protected virtual bool RescanOnArm => false;
+
     protected virtual bool SkipWhileSounding => false;
 
     protected sealed override AudioCueFiring? Compose()
@@ -269,6 +282,15 @@ public abstract class AudioCueEffect : PacedSessionEffect<AudioCueFiring>
         //
         // A SIXTH module will hit this again. The spine has no per-module "acquire your capability"
         // hook that runs before the arm's notification, and that is the gap.
+        // The clip folder is re-read here, not on the clock. One Directory enumeration per ARM is
+        // free next to the device open on the next line; the same read on a window callback would
+        // be filesystem work on a pool thread once per window. Before the open, so a folder that
+        // is slow to stat never sits behind a native audio call.
+        if (RescanOnArm)
+        {
+            _pool.Invalidate();
+        }
+
         _presence.Open();
         RaiseChanged();
 
