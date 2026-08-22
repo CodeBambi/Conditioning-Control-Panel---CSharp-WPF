@@ -283,3 +283,87 @@ Three "triage 0817" fix batches (`the fullscreen trap, the buried nav rail, and 
 - **The detector caught three citations added THE SAME NIGHT and absent from the inventory:** `Services/Settings/ProfileSyncService.cs`, `Services/Companion/Brain/CompanionTurn.cs`, `Dialogs/AwarenessPresetDetailDialog.xaml.cs` — all cited by `task-board.md` rows written hours earlier in this session. The tool caught its own author's drift on its first run, which is the strongest evidence it works that this sync could have produced.
 - **4 UNRESOLVED entries are the known basename-collision class**, not new: `Models/AiCommandData.cs` and `Models/AppSettings.cs` recorded at shipping paths that no longer exist, whose basenames resolve into the first-attempt `CCP.Core/` tree. SP-088 documented this shape; it needs a re-key or a retirement, not a fix here.
 - **Reporting ambiguity worth fixing in the tool, not worked around:** the header prints `297 entries (106 changed in window)`, but only ~88 non-test WPF files changed in this window — the 106 is the inventory's recorded `changedAtSync` from the PREVIOUS sync, not this window's count. The number is stale-by-construction and should either be recomputed for the passed window or labelled as the inventory's own field.
+
+## 2026-08-22 — v6.8.1 -> v6.8.3 MEASURED AND **NOT MERGED**
+
+| | |
+|---|---|
+| baseline | `87035e9a7` (`<Version>6.8.1</Version>`) |
+| upstream tip | `c35cd309e` (`<Version>6.8.3</Version>`) |
+| commits | **58** |
+| files | **97** |
+| payload trees | **unchanged** — 1542 dtrh / 2138 intake / 9 tunnel / 9 vendor |
+
+**THE MERGE WAS NOT PERFORMED. It was tested end to end in a scratch worktree and reverted.**
+Two lanes were in flight (SP-142 in code review, SP-143 implementing) and the merge reds two guards,
+so pushing it would have put a red base on the remote — the one thing the skill's in-flight section
+forbids. The merge itself plus the re-anchoring is the next wave's packet.
+
+### What the scratch merge proved
+
+- **Clean.** Zero conflicts, zero unresolved paths. The `CCP.*` delete/modify class that used to
+  dominate these merges is gone with the tree (SP-141).
+- **The port was untouched**: `git diff --name-only feat/crossplatform HEAD` listed nothing under
+  `client/`, `spine-tasks/` or `.spine/`.
+- **`ConditioningControlPanel/` stayed byte-identical to `main`** by subtree object identity. SP-141's
+  invariant survives a 58-commit sync, which is the first evidence that it holds under motion.
+
+### The cost: EXACTLY TWO GUARDS, TEN CITATIONS — all already derived so the packet need not re-derive
+
+`HapticSiteCensusTests.TheLadderConstantsAreStillAtTheLinesTheCensusCites` and
+`GoonGameCensusTests.EveryPinnedCitation_IsOnTheExactLineItClaims`. Every replacement below was
+verified by needle identity against the merged bytes, never by proximity:
+
+| citation | was | is | verified by |
+|---|---|---|---|
+| goon `cli-goon` | `App.xaml.cs:2436` | **2517** | `Services.GoonGame.GoonHostService.Launch();` |
+| goon `cli-goon-test` | `App.xaml.cs:2364` | **2445** | `try { new GoonTestWindow().Show(); }` |
+| goon `cli-goon-vectors` | `App.xaml.cs:2447` | **2528** | `var vectorsPath = ...GoonVectorDumper.Run();` |
+| goon `assets-hook` | `MainWindow.Assets.cs:1504` | **1493** | `...TransferCompressionService.Instance.OnPresetChanged(preset.Id);` |
+| goon `assets-hook-comment` | `MainWindow.Assets.cs:1502` | **1491** | `// The Goon Game transfer cache plans against the ACTIVE pool...` |
+| haptic ladder `~2s` | `HapticService.cs:761` | **817** | `Vibe that decays over ~2s` (NOT `:994`, which is a different `~2s`) |
+| haptic ladder `i < 8` | `:782` | **838** | `for (int i = 0; i < 8; i++)` |
+| haptic ladder `Math.Pow(0.7, i)` | `:784` | **840** | `Math.Max(start * Math.Pow(0.7, i), MinPerceptibleIntensity)` |
+| haptic ladder `250` | `:786` | **842** | `HapticPatterns.Render(rule.Mode, intensity, 250, priority: 1, ...)` |
+| haptic ladder `i * 450` | `:787` | **843** | `offsetMs: i * 450` |
+
+The haptic block shifts a uniform **+56**. Four of the five confirmed that on their own; the fifth
+(`250`) was **read at line 842 rather than inferred from the pattern**, because a consistent shift is
+exactly the evidence that makes a proximity guess feel safe.
+
+### Bucket 1 — PARITY DEFECTS IN ALREADY-LANDED PORT CODE. **This is the dangerous bucket**
+
+**18 `fix(...)` commits land under `ConditioningControlPanel/Services` and `Chaos`**, several in
+surfaces this port has already copied. Where upstream fixed a bug the port faithfully reproduced, the
+port now carries a bug upstream has retired, and **no test on either side will say so**:
+
+- `4835d200b fix(haptics): stop the trim slider snapping to 0 mid-drag; make Test work on strokers (#977)`
+- `97a353288 fix(braindrain): the blur was invisible on machines whose driver leaves the capture's alpha byte at 0 (#960, #975)`
+- `3082157e2 fix(braindrain): the blur could go silently dead with nothing in the log (#975, #960)`
+- `3fcf1190a fix(braindrain): the legacy path ignored the strength dial's alpha half`
+- `ad426360f fix(cornergif): the session-scoped overlay never got the #221 freeze fix`
+- `c35cd309e fix(auth): heal a diverged auth token instead of retrying the dead one (#240)` — the port
+  has this surface (`Entitlement/HostAuthTokenReader.cs`), so this is a live parity question, not archaeology.
+
+`BrainDrain` is an `OwnedSessionEffect` subclass in the port, so three of these land on ported code.
+
+### Bucket 2 — new surfaces
+
+New files, none of them a new payload tree: `Services/Update/NativeBundleGuard.cs`,
+`Services/UI/HangContext.cs` + `UiHangWatchdog.cs`, `Services/Compositor/*` (7 files touched),
+`Resources/Theme/*`, and six new upstream test files.
+
+### Bucket 3 — in-flight packets whose baseline this moves
+
+**SP-142 cites `Services/Flash/FlashService.cs:367-380`, `:345-351`, `:3910` and
+`Services/Notifications/OverlayService.cs:398` as upstream evidence — and BOTH files changed in this
+delta.** Per the standing rule the packet is **not retargeted**; its archaeology is internally
+consistent against `87035e9a7`. The delta is a follow-up row instead.
+
+### Bucket 4 — what this sync exposed in the port's own guards
+
+Release notes stop at `notes-v6.7.2.txt` while the csproj says **6.8.3** — the documented lag, so the
+notes were read as a map and cited for nothing. And the two census guards were again the ONLY
+mechanism that noticed a WPF-tree change: they caught this because they re-derive line numbers from
+the shipping bytes, which remains an accident of how they were built rather than a rule anyone
+enforces.
