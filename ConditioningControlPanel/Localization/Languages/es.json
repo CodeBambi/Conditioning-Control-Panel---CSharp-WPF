@@ -2487,6 +2487,7 @@
   "msg_login_required_remote": "Necesitas iniciar sesión y sincronizar tu perfil antes de usar Control Remoto.\n\nInicia sesión vía Patreon o Discord en la pestaña de Ajustes.",
   "title_connection_error": "Error de Conexión",
   "msg_remote_connection_error": "No se pudo iniciar la sesión de control remoto. El servidor puede estar temporalmente no disponible.\n\nPor favor verifica tu conexión a internet e intenta de nuevo.",
+  "msg_remote_auth_error": "No se pudo iniciar la sesión de control remoto porque el servidor rechazó tu sesión de inicio.\n\nPor favor cierra sesión, vuelve a iniciarla con Patreon o Discord e intenta de nuevo.",
 
   "msg_failed_to_start_session": "Error al iniciar sesión:\n{0}",
 

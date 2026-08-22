@@ -2487,6 +2487,7 @@
   "msg_login_required_remote": "リモートコントロールを使用する前に、ログインしてプロフィールを同期する必要があります。\n\n設定タブでPatreonまたはDiscordからログインしてください。",
   "title_connection_error": "接続エラー",
   "msg_remote_connection_error": "リモートコントロールセッションを開始できませんでした。サーバーが一時的に利用できない可能性があります。\n\nインターネット接続を確認して、もう一度お試しください。",
+  "msg_remote_auth_error": "サーバーがログインセッションを拒否したため、リモートコントロールセッションを開始できませんでした。\n\n一度ログアウトしてから、PatreonまたはDiscordで再ログインして、もう一度お試しください。",
 
   "msg_failed_to_start_session": "セッションの開始に失敗しました：\n{0}",
 

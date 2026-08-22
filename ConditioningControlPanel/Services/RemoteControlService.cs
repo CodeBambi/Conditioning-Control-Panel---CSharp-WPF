@@ -107,10 +107,22 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// True when the last <see cref="StartSessionAsync"/> failure was the server rejecting
+        /// our auth/session (401/403) rather than the network or the server being down.
+        /// BUG-NV4FF6TPA7: both used to collapse into one "server may be temporarily
+        /// unavailable, check your internet connection" dialog, which sent users with a dead
+        /// auth token chasing a connectivity problem they did not have (the actual fix was
+        /// re-signing into their provider). The caller reads this to pick the right message.
+        /// </summary>
+        public bool LastStartFailedAuth { get; private set; }
+
+        /// <summary>
         /// Starts a remote control session with the given tier.
         /// </summary>
         public async Task<string?> StartSessionAsync(string tier)
         {
+            LastStartFailedAuth = false;
+
             var unifiedId = App.UnifiedUserId;
             if (string.IsNullOrEmpty(unifiedId))
             {
@@ -129,7 +141,12 @@ namespace ConditioningControlPanel.Services
                 var json = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
                 {
-                    App.Logger?.Warning("[RemoteControl] Start failed: {Status} {Body}", response.StatusCode, json);
+                    LastStartFailedAuth =
+                        response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+                        response.StatusCode == System.Net.HttpStatusCode.Forbidden;
+                    App.Logger?.Warning("[RemoteControl] Start failed: {Status} {Body}{AuthHint}",
+                        response.StatusCode, json,
+                        LastStartFailedAuth ? " (auth/session failure — not a connectivity problem)" : "");
                     return null;
                 }
 

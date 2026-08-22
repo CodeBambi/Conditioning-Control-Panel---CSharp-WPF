@@ -2495,6 +2495,7 @@
   "msg_login_required_remote": "Tu dois te connecter et synchroniser ton profil avant d'utiliser le Contrôle à Distance.\n\nConnecte-toi via Patreon ou Discord dans l'onglet Paramètres.",
   "title_connection_error": "Erreur de Connexion",
   "msg_remote_connection_error": "Impossible de démarrer la session de contrôle à distance. Le serveur est peut-être temporairement indisponible.\n\nVérifie ta connexion internet et réessaie.",
+  "msg_remote_auth_error": "Impossible de démarrer la session de contrôle à distance car le serveur a rejeté ta session de connexion.\n\nDéconnecte-toi puis reconnecte-toi avec Patreon ou Discord, et réessaie.",
 
   "msg_failed_to_start_session": "Échec du démarrage de la session :\n{0}",
 
