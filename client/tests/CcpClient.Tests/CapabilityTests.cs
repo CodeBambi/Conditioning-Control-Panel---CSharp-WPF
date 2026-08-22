@@ -462,16 +462,22 @@ public class CapabilityTests
                 ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded", "host-login-entitlement", "haptic-sink"],
                 capabilities.Names);
 
-            // And it reports the ADMITTED-PROVIDER gap, never a missing device: the classification's
-            // first arm is the admission question, so no run of this build can reach the
-            // DependencyMissing("a haptic device …") arm.
+            // A route IS admitted now, so the probe no longer reports the admission gap — it reports
+            // what the SERVER said, which on a machine with no Lovense server running is that nobody
+            // answered. That is the honest answer and the whole point of admitting a client: the
+            // capability line can finally change.
             var hapticState = Assert.IsType<CapabilityState.Unavailable>(
                 capabilities.GetState(CompositionRoot.HapticCapabilityName));
-            Assert.Equal("haptic-no-admitted-provider", hapticState.Reason.Code);
-            // It says so in as many words, and it does NOT carry upstream's device-refusal wording
-            // ("No devices found. Connect your device in Intiface first.", ButtplugProvider.cs:135),
-            // which is what a build with a client and no toy would say.
-            Assert.Contains("THIS IS NOT \"no device found\"", hapticState.Reason.Detail, StringComparison.Ordinal);
+            Assert.Equal("haptic-server-unreachable", hapticState.Reason.Code);
+            // Still not the device-refusal wording ("No devices found. Connect your device in
+            // Intiface first.", ButtplugProvider.cs:135): a server that never answered is not a
+            // missing toy, and telling a user to pair one would send them to fix the wrong thing.
+            Assert.Contains("the haptic server did not answer", hapticState.Reason.Detail, StringComparison.Ordinal);
+
+            // And it names BOTH servers a user might need to start, not just the admitted route's:
+            // the classification is shared, and a user who owns the other kind of toy must not be
+            // told to install the wrong program.
+            Assert.Contains("Lovense Connect", hapticState.Reason.Detail, StringComparison.Ordinal);
             Assert.DoesNotContain("Connect your device in Intiface first",
                 hapticState.Reason.Detail, StringComparison.OrdinalIgnoreCase);
 

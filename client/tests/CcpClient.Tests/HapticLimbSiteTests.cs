@@ -304,6 +304,11 @@ public class HapticLimbSiteTests
         var participant = new HapticParticipant(
             new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), new NullLog()),
             scratch.Path,
+            // The unadmitted sink, named rather than defaulted. This fact is about a LIMB not
+            // lighting the dot, so it must not depend on what the product admits: with a route
+            // admitted the default sink would open a real socket to a server nobody is running,
+            // which is four seconds of nothing and a fact about the network instead of the limb.
+            sink: HapticSinkFactory.CreateFrom([]),
             resolveEntitlement: _ => Task.FromResult<EntitlementOutcome>(
                 new EntitlementOutcome.Entitled(EntitlementTier.Supporter, "confirmed")),
             clock: new FrozenClock());

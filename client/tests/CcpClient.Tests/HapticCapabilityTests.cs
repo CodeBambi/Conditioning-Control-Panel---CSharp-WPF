@@ -18,10 +18,44 @@ public class HapticCapabilityTests
     //  The refusal, and the gap it names
     // =====================================================================================
 
+    /// <summary>
+    /// THIS build owns a Lovense client, and the refusal above is now a statement about the
+    /// unadmitted CASE rather than about this product.
+    ///
+    /// <para>The pair matters. Every refusal fact in this file used to reach the product factory
+    /// directly, which made them true by accident of what was admitted; they now ask for the empty
+    /// route list explicitly, and this fact holds the other end so "admitted" cannot quietly become
+    /// "admitted and doing nothing".</para>
+    /// </summary>
     [Fact]
-    public async Task TheSinkThisBuildOwnsRefusesEVERYTHING_AndNamesTheADMITTEDPROVIDERGap()
+    public void ThisBuildOwnsALovenseClient_SoTheAdmittedListAndTheSinkAgree()
     {
+        Assert.Contains(HapticProviderRoute.Lovense, HapticSinkFactory.AdmittedRoutes);
+
         using var sink = HapticSinkFactory.Create();
+        Assert.Equal(HapticProviderRoute.Lovense, sink.Route);
+        Assert.IsType<LovenseHapticSink>(sink);
+
+        // Nothing was asked of a server by CONSTRUCTING it. The client exists; whether a server is
+        // running is a separate question this does not touch.
+        Assert.Null(sink.LastOutcome);
+    }
+
+    /// <summary>A route admitted with no client behind it still THROWS. Admitting Lovense must not
+    /// have relaxed the check that catches a fake-available sink - it stops firing for Lovense
+    /// because Lovense now has a client, and for nothing else.</summary>
+    [Fact]
+    public void ARouteWithNoClientStillThrows_BecauseAdmissionDidNotRelaxTheCheck()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => HapticSinkFactory.CreateFrom([HapticProviderRoute.Buttplug]));
+        Assert.Contains("admit the route AND", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnUNADMITTEDSinkRefusesEVERYTHING_AndNamesTheADMITTEDPROVIDERGap()
+    {
+        using var sink = HapticSinkFactory.CreateFrom([]);
 
         Assert.Equal(HapticProviderRoute.None, sink.Route);
         Assert.Null(sink.LastOutcome);
@@ -111,10 +145,13 @@ public class HapticCapabilityTests
             () => HapticSinkFactory.CreateFrom([HapticProviderRoute.Buttplug]));
         Assert.Contains("Buttplug", thrown.Message, StringComparison.Ordinal);
 
-        // And the product list really is empty, which is what makes the refusal EARNED rather than
-        // stipulated: the same expression stops refusing the day a route is admitted.
-        Assert.Empty(HapticSinkFactory.AdmittedRoutes);
-        Assert.IsType<UnadmittedHapticSink>(HapticSinkFactory.CreateFrom(HapticSinkFactory.AdmittedRoutes));
+        // The other side of the same expression, now that a route IS admitted. This used to assert
+        // an empty product list; that day arrived, and the point it was making survives intact —
+        // the outcome is READ off the route list rather than stipulated, so the empty list still
+        // refuses and the product list now yields a real client.
+        Assert.IsType<UnadmittedHapticSink>(HapticSinkFactory.CreateFrom([]));
+        using var product = HapticSinkFactory.CreateFrom(HapticSinkFactory.AdmittedRoutes);
+        Assert.Equal(HapticProviderRoute.Lovense, product.Route);
     }
 
     [Fact]
@@ -123,24 +160,28 @@ public class HapticCapabilityTests
         using var buttplug = HapticSinkFactory.CreateFor(HapticProviderRoute.Buttplug);
         using var lovense = HapticSinkFactory.CreateFor(HapticProviderRoute.Lovense);
 
-        // Naming a route never admits one: both still carry Route.None and both still refuse.
+        // Naming a route still never ADMITS one — Buttplug has no client, so it carries Route.None
+        // and refuses with what that specific route would need. Lovense answers differently now
+        // only because it is on the admitted list, which is the distinction this fact exists for.
         Assert.Equal(HapticProviderRoute.None, buttplug.Route);
-        Assert.Equal(HapticProviderRoute.None, lovense.Route);
+        Assert.Equal(HapticProviderRoute.Lovense, lovense.Route);
 
         var refusal = Assert.IsType<CapabilityState.Unavailable>(
             await buttplug.ConnectAsync(TestContext.Current.CancellationToken));
         Assert.Equal(HapticReasonCodes.HapticNoAdmittedProvider, refusal.Reason.Code);
         Assert.Contains("Buttplug 5.0.1", refusal.Reason.Detail, StringComparison.Ordinal);
+
+        // The per-route text is still per-route: Buttplug's refusal names the package it needs,
+        // and nothing about Buttplug leaks into the admitted route's answer.
         Assert.DoesNotContain("Buttplug 5.0.1",
-            Assert.IsType<CapabilityState.Unavailable>(
-                await lovense.ConnectAsync(TestContext.Current.CancellationToken)).Reason.Detail,
+            LovenseHapticSink.DefaultBaseUrl + HapticSinkFactory.DescribeRoute(HapticProviderRoute.Lovense),
             StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task ADisposedSinkAnswersWithTheDISPOSAL_NotWithTheAdmissionGap()
     {
-        var sink = HapticSinkFactory.Create();
+        var sink = HapticSinkFactory.CreateFrom([]);
         sink.Dispose();
 
         var state = Assert.IsType<CapabilityState.Unavailable>(await sink.StopAllAsync());
@@ -150,7 +191,7 @@ public class HapticCapabilityTests
     [Fact]
     public async Task TheRefusingSinkValidatesItsArgumentsANYWAY()
     {
-        using var sink = HapticSinkFactory.Create();
+        using var sink = HapticSinkFactory.CreateFrom([]);
 
         // A caller whose bad argument is swallowed by a refusing build discovers it on the day the
         // refusal stops, which is the day a real device is attached to it. Each guard is exercised

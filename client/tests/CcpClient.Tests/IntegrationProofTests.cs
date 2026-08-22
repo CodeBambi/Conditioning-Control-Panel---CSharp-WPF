@@ -74,7 +74,11 @@ public class IntegrationProofTests
         Assert.False(haptics.Enabled);
         Assert.False(haptics.OutputAllowed);
         Assert.IsType<CcpClient.Desktop.Haptics.HapticGateDecision.RefusedUnverified>(haptics.Gate);
-        Assert.Equal(CcpClient.Desktop.Haptics.HapticProviderRoute.None, haptics.Sink.Route);
+        // The real root now owns a REAL client, and the three assertions above are what makes that
+        // safe: a route is admitted, and still nothing was connected, observed or allowed, because
+        // the setting is off and the entitlement is unverified.
+        Assert.Equal(CcpClient.Desktop.Haptics.HapticProviderRoute.Lovense, haptics.Sink.Route);
+        Assert.Equal(0, haptics.ConnectAttempts);
         // And the gate it consulted is the composition root's OWN entitlement capability — the same
         // object the DTRH door consults and the same one the System page reports. A missing
         // authority and this build's unconfigured one refuse identically, so without this assertion

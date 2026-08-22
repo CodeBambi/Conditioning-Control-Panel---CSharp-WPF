@@ -45,15 +45,29 @@ public class HapticParticipantTests
         // admitted-route list rather than of a hard-coded "never".
         using var scope = new Scope();
         var sink = new RecordingSink(HapticProviderRoute.Buttplug, devices: 2);
-        var participant = scope.Build(sink);
+        var participant = scope.Build(sink, Entitled(EntitlementTier.Supporter));
 
         await participant.StartAsync(TestContext.Current.CancellationToken);
+
+        // A route is admitted, and STILL nothing is contacted: the setting is off. Upstream guards
+        // its auto-connect the same way, because knocking on a provider nobody has "would silently
+        // bring up three virtual toys and a stream of pink toasts at each launch".
+        Assert.Equal(0, participant.ConnectAttempts);
+
+        participant.RequestEnable(true);
+        await TestWait.Until(participant.PendingConnect!, "the enable-path connect to land");
 
         Assert.Equal(1, participant.ConnectAttempts);
         Assert.IsType<CapabilityState.Available>(participant.LastConnectOutcome);
         Assert.True(participant.LastObservation!.Confirmed);
         Assert.Equal(1, sink.Connects);
 
+        // NOT ASSERTED HERE, and named rather than left as a silent hole: "a relaunch with the
+        // setting already on connects at START". Settings Mutate only marks dirty — persistence is
+        // debounced — so a relaunch inside this fact would be racing a save rather than proving a
+        // gate, and a fact that sometimes reads the old file is worse than no fact. The start gate
+        // itself IS covered: the assertion above proves it refuses while the setting is off, and
+        // both paths run the same ConnectAndRecordAsync.
         await participant.StopAsync();
     }
 
@@ -85,11 +99,18 @@ public class HapticParticipantTests
         // line that cannot change is a capability line that is decoration.
         using var scope = new Scope();
         var sink = new RecordingSink(HapticProviderRoute.Lovense, devices: 3);
-        var participant = scope.Build(sink);
+        var participant = scope.Build(sink, Entitled(EntitlementTier.Supporter));
 
         Assert.IsType<CapabilityState.Unavailable>(participant.SinkState);
 
         await participant.StartAsync(TestContext.Current.CancellationToken);
+
+        // Nothing was asked yet, because the setting is off and this build no longer contacts a
+        // provider a user has not switched on.
+        Assert.IsType<CapabilityState.Unavailable>(participant.SinkState);
+
+        participant.RequestEnable(true);
+        await TestWait.Until(participant.PendingConnect!, "the enable-path connect to land");
 
         var available = Assert.IsType<CapabilityState.Available>(participant.SinkState);
         Assert.Contains("3 device(s)", available.Detail, StringComparison.Ordinal);
@@ -276,6 +297,7 @@ public class HapticParticipantTests
 
         Assert.Equal(EffectDotState.Off, participant.Dot);
         participant.RequestEnable(true);
+        await TestWait.Until(participant.PendingConnect!, "the enable-path connect to land");
 
         Assert.Equal(EffectDotState.Armed, participant.Dot);
         // D179 MADE VISIBLE. Live would have to mean something is being sent, and nothing is: the
@@ -470,7 +492,14 @@ public class HapticParticipantTests
             IHapticSink? sink = null,
             Func<CancellationToken, Task<EntitlementOutcome>>? entitlement = null) =>
             new(new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), Log),
-                Directory, sink, entitlement);
+                Directory, sink ?? Unadmitted(), entitlement);
+
+        /// <summary>The refusing sink, named explicitly. Before a route was admitted this was what
+        /// the product factory returned, so a fact could get it by default; now the default is a
+        /// REAL client that would open a socket. A fact about the unadmitted case has to ask for
+        /// the unadmitted case.</summary>
+        public static IHapticSink Unadmitted() =>
+            HapticSinkFactory.CreateFrom([]);
 
         public void Dispose()
         {

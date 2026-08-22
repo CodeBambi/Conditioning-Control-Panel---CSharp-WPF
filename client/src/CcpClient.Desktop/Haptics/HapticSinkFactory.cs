@@ -24,7 +24,7 @@ public static class HapticSinkFactory
     /// reading it rather than by a hard-coded branch</b> — so the day one is admitted, the same code
     /// stops refusing without being edited to stop refusing.
     /// </summary>
-    public static IReadOnlyList<HapticProviderRoute> AdmittedRoutes { get; } = [];
+    public static IReadOnlyList<HapticProviderRoute> AdmittedRoutes { get; } = [HapticProviderRoute.Lovense];
 
     /// <summary>
     /// The gap, in one paragraph, worded so that nobody can read it as a missing toy.

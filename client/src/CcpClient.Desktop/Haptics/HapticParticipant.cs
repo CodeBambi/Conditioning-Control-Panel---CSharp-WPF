@@ -256,6 +256,24 @@ public sealed class HapticParticipant : IBackgroundParticipant
 
         await ApplyEntitlementAsync(cancellationToken).ConfigureAwait(false);
 
+        // THE USER'S SETTING GATES THE CONNECT, and this is upstream's guard rather than an
+        // optimisation. Upstream auto-connects only on
+        // `Settings.Current.Haptics.AutoConnect && HasRealHapticProviderEnabled()`
+        // (App.xaml.cs:2103, predicate at :3487-3495) because auto-connecting a provider nobody
+        // really has "would silently bring up three virtual toys and a stream of pink toasts at each
+        // launch" (:2098-2102).
+        //
+        // While no route was admitted this was invisible: Route was always None, so the branch below
+        // returned first and no launch ever reached a socket. Admitting a route made the omission
+        // real — every launch would knock on a Lovense server, including for the majority of users
+        // who own no toy and have haptics switched off. That is a behaviour this port must not have,
+        // and it is louder than a slow start: it is an unrequested outbound connection attempt.
+        if (!Enabled)
+        {
+            _log.Log("haptics: disabled in settings — no provider was contacted");
+            return;
+        }
+
         if (Sink.Route == HapticProviderRoute.None)
         {
             // The admitted-provider gap, logged as a classification exactly once per launch. Not a
@@ -265,10 +283,7 @@ public sealed class HapticParticipant : IBackgroundParticipant
             return;
         }
 
-        ConnectAttempts++;
-        LastConnectOutcome = await Sink.ConnectAsync(cancellationToken).ConfigureAwait(false);
-        LastObservation = await Sink.ObserveAsync(cancellationToken).ConfigureAwait(false);
-        _log.Log($"haptics: connect → {LastConnectOutcome.GetType().Name}");
+        await ConnectAndRecordAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -362,7 +377,48 @@ public sealed class HapticParticipant : IBackgroundParticipant
         }
 
         _store.Mutate(document => document.Enabled = true);
+
+        // SWITCHING IT ON IS THE OTHER MOMENT A CONNECT IS OWED. Start only connects when the
+        // setting is ALREADY on, which is upstream's auto-connect guard; without this, a user who
+        // enables haptics mid-session would sit at an Off dot until they relaunched the app, because
+        // nothing would ever ask a server whether a toy is there.
+        //
+        // Fire-and-forget with the outcome RECORDED, never awaited: this returns a gate decision to
+        // a UI caller on its own thread, and a socket round trip does not belong on that thread. The
+        // dot arms when the answer lands, which is the same way it arms at start.
+        if (_running && Sink.Route != HapticProviderRoute.None)
+        {
+            PendingConnect = ConnectAndRecordAsync();
+        }
+
         return Gate;
+    }
+
+    /// <summary>
+    /// The in-flight connect started by <see cref="RequestEnable"/>, or null when none was started.
+    ///
+    /// <para>Exposed because the enable path cannot await its own socket — it returns a gate decision
+    /// to a UI caller on that caller's thread. A test needs a DETERMINISTIC signal that the answer
+    /// landed rather than a wall-clock wait for it, and this is that signal. It never faults: the
+    /// helper records failures instead of throwing.</para>
+    /// </summary>
+    public Task? PendingConnect { get; private set; }
+
+    /// <summary>The connect half of phase three, reusable by the enable path. Never throws into a
+    /// caller: a provider that refuses is a recorded outcome, not an exception on a UI thread.</summary>
+    private async Task ConnectAndRecordAsync()
+    {
+        try
+        {
+            ConnectAttempts++;
+            LastConnectOutcome = await Sink.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
+            LastObservation = await Sink.ObserveAsync(CancellationToken.None).ConfigureAwait(false);
+            _log.Log($"haptics: connect → {LastConnectOutcome.GetType().Name}");
+        }
+        catch (Exception ex)
+        {
+            _log.Log($"haptics: connect threw {ex.GetType().Name} — recorded, never rethrown to a caller");
+        }
     }
 
     /// <summary>

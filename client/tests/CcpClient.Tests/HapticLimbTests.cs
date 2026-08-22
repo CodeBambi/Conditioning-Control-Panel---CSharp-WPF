@@ -401,14 +401,14 @@ public class HapticLimbTests
     // =====================================================================================
 
     [Fact]
-    public void OnTheREALSinkAWholeSessionOfMomentsSendsABSOLUTELYNOTHING()
+    public void OnAnUNADMITTEDSinkAWholeSessionOfMomentsSendsABSOLUTELYNOTHING()
     {
         // The central trap, executed. The limb commands correctly and there is no device key to
         // address, because HapticSinkFactory.AdmittedRoutes is empty and nothing was ever asked of a
         // server. The commands are FORMED and never delivered, and that is the honest state of this
         // build.
         var clock = new ManualClock();
-        var sink = HapticSinkFactory.Create();
+        var sink = HapticSinkFactory.CreateFrom([]);
         using var limb = new HapticLimb(sink, clock, () => true, () => []);
 
         limb.FlashPlaced();
