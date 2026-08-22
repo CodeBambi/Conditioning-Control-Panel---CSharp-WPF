@@ -1829,3 +1829,43 @@ off Windows by design, and D322's finding is a Windows hardware limit, not a Lin
 **The single-display divergences stay open, not superseded.** D66, D73, D148 and D162 remain the
 live statements of the limit; D311 to D322 explain it per effect, sharpen two of them into a live
 parity defect (D313) and an owner question (D318), and lift none of them.
+## SP-140 — the first real clip decoded, and what the Media Foundation divergence actually costs
+
+**D124 named a cost and nobody had ever measured it.** The port decodes through Media Foundation
+where upstream decodes through LibVLC, so *"the playable set becomes what Windows can open rather
+than what LibVLC can"*. Every video fact before SP-140 ran against an uncompressed `BI_RGB` AVI the
+suite writes in managed code, which Media Foundation opens without running a codec at all. SP-140
+decodes a real compressed clip in a standing test, and measures the openable set against the
+owner's designated library of 54 real videos. **The measurement is evidence for the record and is
+deliberately not a test**: it depends on a directory that exists on one machine, and a test that
+skipped when that directory was absent would be the vacuous-green shape this repository bans.
+
+| # | v6.8.1 fact | Port at SP-140 | Reason |
+|---|---|---|---|
+| **D323** | Upstream opens whatever **LibVLC** opens (`Services/Video/VideoService.cs:308-316`), and D124 named the port's cost in as many words: a container Windows has no decoder for refuses with `video-clip-unreadable` where the shipping app would play it. **The number was never taken** | **54 of 54 open, 54 of 54 decode a frame, ZERO refuse.** Measured 2026-08-22 over the owner's designated library (`C:/Code/ccp media/videos`, 53 `.mp4` + 1 `.mov`, recursive) through the real `MediaFoundationClipSource`, not a double | **D124's cost is THEORETICAL on this library, and that is the strongest result available rather than a weak one.** The `.mov` is the case worth separating: Media Foundation opens and decodes it (640x360, 9:28) and `Effects/VideoClipPool.cs:53` lists `.mov` in upstream's own extension set, so Mandatory Video would play it — while `Features/Dtrh/DtrhUserMedia.cs:173` classes `.mov` as media-like-but-NOT-served by the DTRH manifest. **Two different subsystems answering two different questions, both correctly.** Named limits, because a green number invites over-reading: ONE library, ONE machine, ONE Windows build and codec set, and **the first decodable frame per file** rather than a whole playthrough. It bounds the cost observed here; it does not certify the format set, which is why survivor M-w stays OPEN. Privacy: every file was opened, one frame decoded, and released — nothing copied, no frame or still written, and **the 54 filenames are deliberately NOT recorded anywhere**, a tightening on the packet's own instruction |
+| **D324** | Upstream never has to make three of the port's defensive choices: LibVLC normalises orientation before WPF sees a pixel, owns its own clock (D125), and `VideoMaxDurationSeconds` has no ceiling at all (`VideoService.cs:5509-5510`, D126) | The port carries a bottom-up stride flip (`Video/MediaFoundationClipSource.cs:364-384`), an 80 ms frame interval when a container reports no rate (D125), and a one-hour ceiling (D126) | **All three are measured, and the real library triggers NONE of them.** Zero of 54 report a negative `MF_MT_DEFAULT_STRIDE` — every one is top-down, and the flip exists only because the suite's own AVI fixture measured `-1280`. Zero of 54 are rate-less; every file declares 24, 30, 59.94 or 60 fps, so the 80 ms fallback is taken by nothing here. The longest clip is 42:12, so the hour ceiling refuses nothing. **This is not an argument for deleting any of them** — a defence with no observed trigger is still a defence, and all three guard states a hostile or damaged file can still produce. What it establishes is narrower and more useful: **the AVI fixture is the ONLY thing holding the flip branch**, and no test over real media covers any of the three. SP-140's new fixture is top-down for exactly this reason, so the two fixtures cover the two stride branches between them rather than duplicating one |
+| **D325** | Scaling happens inside **LibVLC and WPF's compositor** (D128), on whatever path they choose | The bars and the scaled picture are composed **in managed code, nearest-neighbour, into one buffer** and blitted 1:1 (D128, and the read-back this capability rests on requires it) | **The input size to that managed path is now known and it was not before.** The library's largest picture is **2560x1440**, which `Video/VideoFrame.cs`' BGRX layout makes **14 745 600 bytes per frame**, against a container-declared 30 fps; nine files exceed 1920x1080-equivalent volumes and the median is 1280x720 (3 686 400 bytes). Every one of those is reachable from the owner's real library today. **REACHABLE IS NOT SLOW, and nothing here measured a cost**: no frame time, no allocation rate, no dropped-frame count and no comparison against upstream was taken, and D128's choice remains correct for the reason it was made. What is recorded is that the port's per-frame managed copy now has a **measured real-world input size** instead of a 320x240 fixture's, and that the cost of moving it is an **unmeasured path with a real input**, not a theoretical one |
+
+### What SP-140 does NOT establish
+
+**Survivor M-y is closed; survivor M-w is NOT, and the board's acceptance is wrong on that half.**
+Board line 71 says *"ONE compressed fixture closes both survivors"*. It cannot: one file bounds one
+format. `RealClipDecodeTests` closes M-y — the fixture's stream is H.264 Baseline 1.0, its decoder
+does not produce RGB32, and `MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING`
+(`Video/MediaFoundationClipSource.cs:140-141`) is what converts it, **demonstrated by deleting those
+two lines and watching five of the six new facts go red while the AVI fixture's three decode facts
+stayed GREEN**. That control is the whole of M-y: the old fixture cannot see the defect. M-w is
+quantified by D323 and stays open.
+
+**Nothing here is `presentation-verified`, and no frame reached a screen.** Decoding is not
+presenting. `client/docs/verification-harness.md` governs, a headless or in-memory frame never
+discharges a headed gate, and every claim above is about buffers the operating system handed back.
+
+**Cadence, order and timing remain entirely unmeasured.** A clip playing at half speed, or
+backwards, passes every fact SP-140 added and every file in the measurement. That gap is unchanged
+from SP-111 and this packet did not narrow it.
+
+**The fixture's ORIENTATION is not established.** `TestAvi` can prove orientation because its writer
+chooses which half of the picture is which; `testsrc2`'s layout has no independent oracle in this
+repository, so pinning an observed top/bottom asymmetry would pin whatever the decoder did on the
+day. Orientation stays `VideoCapabilityTests`' fact.
