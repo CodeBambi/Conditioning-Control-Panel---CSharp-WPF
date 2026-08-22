@@ -16,7 +16,7 @@ namespace CcpClient.Tests;
 /// </summary>
 public sealed class LovenseHapticSinkTests : IDisposable
 {
-    private readonly ToyServer _server = new();
+    private readonly HapticToyServer _server = new();
 
     public void Dispose() => _server.Dispose();
 
@@ -224,7 +224,7 @@ public sealed class LovenseHapticSinkTests : IDisposable
     {
         // A port nothing is listening on. Bound and released, so the refusal is a real connection
         // refusal rather than a guess at an unused number.
-        var dead = ToyServer.ReserveAndReleasePort();
+        var dead = HapticToyServer.ReserveAndReleasePort();
         using var sink = new LovenseHapticSink(_ => { }, dead, LovenseHapticSink.LovenseMode.Lan);
 
         var connect = await sink.ConnectAsync(TestContext.Current.CancellationToken);
@@ -286,144 +286,4 @@ public sealed class LovenseHapticSinkTests : IDisposable
     }
 
     // -----------------------------------------------------------------------------------
-
-    /// <summary>A real Lovense-shaped server on loopback, recording what actually arrived.</summary>
-    private sealed class ToyServer : IDisposable
-    {
-        private readonly HttpListener _listener;
-        private readonly CancellationTokenSource _cts = new();
-        private readonly Task _serve;
-        private readonly List<Recorded> _requests = [];
-
-        public ToyServer()
-        {
-            HttpListener? bound = null;
-            string? prefix = null;
-            for (var attempt = 0; attempt < 20 && bound is null; attempt++)
-            {
-                var port = Random.Shared.Next(49152, 65535);
-                var candidate = new HttpListener();
-                try
-                {
-                    candidate.Prefixes.Add($"http://127.0.0.1:{port}/");
-                    candidate.Start();
-                    bound = candidate;
-                    prefix = $"http://127.0.0.1:{port}";
-                }
-                catch (HttpListenerException)
-                {
-                    candidate.Close();
-                }
-            }
-
-            _listener = bound ?? throw new InvalidOperationException("ToyServer: no loopback port available");
-            BaseUrl = prefix!;
-            LoopbackListenerRegistry.Register(nameof(ToyServer), new Uri(BaseUrl).Port, BaseUrl);
-            _serve = Task.Run(ServeLoop);
-        }
-
-        public string BaseUrl { get; }
-
-        public IReadOnlyList<string> ToyKeys { get; set; } = ["toy-a"];
-
-        public IReadOnlyList<Recorded> Requests
-        {
-            get { lock (_requests) { return _requests.ToArray(); } }
-        }
-
-        /// <summary>Binds a loopback port and lets it go, so a refusal fact refuses against a port
-        /// that is genuinely free rather than one guessed to be.</summary>
-        public static string ReserveAndReleasePort()
-        {
-            var listener = new HttpListener();
-            for (var attempt = 0; attempt < 20; attempt++)
-            {
-                var port = Random.Shared.Next(49152, 65535);
-                try
-                {
-                    listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-                    listener.Start();
-                    listener.Stop();
-                    listener.Close();
-                    return $"http://127.0.0.1:{port}";
-                }
-                catch (HttpListenerException)
-                {
-                    listener.Prefixes.Clear();
-                }
-            }
-
-            throw new InvalidOperationException("ToyServer: no loopback port available to reserve");
-        }
-
-        private async Task ServeLoop()
-        {
-            while (!_cts.IsCancellationRequested)
-            {
-                HttpListenerContext context;
-                try { context = await _listener.GetContextAsync(); }
-                catch { return; }
-
-                var request = context.Request;
-                var body = string.Empty;
-                if (request.HasEntityBody)
-                {
-                    using var reader = new StreamReader(request.InputStream, request.ContentEncoding);
-                    body = await reader.ReadToEndAsync();
-                }
-
-                var path = request.Url?.AbsolutePath ?? string.Empty;
-                if (!path.EndsWith("/GetToys", StringComparison.OrdinalIgnoreCase))
-                {
-                    lock (_requests)
-                    {
-                        _requests.Add(new Recorded(request.HttpMethod, path, request.Url?.Query ?? string.Empty, body));
-                    }
-                }
-
-                var payload = path.EndsWith("/GetToys", StringComparison.OrdinalIgnoreCase)
-                    ? "{" + string.Join(",", ToyKeys.Select(k => $"\"{k}\":{{\"id\":\"{k}\",\"status\":1}}")) + "}"
-                    : "{\"code\":200}";
-
-                var bytes = Encoding.UTF8.GetBytes(payload);
-                context.Response.StatusCode = 200;
-                context.Response.ContentType = "application/json";
-                context.Response.ContentLength64 = bytes.Length;
-                await context.Response.OutputStream.WriteAsync(bytes);
-                context.Response.Close();
-            }
-        }
-
-        public void Dispose()
-        {
-            _cts.Cancel();
-
-            // Unregistered ONLY after the listener really closed. The registry's rule is that a
-            // failed dispose stays registered, because a leak report that lied would fail the whole
-            // assembly loud on a false fact.
-            var closed = false;
-            try
-            {
-                _listener.Stop();
-                _listener.Close();
-                closed = true;
-            }
-            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException)
-            {
-                // Stays registered on purpose.
-            }
-
-            if (closed)
-            {
-                LoopbackListenerRegistry.Unregister(new Uri(BaseUrl).Port);
-            }
-
-            // No join on the serve task, and therefore no wall-clock wait to pin. Closing the
-            // listener is what ends the loop: the pending GetContextAsync faults and the loop
-            // returns. Waiting on it would add a deadline whose only job is to expire.
-            _cts.Dispose();
-        }
-
-        internal sealed record Recorded(string Method, string Path, string Query, string Body);
-    }
 }

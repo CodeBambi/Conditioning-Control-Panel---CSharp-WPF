@@ -358,6 +358,76 @@ public class HapticParticipantTests
             + $"{other.StopSequence}: the all-stop must come FIRST");
     }
 
+    /// <summary>
+    /// THE STOP REACHES A REAL PROVIDER ON THE WIRE, before teardown completes.
+    ///
+    /// <para>Every other teardown fact in this file counts calls on a recording double, which
+    /// proves the ORDER and nothing about delivery: a sink that accepted an all-stop and sent
+    /// nothing would satisfy all of them. This one drives the REAL ApplicationHost.ShutdownAsync
+    /// through the REAL composition root into a REAL LovenseHapticSink pointed at
+    /// an HTTP server, and then asks the SERVER what arrived.</para>
+    ///
+    /// <para><b>What this proves is DELIVERY, and not ordering.</b> I wrote it claiming both and
+    /// checked: with the composition root's pre-drain head slot DELETED this fact still passes,
+    /// because <c>StopAsync</c> also all-stops before releasing the sink, so a zero still reaches
+    /// the wire by the slower path. Ordering is <see cref="THEALLSTOPRunsBEFOREEveryParticipantStop_WhichIsUpstreamsOrdering"/>,
+    /// which does fail against that mutation. The two are complementary and neither is redundant:
+    /// the ordering fact counts calls on a double and would pass against a sink that sent nothing,
+    /// and this one would pass against a broken order. Naming the boundary here so the next reader
+    /// does not delete one believing the other covers it.</para>
+    ///
+    /// <para>What this still does NOT claim: that a motor stopped spinning. That is a device gate a
+    /// human reports, and the row says so.</para>
+    /// </summary>
+    [Fact]
+    public async Task THEALLSTOPPutsAZeroOnTHEWIRE_AgainstARealProviderBeforeTeardownCompletes()
+    {
+        using var scope = new Scope();
+        using var server = new HapticToyServer();
+        HapticParticipant? haptics = null;
+
+        var root = new CompositionRoot
+        {
+            SettingsPathFactory = () => Path.Combine(scope.Directory, "settings.json"),
+            ParticipantsFactory = infra =>
+            {
+                haptics = new HapticParticipant(
+                    infra, scope.Directory,
+                    new LovenseHapticSink(_ => { }, server.BaseUrl, LovenseHapticSink.LovenseMode.Lan),
+                    Entitled(EntitlementTier.Supporter));
+                return [haptics];
+            },
+        };
+
+        Assert.True(root.Validate(out _));
+        var host = root.Build(new StartupTrace());
+        Assert.IsType<StartupOutcome.Success>(
+            await host.StartParticipantsAsync(TestContext.Current.CancellationToken));
+
+        // Switch it on and let the connect land, so the sink really has a device to countermand.
+        haptics!.RequestEnable(true);
+        await TestWait.Until(haptics.PendingConnect!, "the enable-path connect to land");
+
+        // Drive one real level onto the wire. Without this the stop would have nothing recorded to
+        // stop, and StopAllAsync would answer Degraded rather than sending anything.
+        await haptics.Sink.SetOutputsAsync(
+            server.ToyKey, [new HapticOutput(0, HapticLevel.Of(0.8))], TestContext.Current.CancellationToken);
+        // Derived, not restated: the level this maps to is the quantizer's business, and a
+        // hand-written number here would be a second implementation of it that can disagree.
+        var expected = LovenseHapticSink.QuantizeLevel(HapticLevel.Of(0.8));
+        Assert.Contains(server.Commands, c => c.Contains($"Vibrate:{expected}", StringComparison.Ordinal));
+        var beforeShutdown = server.Commands.Count;
+
+        await host.ShutdownAsync();
+
+        // THE FACT: a zero arrived at the server during shutdown.
+        var duringShutdown = server.Commands.Skip(beforeShutdown).ToList();
+        Assert.Contains(duringShutdown, c => c.Contains("Vibrate:0", StringComparison.Ordinal));
+
+        // And it was the all-stop that sent it, once.
+        Assert.Equal(1, haptics.AllStops);
+    }
+
     [Fact]
     public async Task THEALLSTOPIsONESHOT_SoTheHeadSlotAndTheParticipantStopCannotBothSpendIt()
     {
