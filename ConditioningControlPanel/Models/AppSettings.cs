@@ -2863,6 +2863,77 @@ namespace ConditioningControlPanel.Models
             set { _bubbleAvatarEggEnabled = value; OnPropertyChanged(); }
         }
 
+        // ---- Lockdown: Safeties + Possession (Services/Possession/POSSESSION.md) ----
+        // The old cage (forced Strict Lock, panic key off, system keys blocked) stays, as default-on
+        // Safeties toggles inside the Lockdown card. Possession is the haunted-UI layer that runs on
+        // top while a lockdown is active. None of these are touched by LockdownService at runtime;
+        // they are read on Activate.
+        private bool _lockdownForceStrictLock = true;
+        public bool LockdownForceStrictLock
+        {
+            get => _lockdownForceStrictLock;
+            set { _lockdownForceStrictLock = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockdownDisablePanicKey = true;
+        public bool LockdownDisablePanicKey
+        {
+            get => _lockdownDisablePanicKey;
+            set { _lockdownDisablePanicKey = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockdownBlockSystemKeys = true;
+        public bool LockdownBlockSystemKeys
+        {
+            get => _lockdownBlockSystemKeys;
+            set { _lockdownBlockSystemKeys = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockdownPossessionEnabled = true;
+        public bool LockdownPossessionEnabled
+        {
+            get => _lockdownPossessionEnabled;
+            set { _lockdownPossessionEnabled = value; OnPropertyChanged(); }
+        }
+
+        // 0 Gentle (caps rung 2) / 1 Eerie (default, rungs 0-3) / 2 Full Doki (rung 4 + themed dialogs)
+        private int _lockdownPossessionIntensity = 1;
+        public int LockdownPossessionIntensity
+        {
+            get => _lockdownPossessionIntensity;
+            set { _lockdownPossessionIntensity = Math.Clamp(value, 0, 2); OnPropertyChanged(); }
+        }
+
+        private bool _lockdownTripwiresEnabled = true;
+        public bool LockdownTripwiresEnabled
+        {
+            get => _lockdownTripwiresEnabled;
+            set { _lockdownTripwiresEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockdownWardenEnabled = true;
+        public bool LockdownWardenEnabled
+        {
+            get => _lockdownWardenEnabled;
+            set { _lockdownWardenEnabled = value; OnPropertyChanged(); }
+        }
+
+        // Photosensitive-safe: no blinks / strobes / hard shakes; the ember charge becomes a static tint.
+        private bool _lockdownPhotosafe = false;
+        public bool LockdownPhotosafe
+        {
+            get => _lockdownPhotosafe;
+            set { _lockdownPhotosafe = value; OnPropertyChanged(); }
+        }
+
+        // First-run: the warden has stated the Possession rules once (intro card + bark).
+        private bool _lockdownPossessionIntroSeen = false;
+        public bool LockdownPossessionIntroSeen
+        {
+            get => _lockdownPossessionIntroSeen;
+            set { _lockdownPossessionIntroSeen = value; OnPropertyChanged(); }
+        }
+
         // ---- Chaos Mode (effect-bubbles roguelite, Lab) ----
         private bool _chaosModeEnabled = true;
         public bool ChaosModeEnabled

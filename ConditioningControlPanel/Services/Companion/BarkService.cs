@@ -336,6 +336,20 @@ namespace ConditioningControlPanel.Services
             Raise("UiAction", c => c.Set("action", action!));
         }
 
+        // ---- Possession (haunted-UI layer of Lockdown; Services/Possession/POSSESSION.md) ----
+        // Trigger names are the constants in Possession.PossessionBarkTriggers. Rules live in each
+        // pack's bark_rules.json as text-only variants; "target" is what the warden NAMES.
+        public void NotifyPossessionRung(int rung) =>
+            Raise(Possession.PossessionBarkTriggers.RungChanged, c => c.Set("rung", (double)rung));
+        public void NotifyPossessionEffect(string effect, string? target) =>
+            Raise(Possession.PossessionBarkTriggers.Effect, c => { c.Set("effect", effect); c.Set("target", target ?? string.Empty); });
+        public void NotifyPossessionTripwire(string kind, int repeat, int total) =>
+            Raise(Possession.PossessionBarkTriggers.Tripwire, c => { c.Set("kind", kind); c.Set("repeat", (double)repeat); c.Set("total", (double)total); });
+        public void NotifyPossessionWarden(string verb) =>
+            Raise(Possession.PossessionBarkTriggers.Warden, c => c.Set("verb", verb));
+        public bool NotifyPossessionRules() =>
+            Raise(Possession.PossessionBarkTriggers.Rules, guaranteed: true);
+
         /// <summary>The user opened/refreshed the leaderboard. rank/total let rules react to standing (rank 0 = unranked).</summary>
         public void NotifyLeaderboardViewed(int rank, int total)
         {
