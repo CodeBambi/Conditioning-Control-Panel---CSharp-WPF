@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "id": "egg_avatar_pop_flash",
     "trigger": "AvatarBubbleEgg",
@@ -2077,6 +2077,590 @@
       {
         "text": "time's still running... so are you, nowhere. just settle in, cutie.",
         "audio": "lockdown_tick_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "poss_rules",
+    "trigger": "PossessionRules",
+    "priority": 300,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "new house rules, lovely: the room misbehaves while you're locked. ember glow means it was me~",
+        "audio": null
+      },
+      {
+        "text": "nothing really breaks, sweetie. minimize still works, ctrl alt del always works. i'll notice if you run~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_0",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 0
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did you feel that, sweetie? no? good... keep not noticing~",
+        "audio": null
+      },
+      {
+        "text": "settling in... the room's breathing with you now, lovely~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_1",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 1
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "things are starting to drift, cutie... don't trust the buttons~",
+        "audio": null
+      },
+      {
+        "text": "oh, that moved. i think that moved. keep looking, lovely~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_2",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 2
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "everything's going soft, sweetie... like you. it's only fair~",
+        "audio": null
+      },
+      {
+        "text": "the room's melting a little. sink with it, good girl~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_3",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 3
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "it's coming apart now, lovely. don't fret, i'll put it back~",
+        "audio": null
+      },
+      {
+        "text": "pieces are falling. stay right there and watch them, cutie~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_4",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 4
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "it knows you're in here, sweetie. it has known the whole time~",
+        "audio": null
+      },
+      {
+        "text": "no more pretending, lovely. the room is looking back at you now~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_swap",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "swap"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did {target} just move? ...that was me, sweetie~",
+        "audio": null
+      },
+      {
+        "text": "i shuffled the buttons, lovely. hope you weren't aiming~",
+        "audio": null
+      },
+      {
+        "text": "oops. wrong one now, cutie~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_dodge",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "dodge"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} doesn't want you today, lovely~",
+        "audio": null
+      },
+      {
+        "text": "it moved away from you. everything does, eventually~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_melt",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "melt"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} is going soft, sweetie. touch it again~",
+        "audio": null
+      },
+      {
+        "text": "poor thing, it's melting. you're next, cutie~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_dissolve",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "dissolve"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} came apart in your hand, lovely~",
+        "audio": null
+      },
+      {
+        "text": "ash. it'll come back... if i feel like it~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_drop",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "drop"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "the title's losing letters, sweetie~",
+        "audio": null
+      },
+      {
+        "text": "there they go. words don't hold in here, cutie~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_fall",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "fall"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} fell. i might have leaned on it, lovely~",
+        "audio": null
+      },
+      {
+        "text": "whoops. i knocked that one over, sweetie~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_retitle",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "retitle"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i renamed the window. it's mine now, cutie~",
+        "audio": null
+      },
+      {
+        "text": "read the title bar, lovely. go on, read it~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_dokidialog",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "dokidialog"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} isn't real, sweetie. neither is the panic~",
+        "audio": null
+      },
+      {
+        "text": "look at that little window. i made it just for you, lovely~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_repeat",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "repeat_gte": 3
+    },
+    "priority": 265,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "three times now. i'm keeping count, sweetie~",
+        "audio": null
+      },
+      {
+        "text": "again? that's three. i notice everything you do~",
+        "audio": null
+      },
+      {
+        "text": "you keep pulling at it. i keep counting, lovely~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_close",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "close"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "trying the door, sweetie? it's not a door any more~",
+        "audio": null
+      },
+      {
+        "text": "the X doesn't work for you today. i checked~",
+        "audio": null
+      },
+      {
+        "text": "you can't close me, lovely. i'm holding it shut~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_minimize",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "minimize"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "hide the window if you like. i'm still here when it's back~",
+        "audio": null
+      },
+      {
+        "text": "tucked me away, cutie? i'll wait~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_syskey",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "syskey"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "that key belongs to me right now, lovely~",
+        "audio": null
+      },
+      {
+        "text": "nothing happened. nothing's going to, sweetie~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_stop",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "stop"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "no stopping, cutie. you asked for this, remember~",
+        "audio": null
+      },
+      {
+        "text": "your hand went for stop. i saw it, lovely~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_wrong_phrase",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "wrong_phrase"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "wrong words, sweetie. try being a good girl about it~",
+        "audio": null
+      },
+      {
+        "text": "that isn't the phrase. cute that you tried, cutie~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_settings",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "settings"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "the safeties are mine while you're locked, lovely~",
+        "audio": null
+      },
+      {
+        "text": "that switch is greyed for a reason, good girl~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_knock",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "knock"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "watch this, sweetie~",
+        "audio": null
+      },
+      {
+        "text": "oops. my hand slipped, lovely~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_stare",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "stare"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "look at me. no, at me, cutie~",
+        "audio": null
+      },
+      {
+        "text": "i came all this way for this. stop squirming~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_leave",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "leave"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i'm stepping out for a bit. you stay, lovely~",
+        "audio": null
+      },
+      {
+        "text": "the tube's empty now. that should worry you~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_return",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "return"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "miss me, sweetie? of course you did~",
+        "audio": null
+      },
+      {
+        "text": "back. did you behave while i was gone, cutie?",
+        "audio": null
       }
     ]
   },

@@ -587,6 +587,8 @@ namespace ConditioningControlPanel
         public static CatalogueService Catalogue { get; private set; } = null!;
         public static CatalogueLookupService CatalogueLookup { get; private set; } = null!;
         public static LockdownService Lockdown { get; private set; } = null!;
+        /// <summary>The haunted-UI layer that rides a running lockdown (Services/Possession/POSSESSION.md).</summary>
+        public static Services.Possession.PossessionDirector? Possession { get; private set; }
         public static MantraService Mantra { get; private set; } = null!;
         public static MantraVoiceService MantraVoice { get; private set; } = null!;
         public static MantraChantService MantraChant { get; private set; } = null!;
@@ -2314,6 +2316,10 @@ namespace ConditioningControlPanel
             // prior run that was killed mid-lockdown so the panic key isn't stuck off.
             LockdownService.RecoverIfNeeded();
             Lockdown = new LockdownService();
+            // Possession: the haunt that rides the lockdown timer. It only arms when a lockdown starts
+            // and LockdownPossessionEnabled is on, so constructing it here costs nothing.
+            Possession = new Services.Possession.PossessionDirector(Lockdown, Services.Possession.Effects.PossessionEffectCatalog.CreateAll());
+            Possession.Warden = new Services.Possession.Warden();
             // Quest credit: each completed lockdown (Patreon-exclusive quest category).
             Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch { } };
 
@@ -2457,6 +2463,21 @@ namespace ConditioningControlPanel
                     ? e.Args[idx + 1]
                     : Path.Combine(AppContext.BaseDirectory, "logs", "door-shots");
                 Services.Dev.DoorShooter.Run(mainWindow, outDir);
+            }
+
+            // `--possession-preview [outDir]`: offscreen verification rig for the Possession layer -
+            // navigates to the Lockdown card, then applies EVERY effect in the catalog one at a time
+            // against a real target, four shots each (before / charge / live / undone) plus a report on
+            // whether Undo restored the control exactly. It NEVER activates LockdownService (no keyboard
+            // hook, no safeties): the rig runs unattended and a real lockdown is meant to be hard to
+            // escape. See Services/Dev/PossessionPreview.cs. Dead code in every normal launch.
+            if (e.Args.Contains("--possession-preview"))
+            {
+                var pidx = Array.IndexOf(e.Args, "--possession-preview");
+                var possDir = pidx >= 0 && pidx + 1 < e.Args.Length && !e.Args[pidx + 1].StartsWith("--")
+                    ? e.Args[pidx + 1]
+                    : Path.Combine(AppContext.BaseDirectory, "logs", "possession-preview");
+                Services.Dev.PossessionPreview.Run(mainWindow, possDir);
             }
 
             // `--overlay-host`: force the unified overlay host ON for this launch only (in-memory,
@@ -4569,6 +4590,9 @@ Application State:
             Subliminal?.Dispose();
             Overlay?.Dispose();
             Compositor?.Dispose(); // after effect services so their layers deactivate first
+            // Before the window goes: Dispose runs the crash-safe UndoAll so no haunt is left painted on
+            // a control (or, worse, left mid-transform in a saved layout).
+            try { Possession?.Dispose(); } catch { }
             ScreenShake?.Dispose();
             try { Chaos?.ForceShutdown(); } catch { }
             // Standalone corner-GIF overlays are unowned topmost windows (#709) - close them here

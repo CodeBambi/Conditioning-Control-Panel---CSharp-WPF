@@ -8,6 +8,7 @@
         xmlns:local="clr-namespace:ConditioningControlPanel"
         xmlns:views="clr-namespace:ConditioningControlPanel.Views.Tabs"
         xmlns:controls="clr-namespace:ConditioningControlPanel.Controls"
+        xmlns:poss="clr-namespace:ConditioningControlPanel.Services.Possession"
         Title="Conditioning Control Panel"
         Height="943" Width="1563"
         MinHeight="620" MinWidth="1131"
@@ -570,6 +571,7 @@
                         <!-- ===== HOME (default: settings) ===== -->
                         <StackPanel Grid.Row="1">
                         <Button x:Name="DoorHome" Tag="home" Style="{StaticResource NavDoorButton}"
+                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Home door"
                                 Background="#22FF69B4" BorderBrush="#FF69B4"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_home}">
                             <!-- THE MEDALLION. Child order and TYPES are API: NavRail.cs's
@@ -643,6 +645,7 @@
                         <!-- ===== STUDIO (default: presets) ===== -->
                         <StackPanel Grid.Row="3">
                         <Button x:Name="DoorStudio" Tag="studio" Style="{StaticResource NavDoorButton}"
+                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Studio door"
                                 Background="#22FF7E6B" BorderBrush="#FF7E6B"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_studio}">
                             <!-- Medallion: see DoorHome for what the four children are for. -->
@@ -724,6 +727,7 @@
                         <!-- ===== COMPANION (default: companion) ===== -->
                         <StackPanel Grid.Row="5">
                         <Button x:Name="DoorCompanion" Tag="companion" Style="{StaticResource NavDoorButton}"
+                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Companion door"
                                 Background="#22E85CE0" BorderBrush="#E85CE0"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_companion}">
                             <!-- Medallion: see DoorHome for what the four children are for. -->
@@ -802,6 +806,7 @@
                         <!-- ===== PLAY (default: play) ===== -->
                         <StackPanel Grid.Row="7">
                         <Button x:Name="DoorPlay" Tag="play" Style="{StaticResource NavDoorButton}"
+                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Play door"
                                 Background="#22B8E85C" BorderBrush="#B8E85C"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_play}">
                             <!-- Medallion: see DoorHome for what the four children are for. -->
@@ -923,6 +928,7 @@
                         <!-- ===== YOU (default: discord / Profile) ===== -->
                         <StackPanel Grid.Row="9">
                         <Button x:Name="DoorYou" Tag="you" Style="{StaticResource NavDoorButton}"
+                                poss:Possession.Role="TabHeader" poss:Possession.Name="the You door"
                                 Background="#225EA8FF" BorderBrush="#5EA8FF"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_you}">
                             <!-- Medallion: see DoorHome for what the four children are for. -->
@@ -1045,6 +1051,7 @@
                         <!-- ===== LIBRARY (default: assets) ===== -->
                         <StackPanel Grid.Row="11">
                         <Button x:Name="DoorLibrary" Tag="library" Style="{StaticResource NavDoorButton}"
+                                poss:Possession.Role="TabHeader" poss:Possession.Name="the Library door"
                                 Background="#225ED4E8" BorderBrush="#5ED4E8"
                                 Click="NavDoor_Click" ToolTip="{loc:Str nav_door_library}">
                             <!-- Medallion: see DoorHome for what the four children are for. -->
@@ -1256,6 +1263,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="DoorSettings" Tag="appsettings" Style="{StaticResource NavDoorButton}"
+                            poss:Possession.Role="TabHeader" poss:Possession.Name="the Settings door"
                             Background="#225CE0A5" BorderBrush="#5CE0A5"
                             Click="NavDoor_Click" ToolTip="{loc:Str nav_door_settings}">
                         <!-- Medallion: see DoorHome for what the four children are for. -->
@@ -1542,6 +1550,7 @@
                         </Button>
                     </StackPanel>
                     <TextBlock Grid.Column="1" x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
+                               poss:Possession.Role="Title" poss:Possession.Name="the title"
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"
                                MaxWidth="200" TextTrimming="CharacterEllipsis"
                                ToolTip="{Binding ElementName=TxtPlayerTitle, Path=Text}">
@@ -1553,6 +1562,7 @@
                         <TextBlock x:Name="TxtLevel" Text="{loc:Str label_lvl_1}" Foreground="White" FontWeight="Bold" FontSize="12"/>
                     </Border>
                     <TextBlock Grid.Column="3" x:Name="TxtHeaderVersion" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="10" FontWeight="Normal"
+                               poss:Possession.Role="Label" poss:Possession.Name="the version tag"
                                VerticalAlignment="Bottom" Margin="4,0,0,3"/>
                     <!-- Streak Fire Icon (unlocked by Good Girl Streak skill) -->
                     <Border Grid.Column="4" x:Name="StreakFirePill" VerticalAlignment="Center"
@@ -2154,6 +2164,7 @@
                          can pop it. Named transforms, animated from MainWindow.HeroFx.cs via
                          BeginAnimation - nothing else drives this TextBlock's RenderTransform. -->
                     <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="{loc:Str label_lvl_1_2}" Foreground="{DynamicResource PinkBrush}"
+                               poss:Possession.Role="Label" poss:Possession.Name="the level label"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"
                                RenderTransformOrigin="0.5,0.5">
                         <TextBlock.RenderTransform>
@@ -2539,6 +2550,7 @@
                      RenderTransform and nothing else may claim it - HoverPop deliberately refuses
                      named transforms, so this stays a lane-B-only surface. -->
                 <Button x:Name="BtnStart" Grid.Column="1" Style="{StaticResource PinkButton}"
+                        poss:Possession.Role="Button" poss:Possession.Name="the Start button"
                         Background="{DynamicResource AccentGradientBrush}"
                         Height="50" FontSize="18" Click="BtnStart_Click"
                         RenderTransformOrigin="0.5,0.5"

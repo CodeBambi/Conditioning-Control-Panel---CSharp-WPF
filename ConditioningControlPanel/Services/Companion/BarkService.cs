@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -341,8 +341,11 @@ namespace ConditioningControlPanel.Services
         // pack's bark_rules.json as text-only variants; "target" is what the warden NAMES.
         public void NotifyPossessionRung(int rung) =>
             Raise(Possession.PossessionBarkTriggers.RungChanged, c => c.Set("rung", (double)rung));
+        // The packs' PossessionEffect lines use the {target} placeholder (ApplySubstitutions swaps any
+        // {key} from this context), so an absent display name must not leave a hole in the sentence -
+        // it falls back the way {0} already falls back to "that".
         public void NotifyPossessionEffect(string effect, string? target) =>
-            Raise(Possession.PossessionBarkTriggers.Effect, c => { c.Set("effect", effect); c.Set("target", target ?? string.Empty); });
+            Raise(Possession.PossessionBarkTriggers.Effect, c => { c.Set("effect", effect); c.Set("target", string.IsNullOrWhiteSpace(target) ? "that one" : target!); });
         public void NotifyPossessionTripwire(string kind, int repeat, int total) =>
             Raise(Possession.PossessionBarkTriggers.Tripwire, c => { c.Set("kind", kind); c.Set("repeat", (double)repeat); c.Set("total", (double)total); });
         public void NotifyPossessionWarden(string verb) =>

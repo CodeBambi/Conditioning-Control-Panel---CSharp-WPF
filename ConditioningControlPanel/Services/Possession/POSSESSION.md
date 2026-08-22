@@ -150,3 +150,21 @@ Hard rules for every file:
 - Photosafe + `SystemParameters.ClientAreaAnimation == false` = no flicker effects, static charge.
 - Ember `#FF8A5C` only for Possession. Crimson `#DC143C` stays the Lockdown theme colour.
 - No em-dashes in user-facing strings (house rule). Loc keys for UI strings in all 9 language files.
+
+## Verifying without entering Lockdown
+
+`ConditioningControlPanel.exe --possession-preview <outDir>` (Services/Dev/PossessionPreview.cs) runs
+every catalog effect against the real main window - charge / live / undone shots per effect via
+RenderTargetBitmap (works with the display asleep), a `_report.txt` with undo-exactness deltas, then
+exits. It NEVER activates LockdownService (no hook, no safeties), so it is safe unattended. Use it
+after any effect or attribution change; judge the shots against "clarity in front".
+
+Traps learned building it (2026-08-22):
+- GhostLayer/RubbleFloor are RootGrid SIBLINGS of the `<Viewbox Stretch="Fill">` that scales
+  DesignCanvas (1585x901). `TransformToAncestor(GhostLayer)` THROWS for every victim (swallowed ->
+  empty bounds -> the whole attribution grammar silently invisible). Always `TransformToVisual`,
+  and take sizes from the transformed bounds, never ActualWidth (design units; X/Y scale differ).
+- A broken effect fails through clean `return`s, so the log says everything worked. Trust the shots.
+- `wobble` has no target outside a live lockdown (the Timer lives in the active panel); `swap` needs
+  two visible Button targets in one parent (the main window only tags BtnStart - tag more buttons
+  or accept that swap mostly fires in rooms with button pairs).
