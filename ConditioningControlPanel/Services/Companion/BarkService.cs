@@ -724,6 +724,9 @@ namespace ConditioningControlPanel.Services
                     // wired the intake into the same event.
                     if (!e.Perfect && !e.Passed) return;
                     if (Quiz.IntakeHostService.IsActive) return;
+                    // Same reasoning for the Arcademy: it is a modal WebView2 window with its own
+                    // voiced/animated ceremonies, and MainWindow is tucked to the tray behind it.
+                    if (Arcademy.ArcademyHostService.IsActive) return;
                     Raise("QuizCompleted", c => c.Set("passed", e.Passed).Set("perfect", e.Perfect));
                 };
                 QuizService.QuizCompleted += h;

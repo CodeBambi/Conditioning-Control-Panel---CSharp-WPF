@@ -916,6 +916,7 @@ namespace ConditioningControlPanel
                 if (App.IsSessionRunning) return;
                 if (Services.Chaos.DtrhHostService.IsActive) return;
                 if (Services.Quiz.IntakeHostService.IsActive) return;
+                if (Services.Arcademy.ArcademyHostService.IsActive) return;
                 // Catch-all for the rest of the WebView2 game hosts (Bureau, Loom, the DtRH web
                 // page). They are all fullscreen-ish and all sit above MainWindow, so a Topmost
                 // popup would land on top of whatever the user is actually doing.

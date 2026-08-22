@@ -2545,6 +2545,12 @@ namespace ConditioningControlPanel
                 else Logger?.Information("--fyp ignored: {Reason}", fypGate.Reason);
             }
 
+            // The Arcademy, dev shortcut: `--arcademy` opens the mini-game hub straight away,
+            // bypassing the Play strip. Launch() applies the same T2 + AudioOnlySession gates the
+            // card's click does, so this skips the UI and nothing else.
+            if (e.Args.Contains("--arcademy"))
+                Services.Arcademy.ArcademyHostService.Launch();
+
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
             // for Takeover to start. No-op unless consent is given and the speech engine is available.
@@ -4499,6 +4505,13 @@ Application State:
 
             // DtRH browser game: dispose the WebView2 window/process if it's up.
             try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }
+
+            // The Arcademy: same reason - a WebView2 process outliving the app is a leak, and its
+            // meta store has a debounced write that must be flushed before we go. ShutdownFlush, NOT
+            // CloseActive: the graceful close waits on a 1200ms DispatcherTimer for the page's
+            // exit-done, and that timer can never tick from inside OnExit - so the flush it guards
+            // never happened and the last class's grades/streak went with the process.
+            try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch { }
 
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it

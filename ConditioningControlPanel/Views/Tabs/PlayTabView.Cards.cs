@@ -108,5 +108,11 @@ namespace ConditioningControlPanel.Views.Tabs
         // editor. OpenStudioModule is the same helper every dashboard mosaic tile routes through.
         private void BtnPlayLoom_Click(object sender, RoutedEventArgs e)
             => Owner?.OpenStudioModule("spiral");
+
+        // The Arcademy is a LAUNCH, not navigation: it has no tab of its own, so this forwards to
+        // the MainWindow handler beside the DtRH / Goon / Intake ones, and ArcademyHostService
+        // .Launch owns every gate (T2, then AudioOnlySession, then idempotency).
+        private void BtnStartArcademy_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnStartArcademy_Click(sender, e);
     }
 }

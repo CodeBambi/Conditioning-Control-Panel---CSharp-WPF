@@ -95,6 +95,11 @@ namespace ConditioningControlPanel
                 SetLockband(tab.PlayLockLockdown, TierGate.RequiresPremium(Loc.Get("tab_lockdown_mode")));
                 SetLockband(tab.PlayLockBlink, TierGate.RequiresPremium(Loc.Get("tab_blink_trainer")));
                 SetLockband(tab.PlayLockFyp, TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp"));
+                // The Arcademy: T2, and NOT on the daily-free wheel (no key passed, so no FREE
+                // TODAY stamp to keep in step). Literal name for the same reason the descent's is
+                // literal - it is the brand, identical in all nine language files.
+                SetLockband(tab.PlayLockArcademy,
+                    TierGate.RequiresLab(Services.Arcademy.ArcademyHostService.ProductName));
 
                 // --- FREE TODAY re-stamps ---------------------------------------------------
                 RefreshPlayFreeStamps(tab);

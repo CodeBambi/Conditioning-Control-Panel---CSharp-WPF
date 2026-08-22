@@ -6521,6 +6521,168 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region The Arcademy (webview mini-game hub)
+
+        // The Arcademy's GLOBAL settings tier (planning/arcademy/GROUND-RULES.md §5). Everything
+        // here is a CEILING the page may use less of and never more: the host re-clamps every
+        // field arriving from the page and these setters clamp again, so a stale or hand-edited
+        // page cannot raise its own limits.
+        //
+        // DELIBERATELY NOT DUPLICATED here (the Arcademy reads the app-wide ones):
+        // ChaosEffectIntensity (the photosensitivity guard, one knob app-wide), MediaSource +
+        // RemoteMediaRatio + FypOnlineNiches (one asset-source vocabulary), MasterVolume,
+        // SubliminalPool (the word vocabulary), MotionLevel / PerformanceMode.
+
+        private double _arcademyMasterIntensity = 0.7;
+        /// <summary>Master distraction dial, 0..1. Every engine strength is
+        /// <c>clampToCaps(channels, caps) × masterIntensity</c>; nothing hardcodes an absolute.</summary>
+        [JsonProperty("arcademyMasterIntensity")]
+        public double ArcademyMasterIntensity
+        {
+            get => _arcademyMasterIntensity;
+            set { _arcademyMasterIntensity = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
+        }
+
+        // The 7-channel caps vector, Intake's DEFAULT_CAPS names verbatim (SYNTHESIS-NOTES #9 —
+        // the canon is binauralDepth, NOT audioDepth). 1.0 = "no ceiling on this channel".
+        private double _arcademyCapFlashRate = 1.0;
+        [JsonProperty("arcademyCapFlashRate")]
+        public double ArcademyCapFlashRate
+        {
+            get => _arcademyCapFlashRate;
+            set { _arcademyCapFlashRate = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
+        }
+
+        private double _arcademyCapFlashOpacity = 1.0;
+        [JsonProperty("arcademyCapFlashOpacity")]
+        public double ArcademyCapFlashOpacity
+        {
+            get => _arcademyCapFlashOpacity;
+            set { _arcademyCapFlashOpacity = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
+        }
+
+        private double _arcademyCapSubDensity = 1.0;
+        [JsonProperty("arcademyCapSubDensity")]
+        public double ArcademyCapSubDensity
+        {
+            get => _arcademyCapSubDensity;
+            set { _arcademyCapSubDensity = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
+        }
+
+        private double _arcademyCapDuckDepth = 1.0;
+        [JsonProperty("arcademyCapDuckDepth")]
+        public double ArcademyCapDuckDepth
+        {
+            get => _arcademyCapDuckDepth;
+            set { _arcademyCapDuckDepth = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
+        }
+
+        private double _arcademyCapBubbleRate = 1.0;
+        [JsonProperty("arcademyCapBubbleRate")]
+        public double ArcademyCapBubbleRate
+        {
+            get => _arcademyCapBubbleRate;
+            set { _arcademyCapBubbleRate = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
+        }
+
+        private double _arcademyCapBinauralDepth = 1.0;
+        [JsonProperty("arcademyCapBinauralDepth")]
+        public double ArcademyCapBinauralDepth
+        {
+            get => _arcademyCapBinauralDepth;
+            set { _arcademyCapBinauralDepth = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
+        }
+
+        private double _arcademyCapBgIntensity = 1.0;
+        [JsonProperty("arcademyCapBgIntensity")]
+        public double ArcademyCapBgIntensity
+        {
+            get => _arcademyCapBgIntensity;
+            set { _arcademyCapBgIntensity = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
+        }
+
+        /// <summary>The five audio-group gains the Arcademy mixes, DTRH's group vocabulary and
+        /// defaults (<c>Resources/web/dtrh/engine/audioLevels.js</c>) with its page-local
+        /// localStorage swapped for C# ownership — the host is the settings owner for every
+        /// hosted page. All 0..1 gains except <c>music</c>, which is a 0..2 MULTIPLIER over the
+        /// ambient bed. Multiplied under app <see cref="MasterVolume"/>, never instead of it.</summary>
+        private Dictionary<string, double> _arcademyAudioLevels = DefaultArcademyAudioLevels();
+        [JsonProperty("arcademyAudioLevels")]
+        public Dictionary<string, double> ArcademyAudioLevels
+        {
+            get => _arcademyAudioLevels;
+            set { _arcademyAudioLevels = value ?? DefaultArcademyAudioLevels(); OnPropertyChanged(); }
+        }
+
+        /// <summary>Ceiling for each audio group (music is a multiplier, the rest are gains).</summary>
+        internal static double ArcademyAudioCeiling(string group) =>
+            string.Equals(group, "music", StringComparison.Ordinal) ? 2.0 : 1.0;
+
+        internal static Dictionary<string, double> DefaultArcademyAudioLevels() => new()
+        {
+            ["fx"] = 0.48,
+            ["voice"] = 0.85,
+            ["tutorial"] = 0.85,
+            ["drops"] = 0.4,
+            ["music"] = 1.0,
+        };
+
+        private bool _arcademyAudioMute;
+        /// <summary>Hard on/off over every Arcademy audio group. Separate from the gains on
+        /// purpose (DTRH precedent): a comfort mute must not destroy the mix the user tuned.</summary>
+        [JsonProperty("arcademyAudioMute")]
+        public bool ArcademyAudioMute
+        {
+            get => _arcademyAudioMute;
+            set { _arcademyAudioMute = value; OnPropertyChanged(); }
+        }
+
+        private bool _arcademyHideTutorial;
+        /// <summary>Skip the shell's lesson cards. Replay-lessons resets it (DTRH guide policy).</summary>
+        [JsonProperty("arcademyHideTutorial")]
+        public bool ArcademyHideTutorial
+        {
+            get => _arcademyHideTutorial;
+            set { _arcademyHideTutorial = value; OnPropertyChanged(); }
+        }
+
+        private string _arcademyKeybindsJson = "";
+        /// <summary>Serialized <c>{ "&lt;verb&gt;": "&lt;key&gt;" }</c> for the shell's manifest-declared
+        /// keybind slots (SYNTHESIS-NOTES #7). Opaque to C# apart from a size cap: the verb
+        /// vocabulary is per-game and lives in the game manifests, so a typed model here would make
+        /// every new keybind a C# change. Conflict checking against <see cref="PanicKey"/> is the
+        /// shell's job — the panic key itself stays app-owned and unwritable from the page.</summary>
+        [JsonProperty("arcademyKeybindsJson")]
+        public string ArcademyKeybindsJson
+        {
+            get => _arcademyKeybindsJson;
+            set
+            {
+                var v = value ?? "";
+                _arcademyKeybindsJson = v.Length > 8192 ? "" : v;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _arcademySettingsJson = "";
+        /// <summary>The FLAT per-game settings bag (<c>{ "dt_hard_mode": false, ... }</c>), one JSON
+        /// blob because per-game knobs are declared in game manifests (BUILD-CONTRACT §11) and must
+        /// not each become an AppSettings property. GLOBAL settings never live here — a game that
+        /// re-exposed one would be a defect (GROUND-RULES §5).</summary>
+        [JsonProperty("arcademySettingsJson")]
+        public string ArcademySettingsJson
+        {
+            get => _arcademySettingsJson;
+            set
+            {
+                var v = value ?? "";
+                _arcademySettingsJson = v.Length > 65536 ? "" : v;
+                OnPropertyChanged();
+            }
+        }
+
+        #endregion
+
         #region Validation
 
         /// <summary>
@@ -6555,7 +6717,48 @@ namespace ConditioningControlPanel.Models
                 _simultaneousImages = 20;
             }
 
+            // The Arcademy's ceilings. The setters clamp too; this catches a hand-edited or
+            // cloud-restored settings.json, which is the one path that never runs a setter.
+            ClampArcademy(ref _arcademyMasterIntensity, "Arcademy master intensity", corrections);
+            ClampArcademy(ref _arcademyCapFlashRate, "Arcademy flash-rate cap", corrections);
+            ClampArcademy(ref _arcademyCapFlashOpacity, "Arcademy flash-opacity cap", corrections);
+            ClampArcademy(ref _arcademyCapSubDensity, "Arcademy subliminal-density cap", corrections);
+            ClampArcademy(ref _arcademyCapDuckDepth, "Arcademy duck-depth cap", corrections);
+            ClampArcademy(ref _arcademyCapBubbleRate, "Arcademy bubble-rate cap", corrections);
+            ClampArcademy(ref _arcademyCapBinauralDepth, "Arcademy binaural-depth cap", corrections);
+            ClampArcademy(ref _arcademyCapBgIntensity, "Arcademy background-intensity cap", corrections);
+
+            if (_arcademyAudioLevels == null)
+            {
+                _arcademyAudioLevels = DefaultArcademyAudioLevels();
+            }
+            else
+            {
+                foreach (var group in new List<string>(_arcademyAudioLevels.Keys))
+                {
+                    var ceiling = ArcademyAudioCeiling(group);
+                    var raw = _arcademyAudioLevels[group];
+                    var fixedValue = double.IsFinite(raw) ? Math.Clamp(raw, 0.0, ceiling) : ceiling;
+                    if (Math.Abs(fixedValue - raw) > 0.0001)
+                    {
+                        corrections.Add($"Arcademy '{group}' audio level adjusted from {raw} to {fixedValue}");
+                        _arcademyAudioLevels[group] = fixedValue;
+                    }
+                }
+            }
+
             return corrections;
+        }
+
+        /// <summary>0..1 clamp for one Arcademy dial, with a correction line when it moved. NaN
+        /// (a hand-edited "null" or a bad restore) resolves to 1.0 rather than poisoning every
+        /// multiply downstream with NaN.</summary>
+        private static void ClampArcademy(ref double field, string label, List<string> corrections)
+        {
+            var fixedValue = double.IsFinite(field) ? Math.Clamp(field, 0.0, 1.0) : 1.0;
+            if (Math.Abs(fixedValue - field) <= 0.0001) return;
+            corrections.Add($"{label} adjusted from {field} to {fixedValue}");
+            field = fixedValue;
         }
 
         /// <summary>

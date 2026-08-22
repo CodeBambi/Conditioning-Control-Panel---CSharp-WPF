@@ -1270,10 +1270,10 @@
                 </UniformGrid>
 
                 <!-- ===================== ZONE: MORE =====================
-                     One entry left in this zone (Bureau and Showcase came off the page on
-                     2026-08-12), so it is a full-width STRIP rather than a lone third-width card
-                     with two empty columns beside it. The strip form is also the honest one for
-                     what this row does: Loom is a signpost to another door, not a launch. -->
+                     Full-width STRIPS rather than third-width cards (Bureau and Showcase came off
+                     the page on 2026-08-12 and left this zone with one entry). The strip form is
+                     also the honest one for what these rows do: Loom is a signpost to another
+                     door, and the Arcademy has no hero art yet. -->
                 <Grid Margin="2,18,2,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -1297,6 +1297,76 @@
                      ShowTab("studio") + FocusRackEntry("spiral"), through OpenStudioModule, which
                      is the path every dashboard mosaic tile uses. (Separately, and out of scope:
                      LoomHostService has no tier check at all - worth a ledger row.) -->
+                <!-- THE ARCADEMY: the webview mini-game hub (Services\Arcademy\ArcademyHostService).
+                     Deliberately a STRIP with a glyph plate and NO hero art: there is no
+                     Resources/features art for it yet, and a card built around a missing
+                     ImageSource is the failure mode this wall already knows about. When the art
+                     lands it can become a full card in a zone whose Columns count is revisited.
+                     Same launch posture as the DtRH hero: the band below is decoration and
+                     ArcademyHostService.Launch does the refusing (T2, then AudioOnlySession). -->
+                <Grid x:Name="SlotArcademy" x:FieldModifier="internal" Margin="0,0,0,10">
+                    <Border Style="{StaticResource PlayCardT2}" Padding="0" MinHeight="118">
+                        <Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="22,20,20,20">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <Border Style="{StaticResource PlayTitleGlyphPlate}">
+                                            <Image Width="18" Height="18" Source="{Binding Source='🎓', Converter={StaticResource EmojiToImageSource}}"/>
+                                        </Border>
+                                        <TextBlock Text="The Arcademy" Style="{StaticResource PlayCardTitle}"/>
+                                        <Border Style="{StaticResource PlayBadgePill}" Margin="12,2,0,0" Padding="7,2">
+                                            <TextBlock Text="NEW" Style="{StaticResource PlayBadgePillText}" FontSize="10"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="three classes a day. simple little games made hard by everything else on your screen. show up, get graded, keep the streak."
+                                               Style="{StaticResource PlayCardBlurb}" MaxWidth="560" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                                <!-- PRIME SUBJECT sign in its OWN COLUMN, not as a corner overlay.
+                                     PlayTierBadge's corner posture (top-right, Margin 0,-24,-24,0)
+                                     is built for a CARD with a 138px art plate to hang over. On a
+                                     118px STRIP the badge is taller than the whole row, and its
+                                     width is measure-driven (0.45 of the available width, capped at
+                                     190), so on the wide wall it landed square on top of the
+                                     vertically-centred Attend button and ate the click - the same
+                                     collision the DtRH hero avoids by mirroring its sign to the
+                                     LEFT, which is not open here (the title block owns that corner).
+                                     Auto column instead: the badge cannot overlap anything, and the
+                                     strip stays one readable row.
+                                     NO explicit Width on purpose - an Auto column measures with an
+                                     infinite constraint, which is the branch TierBadge answers with
+                                     its FallbackWidth (140). Pinning Width instead would make the
+                                     control clamp 0.45 x 128 back down to its 88 minimum and leave
+                                     40px of dead space beside the sign. -->
+                                <fx:TierBadge Grid.Column="1" x:Name="PlayBadgeArcademy" x:FieldModifier="internal"
+                                              Tier="2" VerticalAlignment="Center"
+                                              Margin="0,0,18,0" Panel.ZIndex="9"/>
+                                <Button Grid.Column="2" x:Name="BtnPlayArcademy" x:FieldModifier="internal"
+                                        Content="Attend" Cursor="Hand"
+                                        VerticalAlignment="Center" Margin="0,0,24,0" Padding="24,10"
+                                        Background="{DynamicResource PinkBrush}" Foreground="White"
+                                        BorderThickness="0" FontWeight="Bold" FontSize="14"
+                                        ToolTip="today's timetable is waiting."
+                                        Click="BtnStartArcademy_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                            </Grid>
+                            <Border x:Name="PlayLockArcademy" x:FieldModifier="internal"
+                                    Style="{StaticResource PlayLockBandT2}">
+                                <StackPanel VerticalAlignment="Center">
+                                    <helpers:EmojiTextBlock Text="🧪" Style="{StaticResource PlayLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t2}" Style="{StaticResource PlayLockTeaserT2}"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
                 <Grid x:Name="SlotLoom" x:FieldModifier="internal">
                     <!-- Padding 0 overrides PlayCard's 22 so the art bleeds to the strip's rounded
                          left edge; the copy carries its own inset instead. -->
