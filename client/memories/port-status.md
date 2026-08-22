@@ -1,5 +1,22 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## REAL MEDIA EXISTS: the owner designated `C:\Code\ccp media` on 2026-08-22
+
+- **This supersedes `Z:\CCP Vids`**, which never existed on this machine and blocked board line 71 for weeks.
+  `client/port.txt`'s machine-specific section allows exactly this: *desktop-only unless the owner designates
+  equivalents*. 390 files, 6.9 GB: `images/` 336 (284 gif, 23 webp, 17 jpg, 12 png) and `videos/` 54 (53 mp4, 1 mov).
+- **How to point the port at it, without copying 6.9 GB or touching the owner's files:** make a scratch directory,
+  create a DIRECTORY JUNCTION `assets` inside it targeting `C:\Code\ccp media`, and set `CCP_DATA_ROOT` to the
+  scratch directory **for that process only**. The port resolves user media as `DataDirectory/assets`
+  (`DtrhParticipant.cs:92`, `GoonParticipant.cs:100`), and the owner's tree already has the `images`/`videos` shape.
+  **NEVER export `CCP_DATA_ROOT` process-wide** - the SP-057 pin then skips and the floor reports a vacuous green.
+- **First run, 2026-08-22, and it worked:** `dtrh-media: manifest - 333 image(s), 53 video(s), 4 skipped`, all 390
+  files reconciled (3 images over the 50 MB cap, 1 `.mov` media-like-but-not-served, both upstream parity). Intake
+  drove end to end: 18 gifs + 18 stills sampled, WebView2 Blink 151.0.4129.93, `NavigationCompleted success=True`.
+- **Still NOT proven by that run:** no frame was DECODED. A manifest enumerates; it does not play. Board line 71's
+  survivors M-y (video processor unexercised) and M-w (openable formats untested against real files) stand, and
+  cadence/order/timing remain unmeasured. **53 real MP4s now make that fixture cheap.**
+
 ## THE BUILDABLE FRONTIER, measured 2026-08-22 — and why the port stops here without the owner
 
 **Of the five capability rows traced to code, NOT ONE is both buildable without an owner decision AND has a
