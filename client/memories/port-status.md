@@ -1,5 +1,24 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## Wave 69 AUTHORED AND CANCELLED 2026-08-22 — the premise was stale and the lane caught it
+
+- **SP-138 was authored against board LINE 83 and cancelled at its plan checkpoint. No product code was written.**
+  The row said Bouncing Text and every moving-glyph module were blocked on one overlay capability. **They are not.**
+  `Glyph/IGlyphSurface.cs:92` `MoveTo` ships, is implemented without a style write or hit test at
+  `Glyph/Win32GlyphSurface.cs:277-333`, and is consumed per frame at `Effects/BouncingTextSurfacePresenter.cs:329`.
+  Board line 58 (P0, WIP) has said *"Closes D83/D84, blocked since wave 46"* the whole time, and the ledger says
+  *"D83 and D84 CLOSE"* at `wpf-surface-reachability.md:1219`.
+- **The lesson is not "check the row" - I DID check it.** Both of the row's mechanism citations were verified
+  against source before authoring and both were exact. *Is this accurate* and *is this still needed* are different
+  questions, and only the first was asked. **Ask the second by looking for a CONSUMER, not for the mechanism.**
+- **Two rows on one board contradicted each other for weeks and nothing noticed.** Same shape as the wave-68 finding
+  that divergences carry no status: line 58 said CLOSED in prose, line 83 said OPEN in a status column.
+- **PRECISION DEFECT, recorded because it has been repeated for several waves:** "row 83" and "row 342" in my
+  summaries are LINE numbers, not row numbers. The board's 83rd table row is an unrelated DTRH P1.
+- **Base measured GREEN at `63293d11d` by the lane:** 2616/2616 unit, 152/152 headless, warning gate 0/0, and the
+  three `PointerCoexistenceTests` PASSING with `DesktopPreflight` not refusing. **Desktop contention is a property
+  of the moment, not of this machine** - my wave-68 land hit it, this run did not.
+
 ## Wave 68 LANDED 2026-08-22 — floor 2599 -> 2616 / 152
 
 - Landed at owner instruction **"land it"**, by the context that ran it, overriding `port.txt:16-17`. Owner's call,
