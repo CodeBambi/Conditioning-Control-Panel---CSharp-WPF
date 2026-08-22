@@ -66,8 +66,9 @@ games/<key>/index.js  one folder per game; games NEVER import each other
   deja-vu/         the pair memory                      - script (the swap plan)
   impulse-control/ the Drop Tube (pop/withhold)         - lex/schedule/scoring/render/tube3d/tube2d
                    (seeded three.js chute, vendored r185 in ../vendor/; tube2d = no-WebGL ladder)
-  the-deep-end/    2048 with trance-depth tiers (MEATY) - board/schedule/grade/lex/style/casino/trickster
-                   the deepest tile is the heat dial; board/schedule/grade pure, casino+trickster decks
+  the-deep-end/    2048 with trance-depth tiers (MEATY) - board/schedule/grade/lex/style/casino/trickster/pressure
+                   the deepest tile is the heat dial; board/schedule/grade pure, casino+trickster+pressure decks
+                   (pressure = the rung-by-rung CCP effects ladder + the Balatro board tremor/HUD juice)
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every

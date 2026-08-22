@@ -331,4 +331,50 @@ export function openingSpawn(board, table) {
   return out;
 }
 
-export default { createBoard, move, spawn, openingSpawn, isLocked, deepest, occupancy, strainPair, serialize };
+/* ----------------------------------------------------------------------------
+ * THE DEV BOARD (pass 4) - NOT a game rule. PURE, like everything above.
+ * -------------------------------------------------------------------------- */
+/**
+ * Deal a LADDER board: one tile of `deepest`, one of `deepest - 1`, ... down to
+ * tier 1, on seeded cells, everything else empty. Merges are still possible
+ * (no two tiers are equal, but the tier-1 tile has somewhere to go and the
+ * spawn stream keeps feeding), so the board plays; what it is FOR is standing
+ * a class at a known depth without playing there first.
+ *
+ * The only caller is index.js's `?deep=N` seam, and that seam is gated on
+ * `ctx.dev === true`, which nothing but the scratch rig ever sets. Production
+ * never reaches this function - it exists so the rig does not have to reach
+ * into the model itself.
+ *
+ * @param {Object} board          the live board (mutated, like openingSpawn)
+ * @param {number} deepest        2..TIER_MAX (clamped)
+ * @param {function=} rng         0..1 stream for the cell shuffle (default: the
+ *                                board's own spawn stream)
+ * @returns {Array} the tiles dealt, deepest first
+ */
+export function devBoard(board, deepest, rng) {
+  const n = board.n;
+  const top = Math.max(2, Math.min(TIER_MAX, Math.round(Number(deepest) || 0)));
+  const roll = typeof rng === 'function' ? rng : board.rng;
+  board.tiles.length = 0;
+  /* every cell, shuffled: one draw per swap, so the layout is a pure function
+   * of the stream it was handed */
+  const cells = [];
+  for (let i = 0; i < n * n; i++) cells.push(i);
+  for (let i = cells.length - 1; i > 0; i--) {
+    const j = Math.min(i, Math.floor(roll() * (i + 1)));
+    const tmp = cells[i]; cells[i] = cells[j]; cells[j] = tmp;
+  }
+  const out = [];
+  const count = Math.min(top, n * n);
+  for (let k = 0; k < count; k++) {
+    const ix = cells[k];
+    const tile = { id: board.nextId++, tier: top - k, r: Math.floor(ix / n), c: ix % n, silt: false };
+    board.tiles.push(tile);
+    board.spawned += 1;
+    out.push(tile);
+  }
+  return out;
+}
+
+export default { createBoard, move, spawn, openingSpawn, devBoard, isLocked, deepest, occupancy, strainPair, serialize };

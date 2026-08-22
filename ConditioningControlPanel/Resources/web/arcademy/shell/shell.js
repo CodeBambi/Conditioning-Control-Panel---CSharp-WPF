@@ -46,6 +46,37 @@ const QUICK_MAX_SEC = 180;
 /** How often the shell's own class clock repaints the time bar. */
 const CLOCK_TICK_MS = 250;
 
+/* ----------------------------------------------------------------------------
+ * THE SPIRAL POOL
+ * The engine's wash('spiral') paints a CSS conic gradient unless somebody
+ * hands it a url (engine/index.js spiralUrl()). DTRH already ships real
+ * spirals, and the host maps the whole of Resources/web, so they cost the
+ * build nothing: /dtrh/assets/bubbles/effects/spirals/. Resolved RELATIVE to
+ * this module so the app origin (ccp.game) and the scratch rig (127.0.0.1,
+ * which junctions the same folder) both serve it.
+ *
+ * The weights are BYTE SIZES, not taste: sp6 is 123K and sp7 721K, the other
+ * five are 2.2-2.7MB and sp5 alone is 5.3MB. One url is picked per class off
+ * the class seed and then held, so a class loads at most ONE of them and a
+ * retake dives the same water. Adding a file to the list reshuffles the pick
+ * for every seed - append, never insert.
+ * -------------------------------------------------------------------------- */
+const SPIRAL_POOL = Object.freeze([
+  ['sp6.gif', 34], ['sp7.gif', 26], ['sp1.gif', 9], ['sp2.webp', 9],
+  ['sp4.webp', 9], ['sp3.gif', 8], ['sp5.gif', 5],
+]);
+function pickSpiralUrl(seed) {
+  try {
+    const roll = makeRng(String(seed == null ? '' : seed) + '|spiral');
+    let total = 0;
+    for (const row of SPIRAL_POOL) total += row[1];
+    let r = roll() * total;
+    let file = SPIRAL_POOL[0][0];
+    for (const row of SPIRAL_POOL) { r -= row[1]; if (r < 0) { file = row[0]; break; } }
+    return new URL('../../dtrh/assets/bubbles/effects/spirals/' + file, import.meta.url).href;
+  } catch (e) { return null; }
+}
+
 /** Monotonic-if-available clock for the time bar (a wall-clock step must not
  *  teleport the fill; performance.now cannot be moved by the system clock). */
 function nowMs() {
@@ -800,6 +831,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       Object.assign({}, cls, { timeBudgetSec }), gradeTier, retake, endless);
 
     /* --- engine for this class --- */
+    /* ONE spiral per class, picked off the class seed and then held: the
+     * engine asks per wash, and a fresh answer every time would swap the image
+     * mid-fade. Never awaited, never preloaded here - the browser fetches it
+     * when the first spiral wash actually mounts, and the CSS conic gradient
+     * is still the fallback if it 404s. */
+    const classSpiral = pickSpiralUrl(seed);
     let engine;
     try {
       engine = createEngine({
@@ -814,6 +851,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         assets,
         motionLevel: src.motionLevel == null ? 2 : src.motionLevel,
         reducedMotion,
+        // a real spiral behind wash('spiral') instead of the conic fallback
+        spiralUrl: () => classSpiral,
         // No extra bus: the engine already emits its CustomEvents on `document`,
         // and boot.js listens there. Passing window as well would double every
         // arcademy-log line (engine/index.js emit() fires document AND bus).

@@ -827,6 +827,86 @@ html.arc-reduced .g-de-arrow.is-in{opacity:var(--de-fa-a,.55)}
   .g-de-hud{gap:6px 8px;font-size:10px}
   .g-de-chip{padding:3px 9px}
 }
+
+/* ---- PRESSURE (House Rules, Deck IV) - pass 4 ----------------------------- */
+/* THE TREMOR is not here: pressure.js writes the board's individual translate
+   property (never its transform - the bump keyframes own that, the bench lean owns the
+   bench's, a tile owns its own translate3d) and the chips' transform from one
+   rAF loop. What IS here: the three game-local layers (the pinned wheel under
+   the board, the punch ring around it, the full-stage glitch wash) and the
+   reduced-motion body of a punch (a box-shadow bloom). Every layer is inside
+   the stage (.suspended freezes it) and pointer-events:none is LAW. */
+@property --de-p-pa{syntax:'<number>';inherits:false;initial-value:.3}
+@property --de-p-ga{syntax:'<number>';inherits:false;initial-value:.45}
+@property --de-p-spindir{syntax:'<number>';inherits:false;initial-value:1}
+/* the juiced chips: a punch is a transform on the chip itself (nothing else in
+   the HUD transforms them); the TEXT never changes (ledger honest) */
+.g-de-chip.g-de-score,.g-de-chip.g-de-depth,.g-de-chip.g-de-chain{will-change:transform;transform-origin:50% 50%}
+/* the bloom: reduced motion's whole punch, and a flash under normal motion
+   when the chips are punched while still. Snaps on, eases off on the chip's
+   own .3s box-shadow transition. */
+.g-de-chip.g-de-p-bloom{transition-duration:.3s,.3s,.05s;
+  box-shadow:0 0 0 1px color-mix(in srgb, var(--pink), transparent 20%), 0 0 22px color-mix(in srgb, var(--pink), transparent 35%)}
+/* THE PINNED WHEEL (rung 2): inside the bench, BELOW the board (z0 against the
+   board's z1), centred by margins so the spin keyframe owns the transform, soft
+   radial mask so it reads as light behind the square and not a poster; pressure.js
+   sets the image once per class and --de-p-pa / --de-p-spin by heat. Off by
+   default; .is-on fades it in over 1.2s; .is-gold tints it for the bell. */
+.g-de-p-pin{position:absolute;left:50%;top:50%;z-index:0;pointer-events:none;
+  width:calc(var(--de-board) * 1.45);height:calc(var(--de-board) * 1.45);
+  margin:calc(var(--de-board) * -.725) 0 0 calc(var(--de-board) * -.725);
+  opacity:0;transition:opacity 1.2s ease,filter 1.2s ease;will-change:transform,opacity;
+  background-position:center;background-size:contain;background-repeat:no-repeat;
+  background-image:conic-gradient(from 0deg, color-mix(in srgb, var(--pink), transparent 45%), transparent 25%,
+    color-mix(in srgb, var(--lav), transparent 50%) 50%, transparent 75%, color-mix(in srgb, var(--pink), transparent 45%));
+  mix-blend-mode:screen;
+  -webkit-mask-image:radial-gradient(circle at 50% 50%, #000 38%, transparent 70%);
+  mask-image:radial-gradient(circle at 50% 50%, #000 38%, transparent 70%);
+  animation:g-de-p-spin var(--de-p-spin,30s) linear infinite}
+.g-de-p-pin.is-on{opacity:var(--de-p-pa,.3)}
+.g-de-p-pin.is-gold{filter:sepia(.9) saturate(2) hue-rotate(-14deg) brightness(1.1)}
+@keyframes g-de-p-spin{to{transform:rotate(calc(var(--de-p-spindir,1) * 360deg))}}
+/* THE RING: a box-shadow bloom hugging the board (z2, under the casino's
+   overlay). .is-hit snaps it on and it eases out; .is-deep is the new-deepest /
+   royal weight; .is-gold recolours it for the bell and the ceiling. */
+.g-de-p-ring{position:absolute;left:50%;top:50%;z-index:2;pointer-events:none;display:block;
+  width:calc(var(--de-board) + 14px);height:calc(var(--de-board) + 14px);
+  transform:translate(-50%,-50%);border-radius:17px;opacity:0;transition:opacity .5s ease;
+  --de-p-rc:var(--pink);
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--de-p-rc), transparent 30%), 0 0 34px color-mix(in srgb, var(--de-p-rc), transparent 45%),
+    inset 0 0 40px color-mix(in srgb, var(--de-p-rc), transparent 60%)}
+.g-de-p-ring.is-hit{opacity:.75;transition-duration:.04s}
+.g-de-p-ring.is-deep{opacity:1;
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--de-p-rc), transparent 15%), 0 0 60px color-mix(in srgb, var(--de-p-rc), transparent 30%),
+    inset 0 0 70px color-mix(in srgb, var(--de-p-rc), transparent 45%)}
+.g-de-p-ring.is-gold{--de-p-rc:var(--gold)}
+/* THE GLITCH WASH (rung 4): the dtrh drain look, game-local because the engine's
+   drain element is index.js's and has no luminosity blend, no dark base and no
+   shudder. One node, full stage, over the bench (z1, appended after it) and under
+   the HUD; the pool image arrives as an inline background-image; the dark base +
+   luminosity blend keep it drained, not a slideshow. Blur-behind ONLY while lit
+   (.is-on) so a resting layer costs nothing; the shudder is steps(2) hue + slip on
+   THIS layer, never on the board. */
+.g-de-p-glitch{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:0;
+  transition:opacity .45s ease;will-change:opacity;
+  background-color:#0a0410;background-position:center;background-size:cover;background-repeat:no-repeat;
+  background-blend-mode:luminosity}
+.g-de-p-glitch.is-on{opacity:var(--de-p-ga,.45);backdrop-filter:blur(5px) saturate(.8);-webkit-backdrop-filter:blur(5px) saturate(.8)}
+.g-de-p-glitch.is-shudder{animation:g-de-p-shudder .16s steps(2) infinite}
+@keyframes g-de-p-shudder{
+  0%{transform:translate(0,0);filter:none}
+  50%{transform:translate(-1.2%,0);filter:hue-rotate(35deg) saturate(1.5)}
+  100%{transform:translate(1.2%,0);filter:hue-rotate(-25deg)}}
+/* reduced motion (both gates): the spin and the shudder die with the sheet's
+   animation kill above; the pin sits dimmer and still, the glitch keeps its veil
+   (a still), the ring and the chip bloom are transitions and survive - they ARE
+   the punch under reduced motion. */
+html.arc-reduced .g-de-p-pin.is-on{opacity:calc(var(--de-p-pa,.3) * .6)}
+html.arc-reduced .g-de-p-glitch.is-on{backdrop-filter:none;-webkit-backdrop-filter:none}
+@media (prefers-reduced-motion: reduce){
+  .g-de-p-pin.is-on{opacity:calc(var(--de-p-pa,.3) * .6)}
+  .g-de-p-glitch.is-on{backdrop-filter:none;-webkit-backdrop-filter:none}
+}
 `;
 
 /** Inject once per document. No-op headless (the DOM double has no head). */

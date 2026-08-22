@@ -55,6 +55,21 @@
  * board is not the player's any more (pause, suspend, resurface, new dive,
  * bell, end, destroy). Fast play now flows instead of hitching.
  *
+ * PASS 4 (the owner's third note): THE PRESSURE - the CCP effects ladder and
+ * the Balatro tremor live in pressure.js, DECK III. This file owns none of
+ * that look; it owns the WIRING. The deck is built after the casino and the
+ * trickster, handed the stage/bench/board, the four HUD chips, a read-only
+ * view of the engine (fire/sustain/stop plus a READ of the clamped channels),
+ * a live reader over the player's asset pool and the game's own pause-aware
+ * timer registry; it is then told everything that happens, at the same call
+ * sites the casino is told (slide, merge, newDeepest, exhale, resurface,
+ * ceiling, bell, dimOut, stop) plus ONE that is its own: setDepth, from heat(),
+ * because the RUNG rides the deepest tile while the MAGNITUDE rides heat.
+ * THE DEV SEAM: `ctx.dev === true` (only the scratch rig sets it) lets a spec
+ * carry `devDeepest` 2..11, and every dive then OPENS on board.js's pure
+ * devBoard ladder instead of the two-tile deal - so a rung can be looked at
+ * without being played to. Nothing reads it when ctx.dev is absent.
+ *
  * LAWS THIS FILE KEEPS:
  *   I   the ledger is honest - score, chain, depth, resurfaces and the clock
  *       are computed here from board.js and never routed through a deck. The
@@ -71,7 +86,8 @@
  * (C#), the tier (registry + meta), effect strengths (the engine's ceiling
  * rule), tile transforms and transitions (style.js - we only ever set the
  * --r/--c vars), the lighting (casino.js) and the lies (trickster.js). The
- * pure model is board.js, the seeded plan schedule.js, the composite grade.js.
+ * pure model is board.js, the seeded plan schedule.js, the composite grade.js,
+ * and the ladder + the tremor pressure.js.
  *
  * ENGINE TARGETING NOTE: glitch_swap adds `.ae-glitch{position:relative;
  * animation}` and row_drift writes an inline transform on its targets, so
@@ -83,8 +99,9 @@
 import { injectDeepEndStyle } from './style.js';
 import { createDeCasino } from './casino.js';
 import { createDeTrickster } from './trickster.js';
+import { createDePressure } from './pressure.js';
 import {
-  createBoard, move as boardMove, spawn as boardSpawn, openingSpawn, drain,
+  createBoard, move as boardMove, spawn as boardSpawn, openingSpawn, devBoard, drain,
   isLocked, deepest as boardDeepest, occupancy, strainPair, serialize, TIER_MAX,
 } from './board.js';
 import {
@@ -211,6 +228,10 @@ export default {
     effectsConsumed: [
       'wash', 'ambient_field', 'sub_flash', 'row_drift', 'glitch_swap',
       'audio_trigger', 'gif_burst', 'flash_burst', 'bubble_field',
+      /* pass 4 - THE PRESSURE (pressure.js): the CRT ladder and the gif rain
+       * a new deepest tier brings down. Everything else it asks for is
+       * already in the nine above. */
+      'crt', 'gif_rain',
     ],
     /* 24 loops + 12 stills: the tile faces (one per tier, pass 2) and the
      * reward currents; tiles are DOM, nothing is drawn into canvas, so the
@@ -271,6 +292,11 @@ export default {
 
     let casino = null;
     let trickster = null;
+    let pressure = null;                   // pass 4 - THE PRESSURE (the ladder + the tremor)
+    /* THE DEV SEAM (pass 4): `?deep=N` in the scratch rig. 0 = off, and it is
+     * only ever non-zero when ctx.dev === true. The shell never sets ctx.dev,
+     * so production is byte-identical to a tree without this line. */
+    let devDeepest = 0;
 
     /* ---- the ledger (Law I: computed here, never by a deck) ------------- */
     let score = 0;
@@ -401,6 +427,29 @@ export default {
       try { return ctx.engine.sustain(kind, opts || {}) || null; } catch (e) { return null; }
     }
     function stopSafe(kind) { try { if (ctx.engine) ctx.engine.stop(kind); } catch (e) { /* noop */ } }
+    /** The engine, as a deck sees it: the three welded primitives plus the
+     *  READ of the clamped channel vector (THE CEILING RULE - a deck asks, it
+     *  never raises). Every member is null-safe and may answer null. */
+    const deckEngine = {
+      fire: fireSafe,
+      sustain: sustainSafe,
+      stop: stopSafe,
+      channels: () => {
+        try { return (ctx.engine && typeof ctx.engine.channels === 'function') ? ctx.engine.channels() : null; }
+        catch (e) { return null; }
+      },
+    };
+    /** The player's own media, as a deck sees it. The pool lands ASYNC (a
+     *  claim resolves well after start()), so a deck must be handed a LIVE
+     *  reader rather than the pool object, or it captures null forever. */
+    const deckAssets = {
+      next(kind) {
+        try { return (pool && typeof pool.next === 'function') ? (pool.next(kind) || null) : null; }
+        catch (e) { return null; }
+      },
+    };
+    /** bgIntensity 0 is the player's exit: read it LIVE, never a launch snapshot. */
+    function capsArmed() { return !(ctx.caps && Number(ctx.caps.bgIntensity) === 0); }
     /** A cue through the engine; level never above the tier's audio ceiling. */
     function tick(name, level, extra) {
       const ceil = plan ? plan.audioCeil : 0.45;
@@ -410,7 +459,7 @@ export default {
 
     /* ---- the decks, null-safe ------------------------------------------- */
     function deck(which, method, ...args) {
-      const d = which === 'casino' ? casino : trickster;
+      const d = which === 'casino' ? casino : which === 'pressure' ? pressure : trickster;
       if (!d || typeof d[method] !== 'function') return undefined;
       try { return d[method](...args); } catch (e) { say(which + '.' + method + ' threw: ' + ((e && e.message) || e)); return undefined; }
     }
@@ -420,12 +469,18 @@ export default {
      * ==================================================================== */
     function heat() {
       if (!board || !plan) return;
-      const depthLine = depthLineFor(boardDeepest(board));
+      const deepTier = boardDeepest(board);
+      const depthLine = depthLineFor(deepTier);
       let h = heatCurve(depthLine, tier);
       if (exhaleOn) h *= plan.exhaleHeatMult;
       currentHeat = h;
       try { if (ctx.engine) ctx.engine.setHeat(h); } catch (e) { /* engine is optional */ }
       deck('casino', 'setHeat', h);
+      deck('pressure', 'setHeat', h);
+      /* THE RUNG rides the deepest tile, the MAGNITUDE rides heat - and heat()
+       * is the one place both are known, so the pressure deck learns the depth
+       * on every recompute (every move, every dive, every exhale edge). */
+      deck('pressure', 'setDepth', deepTier, depthLine);
       rowDriftCheck(depthLine);
     }
 
@@ -958,6 +1013,7 @@ export default {
         wakeTimer = after(PLAYTEST.LAND_MS, () => { wakeTimer = 0; for (const c of wake) c.classList.remove('is-wake'); });
       }
       deck('casino', 'slide', dir, moved, maxDist);
+      deck('pressure', 'slide', dir, moved, maxDist);
       tick('slide', PLAYTEST.SLIDE_LV_BASE + PLAYTEST.SLIDE_LV_STEP * Math.min(4, moved), {
         pitch: 1 - PLAYTEST.SLIDE_PITCH_DROP * depthLineFor(boardDeepest(board)),
       });
@@ -966,8 +1022,16 @@ export default {
       chain = result.merges.length;
       let deepestMergeEl = null;
       let deepestMergeTier = 0;
+      /* Law I is untouched: `score` still moves in ONE place (below, by
+       * result.score). This walks the same arithmetic board.js already did -
+       * a merge pays 2^newTier - purely so a deck can be told what a single
+       * merge was worth and what the running total will read. The two agree
+       * by construction: result.score IS the sum of these. */
+      let runScore = score;
       for (const m of result.merges) {
         merges += 1;
+        const deltaScore = Math.pow(2, m.tier);
+        runScore += deltaScore;
         const tile = board.tiles.find((x) => x.id === m.id);
         const node = tile ? tileEl(tile, false) : null;
         if (node) {
@@ -977,6 +1041,7 @@ export default {
           after(moveMs + 320, () => node.classList.remove('is-merged'));
         }
         deck('casino', 'merge', { tier: m.tier, link: m.link, tileEl: node });
+        deck('pressure', 'merge', { tier: m.tier, link: m.link, tileEl: node, deltaScore, score: runScore });
         // one chime family, a semitone DOWN per link: you hear yourself sinking
         tick('streak', 0.3 + 0.04 * m.tier, { pitch: Math.pow(2, -m.link / 12) });
         if (m.tier > deepestMergeTier) { deepestMergeTier = m.tier; deepestMergeEl = node; }
@@ -1074,6 +1139,7 @@ export default {
 
     function onNewDeepest(d, node) {
       deck('casino', 'newDeepest', d, node);
+      deck('pressure', 'newDeepest', d, node);
       if (d >= TIER_MAX) return;             // the ceiling has its own ceremony
       if (d >= 3) {
         try { ctx.ceremonies.stamp({ text: tierName(d), target: bench }); } catch (e) { /* noop */ }
@@ -1153,12 +1219,14 @@ export default {
       exhaleOn = true;
       setPhase(basePhase());
       deck('casino', 'exhale', true);
+      deck('pressure', 'exhale', true);
       msg('de_exhale_line', DE_LEX.de_exhale_line);
       tick('whisper', 0.3);
       heat();
       after(plan.exhaleMs, () => {
         exhaleOn = false;
         deck('casino', 'exhale', false);
+        deck('pressure', 'exhale', false);
         if (!ended) setPhase(basePhase());
         heat();
       });
@@ -1172,6 +1240,7 @@ export default {
       resurfaces += 1;
       bestDeepest = Math.max(bestDeepest, diveDeepest);
       deck('casino', 'resurface');
+      deck('pressure', 'resurface');
       try { ctx.ceremonies.stamp({ text: t('de_stamp_resurface', DE_LEX.de_stamp_resurface), tone: 'pink', target: bench }); } catch (e) { /* noop */ }
       msg('de_resurface_line', DE_LEX.de_resurface_line);
       tick('stamp_bad', 0.3);                      // the loss: a muted thud, never silence
@@ -1204,7 +1273,12 @@ export default {
       exhalePending = false;
       exhaleOn = false;
       lastStrainKey = '';
-      for (const tile of openingSpawn(board, plan.spawnTable)) tileEl(tile, true);
+      /* THE DEV SEAM: with ?deep=N the dive OPENS at tier N instead of being
+       * played there. Off (devDeepest 0) in every build the shell starts. */
+      const opening = devDeepest > 0
+        ? devBoard(board, devDeepest, board.rng)
+        : openingSpawn(board, plan.spawnTable);
+      for (const tile of opening) tileEl(tile, true);
       diveDeepest = boardDeepest(board);
       bestDeepest = Math.max(bestDeepest, diveDeepest);
       chain = 0;
@@ -1225,6 +1299,7 @@ export default {
       survived = true;
       setPhase('ceiling');
       deck('casino', 'ceiling');
+      deck('pressure', 'ceiling');
       try { ctx.ceremonies.reward('jackpot', { intensity: 1, target: boardEl, text: t('de_stamp_ceiling', DE_LEX.de_stamp_ceiling) }); } catch (e) { /* noop */ }
       try { ctx.ceremonies.stamp({ text: t('de_stamp_ceiling', DE_LEX.de_stamp_ceiling), target: bench }); } catch (e) { /* noop */ }
       msg('de_ceiling_line', DE_LEX.de_ceiling_line);
@@ -1270,6 +1345,7 @@ export default {
       survived = !isLocked(board);
       bestDeepest = Math.max(bestDeepest, diveDeepest);
       deck('casino', 'dimOut');
+      deck('pressure', 'dimOut');
       try { ctx.ceremonies.stamp({ text: t('de_stamp_bell', DE_LEX.de_stamp_bell), tone: 'pink', target: bench }); } catch (e) { /* noop */ }
       msg('de_bell_line', DE_LEX.de_bell_line);
       tick('stamp', 0.6);
@@ -1293,6 +1369,7 @@ export default {
       clearHint();
       deck('trickster', 'stop');
       deck('casino', 'stop');
+      deck('pressure', 'stop');
       paintHud();                                  // truth on every chip, whatever the trickster left
       for (const tile of board.tiles) { const node = tileEls.get(tile.id); if (node) paintName(node, tile); }
 
@@ -1460,6 +1537,7 @@ export default {
           bellOn = true;
           setPhase(basePhase());
           deck('casino', 'bell', true);
+          deck('pressure', 'bell', true);
           msg('de_bell_warn', DE_LEX.de_bell_warn);
           tick('sting', 0.4);
         }
@@ -1501,6 +1579,14 @@ export default {
         ceilingHold = false;
         budgetMs = endless ? Infinity : Math.max(20000, (Number(spec.timeBudgetSec) || 300) * 1000);
         retake = endless ? false : !!spec.retake;
+        /* `ctx.dev` is the ONE gate, and only the scratch rig sets it. Without
+         * it a devDeepest on the spec is read by nothing at all. */
+        devDeepest = 0;
+        if (ctx.dev === true) {
+          const want = Math.round(Number(spec.devDeepest));
+          if (Number.isFinite(want) && want >= 2 && want <= TIER_MAX) devDeepest = want;
+          if (devDeepest) say('DEV: opening every dive at tier ' + devDeepest);
+        }
         reduced = probeReduced(ctx);
         n = sizeFromSetting(ctx.settings ? ctx.settings.de_board_size : '4x4');
         {
@@ -1561,6 +1647,27 @@ export default {
             log: say,
           });
         } catch (e) { trickster = null; say('trickster refused: ' + ((e && e.message) || e)); }
+        /* DECK III - THE PRESSURE. Built last (it layers OVER the casino's
+         * light) and handed the game's own DOM, the game's pause-aware timer
+         * registry and a READ-ONLY view of the engine: it may spend the
+         * channels, never raise them. */
+        try {
+          pressure = createDePressure({
+            seed,
+            gradeTier: tier,
+            reduced,
+            motionLevel: motionLevelOf(),
+            stage,
+            bench,
+            board: boardEl,
+            hud: { score: scoreChip, depth: depthChip, chain: chainChip, clock: clockChip },
+            engine: deckEngine,
+            assets: deckAssets,
+            timers: deckTimers,
+            capsOk: capsArmed,
+            log: say,
+          });
+        } catch (e) { pressure = null; say('pressure refused: ' + ((e && e.message) || e)); }
 
         bindInput();
         claimAssets();
@@ -1584,6 +1691,7 @@ export default {
           setPhase(basePhase());
           msg('de_play_hint', DE_LEX.de_play_hint);
           deck('casino', 'start');
+          deck('pressure', 'start');
           deck('trickster', 'start');
           openAmbience();
           // the water opens: from here a press against the lock is REMEMBERED
@@ -1607,6 +1715,7 @@ export default {
         // a frozen class holds no hand and remembers no press
         clearGrab();
         clearQueue();
+        deck('pressure', 'pause');
         if (stage) stage.classList.add('suspended');
       },
 
@@ -1614,6 +1723,7 @@ export default {
         if (!paused) return;
         paused = false;
         if (stage) stage.classList.remove('suspended');
+        deck('pressure', 'resume');
         lastTick = Date.now();
         const q = deferred.splice(0);
         for (const fn of q) run(fn);
@@ -1637,6 +1747,8 @@ export default {
         trickster = null;
         try { if (casino) casino.destroy(); } catch (e) { /* noop */ }
         casino = null;
+        try { if (pressure) pressure.destroy(); } catch (e) { /* noop */ }
+        pressure = null;
         if (pool && typeof pool.release === 'function') { try { pool.release(); } catch (e) { /* noop */ } }
         pool = null;
         tileEls.clear();
@@ -1697,6 +1809,8 @@ export default {
           liveTileEls: tileEls.size,
           casino: casino && typeof casino.diagnostics === 'function' ? (() => { try { return casino.diagnostics(); } catch (e) { return null; } })() : null,
           trickster: trickster && typeof trickster.diagnostics === 'function' ? (() => { try { return trickster.diagnostics(); } catch (e) { return null; } })() : null,
+          pressure: pressure && typeof pressure.diagnostics === 'function' ? (() => { try { return pressure.diagnostics(); } catch (e) { return null; } })() : null,
+          devDeepest,
           stage, boardEl, well, msgEl, endEl, depthChip, clockChip, scoreChip, chainChip,
         };
       },
