@@ -42,6 +42,7 @@ internal static class OverlayWindowProbe
     private const uint WsExTopmost = 0x00000008;
     private const int GwlExstyle = -20;
     private const uint LwaAlpha = 0x00000002;
+    private const nint HwndNotopmost = -2;
     private const uint SwpNosize = 0x0001;
     private const uint SwpNomove = 0x0002;
     private const uint SwpNoactivate = 0x0010;
@@ -97,6 +98,31 @@ internal static class OverlayWindowProbe
 
         return (rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
     }
+
+    /// <summary>Demotes a live window out of the topmost band, which is what another process
+    /// winning the same adjudication does to it. It must go through SetWindowPos(HWND_NOTOPMOST):
+    /// the topmost bit is z-order state the OS owns, and clearing it with SetWindowLongPtr does
+    /// NOT take — measured here, which is why this helper exists instead of a style write.</summary>
+    internal static void DemoteFromTopmost(nint window)
+    {
+        if (!WindowsHost || window == 0) return;
+        SetWindowPos(window, HwndNotopmost, 0, 0, 0, 0, SwpNomove | SwpNosize | SwpNoactivate);
+    }
+
+    /// <summary>Clears extended-style bits the OS does let a caller write directly.</summary>
+    internal static uint ClearExStyle(nint window, uint bits)
+    {
+        if (!WindowsHost || window == 0) return 0;
+        var before = (uint)GetWindowLongPtrW(window, GwlExstyle);
+        SetWindowLongPtrW(window, GwlExstyle, (nint)(before & ~bits));
+        return before;
+    }
+
+    /// <summary>WS_EX_TOPMOST, for tests that need to strip exactly the re-assertable bit.</summary>
+    internal static uint TopmostBit => WsExTopmost;
+
+    /// <summary>WS_EX_LAYERED, the bit no re-assertion can restore.</summary>
+    internal static uint LayeredBit => WsExLayered;
 
     internal static uint ExStyleOf(nint window) =>
         WindowsHost && window != 0 ? (uint)GetWindowLongPtrW(window, GwlExstyle) : 0;

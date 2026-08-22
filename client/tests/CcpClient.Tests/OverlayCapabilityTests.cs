@@ -35,6 +35,56 @@ namespace CcpClient.Tests;
 [Collection(nameof(RealDesktopCollection))]
 public class OverlayCapabilityTests
 {
+    /// <summary>
+    /// A stripped WS_EX_TOPMOST must be re-asserted, and a stripped WS_EX_LAYERED must still refuse.
+    ///
+    /// <para>This is the fact behind the four-surface coexistence run going red in a full suite pass
+    /// while passing in isolation. Topmost is not a write that stays written: another process
+    /// asserting it can leave this window without the bit between SetWindowPos returning TRUE and
+    /// the very next read-back. Present used to read the style once and refuse, returning BEFORE the
+    /// bounded re-assertion this class already owned. The requirement is unchanged — every required
+    /// bit must be present in the OS's own read-back — so the second leg matters as much as the
+    /// first: a bit that no re-assertion can restore must still fail, or the fix would have been a
+    /// weakened check wearing a loop.</para>
+    /// </summary>
+    [Fact]
+    public void AStrippedTopmostIsReasserted_ButAStrippedLayeredStillRefuses()
+    {
+        using var overlay = new Win32OverlayPresence();
+        var bounds = new OverlayBounds(120, 120, 220, 160);
+        var first = overlay.Present(new OverlaySurfaceRequest(bounds, 0.6, ClickThrough: true));
+
+        if (!OverlayWindowProbe.MachineHasInteractiveDesktop)
+        {
+            Assert.IsNotType<CapabilityState.Available>(first);
+            return;
+        }
+
+        Assert.IsType<CapabilityState.Available>(first);
+        var window = overlay.NativeHandles.Window;
+
+        // Another process wins the topmost adjudication: the bit is gone, everything else intact.
+        OverlayWindowProbe.DemoteFromTopmost(window);
+        Assert.True((OverlayWindowProbe.ExStyleOf(window) & OverlayWindowProbe.TopmostBit) == 0,
+            "the strip did not take, so this fact would prove nothing");
+
+        var recovered = overlay.Present(new OverlaySurfaceRequest(bounds, 0.6, ClickThrough: true));
+        Assert.True(recovered is CapabilityState.Available,
+            "a stripped topmost bit must be re-asserted rather than refused, because that is the state a "
+            + "full suite pass and any real desktop with another topmost window both produce: "
+            + PointerSurfaceObservations.Describe(recovered));
+        Assert.True((OverlayWindowProbe.ExStyleOf(window) & OverlayWindowProbe.TopmostBit) != 0,
+            "Present returned Available while the OS still holds no topmost bit for the window");
+
+        // The other half: a bit no re-assertion can restore must still refuse, so the loop above
+        // cannot be mistaken for a relaxed requirement.
+        OverlayWindowProbe.ClearExStyle(window, OverlayWindowProbe.LayeredBit);
+        var refused = overlay.Present(new OverlaySurfaceRequest(bounds, 0.6, ClickThrough: true));
+        Assert.True(refused is not CapabilityState.Available,
+            "a window stripped of WS_EX_LAYERED is not the window that was asked for and must refuse: "
+            + PointerSurfaceObservations.Describe(refused));
+    }
+
     [Fact]
     public void TheHitTestOracle_CanTellAClickThroughWindowFromAnOpaqueOne()
     {

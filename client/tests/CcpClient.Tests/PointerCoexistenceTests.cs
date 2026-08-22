@@ -32,11 +32,21 @@ public class PointerCoexistenceTests
         // true of an overlay that was never presented.
         var run = PointerSurfaceObservations.Coexistence;
 
-        Assert.Equal(run.MachineHasInteractiveDesktop, run.OverlayPresented);
-        Assert.Equal(run.MachineHasInteractiveDesktop, run.CardTookTheInput);
+        // Each leg carries the refusal the OS actually gave. The conditions are unchanged; what
+        // changed is that a red no longer reads "Expected: True, Actual: False" and stop there.
+        // Present and Show both return a fully-worded Unavailable naming the exact round-trip that
+        // refused and its last-error, and this run used to discard both.
+        Assert.True(run.OverlayPresented == run.MachineHasInteractiveDesktop,
+            $"the overlay did not reach the desktop beside the other three: "
+            + $"{PointerSurfaceObservations.Describe(run.OverlayPresentState)}. Every overlay reading below is "
+            + "then a reading of a surface that was never presented");
+        Assert.True(run.CardTookTheInput == run.MachineHasInteractiveDesktop,
+            $"the input card did not take the input beside the other three: {run.CardBefore}. It is read "
+            + "through the probe, not the capability, so this is the OS's own answer");
         Assert.True(run.VideoShowedAPicture == run.MachineHasInteractiveDesktop,
-            "the video surface did not hold a decoded picture before the pointer target existed, so the reading "
-            + "taken while one was up says nothing about coexistence");
+            $"the video surface did not hold a decoded picture before the pointer target existed, so the reading "
+            + $"taken while one was up says nothing about coexistence: "
+            + $"{PointerSurfaceObservations.Describe(run.VideoFirstShowState)}");
         Assert.True(run.PointerEarnedAvailableBesideThem == run.MachineHasInteractiveDesktop,
             $"the pointer surface did not earn Available beside the other three: "
             + $"{PointerSurfaceObservations.Describe(run.PointerOpenState)}. Coexistence would then be the new "

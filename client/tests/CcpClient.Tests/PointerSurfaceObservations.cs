@@ -527,8 +527,10 @@ internal static class PointerSurfaceObservations
     internal sealed record CoexistenceRun(
         bool MachineHasInteractiveDesktop,
         bool OverlayPresented,
+        CapabilityState OverlayPresentState,
         bool CardTookTheInput,
         bool VideoShowedAPicture,
+        CapabilityState VideoFirstShowState,
         OverlayReading OverlayBefore,
         OverlayReading OverlayDuringOpen,
         OverlayReading OverlayDuringMove,
@@ -662,8 +664,10 @@ internal static class PointerSurfaceObservations
         return new CoexistenceRun(
             MachineHasInteractiveDesktop: OverlayWindowProbe.MachineHasInteractiveDesktop,
             OverlayPresented: presented is CapabilityState.Available,
+            OverlayPresentState: presented,
             CardTookTheInput: cardTookTheInput,
             VideoShowedAPicture: firstShow is CapabilityState.Available,
+            VideoFirstShowState: firstShow,
             OverlayBefore: overlayBefore,
             OverlayDuringOpen: overlayDuringOpen,
             OverlayDuringMove: overlayDuringMove,

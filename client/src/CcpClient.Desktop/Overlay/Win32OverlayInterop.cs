@@ -223,6 +223,9 @@ internal static class Win32OverlayInterop
     [DllImport("user32.dll")]
     public static extern nint GetWindow(nint window, uint command);
 
+    /// <summary>GW_OWNER: a window owned by a non-topmost owner cannot hold the topmost band.</summary>
+    public const uint GwOwner = 4;
+
     [DllImport("user32.dll")]
     public static extern nint GetForegroundWindow();
 

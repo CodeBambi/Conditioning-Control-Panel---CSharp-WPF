@@ -501,15 +501,47 @@ public sealed class Win32OverlayPresence : IOverlayPresence
                 + $"(opacity {request.Opacity:0.###}); the surface would not be drawn at the requested strength");
         }
 
+        // WS_EX_TOPMOST IS NOT A WRITE, IT IS A CLAIM THE OS KEEPS RE-ADJUDICATING, and this
+        // read-back used to treat it as a write. SetWindowPos(HWND_TOPMOST) returns TRUE and the
+        // bit is genuinely set, then ANOTHER process asserting topmost can leave this window
+        // without it before the very next instruction reads it. Measured, not theorised: the whole
+        // four-surface coexistence run reds in a full suite pass with exStyle 0x80800A0 — every
+        // requested bit but 0x8 — while the identical run PASSES in isolation, the difference
+        // being the twenty-odd real-desktop classes ahead of it creating and destroying topmost
+        // windows of their own. It reproduces off-suite too, whenever any other topmost window
+        // (a screen recorder, a chat overlay, a game bar) wins the same adjudication.
+        //
+        // The re-assertion mechanism already existed for exactly this — Raise() is WPF's
+        // ForceTopmost (FlashService.cs:3865-3868) — but it lived only in the hit-test loop, which
+        // this refusal returned before ever reaching. So the FACT is unchanged and still absolute:
+        // every required bit must be present in the OS's own read-back. What changed is that the
+        // topmost claim is now re-asserted the bounded way this class already knows it must be,
+        // instead of being read once and abandoned.
         var exStyle = (uint)Win32OverlayInterop.GetWindowLongPtrW(window, Win32OverlayInterop.GwlExstyle);
         var required = Win32OverlayInterop.WsExLayered | Win32OverlayInterop.WsExToolwindow
             | Win32OverlayInterop.WsExNoactivate | Win32OverlayInterop.WsExTopmost;
+        var styleAttempts = 1;
+        while ((exStyle & required) != required
+            && (exStyle & required & ~Win32OverlayInterop.WsExTopmost) == (required & ~Win32OverlayInterop.WsExTopmost)
+            && styleAttempts < MaxRaiseAttempts)
+        {
+            // Only the topmost bit is re-assertable this way; a window missing LAYERED, TOOLWINDOW
+            // or NOACTIVATE is genuinely not the window that was asked for, and loops out at once.
+            Raise();
+            styleAttempts++;
+            exStyle = (uint)Win32OverlayInterop.GetWindowLongPtrW(window, Win32OverlayInterop.GwlExstyle);
+        }
+
         if ((exStyle & required) != required)
         {
             return Unavailable(OverlayReasonCodes.OverlayStyleRefused,
                 $"the extended-style read-back for window 0x{window:X} is 0x{exStyle:X}, missing 0x{required & ~exStyle:X} "
-                + "of WS_EX_LAYERED|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_TOPMOST; the window is not the window "
-                + "that was asked for, whatever the write calls returned");
+                + "of WS_EX_LAYERED|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_TOPMOST after "
+                + $"{styleAttempts} topmost assertion(s) (last SetWindowPos(HWND_TOPMOST) "
+                + $"{(LastRaiseSucceeded ? "SUCCEEDED" : $"FAILED, last-error {LastRaiseError}")}, owner 0x"
+                + $"{Win32OverlayInterop.GetWindow(window, Win32OverlayInterop.GwOwner):X}, desktop foreground 0x"
+                + $"{Win32OverlayInterop.GetForegroundWindow():X}); the window is not the "
+                + "window that was asked for, whatever the write calls returned");
         }
 
         var zOrder = ReadZOrder(window);
@@ -831,10 +863,23 @@ public sealed class Win32OverlayPresence : IOverlayPresence
         return Win32OverlayInterop.DefWindowProcW(window, message, wParam, lParam);
     }
 
-    /// <summary>WPF's <c>ForceTopmost</c>, verbatim in effect (<c>FlashService.cs:3865-3868</c>).</summary>
-    private void Raise() => Win32OverlayInterop.SetWindowPos(
-        _window, Win32OverlayInterop.HwndTopmost, 0, 0, 0, 0,
-        Win32OverlayInterop.SwpNomove | Win32OverlayInterop.SwpNosize | Win32OverlayInterop.SwpNoactivate);
+    /// <summary>WPF's <c>ForceTopmost</c>, verbatim in effect (<c>FlashService.cs:3865-3868</c>).
+    /// The OS's answer is RECORDED rather than discarded: "the bit is still missing" and "the call
+    /// that would set it is being refused" are different diagnoses with different fixes, and a void
+    /// Raise cannot tell them apart.</summary>
+    private void Raise()
+    {
+        LastRaiseSucceeded = Win32OverlayInterop.SetWindowPos(
+            _window, Win32OverlayInterop.HwndTopmost, 0, 0, 0, 0,
+            Win32OverlayInterop.SwpNomove | Win32OverlayInterop.SwpNosize | Win32OverlayInterop.SwpNoactivate);
+        LastRaiseError = LastRaiseSucceeded ? 0 : Marshal.GetLastWin32Error();
+    }
+
+    /// <summary>Whether the most recent topmost assertion was accepted by the OS.</summary>
+    public bool LastRaiseSucceeded { get; private set; }
+
+    /// <summary>The last-error from the most recent REFUSED topmost assertion, or 0.</summary>
+    public int LastRaiseError { get; private set; }
 
     /// <summary>
     /// WPF's <c>ApplyClickability</c> (<c>FlashService.cs:3660-3673</c>): the flag is written to the
