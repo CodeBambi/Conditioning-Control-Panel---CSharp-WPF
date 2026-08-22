@@ -113,6 +113,34 @@ reproduces this at all.
 
 ---
 
+## Answered 2026-08-23
+
+Four decisions the board had been carrying, answered in one pass. Each is recorded on its row; this is the
+derived copy.
+
+**Haptics — admit BOTH provider routes.** Buttplug.io through Intiface Central and Lovense through
+Connect/Remote. Both are clients of a separate server the user installs, so no driver or kernel boundary
+opens. Buttplug brings one NuGet package the shipping app already references; Lovense brings none at all.
+The owner can run headed device checks, so the wire is proven here and the device result is reported back —
+the row does not close on a build.
+
+**For You Feed gaze — research first, admit later.** The third-party engine is unnamed, and naming it is a
+decision about a biometric and network boundary. A comparison of fully-local candidates is gathered as
+EVIDENCE; no dependency and no code until the provider is named. The 2026-08-22 decision stands: both
+engines, user-selectable, current consent, separate calibration, no silent fallback.
+
+**Hosted-page motion — port `MotionLevel` rather than force the flag.** The obvious fix was an accessibility
+regression: forcing `--force-prefers-no-reduced-motion` with no user-facing control overrides an OS
+preference a user cannot then restore, which this port's own motion-inheritance seam names as the betrayal
+direction. Upstream avoids that by owning a `MotionLevel` setting and driving the flag from it. Default is
+`Full`, matching upstream.
+
+**Citation inventory — build the tool before doing the work.** 297 entries and 81 tier-1 verdicts are not a
+slice; a regenerate mode that recomputes `changedAtSync` mechanically turns the bulk into tooling and leaves
+only the verdicts as judgment.
+
+---
+
 ## Not a decision, and I should not have listed it as one
 
 **Subliminals keeping its own settings file.** I listed this beside blocking decisions in roughly fifteen
