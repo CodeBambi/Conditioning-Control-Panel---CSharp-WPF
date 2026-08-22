@@ -485,11 +485,39 @@ namespace ConditioningControlPanel.Services
 
                 // Server healed a divergent auth token — store immediately. Only
                 // present on mismatch; not cached, so no stale replay (BUG-7DCJHDP3JZ).
+                //
+                // BUT only when the server resolved this Discord account to the SAME unified
+                // record this client is operating as. The heal is keyed to the discord_index
+                // record; on a duplicate-identity account (one record per provider, never
+                // merged) that is a DIFFERENT record than Settings.UnifiedId. Adopting its
+                // token here silently swaps out a token that matched our record for one that
+                // doesn't — from then on every request that sends unified_id in the body
+                // (sync, heartbeat, export-data, delete-account) 401s "Invalid or missing
+                // auth token", restore-session can never recover (it authenticates with the
+                // now-wrong token against our record), and a provider re-validate just
+                // repeats this same cross-adoption. A full relog only helps until the next
+                // validate of the OTHER provider breaks the pair again. Refusing the
+                // mismatched token keeps this session's credential consistent; the duplicate
+                // records themselves still need an account merge server-side.
                 if (!string.IsNullOrEmpty(user.AuthToken) && App.Settings?.Current != null)
                 {
-                    App.Settings.Current.AuthToken = user.AuthToken;
-                    App.Settings.Save();
-                    App.Logger?.Information("[Auth] Stored re-issued auth token from Discord validate (token recovery)");
+                    var localUnifiedId = App.Settings.Current.UnifiedId;
+                    if (!string.IsNullOrEmpty(localUnifiedId) &&
+                        !string.IsNullOrEmpty(user.UnifiedId) &&
+                        !string.Equals(user.UnifiedId, localUnifiedId, StringComparison.Ordinal))
+                    {
+                        App.Logger?.Warning(
+                            "[Auth] Discord validate resolved to unified account {ServerId} but this session is {LocalId} — " +
+                            "REFUSING the re-issued auth token (it belongs to the other record). " +
+                            "This account pair likely needs a server-side merge.",
+                            user.UnifiedId, localUnifiedId);
+                    }
+                    else
+                    {
+                        App.Settings.Current.AuthToken = user.AuthToken;
+                        App.Settings.Save();
+                        App.Logger?.Information("[Auth] Stored re-issued auth token from Discord validate (token recovery)");
+                    }
                 }
 
                 // Update state and cache
