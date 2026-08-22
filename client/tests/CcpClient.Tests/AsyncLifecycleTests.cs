@@ -66,6 +66,162 @@ public class AsyncLifecycleTests
         Assert.Equal(0, registry.OutstandingOperations);
     }
 
+    /// <summary>
+    /// SP-142, fact 1 of 3. <c>CancellationTokenSource.Cancel()</c> runs its registrations
+    /// synchronously on the calling thread, so an owner that cancels inside its own lock runs
+    /// FOREIGN code with that lock held — and <c>IsLive</c> is reached the other way round, from
+    /// under a caller's own lock (<c>Session/OwnedSessionEffect.cs</c>'s <c>Dot</c> holds the effect
+    /// gate across it). No deadlock was ever observed; the only thing preventing one was an
+    /// unenforced convention that every cancellation callback stay lock-free, and SP-106 was
+    /// reverted for exactly that inversion. The existing suite could not see it because every other
+    /// test drives this on ONE thread.
+    /// </summary>
+    [Fact]
+    public async Task Cancel_RunsCancellationCallbacks_WithoutHoldingTheOwnersGate()
+        => Assert.IsType<OperationOutcome.Cancelled>(
+            await TheOwnersGateIsFreeWhileACancellationCallbackRuns(owner => owner.Cancel()));
+
+    /// <summary>SP-142, fact 2 of 3: <see cref="AsyncOperationOwner.Begin"/> reaches the same cycle,
+    /// because it cancels the generation it retires.</summary>
+    [Fact]
+    public async Task Begin_RunsThePreviousGenerationsCallbacks_WithoutHoldingTheOwnersGate()
+        => Assert.IsType<OperationOutcome.Cancelled>(
+            await TheOwnersGateIsFreeWhileACancellationCallbackRuns(owner => _ = owner.Begin()));
+
+    /// <summary>
+    /// SP-142, fact 3 of 3, and the one that needs no second thread at all.
+    ///
+    /// <para><b>Why it bites, which is not obvious.</b> A <c>lock</c> is re-entrant. In the pre-fix
+    /// shape the retired generation's callback ran INSIDE <c>lock (_gate)</c> and before
+    /// <c>_generation++</c>, on the same thread, so <c>owner.Generation</c> re-entered the lock
+    /// happily and answered the OLD generation. Cancelling after the critical section is what makes
+    /// the new generation visible there. So this asserts the ordering directly, deterministically,
+    /// with no wait and no timeout — and fails on <c>Assert.Equal</c> in milliseconds if the cancel
+    /// moves back under the lock.</para>
+    ///
+    /// <para>It also pins the half of contract §3.1 the fix must not move: <c>Begin</c> returns the
+    /// generation it installed, and the increment and the install stay one atomic transition.</para>
+    /// </summary>
+    [Fact]
+    public async Task Begin_InstallsTheNewGeneration_BeforeThePreviousGenerationsCallbackRuns()
+    {
+        var registry = new OperationRegistry();
+        var owner = registry.OwnerFor("P");
+        var first = owner.Begin();
+
+        var registered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var seenFromTheCallback = int.MinValue;
+        var op = owner.RunAsync("parked", async token =>
+        {
+            using var registration = token.Register(() =>
+            {
+                seenFromTheCallback = owner.Generation;
+                stopped.TrySetResult();
+            });
+
+            registered.SetResult();
+            await stopped.Task;
+            return OperationOutcome.Cancelled.Instance;
+        });
+        await TestWait.Until(registered.Task, "the parked operation to register its cancellation callback");
+
+        var second = owner.Begin(); // retires `first`, running its callback synchronously on this thread
+
+        Assert.Equal(first + 1, second); // Begin returns the generation it installed (contract §3.1)
+        Assert.Equal(second, owner.Generation);
+        Assert.Equal(second, seenFromTheCallback); // pre-fix: the callback saw `first`, from inside the lock
+        Assert.IsType<OperationOutcome.Cancelled>(await op);
+        Assert.Equal(0, registry.OutstandingOperations);
+    }
+
+    /// <summary>
+    /// The two-thread ordering pin behind facts 1 and 2, and the handshake it uses.
+    ///
+    /// <para>Thread C runs the trigger; its cancellation callback signals that it is running and
+    /// then parks on a signal the <c>finally</c> below always sets — never on a clock. Thread P then
+    /// asks the owner a question that needs the owner's gate (<c>IsLive</c>, the exact chain
+    /// <c>Dot</c> takes) and signals when it RETURNS. If the callback were still running under that
+    /// gate, P could not return until the callback did.</para>
+    ///
+    /// <para><b>Against the pre-fix code this FAILS rather than hangs</b>, which is what makes it
+    /// shippable: <see cref="TestWait"/> expires on the shared window with
+    /// <c>TIMING-VERDICT:CONDITION-NEVER-TRUE</c>, the <c>finally</c> releases the callback, the
+    /// trigger returns, the gate is released, P unblocks and both threads join. The PASSING path
+    /// waits on no clock at all — every signal is already set when it is awaited. The bounded window
+    /// on the failing path is irreducible: absence of progress is only observable by bounding, and
+    /// both unbounded shapes wedge a host that has no per-test timeout.</para>
+    ///
+    /// <para>Returns the parked operation's terminal outcome so each fact asserts in its own body:
+    /// assertions living only in a called helper are the documented false positive of
+    /// <see cref="VacuousShapeDetector"/> (<c>no-assertion</c>), and removing the shape is cheaper
+    /// than dispositioning it.</para>
+    /// </summary>
+    private static async Task<OperationOutcome> TheOwnersGateIsFreeWhileACancellationCallbackRuns(
+        Action<AsyncOperationOwner> trigger)
+    {
+        var registry = new OperationRegistry();
+        var owner = registry.OwnerFor("P");
+        var generation = owner.Begin();
+
+        var registered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var callbackEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probeReturned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseTheCallback = new ManualResetEventSlim(false);
+
+        // The product's own parked-operation shape (Session/OwnedSessionEffect.ParkUntilCancelledAsync).
+        var op = owner.RunAsync("parked", async token =>
+        {
+            using var registration = token.Register(() =>
+            {
+                callbackEntered.SetResult();
+                releaseTheCallback.Wait(); // deterministic signal; the finally below always sets it
+                stopped.TrySetResult();
+            });
+
+            registered.SetResult();
+            await stopped.Task;
+            return OperationOutcome.Cancelled.Instance;
+        });
+        await TestWait.Until(registered.Task, "the parked operation to register its cancellation callback");
+
+        var canceller = new Thread(() => trigger(owner)) { IsBackground = true, Name = "sp142-canceller" };
+        var probe = new Thread(() =>
+        {
+            _ = owner.IsLive(generation);
+            probeReturned.SetResult();
+        }) { IsBackground = true, Name = "sp142-probe" };
+
+        var probeStarted = false;
+        canceller.Start();
+        try
+        {
+            await TestWait.Until(callbackEntered.Task, "the cancellation callback to start running");
+
+            // The callback is provably mid-flight from here to the finally.
+            probe.Start();
+            probeStarted = true;
+            await TestWait.Until(
+                probeReturned.Task,
+                "the owner's gate to be free while one of its cancellation callbacks runs",
+                () => $"callback running={!releaseTheCallback.IsSet}, canceller={canceller.ThreadState}, probe={probe.ThreadState}");
+        }
+        finally
+        {
+            releaseTheCallback.Set();
+            canceller.Join();
+            if (probeStarted)
+            {
+                probe.Join();
+            }
+        }
+
+        var outcome = await op;
+        Assert.Equal(0, registry.OutstandingOperations);
+        return outcome;
+    }
+
     [Fact]
     public async Task ResourceFailure_ClassifiedByOwner_RoutedAsTypedOutcome_NotSwallowed()
     {
