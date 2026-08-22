@@ -362,3 +362,39 @@ Format:
   managed nearest-neighbour code at a declared 30 fps. Nobody has ever measured that path, and it is now known to be
   reachable from your own media rather than in theory. Filed as a measurement task, not a defect - it may well be
   fine.
+
+## 2026-08-22 - the old Avalonia port is gone, and the shipping solution builds again
+
+- **WHAT LANDED.** You asked for the first port attempt to be deleted so only the new client remains. It is
+  deleted: **1189 files, 254,616 lines**. The whole `CCP.*` tree, plus about 90 committed build logs, traces
+  and caches that had been sitting in the repo. `ConditioningControlPanel/` now matches the shipping `main`
+  branch **exactly** - proved by comparing the directory's git object id, which covers every file, its
+  contents and its permissions, rather than by a diff coming back empty.
+- **A REAL BREAKAGE WENT AWAY WITH IT.** `dotnet build ConditioningControlPanel.sln` had **38 compile errors**
+  on this branch and nobody would have learned that from a green port run, because no gate built it. It now
+  reproduces main's exact result. Your shipping product was never affected - it builds from `main` - but this
+  branch could not have merged toward main in that state.
+- **I WAS WRONG ABOUT THIS TWICE AND BOTH ARE ON THE RECORD.** First I warned you that deleting the old port
+  would break the shipping product; `main` has no `CCP.*` at all, so that was simply false. Then I wrote the
+  task claiming exactly two tests would need fixing. The lane refused the task and measured **five**, then
+  found a **sixth** itself. I amended the task rather than let it work around my mistake, and kept the wrong
+  paragraph in it marked superseded, because a task that quietly edits its own false premise teaches the next
+  reader nothing.
+- **WHAT IT COST, stated because it is a real debt and not a footnote.** Deleting a tree moves line numbers,
+  and this port's evidence is thousands of `File.cs:line` citations into that tree. **492 citations now sit at
+  or after a shifted line, and 144 point into the deleted tree outright** - 37 of them in files the task was
+  not allowed to touch. Nothing will go red when those rot, because the citation checker is not a gate. I told
+  the lane to report them and not fix them, so the debt is visible rather than absorbed. It is now four board
+  rows.
+- **THE THING WORTH YOUR ATTENTION.** The rule that this tree must match `main` has existed for the life of
+  the branch, and the tree drifted by 1180 files without a single gate, test or review noticing. What did
+  notice was two unrelated tests that happen to re-derive line numbers from the shipping files - by accident
+  of how they were built. A one-line check would have caught it on day one. That is filed.
+- **ONE DECISION FOR YOU.** Seven files still describe the tree that no longer exists, and two of them
+  actively misroute agents (a pre-commit skill points at a deleted script; a merge skill gives advice that is
+  now wrong). I can fix six. The seventh is the root `CLAUDE.md`, and the constitution explicitly forbids me
+  from modifying it. **It is stale in four places and it is the most-read instruction file in the repo.** I am
+  not going to quietly rewrite my own instructions - tell me to, and I will.
+- **WHAT THIS DOES NOT PROVE.** The restored WPF app was **built, not run**. A 332-warning compile result says
+  nothing about whether it starts, and the restored OpenAI and SharpDX package references were never exercised
+  beyond compiling. Nothing here was seen on a screen.

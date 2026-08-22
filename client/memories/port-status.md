@@ -1,5 +1,30 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## THE OLD PORT IS DELETED (SP-141, 2026-08-22) - and what that cost
+
+- **`ConditioningControlPanel/` now matches `main` EXACTLY.** Proved by subtree object identity, both sides
+  `7028db9d4b619abd5b5f7bb75a779727a7cebcb3` - NOT by an empty `git diff`, which is also what a typo'd
+  pathspec, a wrong ref or a suppressed binary diff produces. 1189 files, 254616 deletions.
+- **`git rm -r` BEFORE `git checkout main -- <path>` is load-bearing.** Checkout alone leaves index entries
+  the source tree lacks, so every `CCP.*` file survives a restore that LOOKS successful. The lane found this;
+  the packet had not specified it.
+- **The shipping solution built 38 compile errors on this branch and no gate watched it.** Now reproduces
+  main's 332W/1E. `tools/run-gates.sh` was the ONLY script that built it and was deleted with the tree, so the
+  gate half of that P0 is now WORSE, not closed.
+- **THE TRACK-`main` RULE HAS NO ENFORCEMENT.** 1180 files of drift, invisible for the life of the branch.
+  What noticed was two census guards re-deriving line numbers from the shipping bytes, BY ACCIDENT of how they
+  were built. Subtree-identity is one `git rev-parse` comparison. Filed P1.
+- **KNOWING DEBT, deliberately not fixed:** 492 citation occurrences shifted across 18 files, 144 orphaned
+  into `CCP.*` across 46 files (37 under `client/src/**`). `detect.mjs` is not on the floor so nothing reds.
+  Its basename fallback now CREDITS dead citations to same-named shipping files: collisions rose 24 -> 104,
+  and 6 shipping paths are held out of `CITATION-GONE` by that misattribution alone.
+- **MY PREMISE WAS WRONG TWICE AND THE LANE CAUGHT BOTH.** I said deleting the old port would break the
+  product (`main` has no `CCP.*` at all); I said exactly two guards would red (five, then the lane found a
+  sixth). **Amend the packet, keep the wrong section marked SUPERSEDED, never silently rewrite it.**
+- **Still stale after the delete:** `.github/workflows/linux-smoke.yml` (dead CI, `continue-on-error` so it
+  fails silently forever), `.claude/skills/gates/SKILL.md`, `.claude/skills/wpf-upstream-sync/SKILL.md`,
+  `docs/constitution.md:32`, root `CLAUDE.md` (**owner decision - the constitution forbids modifying it**).
+
 ## THE OLD-PORT CLEANUP: measured 2026-08-22, NOT performed, and it is bigger than a delete
 
 The owner asked to remove the old Avalonia port so only `client/` remains. **It is removable and it does NOT touch
@@ -651,8 +676,8 @@ and the recurring procedure is the project skill `wpf-upstream-sync`.
   consistent; the v6.7.x intake delta (new `intake/core/accents.js` +350, `ai.js` +79) is a follow-up row.
 - **Guard gap found:** the client asset-manifest parity test gives ZERO signal for upstream payload
   trees the client doesn't ship yet (a 184-file tree appeared, suite stayed green).
-- Merge-conflict rule: the WPF tree tracks `main` exactly (`--theirs`); `CCP.Core/` + `CCP.Avalonia.*`
-  are abandoned first-attempt residue that manufacture delete/modify conflicts forever.
+- Merge-conflict rule: the WPF tree tracks `main` exactly (`--theirs`). **The `CCP.Core/` + `CCP.Avalonia.*` residue clause below is DEAD as of SP-141 (2026-08-22) - that tree is deleted and
+  there is no residue to leave alone. Kept as history; do not act on it.**
 
 ## Wave 14 (2026-08-11, integrate `6ce1e2ae`; floor now 795/795 + 33/33)
 

@@ -170,14 +170,22 @@ against `main`'s bytes and holds byte-for-byte: the `&&` clause order,
 
 | | before | after |
 |---|---|---|
-| TOTAL ROWS | 167 | **166** |
+| TOTAL ROWS | 167 | **167** |
 | NEEDS-VERDICT | 9 | 9 |
-| NEW-CITATION | 152 | 155 |
+| NEW-CITATION | 152 | 156 |
 | CITATION-GONE | 0 | 0 |
 | UNRESOLVED | 4 | **0** |
 | AMBIGUOUS | 1 | 1 |
 | DELTA-MISMATCH | 1 | 1 |
-| dropped tokens | 659 occ / 286 names, 49 resolving only under `CCP.*` | 587 occ / 278 names, **0** resolving under `CCP.*` |
+| dropped tokens | 659 occ / 286 names, 49 resolving only under `CCP.*` | 588 occ / 278 names, **0** resolving under `CCP.*` |
+
+**CORRECTED AT LAND (2026-08-22), by the final review and re-measured on the committed tree.**
+The `after` column originally read TOTAL ROWS **166**, NEW-CITATION **155**, dropped **587** — a snapshot
+taken BEFORE `D326`-`D328` were appended to `wpf-surface-reachability.md`. Those rows carry citations of
+their own (`ConditioningControlPanel.csproj:52` in D328), so the committed tree gives **167 / 156 / 588**.
+Every other figure in the table matched exactly. The error ran in the CONSERVATIVE direction — it
+understated the debt rather than the cleanliness — but a record whose whole value is exactness does not get
+to be off by one in a friendly direction.
 | `CCP.*` credited to a shipping path by basename collision | 24 occ / 13 names | **104 occ / 20 names**, 6 with no other citer |
 
 `UNRESOLVED` fell to zero because the four moved `Models/` files resolve again — the restore repaired
