@@ -254,10 +254,40 @@ should have the choice before I spend it.
 
 ---
 
-## 8. State at this checkpoint
+## 8. State at this checkpoint, measured
 
 - Base build: **0 warnings / 0 errors, 4 projects**, forced non-incremental (`check-warnings.mjs`).
-- Baseline floor run started before any edit, so the before/after **failure sets** can be compared
-  rather than counts — the three contended `PointerCoexistenceTests` facts are expected red and will
-  not be chased.
-- **No product file and no test file has been edited.** This plan is the only artefact written.
+- **Baseline floor, taken at `2508b39c4` before any edit:**
+  - `CcpClient.Tests` **total = 2616**, passed 2600, **failed 14**
+  - `CcpClient.HeadlessTests` **total = 152**, passed 152, failed 0
+  - Both totals match the pin (2616 / 152) exactly.
+- **The packet's prediction about the contended desktop names the wrong class.** It says three
+  `PointerCoexistenceTests` facts are red. At this base **zero `PointerCoexistenceTests` are red**;
+  the 14 reds are **all `GlyphCapabilityTests`**, and they share one symptom
+  (`glyph-nothing-presented`, plus z-order and hit-test reads returning `False`) — the same
+  *environmental* class the packet describes, arriving on the per-pixel layered-window capability
+  instead of the pointer one. Named so the after-run is compared against **this** set, not the
+  packet's:
+
+  `AMOVEIsOneCall_ItEarnsAvailableFromGetWindowRect_AndTheContentSurvivesIt`,
+  `AMismatchedFrameIsRefusedRatherThanStretched`,
+  `AMoveThatWouldRESIZEIsRefused_BecauseTheLayeredSurfaceISTheFrame`,
+  `ANDTHECAPABILITYNAMESTHEMODE_OnBothEntryPoints`,
+  `ANINKLESSFRAMEIsREFUSED_BecauseNothingCouldTellItFromAGhost`,
+  `AndTheMOVEsAvailableSaysExactlyWhatItDidNotReask`,
+  `PaintReplacesTheContent_AndTheOSsCopyREALLYCHANGED`,
+  `PresentEarnsAvailableONLYWhereTheMachineHasADesktop`,
+  `PresentNAMESWhatItDoesNotClaim_TheTransparentPixelAndTheHumanEye`,
+  `THEUNIFORMALPHAREFUSALISSTAGEDOnARealSurface_NotClassedAsUnreachable`,
+  `TheExtendedStyleReadBackCarriesEveryBitThatWasWritten`,
+  `TheOSsOwnZOrderPutsTheSurfaceAboveEveryOrdinaryWindow`,
+  `TheWindowManagerRoutesThePointPASTIt_AndTOItWhenMomentarilyMadeOpaque`,
+  `WithdrawTakesItOffTheScreenAndOutOfTheHitTest_AndKeepsTheComposite`
+  (all `CcpClient.Tests.GlyphCapabilityTests.*`).
+
+  These will not be chased and nothing will be added to `allowedSkips` for them.
+  **Note the coincidence worth flagging to the reviewer:** `GlyphCapabilityTests` is the capability
+  behind consumer #5 (Bouncing Text), which this plan does **not** touch — so this baseline red is
+  not evidence for or against anything in §1, but a lane that later takes D315 will meet it.
+- **No product file and no test file has been edited.** `plan.md` is the only artefact written, and
+  it is committed (`b5d5f2cbb`) so the worktree is not empty at the checkpoint.
