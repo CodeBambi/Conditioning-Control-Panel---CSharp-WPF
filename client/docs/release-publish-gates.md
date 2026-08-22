@@ -1,6 +1,6 @@
 # Release and publish gates
 
-**Status:** active deliverable of task-board row 9 (SP-010). Owner decisions applied: A-014 Release rule (Debug, Release, and published artifacts are separate gates; one version source drives assemblies, update metadata, and packaging) and YAGNI constraint (no installer, no updater, no packaging mechanism without a consumer). This contract applies [architecture.md](architecture.md)'s A-014 version-authority and publish strategy. It discharges two inherited named gates: row 8's deferred publish third (same `--verify-assets` invocation against the published artifact) and rows 2/3's headed-Linux (WSLg) smoke debt, including SP-007's graceful-close gap.
+**Status:** active deliverable of task-board row 9. Owner decisions applied: A-014 Release rule (Debug, Release, and published artifacts are separate gates; one version source drives assemblies, update metadata, and packaging) and YAGNI constraint (no installer, no updater, no packaging mechanism without a consumer). This contract applies [architecture.md](architecture.md)'s A-014 version-authority and publish strategy. It discharges two inherited named gates: row 8's deferred publish third (same `--verify-assets` invocation against the published artifact) and rows 2/3's headed-Linux (WSLg) smoke debt, including the earlier graceful-close gap.
 
 ---
 
@@ -21,7 +21,7 @@ dotnet publish client/src/CcpClient.Desktop/CcpClient.Desktop.csproj -c Release 
 
 **Measured publish facts (2026-07-19, SDK 10.0.302):** command = the §1 invocation per RID via `client/tools/publish/publish.ps1|.sh` (artifact name derives from `dotnet msbuild -getProperty:Version`). win-x64 artifact = `CcpClient.Desktop-0.1.0-win-x64/`: apphost `CcpClient.Desktop.exe` **82.8 MB** (all managed assemblies bundled) + native sidecars `av_libglesv2.dll` 5.4 MB, `libHarfBuzzSharp.dll` 1.8 MB, `libSkiaSharp.dll` 11.6 MB (+PDB symbol files, not product payload) — observed layout matches the researched SDK-default expectation exactly. linux-x64 artifact = `CcpClient.Desktop-0.1.0-linux-x64/` (**93 MB** total): apphost `CcpClient.Desktop` + sidecars `libHarfBuzzSharp.so` 2.8 MB, `libSkiaSharp.so` 11.2 MB (no `av_libglesv2` — Windows ANGLE only).
 
-**Publish-script invariant (learned the hard way, SP-010):** the scripts always publish to a CLEAN output directory. An incremental `dotnet publish` into an existing single-file output dir silently DROPS the native sidecars; the app then dies at startup with `BadImageFormatException 0x8007000B` (Windows). Reproduced deterministically (cold = natives present, second run = gone), fixed in both scripts.
+**Publish-script invariant (learned the hard way):** the scripts always publish to a CLEAN output directory. An incremental `dotnet publish` into an existing single-file output dir silently DROPS the native sidecars; the app then dies at startup with `BadImageFormatException 0x8007000B` (Windows). Reproduced deterministically (cold = natives present, second run = gone), fixed in both scripts.
 
 **Residual system-library floor (Ubuntu 26.04 / WSL2, observed 2026-07-19):** `ldd` on the shipped `libSkiaSharp.so` requires system `libfontconfig`, `libfreetype`, `libexpat`, `libz`, `libbz2`, `libpng16`, `libbrotli*`; the running process additionally dlopens the libX11 family (`libX11`, `libXext`, `libXrandr`, `libXi`, `libXcursor`, `libXrender`, `libXfixes`, `libXxf86vm`, `libX11-xcb`, `libXau`, `libXdmcp`), the `libGL`/Mesa stack (WSLg session fact), `libdbus-1`, and ICU (`libicuuc`/`libicui18n`/`libicudata` 78.x — `InvariantGlobalization` is not set). `ldd` on the apphost alone shows none of this — the honest floor is `ldd`-per-shipped-.so ∪ runtime `/proc/<pid>/maps`. Feeds the owner's "which Linux distributions" decision without settling it: a distro without fontconfig/freetype/X11/ICU cannot run this artifact.
 
@@ -51,7 +51,7 @@ Every cell of the matrix proves, for that mode and platform:
 | 4 | Fresh-profile run | Real config dir moved aside → headed run → graceful close → exit 0; **no `settings.json` created** (defaults are never auto-saved — persistence contract §5 rule 2); no configuration-only crash. Config dir restored after. |
 | 5 | Corrupt-settings run | Garbage bytes seeded at `settings.json` → headed run → graceful close → exit 0 (typed Degraded, never silent); **`settings.corrupt-*.json` exists with the original garbage bytes preserved** (the observable quarantine proof — exit code alone is insufficient). Config dir restored after. |
 | 6 | Data-path identity | The store path resolves identically across the three modes (`%APPDATA%\CcpClient` Windows; on Linux `$XDG_CONFIG_HOME/CcpClient` when set, else `~/.config/CcpClient` — .NET's Unix mapping of `Environment.SpecialFolder.ApplicationData`; **verified 2026-07-19**: with `XDG_CONFIG_HOME=/tmp/xdg-sp010` the quarantine landed under it, with XDG unset the matrix landed in `~/.config/CcpClient`). Never derived from `AppContext.BaseDirectory` or the artifact location. Evidence: the quarantine file from gate 5 lands at the same absolute path in every mode. The publish directory is MOVED before its run to prove the artifact is location-independent. |
-| 7 | Logs-absence | No logging subsystem exists (the SP-003 seam writes to stderr only — startup-shutdown-contract §9, framework admission explicitly deferred). Gate: after every run, no log files exist beside the artifact or in the config dir. **The absence is verified, never invented into existence.** |
+| 7 | Logs-absence | No logging subsystem exists (the log seam writes to stderr only — startup-shutdown-contract §9, framework admission explicitly deferred). Gate: after every run, no log files exist beside the artifact or in the config dir. **The absence is verified, never invented into existence.** |
 | 8 | Native-deps floor | Windows: record which native files ship beside the exe (research expectation: runtime natives + `libSkiaSharp.dll`/`libHarfBuzzSharp.dll`-class Avalonia natives — observed reality recorded). Linux: `ldd` on every shipped `.so` **plus** `/proc/<pid>/maps` of the running process — `ldd` on the apphost alone CANNOT see runtime-dlopened libraries (libX11, fontconfig, ICU load via dlopen). The union is the recorded system-library floor. It feeds the owner's "which Linux distributions" decision WITHOUT settling it. |
 
 Matrix scripts live under `client/tools/publish/` (Windows PowerShell + WSL bash sharing the same gate definitions); the X11 graceful-close sender extends the proven `client/tools/verify/xgetimage.py` ctypes mechanism.
@@ -77,9 +77,9 @@ artifact:  CcpClient.Desktop-<version>-<rid>          ← publish directory as a
 
 The future row owns: where metadata is published, how a running client compares versions, signing, and channels. None of that is built here.
 
-## 6. WSLg graceful-close contract (rows 2/3 debt + SP-007 gap)
+## 6. WSLg graceful-close contract (rows 2/3 debt + the earlier graceful-close gap)
 
-The headed-Linux smoke debt is discharged by gate 1 on WSL2 against the published linux-x64 artifact (plus Debug/Release): the window renders for real (XGetImage capture, SP-007 pattern) AND the process exits 0 through the real close path.
+The headed-Linux smoke debt is discharged by gate 1 on WSL2 against the published linux-x64 artifact (plus Debug/Release): the window renders for real (XGetImage capture, the established pattern) AND the process exits 0 through the real close path.
 
 The close mechanism (pre-approach consult, three silent-failure modes pinned):
 
@@ -101,7 +101,7 @@ All fetched 2026-07-19. Baselines: Avalonia 12.1.0, .NET SDK 10.0.302 (Windows) 
 
 ## Honest absences (verified, never invented)
 
-- **Logging:** no logging subsystem exists. The SP-003 seam (`ILogSink`) writes to stderr only; framework admission is explicitly deferred by startup-shutdown-contract §9. Matrix gate 7 verifies the absence of log files.
+- **Logging:** no logging subsystem exists. The log seam (`ILogSink`) writes to stderr only; framework admission is explicitly deferred by startup-shutdown-contract §9. Matrix gate 7 verifies the absence of log files.
 - **Localization:** no localization entries exist (asset-manifest.md: entries arrive with the localization row; no consumer — A-014). The matrix's asset gate is the `--verify-assets` invocation, which catalogues exactly what ships.
 - **Installer/updater:** none (§1 exclusions, §5 shape-only).
 - **XDG:** the store honors `$XDG_CONFIG_HOME` on Linux via .NET's `SpecialFolder.ApplicationData` mapping (verified, gate 6) — the earlier framing ("</.config literal") was empirically wrong and is corrected here.

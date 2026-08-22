@@ -11,7 +11,7 @@ namespace CcpClient.Tests;
 ///
 /// <para>Keeping both in one record is what lets the facts assert at statement depth 0 — no
 /// conditional, no early return, nothing that can silence an assertion. Same shape and same lineage
-/// as <see cref="OverlayObservations"/> (SP-099) and <see cref="TrayObservations"/> (SP-093).</para>
+/// as <see cref="OverlayObservations"/> and <see cref="TrayObservations"/>.</para>
 ///
 /// <para>Each run happens ONCE per suite execution and is cached: it puts a real window on the
 /// user's real screen and takes the real foreground for the duration of a few dozen syscalls, and

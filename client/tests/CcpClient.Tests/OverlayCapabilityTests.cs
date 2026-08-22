@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-099. An overlay is the easiest capability in this codebase to fake, because every one of its
+/// An overlay is the easiest capability in this codebase to fake, because every one of its
 /// failure modes is invisible from inside the process: a window that is present and invisible,
 /// present and buried, or present and swallowing every click all look identical to the code that
 /// created it. A test that only checked the return value of <c>Present</c> would certify all three
@@ -30,7 +30,7 @@ namespace CcpClient.Tests;
 /// pointer passes through: <c>WindowFromPoint</c> is the window manager's routing question asked,
 /// not delivered input. Multi-monitor placement, cross-DPI behaviour, sustained topmost under
 /// minutes of contention, and every part of Linux. Those are headed claims and a named manual gate
-/// (SP-099 record.md).</para>
+/// (this packet's record.md).</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
 public class OverlayCapabilityTests
@@ -305,7 +305,7 @@ public class OverlayCapabilityTests
     [Fact]
     public void NothingInThisCapabilityDrawsAnything_AndTheContractSaysSo()
     {
-        // Deliberate and load-bearing: SP-099 delivers a surface and wires it to no effect. The
+        // Deliberate and load-bearing: this packet delivers a surface and wires it to no effect. The
         // claim string is part of the contract because it is what a reader of a log sees, and it
         // must not let anyone believe a flash was shown.
         var run = OverlayObservations.Lifecycle;

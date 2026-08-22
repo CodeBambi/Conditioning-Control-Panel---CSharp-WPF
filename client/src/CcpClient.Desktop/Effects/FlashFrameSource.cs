@@ -41,7 +41,7 @@ public interface IFlashFrameSource
 /// <c>Brushes.Black</c> and the <c>Image</c> on it is pinned to the window's size
 /// (<c>FlashService.cs:1245</c>, <c>:1274-1281</c>). A PNG with transparency therefore shows black
 /// where it is transparent, as it does upstream, rather than showing the desktop through it — this
-/// surface has one uniform alpha and no per-pixel alpha to give it (SP-100 divergence).</para>
+/// surface has one uniform alpha and no per-pixel alpha to give it (a recorded divergence).</para>
 ///
 /// <para><b>What it cannot decode.</b> WebP. It is in the pool's extension list
 /// (<see cref="FlashImagePool"/>) because the DTRH media rules list it, and GDI+ has no WebP codec;
@@ -62,7 +62,7 @@ public sealed class GdiPlusFlashFrameSource : IFlashFrameSource
     private const int HighQualityBicubic = 7;
 
     /// <summary>True when GDI+ initialised in this process. The startup itself is
-    /// <see cref="GdiPlusRuntime"/>'s (SP-101: the text rasteriser needs the same library up and
+    /// <see cref="GdiPlusRuntime"/>'s (the text rasteriser needs the same library up and
     /// <c>GdiplusStartup</c> is per process, not per caller). False means every render returns
     /// null — no frames, no exception, and nothing pretending.</summary>
     public static bool Available => GdiPlusRuntime.Available;

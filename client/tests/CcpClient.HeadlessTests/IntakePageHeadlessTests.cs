@@ -16,7 +16,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-095: the Graded Intake route, driven by REAL headless input on the REAL controls from a
+/// The Graded Intake route, driven by REAL headless input on the REAL controls from a
 /// cold composition-root boot with NO command-line arguments — rail door <c>Graded Intake</c> ->
 /// the page's <c>Begin Intake</c> button -> the weekly-pass gate -> the ONE
 /// <see cref="IntakeLaunchCoordinator"/>.
@@ -28,7 +28,7 @@ namespace CcpClient.HeadlessTests;
 /// (<c>MainWindow.Lab.cs:119-146</c>) -> <c>IntakeHostService.Launch</c> (<c>:159</c>).</para>
 ///
 /// <para><b>What is substituted, and what is not.</b> Two seams, both the product's own and both
-/// the shape SP-054/SP-092 built for exactly this: the entitlement source
+/// the shape earlier waves built for exactly this: the entitlement source
 /// (<see cref="IntakePassService.IIntakeEntitlementSource"/>) and the data root. Nothing stubs
 /// the DECISION — <see cref="IntakePassGate"/> is a pure function over whatever the seam reports,
 /// and the real <see cref="IntakePassService"/> evaluates it against real stores. The
@@ -135,7 +135,7 @@ public class IntakePageHeadlessTests
     [AvaloniaFact]
     public async Task WhenAnAuthoritySaysPatron_TheSameTwoClicksReachTheOneCoordinator()
     {
-        // The grant branch, through the SP-054 entitlement seam rather than a stubbed decision.
+        // The grant branch, through the entitlement seam rather than a stubbed decision.
         // WPF: Premium is "unlimited runs, no week, no door" (:13), and CanStartIntake is
         // Premium || Available (:139-146). Without this fact the door could be permanently dead
         // and every other test here would still be green.
@@ -281,7 +281,7 @@ public class IntakePageHeadlessTests
         // The second half is what keeps the HEADED harness honest. capture.ps1:136-151 derives the
         // rail's door set from UIA names of the form "<id> door" and demands a layout-probe line
         // per derived door; a new door whose AutomationProperties.Name did not follow that shape
-        // would be invisible to it, exactly the blindness SP-094 hit with a hard-coded list. This
+        // would be invisible to it, exactly the blindness the Play door hit with a hard-coded list. This
         // asserts the shape the harness reads, headlessly, so the harness cannot silently stop
         // checking this door.
         var (host, window, _) = await BootAsync();
@@ -304,7 +304,7 @@ public class IntakePageHeadlessTests
         await host.ShutdownAsync();
     }
 
-    // ---------- SP-097: the failure a user can see, and the two arms nothing had rendered ----------
+    // ---------- The failure a user can see, and the two arms nothing had rendered ----------
 
     [AvaloniaFact]
     public async Task WhenOpeningTheRunThrows_TheUserIsTOLD_InWpfsOwnWords_AndTheDetailIsNotDropped()
@@ -476,7 +476,7 @@ public class IntakePageHeadlessTests
         await host.ShutdownAsync();
     }
 
-    /// <summary>An authority that reports a patron. It is the SP-054 seam, not a stubbed
+    /// <summary>An authority that reports a patron. It is the real seam, not a stubbed
     /// decision: the real pass service still evaluates, and the real gate still decides.</summary>
     private sealed class PatronSource : IntakePassService.IIntakeEntitlementSource
     {

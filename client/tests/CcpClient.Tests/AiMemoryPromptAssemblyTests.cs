@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-047 memory→prompt assembly proofs (ai-companion-admission.md §4 rule 1; contract §5;
+/// Memory→prompt assembly proofs (ai-companion-admission.md §4 rule 1; contract §5;
 /// board row "Wire companion memory into prompt context"). Proves the falsifiable core: a
 /// NEW PAIR ROUND-TRIPS INTO THE NEXT REQUEST'S PROMPT — at the provider seam (captured
 /// <see cref="AiRequest.History"/>) AND on the wire (a self-contained loopback listener
@@ -247,7 +247,7 @@ public class AiMemoryPromptAssemblyTests
             registry, capabilities, LoopbackOnlyAdmissionPolicy.Instance,
             new CollectingAiDiagnosticsSink(), new AiModerationBoundary(), memory);
         pipeline.RegisterProvider(new LoopbackOllamaProvider(
-            new LoopbackOllamaProviderOptions { Host = listener.Prefix, RequestTimeout = TestWait.InjectedBudget })); // SP-063: the subject is wire shape, never time
+            new LoopbackOllamaProviderOptions { Host = listener.Prefix, RequestTimeout = TestWait.InjectedBudget })); // The subject is wire shape, never time
         pipeline.SelectProvider(AiProviderId.LocalOllama);
         await new CapabilityProbeRunner(registry.OwnerFor("probes"), capabilities).RunAllAsync(CancellationToken.None);
 
@@ -255,7 +255,7 @@ public class AiMemoryPromptAssemblyTests
         await pipeline.RunInteractiveAsync(new AiRequest("wire question two"));
 
         Assert.Equal(2, listener.ChatBodies.Count);
-        // The FIRST request's payload is the pre-SP-047 single-message shape (wire-level
+        // The FIRST request's payload is the pre-assembly single-message shape (wire-level
         // proof that empty history leaves the payload unchanged).
         using (var firstDoc = JsonDocument.Parse(listener.ChatBodies[0]))
         {
@@ -271,7 +271,7 @@ public class AiMemoryPromptAssemblyTests
         Assert.Equal(WireListener.ReplyText, messages[1].GetProperty("content").GetString());
         Assert.Equal("user", messages[2].GetProperty("role").GetString());
         Assert.Equal("wire question two", messages[2].GetProperty("content").GetString());
-        // The pre-SP-047 payload shape is intact (model/stream/think untouched).
+        // The pre-assembly payload shape is intact (model/stream/think untouched).
         Assert.False(doc.RootElement.GetProperty("stream").GetBoolean());
         Assert.False(doc.RootElement.GetProperty("think").GetBoolean());
     }
@@ -308,7 +308,7 @@ public class AiMemoryPromptAssemblyTests
 
             _listener = bound ?? throw new InvalidOperationException("WireListener: no loopback port available");
             Prefix = prefix!;
-            LoopbackListenerRegistry.Register(nameof(WireListener), Prefix.Port, Prefix.ToString()); // SP-059 T-15 self-check coverage
+            LoopbackListenerRegistry.Register(nameof(WireListener), Prefix.Port, Prefix.ToString()); // T-15 self-check coverage
             _serve = Task.Run(ServeLoop);
         }
 

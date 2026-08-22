@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-126 — the ARITHMETIC of the haptic limb, with no clock, no sink and no device anywhere near
+/// The ARITHMETIC of the haptic limb, with no clock, no sink and no device anywhere near
 /// it. Every number asserted here is upstream's, cited at the line it was read from, and the point
 /// of the file is that a port which drifted from those numbers would fail HERE rather than on
 /// somebody's toy.

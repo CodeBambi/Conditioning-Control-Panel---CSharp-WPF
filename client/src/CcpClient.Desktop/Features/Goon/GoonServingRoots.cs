@@ -1,8 +1,8 @@
 namespace CcpClient.Desktop.Features.Goon;
 
 /// <summary>
-/// SP-130: the Goon payload-root probe (the <see cref="Intake.IntakeServingRoots"/> shape,
-/// SP-048 discipline). The goon tree rides the SAME copied-asset convention as dtrh/intake/
+/// The Goon payload-root probe (the <see cref="Intake.IntakeServingRoots"/> shape,
+/// payload-probe discipline). The goon tree rides the SAME copied-asset convention as dtrh/intake/
 /// tunnel/vendor — a LINKED read-only glob in <c>CcpClient.Desktop.csproj</c> that copies the
 /// bytes unmodified to <c>payload/goon</c> beside the exe. <b>Zero bytes are forked: the
 /// legacy tree stays the single owner</b> (goon-game-census.md §5.3).
@@ -12,7 +12,7 @@ namespace CcpClient.Desktop.Features.Goon;
 /// </summary>
 public static class GoonServingRoots
 {
-    /// <summary>Payload-root presence states (SP-048 pattern).</summary>
+    /// <summary>Payload-root presence states (the payload-probe pattern).</summary>
     public enum GoonPayloadState
     {
         Present,

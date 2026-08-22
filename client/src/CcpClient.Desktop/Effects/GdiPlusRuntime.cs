@@ -5,7 +5,7 @@ namespace CcpClient.Desktop.Effects;
 /// <summary>
 /// GDI+ for this process: started once, for the life of it.
 ///
-/// <para><b>Why GDI+ at all</b> (SP-100, and unchanged by SP-101): the surface these frame sources
+/// <para><b>Why GDI+ at all</b> (and unchanged since): the surface these frame sources
 /// feed is a Win32 window filled by a GDI blit, and the pixels have to arrive as a B,G,R,X buffer
 /// whatever produces them. GDI+ is part of Windows, needs no package, and — the reason that decided
 /// it — it works in a process with NO Avalonia runtime, which is what lets the whole draw path be
@@ -14,7 +14,7 @@ namespace CcpClient.Desktop.Effects;
 /// anyway (<see cref="Overlay.UnsupportedOverlayPresence"/>), so no capability is lost by the
 /// rasteriser being Windows-only, and none is claimed either.</para>
 ///
-/// <para><b>Why it is its own class (SP-101).</b> The image path and the text path both need the
+/// <para><b>Why it is its own class.</b> The image path and the text path both need the
 /// library up, and <c>GdiplusStartup</c> is per process, not per caller. Two lazy initialisers would
 /// start it twice and leave the second token dangling.</para>
 /// </summary>

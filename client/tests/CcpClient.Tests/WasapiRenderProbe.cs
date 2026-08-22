@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-109's independent effect instrument: it asks the WINDOWS AUDIO ENGINE what it believes is
+/// An independent effect instrument: it asks the WINDOWS AUDIO ENGINE what it believes is
 /// happening, without asking the product.
 ///
 /// <para><b>Why it re-declares every COM interface instead of using the product's interop.</b>

@@ -4,13 +4,13 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
-/// SP-101: the Subliminals module's persisted dials and its phrase pool — the port's counterpart of
+/// The Subliminals module's persisted dials and its phrase pool — the port's counterpart of
 /// the <c>#region Subliminals</c> block WPF reads out of <c>App.Settings.Current</c>
 /// (<c>CCP.Core/Models/AppSettings.cs:1232-1290</c>).
 ///
 /// <para><b>Why this is a SECOND document and not two more properties on
 /// <see cref="Persistence.SessionPresetDocument"/>.</b> Two reasons, one of them procedural and
-/// stated plainly. The procedural one: <c>Persistence/**</c> is outside SP-101's File Scope, so the
+/// stated plainly. The procedural one: <c>Persistence/**</c> is outside this packet's File Scope, so the
 /// shared session preset was not edited and the fact is recorded as a divergence rather than
 /// silently worked around. The substantive one, which is why this shape was chosen rather than
 /// merely accepted: <b>fifteen modules editing one document is a chokepoint</b>, exactly as one

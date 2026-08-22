@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-057: the CCP_DATA_ROOT isolation seam. Two halves:
+/// The CCP_DATA_ROOT isolation seam. Two halves:
 /// (1) <see cref="DataRootOverrideTests"/> — the PURE validation core
 /// (<see cref="CompositionRoot.ResolveDataRoot"/>) plus the unset-env default-path pin;
 /// no environment mutation, so this class runs anywhere.
@@ -16,7 +16,7 @@ namespace CcpClient.Tests;
 /// composition, in a non-parallel collection (process-wide env mutation is an xunit
 /// parallelism hazard — consult A1/A2).
 ///
-/// SP-062: BOTH classes now live in <see cref="ProcessEnvCollection"/>. The SP-061/SP-062
+/// BOTH classes now live in <see cref="ProcessEnvCollection"/>. The
 /// finding (probe-proven on this runner, record.md Step 1) is that
 /// DisableParallelization does NOT serialize a collection against others under
 /// xUnit.v3 3.2.2 + this runner — so the pin's old home in the default collection let the
@@ -72,7 +72,7 @@ public class DataRootOverrideTests
         // choke point resolves the REAL per-user profile — which is exactly why headed
         // evidence runs must set the override. Also pins both platform defaults against
         // accidental change (framing c).
-        // SP-062: LOUD skip (never a silent return) — a vacuous run must report
+        // LOUD skip (never a silent return) — a vacuous run must report
         // 891 passed / 1 skipped so the exact-count floor discipline catches it. Reasons
         // name the variable + leak class only, never the override value (a user path).
         Assert.SkipWhen(
@@ -92,7 +92,7 @@ public class DataRootOverrideTests
         Assert.SkipWhen(
             CompositionRoot.ActiveDataRootOverride() is not null,
             "CCP_DATA_ROOT became non-null between the guard and the read (leak class: " +
-            "cross-collection process-env leak, the SP-057 flake class) — the pin only binds " +
+            "cross-collection process-env leak, the data-root flake class) — the pin only binds " +
             "with the override unset at BOTH checkpoints");
 
         Assert.Equal(
@@ -113,7 +113,7 @@ public class DataRootOverrideTests
     }
 }
 
-/// <summary>The env-mutating half. SP-062: the collection is the isolation mechanism —
+/// <summary>The env-mutating half. The collection is the isolation mechanism —
 /// intra-collection sequentiality (probe-proven on this runner, record.md Step 1) serializes
 /// every fact here, including the pin class that joined it. DisableParallelization stays as
 /// a NON-RELIED-UPON hint: on this runner it does not serialize cross-collection traffic
@@ -183,7 +183,7 @@ public sealed class DataRootOverrideEnvTests
             var dir = Path.GetFullPath(sandbox);
             Assert.True(File.Exists(Path.Combine(dir, "settings.json")), "settings.json must land in the override root");
             Assert.True(File.Exists(Path.Combine(dir, "dtrh_slot1.json")), "slot document must land in the override root");
-            Assert.True(File.Exists(Path.Combine(dir, "dtrh_slots.json")), "the slot index (the file SP-052 Run A clobbered) must land in the override root");
+            Assert.True(File.Exists(Path.Combine(dir, "dtrh_slots.json")), "the slot index (the file a headed run once clobbered) must land in the override root");
             // The DTRH participant's data directory rode the same seam.
             Assert.Equal(dir, host.Participants.OfType<DtrhParticipant>().Single().DataDirectory);
 

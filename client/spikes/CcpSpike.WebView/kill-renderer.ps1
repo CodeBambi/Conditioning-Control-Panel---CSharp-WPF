@@ -1,4 +1,4 @@
-# SP-011 failure-injection case 1: kill the WebView2 renderer processes belonging to the
+# Failure-injection case 1: kill the WebView2 renderer processes belonging to the
 # spike app (identified by the unique UserDataFolder under the spike scratch dir).
 $marker = "CcpSpike.WebView\scratch\wv2-profile"
 $procs = Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" |

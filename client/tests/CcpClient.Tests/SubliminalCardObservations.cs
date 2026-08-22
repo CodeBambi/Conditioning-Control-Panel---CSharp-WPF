@@ -8,7 +8,7 @@ namespace CcpClient.Tests;
 /// already reduced to a value.
 ///
 /// <para><b>Why the measurement is hoisted out of the facts</b> (the
-/// <see cref="FlashDrawObservations"/> shape, SP-100): the rasteriser is Windows-only, and a fact
+/// <see cref="FlashDrawObservations"/> shape): the rasteriser is Windows-only, and a fact
 /// that branched on the platform would be a silencing shape the vacuous-shape ledger has to carry.
 /// Reducing the whole card to booleans first means every fact can compare a MACHINE property —
 /// "does this build have GDI+" — against a product property, with no conditional and no skip, and

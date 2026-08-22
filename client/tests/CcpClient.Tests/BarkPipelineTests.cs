@@ -7,10 +7,10 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-032 q2 bark content pipeline conformance: WPF-schema loader tolerance, condition
+/// Q2 bark content pipeline conformance: WPF-schema loader tolerance, condition
 /// ops, the VERIFIED gate order + bypass matrix (BarkService.cs:1305-1422), variant
 /// rotation/recycle/recency, payload integrity (text/audio/emotion as ONE unit), mute
-/// text-only degradation (typed, surfaced), disabled-phrase persistence on the SP-005
+/// text-only degradation (typed, surfaced), disabled-phrase persistence on the store
 /// machinery (round-trip + quarantine), TEXT-derived pacing math (Speech.cs:148-168), and
 /// priority routing through q1's arbitration.
 /// </summary>
@@ -528,7 +528,7 @@ public sealed class BarkPipelineTests
         Assert.True(h.Backend.Players[1].Playing);
     }
 
-    // ---------- disabled-phrase persistence (SP-005 machinery) ----------
+    // ---------- disabled-phrase persistence (store machinery) ----------
 
     [Fact]
     public async Task Disabled_AllVariants_EmptyPoolGate_ReEnableRoundTrips()

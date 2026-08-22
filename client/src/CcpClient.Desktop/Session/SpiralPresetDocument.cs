@@ -4,11 +4,11 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
-/// SP-106: the Spiral Overlay module's persisted dials — the port's counterpart of the
+/// The Spiral Overlay module's persisted dials — the port's counterpart of the
 /// <c>#region Spiral Overlay</c> block WPF reads out of <c>App.Settings.Current</c>
 /// (<c>CCP.Core/Models/AppSettings.cs:2643-2682</c>).
 ///
-/// <para><b>One document per module</b>, on the precedent SP-101 set and SP-105 applied a second
+/// <para><b>One document per module</b>, on the precedent set and applied a second
 /// time (<see cref="SubliminalPresetDocument"/>, <see cref="PinkFilterPresetDocument"/>,
 /// divergences D71/D80): <c>Persistence/**</c> is outside this packet's File Scope too, and the
 /// substantive half of the argument is unchanged — the store's Degraded load path takes the WHOLE

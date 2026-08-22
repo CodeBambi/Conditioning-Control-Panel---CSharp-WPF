@@ -20,16 +20,16 @@ public partial class MainWindow : Window
     private Features.Companion.CompanionWindow? _companion;
 
     /// <summary>
-    /// SP-091: the navigation shell. A rail of doors, one page host, and — for the first time
+    /// The navigation shell. A rail of doors, one page host, and — for the first time
     /// in the port — a landed surface reachable by a real gesture from a cold start with no
     /// command-line arguments: Studio -> Spiral Overlay -> THE LOOM
     /// (wpf-surface-reachability.md §8.4, verified against the running v6.8.1 app).
     ///
-    /// <para>SP-094 adds the second real route and the port's flagship one: Play -> the DTRH
+    /// <para>The second real route is the port's flagship one: Play -> the DTRH
     /// hero card -> FALL IN / Quick Drop, behind the Tier-2 gate
     /// (<c>Features/Dtrh/DtrhGate.cs</c>, <c>MainWindow/MainWindow.Lab.cs:228,313</c>).</para>
     ///
-    /// <para>SP-095 adds the third: Graded Intake -> <c>Begin Intake</c>, the port's analogue of
+    /// <para>The third is Graded Intake -> <c>Begin Intake</c>, the port's analogue of
     /// WPF's rail sub-entry <c>BtnNavGradedIntake</c> (<c>MainWindow/MainWindow.xaml:811-812</c>
     /// -> <c>MainWindow.TabNavigation.cs:947</c>) and of the destination page that entry opens.
     /// It also settles the two surfaces that do NOT get a door — the Chaos tunnel backdrop and
@@ -45,7 +45,7 @@ public partial class MainWindow : Window
 
         _host = host;
         Loom = new LoomLaunch(host, this);
-        // SP-096: the shell's duck/restore and the ONE tray owner. Built here because the two
+        // The shell's duck/restore and the ONE tray owner. Built here because the two
         // non-restore menu entries are shell verbs — WPF wires the same two on the same object
         // (MainWindow/MainWindow.xaml.cs:323-351). It is handed to DtrhLaunch rather than built
         // inside it so there is exactly one tray presence per window, whatever ends up ducking.
@@ -69,7 +69,7 @@ public partial class MainWindow : Window
         // flag reaches this same object's coordinator rather than building a second one, which is
         // the LoomLaunch/DtrhLaunch convention two waves already depend on.
         Intake = new Features.Intake.IntakeLaunch(host, this, intakeHarness);
-        // SP-130: the ONE Goon construction site (Features/Goon/GoonLaunch.cs). Same
+        // The ONE Goon construction site (Features/Goon/GoonLaunch.cs). Same
         // convention: any second caller would reach THIS object rather than build another.
         // (--goon-demo was granted and is NOT built -- D259; see GoonLaunch's class doc.)
         // No entitlement argument, and that is upstream's fact rather than an omission --
@@ -78,7 +78,7 @@ public partial class MainWindow : Window
         // where Features/Goon/GoonDoors.cs refuses them.
         Goon = new Features.Goon.GoonLaunch(host, this);
 
-        // SP-013 demonstrator popup manager. It has no user path now that the demonstrator card
+        // The demonstrator popup manager. It has no user path now that the demonstrator card
         // is retired: it is infrastructure only (A-014 integration rule), kept because
         // --popup-demo is still the WSLg evidence driver for the W-04 window contract.
         _popups = new FeaturePopupManager(
@@ -88,7 +88,7 @@ public partial class MainWindow : Window
                 : new FeaturePopupWindow(),
             FeaturePopupManager.CreateFocusRestoration(this));
 
-        // SP-098: the conditioning session, composed once by the composition root and reached
+        // The conditioning session, composed once by the composition root and reached
         // through the host — the same rule the entitlement capability follows. A shell-local
         // second engine would let the START button and the rack row drive different sessions.
         Session = host.Participants.OfType<Session.SessionParticipant>().FirstOrDefault()
@@ -96,7 +96,7 @@ public partial class MainWindow : Window
                 "the shell needs the conditioning session and this host has none — a START button "
                 + "wired to nothing is the flag-instead-of-a-session shape the spine exists to prevent");
 
-        // SP-118: the scheduler, composed once by the composition root beside the session and
+        // The scheduler, composed once by the composition root beside the session and
         // reached through the host — the same rule the session and the entitlement capability
         // follow. A shell-local second scheduler would poll a different engine than the one the
         // START button drives, which is precisely how a session gets started that nobody can stop
@@ -107,7 +107,7 @@ public partial class MainWindow : Window
                 + "be unable to tell it the user stopped by hand, and it would restart the session "
                 + "on its next tick")).Scheduler;
 
-        // SP-119: the haptic sink's app-lifetime owner, composed once by the composition root beside
+        // The haptic sink's app-lifetime owner, composed once by the composition root beside
         // the session and the scheduler and reached through the host — the same rule all three
         // follow. A shell-local second one would hold a second entitlement decision and a second
         // sink, so the switch on the page and the all-stop at teardown would be about different
@@ -156,7 +156,7 @@ public partial class MainWindow : Window
         // the shell so a session started here survives every navigation (§8.6).
         SessionStartButton.Click += (_, _) =>
         {
-            // SP-118. WPF's BtnStart_Click reads _isRunning and writes the scheduler's manual-stop
+            // WPF's BtnStart_Click reads _isRunning and writes the scheduler's manual-stop
             // flag on the way past, BEFORE it calls StopEngine/StartEngine
             // (MainWindow/MainWindow.StartStop.cs:52, :98-101, :106-107). So the scheduler is told
             // what the press MEANS while the session's state still says which press it was.
@@ -170,7 +170,7 @@ public partial class MainWindow : Window
         };
         Session.Engine.Changed += OnSessionEngineChanged;
 
-        // SP-118: WPF minimizes to tray inside the same invoke as a scheduled start
+        // WPF minimizes to tray inside the same invoke as a scheduled start
         // (MainWindow/MainWindow.StartStop.cs:615). Duck is the port's landed analogue — the shell
         // is minimized and a tray icon with the full menu goes up, and nothing is ever HIDDEN
         // (ShellTray, §12 D35). The event arrives already marshalled onto this thread.
@@ -182,12 +182,12 @@ public partial class MainWindow : Window
 
         if (popupDemo)
         {
-            // SP-013 WSLg evidence: open the demonstrator popup at startup — WSLg has no input
-            // automation (SP-008 named limit), so it must open itself.
+            // WSLg evidence: open the demonstrator popup at startup — WSLg has no input
+            // automation (a named limit), so it must open itself.
             Opened += (_, _) => _popups.Show();
         }
 
-        // SP-007 layout probe: the measured DIP bounds, the actual RenderScaling and the screen
+        // The layout probe: the measured DIP bounds, the actual RenderScaling and the screen
         // origin of every rail door — the headed harness drives real input at these rects
         // (client/tools/verify/capture.ps1). Rendered in the window (UIA-readable on Windows)
         // and logged once on first layout (stderr-readable on Linux).
@@ -221,26 +221,26 @@ public partial class MainWindow : Window
     /// granted and is NOT built, D259).</summary>
     public Features.Goon.GoonLaunch Goon { get; }
 
-    /// <summary>Demonstrator popup manager (SP-013); public so tests drive the real wiring.</summary>
+    /// <summary>Demonstrator popup manager; public so tests drive the real wiring.</summary>
     public FeaturePopupManager Popups => _popups;
 
-    /// <summary>The open companion window (SP-046), if any; public so tests assert the real open path.</summary>
+    /// <summary>The open companion window, if any; public so tests assert the real open path.</summary>
     public Features.Companion.CompanionWindow? Companion => _companion;
 
-    /// <summary>The shell's ONE duck/restore and tray owner (SP-096); public so tests drive the
+    /// <summary>The shell's ONE duck/restore and tray owner; public so tests drive the
     /// real menu and the real window transitions.</summary>
     public ShellTray ShellTray { get; }
 
-    /// <summary>The conditioning session START drives (SP-098); public so tests drive the real
+    /// <summary>The conditioning session START drives; public so tests drive the real
     /// engine and the real effect rather than a shell-local copy of either.</summary>
     public Session.SessionParticipant Session { get; }
 
-    /// <summary>The one scheduler (SP-118); public so tests drive the real decision machine rather
+    /// <summary>The one scheduler; public so tests drive the real decision machine rather
     /// than a shell-local copy of it. It is APP-lifetime, not session-lifetime: it runs while
     /// nothing is running, which is the whole feature.</summary>
     public Scheduling.SessionScheduler Scheduler { get; }
 
-    /// <summary>The one haptic sink's owner (SP-119); public so tests drive the real gate and the
+    /// <summary>The one haptic sink's owner; public so tests drive the real gate and the
     /// real refusal rather than a shell-local copy of either. APP-lifetime, like the scheduler and
     /// unlike every rack module: upstream's is a static built at startup and never engine-started
     /// (<c>App.xaml.cs:533</c>, <c>:2060</c>).</summary>
@@ -266,8 +266,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Repaint the START/STOP control. Called directly, off no dispatcher check of its own: since
-    /// SP-101 the session's <c>Changed</c> is raised through <see cref="Session.EffectSignal"/> and
+    /// Repaint the START/STOP control. Called directly, off no dispatcher check of its own: the
+    /// session's <c>Changed</c> is raised through <see cref="Session.EffectSignal"/> and
     /// arrives on the UI thread whenever one exists, so the marshalling this method used to carry
     /// now lives once, in the producer, for every module and every panel that will ever subscribe.
     /// </summary>
@@ -295,7 +295,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// SP-046 companion surface: owned, modeless, one-at-a-time (activate if already open —
+    /// The companion surface: owned, modeless, one-at-a-time (activate if already open —
     /// the W-04 discipline). The window closes with its owner automatically. WPF has no
     /// entitlement gate on showing the companion (wpf-surface-reachability.md §5).
     /// </summary>

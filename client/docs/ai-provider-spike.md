@@ -1,14 +1,14 @@
 # AI provider spike — cancellable providers and strict commands
 
-**Date:** 2026-07-21 · **Task:** SP-019 (task-board row: "Spike cancellable AI providers and strict commands") · **Status:** spike evidence; zero product-code change. Quarantined host `client/spikes/CcpSpike.AiProvider/` (NOT in `client/CcpClient.sln`; ProjectReference to `CcpClient.Desktop` only, to exercise SP-016's real `AiEnvelopeValidator` and vocabulary). The observations and limits are stated inline below.
+**Date:** 2026-07-21 · **Task:** task-board row "Spike cancellable AI providers and strict commands" · **Status:** spike evidence; zero product-code change. Quarantined host `client/spikes/CcpSpike.AiProvider/` (NOT in `client/CcpClient.sln`; ProjectReference to `CcpClient.Desktop` only, to exercise the contract's real `AiEnvelopeValidator` and vocabulary). The observations and limits are stated inline below.
 
-This spike exercises the SP-016 contract (`ai-operation-contract.md`) against a deterministic fake OpenAI-compatible loopback endpoint — the primary instrument, because a live model cannot produce timeout/429/refusal/malformed/mid-stream-cancel ON DEMAND. The strict command envelope is fuzzed against the real validator with a canary executor proving zero execution.
+This spike exercises the AI operation contract (`ai-operation-contract.md`) against a deterministic fake OpenAI-compatible loopback endpoint — the primary instrument, because a live model cannot produce timeout/429/refusal/malformed/mid-stream-cancel ON DEMAND. The strict command envelope is fuzzed against the real validator with a canary executor proving zero execution.
 
 ## Named observation per acceptance item
 
 ### 1. OpenAI-compatible endpoint behavior (instrument: deterministic fake loopback lab) — cancellation
 
-**OBSERVED (Windows + Linux):** mid-stream cancellation against the lab's `HangStream` mode (200 headers + partial body, then stall): the client received a TRUE mid-stream position (18B partial body) before the token fired; cancellation produced typed `Cancelled` in 0ms (no hang); the owning generation advanced and the cancelled result was discarded at the application seam (SP-004 §3 rule 2); the lab observed `client-gone` — a cancelled transport cannot deliver a late result. **Zero late results applied.**
+**OBSERVED (Windows + Linux):** mid-stream cancellation against the lab's `HangStream` mode (200 headers + partial body, then stall): the client received a TRUE mid-stream position (18B partial body) before the token fired; cancellation produced typed `Cancelled` in 0ms (no hang); the owning generation advanced and the cancelled result was discarded at the application seam (async-lifecycle contract §3 rule 2); the lab observed `client-gone` — a cancelled transport cannot deliver a late result. **Zero late results applied.**
 
 ### 2. Timeout (fake loopback lab)
 
@@ -44,7 +44,7 @@ This spike exercises the SP-016 contract (`ai-operation-contract.md`) against a 
 
 ### 10. Strict command schema fuzz — zero execution
 
-**OBSERVED (Windows + Linux): 62 fuzz cases green** against SP-016's real `AiEnvelopeValidator` with a canary executor (spike-side only). Per payload class:
+**OBSERVED (Windows + Linux): 62 fuzz cases green** against the contract's real `AiEnvelopeValidator` with a canary executor (spike-side only). Per payload class:
 
 - **mixed (valid+invalid):** whole-envelope atomic rejection re-verified — valid siblings typed `NotExecuted(EnvelopeRejected)`, reply text suppressed (contract §9 rule 4), `Plan == null`, canary silent. Zero execution.
 - **invalid schema:** unknown commands + enum near-misses (casing/space), missing/wrong-type/extra fields at command and data level → typed `UnknownCommand`/`MalformedData` verdicts; envelope rejected; canary silent. Model-supplied field names never leak into verdicts (`(unrecognized)` token).
@@ -59,13 +59,13 @@ The zero-execution proof is enforced at the assembly boundary, not by convention
 
 ### 11. No sensitive logs
 
-**OBSERVED (Windows + Linux):** central redaction registry (SP-018 pattern): fake Bearer API key, prompt payloads, and the lab reply text are registered secrets; every log line passes through `Redact.Scrub`; auth/payloads appear as presence+length shapes only. `--audit-logs` self-check re-registers from the gitignored registry and scans every emitted log: **GREEN on both platforms** (zero secret values in logs).
+**OBSERVED (Windows + Linux):** central redaction registry (the established pattern): fake Bearer API key, prompt payloads, and the lab reply text are registered secrets; every log line passes through `Redact.Scrub`; auth/payloads appear as presence+length shapes only. `--audit-logs` self-check re-registers from the gitignored registry and scans every emitted log: **GREEN on both platforms** (zero secret values in logs).
 
 ## Session facts
 
-- Windows: fuzz 62/62, matrix 39/39 checks, selftest 15/15, audit GREEN; contract pollution guard green (`client/CcpClient.sln` 0W/0E, 213/213 unit + 22/22 headless — identical counts to SP-016/017/018).
+- Windows: fuzz 62/62, matrix 39/39 checks, selftest 15/15, audit GREEN; contract pollution guard green (`client/CcpClient.sln` 0W/0E, 213/213 unit + 22/22 headless — identical counts to the three preceding packets).
 - WSL2 (`~/ccp-sp019`, never /mnt/e): fuzz 62/62, matrix green, selftest green, audit GREEN on Linux (the lab is loopback — real Linux evidence); contract green on Linux (213/213 + 22/22).
-- The typed vocabulary, endpoint classifier, envelope validator, and diagnostic codes under test are SP-016's REAL product code (`client/src/CcpClient.Desktop/Ai/`) — unchanged by this spike.
+- The typed vocabulary, endpoint classifier, envelope validator, and diagnostic codes under test are the contract's REAL product code (`client/src/CcpClient.Desktop/Ai/`) — unchanged by this spike.
 
 ## Named limits (row stays WIP)
 

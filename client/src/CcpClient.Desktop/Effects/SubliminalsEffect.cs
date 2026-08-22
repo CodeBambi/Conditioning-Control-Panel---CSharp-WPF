@@ -26,7 +26,7 @@ public sealed record SubliminalFiring(SubliminalEvent Event, SubliminalCard Card
 /// <c>MainWindow/MainWindow.StartStop.cs:186-187</c> and stopped by <c>StopEngineCore</c> at
 /// <c>:337</c>.
 ///
-/// <para><b>Why this module exists in the port (SP-101).</b> Not because subliminals were the next
+/// <para><b>Why this module exists in the port.</b> Not because subliminals were the next
 /// most valuable feature — because the session spine had exactly one implementation and thirteen
 /// more were queued behind it. This is the module that had to be written to find out whether the
 /// first one's shape was a template or an accident. What it found is in
@@ -88,7 +88,7 @@ public sealed class SubliminalsEffect : PacedSessionEffect<SubliminalFiring>
     /// <param name="preset">This module's persisted dials.</param>
     /// <param name="random">The jitter's source; injected so a fact can pin the arithmetic.</param>
     /// <param name="surface">Where the card goes.</param>
-    /// <param name="haptics">SP-126: the haptic limb, told once per card shown, with the card's own
+    /// <param name="haptics">The haptic limb, told once per card shown, with the card's own
     /// words. Null is ABSENT rather than silent.</param>
     public SubliminalsEffect(
         AsyncOperationOwner owner,
@@ -208,7 +208,7 @@ public sealed class SubliminalsEffect : PacedSessionEffect<SubliminalFiring>
     {
         _surface?.Show(firing.Card);
 
-        // SP-126, census sites 14 and 15. Upstream fires TriggerSubliminalPatternAsync from both
+        // Haptic census sites 14 and 15. Upstream fires TriggerSubliminalPatternAsync from both
         // branches of FlashSubliminal — the with-whisper one (SubliminalService.cs:230) and the
         // silent one inside TriggerSubliminalWithHapticPattern (:588) — and this port has no whisper
         // audio, so the two are one path here. The PHRASE travels rather than a duration, because
@@ -225,7 +225,7 @@ public sealed class SubliminalsEffect : PacedSessionEffect<SubliminalFiring>
 
     /// <summary>
     /// A module that is paced but cannot show anything says so, in type
-    /// (<see cref="EffectReasonCodes.SubliminalNoActivePhrase"/>). This is the hook SP-098's review
+    /// (<see cref="EffectReasonCodes.SubliminalNoActivePhrase"/>). This is the hook the first module's review
     /// asked for and the reason <see cref="ISessionEffect.Arm"/> stopped returning void: the
     /// schedule really is armed — <c>Degraded</c>, never <c>Unavailable</c> — and the surviving
     /// semantics say exactly which half holds.

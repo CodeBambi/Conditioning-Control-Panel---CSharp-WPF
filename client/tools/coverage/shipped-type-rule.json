@@ -1,5 +1,4 @@
 {
-  "packet": "SP-121",
   "boardRow": "client/docs/task-board.md:33",
   "question": "Which SHIPPED types have ZERO executed lines? Not a percentage - a percentage answers a worse question, because a record whose synthesized Equals ran reports line-rate 0.5 while no behaviour was driven.",
   "noThreshold": "This rule sets NO threshold, NO target and NO failing gate on the resulting count. A tolerance sized to a number just observed is exactly the size of the defect it will next hide.",

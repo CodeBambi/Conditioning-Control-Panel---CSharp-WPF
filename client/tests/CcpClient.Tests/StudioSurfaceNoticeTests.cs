@@ -10,12 +10,12 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-101 — the one sentence on the Studio module panel that had gone false.
+/// The one sentence on the Studio module panel that had gone false.
 ///
-/// <para><b>What was wrong.</b> Through SP-098 the panel said, in fixed words, that showing the
-/// images over your other windows "is not ported yet". SP-100 landed the overlay and made that
+/// <para><b>What was wrong.</b> Until the overlay landed the panel said, in fixed words, that showing
+/// the images over your other windows "is not ported yet". The overlay made that
 /// false on Windows while leaving it exactly right on Linux, and no fixed sentence can be both.
-/// SP-100's own closing note recorded it as a consequence outside its File Scope and named the
+/// That packet's own closing note recorded it as a consequence outside its File Scope and named the
 /// requirement: the replacement has to say both halves.</para>
 ///
 /// <para><b>What replaced it, and why these facts are about the SHAPE of the answer.</b> The line
@@ -28,7 +28,7 @@ namespace CcpClient.Tests;
 public class StudioSurfaceNoticeTests
 {
     // =====================================================================================
-    //  SP-105 final review — the CONTINUOUS module's live-state line, one sentence per state
+    //  Final review — the CONTINUOUS module's live-state line, one sentence per state
     // =====================================================================================
 
     /// <summary>
@@ -166,7 +166,7 @@ public class StudioSurfaceNoticeTests
     }
 
     // =====================================================================================
-    //  SP-106 — the MOVING module's live-state line, where "on screen and stopped" is a sentence
+    //  The MOVING module's live-state line, where "on screen and stopped" is a sentence
     // =====================================================================================
 
     /// <summary>Every situation a user of the moving module can really be in.</summary>
@@ -231,7 +231,7 @@ public class StudioSurfaceNoticeTests
             }
         }
 
-        // SP-105's final-review rule, carried to the fourth module: only a state with NO session
+        // The static module's final-review rule, carried to the fourth module: only a state with NO session
         // running may tell the user to start one, and every running state must say so. This module
         // has ELEVEN states against the tint's seven, which is exactly why the rule is asserted
         // mechanically rather than read.
@@ -453,7 +453,7 @@ public class StudioSurfaceNoticeTests
     }
 
     // =====================================================================================
-    //  SP-108 — the panel that has NO surface line, and what it says instead
+    //  The panel that has NO surface line, and what it says instead
     // =====================================================================================
 
     /// <summary>The state the Intensity Ramp's live line is written for. Every row is a situation a
@@ -497,7 +497,7 @@ public class StudioSurfaceNoticeTests
 
         // No line may be blank, and NO TWO STATES MAY SHARE A SENTENCE. Without this loop a
         // DescribeRampState that returned one constant would pass every row of this theory — which
-        // is the bug SP-105 shipped, a review caught, and the sibling theory above has guarded
+        // is the bug the static module shipped, a review caught, and the sibling theory above has guarded
         // against ever since. Caught here at code review before it landed.
         Assert.False(string.IsNullOrWhiteSpace(text), $"{line} renders as blank space");
         Assert.EndsWith(".", text.TrimEnd(), StringComparison.Ordinal);
@@ -582,7 +582,7 @@ public class StudioSurfaceNoticeTests
     [Fact]
     public void ARampLinkedToNothingBUTTHEFLASHOpacityIsStillLinked_WhichSp117sThirdLinkMadeReachable()
     {
-        // SP-117's sweep survivor M-ao, closed. RampPanelNotices' anyLink predicate decides whether
+        // Sweep survivor M-ao, closed. RampPanelNotices' anyLink predicate decides whether
         // this panel tells the user "nothing is linked to it yet"; before this fact, every case that
         // exercised it linked the spiral or the tint, so dropping the third link from the predicate
         // changed no measured outcome — and a user who had linked ONLY flash opacity would have been
@@ -678,7 +678,7 @@ public class StudioSurfaceNoticeTests
     }
 
     // =====================================================================================
-    //  SP-109 — the AUDIO panels' lines. Four states for a module nobody can SEE.
+    //  The AUDIO panels' lines. Four states for a module nobody can SEE.
     // =====================================================================================
 
     /// <summary>The state an audio sentence is written for. Every one is a situation a user can
@@ -731,7 +731,7 @@ public class StudioSurfaceNoticeTests
         };
         Assert.Contains(expected, line, StringComparison.Ordinal);
 
-        // THE CLAUSE THAT CAUGHT A REAL DEFECT. SP-105's finding was that telling a user to start a
+        // THE CLAUSE THAT CAUGHT A REAL DEFECT. The static module's finding was that telling a user to start a
         // session they have already started is the failure mode of a one-sentence Armed. Two of the
         // six rows here have a session running, and neither may say it.
         if (sessionRunning)
@@ -811,13 +811,13 @@ public class StudioSurfaceNoticeTests
     }
 
     // =================================================================================
-    //  SP-110 — the one resolution value that is reached by TWO opposite causes
+    //  The one resolution value that is reached by TWO opposite causes
     // =================================================================================
 
     [Fact]
     public void ARefusedCardSaysWHICHRefusalItWas_BecauseOneValueIsReachedByTwoOppositeCauses()
     {
-        // THE DEFECT CLASS SP-105 AND SP-109 EACH SHIPPED ONCE: a sentence true for one branch and
+        // THE DEFECT CLASS THE STATIC AND AUDIO MODULES EACH SHIPPED ONCE: a sentence true for one branch and
         // false for another that reaches it. LockCardResolution.Refused is reached BOTH when the
         // operating system would not give the card the keyboard AND when it did and only the ink
         // read-back refused. A single sentence naming the first is a lie about the second — and the
@@ -869,7 +869,7 @@ public class StudioSurfaceNoticeTests
     }
 
     // =================================================================================
-    //  SP-112 - the row with TWO channels, and one sentence per state that can differ
+    //  The row with TWO channels, and one sentence per state that can differ
     // =================================================================================
 
     [Fact]
@@ -902,7 +902,7 @@ public class StudioSurfaceNoticeTests
         Assert.Contains("not scheduled right now", unscheduled, StringComparison.Ordinal);
 
         // NONE of the five running states tells a user to start a session they already started -
-        // the exact message SP-105 had to split apart.
+        // the exact message the static module had to split apart.
         foreach (var line in new[] { noDisplay, noUser, neither, frozen, unfocused, unscheduled })
         {
             Assert.DoesNotContain("until the session starts", line, StringComparison.Ordinal);

@@ -10,7 +10,7 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// (:24,107-122), browser-undecodable media counted as skipped (:124-125), ratio-preserving
 /// downsample when over the cap (:127-137).
 ///
-/// SP-055: this file carries the client's ONE active-pool definition (upstream turned
+/// This file carries the client's ONE active-pool definition (upstream turned
 /// deselection into a shipped contract — #762/#798/#619 — around DtrhAssetManifest.cs's
 /// `EnumerateActive()` + IntakeHostService.cs's `IsAssetActive`; the port keeps ONE seam
 /// here so no two scans can disagree). `BuildDisabledSet` + `IsAssetActive` port the

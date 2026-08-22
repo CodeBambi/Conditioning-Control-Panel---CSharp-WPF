@@ -11,8 +11,8 @@ namespace CcpClient.Desktop.Features.Dtrh;
 ///
 /// Store shape decision (Step-1 consult): the WPF folder discipline — temp-then-move
 /// atomic writes (:85-87), slug whitelist (traversal impossible), the 12-file cap, size
-/// ceilings, GIF magic + trailer validation. REJECTED alternative: SP-005 adaptation —
-/// SP-005 is a JSON-document store (schema/migration journal); Loom artifacts are binary
+/// ceilings, GIF magic + trailer validation. REJECTED alternative: the persistence store —
+/// that is a JSON-document store (schema/migration journal); Loom artifacts are binary
 /// GIFs with a convenience sidecar, no schema/migration need, and a JSON index would
 /// invent a structure the WPF evidence doesn't have.
 ///

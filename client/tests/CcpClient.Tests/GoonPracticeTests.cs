@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-130 — the Goon practice host: the payload it serves, the frames it transcribes, and the
+/// The Goon practice host: the payload it serves, the frames it transcribes, and the
 /// four doors it refuses.
 ///
 /// <para><b>What these facts are and are not.</b> They pin SHAPE and SOURCE: that the payload
@@ -699,7 +699,7 @@ public sealed class GoonPracticeTests
 
     /// <summary>Asserts a tree is really there and returns it. The existence PREDICATE lives
     /// here rather than in a test body on purpose: a filesystem predicate inside a [Fact] is a
-    /// silencing shape (SP-066), and this one must fail the suite rather than quiet it.</summary>
+    /// silencing shape, and this one must fail the suite rather than quiet it.</summary>
     private static string RequireTree(string path, string what)
     {
         Assert.True(Directory.Exists(path), $"{what} is missing at {path}");

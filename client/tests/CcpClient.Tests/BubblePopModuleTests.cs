@@ -11,7 +11,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-113 — <b>Bubble Pop's arithmetic, its dot, and the presenter that turns the two into windows
+/// <b>Bubble Pop's arithmetic, its dot, and the presenter that turns the two into windows
 /// the operating system routes clicks to.</b> No desktop is touched in this file: the pointer
 /// surface is a double, the clock is injected and advanced by hand, and every number is upstream's
 /// with its own citation.
@@ -77,7 +77,7 @@ public class BubblePopModuleTests
     [Fact]
     public void ONESTEPCannotCarryABubbleOffItsOwnCentre_AndThatInequalityISTheRaceArgument()
     {
-        // SP-110 predicted this packet's central race: a hit test's answer is a function of a
+        // The Lock Card predicted this packet's central race: a hit test's answer is a function of a
         // position that changes between asking and clicking. The port removed it from the product —
         // nothing hit-tests and then acts on the answer, because each target is its own window and
         // the arbiter is the window manager at the instant of the click — and what remains is that a
@@ -706,7 +706,7 @@ public class BubblePopModuleTests
     [Fact]
     public void THEMODULETAKESNOCLOCKATALL_BecauseBothCadencesKeepASURFACECorrect()
     {
-        // SP-106's rule, applied a fourth time: an interval that decides when a MODULE is due
+        // The interval-ownership rule, applied a fourth time: an interval that decides when a MODULE is due
         // belongs to PacedSessionEffect; a cadence that keeps a SURFACE correct is the surface's.
         var clockParameters = typeof(BubblePopEffect)
             .GetConstructors(BindingFlags.Public | BindingFlags.Instance)
@@ -975,7 +975,7 @@ public class BubblePopModuleTests
     /// does — with a typed state carrying the backend's own reason code.
     ///
     /// <para><b>It mirrors the product's refusal shape rather than a convenient one</b>, which is
-    /// SP-110's §8b lesson: a double that reported success where the product reports a refusal makes
+    /// the Lock Card's §8b lesson: a double that reported success where the product reports a refusal makes
     /// every fact built on it blind in exactly the state that traps the user. So a refused OPEN still
     /// creates a handle and still counts as a target that is UP — because that is what the real
     /// surface does when the window exists and the routing answer is somebody else's.</para>
@@ -1070,7 +1070,7 @@ public class BubblePopModuleTests
         /// <para><b>The queue mirrors the product rather than being convenient.</b> A real press
         /// arrives in a message queue and nothing in the module runs until the surface's own pump
         /// drains it; a double that invoked the callback inline would make the presenter's
-        /// pump-before-you-move ordering invisible, which is exactly the blindness SP-110 §8b
+        /// pump-before-you-move ordering invisible, which is exactly the blindness the Lock Card's §8b review
         /// found in a double that diverged from the product where the bug lived.</para>
         /// </summary>
         public void DeliverPress(int target, PointerPressKind kind)

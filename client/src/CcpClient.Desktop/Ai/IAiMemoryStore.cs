@@ -15,7 +15,7 @@ public enum AiMemoryRole
 
 /// <summary>
 /// Local memory seam (contract §5) — DECLARED ONLY. No implementation exists in this
-/// slice; per SP-006's honesty rule this declaration is NOT a capability claim. The
+/// slice; per the capability-honesty rule this declaration is NOT a capability claim. The
 /// first consumer row implements it and proves the behavior.
 ///
 /// Contract rules binding on any future implementation:
@@ -34,7 +34,7 @@ public interface IAiMemoryStore
     IReadOnlyList<AiMemoryTurn> ReadRecent(int maxTurns);
 
     /// <summary>
-    /// The consent-gated CONVERSATION-CONSUMPTION read (SP-047; the WPF `:113` port,
+    /// The consent-gated CONVERSATION-CONSUMPTION read (the WPF `:113` port,
     /// LocalAiService.cs:111-126): the consent state is checked FIRST — not Granted ⇒ an
     /// empty list, the document's turns untouched (consent off ⇒ history is neither read
     /// nor written). Otherwise the current pairs, oldest first (already retention-capped at

@@ -1,7 +1,7 @@
 namespace CcpClient.Desktop.Features.Goon;
 
 /// <summary>
-/// SP-130: the four owner-gated doors of the Goon title screen, refused TYPED.
+/// The four owner-gated doors of the Goon title screen, refused TYPED.
 ///
 /// <para><b>Why this file exists at all.</b> Practice is one of the title menu's items and four
 /// of its siblings lead into goon-game-census.md §6, which is owner-gated and unanswered.

@@ -1,7 +1,7 @@
 namespace CcpSpike.AiProvider;
 
 /// <summary>
-/// Central secret registry + redaction (SP-018 pattern). Packet honesty framing (d):
+/// Central secret registry + redaction (video-handoff spike pattern). Packet honesty framing (d):
 /// provider payloads (prompt/reply text), auth header VALUES, and any token-bearing URL
 /// component are never logged — presence + redacted shape only. Every log line passes
 /// through <see cref="Scrub"/>; the --audit-logs self-check scans emitted logs for any

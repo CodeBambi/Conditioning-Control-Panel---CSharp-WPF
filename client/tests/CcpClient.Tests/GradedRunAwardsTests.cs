@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-128: the graded-run award path — upstream's <c>GamificationBridge.OnQuizCompleted</c>
+/// The graded-run award path — upstream's <c>GamificationBridge.OnQuizCompleted</c>
 /// perfect branch (<c>Services/GamificationBridge.cs:598-609</c>), and the defect it must not
 /// import.
 ///

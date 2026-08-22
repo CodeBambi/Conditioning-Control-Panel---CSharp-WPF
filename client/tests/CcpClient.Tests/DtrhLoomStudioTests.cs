@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-049: the Loom studio promotion — loom-reveal (typed protocol + GifPathFor + the OS
+/// The Loom studio promotion — loom-reveal (typed protocol + GifPathFor + the OS
 /// reveal seam with an injected launcher, never a real process) and the shared
 /// <see cref="DtrhLoomDispatch"/> (save/delete/reveal → result/list over a recording send;
 /// presence+shape logging — the slug never appears in logs).

@@ -5,9 +5,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Boundary mechanism unit tests (SP-038 slice c3; ai-operation-contract.md §7;
+/// Boundary mechanism unit tests (slice c3; ai-operation-contract.md §7;
 /// ai-companion-admission.md §3). Proves: the injected policy document is what the guard
-/// evaluates (never a hardcoded list), the default is the SP-019 "verdict-rejected shape
+/// evaluates (never a hardcoded list), the default is the spike's "verdict-rejected shape
 /// only" posture (Empty — no values invented), shape validation rejects malformed
 /// documents, the guard is outside the model (prompt-carried policy text is only ever the
 /// subject under evaluation), and the escalation counter is the typed WPF MECHANISM with
@@ -50,7 +50,7 @@ public class AiModerationBoundaryTests
             new AiModerationVerdict.SoftHit("cat-1") { SurfaceId = "surface-1" },
             new AiModerationVerdict.Block("cat-2") { SurfaceId = "surface-2" },
         ];
-        // SP-066 framing (c): the loop carries the only assertions — pin the source
+        // Loop framing (c): the loop carries the only assertions — pin the source
         // non-empty so an empty sample set can never silence them invisibly.
         Assert.NotEmpty(samples);
         foreach (var verdict in samples)
@@ -61,7 +61,7 @@ public class AiModerationBoundaryTests
         }
     }
 
-    // ---- placeholder default = verdict-rejected shape only (SP-019; admission §3 rule 5) ----
+    // ---- placeholder default = verdict-rejected shape only (admission §3 rule 5) ----
 
     [Fact]
     public void DefaultPolicy_Empty_EverythingPasses_NoValuesInvented()

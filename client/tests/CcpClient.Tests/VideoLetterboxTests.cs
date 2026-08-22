@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-111 — the surface's composition, which is pure arithmetic and therefore needs no desktop.
+/// The surface's composition, which is pure arithmetic and therefore needs no desktop.
 ///
 /// <para>These facts are deliberately NOT in <c>RealDesktopCollection</c>: nothing here creates a
 /// window, and putting pure arithmetic behind a machine-wide lease would slow every floor run for

@@ -9,7 +9,7 @@
         ShowInTaskbar="False"
         Background="#FF141018">
 
-  <!-- Hand-authored smallest AXAML (SP-046; A-013 advisory runs on this file — advisory
+  <!-- Hand-authored smallest AXAML (A-013 advisory runs on this file — advisory
        only). Evolved dashboard grammar: dark #FF141018 base, neon #FFE066FF accent,
        #FF3A2F3E borders, restrained glow (MainWindow.axaml/FeaturePopupWindow.axaml
        lineage) — designed, never WPF-cloned (owner decree 2026-08-04). Styling is
@@ -87,7 +87,7 @@
 
   <Grid RowDefinitions="Auto,*,Auto,Auto">
 
-    <!-- Header: title + status (status derives from the SP-006 capability state ONLY). -->
+    <!-- Header: title + status (status derives from the probed capability state ONLY). -->
     <Border Grid.Row="0" Background="#FF241A2B" BorderBrush="#FF3A2F3E" BorderThickness="0,0,0,1" Padding="14,10">
       <Grid ColumnDefinitions="Auto,*">
         <TextBlock Text="Companion" FontSize="15" FontWeight="SemiBold" Foreground="#FFE066FF" VerticalAlignment="Center" />
@@ -173,7 +173,7 @@
                          ToolTip.Tip="Loop-protection cooldown (placeholder baseline)"
                          AutomationProperties.Name="loop protection cooldown seconds" />
         </Grid>
-        <!-- The honesty line (pre-approach consult #6 / SP-047): state exactly what memory
+        <!-- The honesty line (pre-approach consult #6): state exactly what memory
              does — saved, clearable, consumed as context ONLY under the consent typed state.
              Never imply recall under the Denied placeholder default. -->
         <TextBlock Text="Memory is saved, can be cleared here, and is used as conversation context while memory consent is on. Consent and cooldowns are session-scoped placeholders pending owner decisions."

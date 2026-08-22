@@ -1,7 +1,7 @@
 namespace CcpClient.Desktop.Features.AvatarTube;
 
 /// <summary>
-/// The machine-checkable frame counter strip (SP-015 Step 1 design, consult verdict #5/#8):
+/// The machine-checkable frame counter strip (the Step 1 design, consult verdict #5/#8):
 /// every generated frame carries a pixel strip encoding pack ID, clip ID, and frame index,
 /// decodable from RENDERED captures. A uniform-delay or unmarked asset cannot falsify
 /// multiplied-speed; this strip plus non-uniform delays can.

@@ -1,7 +1,7 @@
 namespace CcpSpike.AiProvider;
 
 /// <summary>
-/// SP-019 spike host. Modes:
+/// AI-provider spike host. Modes:
 ///   --selftest        Step-2 smoke: lab round-trip, policy rejection, timeout, audit
 ///   --fuzz            Step-3 strict-envelope fuzz matrix (zero-execution proof)
 ///   --matrix          Step-4 provider-behavior matrix (cancellation/timeout/429/5xx/refusal/malformed)

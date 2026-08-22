@@ -35,7 +35,7 @@ public sealed class DemoSettings
     public int Volume { get; set; } = 50;
 
     /// <summary>
-    /// The demo.status-ticker enabled flag (SP-007). NO schema bump: unknown-member
+    /// The demo.status-ticker enabled flag. NO schema bump: unknown-member
     /// tolerance means an older document loads with default false, and
     /// <see cref="ExtensionData"/> preserves the member for older builds. DemoSettings stays
     /// "not a feature model" because the ticker is a labeled demonstrator.

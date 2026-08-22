@@ -37,10 +37,10 @@ public partial class PlayPage : UserControl
         ArgumentNullException.ThrowIfNull(goon);
         InitializeComponent();
 
-        // SP-130: the Goon door. Synchronous, because GoonLaunch.Practice is - there is no gate
+        // The Goon door. Synchronous, because GoonLaunch.Practice is - there is no gate
         // to resolve (upstream's card is ungated, PlayTabView.xaml:547-549) and no async read to
         // wait on. It never throws: a fault arrives on Faulted and is rendered below rather than
-        // vanishing into an unobserved task, which is SP-097's lesson applied to a second door.
+        // vanishing into an unobserved task, which is the launch-fault lesson applied to a second door.
         GoonPracticeButton.Click += (_, _) => goon.Practice();
         goon.Faulted += RenderGoonFault;
 
@@ -50,7 +50,7 @@ public partial class PlayPage : UserControl
         // ever disabled, in any branch — a gated press must ARRIVE (PlayTabView.xaml:503-506).
         //
         // Discarding the task is SAFE ONLY BECAUSE the launcher no longer lets one fault escape
-        // it (SP-097): DtrhLaunch wraps the whole flow the way WPF wraps its whole handler
+        // it: DtrhLaunch wraps the whole flow the way WPF wraps its whole handler
         // (MainWindow.Lab.cs:221-271) and raises Faulted. Before that, a throw from the descent
         // landed in TaskScheduler.UnobservedTaskException at some later GC and the user saw
         // nothing at all.

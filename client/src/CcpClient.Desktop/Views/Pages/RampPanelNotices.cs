@@ -13,8 +13,8 @@ public sealed record RampDialHold(string Label, int BaseValue, int CurrentValue)
 /// <summary>
 /// The Intensity Ramp panel's two sentences.
 ///
-/// <para><b>Why they are in their own file (SP-108).</b> SP-105 deferred extracting
-/// <c>StudioPage.axaml.cs</c>'s <c>Describe*</c> families and SP-106 §1.4 said four real bodies had
+/// <para><b>Why they are in their own file.</b> An earlier row deferred extracting
+/// <c>StudioPage.axaml.cs</c>'s <c>Describe*</c> families and a later audit §1.4 said four real bodies had
 /// made the extraction justified. Refactoring the file that carries all four landed modules' rendered
 /// claims is not this packet's risk to take, so the fifth module's text starts where the extraction
 /// would put it instead of adding a fifth family to the file that will not scale.</para>
@@ -44,7 +44,7 @@ public static class RampPanelNotices
         bool sessionRunning)
     {
         ArgumentNullException.ThrowIfNull(preset);
-        // SP-117 added the third of WPF's five links (flash opacity). This predicate is what decides
+        // The third of WPF's five links (flash opacity) is ported now. This predicate is what decides
         // whether the panel says "nothing is linked to it yet", so a link the port has and this
         // clause does not know about would make the panel tell a user with a linked ramp that their
         // ramp does nothing.

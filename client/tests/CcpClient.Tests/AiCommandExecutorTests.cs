@@ -5,11 +5,11 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// c6 command-execution tests (SP-044; admission §8 c6; contract §8 rule 6, §9): envelope →
+/// c6 command-execution tests (admission §8 c6; contract §8 rule 6, §9): envelope →
 /// plan → gated dispatch. Proves: consent gates post-validation and typed; the none-admitted
 /// default (deliberate WPF divergence); canary zero-execution on every rejected/gated/stale
 /// class; moderation pre-execution through the shipped ForBoundary factory; and
-/// NotExecuted(SupersededGeneration) at EXECUTION level (SP-019 limit 7) against the REAL
+/// NotExecuted(SupersededGeneration) at EXECUTION level (named limit 7) against the REAL
 /// AsyncOperationOwner generation machinery.
 /// </summary>
 public class AiCommandExecutorTests
@@ -169,7 +169,7 @@ public class AiCommandExecutorTests
         Assert.Equal(generation, gates.Generation);
     }
 
-    // ---- superseded generation at execution level (SP-019 limit 7) ----
+    // ---- superseded generation at execution level (named limit 7) ----
 
     [Fact]
     public void StaleGeneration_BeforeDispatch_EveryCommandSuperseded_CanarySilent()
@@ -237,7 +237,7 @@ public class AiCommandExecutorTests
         var result = Validate(json, Policy(master: true));
 
         Assert.False(result.Accepted);
-        // Atomic envelope semantics (SP-016/SP-019): an invalid envelope has NO executable
+        // Atomic envelope semantics: an invalid envelope has NO executable
         // representation — the executor cannot be invoked on it (type-enforced, internal ctor).
         Assert.Null(result.Plan);
     }

@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-061: the tunnel surface's capability typing — ONE capability, never a silent
+/// The tunnel surface's capability typing — ONE capability, never a silent
 /// fallback. Windows delegates to the DTRH embedded probe (literally the same engine load);
 /// Linux carries the tunnel's OWN unavailability reasons (never DTRH's text, never a green
 /// dialog row for an unadmitted surface — consult ruling 3b).
@@ -26,7 +26,7 @@ public sealed class ChaosTunnelCapabilityTests
     [Fact]
     public void Windows_DelegatesToTheSameEngineLoadAsDtrh()
     {
-        // SP-066: the OS gate REPORTS (Assert.SkipUnless), never a silent return — the
+        // The OS gate REPORTS (Assert.SkipUnless), never a silent return — the
         // skip is pinned by NAME in client/tests/floor/floor.json (allowedSkips; may-skip
         // semantics — green on Windows, allowed-skipped on Linux).
         Assert.SkipUnless(OperatingSystem.IsWindows(),
@@ -40,7 +40,7 @@ public sealed class ChaosTunnelCapabilityTests
     [Fact]
     public void Linux_UnavailableNamesTheTunnelsOwnTwoGaps()
     {
-        // SP-066: the OS gate REPORTS (Assert.SkipWhen), never a silent return — the skip is
+        // The OS gate REPORTS (Assert.SkipWhen), never a silent return — the skip is
         // pinned by NAME in client/tests/floor/floor.json (allowedSkips; runs on the Linux
         // machine class — the WSL gate — allowed-skipped on Windows).
         Assert.SkipWhen(OperatingSystem.IsWindows(),

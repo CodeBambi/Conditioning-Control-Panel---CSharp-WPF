@@ -9,7 +9,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-111 — the Mandatory Video module: its pacing law, its clip pool, its three arm outcomes, and
+/// The Mandatory Video module: its pacing law, its clip pool, its three arm outcomes, and
 /// the dot's SEVENTH meaning.
 ///
 /// <para>Nothing here touches a desktop, a decoder or a file the OS has to parse: the surface is a
@@ -210,7 +210,7 @@ public class MandatoryVideoModuleTests
         // EVERY other module in the rack reports a clean Available when everything works. This one
         // must not: the absence is a property of the BUILD, not of the run, and a row that only
         // admitted to being half a row when something else broke would be the silently-missing half
-        // the reason code exists to prevent. SP-109's Brain Drain set this precedent.
+        // the reason code exists to prevent. Brain Drain set this precedent.
         var state = Assert.IsType<CapabilityState.Degraded>(rig.Effect.Arm());
         Assert.Equal(EffectReasonCodes.VideoSilentHalfAbsent, state.Reason.Code);
         Assert.Equal(MandatoryVideoEffect.VideoPanelNoticeText, state.Reason.Detail);
@@ -229,7 +229,7 @@ public class MandatoryVideoModuleTests
         Assert.Equal(EffectReasonCodes.VideoNoClip, state.Reason.Code);
         Assert.StartsWith("there is no video in ", state.Reason.Detail, StringComparison.Ordinal);
 
-        // And the BUILD-level one still travels, in the same detail. SP-109 shipped this defect once
+        // And the BUILD-level one still travels, in the same detail. This defect shipped once
         // — Brain Drain's Ready replaced the run-level cause with the build-level one and the user
         // lost "there is no clip in <folder>" entirely.
         Assert.Contains(MandatoryVideoEffect.VideoPanelNoticeText, state.Reason.Detail, StringComparison.Ordinal);
@@ -328,7 +328,7 @@ public class MandatoryVideoModuleTests
         Assert.Equal(["only.mp4"], rig.Surface.Begun);
         Assert.Equal(TimeSpan.FromSeconds(42), rig.Surface.LastMaxLength);
 
-        // SP-112 added an optional PAINTER to this seam for a second module. THIS module passes
+        // An optional PAINTER was added to this seam for a second module. THIS module passes
         // none, and the double records that so the claim is asserted rather than promised: the
         // capability's second consumer must not have changed what the first one does.
         Assert.Null(rig.Surface.LastPainter);
@@ -337,7 +337,7 @@ public class MandatoryVideoModuleTests
         Assert.Equal(1, fired!.Value.Ordinal);
 
         // The event carries no path and no file name: the clips are the user's own media and this
-        // record reaches subscribers and, one day, a log. SP-098's rule, kept.
+        // record reaches subscribers and, one day, a log. The no-file-name rule, kept.
         Assert.DoesNotContain("only.mp4", fired.Value.ToString(), StringComparison.Ordinal);
     }
 
@@ -541,8 +541,8 @@ public class MandatoryVideoModuleTests
     /// <para><b>It decides nothing the product should decide.</b> It reports whatever state the fact
     /// set and hands back whatever outcome the fact chose, and it MIRRORS the product where the
     /// product's own state transitions matter — <c>Begin</c> marks the surface showing only when it
-    /// succeeded, exactly as <see cref="VideoSurfacePresenter"/> does, because SP-110 shipped a
-    /// double that diverged from the product in precisely the state a defect lived in.</para>
+    /// succeeded, exactly as <see cref="VideoSurfacePresenter"/> does, because a double that
+    /// diverged from the product in precisely the state a defect lived in has shipped before.</para>
     /// </summary>
     private sealed class RecordingVideoSurface : IVideoSurface
     {
@@ -576,8 +576,8 @@ public class MandatoryVideoModuleTests
 
         public VideoSurfaceObservation LastObservation { get; set; } = VideoSurfaceObservation.NotAsked;
 
-        /// <summary>The painter the last Begin was handed, or null. SP-112 added the seam; this
-        /// module never uses it, and the double records it so a fact can assert that.</summary>
+        /// <summary>The painter the last Begin was handed, or null. The seam was added elsewhere;
+        /// this module never uses it, and the double records it so a fact can assert that.</summary>
         public IVideoFramePainter? LastPainter { get; private set; }
 
         public CapabilityState Begin(

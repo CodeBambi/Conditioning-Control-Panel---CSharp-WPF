@@ -1,11 +1,11 @@
-# CCP greenfield verification harness - seeded-regression self-test (SP-008).
+# CCP greenfield verification harness - seeded-regression self-test.
 # Proves the targeted gate catches a REAL visual regression, throwaway-edit pattern
-# (SP-007 AVLN2000 precedent; NO defect-injection flags in product code):
+# (AVLN2000 precedent; NO defect-injection flags in product code):
 #   1. edit the REAL MainWindow.axaml — break the SELECTED rail-door border brush
 #   2. build, capture rail-door/selected, assert CcpVerify FAILS the SPECIFIC NAMED check
 #   3. restore (from the bytes captured in memory, never git), rebuild, re-capture, assert green
 #
-# SP-122: the SAME seed covers the RACK, and it costs one extra capture per build to prove it.
+# The SAME seed covers the RACK, and it costs one extra capture per build to prove it.
 # #FFE066FF is not door-specific — it is also RadioButton.rack-row:checked's BorderBrush and
 # Ellipse.dot.live's Fill (MainWindow.axaml:68-71, :101-105, :390-393) — so one throwaway edit
 # breaks the rail door's selected border AND the rack row's selection marker, and both named
@@ -22,7 +22,7 @@ $manifest = Join-Path $verifyDir 'checks.json'
 $capture = Join-Path $verifyDir 'artifacts\windows-rail-door-selected.png'
 $rackCapture = Join-Path $verifyDir 'artifacts\windows-rack-row-selected.png'
 
-# RESTORE FROM MEMORY, NEVER FROM GIT (SP-094 near-miss, 2026-08-18).
+# RESTORE FROM MEMORY, NEVER FROM GIT (near-miss, 2026-08-18).
 # This used `git checkout -- MainWindow.axaml` in both the failure path and the finally
 # block. That restores the COMMITTED content, so running the self-test on a tree with
 # uncommitted edits to that file DISCARDS them -- silently, and before anything is read.
@@ -65,7 +65,7 @@ try {
     }
     Write-Output 'seeded regression caught by the SPECIFIC named check (exit 2)'
 
-    # SP-122 — the same seeded build, read at the RACK. The rack row's selection marker uses the
+    # The same seeded build, read at the RACK. The rack row's selection marker uses the
     # same brush, so it must trip too, and it must trip by its OWN name.
     & (Join-Path $verifyDir 'capture.ps1') -Surface rack-row -State selected | Out-Null
     if ($LASTEXITCODE -ne 0) { Fail 'rack-row capture failed with seeded regression' }

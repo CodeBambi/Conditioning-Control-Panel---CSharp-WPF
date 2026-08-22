@@ -4,14 +4,14 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-019's 62-case strict-envelope fuzz matrix (client/spikes/CcpSpike.AiProvider/Fuzz.cs)
-/// ported as the permanent regression suite for the F1 fix (SP-033; admission §3 rule 6).
+/// The spike's 62-case strict-envelope fuzz matrix (client/spikes/CcpSpike.AiProvider/Fuzz.cs)
+/// ported as the permanent regression suite for the F1 fix (admission §3 rule 6).
 /// Zero-execution is proven two ways per case: a rejected payload has NO AiExecutionPlan
 /// (type-enforced — internal ctor), so the canary CANNOT be invoked; a valid payload's plan
 /// must record EXACTLY its commands in the canary (the falsifiable pair).
 ///
 /// F1 DELTA vs the spike: duplicate keys are now REJECTED (the only contract-consistent
-/// answer, SP-019 limit 6). The spike's two dup-key probe cases flipped:
+/// answer, named limit 6). The spike's two dup-key probe cases flipped:
 /// "dup-key-last-out-of-range" [O]→[M duplicate], "dup-key-first-out-of-range" accepted→rejected.
 /// New duplicate-key cases (root/command/data, both orders, unknown-name precedence) appended.
 /// </summary>
@@ -146,7 +146,7 @@ public class AiEnvelopeFuzzRegressionTests
 
         Assert.True(failures.Count == 0,
             $"fuzz failures ({failures.Count}/{cases.Length}):\n" + string.Join("\n", failures));
-        Assert.Equal(70, cases.Length); // 62 SP-019 cases + 8 new F1 duplicate-key cases
+        Assert.Equal(70, cases.Length); // 62 spike cases + 8 new F1 duplicate-key cases
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class AiEnvelopeFuzzRegressionTests
         Assert.Equal("command", cv.Field);
         Assert.Equal("duplicate", cv.Code);
 
-        // Data-object level, both orders (the SP-019 parser-differential pair).
+        // Data-object level, both orders (the spike's parser-differential pair).
         foreach (var payload in new[]
         {
             """{"commands":[{"command":"flash_image","data":{"amount":1,"amount":9,"duration":1,"size":1,"opacity":1}}]}""",
@@ -336,7 +336,7 @@ public class AiEnvelopeFuzzRegressionTests
             true, null, [V, V, V, NE],
             [AiCommandKind.Bubbles, AiCommandKind.Spiral, AiCommandKind.Pink]),
 
-        // ---- NEW F1 duplicate-key cases (SP-033) ----
+        // ---- NEW F1 duplicate-key cases ----
         new("dup-root-reply", "{\"reply\":\"a\",\"reply\":\"b\"}", PermitAll,
             false, "duplicate-field", [], []),
         new("dup-root-commands", "{\"commands\":[],\"commands\":[]}", PermitAll,

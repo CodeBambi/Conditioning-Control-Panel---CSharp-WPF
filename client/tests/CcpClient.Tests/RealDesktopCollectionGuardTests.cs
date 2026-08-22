@@ -3,14 +3,14 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-107: the <see cref="RealDesktopCollection"/> membership convention, made mechanical.
+/// The <see cref="RealDesktopCollection"/> membership convention, made mechanical.
 ///
 /// <para><b>WHAT THIS BINDS.</b> The desktop is machine-global, so a class that puts a window on
 /// it or reads pixels off it must run inside the collection that holds the machine-wide lease.
 /// Without this guard the convention is TEXT, and the next probe file to appear silently rejoins
-/// the racy default collection — which is precisely how SP-099's and SP-100's fixtures came to
+/// the racy default collection — which is precisely how the overlay fixtures came to
 /// contend with each other and with other processes in the first place. The symptom arrives as an
-/// unrelated packet's land reddening a test it never touched (SP-106 §6.1/§6.2).</para>
+/// unrelated packet's land reddening a test it never touched.</para>
 ///
 /// <para><b>WHY A SOURCE WALK.</b> <c>[Collection]</c> is reflectable, but "this class reaches the
 /// real window manager" is a property of a method body, which reflection cannot see without
@@ -68,7 +68,7 @@ public class RealDesktopCollectionGuardTests
         "TrayObservations",
         "TrayShellProbe",
         "Win32OverlayPresence",
-        // SP-110. An input-capturing window is the most contended thing this suite puts on the
+        // An input-capturing window is the most contended thing this suite puts on the
         // desktop: it does not merely occupy a point in the z-order, it TAKES THE FOREGROUND and the
         // keyboard focus away from whatever else is running — including another CcpClient.Tests
         // process's own card, and including the scratch rigs the overlay and flash fixtures depend
@@ -78,20 +78,20 @@ public class RealDesktopCollectionGuardTests
         "InputCaptureObservations",
         "Win32InputPresence",
 
-        // SP-111. A video surface is a layered topmost window that this process paints frame by
+        // A video surface is a layered topmost window that this process paints frame by
         // frame and then READS BACK, and the read-back leg the harness adds reads the composited
         // DESKTOP. Two of these running concurrently would contest the same points on the one
         // machine-global screen, and the desktop-capture control would be reading the other run.
         "VideoSurfaceObservations",
         "Win32VideoPresence",
 
-        // SP-112. The second consumer's own run uses ALL THREE of the above at once — an overlay, a
+        // The second consumer's own run uses ALL THREE of the above at once — an overlay, a
         // video surface carrying a picture this process painted, and a card that takes the
         // foreground after it — so it contends for everything the three lines above contend for,
         // and it must join the same collection for the same reasons.
         "BubbleCountObservations",
 
-        // SP-113. A pointer target is the most invasive thing this suite has put on the desktop yet
+        // A pointer target is the most invasive thing this suite has put on the desktop yet
         // and it is invasive in a NEW way: the runs behind these helpers SYNTHESISE MOUSE CLICKS at
         // points on the one machine-global screen. Two of them running concurrently would not merely
         // contest a rectangle — one run's click would land in the other run's window, or in whatever
@@ -100,7 +100,7 @@ public class RealDesktopCollectionGuardTests
         "PointerSurfaceObservations",
         "Win32PointerSurface",
 
-        // SP-115. A per-pixel-alpha surface is a layered topmost window this process composites and
+        // A per-pixel-alpha surface is a layered topmost window this process composites and
         // then reads back, and its central fact reads the COMPOSITED DESKTOP over a known
         // background. Two runs sharing the machine would each be reading the other's background,
         // and the run's own occlusion arbitration would name the peer's window as the intruder --
@@ -190,7 +190,7 @@ public class RealDesktopCollectionGuardTests
                 violations.Add($"CcpClient.Tests/{name}: declares tests and reaches the real desktop "
                     + $"[{string.Join("; ", reasons)}] but does not carry {MembershipAttribute}. The interactive "
                     + "desktop is MACHINE-global: this class contends with every other real-desktop class in the "
-                    + "process AND with every other CcpClient.Tests process on the machine, which SP-107 measured "
+                    + "process AND with every other CcpClient.Tests process on the machine, measured "
                     + "as 8 red in 12 concurrent floor runs. The fix is membership, never a skip, never a retry, "
                     + "and never an allowedSkips entry.");
             }
@@ -251,7 +251,7 @@ public class RealDesktopCollectionGuardTests
         // The asymmetry, and why it is the STRONGER rule over there: xunit collections do not span
         // assemblies, so nothing in CcpClient.HeadlessTests can hold the machine-wide lease. A real
         // window opened from that project would be on the user's desktop with nothing serializing it
-        // against the unit project's fixtures OR against another process — the exact defect SP-107
+        // against the unit project's fixtures OR against another process — the exact defect that was
         // measured, with no remedy available short of moving the fact.
         var files = ProjectSources(HeadlessProjectParts);
         var strays = new List<string>();

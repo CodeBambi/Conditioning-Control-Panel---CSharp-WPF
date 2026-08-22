@@ -8,13 +8,13 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// The b2 slot document (schema v1): the fields the picker/quarantine/lifecycle semantics
 /// need now. b4 (progression) ADDS members without a schema bump — unknown-member
 /// tolerance + <see cref="ExtensionData"/> preserve them both directions (persistence
-/// contract §6, SP-007 precedent). <see cref="CraftedItems"/> keeps the WPF key names
+/// contract §6, the demonstrator precedent). <see cref="CraftedItems"/> keeps the WPF key names
 /// verbatim ("ragdoll" / "porcelain" — ChaosMetaStore.cs:105-108) because the stitch-lock
 /// reads them.
 ///
-/// b4 (SP-026): the FULL WPF ChaosMetaState progression surface (ChaosMetaState.cs —
+/// b4: the FULL WPF ChaosMetaState progression surface (ChaosMetaState.cs —
 /// additive-only, neutral defaults :8-9) rides this document. NOT ported: SchemaVersion
-/// (the SP-005 store owns schema) and the retired ToyPockets/AccessoryPockets (WPF
+/// (the persistence store owns schema) and the retired ToyPockets/AccessoryPockets (WPF
 /// do-not-read, migration-zeroed, ChaosMetaState.cs:62-63). A b2-era file lacking these
 /// members loads clean — the initializers ARE the WPF defaults (ConsumableSlots=1 mirrors
 /// the ChaosMetaStore.cs:71 load clamp); the meta engine flags absent members once at
@@ -132,8 +132,8 @@ public sealed class DtrhSlotDocument
 }
 
 /// <summary>The DTRH-owned index document: which slot is live. Lives in its own store
-/// because Persistence/DemoSettings.cs is outside this packet's File Scope (SP-024
-/// record Step 1 — a 4th PersistenceStore on the SAME SP-005 machinery, not a second
+/// because Persistence/DemoSettings.cs is outside this packet's File Scope (the packet
+/// record Step 1 — a 4th PersistenceStore on the SAME machinery, not a second
 /// persistence path; WPF parity: ChaosMetaStore.cs:38 keeps the active slot in app
 /// settings).</summary>
 public sealed class DtrhSlotIndex
@@ -142,7 +142,7 @@ public sealed class DtrhSlotIndex
 
     public int ActiveSlot { get; set; } = 1;
 
-    // ---- b4 (SP-026): the saved Descent-tab choices (request-run persistence, WPF
+    // ---- b4: the saved Descent-tab choices (request-run persistence, WPF
     // PersistRunSetup :421-444 writes AppSettings — app-global, shared across slots, so
     // the INDEX document carries them; same File Scope constraint class as ActiveSlot).
     // init's runSetup reads these (BuildRunSetup :447-478 raw values, NOT clamped run
@@ -151,8 +151,8 @@ public sealed class DtrhSlotIndex
 
     public int DurationSec { get; set; } = 180;
 
-    /// <summary>The Bottomless Fall toggle (WPF ChaosEndless; SP-052 additive member —
-    /// absent in pre-SP-052 index docs = false, neutral default, no schema bump). Persist
+    /// <summary>The Bottomless Fall toggle (WPF ChaosEndless; an additive member —
+    /// absent in older index docs = false, neutral default, no schema bump). Persist
     /// is ownership-gated (endless_mode); deal re-checks ownership (ChaosModels.cs:206).</summary>
     public bool Endless { get; set; } = false;
 
@@ -193,14 +193,14 @@ public sealed record DtrhSlotSummary(
     DateTime? LastPlayedUtc,
     bool HasRagdoll,
     bool HasPorcelain,
-    /// <summary>Typed Degraded (SP-005 §5): this slot's document was quarantined or is
+    /// <summary>Typed Degraded (the persistence contract §5): this slot's document was quarantined or is
     /// newer-schema. Greenfield divergence from WPF (which shows corrupt slots as
-    /// zeroed-but-deletable, ChaosMetaStore.cs:84-85): the packet mandates SP-005
+    /// zeroed-but-deletable, ChaosMetaStore.cs:84-85): the packet mandates
     /// quarantine, so the card surfaces the flag instead of silent zeros.</summary>
     bool Degraded);
 
 /// <summary>
-/// The three local DTRH save slots (slice b2; dtrh-admission.md §7) on SP-005 machinery:
+/// The three local DTRH save slots (slice b2; dtrh-admission.md §7) on persistence machinery:
 /// one <see cref="PersistenceStore{TModel}"/> per slot file (<c>dtrh_slot1..3.json</c>
 /// beside settings.json — WPF one-file-per-slot identity, ChaosMetaStore.cs:24,30) plus
 /// one for the active-slot index (<c>dtrh_slots.json</c>). Every store gets its OWN named
@@ -208,8 +208,8 @@ public sealed record DtrhSlotSummary(
 /// (OperationRegistry.cs:148-159), so N stores sharing one owner would cancel each
 /// other's in-flight writes.
 ///
-/// Semantics ported from WPF (archaeology cites in SP-024 record Step 1): missing slot =
-/// empty ("New Journey"), never auto-created at load (SP-005 Missing outcome is not
+/// Semantics ported from WPF (archaeology cites in the packet record Step 1): missing slot =
+/// empty ("New Journey"), never auto-created at load (the Missing outcome is not
 /// dirty); corrupt slot = quarantine + typed Degraded, never silent defaults; descending
 /// into an empty slot persists a fresh document immediately (defines lastPlayed);
 /// delete removes file + stray temp and reloads the slot store to flagged-empty; the
@@ -239,9 +239,9 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
             _slots[i] = NewSlotStore(i + 1);
         }
 
-        // b4 (SP-026): cumulative per-asset engagement (asset-stats) — app-global in WPF
+        // b4: cumulative per-asset engagement (asset-stats) — app-global in WPF
         // (dtrh_asset_stats.json, DtrhAssetStatsStore.cs:41), so it lives beside the index,
-        // not inside a slot. Same SP-005 machinery, its OWN named owner.
+        // not inside a slot. Same persistence machinery, its OWN named owner.
         _assetStats = new PersistenceStore<DtrhAssetStatsDocument>(
             infra.OwnerFor("DtrhAssetStats"), infra.Log, AssetStatsFilePath, DtrhAssetStatsDocument.CurrentSchemaVersion);
     }
@@ -280,7 +280,7 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
 
     private static int Clamp(int slot) => slot < 1 || slot > SlotCount ? 1 : slot;
 
-    /// <summary>Start loads every store (SP-005 phase-3 contract): a missing slot yields
+    /// <summary>Start loads every store (the persistence phase-3 contract): a missing slot yields
     /// flagged-empty defaults WITHOUT a file write (empty slots stay file-less); a
     /// corrupt slot is quarantined here — once, at startup, never at picker-open.</summary>
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -288,7 +288,7 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
         cancellationToken.ThrowIfCancellationRequested();
         if (Interlocked.Exchange(ref _started, 1) != 0)
         {
-            return; // idempotent (SP-003)
+            return; // idempotent (lifecycle contract)
         }
 
         Running = true;
@@ -335,7 +335,7 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
         await _assetStats.StopAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Teardown flush for every store (SP-005 §11): enqueues final writes for
+    /// <summary>Teardown flush for every store (the persistence contract §11): enqueues final writes for
     /// dirty stores and awaits quiescence with a bounded wait. Never throws.</summary>
     public async Task FlushAsync(TimeSpan boundedWait)
     {
@@ -421,7 +421,7 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
 
     /// <summary>Descend into a slot: select it, then persist a fresh document when the slot
     /// is empty — the save now exists (defines lastPlayed) and restart persistence has a
-    /// file to prove. Greenfield choice recorded in SP-024 record Step 1 (WPF creates the
+    /// file to prove. Greenfield choice recorded in the packet record Step 1 (WPF creates the
     /// file on the first meta flush; the user-observable outcome is identical).</summary>
     public async Task<OperationOutcome> DescendInto(int slot)
     {
@@ -460,7 +460,7 @@ public sealed class DtrhSaveSlots : IBackgroundParticipant
             _log.Log($"dtrh-slots: delete slot {slot} failed: {ex.Message}");
         }
 
-        // Fresh store = SP-005 load of the now-missing file (flagged-empty defaults, not
+        // Fresh store = a persistence load of the now-missing file (flagged-empty defaults, not
         // dirty — the empty slot stays file-less until a descend persists it). The OLD
         // store is stopped first so an in-flight write can't resurrect the deleted file.
         var old = _slots[slot - 1];

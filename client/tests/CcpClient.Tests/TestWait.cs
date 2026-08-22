@@ -1,13 +1,13 @@
 namespace CcpClient.Tests;
 
 /// <summary>
-/// The ONE approved bounded-window wait for tests (SP-059 timing discipline — the third
-/// occurrence of the wall-clock-flake class, encoded: T-15 SP-041, T-16 SP-043). Every test
+/// The ONE approved bounded-window wait for tests (timing discipline — the third
+/// occurrence of the wall-clock-flake class, encoded: T-15, T-16). Every test
 /// wait is either a deterministic signal or THIS helper; hard-coded deadline literals anywhere
 /// else in <c>client/tests/**</c> fail <c>TestTimingGuardTests</c>.
 ///
 /// On window expiry the failure LEADS with a greppable verdict token (it survives into TRX
-/// failure names — the SP-058 land lesson) and appends environment + actor evidence, because
+/// failure names — an earlier land lesson) and appends environment + actor evidence, because
 /// "the condition never became true" (a real product/test failure) and "this machine was slow"
 /// are different verdicts and must be reported differently:
 ///
@@ -30,7 +30,7 @@ public static class TestWait
     public static readonly TimeSpan DefaultWindow = TimeSpan.FromSeconds(20);
 
     /// <summary>
-    /// SP-063 owner decree ("just increase the amount of budgets by a lot"): the ONE shared
+    /// The owner decree ("just increase the amount of budgets by a lot"): the ONE shared
     /// deadline budget for tests whose subject is NOT the budget's elapsing (classification,
     /// round-trip, payload shape, cancellation). Injected into product options so a cold
     /// first-ever build (JIT + HttpListener warmup) can never race the assertion. 60 s is
@@ -138,7 +138,7 @@ public static class TestWait
     }
 
     /// <summary>
-    /// SP-116. The verdict selector, and the ONE place either token is chosen.
+    /// The verdict selector, and the ONE place either token is chosen.
     ///
     /// <para><b>The bug this shape exists to make impossible.</b> Both branches used to be reached
     /// through the poll heuristic alone, and the SIGNAL overload has no poll loop: it filled
@@ -152,7 +152,7 @@ public static class TestWait
     /// measure.</para>
     ///
     /// <para>Internal rather than private so BOTH verdicts can be pinned against each other
-    /// (<c>TestWaitVerdictTests</c>). Before SP-116 neither was pinned anywhere, which is how the
+    /// (<c>TestWaitVerdictTests</c>). Before that file neither was pinned anywhere, which is how the
     /// misclassification survived across ten call sites: the only evidence was a failure message
     /// nobody reads until something is already broken.</para>
     /// </summary>
@@ -204,7 +204,7 @@ public static class TestWait
     private sealed record Stats(
         bool Met, int Polls, long WorstSlipMs, long ElapsedMs, TimeSpan Window, bool DeterministicSignal = false)
     {
-        /// <summary>SP-116: the signal overload carries its OWN measured elapsed and says plainly
+        /// <summary>The signal overload carries its OWN measured elapsed and says plainly
         /// that it had no poll loop, instead of filling the poll fields with sentinels the verdict
         /// selector then read as starvation.</summary>
         public static Stats ForSignal(TimeSpan window, long elapsedMs) =>

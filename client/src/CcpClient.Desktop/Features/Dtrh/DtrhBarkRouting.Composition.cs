@@ -6,9 +6,9 @@ namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
 /// The DTRH host's bark COMPOSITION — what <c>DtrhBarkRouting</c>'s table routes into — lifted out
-/// of <see cref="DtrhHostWindow"/> so it can be DRIVEN (SP-123).
+/// of <see cref="DtrhHostWindow"/> so it can be DRIVEN.
 ///
-/// <para><b>Why it exists.</b> The SP-121 execution census found that
+/// <para><b>Why it exists.</b> The execution census found that
 /// <c>DtrhHostWindow.InitBarkPipeline</c> was the SOLE construction site of four types with zero
 /// executed lines — <see cref="SystemSoundClock"/>, <see cref="UnavailableDuckSink"/>,
 /// <see cref="DirectoryBarkAudioResolver"/> and the window's own private log adapter — inside an
@@ -57,10 +57,10 @@ public static partial class DtrhBarkRouting
     /// options.
     /// </summary>
     /// <param name="backend">The audio backend. Product = a second SoundFlow engine (miniaudio
-    /// devices coexist — SP-029 DTRH boundary); facts = a recording fake.</param>
+    /// devices coexist — the DTRH audio boundary); facts = a recording fake.</param>
     /// <param name="log">The host diagnostic log; also the clock's callback-fault reporter, so a
     /// faulting pacing/recovery/duck-watchdog callback is contained and named instead of ending the
-    /// process from a pool thread (SP-123 fix 1).</param>
+    /// process from a pool thread.</param>
     public static SoundArbitration CreateArbitration(IAudioBackend backend, Action<string> log)
     {
         ArgumentNullException.ThrowIfNull(backend);
@@ -80,7 +80,7 @@ public static partial class DtrhBarkRouting
     /// <see cref="CompanionAudioFolder"/> beneath <paramref name="dataDirectory"/>.
     /// </summary>
     /// <param name="arbitration">The arbitration from <see cref="CreateArbitration"/>.</param>
-    /// <param name="store">The companion-state document on SP-005 machinery.</param>
+    /// <param name="store">The companion-state document on persistence machinery.</param>
     /// <param name="dataDirectory">The DTRH data directory (<c>DtrhParticipant.DataDirectory</c>).</param>
     /// <param name="log">The host diagnostic log (rule-parse diagnostics + pipeline lines).</param>
     public static BarkPipeline CreatePipeline(

@@ -4,13 +4,13 @@ using CcpClient.Desktop.Persistence;
 namespace CcpClient.Desktop.Features;
 
 /// <summary>
-/// Demonstrator feature <c>demo.status-ticker</c> (SP-007; A-004 stable identity). It is
+/// Demonstrator feature <c>demo.status-ticker</c> (A-004 stable identity). It is
 /// explicitly a DEMONSTRATOR — not a product feature, named after no real WPF feature, and
 /// the first real feature card supersedes it in a later dashboard row. The toggle
-/// starts/cancels a REAL SP-004 owned operation (owner, cancellation generation, typed
+/// starts/cancels a REAL owned operation (owner, cancellation generation, typed
 /// terminal outcome); the card's ring reflects <see cref="IsOperationLive"/> — the operation
-/// authority — never the persisted flag alone. The flag round-trips through the SP-005
-/// store. Construction starts nothing (SP-003 §4.4); the phase-3 start applies the
+/// authority — never the persisted flag alone. The flag round-trips through the persistence
+/// store. Construction starts nothing (the lifecycle contract §4.4); the phase-3 start applies the
 /// restored flag (restore-then-start: the store starts earlier in registration order, so
 /// its load has completed before this participant reads it).
 /// </summary>
@@ -79,7 +79,7 @@ public sealed class StatusTickerParticipant : IBackgroundParticipant
         return Task.CompletedTask;
     }
 
-    /// <summary>Idempotent stop (SP-003 §5.3): cancels the operation generation.</summary>
+    /// <summary>Idempotent stop (the lifecycle contract §5.3): cancels the operation generation.</summary>
     public Task StopAsync()
     {
         if (!Running)

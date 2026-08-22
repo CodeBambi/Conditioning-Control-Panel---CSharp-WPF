@@ -15,7 +15,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-130 — the Goon door on the Play page, and the refusal rail the host window carries.
+/// The Goon door on the Play page, and the refusal rail the host window carries.
 ///
 /// <para><b>Draw-level ONLY</b> (verification-harness.md evidence class): visual tree, real
 /// input routing, real AXAML. <b>Nothing here claims the goon page loaded, that the init +
@@ -255,7 +255,7 @@ public class GoonPracticeHeadlessTests
         // this build" while the page's recorder stayed live — the guard enforced the overstatement
         // rather than catching it (wave-65 land).
         //
-        // SP-137 re-pointed this needle. SP-135 made "the browser can still ask you" false on the
+        // A later wave re-pointed this needle. The deny hook made "the browser can still ask you" false on the
         // WINDOWS embedded path (the deny hook attaches at GoonHostWindow.axaml.cs:393), so the
         // rail now states a PLATFORM SPLIT — and a split introduces a failure the old single
         // unconditional needle could not have: POLARITY. Three unordered Contains over the joined

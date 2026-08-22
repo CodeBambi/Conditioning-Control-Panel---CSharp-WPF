@@ -56,7 +56,7 @@ public static class AudioReasonCodes
 
     /// <summary>
     /// The cue's file could not be turned into a player: it is missing, undecodable, or the bounded
-    /// construction was abandoned (<see cref="PlayerConstructionTimeoutException"/>, SP-072/SP-083).
+    /// construction was abandoned (<see cref="PlayerConstructionTimeoutException"/>).
     /// The detail carries the failure verbatim.
     /// </summary>
     public const string CuePlaybackFailed = "audio-cue-playback-failed";

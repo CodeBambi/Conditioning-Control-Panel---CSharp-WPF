@@ -4,9 +4,9 @@ using CcpClient.Desktop.Haptics;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-126 — the evidence surface for a limb that can never move anything.
+/// The evidence surface for a limb that can never move anything.
 ///
-/// <para><b>IT RECORDS AND IT NEVER TRANSFORMS, and that rule is the whole design.</b> SP-108 is the
+/// <para><b>IT RECORDS AND IT NEVER TRANSFORMS, and that rule is the whole design.</b> The
 /// named hazard: a test double whose <c>Write</c> clamped laundered the very clamp the fact existed
 /// to test, so the fact passed while the product's arithmetic was wrong. Nothing here clamps,
 /// rounds, quantises, coalesces, de-duplicates, re-orders or drops. The exact
@@ -106,7 +106,7 @@ internal sealed class RecordingHapticSink : IHapticSink
         lock (_gate)
         {
             // The reference, not a copy and not a projection. A double that rebuilt this list would
-            // be free to "tidy" it, which is the SP-108 failure in one line.
+            // be free to "tidy" it, which is that failure in one line.
             _commands.Add(new Command(deviceKey, outputs));
         }
 

@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Synthetic pack pipeline tests (SP-015 Step 2): deterministic generation, strip codec,
+/// Synthetic pack pipeline tests: deterministic generation, strip codec,
 /// BMP codec, pack-definition parse/validation, loader slicing + strip self-check, and the
 /// committed-asset drift proofs. All pure — no Avalonia platform needed.
 /// </summary>
@@ -276,7 +276,7 @@ public sealed class AvatarPackTests
     [Fact]
     public void Definitions_AreNonUniform_AndCommittedJsonMatchesInCodeSource()
     {
-        // SP-066 framing (c): the pack loop carries assertions — pin the registry
+        // Loop framing (c): the pack loop carries assertions — pin the registry
         // non-empty so an emptied pack set turns RED, not vacuous.
         Assert.NotEmpty(SyntheticAvatarPacks.All);
         foreach (var def in SyntheticAvatarPacks.All)
@@ -336,7 +336,7 @@ public sealed class AvatarPackTests
         Assert.Equal(6, pack.Frames.Count);
         Assert.Equal(6, pack.Frames[SyntheticAvatarPacks.ClipIdle].Length);
 
-        // Undecodable bytes → typed load exception (the participant maps it to SP-006 Degraded).
+        // Undecodable bytes → typed load exception (the participant maps it to a Degraded capability state).
         Assert.Throws<AvatarPackLoadException>(() =>
             AvatarPackLoader.Load(SyntheticAvatarPacks.Circuit, _ => new MemoryStream([1, 2, 3, 4])));
 
@@ -357,7 +357,7 @@ public sealed class AvatarPackTests
         Assert.Equal(SyntheticAvatarPacks.Circuit.Clips.Length, roundTripped.Clips.Length);
     }
 
-    /// <summary>Embedded-asset open via the same mechanism the app uses (SP-009 StandardAssetLoader pattern).</summary>
+    /// <summary>Embedded-asset open via the same mechanism the app uses (the StandardAssetLoader pattern).</summary>
     private static Stream OpenEmbedded(string path) =>
         new Avalonia.Platform.StandardAssetLoader(typeof(CcpClient.Desktop.App).Assembly).Open(
             new Uri(CcpClient.Desktop.Manifest.AssetManifest.AssemblyAssetUriPrefix + path));

@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Effects;
 /// <summary>
 /// A pool of overlay surfaces and the one correct way to put a frame on one.
 ///
-/// <para><b>Why this is shared (SP-101).</b> SP-100 built this machinery inside
+/// <para><b>Why this is shared.</b> This machinery was built inside
 /// <see cref="FlashSurfacePresenter"/>. Subliminals draws through the same capability with entirely
 /// different geometry — one full-screen card instead of up to ten randomly placed rectangles, no
 /// stagger, a lifetime computed per show — and the second presenter would have been ninety percent
@@ -124,7 +124,7 @@ public sealed class OverlaySurfaceSet : IDisposable
     /// creating a pair per image per flash would churn both for the life of a session. WPF pools its
     /// windows too, for a different reason it names (<c>Services/Flash/FlashService.cs:3576-3607</c>
     /// and <c>Services/Subliminal/SubliminalService.cs:26-32</c> — a WPF render-thread hazard this
-    /// path cannot have, SP-099 divergence D54).
+    /// path cannot have, divergence D54).
     /// </summary>
     public Slot? Acquire()
     {
@@ -152,7 +152,7 @@ public sealed class OverlaySurfaceSet : IDisposable
     /// Put one frame on one slot for <paramref name="lifetime"/>: present, then paint, then hold.
     /// Every outcome is recorded verbatim; false means nothing is on screen for this call.
     ///
-    /// <para><b><paramref name="lifetime"/> may be null (SP-105), and that is the one thing this
+    /// <para><b><paramref name="lifetime"/> may be null, and that is the one thing this
     /// class had to learn for a CONTINUOUS module.</b> Flash Images and Subliminals each place a
     /// surface for a computed span and it retires itself; Pink Filter's layer is up from START to
     /// STOP and has no span at all — WPF's overlay service arms no timer for it, only a reconcile
@@ -200,7 +200,7 @@ public sealed class OverlaySurfaceSet : IDisposable
     /// Put a NEW frame on a slot that is already up, without re-presenting it.
     ///
     /// <para><b>This is the one thing a MOVING module needed that neither a paced nor a static one
-    /// did (SP-106), and it is the frame path the overlay capability already documented and nobody
+    /// did, and it is the frame path the overlay capability already documented and nobody
     /// had used.</b> <see cref="IOverlayPresence.Present"/> walks the OS's whole top-level z-order
     /// and asks the window manager's hit test in both polarities — with click-through momentarily
     /// cleared (<c>Overlay/Win32OverlayPresence.cs:547-576</c>) — which is right once per placement
@@ -313,7 +313,7 @@ public sealed class OverlaySurfaceSet : IDisposable
     /// One re-assertion of the topmost band per live surface, on the configured cadence, for as long
     /// as anything is up — WPF's <c>RaiseAllToFront</c> (<c>FlashService.cs:206-243</c>). It re-arms
     /// itself only while a surface is showing, so a stopped session leaves no timer behind, which is
-    /// the property SP-098's stop facts are built on.
+    /// the property the stop facts are built on.
     /// </summary>
     private void EnsureCadence()
     {

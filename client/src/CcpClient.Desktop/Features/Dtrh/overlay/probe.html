@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- SP-023 product transport probe (NEW overlay path — never shadows a payload file).
+<!-- Product transport probe (NEW overlay path — never shadows a payload file).
      Imports the PRODUCT bridge.js derivative and proves the admitted transport matrix
      (dtrh-admission.md §3.2) on whichever engine hosts it:
        check1  which JS host objects exist;
@@ -7,7 +7,7 @@
        check3  host->page delivery through bridge.on (Windows: synthetic dispatch;
                Linux: long-poll inbox) incl. preBuffer replay on late registration.
      Every line is mirrored via bridge.log so the host sees results WITHOUT
-     InvokeScript (NativeWebDialog GTK backend constraint, SP-011 L7). -->
+     InvokeScript (NativeWebDialog GTK backend constraint, spike L7). -->
 <meta charset="utf-8">
 <title>PROBING</title>
 <pre id="out">PROBING</pre>
@@ -46,7 +46,7 @@ if (bridge) {
     document.title = 'PROBE-DONE';
   });
   rec('bridge.on(probe-h2p) registered; awaiting host send');
-  // SP-026 b4: served-media display proof — the host sends probe-img messages carrying
+  // b4: served-media display proof — the host sends probe-img messages carrying
   // SERVED loopback URLs (Loom spirals / user media) and the probe renders them in the
   // SAME engine that renders the game (pixel-verifiable serving evidence, harness-only).
   bridge.on('probe-img', (m) => {
@@ -70,7 +70,7 @@ if (bridge) {
 }
 rec('probe module complete');
 
-// SP-053 reduced-motion inheritance probe: evaluate the EXACT query the page's own
+// Reduced-motion inheritance probe: evaluate the EXACT query the page's own
 // capability probe uses (payload shared/capability.js:35 — READ-ONLY) inside whichever
 // engine hosts this page, and report page->host as typed probe-motion messages (the
 // host logs probe-* UnknownTypes verbatim AND re-reads the OS state at each arrival to

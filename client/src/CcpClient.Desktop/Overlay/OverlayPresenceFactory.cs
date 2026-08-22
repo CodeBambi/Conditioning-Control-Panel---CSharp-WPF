@@ -66,7 +66,7 @@ public static class OverlayPresenceFactory
     /// <summary>
     /// The backend for a named platform. Both branches are reachable from either OS, so the refusal
     /// path is testable on a Windows box and the Windows path is testable nowhere else — which is
-    /// the honest asymmetry, not a hidden one (the SP-093 precedent).
+    /// the honest asymmetry, not a hidden one (an established precedent).
     /// </summary>
     public static IOverlayPresence CreateFor(OverlayHostPlatform platform) => platform switch
     {

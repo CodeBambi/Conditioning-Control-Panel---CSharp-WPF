@@ -3,7 +3,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-057 choke-point guard: <c>Environment.SpecialFolder.ApplicationData</c> and
+/// Data-root choke-point guard: <c>Environment.SpecialFolder.ApplicationData</c> and
 /// <c>SpecialFolder.UserProfile</c> may appear ONLY in
 /// <c>Lifecycle/CompositionRoot.cs</c> (the single data-root authority). Any other use
 /// is a data-root bypass — the exact false-isolation failure mode this task closes —
@@ -46,7 +46,7 @@ public class DataRootChokePointGuardTests
                     if (lines[i].Contains(token, StringComparison.Ordinal))
                     {
                         violations.Add($"{normalized}:{i + 1}: {token} outside {AllowedSuffix} — "
-                            + "route the data root through CompositionRoot.DefaultSettingsPath() (SP-057)");
+                            + "route the data root through CompositionRoot.DefaultSettingsPath()");
                     }
                 }
             }
@@ -55,7 +55,7 @@ public class DataRootChokePointGuardTests
         Assert.True(violations.Count == 0,
             "data-root choke-point guard violations:" + Environment.NewLine + string.Join(Environment.NewLine, violations));
 
-        // SP-062: the pin's class MUST stay inside ProcessEnvCollection. The collection
+        // The pin's class MUST stay inside ProcessEnvCollection. The collection
         // membership is the env-leak isolation (probe-proven intra-collection sequentiality);
         // a future refactor dropping the attribute silently reintroduces the cross-collection
         // race against the pin's two checkpoints. This deterministic reflection assertion backs
@@ -67,7 +67,7 @@ public class DataRootChokePointGuardTests
                 .Cast<Xunit.CollectionAttribute>()
                 .Any(a => a.Name == nameof(ProcessEnvCollection)),
             "DataRootOverrideTests must carry [Collection(nameof(ProcessEnvCollection))] — " +
-            "the SP-062 env-leak isolation; removing it revives the cross-collection race");
+            "the env-leak isolation; removing it revives the cross-collection race");
     }
 
     private static string FindRepoRoot()

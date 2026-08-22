@@ -14,10 +14,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Baseline package (admitted SP-001/SP-002) + packages already present transitively in
+    <!-- Baseline admitted package + packages already present transitively in
          the admitted dependency graph (Avalonia.Headless via the admitted
          Avalonia.Headless.XUnit 12.1.1; Avalonia.Skia via baseline Avalonia.Desktop).
-         Pinned explicit references add NO new third-party code — recorded in SP-008 record.md. -->
+         Pinned explicit references add NO new third-party code. -->
     <PackageReference Include="Avalonia" Version="12.1.1" />
     <PackageReference Include="Avalonia.Headless" Version="12.1.1" />
     <PackageReference Include="Avalonia.Skia" Version="12.1.1" />

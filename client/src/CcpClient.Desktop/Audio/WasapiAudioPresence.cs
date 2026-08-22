@@ -8,7 +8,7 @@ namespace CcpClient.Desktop.Audio;
 ///
 /// <para><b>The split is the whole design.</b> The backend layer already exists and is not
 /// re-implemented here — <c>Audio/AudioSeams.cs</c> owns the device seam, the F1 re-enumerate
-/// discipline, the SP-025 off-sync-context rule and the SP-072/SP-083 orphan-safe bounded player
+/// discipline, the off-sync-context rule and the orphan-safe bounded player
 /// construction, and <see cref="SoundFlowAudioBackend"/> implements all of it. What the backend
 /// cannot do, and what nothing inside this process can do, is tell you the OPERATING SYSTEM agrees
 /// that sound is going out. So this class does exactly one new thing: after every device call it

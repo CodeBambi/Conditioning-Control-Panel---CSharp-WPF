@@ -4,11 +4,11 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
-/// SP-115: the Bouncing Text module's persisted dials — the port's counterpart of the
+/// The Bouncing Text module's persisted dials — the port's counterpart of the
 /// <c>#region Bouncing Text</c> block WPF reads out of <c>App.Settings.Current</c>
 /// (<c>CCP.Core/Models/AppSettings.cs:3596-3719</c>).
 ///
-/// <para><b>One document per module</b>, on the precedent SP-101 set (D71/D80): the store's Degraded
+/// <para><b>One document per module</b>, on the established per-module precedent (D71/D80): the store's Degraded
 /// load path takes the WHOLE document to defaults, so one hand-broken value in a shared file would
 /// reset every other module's dials.</para>
 ///

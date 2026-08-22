@@ -143,7 +143,7 @@ public sealed class AvatarTraceEventArgs(string kind, int packId, int clipId, in
 }
 
 /// <summary>
-/// The AvatarTube demonstrator animation engine. ONE SP-004 owned operation per run
+/// The AvatarTube demonstrator animation engine. ONE owned operation per run
 /// generation drives EVERYTHING (pre-approach consult): frame advancement on declared
 /// non-uniform deadlines, crossfade opacity steps (no Avalonia Transitions clock as a
 /// second timing authority), dip-fades, and the float transform — there is no

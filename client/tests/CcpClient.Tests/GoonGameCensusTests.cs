@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-129 — the pin under <c>client/docs/goon-game-census.md</c>.
+/// The pin under <c>client/docs/goon-game-census.md</c>.
 ///
 /// <para><b>Why this exists.</b> The board row for the Goon Game claimed 25 files in
 /// <c>Services/GoonGame/</c> and 184 in <c>Resources/web/goon/</c>, and <b>both numbers are exactly
@@ -17,7 +17,7 @@ namespace CcpClient.Tests;
 /// second convention — the document is the DATA and this file is the LOGIC. The directory roots and
 /// the needles live HERE and every count is RE-DERIVED from the shipping bytes on every run.</para>
 ///
-/// <para><b>What this guard does that SP-127's did not, and why.</b>
+/// <para><b>What this guard does that the trainer-card pin did not, and why.</b>
 /// <c>TrainerCardCensusTests</c> pinned citation PATHS and matched an expression anywhere in the
 /// file, so its suite was green while three of its own citations were wrong by 3 and 5 lines. Here
 /// <see cref="EveryPinnedCitation_IsOnTheExactLineItClaims"/> reads <b>the exact line</b> the census
@@ -182,7 +182,7 @@ public sealed class GoonGameCensusTests
     }
 
     // ======================================================================================
-    // THE SP-127 REPAIR: a pin that watches the NUMBER, not the path.
+    // THE REPAIR: a pin that watches the NUMBER, not the path.
     // ======================================================================================
 
     [Fact]
@@ -199,7 +199,7 @@ public sealed class GoonGameCensusTests
         var wrong = CitationDrift(rows, relative => ReadShippingFile(reference.Wpf, relative));
         Assert.True(wrong.Count == 0,
             "census §10.4 citations that are NOT on the line they claim (this is the exact defect "
-            + "that survived SP-127's path-only pin):" + Environment.NewLine
+            + "that survived the earlier path-only pin):" + Environment.NewLine
             + string.Join(Environment.NewLine, wrong));
     }
 
@@ -325,7 +325,7 @@ public sealed class GoonGameCensusTests
         AssertAgrees(declared, actual, "§10.6");
     }
 
-    /// <summary>The line totals and group counts the census states in PROSE. SP-127's pin covered
+    /// <summary>The line totals and group counts the census states in PROSE. The earlier pin covered
     /// its tables and left its prose numbers free; these are the ones a reader quotes. All but one
     /// re-derive from the shipping tree; <c>census-cites-goonhostservice-lines</c> re-derives from
     /// the census, because its subject IS the document (the same justification as the label
@@ -443,7 +443,7 @@ public sealed class GoonGameCensusTests
 
     /// <summary>
     /// Every numeric token in the census must be pinned in §10 or named in §9. This is the property
-    /// SP-127 lost — it published 96.5% while its guard asserted only <c>&gt; 0.90</c> — and it is
+    /// the earlier census lost — it published 96.5% while its guard asserted only <c>&gt; 0.90</c> — and it is
     /// the only mechanism that would have caught it.
     ///
     /// <para><b>The exclusions are CLASSES, enumerated here in code, never a list of literals.</b>
@@ -711,7 +711,7 @@ public sealed class GoonGameCensusTests
         const string doc = """
             # Doc
 
-            Filed 2026-08-04 for v6.7.4 as SP-129, recorded as D240, see §10.4 and
+            Filed 2026-08-04 for v6.7.4, recorded as D240, see §10.4 and
             `GoonHostService.cs:310`, sha `460c9355`. The tree holds 25 files.
             Somebody later wrote that it holds 77 files.
 
@@ -731,7 +731,7 @@ public sealed class GoonGameCensusTests
         var pinned = PinnedNumbers(doc);
         var escapees = UnpinnedNumbers(doc, pinned);
 
-        // The excluded CLASSES all pass: ISO date, version, packet id, divergence id, section
+        // The excluded CLASSES all pass: ISO date, version, divergence id, section
         // reference, File.cs:line citation, hex sha.
         Assert.Single(escapees);
         Assert.Contains("77", escapees[0], StringComparison.Ordinal);
@@ -1324,7 +1324,6 @@ public sealed class GoonGameCensusTests
         new(@"(?<![A-Za-z0-9]):\d+(?:-\d+)?", RegexOptions.Compiled),                                                 // bare :NNN continuations
         new(@"§\s*\d+(?:\.\d+)*", RegexOptions.Compiled),                                                             // section references
         new(@"\bD\d+\b", RegexOptions.Compiled),                                                                      // divergence ids
-        new(@"\bSP-\d+\b", RegexOptions.Compiled),                                                                    // packet ids
         new(@"\b\d{4}-\d{2}-\d{2}\b", RegexOptions.Compiled),                                                         // ISO dates
         new(@"\bv\d+(?:\.\d+)*\b", RegexOptions.Compiled),                                                            // versions
         new(@"\bsha-?\d+\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),                                        // hash algorithm names
@@ -1345,7 +1344,7 @@ public sealed class GoonGameCensusTests
     /// anything appended to the document landed inside it and had its numbers silently added to the
     /// vocabulary. <b>The red demonstration this fact was built with PASSED because of exactly
     /// that</b> — the guard was looking somewhere the claim was not, which is the same shape of hole
-    /// SP-127's path-only pin had.</para>
+    /// the earlier path-only pin had.</para>
     /// </summary>
     private static HashSet<string> PinnedNumbers(string census)
     {

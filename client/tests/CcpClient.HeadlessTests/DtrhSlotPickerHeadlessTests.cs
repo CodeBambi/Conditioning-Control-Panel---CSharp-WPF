@@ -9,7 +9,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-024 slice b2: the save picker's draw-level facts (verification-harness evidence-class
+/// The save picker's draw-level facts (verification-harness evidence-class
 /// rule): visual-tree structure, card classes (sel/locked), texts, confirm overlay, commit
 /// and cancel outcomes. No rendered frames, no presentation claims.
 /// </summary>

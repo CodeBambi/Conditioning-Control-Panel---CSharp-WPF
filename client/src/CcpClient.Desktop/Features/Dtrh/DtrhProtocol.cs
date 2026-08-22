@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// Protocol v1 (slice b2; dtrh-admission.md §7): the FULL message vocabulary of the
 /// DTRH page↔host bridge, extracted from the READ-ONLY payload (bridge.js blob
 /// 13af3f4d: PROTOCOL=1; boot.js handler/send sites) and the WPF host behavior
-/// (DtrhHostService.cs OnPageMessage/post sites — File.cs:line cites in SP-024 record
+/// (DtrhHostService.cs OnPageMessage/post sites — File.cs:line cites in the packet record
 /// Step 1). Nothing here is invented: every type maps to a payload send or handler site.
 ///
 /// Tolerance decision (Step 1 consult): unknown types, forward-version envelopes, and
@@ -28,8 +28,8 @@ public static class DtrhProtocol
 
     // ============================ page → host ============================
 
-    /// <summary>The 22 page→host message types (payload send sites; SP-024 record Step 1 table
-    /// + SP-049's loom-reveal from the v6.6.3 loomStudio.js rack).</summary>
+    /// <summary>The 22 page→host message types (payload send sites; the packet record Step 1 table
+    /// + the loom-reveal from the v6.6.3 loomStudio.js rack).</summary>
     public abstract record DtrhPageMessage
     {
         private DtrhPageMessage() { }
@@ -75,7 +75,7 @@ public static class DtrhProtocol
 
         public sealed record LoomDelete(string? Slug) : DtrhPageMessage;
 
-        /// <summary>SP-049: the rack tile's 📂 — show the saved GIF in the OS file manager
+        /// <summary>The rack tile's 📂 — show the saved GIF in the OS file manager
         /// (loomStudio.js:749; WPF LoomHostService.cs:108-117 + DtrhHostService.cs:336).</summary>
         public sealed record LoomReveal(string? Slug) : DtrhPageMessage;
 
@@ -191,23 +191,23 @@ public static class DtrhProtocol
         DtrhPageMessage.Ready or DtrhPageMessage.Log or DtrhPageMessage.Heartbeat
             or DtrhPageMessage.Exit or DtrhPageMessage.FullscreenSet
             or DtrhPageMessage.BootError => DtrhDispatchClass.Handled.Instance,
-        // b3 (SP-025): native SFX/whisper/video + freeze + VN mix gate — REAL effects via
+        // b3: native SFX/whisper/video + freeze + VN mix gate — REAL effects via
         // DtrhNativeEffects, wired in the host window.
         DtrhPageMessage.VnSpeaking or DtrhPageMessage.Sfx or DtrhPageMessage.FirePayload
             or DtrhPageMessage.FreezeState => DtrhDispatchClass.Handled.Instance,
         // Bark arbitration (event → voiceline over CCP bark rules + gates,
-        // DtrhHostService.cs:618-650 → BarkService) — SP-032 slice q2 OWNS it: routed
+        // DtrhHostService.cs:618-650 → BarkService) — slice q2 OWNS it: routed
         // through Companion/BarkPipeline on q1's SoundArbitration (DtrhBarkRouting table),
         // wired in the host window's dispatch. m2Test skips routing (WPF _testMode parity).
         DtrhPageMessage.Bark => DtrhDispatchClass.Handled.Instance,
-        // b4 (SP-026): progression/payout + Loom + media stats — REAL effects via
-        // DtrhMeta / DtrhLoom, wired in the host window. SP-049: LoomReveal joins — the
+        // b4: progression/payout + Loom + media stats — REAL effects via
+        // DtrhMeta / DtrhLoom, wired in the host window. LoomReveal joins — the
         // v6.6.3 studio rack's 📂 (shared loomStudio.js emits it from BOTH homes).
         DtrhPageMessage.MetaCommand or DtrhPageMessage.RequestRun or DtrhPageMessage.RunStarted
             or DtrhPageMessage.RunEnded or DtrhPageMessage.AssetStats
             or DtrhPageMessage.LoomSave or DtrhPageMessage.LoomDelete
             or DtrhPageMessage.LoomReveal => DtrhDispatchClass.Handled.Instance,
-        // b5 (SP-027): bounded exit-done wait + pong heartbeat stamp — REAL handlers
+        // b5: bounded exit-done wait + pong heartbeat stamp — REAL handlers
         // wired in the host window (exit flow) and the watchdog.
         DtrhPageMessage.ExitDone or DtrhPageMessage.Pong => DtrhDispatchClass.Handled.Instance,
         // No slice owns the hub's bug-report affordance yet (host UI, not protocol).

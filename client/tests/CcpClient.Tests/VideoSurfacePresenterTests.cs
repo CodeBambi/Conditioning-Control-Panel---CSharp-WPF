@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-111 — the video PRESENTER: where the frame cadence lives, what it does when a clip ends, is
+/// The video PRESENTER: where the frame cadence lives, what it does when a clip ends, is
 /// capped, or stops being held, and what it releases.
 ///
 /// <para>Every seam is a stub: no window, no decoder, no file. That is deliberate and it is what
@@ -18,7 +18,7 @@ namespace CcpClient.Tests;
 public class VideoSurfacePresenterTests
 {
     // ---------------------------------------------------------------------------------------
-    //  SP-112 — the seam the SECOND consumer needed, and the refusal the FIRST one wanted
+    //  The seam the SECOND consumer needed, and the refusal the FIRST one wanted
     // ---------------------------------------------------------------------------------------
 
     [Fact]
@@ -63,7 +63,7 @@ public class VideoSurfacePresenterTests
     {
         using var rig = new Rig();
 
-        // The seam SP-112 added must not have changed what the first consumer does. Begin with no
+        // The seam the SECOND consumer added must not have changed what the first consumer does. Begin with no
         // painter plays exactly as it did before, and nothing in the presenter requires one.
         Assert.IsType<CapabilityState.Available>(rig.Presenter.Begin("clip.mp4", TimeSpan.Zero, () => { }));
         rig.Clock.AdvanceToNextDue();
@@ -81,7 +81,7 @@ public class VideoSurfacePresenterTests
 
         // THE COLLISION THE SECOND CONSUMER REVEALED. Both modules guard with "a clip is already
         // showing" in Compose, which runs on the CLOCK thread while this runs on the SURFACE
-        // thread — so the guard cannot close the window between them. Before SP-112 this call
+        // thread — so the guard cannot close the window between them. Before that seam this call
         // overwrote the first clip's handle and its end-callback: an open decoder leaked and the
         // first module believed it was still playing for ever.
         var second = rig.Presenter.Begin("second.mp4", TimeSpan.Zero, () => { });

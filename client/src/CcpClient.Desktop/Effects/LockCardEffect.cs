@@ -59,7 +59,7 @@ public enum LockCardResolution
 /// and focus rather than from a handler having been attached
 /// (<see cref="IInputPresence"/>).</para>
 ///
-/// <para><b>THE DOT, and the sixth thing it has meant (SP-110).</b>
+/// <para><b>THE DOT, and the sixth thing it has meant.</b>
 /// <see cref="OwnedSessionEffect.WorkIsRunning"/> here has three clauses and none is redundant:</para>
 /// <code>
 /// Live  =  a firing is on the clock
@@ -74,10 +74,10 @@ public enum LockCardResolution
 /// every other process on the desktop, and taken away by a click on another window.</para>
 /// <para><b>And the question the packet asks directly: is this module <c>Live</c> while the prompt
 /// is up and unanswered? YES.</b> Waiting for a human IS the work — a module that went <c>Armed</c>
-/// the moment it did its job would be the under-claim SP-109 refused for the audio half-row. But it
+/// the moment it did its job would be the under-claim refused for the audio half-row. But it
 /// is <c>Live</c> only because the OS says the question is really in front of them: measured, a card
 /// can be visible, topmost and hit-testable while the keyboard belongs to another application
-/// entirely (SP-110 plan.md §0), and a dot lit there claims a question nobody is being asked.</para>
+/// entirely (the packet plan.md §0), and a dot lit there claims a question nobody is being asked.</para>
 ///
 /// <para><b>What is NOT ported</b>, and is not pretended: the fullscreen cover on EVERY monitor with
 /// its primary/mirror input sync (<c>Windows/LockCardWindow.xaml.cs:1496-1607</c>) — the port shows
@@ -243,7 +243,7 @@ public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
     }
 
     /// <summary>The frequency dial. Writes and re-evaluates, the port's convention for every module's
-    /// dial since SP-105 — and it matters here because upstream's own frequency slider takes effect
+    /// dial — and it matters here because upstream's own frequency slider takes effect
     /// at the next tick rather than after the old interval expires.</summary>
     public void SetPerHour(int perHour)
     {
@@ -503,7 +503,7 @@ public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
     /// <summary>
     /// Narrow the arm result to what this module can honestly claim, and the two narrowings are
     /// deliberately DIFFERENT states because a missing channel and missing content are not the same
-    /// failure — the same split SP-109 made for a device against a clip folder.
+    /// failure — the same split the audio modules made for a device against a clip folder.
     /// </summary>
     protected override CapabilityState Ready(CapabilityState scheduled)
     {
@@ -571,7 +571,7 @@ public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
     /// </summary>
     private static InputBounds DefaultPlacement()
     {
-        // SP-112 extracted the display walk and the centring into PrimaryDisplayPlacement, which
+        // Extracted the display walk and the centring into PrimaryDisplayPlacement, which
         // three modules now share. What stays HERE is what is genuinely this module's: its own
         // fractions (D110) and its own answer to "no display at all" — a minimum legal rectangle
         // rather than the video surface's null, because Compose refuses first on the station read

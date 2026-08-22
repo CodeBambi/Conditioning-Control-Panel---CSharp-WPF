@@ -11,7 +11,7 @@ namespace CcpClient.Desktop.Scheduling;
 /// because it is the only thing in the port that can start a conditioning session with nobody at
 /// the keyboard. A tick whose outcome could not be named would be a start nobody could audit.</para>
 ///
-/// <para><b>Every code here is EMITTED by a path, and TWO were not.</b> SP-118 shipped
+/// <para><b>Every code here is EMITTED by a path, and TWO were not.</b> This module first shipped
 /// <c>scheduler-not-polling</c> and <c>scheduler-balloon-absent</c>, and no path ever produced
 /// either: the first named a state carried entirely by the dot's <c>Off</c> and the panel's own
 /// "not watching the clock yet" line, and the second was reachable only from a <c>&lt;see

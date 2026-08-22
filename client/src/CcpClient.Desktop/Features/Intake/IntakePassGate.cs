@@ -6,7 +6,7 @@ namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
 /// What the Graded Intake door does about the weekly pass. A CLOSED set of four outcomes, one
-/// per user-visible answer — never a boolean, for the SP-092 reason: a bool collapses "you have
+/// per user-visible answer — never a boolean, for the entitlement reason: a bool collapses "you have
 /// had your run" into "this build cannot tell", and those two must never be shown as each other.
 /// </summary>
 public abstract record IntakePassDecision
@@ -36,13 +36,13 @@ public abstract record IntakePassDecision
 /// the port's answer to WPF's own claim that there is "exactly one place that decides who gets
 /// in and why" (<c>Services/Progression/IntakePassService.cs:8</c>).
 ///
-/// <para><b>WHY A GATE EXISTS AT ALL, since SP-095 first shipped this door without one.</b>
+/// <para><b>WHY A GATE EXISTS AT ALL, since this door first shipped without one.</b>
 /// The intake is paid content and unlimited retakes are the patron privilege, stated outright
 /// upstream: <c>Premium</c> is "Patron. The pass system does not apply - unlimited runs, no
 /// week, no door" (<c>:13</c>), and the class header says "The intake is a premium Exclusive …
 /// free accounts get ONE run per week … while retakes stay a reason to subscribe"
 /// (<c>:26-29</c>). An ungated door hands every user the patron privilege. That is an
-/// OVER-GRANT — the same direction as the undefined-tier hole SP-094 closed at
+/// OVER-GRANT — the same direction as the undefined-tier hole closed at
 /// <c>DtrhGate</c>, and the opposite of the under-grant §10 D24 records, which errs toward
 /// refusing something WPF would allow.</para>
 ///
@@ -50,7 +50,7 @@ public abstract record IntakePassDecision
 /// a free, signed-out user <c>NeedsLogin</c> — "The pass is per-account, so there is nothing to
 /// hand out yet" (<c>:15</c>, and the branch at <c>:115</c>) — and NOT <c>Spent</c>. The port has
 /// no account of any kind, so it cannot determine the pass, and saying "you already ran this
-/// week" would be a claim about the install that nobody could lift. That is the SP-092/SP-094
+/// week" would be a claim about the install that nobody could lift. That is the entitlement capability's
 /// three-way distinction applied to a second surface: entitled / not entitled / could not tell,
 /// with "could not tell" refusing out loud in its own words and never wearing the other
 /// refusal's clothes. Divergence and close condition at wpf-surface-reachability.md §11 D26.</para>
@@ -144,12 +144,12 @@ public static class IntakePassGate
         // Every (state, reason) pair above is accounted for. Anything else is an enum that grew
         // without this gate growing with it, and the only safe answer to an outcome this function
         // does not understand is to refuse and say so — never to open paid content. This is the
-        // same closure SP-094 put on DtrhGate after the undefined-tier over-grant.
+        // same closure put on DtrhGate after the undefined-tier over-grant.
         return new IntakePassDecision.RefusedUndeterminable(UndeterminableMessage, reason);
     }
 
     /// <summary>Log-safe decision class. Never the message: the log's job is classification, and
-    /// one vocabulary beats two (the SP-092 logging discipline).</summary>
+    /// one vocabulary beats two (the entitlement-logging discipline).</summary>
     public static string Classify(IntakePassDecision decision) => decision switch
     {
         IntakePassDecision.Proceed proceed => "proceed(" + proceed.State.ToString().ToLowerInvariant() + ")",

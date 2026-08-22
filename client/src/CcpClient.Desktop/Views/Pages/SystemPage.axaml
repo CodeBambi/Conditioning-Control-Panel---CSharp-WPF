@@ -2,8 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="CcpClient.Desktop.Views.Pages.SystemPage">
   <!--
-    The SP-003/SP-004/SP-006 integration proofs. They may shrink and move; they are never
-    deleted. They moved HERE when the demonstrator card was retired (SP-091), because a
+    The integration proofs. They may shrink and move; they are never
+    deleted. They moved HERE when the demonstrator card was retired, because a
     diagnostics readout is a page, not a dashboard tile. WPF puts this class of surface on the
     Home page's bottom button row ("System", "App Info & Data" — §8.6); the port's rail has no
     Home door, so it carries its own System door (divergence §9 D2).
@@ -15,7 +15,7 @@
 
       <Border Classes="module" Margin="0,12,0,0">
         <StackPanel Spacing="6">
-          <TextBlock Classes="module-title" Text="Startup trace + capability states (SP-003/SP-006 proofs)" />
+          <TextBlock Classes="module-title" Text="Startup trace + capability states" />
           <TextBlock x:Name="TraceText" Classes="diagnostic" TextWrapping="Wrap" />
           <TextBlock x:Name="HeartbeatText" Classes="diagnostic" Text="Heartbeat: waiting" />
           <!-- Compiled-binding named-element case: this text FOLLOWS the live heartbeat text —

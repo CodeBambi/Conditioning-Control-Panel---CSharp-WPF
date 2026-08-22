@@ -77,7 +77,7 @@ public enum AiMemoryWriteAdmission
     Admitted,
     ConsentDenied,
 
-    /// <summary>The document on disk is newer than this build; writes stay locked out (SP-005 contract §4 rule 7).</summary>
+    /// <summary>The document on disk is newer than this build; writes stay locked out (the persistence contract §4 rule 7).</summary>
     WritesDisabled,
 }
 
@@ -91,24 +91,24 @@ public enum AiMemoryClearOutcome
 
 /// <summary>
 /// The first <see cref="IAiMemoryStore"/> implementation (admission §8 slice c4), on
-/// SP-005 machinery (admission §4 rule 2 — DECIDED, no new seam): ONE
+/// the persistence machinery (admission §4 rule 2 — DECIDED, no new seam): ONE
 /// <see cref="PersistenceStore{TModel}"/> of <see cref="AiMemoryDocument"/> in the
-/// user-data root with its OWN named <see cref="AsyncOperationOwner"/> (the SP-024
+/// user-data root with its OWN named <see cref="AsyncOperationOwner"/> (the earlier
 /// lesson: N stores sharing one owner cancel each other's writes). schemaVersion +
 /// migration journal, corrupt-document quarantine once at startup → typed Degraded
-/// (the b2/b4 precedent), unknown-member preserve — all inherited from SP-005.
+/// (the b2/b4 precedent), unknown-member preserve — all inherited from that machinery.
 ///
 /// Consent is code-enforced at WRITE ADMISSION (contract §5 rule 2 — never a prompt
 /// convention): a denied <see cref="Append"/> is a typed no-op observable via
 /// <see cref="LastWriteAdmission"/>. The CONVERSATION-CONSUMPTION read is gated the same
-/// way (SP-047, <see cref="ReadPromptContext"/> — the WPF `:113` port: consent off ⇒
+/// way (<see cref="ReadPromptContext"/> — the WPF `:113` port: consent off ⇒
 /// history neither read into a prompt nor written); the inspection read
-/// (<see cref="ReadRecent"/>) stays ungated. Named divergence (SP-047 record §3.1): the
+/// (<see cref="ReadRecent"/>) stays ungated. Named divergence (the packet record §3.1): the
 /// phase-3 startup LOAD is consent-agnostic (clear/degraded/write machinery needs the
 /// document resident) — WPF never reads the file under disabled consent; the observable
 /// conversation behavior is identical.
 ///
-/// Consumption as conversation context landed in SP-047 (pipeline assembly +
+/// Consumption as conversation context landed later (pipeline assembly +
 /// <see cref="ReadPromptContext"/>). c4's claim was exactly "memory persists and clears".
 /// </summary>
 public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
@@ -145,10 +145,10 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
 
     public bool Running => _store.Running;
 
-    /// <summary>Typed outcome of the phase-3 load (SP-005 contract §5); quarantine/newer-schema surface as Degraded.</summary>
+    /// <summary>Typed outcome of the phase-3 load (the persistence contract §5); quarantine/newer-schema surface as Degraded.</summary>
     public LoadOutcome? LastLoadOutcome => _store.LastLoadOutcome;
 
-    /// <summary>Read-only inspection of the loaded document. Mutations MUST go through <see cref="Append"/>/<see cref="Clear"/> — direct writes bypass dirty tracking (SP-005 contract §5 rule 2).</summary>
+    /// <summary>Read-only inspection of the loaded document. Mutations MUST go through <see cref="Append"/>/<see cref="Clear"/> — direct writes bypass dirty tracking (the persistence contract §5 rule 2).</summary>
     public AiMemoryDocument Current => _store.Current;
 
     /// <summary>Typed Degraded surface (the b2/b4 precedent): quarantine or newer-schema.</summary>
@@ -167,7 +167,7 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
 
     public Task StopAsync() => _store.StopAsync();
 
-    /// <summary>Teardown flush (SP-005 contract §11) — passthrough to the store's bounded flush.</summary>
+    /// <summary>Teardown flush (the persistence contract §11) — passthrough to the store's bounded flush.</summary>
     public Task FlushAsync(TimeSpan boundedWait) => _store.FlushAsync(boundedWait);
 
     /// <summary>Reads up to <paramref name="maxTurns"/> most recent turns, oldest first. Snapshot copy under the store gate.</summary>
@@ -182,7 +182,7 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
     }
 
     /// <summary>
-    /// The consent-gated conversation-consumption read (SP-047; the WPF `:113` port,
+    /// The consent-gated conversation-consumption read (the WPF `:113` port,
     /// LocalAiService.cs:111-126): consent is checked FIRST — not Granted ⇒ an empty list,
     /// the document's turns untouched (consent off ⇒ history is neither read into a prompt
     /// nor written). Otherwise all current pairs, oldest first — the append-trim already
@@ -246,15 +246,15 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
     /// LocalAiService.cs:227-232): empties in-memory state AND deletes the persisted
     /// document. The chained writer snapshots the EMPTY state and clears dirty before the
     /// delete, so neither a queued write nor the teardown flush can resurrect the file;
-    /// a stray orphaned temp is deleted too (SP-005 crash recovery would otherwise adopt
+    /// a stray orphaned temp is deleted too (persistence crash recovery would otherwise adopt
     /// it on the next load). Serialized against <see cref="Append"/> under the store gate
     /// (a racing append mid-clear must not recreate the file with only its turn).
-    /// Sync-block is deadlock-safe: SP-004 RunAsync bodies run on Task.Run with
+    /// Sync-block is deadlock-safe: owned RunAsync bodies run on Task.Run with
     /// ConfigureAwait(false) (OperationRegistry.cs:216-221), no captured context.
     /// A newer-schema document is NEVER deleted (an older build never clobbers a newer
-    /// one, SP-005 contract §4 rule 7) — the clear empties in-memory state and surfaces
+    /// one, the persistence contract §4 rule 7) — the clear empties in-memory state and surfaces
     /// typed <see cref="AiMemoryClearOutcome.Degraded"/>. Quarantined .corrupt-*.json
-    /// backups are SP-005 contract-preserved (§5 rule 3) and are never deleted by clear.
+    /// backups are contract-preserved (§5 rule 3) and are never deleted by clear.
     /// </summary>
     public void Clear()
     {
@@ -280,7 +280,7 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
         }
     }
 
-    /// <summary>Test/pipeline quiescence: awaits the store's chained writer so previously enqueued writes have finished (SP-005 contract §4 rule 5).</summary>
+    /// <summary>Test/pipeline quiescence: awaits the store's chained writer so previously enqueued writes have finished (the persistence contract §4 rule 5).</summary>
     public Task<OperationOutcome> SaveImmediate() => _store.SaveImmediate();
 
     private static void TryDelete(string path)

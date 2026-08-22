@@ -4,7 +4,7 @@ using System.Text;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-115's independent instrument, in the shape <see cref="OverlayWindowProbe"/> and
+/// This capability's independent instrument, in the shape <see cref="OverlayWindowProbe"/> and
 /// <see cref="TrayShellProbe"/> established: a second, complete copy of every P/Invoke the product
 /// uses, so a fact about the glyph surface is never measured through the same declarations the
 /// surface measures itself through. A suite that shared them would be one edit away from certifying
@@ -14,7 +14,7 @@ namespace CcpClient.Tests;
 /// <c>PrintWindow(PW_RENDERFULLCONTENT)</c>, and that check is only worth anything if a window that
 /// composites NOTHING answers it differently. <see cref="RunNegativeControl"/> builds that window
 /// for real, on every suite run, and measures both arms. It also builds the two states that make
-/// SP-099's recorded hazard concrete — a uniform-alpha window that refuses a per-pixel composite,
+/// the recorded hazard concrete — a uniform-alpha window that refuses a per-pixel composite,
 /// and the same window after the style toggle that lets one through — so the hazard this packet
 /// designs around is re-measured rather than quoted.</para>
 /// </summary>
@@ -116,7 +116,7 @@ internal static class GlyphWindowProbe
     /// Writes the extended style through THIS probe's own declaration, so the input differential
     /// can flip click-through without asking the capability under test to certify itself.
     ///
-    /// <para><b>It is a style write and it is deliberately not a layered-style TOGGLE.</b> SP-099's
+    /// <para><b>It is a style write and it is deliberately not a layered-style TOGGLE.</b> The recorded
     /// hazard is clearing <c>WS_EX_LAYERED</c> and then compositing; every caller of this method
     /// passes a value that keeps the layered bit exactly as it found it, and
     /// <see cref="RunNegativeControl"/> is the one place in the suite that performs the toggle at
@@ -267,7 +267,7 @@ internal static class GlyphWindowProbe
     /// own z-order and the intervening windows' own rectangles, rather than assumed from
     /// disjointness.
     ///
-    /// <para>SP-113's review recorded that the four-disjoint-rectangles argument does not scale past
+    /// <para>An earlier review recorded that the four-disjoint-rectangles argument does not scale past
     /// four surfaces. It does not scale to this capability AT ALL, because proving that a
     /// transparent pixel shows the background behind it requires the surface to be placed OVER a
     /// known background: the overlap is the evidence. So ownership is measured. This walks the
@@ -353,8 +353,8 @@ internal static class GlyphWindowProbe
     /// <param name="UniformModeRefusalError">The Win32 last-error from that refusal (87 = the
     /// documented invalid-parameter answer).</param>
     /// <param name="UniformAlphaSurvivedTheRefusal">Does the uniform window still hold its alpha afterwards?</param>
-    /// <param name="StyleToggleClearsUniformAlpha">SP-099's first line: does clearing WS_EX_LAYERED wipe it?</param>
-    /// <param name="ToggleThenPerPixelSucceeds">SP-099's second line: does the composite then go through?</param>
+    /// <param name="StyleToggleClearsUniformAlpha">The hazard's first line: does clearing WS_EX_LAYERED wipe it?</param>
+    /// <param name="ToggleThenPerPixelSucceeds">The hazard's second line: does the composite then go through?</param>
     /// <param name="UniformAlphaAfterToggle">And is the uniform read-back gone afterwards? (-1 = gone.)</param>
     /// <param name="ScratchWindowsGoneAfterTeardown">Every scratch window destroyed.</param>
     internal readonly record struct NegativeControl(
@@ -378,7 +378,7 @@ internal static class GlyphWindowProbe
         /// The ghost's whole verdict as ONE boolean: something really was sampled AND none of it is
         /// non-zero. Exposed so a fact can assert it at statement depth 0 against
         /// <see cref="MachineHasInteractiveDesktop"/> instead of returning early on a machine with no
-        /// desktop - which is the shape SP-066's ledger exists to catch, and it is avoidable here.
+        /// desktop - which is the shape the vacuous-shape ledger exists to catch, and it is avoidable here.
         /// </summary>
         internal bool GhostReadBackIsEmpty => GhostSampledPixels > 0 && GhostNonZeroPixels == 0;
 
@@ -463,7 +463,7 @@ internal static class GlyphWindowProbe
             }
         }
 
-        // (3) SP-099's HAZARD, re-measured. A uniform-alpha window refuses a per-pixel composite;
+        // (3) THE RECORDED HAZARD, re-measured. A uniform-alpha window refuses a per-pixel composite;
         // clearing WS_EX_LAYERED wipes the uniform attributes; restoring it lets the composite
         // through and the uniform read-back is gone for good.
         var uniform = ScratchWindow.Create("ccp-glyph-uniform", x + 200, y, side, side);

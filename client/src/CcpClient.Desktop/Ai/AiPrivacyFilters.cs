@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace CcpClient.Desktop.Ai;
 
 /// <summary>
-/// SP-068: three subtractive privacy filters over the landed awareness and reply paths
+/// Three subtractive privacy filters over the landed awareness and reply paths
 /// (board row :46; audit `her-room-divergence-audit.md` rows A6/A10/C3 — three rows of the
 /// audit's §5 sizing table filtered at authoring for Size S / no dependency / unit evidence
 /// only). Every rule here only ever REMOVES or NARROWS what flows: nothing is observed,
@@ -16,7 +16,7 @@ namespace CcpClient.Desktop.Ai;
 /// the UNION (55 entries) as its ONE definition: a marker on either WPF enforcement path
 /// dropped that title, so the union never re-admits what any WPF path suppressed. Nine
 /// entries are substring-subsumed by other union entries under Contains matching; kept for
-/// verbatim fidelity (recorded in the SP-068 record, not silently deduped).</para>
+/// verbatim fidelity (recorded in the packet record, not silently deduped).</para>
 ///
 /// <para>F2 (A10, ADOPT): title scrubbing with WPF's exact values — no rounding, no
 /// "improved" regexes. The 120-char cloud-projection cap (`AwarenessProjection.cs:217`) is
@@ -44,7 +44,7 @@ public static class AiPrivacyFilters
     /// Private-browsing markers, matched case-insensitively anywhere in the title. The UNION
     /// of WPF's two divergent lists (`AwarenessPrivacyRules.cs:192-216` and
     /// `AwarenessObserverPolicy.cs:169-183`) — one definition, every consumer routed through
-    /// it (SP-055 discipline). Hard-coded, not a setting: WPF's own framing is that a false
+    /// it (the one-definition discipline). Hard-coded, not a setting: WPF's own framing is that a false
     /// positive costs one joke, a false negative reads a session the user explicitly hid.
     /// </summary>
     public static IReadOnlyList<string> IncognitoMarkers { get; } =
@@ -106,7 +106,7 @@ public static class AiPrivacyFilters
         return false;
     }
 
-    /// <summary>The F1 verdict for a captured foreground title (the port's observation-seam decision, SP-068 framing e).</summary>
+    /// <summary>The F1 verdict for a captured foreground title (the port's observation-seam decision, framing e).</summary>
     public enum CapturedTitleVerdict
     {
         /// <summary>The title may leave the seam to the caller.</summary>

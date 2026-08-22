@@ -1,6 +1,6 @@
 # The haptic limb, censused — every upstream command site, mapped to a port trigger point
 
-SP-120. Companion to `client/docs/wpf-surface-reachability.md` D202-D206 (the divergences).
+Companion to `client/docs/wpf-surface-reachability.md` D202-D206 (the divergences).
 The method, reconciliation, and priced vocabulary menu are stated here. **No product code was
 written for this document**; `client/src/**` was outside its scope.
 
@@ -139,7 +139,7 @@ cited line; the pin checks both sides.
 | 15 | `Services/Subliminal/SubliminalService.cs:588` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:209` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | Same moment, upstream's silent branch, inside the helper `TriggerSubliminalWithHapticPattern` (`:577`). The port has no whisper audio, so the two branches are one path here. **What the collapse loses is the ANTICIPATION**: upstream fires the haptic first and delays the visual by `SubliminalAnticipationMs` (250 ms, or 1300 ms on Buttplug — `Services/Haptics/HapticService.cs:88`), and the port shows the card immediately. |
 | 16 | `Services/Subliminal/SubliminalService.cs:297` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | absent-by-decision | — | — | — | The "Bambi Freeze" trigger phrase is shown. |
 | 17 | `Services/Subliminal/SubliminalService.cs:387` | `App.Haptics?.TriggerSubliminalPatternAsync(resetText)` | absent-by-decision | — | — | — | The "Bambi Reset" follow-up is shown. |
-| 18 | `Services/Subliminal/BouncingTextService.cs:515` | `App.Haptics?.BouncingTextBounceAsync()` | present | `Effects/BouncingTextField.cs:230` | `Bounces++` | fail: intensity | A bouncing word hits a screen edge. **In a module this port shipped** (SP-115), and in no prior count. The port's statement even sits at the same place in the sequence: upstream fires between the bounce bookkeeping and the 10 % text re-roll (`:515` against `:518`), and `:230` sits between `Bounces++` and the same re-roll at `Effects/BouncingTextField.cs:251`. |
+| 18 | `Services/Subliminal/BouncingTextService.cs:515` | `App.Haptics?.BouncingTextBounceAsync()` | present | `Effects/BouncingTextField.cs:230` | `Bounces++` | fail: intensity | A bouncing word hits a screen edge. **In a module this port shipped**, and in no prior count. The port's statement even sits at the same place in the sequence: upstream fires between the bounce bookkeeping and the 10 % text re-roll (`:515` against `:518`), and `:230` sits between `Bounces++` and the same re-roll at `Effects/BouncingTextField.cs:251`. |
 <!-- /census:sites -->
 
 ### 3.1 The five port trigger points, gathered
@@ -279,7 +279,7 @@ phrase is shown by this port.
 
 | claim | where | verdict against this census |
 |---|---|---|
-| **8 sites in three modules**, citing `Services/SubliminalService.cs:230` | SP-119 plan §5, three source comments, D202's first draft | **wrong twice**: the path has no `Subliminal/` directory segment and the file drives four sites, not one |
+| **8 sites in three modules**, citing `Services/SubliminalService.cs:230` | the haptics plan §5, three source comments, D202's first draft | **wrong twice**: the path has no `Subliminal/` directory segment and the file drives four sites, not one |
 | **13 sites**, three files | `client/docs/wpf-surface-reachability.md` D202, `Haptics/IHapticSink.cs:210-215` | **correct for the three files it names, under a rule that excluded FunScript.** Misses three files' worth of sites |
 | **14 sites**, adding `VideoService.Browser.cs:452` | this packet's brief | **correct as far as it goes.** Still misses `BouncingTextService.cs:515` and `VideoService.Browser.cs:453` |
 | **18 sites** | this census | derived from the bytes by §2 |
@@ -291,7 +291,7 @@ Line by line, from 13 to 18:
 |---|---|---|
 | +1 | `VideoService.Browser.cs:452` | the file was outside the searched set |
 | +2 | `VideoService.Browser.cs:453` | the same file, and it is a FunScript site as well |
-| +3 | `Subliminal/BouncingTextService.cs:515` | the file was outside the searched set. **The module is ported** (SP-115) |
+| +3 | `Subliminal/BouncingTextService.cs:515` | the file was outside the searched set. **The module is ported** |
 | +4 | `VideoService.cs:2584` | counted as ADJACENT under the older rule because the port has no script player |
 | +5 | `VideoService.cs:6584` | the same |
 
@@ -402,5 +402,5 @@ does NOT sum even upstream**: `PlayDecayLadder` cancels any running flash ladder
 **Recommended: C**, with C+ named as the upgrade that buys the one reachable loss without a poll; the
 full reasoning, including why the 10 Hz loop's own safety properties belong to the provider rather
 than to the limb, is in the record. Every option leaves `Haptics/IHapticSink.cs` byte-identical,
-which is the SP-119 seam's own claim being cashed: a limb is a layer above the sink, never a change
+which is the haptic seam's own claim being cashed: a limb is a layer above the sink, never a change
 to it.

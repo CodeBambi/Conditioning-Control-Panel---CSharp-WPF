@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-066 (board row 49 part 1): the lexical VACUOUS-SHAPE detector. One exact surface,
+/// Board row 49 part 1: the lexical VACUOUS-SHAPE detector. One exact surface,
 /// shared by the raw inventory (produced through this class) and the pinned-ledger guard
 /// (<c>VacuousShapeGuardTests</c>), so the enumeration and the guard can never drift.
 ///

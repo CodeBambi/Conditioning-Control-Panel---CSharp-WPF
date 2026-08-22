@@ -1,8 +1,8 @@
-# SP-011 headed capture (SP-007 pattern): raise the spike window TOPMOST, GDI-copy the
+# Headed capture (shared headed-capture pattern): raise the spike window TOPMOST, GDI-copy the
 # primary screen region of the window to a PNG in scratch/. RAIL/occlusion-safe on Windows.
 param(
   [Parameter(Mandatory=$true)][string]$OutPng,
-  [string]$TitleLike = "SP-011 WebView spike",
+  [string]$TitleLike = "WebView spike",
   [int]$DelayMs = 300
 )
 Add-Type -AssemblyName System.Drawing

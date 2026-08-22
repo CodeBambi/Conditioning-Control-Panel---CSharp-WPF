@@ -4,11 +4,11 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
-/// SP-105: the Pink Filter module's persisted dials — the port's counterpart of the
+/// The Pink Filter module's persisted dials — the port's counterpart of the
 /// <c>#region Pink Filter</c> block WPF reads out of <c>App.Settings.Current</c>
 /// (<c>CCP.Core/Models/AppSettings.cs:3724-3755</c>).
 ///
-/// <para><b>One document per module</b>, on the precedent SP-101 set and argued for
+/// <para><b>One document per module</b>, on the precedent set and argued for
 /// (<see cref="SubliminalPresetDocument"/>, divergence D71): <c>Persistence/**</c> is outside this
 /// packet's File Scope too, and the substantive half of that argument is unchanged — the store's
 /// Degraded load path takes the WHOLE document to defaults, so one hand-broken value in a shared

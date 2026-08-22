@@ -4,7 +4,7 @@ using System.Text;
 namespace CcpSpike.VideoHandoff;
 
 /// <summary>
-/// Loopback source lab (SP-011 LoopbackServer pattern): GET-only, 127.0.0.1, ephemeral port.
+/// Loopback source lab (WebView spike LoopbackServer pattern): GET-only, 127.0.0.1, ephemeral port.
 /// Every matrix row's fixture is served here. All request logging is redacted (presence+shape).
 /// </summary>
 public sealed class Lab : IDisposable
@@ -25,7 +25,7 @@ public sealed class Lab : IDisposable
     public Lab(string fixturesDir)
     {
         _fixtures = fixturesDir;
-        // HttpListener cannot bind port 0 (SP-011 pattern): retry random ephemeral ports.
+        // HttpListener cannot bind port 0 (WebView spike pattern): retry random ephemeral ports.
         for (var attempt = 0; ; attempt++)
         {
             var port = Random.Shared.Next(49152, 65535);
@@ -217,7 +217,7 @@ public sealed class Lab : IDisposable
         if (!File.Exists(full)) { res.StatusCode = 404; return; }
         var bytes = await File.ReadAllBytesAsync(full);
         res.ContentType = mime;
-        // Range support (video seek / progressive fetch; SP-011 contract point).
+        // Range support (video seek / progressive fetch; WebView spike contract point).
         var range = req.Headers["Range"];
         if (range is not null && range.StartsWith("bytes=", StringComparison.Ordinal))
         {

@@ -79,7 +79,7 @@
         </ScrollViewer>
       </Grid>
 
-      <!-- Observable evidence channels (SP-007 layout-probe pattern): live Extent/Viewport/
+      <!-- Observable evidence channels (the layout-probe pattern): live Extent/Viewport/
            Offset + final-control viewport state, and popup/scrollbar screen geometry for
              the headed harness. UIA-readable; content-free diagnostics. -->
       <StackPanel x:Name="ProbeFooter" Grid.Row="2" Margin="16,4,16,8">

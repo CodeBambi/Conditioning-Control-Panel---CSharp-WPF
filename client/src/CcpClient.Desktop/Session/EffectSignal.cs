@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Session;
 /// Where a module's <see cref="ISessionEffect.Changed"/> is allowed to arrive, and the one place
 /// that decides it.
 ///
-/// <para><b>Why this exists (SP-101, hazard 2 from SP-098's review).</b> Before this, an effect
+/// <para><b>Why this exists (hazard 2 from the first module's review).</b> Before this, an effect
 /// raised <c>Changed</c> on whatever thread moved its state, and every consumer carried its own
 /// copy of the marshalling — <c>Dispatcher.UIThread.CheckAccess()</c>, then either the work inline
 /// or a <c>Post</c>. Two consumers had that body

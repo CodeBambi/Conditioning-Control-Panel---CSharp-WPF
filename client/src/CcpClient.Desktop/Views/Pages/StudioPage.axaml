@@ -8,22 +8,22 @@
     real effects. Five of WPF's rows are still unported — Visuals, Bubble Pop, Bouncing Text,
     Haptics and Scheduler (StudioTabView.xaml.cs:496, :499, :505, :519, :535) — and none of them
     has a row here, which is WPF's own rule for a row that cannot be wired honestly (:494-496).
-    SP-112 lands Bubble Count, the first row that consumes capabilities it did not shape.
+    Bubble Count lands here as the first row that consumes capabilities it did not shape.
 
     Rack ORDER is WPF's own (StudioTabView.xaml.cs:483-541): within EFFECTS, flash, video,
-    subliminal, spiral, pinkfilter. SP-111 landed Mandatory Video in its own upstream position,
+    subliminal, spiral, pinkfilter. Mandatory Video landed in its own upstream position,
     SECOND, so the rows no longer close up around it. Where a row IS still unported the ported
     ones close up around it without reordering the ones that are here, which is why the order of
     what is present is upstream's rather than the order the modules happened to land in.
 
-    SP-098 landed Flash Images with the two things §9 D5/D6 recorded as missing "because the port
-    has nothing to wire yet" — a LIVE STATE DOT and a RIGHT-CLICK QUICK-TOGGLE. SP-105 adds the
-    rows for Subliminals (which landed in SP-101 with no way to switch it on at all — D72) and for
+    Flash Images landed with the two things §9 D5/D6 recorded as missing "because the port
+    has nothing to wire yet" — a LIVE STATE DOT and a RIGHT-CLICK QUICK-TOGGLE. Then came the
+    rows for Subliminals (which landed with no way to switch it on at all — D72) and for
     Pink Filter, the first continuous module. All three carry the full grammar, and they carry it
     because there is a real effect behind each one whose state can be reported and whose dial can
     be flipped.
 
-    SP-106 wires the last one, Spiral Overlay — the first module whose picture has to keep
+    The last one wired was Spiral Overlay — the first module whose picture has to keep
     CHANGING while it is on — and with it D5/D6 CLOSE for the whole rack: every row here now
     carries the full grammar because every row here now has a real effect behind it. WPF's rule
     for a row it cannot wire honestly ("A dot that cannot be wired honestly is omitted",
@@ -31,7 +31,7 @@
     simply none of them on this page any more.
   -->
   <Grid ColumnDefinitions="248,*" Margin="20">
-    <!-- SP-112: THE RACK SCROLLS, and it is a defect fix rather than a flourish. At ten rows the
+    <!-- THE RACK SCROLLS, and it is a defect fix rather than a flourish. At ten rows the
          column is taller than the window's 760 px, so the LAST row was clipped out of the visible
          region and could not be clicked at all — measured, not supposed: a headless click at the
          row's own centre did not select it. WPF's own rack lives in a scrollable tab body for the
@@ -74,7 +74,7 @@
             </Grid>
           </RadioButton>
 
-          <!-- SP-111. WPF's EFFECTS group is Flash Images, Mandatory Video, Subliminals, Spiral
+          <!-- WPF's EFFECTS group is Flash Images, Mandatory Video, Subliminals, Spiral
                Overlay, Magenta Filter, Visuals (StudioTabView.xaml.cs:483-497), so this row sits
                SECOND. Its label says "(silent half)" and that string is load-bearing rather than
                cosmetic: the dot on this row goes Live while the picture moves, and that is only
@@ -121,10 +121,10 @@
             </Grid>
           </RadioButton>
 
-          <!-- SP-115. WPF's EFFECTS group carries Bouncing Text after Spiral Overlay; the row was
+          <!-- WPF's EFFECTS group carries Bouncing Text after Spiral Overlay; the row was
                absent from this port for nine waves because its window is transparency-backed glyphs
                (D83) and this port's overlay refused per-pixel alpha by design. The title names the
-               ported half, on the precedent SP-109/SP-111/SP-113 set. -->
+               ported half, on the precedent the earlier rows set. -->
           <RadioButton x:Name="RowBouncingText"
                        Classes="rack-row"
                        GroupName="rack"
@@ -153,7 +153,7 @@
             </Grid>
           </RadioButton>
 
-          <!-- SP-117 — VISUALS, the EFFECTS group's sixth and last row, in WPF's own position
+          <!-- VISUALS, the EFFECTS group's sixth and last row, in WPF's own position
                (StudioTabView.xaml.cs:484-496: flash, video, subliminal, spiral, pinkfilter,
                visuals).
 
@@ -174,7 +174,7 @@
             </Grid>
           </RadioButton>
 
-          <!-- SP-110 — GAMES & CARDS, and it is the group SP-109's comment said the port did
+          <!-- GAMES & CARDS, and it is the group the IMMERSION comment said the port did
                not have. WPF's group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
                (StudioTabView.xaml.cs:483/498/508/530), so it opens here, between the two that
                already exist, and nothing is reordered. The header is upstream's own string
@@ -186,16 +186,16 @@
                something no earlier dot has meant — see LockCardEffect. -->
           <TextBlock Classes="rack-group" Text="GAMES &amp; CARDS" />
 
-          <!-- SP-113 — and it goes FIRST in this group because that is where the rack puts it:
+          <!-- Bubble Pop goes FIRST in this group because that is where the rack puts it:
                Bubble Pop, Bubble Count, Lock Card, Bouncing Text (StudioTabView.xaml.cs:499-505).
-               SP-112's own comment below already named this position as Bubble Pop's and said the
+               The Bubble Count comment below already named this position as Bubble Pop's and said the
                row was unported; it is ported now and takes the place that was held for it.
 
                THIS ROW IS THE FIRST THE USER ACTS ON. Every module before it did something TO
                them. Its dot therefore means something no earlier dot has meant: not that a
                picture is on the screen or that a question is in front of them, but that the
                OPERATING SYSTEM will route a click at one of these windows to this app — a claim
-               on attention the OS grants and can revoke, which is SP-110's DEMAND with the hit
+               on attention the OS grants and can revoke, which is the Lock Card row's DEMAND with the hit
                test in place of the foreground. See BubblePopEffect. -->
           <RadioButton x:Name="RowBubblePop"
                        Classes="rack-row"
@@ -211,12 +211,12 @@
             </Grid>
           </RadioButton>
 
-          <!-- SP-112 — and it goes ABOVE Lock Card because the RACK's order is the one the port
+          <!-- Bubble Count goes ABOVE Lock Card because the RACK's order is the one the port
                takes when the two upstream orders disagree, which they do here: the rack is Bubble
                Pop, Bubble Count, Lock Card, Bouncing Text (StudioTabView.xaml.cs:499-505) while
                StartEngine starts the lock card first and the bubble count second (:206-215). D90
                settled that question for Spiral/Pink Filter and the same answer applies: the rack is
-               the order the user has learned. Bubble Pop is the row directly above (SP-113).
+               the order the user has learned. Bubble Pop is the row directly above.
 
                THIS ROW IS THE FIRST THAT USES TWO CAPABILITIES. It plays a clip on the same video
                surface Mandatory Video plays on and asks its question through the same input
@@ -250,9 +250,9 @@
             </Grid>
           </RadioButton>
 
-          <!-- SP-109 — THE RACK'S THIRD GROUP, and it sits HERE rather than at the end
+          <!-- THE RACK'S THIRD GROUP, and it sits HERE rather than at the end
                because WPF's group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
-               (StudioTabView.xaml.cs:483/498/508/530). SP-110 opened GAMES & CARDS above with
+               (StudioTabView.xaml.cs:483/498/508/530). GAMES & CARDS opened above with
                its one ported row; the rest of that group still needs video or a moving
                clickable window. The header is upstream's own string
                (st4_studio_group_immersion = "IMMERSION", en.json:4818).
@@ -296,7 +296,7 @@
             </Grid>
           </RadioButton>
 
-          <!-- SP-119 — THE LAST ROW IN IMMERSION, and upstream's own position: Haptics is added
+          <!-- THE LAST ROW IN IMMERSION, and upstream's own position: Haptics is added
                immediately after Brain Drain and before the TIMING group header
                (StudioTabView.xaml.cs:513/519/530). It is upstream's one PAID rack module
                (`tier: 1`, :526-527 — "the rack's one paid module"), and it is the first row on
@@ -330,13 +330,13 @@
             </Grid>
           </RadioButton>
 
-          <!-- SP-108 — THE RACK'S SECOND GROUP. WPF has four (EFFECTS, GAMES & CARDS,
+          <!-- THE RACK'S SECOND GROUP. WPF has four (EFFECTS, GAMES & CARDS,
                IMMERSION, TIMING — §8.3, built at StudioTabView.xaml.cs:483/498/508/530); the
                port now has two, because it now has a module in a second one. The group header
                is upstream's own string (st4_studio_group_timing = "TIMING", en.json:4819) and
                the group exists because a module needs it, not to fill the rack out.
 
-               SP-118 COMPLETES THIS GROUP, and the sentence that used to end this comment —
+               THE SCHEDULER ROW COMPLETES THIS GROUP, and the sentence that used to end this comment —
                "the other TIMING row, Scheduler, starts the engine from OUTSIDE a session and
                is therefore not a session module at all" — is still TRUE and is no longer a
                reason it has no row. It is not on SessionEngine.Effects and never will be; it
@@ -408,7 +408,7 @@
                ABSENT rather than greyed: a disabled dial swallows the gesture and tells the user
                nothing (§9 D7).
 
-               SP-117: THREE OF THEM ARRIVED. Size, opacity and duration are now real dials, and
+               THREE OF THEM ARRIVED. Size, opacity and duration are now real dials, and
                they are on the VISUALS row rather than here, because that is where upstream puts
                them (Features/VisualsFeatureControl.xaml). This panel is the SCHEDULE; that one is
                the DRAW. -->
@@ -470,7 +470,7 @@
           </Border>
 
           <!-- WHERE THE IMAGES GO, read from the surface rather than asserted about the platform.
-               Until SP-100 this line said the drawing half was not ported; on Windows that became
+               This line used to say the drawing half was not ported; on Windows that became
                false the day the overlay landed, and on Linux it is still exactly right. A hard-coded
                sentence cannot be both, and a platform check here would be a second opinion about a
                capability that already answers for itself - so the text is derived from the
@@ -487,7 +487,7 @@
         </StackPanel>
 
         <!-- ================= Visuals ================= -->
-        <!-- SP-117. THE ONLY PANEL IN THE RACK WITH NO ENABLE CHECKBOX, matching upstream, whose
+        <!-- THE ONLY PANEL IN THE RACK WITH NO ENABLE CHECKBOX, matching upstream, whose
              own markup says why: "no enable pill: Visuals is the one module with no master toggle
              at all" (Features/VisualsFeatureControl.xaml:12-14). It carries no live-state line
              either, because it has no dot to explain: what it reports instead is whose dials these
@@ -723,7 +723,7 @@
           <!-- The panel LEADS with what is missing, positionally and not only in text: the six
                per-frame transform effects are not ported and TWO of them ship ON upstream, so a
                user who never reads a record still learns the scope before enabling anything. Same
-               shape and same reason as the video row's silent-half notice (SP-111). -->
+               shape and same reason as the video row's silent-half notice. -->
           <Border Classes="notice">
             <TextBlock x:Name="BouncingTextAbsentNotice"
                        AutomationProperties.AutomationId="BouncingTextAbsentNotice"
@@ -812,7 +812,7 @@
           <TextBlock Classes="module-title" Text="Spiral Overlay" />
           <TextBlock Classes="page-blurb" Text="Show hypnotic spiral overlay" />
 
-          <!-- TWO dials, and both are read by the running effect (SP-106). WPF's panel also
+          <!-- TWO dials, and both are read by the running effect. WPF's panel also
                carries a Randomize toggle, a Display-monitor dropdown, the SPIRAL LIBRARY card and
                a preview pane (§8.4). None of those is ported — the randomiser is D87, the monitor
                target is D66 — and rendering them dead is exactly the greyed control that swallows
@@ -1679,7 +1679,7 @@
                     Content="End the session when the ramp finishes" />
 
           <!-- THREE links where WPF has five (CCP.Core/Models/AppSettings.cs:2589-2621), and the
-               third arrived at SP-117 rather than being invented: D93's rule is that a link whose
+               third arrived with the Visuals row rather than being invented: D93's rule is that a link whose
                dial has no ported panel is ABSENT rather than present-and-inert, and the Visuals row
                IS flash opacity's panel. Master volume and subliminal volume still have no dial
                anywhere, so their switches are still absent — a switch that quietly does nothing is

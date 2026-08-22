@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-093. A tray capability is the easiest thing in this codebase to fake, because every one of
+/// A tray capability is the easiest thing in this codebase to fake, because every one of
 /// its failure modes is invisible: an icon that never appears, a restore that never fires, a
 /// backend that swallows the call and returns success. A test that only checked the return value
 /// of <c>Place</c> would certify all three.
@@ -21,7 +21,7 @@ namespace CcpClient.Tests;
 /// <para><b>What these facts do NOT prove.</b> Nothing about rendering, about the icon being
 /// visible to a human, about a real mouse click, about the window leaving and returning to the
 /// taskbar, about Explorer-restart recovery, or about Linux. Those are headed claims and a
-/// named manual gate (SP-093 record.md).</para>
+/// named manual gate (record.md).</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
 public class TrayCapabilityTests
@@ -169,7 +169,7 @@ public class TrayCapabilityTests
         Assert.False(windows.IsPlaced);
     }
 
-    // ---------- SP-096: the menu that makes the icon worth clicking ----------
+    // ---------- The menu that makes the icon worth clicking ----------
 
     [Fact]
     public void TheMenuTheOperatingSystemHolds_IsTheOneThatWasAskedFor()
@@ -214,7 +214,7 @@ public class TrayCapabilityTests
     [Fact]
     public void TheShellsRightClickNotification_ReachesTheRealMenu_AndTheChosenEntryRunsItsAction()
     {
-        // The way back that SP-094 did not have. This posts the exact message the shell posts on a
+        // The way back the first tray row did not have. This posts the exact message the shell posts on a
         // right-click over the icon and pumps the owner window's queue, so the REAL window proc
         // runs; the tracker seam stands in ONLY for TrackPopupMenu's modal loop, is handed the REAL
         // OS-held menu handle, and answers with the id the OS itself reports for "Show Dashboard".
@@ -245,7 +245,7 @@ public class TrayCapabilityTests
     [Fact]
     public void AMenuThatCannotBringTheWindowBack_IsRefusedWhereItIsBuilt()
     {
-        // The rule SP-094's refusal turns on, made structural. Every shape below is a menu that
+        // The rule that refusal turns on, made structural. Every shape below is a menu that
         // leaves a user with a right-click and no way home.
         static TrayMenuItem Wake() => TrayMenuItem.Command("wake", "Wake Up!", () => { });
         static TrayMenuItem Show() => TrayMenuItem.Restore("show", "Show Dashboard", () => { });

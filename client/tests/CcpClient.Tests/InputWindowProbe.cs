@@ -3,24 +3,24 @@ using System.Runtime.InteropServices;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-110's independent input instrument: it asks the OPERATING SYSTEM whether a window is really
+/// The independent input instrument: it asks the OPERATING SYSTEM whether a window is really
 /// receiving input, without asking the product.
 ///
 /// <para><b>Why it re-declares every P/Invoke instead of using the product's interop.</b> Same
 /// reason <see cref="OverlayWindowProbe"/> does, with the polarity reversed and the stakes higher.
-/// SP-099 proved a surface is click-THROUGH and its review recorded that "input passes through" is
-/// the property most easily faked, because a window that does not exist satisfies it too. Proving
-/// the OPPOSITE is faked just as cheaply: a handler was attached, a style was not set, a call
-/// returned. These declarations are a second, independent copy, so "the presence says it has the
-/// keyboard" and "the OS routes a synthesised keystroke somewhere else" are two facts produced by
-/// two code paths.</para>
+/// The overlay packet proved a surface is click-THROUGH and its review recorded that "input passes
+/// through" is the property most easily faked, because a window that does not exist satisfies it
+/// too. Proving the OPPOSITE is faked just as cheaply: a handler was attached, a style was not set,
+/// a call returned. These declarations are a second, independent copy, so "the presence says it has
+/// the keyboard" and "the OS routes a synthesised keystroke somewhere else" are two facts produced
+/// by two code paths.</para>
 ///
 /// <para><b>THE TRAP THIS INSTRUMENT EXISTS TO EXPOSE, and it is not hypothetical.</b>
 /// <c>GetGUIThreadInfo(<i>someThreadId</i>).hwndFocus</c> is THREAD-LOCAL: it answers "which window
 /// this thread's input queue considers focused", and it answers with YOUR window while the
 /// foreground — and every keystroke — belongs to somebody else entirely. Measured before any of
-/// this was written (SP-110 plan.md §0, run 1): a plain <c>SetForegroundWindow</c> returned FALSE,
-/// zero injected keystrokes arrived, and the thread-local read still said "ours".
+/// this was written (this packet's plan.md §0, run 1): a plain <c>SetForegroundWindow</c> returned
+/// FALSE, zero injected keystrokes arrived, and the thread-local read still said "ours".
 /// <see cref="RunNegativeControl"/> REPRODUCES that state deterministically, in-process, on every
 /// suite run, by parking a focused window on a second thread while the foreground sits on the
 /// first. The system-wide read is <c>GetGUIThreadInfo(<b>0</b>)</c> — documented as the foreground
@@ -42,7 +42,7 @@ internal static class InputWindowProbe
     private const uint WsPopup = 0x80000000;
     private const uint WsExToolwindow = 0x00000080;
 
-    /// <summary>SP-112: a window the OS refuses to ACTIVATE. See <c>ScratchWindow.Create</c>'s
+    /// <summary>A window the OS refuses to ACTIVATE. See <c>ScratchWindow.Create</c>'s
     /// <c>activatable</c> parameter.</summary>
     private const uint WsExNoactivate = 0x08000000;
     private const uint WsExTopmost = 0x00000008;
@@ -71,8 +71,8 @@ internal static class InputWindowProbe
     /// <summary>
     /// Bounded iteration ceiling for "pump until it arrives". Injected input crosses the OS's raw
     /// input thread before it reaches a queue, so the answer is not available on the calling
-    /// instruction — measured arriving on the FIRST pump (SP-110 plan.md §0, F5). Bounded iteration
-    /// with a yield absorbs a loaded machine without a wall-clock wait, which this suite forbids.
+    /// instruction — measured arriving on the FIRST pump (plan.md §0, F5). Bounded iteration with
+    /// a yield absorbs a loaded machine without a wall-clock wait, which this suite forbids.
     /// </summary>
     private const int MaxPumpIterations = 4096;
 
@@ -467,9 +467,9 @@ internal static class InputWindowProbe
 
         /// <param name="activatable">
         /// Whether the operating system may make this window the FOREGROUND. <b>False for the
-        /// parked rig, and that is a defect fix (SP-112).</b>
+        /// parked rig, and that is a defect fix.</b>
         ///
-        /// <para><c>SetFocus</c> ACTIVATES the top-level window it focuses (SP-110 record §4,
+        /// <para><c>SetFocus</c> ACTIVATES the top-level window it focuses (this packet's record §4,
         /// M-m/M-p), so the parked rig — whose whole purpose is to hold a THREAD-LOCAL focus while
         /// something else owns the foreground — became the foreground itself as soon as this
         /// process had the rights to do it. On the FIRST invocation in a process it has no such

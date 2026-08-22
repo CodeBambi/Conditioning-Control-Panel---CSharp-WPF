@@ -17,12 +17,12 @@ You audit what the diff actually does, never what the report claims it does. Fre
 
 ## Blocking triggers specific to this project
 
-- **Any edit to `client/tests/floor/floor.json` in a lane diff.** The pin is a shared chokepoint the orchestrator owns; a lane declares `spine-tasks/<packet>/floor-delta.json` instead. A lane that edited the pin collides with every other lane in the wave, so this is blocking even when the number it wrote is correct.
-- A missing `floor-delta.json`, one whose `packet` does not match its own folder, or one whose counts do not match what the diff actually added. Check this by counting the tests in the diff, not by trusting the `reason` string.
+- **Any edit to `client/tests/floor/floor.json` in a lane diff.** The pin is a shared chokepoint the orchestrator owns; a lane reports its count change in its final report instead. A lane that edited the pin collides with every other lane in the wave, so this is blocking even when the number it wrote is correct.
+- A missing floor-delta line in the lane's report, or one whose counts do not match what the diff actually added. Check this by counting the tests in the diff, not by trusting the lane's stated reason.
 - A name added to `allowedSkips` without naming the machine class where it does execute.
 - Any new wall-clock wait outside `client/tests/CcpClient.Tests/TestWait.cs`.
 - `client/docs/task-board.md` in a lane diff during a parallel wave.
-- Any edit under `ConditioningControlPanel/`, `.spine/`, or another task's folder.
+- Any edit under `ConditioningControlPanel/`, or in a path another lane owns.
 - A cross-platform support claim backed only by compilation, a stub, or a Windows-only test.
 - A TODO, placeholder, or "not implemented" left in changed files.
 

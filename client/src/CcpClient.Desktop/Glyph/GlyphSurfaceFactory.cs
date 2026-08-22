@@ -35,7 +35,7 @@ public static class GlyphSurfaceFactory
     /// attribute at all — it is a property of the visual the window was created with, and it does
     /// nothing without a compositor to honour it. Step 3 is the one that corresponds to this
     /// packet's central trap, and step 5 is expected to FAIL under Wayland even where the picture
-    /// is correct, exactly as SP-111's video gate step 4 does.</para>
+    /// is correct, exactly as the video gate's step 4 does.</para>
     /// </summary>
     public const string LinuxManualGate =
         "MANUAL GATE (Linux, undischarged): on a real X11 desktop session - NOT WSLg - composite a glyph surface "

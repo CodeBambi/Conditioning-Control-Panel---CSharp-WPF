@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
-/// SP-117: the <b>Visuals</b> row's persisted dials — WPF's own
+/// The <b>Visuals</b> row's persisted dials — WPF's own
 /// <c>Features/VisualsFeatureControl.xaml.cs:35-118</c>, which is a settings page and nothing else.
 ///
 /// <para><b>This document has no <c>Enabled</c> member, and that is the whole census finding made
@@ -36,7 +36,7 @@ namespace CcpClient.Desktop.Session;
 /// either.</item>
 /// </list>
 ///
-/// <para><b>One document per module</b>, on the precedent SP-101 set and SP-105 restated
+/// <para><b>One document per module</b>, on the precedent set and restated
 /// (<see cref="PinkFilterPresetDocument"/>, divergence D71): <c>Persistence/**</c> is outside this
 /// packet's File Scope, and the substantive half of that argument is unchanged — the store's
 /// Degraded load path takes the WHOLE document to defaults, so one hand-broken value in a shared
@@ -102,7 +102,7 @@ public sealed class VisualsPresetDocument
     /// 40 % of the monitor in each axis — <c>CalculateGeometry</c>
     /// (<c>Services/Flash/FlashService.cs:2290-2315</c>), already ported verbatim as
     /// <see cref="Effects.FlashGeometry.Size"/>, which has taken this value as a parameter since
-    /// SP-100 and has been handed a constant ever since.
+    /// the first flash was drawn, and has been handed a constant ever since.
     /// </summary>
     public int ImageScalePercent
     {

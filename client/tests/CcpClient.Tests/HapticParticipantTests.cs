@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-119 — the haptic sink's APP-LIFETIME owner: what phase 3 does, what it deliberately does not
+/// The haptic sink's APP-LIFETIME owner: what phase 3 does, what it deliberately does not
 /// do, where the all-stop runs relative to everything else, and what the premium gate writes.
 /// </summary>
 public class HapticParticipantTests
@@ -260,7 +260,7 @@ public class HapticParticipantTests
         participant.RequestEnable(true);
         Assert.True(participant.Enabled);
         // Enabled and STILL dark: the second conjunct asks the sink, so the dot cannot be read off
-        // the checkbox (SP-118's D180 discipline, SP-109's fifth meaning).
+        // the checkbox (the D180 discipline, the dot's fifth meaning).
         Assert.Equal(EffectDotState.Off, participant.Dot);
 
         await participant.StopAsync();

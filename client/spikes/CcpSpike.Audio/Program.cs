@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace CcpSpike.Audio;
 
 /// <summary>
-/// SP-017 spike runner. Executes the IDENTICAL probe sequence per admitted backend and emits
+/// Audio-backend spike runner. Executes the IDENTICAL probe sequence per admitted backend and emits
 /// JSONL facts (one line per observation). Completion/interruption claims come only from
 /// backend events/positions cross-checked against a shared monotonic stopwatch (honesty
 /// framing b) — never from call returns or sleeps. Declared pre-run tolerances (consult item 7):

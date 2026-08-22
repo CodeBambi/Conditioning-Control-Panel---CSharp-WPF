@@ -64,7 +64,7 @@ public enum BubblePopExit
 /// the arbiter being the window manager rather than a user-space disc snapshot), never the numbers.</para>
 ///
 /// <para><b>The one number this class exists to make checkable</b> is
-/// <see cref="MaxStepDisplacement"/>. SP-110 predicted this packet's central race: a hit test's
+/// <see cref="MaxStepDisplacement"/>. An earlier packet predicted this packet's central race: a hit test's
 /// answer is a function of a position that changes between asking and clicking. The port removes
 /// that race from the product — nothing hit-tests and then acts on the answer — and what remains is
 /// that a caller's belief about routing can be one step old. That residue is bounded by arithmetic

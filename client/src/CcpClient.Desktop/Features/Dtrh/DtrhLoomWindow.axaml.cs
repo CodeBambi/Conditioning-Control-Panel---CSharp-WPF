@@ -7,7 +7,7 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// SP-049: THE LOOM studio window — the v6.6.3 promotion (WPF <c>LoomHostService</c>
+/// THE LOOM studio window — the v6.6.3 promotion (WPF <c>LoomHostService</c>
 /// parity, Services/Chaos/LoomHostService.cs): a STRIPPED sibling of the game host. One
 /// windowed web surface on <c>/dtrh/loom.html</c>, speaking only the loom bridge subset
 /// (loom-save / loom-delete / loom-reveal / sfx / log / ready out of the page, loom-result
@@ -28,7 +28,7 @@ public partial class DtrhLoomWindow : Window
     private DtrhLoomDispatch? _loomDispatch;
     private DtrhNativeEffects? _fx;
     private SoundFlowDtrhAudio? _audio;
-    // SP-135: the PermissionRequested deny hook. This window has no ProcessFailed subscription and
+    // The PermissionRequested deny hook. This window has no ProcessFailed subscription and
     // no watchdog at all, so this is its FIRST native CoreWebView2 subscription — the field and the
     // dispose line below are new, not a copy of a neighbouring pattern.
     private WebViewPermissionDeny.PermissionDenySignal? _permissionDenySignal;
@@ -171,7 +171,7 @@ public partial class DtrhLoomWindow : Window
         }
     }
 
-    /// <summary>SP-135: the DENYING PermissionRequested handler, on the studio's embedded surface
+    /// <summary>The DENYING PermissionRequested handler, on the studio's embedded surface
     /// too. Upstream's LoomHostService has no permission handler at all, so this tightens beyond
     /// upstream; the studio asks the browser for nothing, which is exactly why denying costs it
     /// nothing. Autoplay is left at the browser default — the studio's sfx already rely on the
@@ -336,7 +336,7 @@ public partial class DtrhLoomWindow : Window
 
     /// <summary>HARNESS-ONLY headed evidence drive: <code>save:&lt;name&gt;@t;
     /// delete-first@t; reveal-first@t</code> (@t seconds, default spacing 6s). Each step
-    /// runs ONE atomic script through the engine's own InvokeScript (the SP-011 W14
+    /// runs ONE atomic script through the engine's own InvokeScript (the spike W14
     /// precedent) — the gifenc encoder, the bridge messages, the store, the serving, and
     /// the rack re-render are ALL real; only the pointer is scripted (WSLg no-input
     /// class, honestly labeled). The studio rebuilds its DOM on every redraw, so each

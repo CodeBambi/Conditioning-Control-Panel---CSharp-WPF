@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-099's independent effect instrument: it asks the WINDOW MANAGER about a surface without
+/// The independent effect instrument: it asks the WINDOW MANAGER about a surface without
 /// asking the product.
 ///
 /// <para><b>Why it re-declares every P/Invoke instead of using the product's interop.</b> This is
@@ -56,7 +56,7 @@ internal static class OverlayWindowProbe
     /// Hard ceiling on the raise-and-ask loop. The topmost band is CONTESTED on this machine — the
     /// shipping WPF product re-asserts <c>HWND_TOPMOST</c> on its own windows on a cadence
     /// (<c>Services/Flash/FlashService.cs:206-243</c>) and was empirically the window that won the
-    /// point while SP-099 was being written. Bounded iteration absorbs that without a wall-clock
+    /// point while this probe was being written. Bounded iteration absorbs that without a wall-clock
     /// wait, which this suite forbids outright. Raising is an ENVIRONMENT action taken with this
     /// probe's own P/Invoke; it removes contention and cannot manufacture an answer, because
     /// <see cref="WindowFromPoint"/> is still the only thing that produces one.

@@ -4,7 +4,7 @@ namespace CcpClient.Desktop.Lifecycle;
 /// The verdict order is deliberate: only <see cref="Harness"/> refuses to run unsealed.</summary>
 public enum EntryPointDisposition
 {
-    /// <summary>Automated evidence capture or failure injection — REFUSE when CCP_DATA_ROOT is unset (SP-064).</summary>
+    /// <summary>Automated evidence capture or failure injection — REFUSE when CCP_DATA_ROOT is unset.</summary>
     Harness,
 
     /// <summary>Human demonstrator / inspection — never refuse (task-board decree).</summary>
@@ -22,7 +22,7 @@ public enum EntryPointDisposition
 }
 
 /// <summary>
-/// SP-064: the ONE registry classifying every <c>--flag</c> literal reachable from the
+/// The ONE registry classifying every <c>--flag</c> literal reachable from the
 /// startup dispatch surface (plus the non-startup literals the guard also binds).
 /// The gate in <see cref="Program.Main"/> consumes ONLY this registry — there is no
 /// second copy of the classification anywhere. A new harness flag added here as
@@ -33,7 +33,7 @@ public enum EntryPointDisposition
 public static class HarnessEntryPoints
 {
     /// <summary>Process exit code when a harness entry point is refused (1 = usage/startup
-    /// failure, 2 = panic — both taken; grep-pinned unique at introduction, SP-064 record Step 1).</summary>
+    /// failure, 2 = panic — both taken; grep-pinned unique at introduction, the packet record Step 1).</summary>
     public const int RefusalExitCode = 3;
 
     private static readonly KeyValuePair<string, EntryPointDisposition>[] Entries =
@@ -52,13 +52,13 @@ public static class HarnessEntryPoints
         new("--popup-demo", EntryPointDisposition.Demo),
         new("--avatartube-demo", EntryPointDisposition.Demo),
         // In-memory pack corruption only (typed undecodable-asset path) — fabricates nothing
-        // persisted; demo decree stands (SP-064 record, consult-checked boundary call).
+        // persisted; demo decree stands (the packet record, consult-checked boundary call).
         new("--avatar-corrupt-demo", EntryPointDisposition.Demo),
         new("--dtrh-demo", EntryPointDisposition.Demo),
         new("--dtrh-quick", EntryPointDisposition.Demo),
         new("--loom-demo", EntryPointDisposition.Demo),
         new("--intake-demo", EntryPointDisposition.Demo),
-        // SP-132: opens the Goon practice host at startup against the REAL profile, exactly as
+        // Opens the Goon practice host at startup against the REAL profile, exactly as
         // --intake-demo does. Demo, not Harness, by the enum's own contract (:6-13): it captures
         // no evidence and injects no failure. A --goon-drive or --goon-auto-close would NOT be.
         new("--goon-demo", EntryPointDisposition.Demo),
@@ -102,7 +102,7 @@ public static class HarnessEntryPoints
     /// <summary>The harness-class flags present in <paramref name="args"/>, in argument
     /// order, de-duplicated. Pure: no environment read — Program.Main reads
     /// <see cref="CompositionRoot.ActiveDataRootOverride"/> itself so this stays
-    /// unit-testable without process-env mutation (SP-062 discipline).</summary>
+    /// unit-testable without process-env mutation (by discipline).</summary>
     public static IReadOnlyList<string> HarnessFlagsIn(string[] args)
     {
         var found = new List<string>();
@@ -126,5 +126,5 @@ public static class HarnessEntryPoints
         (harnessFlags.Count == 1 ? "is a HARNESS-ONLY entry point" : "are HARNESS-ONLY entry points") +
         $" (automated evidence capture / failure injection) and {CompositionRoot.DataRootOverrideVariable} is not set — " +
         $"set {CompositionRoot.DataRootOverrideVariable}=<fully-qualified absolute directory> so the run is isolated " +
-        $"from the real user profile (SP-057 seam; SP-064 makes it mandatory for harness entries)";
+        $"from the real user profile (the isolation seam is mandatory for harness entries)";
 }

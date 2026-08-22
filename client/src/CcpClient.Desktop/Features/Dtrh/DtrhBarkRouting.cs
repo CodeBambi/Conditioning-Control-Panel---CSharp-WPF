@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// The DTRH page `bark {event, ...}` → bark-trigger routing table (SP-032 q2): the full
+/// The DTRH page `bark {event, ...}` → bark-trigger routing table (slice q2): the full
 /// WPF `RouteBark` switch (DtrhHostService.cs:618-650) mapped onto the Notify* triggers
 /// (BarkService.cs:262-365). Fill values carry the WPF fill KEYS (condition evaluation and
 /// {key} substitution read them); JSON field names follow the payload's send sites.

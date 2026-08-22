@@ -8,11 +8,11 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-106 — FOUR modules under one spine: two paced, one static, one that has to keep moving.
+/// FOUR modules under one spine: two paced, one static, one that has to keep moving.
 ///
-/// <para><b>The claim under test.</b> SP-105 split the spine from the scheduler and asked the next
-/// question out loud: does a module whose work is PER-FRAME end up re-implementing a scheduler to
-/// get its frames? Every fact below fails if the answer is yes. The sharpest is
+/// <para><b>The claim under test.</b> The previous packet split the spine from the scheduler and
+/// asked the next question out loud: does a module whose work is PER-FRAME end up re-implementing
+/// a scheduler to get its frames? Every fact below fails if the answer is yes. The sharpest is
 /// <see cref="PressingStart_ArmsAllFour_AndTheMovingModulesTwoTimersAreBothTheSURFACES"/>, which
 /// counts what each module put on the session clock and asserts that the moving module put nothing
 /// there at all — its presenter did.</para>
@@ -40,7 +40,7 @@ public class MovingEffectSpineTests
         // for both continuous modules, so their surface cadences are on this clock too:
         //   1 flash firing + 1 subliminal firing  -> the two PACED MODULES' schedules
         //   1 pink filter                         -> its SURFACE's topmost band. The MODULE has
-        //                                            none: SP-105's rig, which injects a recording
+        //                                            none: the tint's rig, which injects a recording
         //                                            double instead of the presenter, counts 2 here
         //   2 spiral                              -> its SURFACE's topmost band AND its frame
         //                                            advance. The MODULE has none either
@@ -202,7 +202,7 @@ public class MovingEffectSpineTests
         // only on the runs where the bad ordering really happens (measured: it does happen under
         // suite load, and did not on an isolated run). The bound is stated here rather than glossed.
         //
-        // SP-116 SUPERSEDES THE REST OF THIS PARAGRAPH. It used to say a pin that could force the
+        // THE REST OF THIS PARAGRAPH IS SUPERSEDED. It used to say a pin that could force the
         // ordering "would need either a wall-clock wait, which is banned, or a scheduler seam in the
         // shared body". Both were wrong: ATailThatLandsAfterSomethingWasPutBackUp_… below forces it
         // with neither, by parking the release itself on a gate the test opens. The sentence is
@@ -278,7 +278,7 @@ public class MovingEffectSpineTests
     [Fact]
     public async Task ONESTOPRELEASESTHEWORKTHREETIMES_AndTheTHIRDIsOnAPoolThreadAfterDisarmReturned()
     {
-        // SP-116. The shared body's teardown is not one call and it does not all happen on the
+        // The shared body's teardown is not one call and it does not all happen on the
         // caller's thread. Per stop, EXACTLY three:
         //   1. Disarm's own, synchronous, on the caller's thread (OwnedSessionEffect.cs:219);
         //   2. the generation's cancellation registration (:352), which runs inside
@@ -313,7 +313,7 @@ public class MovingEffectSpineTests
     [Fact]
     public async Task ATailThatLandsAfterSomethingWasPutBackUp_TAKESITDOWN_WhichIsWhyThePostDisarmAwaitIsNotOptional()
     {
-        // SP-116. SP-115 measured the base tree red 1 in 7 on
+        // The base tree was measured red 1 in 7 on
         // SpiralOverlayEffectTests.DisarmReleasesTheWorkUNCONDITIONALLY_…, a fact that touches no
         // OS at all — the strand that "the desktop was contended" cannot explain. THIS is the
         // mechanism, with the thread pool's choice taken away: the probe parks its third release
@@ -635,7 +635,7 @@ public class MovingEffectSpineTests
     }
 
     /// <summary>
-    /// SP-116. A module that does nothing but COUNT its releases and, on request, hold one of them
+    /// A module that does nothing but COUNT its releases and, on request, hold one of them
     /// until the test lets it go — so the ordering the thread pool picks at random becomes the
     /// ordering this test chose.
     ///
@@ -841,7 +841,7 @@ public class MovingEffectSpineTests
         }
     }
 
-    /// <summary>The manual clock, SP-098's shape. Zero wall-clock.</summary>
+    /// <summary>The manual clock, in the shape every module test shares. Zero wall-clock.</summary>
     private sealed class ManualSessionClock : ISessionClock
     {
         private readonly List<Entry> _timers = [];

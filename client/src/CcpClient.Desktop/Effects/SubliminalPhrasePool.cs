@@ -8,7 +8,7 @@ namespace CcpClient.Desktop.Effects;
 /// deliberately a SEPARATE seam rather than a shared generic one: a flash draws N items with
 /// replacement out of a folder that may be slow, and a subliminal draws exactly ONE out of a
 /// dictionary already in memory. The two share the word "pool" and nothing else, which is one of
-/// SP-101's findings about how far the template actually generalises.
+/// the shared body's findings about how far the template actually generalises.
 /// </summary>
 public interface ISubliminalPhrasePool
 {

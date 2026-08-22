@@ -1,7 +1,7 @@
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// SP-027 slice b5: the DTRH watchdog + relaunch-once recovery state machine (contract-named).
+/// Slice b5: the DTRH watchdog + relaunch-once recovery state machine (contract-named).
 /// WPF archaeology (DtrhHostService.cs): heartbeat watch 5s cadence (:823), silence limits
 /// 10s mid-run / 20s hub (:833-836), guarded on page-ready and not-exiting (:830), relaunch
 /// once per session then give up cleanly (:858-876) — never a restart loop.
@@ -150,7 +150,7 @@ public sealed class DtrhWatchdog
 }
 
 /// <summary>
-/// SP-027 slice b5: the graceful-exit flow (window-scoped — a relaunched window gets a
+/// Slice b5: the graceful-exit flow (window-scoped — a relaunched window gets a
 /// fresh flow). WPF archaeology (DtrhHostService.cs): CloseActive :149-160 — if the page
 /// is ready and not already exiting: post end-run {reason:"host"} and arm the 1200ms
 /// exit watchdog; otherwise dispose now. Page-initiated exit :312-314 — the page is

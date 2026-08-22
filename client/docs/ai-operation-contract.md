@@ -20,7 +20,7 @@ WPF and the first Avalonia attempt are read-only behavioral evidence / lessons-o
 
 ## 1. Typed outcomes
 
-Every AI operation terminates in exactly one typed outcome. The terminal-outcome type **is** SP-004's `OperationOutcome` (`async-lifecycle-fault-contract.md` §2): `Completed`, `Cancelled`, or `Failed(kind, reason)`. AI-specific *domain* results (reply text, refusal, fallback classification) ride inside the operation's `Completed` payload as typed values — never as sentinel strings, never as null-with-log.
+Every AI operation terminates in exactly one typed outcome. The terminal-outcome type **is** the async-lifecycle contract's `OperationOutcome` (`async-lifecycle-fault-contract.md` §2): `Completed`, `Cancelled`, or `Failed(kind, reason)`. AI-specific *domain* results (reply text, refusal, fallback classification) ride inside the operation's `Completed` payload as typed values — never as sentinel strings, never as null-with-log.
 
 The domain payload vocabulary:
 
@@ -29,17 +29,17 @@ The domain payload vocabulary:
 - `AiReply.Unavailable(reason)` — the provider could not produce a reply (offline §11, unconfigured, capability not proven). Not an error; distinct from `Refused`.
 - `AiReply.Fallback(text, reason)` — a canned, non-model response. Always distinguishable from `Generated` by type, fixing the WPF string API's fallback/refusal ambiguity (AI_AUDIT §7; first-attempt lesson REJECT "string-inferred failures").
 
-**Evidence:** first-attempt `AiReplyResult` typed reply (`CCP.Core/Services/Moderation/ModerationRefusal.cs:36`) — ACCEPT idea; WPF catch-and-return-null (`CCP.Core/Services/AIService/LocalAiService.cs:392-395`) — REJECTED; SP-004 outcome vocabulary — REUSED.
+**Evidence:** first-attempt `AiReplyResult` typed reply (`CCP.Core/Services/Moderation/ModerationRefusal.cs:36`) — ACCEPT idea; WPF catch-and-return-null (`CCP.Core/Services/AIService/LocalAiService.cs:392-395`) — REJECTED; the async-lifecycle outcome vocabulary — REUSED.
 
 ## 2. Cancellation and generation
 
-No new machinery. Every AI operation is an SP-004 **owned operation**: one owner, a cancellation generation, an owned completion task, a typed terminal outcome (`async-lifecycle-fault-contract.md` §1, §3). Consequences the AI row binds explicitly:
+No new machinery. Every AI operation is an **owned operation**: one owner, a cancellation generation, an owned completion task, a typed terminal outcome (`async-lifecycle-fault-contract.md` §1, §3). Consequences the AI row binds explicitly:
 
-1. In-flight network/inference work observes the generation token; cancellation — never a timeout alone, never the UI thread — is what unblocks it (SP-004 §3 rule 4). Provider timeouts exist as *failure* classifiers, not as the cancellation mechanism.
-2. A completion arriving for generation *N* when the owner is at *M > N* is **stale and discarded** at the point of application (SP-004 §3 rule 2): no late reply bubble, no late command execution, no late memory write.
-3. **Panic cancellation** (owner stop / teardown) cancels the current generation; in-flight AI work terminates with typed `Cancelled` and is drained by SP-004's guarded `ShutdownAsync` (§6). The WPF/first-attempt fire-and-forget + catch-all shape (`async void ExecuteCommand`, `CCP.Avalonia/Services/Commands/AiCommandService.cs:87`) is REJECTED.
+1. In-flight network/inference work observes the generation token; cancellation — never a timeout alone, never the UI thread — is what unblocks it (async-lifecycle contract §3 rule 4). Provider timeouts exist as *failure* classifiers, not as the cancellation mechanism.
+2. A completion arriving for generation *N* when the owner is at *M > N* is **stale and discarded** at the point of application (async-lifecycle contract §3 rule 2): no late reply bubble, no late command execution, no late memory write.
+3. **Panic cancellation** (owner stop / teardown) cancels the current generation; in-flight AI work terminates with typed `Cancelled` and is drained by the guarded `ShutdownAsync` (§6). The WPF/first-attempt fire-and-forget + catch-all shape (`async void ExecuteCommand`, `CCP.Avalonia/Services/Commands/AiCommandService.cs:87`) is REJECTED.
 
-**Evidence:** SP-004 contract (reused); first-attempt lesson "no end-to-end cancellation" — REJECTED.
+**Evidence:** the async-lifecycle contract (reused); first-attempt lesson "no end-to-end cancellation" — REJECTED.
 
 ## 3. Provider switching
 
@@ -49,7 +49,7 @@ The contract:
 
 1. The provider set is a **strategy seam vocabulary** (ADAPTED from the first-attempt strategy seam): providers are identified by stable typed IDs; exactly one is *selected* at a time; the selection is a settings-level fact.
 2. **Switch = generation invalidation → token cancellation → stale-application discard** (§2). A provider switch is an owner stop/restart: the generation increments, in-flight work under the old provider is cancelled, and any racing completion is discarded by the generation check. No late results — a reply started under provider A can never be displayed, executed, or remembered after a switch to B.
-3. Selection alone never claims availability: a selected-but-unproven provider yields `AiReply.Unavailable` (§1) and its capability state per SP-006 (§11). Switching *to* a provider performs no network call by itself.
+3. Selection alone never claims availability: a selected-but-unproven provider yields `AiReply.Unavailable` (§1) and its capability state per the runtime-capability contract (§11). Switching *to* a provider performs no network call by itself.
 4. This contract defines no provider discovery, no health probes, and no fallback chain. **Silent endpoint fallback is rejected** (first-attempt lesson); if a fallback chain is ever wanted it is an owner decision with typed, disclosed transitions.
 
 ## 4. Operation classes: interactive vs awareness
@@ -71,7 +71,7 @@ Two operation classes with distinct contracts:
 3. Memory is provider-neutral state, not provider state: switching providers does not implicitly clear memory, and clearing memory is always an explicit operation.
 4. Memory content is user data under the persistence contract's authority (`persistence-migration-contract.md`) when persisted; it never flows into diagnostics (§12) and is never a secret (§10).
 
-**Honesty rule (SP-006 §4):** the declared seam claims nothing. The first consumer row implements and proves it.
+**Honesty rule (runtime-capability contract §4):** the declared seam claims nothing. The first consumer row implements and proves it.
 
 **Evidence:** WPF local history: 50-pair cap, `ChatMemoryEnabled` default true, file persistence (`CCP.Core/Services/AIService/LocalAiService.cs:36-153`; AI_AUDIT §2 "Memoria") — ADAPTED; quiz in-memory history (`QuizService.cs:175`) — trace.
 
@@ -118,15 +118,15 @@ Two operation classes with distinct contracts:
    - `OutOfRange(field, limit)` — names the field and the violated bound;
    - `ModerationBlocked(category)` — §7 rule 2;
    - `ConsentGated(toggle)` — master/per-effect gate denied;
-   - `NotExecuted(reason)` — the command was valid but did not run, with `reason` ∈ { `envelope-rejected`, `cap-exceeded`, `superseded-generation`, `consent-gated`, `moderation-blocked`, `effect-unavailable` }. A valid sibling in a rejected envelope is `NotExecuted(envelope-rejected)` — never silently dropped. (Reason set extended 2026-08-04 at the SP-044 land: `superseded-generation` now lands at execution level — SP-019 limit 7 discharged; `consent-gated`/`moderation-blocked` = the post-validation gate/moderation outcomes, typed never dropped (the WPF silent-drop strengthening); `effect-unavailable` = admitted by gates but no effect backend exists — the typed placeholder while no greenfield effect surfaces exist. The execution result's `Valid` means DISPATCHED, distinct from validation-time `Valid`.)
+   - `NotExecuted(reason)` — the command was valid but did not run, with `reason` ∈ { `envelope-rejected`, `cap-exceeded`, `superseded-generation`, `consent-gated`, `moderation-blocked`, `effect-unavailable` }. A valid sibling in a rejected envelope is `NotExecuted(envelope-rejected)` — never silently dropped. (Reason set extended 2026-08-04 at the command-execution slice's land: `superseded-generation` now lands at execution level — provider-spike limit 7 discharged; `consent-gated`/`moderation-blocked` = the post-validation gate/moderation outcomes, typed never dropped (the WPF silent-drop strengthening); `effect-unavailable` = admitted by gates but no effect backend exists — the typed placeholder while no greenfield effect surfaces exist. The execution result's `Valid` means DISPATCHED, distinct from validation-time `Valid`.)
 2. The envelope result is a typed, serializable value — the honest record of *why nothing ran* — and is what the spike row's "zero execution on mixed/invalid payloads" asserts against.
 3. Execution results (when an execution row lands) extend this vocabulary per command; they never collapse two distinct failures into one string.
 4. A rejected envelope surfaces **no reply text**: the result's `Reply` is null whenever `Accepted` is false. Reply moderation is the operation pipeline's output boundary (§7 rule 1), not the validator's — the validator's job is to ensure a rejected envelope hands nothing showable or executable to anyone.
 
 ## 10. Secret storage
 
-1. The settings document never carries AI secrets (provider keys, tokens) — SP-005's rule (`persistence-migration-contract.md` §9) applies unchanged; a persisted model stores an opaque secret *name*, never a value.
-2. The seam **is** SP-005's declared-only `ISecretStore` (`Get`/`Set`/`Delete` by name) — REUSED, still declared-only. This slice adds no implementation and no second seam.
+1. The settings document never carries AI secrets (provider keys, tokens) — the persistence contract's rule (`persistence-migration-contract.md` §9) applies unchanged; a persisted model stores an opaque secret *name*, never a value.
+2. The seam **is** the persistence contract's declared-only `ISecretStore` (`Get`/`Set`/`Delete` by name) — REUSED, still declared-only. This slice adds no implementation and no second seam.
 3. WPF/first-attempt auth facts are inventory only: cloud auth via `X-Auth-Token`/Patreon Bearer (AI_AUDIT §9), OpenRouter key server-side. The first row with a secret consumer (provider spike) implements the seam against a platform store and records the admission.
 
 ## 11. Offline behavior
@@ -135,7 +135,7 @@ Two operation classes with distinct contracts:
    - Interactive → `AiReply.Unavailable(reason)` (§1); the user sees honest typed state.
    - Awareness → typed drop (§4 rule 3).
    - Command execution → `NotExecuted` with a typed reason on the envelope result (§9).
-2. A provider's readiness is a **capability state** per SP-006: registration/selection/OS checks never yield availability; only a real probe of the selected backend does (`runtime-capability-contract.md` §2). This slice declares the mapping; provider probes land with the spike row. WPF's identity-check `IsAvailable` (`Services/AiService.cs:52`) is evidence of the wrong shape, not a model.
+2. A provider's readiness is a **capability state** per the runtime-capability contract: registration/selection/OS checks never yield availability; only a real probe of the selected backend does (`runtime-capability-contract.md` §2). This slice declares the mapping; provider probes land with the spike row. WPF's identity-check `IsAvailable` (`Services/AiService.cs:52`) is evidence of the wrong shape, not a model.
 3. **Offline = zero network.** When no provider is proven available, the AI subsystem performs no outbound AI traffic — no speculative retries, no endpoint guessing (AI_AUDIT §10 inventory is the ceiling of what may ever be contacted).
 4. Local (loopback-class) operations degrade independently of cloud: a cloud outage never blocks loopback operations and vice versa; the two classes report their own typed states (§6 disclosure consumes this).
 
@@ -150,7 +150,7 @@ Two operation classes with distinct contracts:
 
 ## 13. Implementation-topology neutrality
 
-**Greenfield-decision.** This contract fixes vocabulary, seams, and mechanics — it does not decide: where providers live (in-process vs out-of-process), whether the strategy is DI-selected or registry-selected, whether moderation runs in-process or behind a service boundary, how memory is persisted, or what the execution pipeline's threading topology is. Any topology that satisfies §§1–12 and the SP-003/SP-004/SP-005/SP-006 contracts is conformant. Provider spikes and the companion implementation row make topology decisions with runtime evidence; this contract neither requires nor forbids any of them.
+**Greenfield-decision.** This contract fixes vocabulary, seams, and mechanics — it does not decide: where providers live (in-process vs out-of-process), whether the strategy is DI-selected or registry-selected, whether moderation runs in-process or behind a service boundary, how memory is persisted, or what the execution pipeline's threading topology is. Any topology that satisfies §§1–12 and the startup, async-lifecycle, persistence and runtime-capability contracts is conformant. Provider spikes and the companion implementation row make topology decisions with runtime evidence; this contract neither requires nor forbids any of them.
 
 ---
 
@@ -160,6 +160,6 @@ Two operation classes with distinct contracts:
 - Zero execution semantics asserted as types: no API path converts an invalid envelope into an executable plan.
 - Per-command results round-trip through serialization; verdict vocabulary is closed.
 - Diagnostic content-freedom schema proof: the diagnostic record's serialized property set is exactly the content-free allow-list; no string field can carry prompt/completion/user text.
-- Generation-invalidation reuse demonstrated against the real SP-004 registry: a switched (restarted) owner cancels the in-flight generation (typed `Cancelled`) and a stale-generation completion is not applied.
+- Generation-invalidation reuse demonstrated against the real async-operation registry: a switched (restarted) owner cancels the in-flight generation (typed `Cancelled`) and a stale-generation completion is not applied.
 - Serialization round-trips of every vocabulary type.
-- Seams (`IAiMemoryStore`, `ISecretStore`) are declarations only — no implementation exists in this slice (SP-006 honesty rule).
+- Seams (`IAiMemoryStore`, `ISecretStore`) are declarations only — no implementation exists in this slice (the runtime-capability honesty rule).

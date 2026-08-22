@@ -6,7 +6,7 @@ using LibVLCSharp.Shared;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// The real <see cref="IDtrhVideoBackend"/> on the SP-018-admitted LibVLCSharp 3.10.0
+/// The real <see cref="IDtrhVideoBackend"/> on the admitted LibVLCSharp 3.10.0
 /// shape (live-feed re-confirmed 2026-07-22). Findings baked in as binding disciplines
 /// (video-handoff-spike.md §3):
 ///  V1 — D3D11VA hw decode segfaults this box even on local parse → software decode
@@ -18,7 +18,7 @@ namespace CcpClient.Desktop.Features.Dtrh;
 ///       ONE app-lifetime LibVLC + MediaPlayer; per-fire only a new Media; LibVLC/player
 ///       release SKIPPED at teardown (OS reclaims; clean-teardown ownership stays with
 ///       the unified-video row — recorded, never claimed solved). Media release ON
-///       REPLACE is dev-loop-CLEARED (SP-025 evidence/devloop/v3-transcript.txt: 5/5
+///       REPLACE is dev-loop-CLEARED (evidence/devloop/v3-transcript.txt: 5/5
 ///       clean cycles, EndReached → background-Stop → Media.Dispose, exit 0).
 /// Stop() runs on a background thread (pre-completion consult: UI-thread Stop deadlocks
 /// against vmem callbacks — libvlc known class). The frame pin + vmem delegates stay
@@ -82,7 +82,7 @@ public sealed class LibVlcDtrhVideo : IDtrhVideoBackend
             var old = Interlocked.Exchange(ref _media, media);
             if (old is not null)
             {
-                // V3 dev-loop experiment (SP-025 evidence/devloop/v3-transcript.txt):
+                // V3 dev-loop experiment (evidence/devloop/v3-transcript.txt):
                 // Media.Dispose after EndReached/Stop is CLEAN 5/5 in the product shape
                 // (persistent player, media replaced per fire) — the probe-shape segfault
                 // does NOT transfer. LibVLC/player release at process exit stays SKIPPED
@@ -168,7 +168,7 @@ public sealed class LibVlcDtrhVideo : IDtrhVideoBackend
     // wide (aspect preserved): the any→RV32 converter at NATIVE 4K dims produces black
     // frames on this box (run-A evidence: 3840x2178 requested → 91.5%-dark captures while
     // the source frames measure luma 109-134; 1280x738 native rendered fine, and the
-    // SP-018 spike's forced-96x96 conversion is the proven envelope). The window's
+    // spike's forced-96x96 conversion is the proven envelope). The window's
     // Stretch.Uniform rescales — pixels stay real decoded content.
     private const uint MaxFrameWidth = 1280;
 

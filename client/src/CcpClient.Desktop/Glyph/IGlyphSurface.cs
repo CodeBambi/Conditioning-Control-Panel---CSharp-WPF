@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Glyph;
 /// alpha</b> — glyphs where the frame is opaque, the user's own desktop where it is not.
 ///
 /// <para><b>Why this capability exists at all.</b> Eleven modules ran without it. Bouncing Text was
-/// blocked from wave 46 and SP-106 refused it with evidence rather than an excuse: its window is
+/// blocked from wave 46 and an earlier packet refused it with evidence rather than an excuse: its window is
 /// transparency-backed glyphs (<c>Services/Subliminal/BouncingTextService.cs:827-828</c>,
 /// <c>AllowsTransparency = true</c> and <c>Background = Brushes.Transparent</c>), and this port's
 /// overlay composites one uniform <c>LWA_ALPHA</c> over an opaque BGRX frame by design
@@ -44,7 +44,7 @@ public interface IGlyphSurface : IDisposable
     ///
     /// <para><b>The frame is not optional, and that is the ghost defence at the API level.</b> A
     /// layered window that has been shown before it was ever composited is precisely the state
-    /// SP-099 measured and the first attempt shipped
+    /// the overlay capability measured and the first attempt shipped
     /// (<c>CCP.Avalonia.Desktop.Windows/WindowsOverlaySurface.cs:26-45</c>). There is no way to ask
     /// this surface for a window without content, so there is no moment at which one exists.</para>
     ///

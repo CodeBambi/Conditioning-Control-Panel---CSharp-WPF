@@ -5,8 +5,8 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the intake host's owned transport infrastructure (the DtrhParticipant shape,
-/// SP-004): a SECOND §4 LoopbackServer (own ephemeral ports, own per-session bridge token,
+/// The intake host's owned transport infrastructure (the DtrhParticipant shape,
+/// owned async): a SECOND §4 LoopbackServer (own ephemeral ports, own per-session bridge token,
 /// own inbox), started/stopped with the intake window (host-local construction — the
 /// DtrhHostWindow bark-pipeline precedent; CompositionRoot is out of this packet's File
 /// Scope and the app-wide lift is a future row).
@@ -80,7 +80,7 @@ public sealed class IntakeParticipant : IDisposable
         $"{Server.PageOrigin}/dtrh/{page}?bridge={BridgeToken}";
 
     /// <summary>Bind the origins (idempotent). The intake payload probe is logged BEFORE
-    /// the bind so the transcript is self-evidencing (SP-048 discipline).</summary>
+    /// the bind so the transcript is self-evidencing (the payload-probe discipline).</summary>
     public IntakeServingRoots.IntakePayloadProbe Start()
     {
         if (Interlocked.Exchange(ref _started, 1) != 0)
@@ -102,7 +102,7 @@ public sealed class IntakeParticipant : IDisposable
         return probe;
     }
 
-    /// <summary>Idempotent teardown (SP-003 discipline).</summary>
+    /// <summary>Idempotent teardown (lifecycle discipline).</summary>
     public void Dispose()
     {
         if (!Running)

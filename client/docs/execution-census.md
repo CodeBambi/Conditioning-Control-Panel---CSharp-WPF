@@ -35,7 +35,7 @@ The compiler moves every async body, iterator and lambda into a nested generated
 SOURCE LINES go with it. Those entries are excluded by C2, so their lines are **attributed back
 to the type that declares them** rather than discarded. Without this, a type whose async body
 ran would read as ZERO, and a type whose async body never ran would be MISSED entirely — the
-SP-118 shape exactly.
+exact shape of the defect this census exists to prevent.
 
 | | |
 |---|---|

@@ -13,7 +13,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-046 c7 headless draw-level tests for the companion surface. Draw-level ONLY
+/// Headless draw-level tests for the companion surface. Draw-level ONLY
 /// (verification-harness.md evidence-class rule): real in-memory layout, real style
 /// resolution, real binding application — NO compositor/window-manager/pixel claims.
 /// Badge pixels and interaction evidence are the avalonia-live headed seat's job (Step 3).
@@ -36,7 +36,7 @@ public class CompanionWindowHeadlessTests
     }
 
     /// <summary>
-    /// SP-091: the companion is now TWO hops, as it is in WPF (a rail door navigates to the
+    /// The companion is now TWO hops, as it is in WPF (a rail door navigates to the
     /// page, a control on the page opens the window — wpf-surface-reachability.md §5). Both
     /// hops are real pointer input.
     /// </summary>

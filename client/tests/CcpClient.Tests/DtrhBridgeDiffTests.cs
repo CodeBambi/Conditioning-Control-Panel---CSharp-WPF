@@ -29,7 +29,7 @@ public class DtrhBridgeDiffTests
         var bytes = File.ReadAllBytes(Path.Combine(OutputRoot, "payload", "dtrh", "bridge.js"));
         // The worktree checkout is CRLF (core.autocrlf) while the blob is LF — a mechanical
         // git transformation, identical JS. The trust anchor pins the CONTENT: normalize
-        // before recomputing the git blob id (sha1("blob <len>\0" + bytes) = 13af3f4d, SP-011).
+        // before recomputing the git blob id (sha1("blob <len>\0" + bytes) = 13af3f4d).
         var normalized = Encoding.UTF8.GetBytes(
             Encoding.UTF8.GetString(bytes).Replace("\r\n", "\n"));
         var prefix = Encoding.ASCII.GetBytes($"blob {normalized.Length}\0");
@@ -62,7 +62,7 @@ public class DtrhBridgeDiffTests
         };
 
         var removed = original.Where(line => !derivative.Contains(line)).ToArray();
-        // SP-066 framing (c): both loops carry the only assertions — pin both sources
+        // Loop framing (c): both loops carry the only assertions — pin both sources
         // non-empty so a drifted diff (nothing removed / nothing kept) turns RED, not vacuous.
         Assert.NotEmpty(removed);
         foreach (var line in removed)

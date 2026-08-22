@@ -76,7 +76,7 @@ public interface IBarkAudioResolver
 /// Filesystem resolver over one sounds root: a name it cannot turn into an existing file answers
 /// null, and it NEVER throws.
 ///
-/// <para><b>SP-123 — the promise above used to be kept by accident, and the census proved it by
+/// <para><b>The promise above used to be kept by accident, and the census proved it by
 /// showing this type had never executed at all.</b> <see cref="Path.Combine(string, string)"/>
 /// throws <see cref="ArgumentNullException"/> on a null segment, so "never throws" held only
 /// because <see cref="BarkPipeline"/> happens to check <c>variant.Audio is null</c> two hundred
@@ -160,7 +160,7 @@ public sealed class BarkPipelineOptions
     /// <summary>
     /// Injectable clock (gate timing: cooldowns, min-gap, safety-hold). Real = system; tests = manual.
     ///
-    /// <para>SP-123: the default is constructed with NO callback-fault reporter, and that is a
+    /// <para>The default is constructed with NO callback-fault reporter, and that is a
     /// statement rather than an omission — <see cref="BarkPipeline"/> never calls
     /// <see cref="ISoundClock.Schedule"/> at all (it reads <see cref="ISoundClock.UtcNow"/> at
     /// <c>CommitFire</c> and <c>Pace</c>, and nothing else), so this instance carries no callback
@@ -189,13 +189,13 @@ public sealed class BarkPipelineOptions
 }
 
 /// <summary>
-/// The bark content pipeline (SP-032 slice q2) — trigger → first-condition-passing rule →
+/// The bark content pipeline (slice q2) — trigger → first-condition-passing rule →
 /// WPF-order gate → variant selection → ONE payload → q1's arbitration. CONSUMES
 /// Audio/SoundArbitration.cs (the q1/q2 boundary: per-item pacing is where TEXT-derived
 /// timing enters; freshness stays caller-supplied — q2's WPF-cited policy is NO ms-age
-/// expiry + gate-level anti-stale, SP-029 record).
+/// expiry + gate-level anti-stale, as recorded).
 ///
-/// WPF parity anchors (SP-032 record Step 1): gate order + bypass matrix
+/// WPF parity anchors (the packet record Step 1): gate order + bypass matrix
 /// (BarkService.cs:1305-1422 — the one-shot latch is bypassed by Safety ONLY, never by
 /// guaranteed; gates 4a–4h skip when bypass = isSafety || guaranteed); priority routing
 /// (:1624, threshold 100); variant rotation/recycle/recency-8 (:1403-1534); mute text-only
@@ -267,7 +267,7 @@ public sealed class BarkPipeline
     /// <summary>Line enabled iff NOT in the persisted disabled set (no caching — WPF ResolvePool, :1172-1180).</summary>
     public bool IsPhraseEnabled(string lineId) => !_store.Current.DisabledPhraseIds.Contains(lineId);
 
-    /// <summary>Disable (mute-but-list) one line id; persisted through the SP-005 store. Round-trips via <see cref="EnablePhrase"/>.</summary>
+    /// <summary>Disable (mute-but-list) one line id; persisted through the persistence store. Round-trips via <see cref="EnablePhrase"/>.</summary>
     public void DisablePhrase(string lineId)
     {
         _store.Mutate(d => d.DisabledPhraseIds.Add(lineId));
@@ -611,7 +611,7 @@ public sealed class BarkPipeline
         }
 
         var gain = (float)(Math.Pow(Math.Clamp(MasterVolume, 0, 100) / 100.0, 1.5) * _options.BarkVolumeScale);
-        // freshness: null — WPF VERIFIED has no ms-age queue expiry (SP-029 record); the
+        // freshness: null — WPF VERIFIED has no ms-age queue expiry (recorded); the
         // gate-level anti-stale drop above IS the WPF freshness policy (consult binding 2).
         var outcome = priority
             ? _arbitration.PlayVoicePriority(payload.AudioPath!, gain)

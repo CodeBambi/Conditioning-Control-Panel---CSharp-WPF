@@ -108,8 +108,8 @@ public partial class App : Application
                     : null);
             desktop.MainWindow = dashboard;
 
-            // SP-015 AvatarTube DEMONSTRATOR (--avatartube-demo): opens the tube at
-            // startup (WSLg has no input automation — SP-008 named limit).
+            // AvatarTube DEMONSTRATOR (--avatartube-demo): opens the tube at
+            // startup (WSLg has no input automation — a named limit).
             if (_avatarDemo)
             {
                 var participant = _host.Participants.OfType<AvatarTubeParticipant>().Single();
@@ -125,7 +125,7 @@ public partial class App : Application
                 if (_avatarCorrupt)
                 {
                     // Typed undecodable-asset evidence: corrupt the pulse pack's bytes in
-                    // memory (embedded assets untouched) — the SP-006 Degraded path runs
+                    // memory (embedded assets untouched) — the Degraded path runs
                     // for real on the pack switch.
                     participant.CorruptPackForDemo(SyntheticAvatarPacks.Pulse.PackId);
                 }
@@ -142,13 +142,13 @@ public partial class App : Application
                 };
             }
 
-            // SP-023/SP-024 DTRH DEMONSTRATOR (--dtrh-demo): b2 opens the save picker
+            // DTRH DEMONSTRATOR (--dtrh-demo): b2 opens the save picker
             // first (hero-card outcome); --dtrh-quick skips it (Quick Start outcome).
             // The flow ending (host closed / picker cancelled) ends the app (exit 0
-            // evidence); WSLg has no input automation — SP-008 named limit.
+            // evidence); WSLg has no input automation — a named limit.
             if (_dtrhDemo)
             {
-                // SP-094: the SAME coordinator the shell's Play page builds (one construction
+                // The SAME coordinator the shell's Play page builds (one construction
                 // site, Features/Dtrh/DtrhLaunch.cs), reached DIRECTLY rather than through
                 // DtrhLaunch.FallInAsync — i.e. the demonstrator deliberately steps past the
                 // Tier-2 gate. That is not an oversight to fix: gating the headed-evidence path
@@ -162,7 +162,7 @@ public partial class App : Application
                 coordinator.FlowEnded += () =>
                 {
                     // One-shot: picker-cancel and host-close both raise FlowEnded, and the
-                    // lifetime's own shutdown closes owned windows again (SP-023 ping-pong).
+                    // lifetime's own shutdown closes owned windows again (the ping-pong class).
                     if (Interlocked.Exchange(ref flowEndedOnce, 1) != 0)
                     {
                         return;
@@ -170,7 +170,7 @@ public partial class App : Application
 
                     _host.LogDiagnostic("dtrh: flow ended — shutting down the lifetime");
                     // Explicit Shutdown, not dashboard.Close(): on the GTK backend closing the
-                    // MainWindow does not reliably end the classic lifetime here (SP-023 WX).
+                    // MainWindow does not reliably end the classic lifetime here (WX).
                     desktop.Shutdown();
                 };
                 coordinator.HostOpened += () =>
@@ -180,7 +180,7 @@ public partial class App : Application
                         return;
                     }
 
-                    // WSLg exit evidence without input automation (SP-008 named limit):
+                    // WSLg exit evidence without input automation (a named limit):
                     // the timed close exercises the same idempotent teardown path.
                     _host.LogDiagnostic($"dtrh: auto-close armed at {_dtrhAutoCloseSeconds}s");
                     _ = Task.Delay(TimeSpan.FromSeconds(_dtrhAutoCloseSeconds)).ContinueWith(
@@ -209,7 +209,7 @@ public partial class App : Application
                         _ = coordinator.LaunchWithPickerAsync();
                         if (_dtrhPickerTimeoutSeconds > 0)
                         {
-                            // No-input platforms (SP-008): a TIMED commit of the picker's
+                            // No-input platforms: a TIMED commit of the picker's
                             // current selection — the same commit path DESCEND takes,
                             // honestly labeled as timed drive, never an input claim.
                             _host.LogDiagnostic($"dtrh: picker timeout armed at {_dtrhPickerTimeoutSeconds}s");
@@ -227,10 +227,10 @@ public partial class App : Application
                 };
             }
 
-            // SP-049 THE LOOM studio DEMONSTRATOR (--loom-demo): the v6.6.3 standalone
+            // THE LOOM studio DEMONSTRATOR (--loom-demo): the v6.6.3 standalone
             // studio window (WPF LoomHostService parity — a plain titled window; closing
             // it ends the demonstrator, the --dtrh-demo flow-ended class).
-            // SP-091: this path no longer constructs the studio window itself. It calls the
+            // This path no longer constructs the studio window itself. It calls the
             // SAME launcher the shell's Studio -> Spiral Overlay -> THE LOOM button calls
             // (Navigation/LoomLaunch.cs), so there is exactly ONE construction site for
             // DtrhLoomWindow in the tree. The demonstrator now opens the studio ON TOP of a
@@ -242,7 +242,7 @@ public partial class App : Application
                 dashboard.Loom.HarnessDrive = _loomDrive;
                 dashboard.Loom.Closed += _ =>
                 {
-                    // One-shot (the SP-023 ping-pong class): Shutdown() closes owned
+                    // One-shot (the ping-pong class): Shutdown() closes owned
                     // windows again, which re-fires Closed — never a teardown loop.
                     if (Interlocked.Exchange(ref loomEndedOnce, 1) != 0)
                     {
@@ -259,7 +259,7 @@ public partial class App : Application
                     _host.LogDiagnostic("loom: studio demonstrator opened (--loom-demo)");
                     if (_loomAutoCloseSeconds > 0)
                     {
-                        // WSLg exit evidence without input automation (SP-008 named limit):
+                        // WSLg exit evidence without input automation (a named limit):
                         // the timed close exercises the same idempotent teardown path.
                         _host.LogDiagnostic($"loom: auto-close armed at {_loomAutoCloseSeconds}s");
                         _ = Task.Delay(TimeSpan.FromSeconds(_loomAutoCloseSeconds)).ContinueWith(
@@ -274,14 +274,14 @@ public partial class App : Application
                     }
                 };
             }
-            // SP-054 Graded Intake DEMONSTRATOR (--intake-demo): the host flow at startup
+            // Graded Intake DEMONSTRATOR (--intake-demo): the host flow at startup
             // (the --loom-demo demonstrator class). The flow ending (window closed for real /
             // watchdog exhaustion) ends the app (exit-0 evidence).
-            // SP-095: this path no longer constructs a coordinator of its own. It uses the SAME
+            // This path no longer constructs a coordinator of its own. It uses the SAME
             // one the shell's Graded Intake door -> "Begin Intake" button uses
             // (Features/Intake/IntakeLaunch.cs), so there is exactly ONE construction site for
             // IntakeLaunchCoordinator in the tree — the LoomLaunch/DtrhLaunch convention. The
-            // SP-054 note that the dashboard entry was BLOCKED glue is discharged: the door
+            // earlier note that the dashboard entry was BLOCKED glue is discharged: the door
             // exists, and it reaches this object.
             if (_intakeDemo)
             {
@@ -298,7 +298,7 @@ public partial class App : Application
                         return;
                     }
 
-                    // SP-008 no-input exit evidence: the timed close exercises the same
+                    // No-input exit evidence: the timed close exercises the same
                     // graceful teardown path (end-run + bounded exit-done wait).
                     _host.LogDiagnostic($"intake: auto-close armed at {_intakeAutoCloseSeconds}s");
                     _ = Task.Delay(TimeSpan.FromSeconds(_intakeAutoCloseSeconds)).ContinueWith(
@@ -322,7 +322,7 @@ public partial class App : Application
                 dashboard.Opened += (_, _) => intakeCoordinator.Launch();
             }
 
-            // SP-061 Chaos tunnel backdrop DEMONSTRATOR (--tunnel-demo): the opaque
+            // Chaos tunnel backdrop DEMONSTRATOR (--tunnel-demo): the opaque
             // below-Topmost surface (the --loom-demo demonstrator class). The tunnel gets NO
             // dashboard door and never will: WPF renders it UNDER a running Chaos descent and
             // navigates to it from nowhere (Chaos/ChaosTunnelService.cs:20,34 — see §11 D30 and
@@ -333,7 +333,7 @@ public partial class App : Application
                 Features.Chaos.ChaosTunnelDemoDrive.Attach(_host, dashboard, desktop, _tunnelDrive, _tunnelAutoCloseSeconds);
             }
 
-            // SP-132 Goon practice DEMONSTRATOR (--goon-demo): opens the practice host at startup.
+            // Goon practice DEMONSTRATOR (--goon-demo): opens the practice host at startup.
             // Through the SAME GoonLaunch the Play page's PRACTICE button reaches (MainWindow.Goon
             // — one construction site, two callers), which is the LoomLaunch/DtrhLaunch/IntakeLaunch
             // convention and the reason no MainWindow edit is needed here.

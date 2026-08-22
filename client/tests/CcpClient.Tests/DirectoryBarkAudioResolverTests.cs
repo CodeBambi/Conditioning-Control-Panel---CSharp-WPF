@@ -4,9 +4,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-123 — the ONLY production <see cref="IBarkAudioResolver"/>, driven for the first time.
+/// The ONLY production <see cref="IBarkAudioResolver"/>, driven for the first time.
 ///
-/// <para><b>Why this file exists.</b> The SP-121 census reported
+/// <para><b>Why this file exists.</b> The zero-execution census reported
 /// <see cref="DirectoryBarkAudioResolver"/> as a shipped type with zero executed lines. It has
 /// exactly two references tree-wide — its own declaration and one wiring in the DTRH host — and
 /// every bark fact in the suite substitutes a recording fake (<c>BarkPipelineTests.cs:593</c>), so

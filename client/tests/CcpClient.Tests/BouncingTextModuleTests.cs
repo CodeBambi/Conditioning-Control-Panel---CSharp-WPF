@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-115. The module per-pixel alpha unblocked: its motion, its raster, its cadence and its dot.
+/// The module per-pixel alpha unblocked: its motion, its raster, its cadence and its dot.
 ///
 /// <para>Nothing here touches the desktop. The motion is a pure state machine with an injected
 /// random source, the surface is a probe double, and the clock is driven by hand — which is the
@@ -368,7 +368,7 @@ public class BouncingTextModuleTests
     [Fact]
     public void THEMODULESCONSTRUCTORCARRIESNOCLOCK_AndThePresentersDoes()
     {
-        // SP-106's rule, pinned at the line a future author would edit: an INTERVAL that decides
+        // The interval-ownership rule, pinned at the line a future author would edit: an INTERVAL that decides
         // when a MODULE is due is the module's; a CADENCE that keeps a SURFACE correct is the
         // surface's. Moving the clock into the module is the change this fact exists to catch.
         var moduleParameters = typeof(BouncingTextEffect).GetConstructors().Single().GetParameters();

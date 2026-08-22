@@ -12,7 +12,7 @@ namespace CcpClient.Desktop.Features.Chaos;
 /// The <c>sfx</c> frame is HANDLED TYPED (counted, surfaced to the log as presence+shape):
 /// the six upstream tunnel_*.mp3 cues exist in the WPF tree but the client has no chaos
 /// sound-library port — a greenfield content gap owned by that row, NEVER a claimed WPF
-/// parity (the SP-051 falsified framing; consult ruling 4).
+/// parity (the falsified parity framing; consult ruling 4).
 /// </summary>
 public sealed class ChaosTunnelCore
 {

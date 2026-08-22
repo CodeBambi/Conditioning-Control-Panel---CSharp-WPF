@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-056 — the guard the v6.6.3 → v6.7.4 sync exposed as missing
+/// The guard the v6.6.3 → v6.7.4 sync exposed as missing
 /// (client/docs/upstream-sync.md §D): an entire 184-file upstream payload tree
 /// (Resources/web/goon/) appeared and the suite stayed green because every parity
 /// test only covers trees the client already ships. This guard compares the REAL

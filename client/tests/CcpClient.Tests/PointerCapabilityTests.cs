@@ -6,14 +6,15 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-113. <b>The third thing this port has had to prove about a window, and the hardest.</b>
+/// <b>The third thing this port has had to prove about a window, and the hardest.</b>
 ///
-/// <para>SP-099 proved a surface is click-THROUGH, and its review recorded that as the property most
-/// easily faked: a window that does not exist satisfies it too. SP-110 proved the inverse for a
-/// keyboard-taking window and discovered that <c>GetGUIThreadInfo(<i>ourThread</i>)</c> LIES — it is
-/// thread-local, and answered "our window has focus" while every injected keystroke went to another
-/// application. <b>This packet must prove a click LANDS on a window that must NOT take the
-/// foreground</b>, so it cannot lean on either fact SP-110's chain leaned on: for this capability,
+/// <para>The overlay packet proved a surface is click-THROUGH, and its review recorded that as the
+/// property most easily faked: a window that does not exist satisfies it too. The input packet
+/// proved the inverse for a keyboard-taking window and discovered that
+/// <c>GetGUIThreadInfo(<i>ourThread</i>)</c> LIES — it is thread-local, and answered "our window
+/// has focus" while every injected keystroke went to another application. <b>This packet must
+/// prove a click LANDS on a window that must NOT take the foreground</b>, so it cannot lean on
+/// either fact the input packet's chain leaned on: for this capability,
 /// "we are the foreground" is a BUG.</para>
 ///
 /// <para><b>So every fact here compares three things</b>: a fact about the MACHINE (does this
@@ -163,7 +164,7 @@ public class PointerCapabilityTests
     {
         // The negative leg, and it is deliberately NOT "the count did not move". A click injected
         // where nothing of ours listens is indistinguishable from an injection that never happened —
-        // which is the SP-099 fake in a new costume — so a probe-owned decoy is put at the point and
+        // which is the overlay fake in a new costume — so a probe-owned decoy is put at the point and
         // asserted to have CAUGHT the click.
         var run = PointerSurfaceObservations.Delivery;
 
@@ -513,7 +514,7 @@ public class PointerCapabilityTests
     {
         // 0 == 0 is the trap: an observation with no window and no hit-test winner would satisfy
         // "the winner IS the window" without the non-zero guard, and Confirmed would follow it.
-        // Same shape and same lesson as SP-110's own M-l.
+        // Same shape and same lesson as the input packet's own M-l.
         var nothing = PointerTargetObservation.NotAsked;
         Assert.False(nothing.HitTestRoutesHere);
         Assert.False(nothing.Confirmed);

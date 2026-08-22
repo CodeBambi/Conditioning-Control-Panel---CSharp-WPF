@@ -4,13 +4,13 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-118 — the REAL clock the scheduler runs on in the product, and the one thing in this packet
+/// The REAL clock the scheduler runs on in the product, and the one thing in this packet
 /// that was compiled and never executed.
 ///
-/// <para><b>Why this file exists, and it is the same finding twice.</b> SP-101 wrote
+/// <para><b>Why this file exists, and it is the same finding twice.</b> An earlier packet wrote
 /// <see cref="SystemSessionClockTests"/> because every session fact substituted a manual clock, so
 /// the one implementation that ships was never run — and <b>the first version of that fact killed
-/// the whole test host</b>. SP-118 reproduced the condition exactly: every scheduler fact injects
+/// the whole test host</b>. This one reproduced the condition exactly: every scheduler fact injects
 /// an <see cref="IScheduleClock"/>, so <see cref="SystemScheduleClock"/> — the default on every
 /// product path (<c>SchedulerParticipant</c>'s constructor) — was covered only by two reads of
 /// <c>LocalNow.Kind</c>. The review caught it; this file closes it.</para>
@@ -22,13 +22,13 @@ namespace CcpClient.Tests;
 /// .NET ends the process — which to a user looks like the app simply vanishing overnight, with no
 /// diagnostic and nothing to report.</para>
 ///
-/// <para><b>No wall-clock wait anywhere — with ONE deliberate exception, named (SP-124).</b> Every
+/// <para><b>No wall-clock wait anywhere — with ONE deliberate exception, named.</b> Every
 /// fact waits on a DETERMINISTIC SIGNAL through the approved helper: no <c>Thread.Sleep</c>, no bare
 /// <c>Task.Delay</c>, no clock poll. The negative observation — that a cancelled schedule does not
 /// fire — is proved with an ordering BARRIER rather than by waiting.
 /// <see cref="DisposingTheHandleBeforeItIsDue_SuppressesTheCallback"/> is the exception and it is
 /// deliberate: <b>its subject IS a due time arriving</b>, so it schedules at a short delay and waits
-/// for the resulting signals. That is not a tolerance bought to make it pass — until SP-124 the
+/// for the resulting signals. That is not a tolerance bought to make it pass — until it was corrected the
 /// doomed schedule there was due in TEN MINUTES, which made its assertion incapable of failing, and
 /// observing the delay is exactly what gives it teeth. Nothing here asserts how LONG anything took.
 /// Structured on <see cref="SystemSessionClockTests"/>, deliberately: the two clocks are the same
@@ -37,7 +37,7 @@ namespace CcpClient.Tests;
 public class SystemScheduleClockTests
 {
     /// <summary>
-    /// SP-124. The doomed schedule's due time — the one delay in this file whose ELAPSING is the
+    /// The doomed schedule's due time — the one delay in this file whose ELAPSING is the
     /// subject rather than an incidental wait. Short enough to cost the suite a second, long enough
     /// that a stall between two adjacent statements would have to run into whole seconds; and if it
     /// ever did, the fact detects that and says so rather than blaming the product.
@@ -95,7 +95,7 @@ public class SystemScheduleClockTests
         // real configuration and this exercises it: the invoke inside the catch is null-conditional,
         // and the clock keeps servicing work afterwards.
         //
-        // HONEST LIMIT, MEASURED ON THIS CLASS BY SP-124 RATHER THAN ARGUED FROM ITS SIBLING. This
+        // HONEST LIMIT, MEASURED ON THIS CLASS RATHER THAN ARGUED FROM ITS SIBLING. This
         // fact does NOT redden if the containment is removed. With `new Timer(_ => fire(), ...)`
         // restored at ScheduleClock.cs:78 it still reports `Failed: 0, Passed: 1`, because its only
         // assertion is that a SECOND, UNRELATED schedule ran — which is true whether or not the
@@ -156,7 +156,7 @@ public class SystemScheduleClockTests
         // The property every stop in this module rests on — SchedulerParticipant disposes the
         // pending one-shot in StopAsync and again on every re-arm.
         //
-        // SP-124 — WHY THIS FACT LOOKS LIKE THIS NOW, AND WHY IT DID NOT BITE BEFORE. The doomed
+        // WHY THIS FACT LOOKS LIKE THIS NOW, AND WHY IT DID NOT BITE BEFORE. The doomed
         // schedule used to be due in TEN MINUTES, so `cancelledFired` was false whether or not
         // Dispose suppressed anything: the assertion was trivially true and could not fail. Making
         // it bite needs the doomed schedule's own moment to ARRIVE inside the fact, and then three

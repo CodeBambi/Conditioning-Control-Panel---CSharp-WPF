@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-125 — the pin under <c>client/docs/fyp-census.md</c>.
+/// The pin under <c>client/docs/fyp-census.md</c>.
 ///
 /// <para><b>Why this exists.</b> The board row for For You Feed claimed <b>3 files</b> in
 /// <c>Services/Fyp/</c>; a recursive walk found <b>9</b>, plus an <c>Online/</c> subdirectory that

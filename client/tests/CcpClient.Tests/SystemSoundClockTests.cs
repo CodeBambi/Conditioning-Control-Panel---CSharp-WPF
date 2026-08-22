@@ -4,14 +4,14 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-123 — the REAL clock the whole audio stack paces on, and the THIRD instance of a shape that
+/// The REAL clock the whole audio stack paces on, and the THIRD instance of a shape that
 /// has already taken something down twice.
 ///
-/// <para><b>Why this file exists, and it is the same finding for the third time.</b> SP-101 wrote
+/// <para><b>Why this file exists, and it is the same finding for the third time.</b> An earlier packet wrote
 /// <see cref="SystemSessionClockTests"/> because every session fact substituted a manual clock, and
-/// <b>the first version of that fact killed the whole test host</b>. SP-118 reproduced it exactly
+/// <b>the first version of that fact killed the whole test host</b>. A later one reproduced it exactly
 /// with <c>SystemScheduleClock</c>. Both were found when somebody happened to write the first test.
-/// This one was found by a MACHINE — the SP-121 execution census reported
+/// This one was found by a MACHINE — the execution census reported
 /// <see cref="SystemSoundClock"/> as a shipped type with zero executed lines, and reading it showed
 /// <c>new Timer(_ => fire(), ...)</c> with the callback bare while both siblings route through a
 /// private <c>Run</c> with a try/catch and say why in their own words.</para>
@@ -23,13 +23,13 @@ namespace CcpClient.Tests;
 /// exception and .NET ends the process — while the user is watching a video or listening to
 /// something, with no diagnostic and nothing to report.</para>
 ///
-/// <para><b>No wall-clock wait anywhere — with ONE deliberate exception, named (SP-124).</b> Every
+/// <para><b>No wall-clock wait anywhere — with ONE deliberate exception, named.</b> Every
 /// positive fact waits on a DETERMINISTIC SIGNAL through the approved helper: no
 /// <c>Thread.Sleep</c>, no bare <c>Task.Delay</c>, no clock poll. The negative observation — that a
 /// cancelled schedule does not fire — is proved with an ordering BARRIER.
 /// <see cref="DisposingTheHandleBeforeItIsDue_SuppressesTheCallback"/> is the exception and it is
 /// deliberate: <b>its subject IS a due time arriving</b>, so it schedules at a short delay and waits
-/// for the resulting signals. That is not a tolerance bought to make it pass — until SP-124 the
+/// for the resulting signals. That is not a tolerance bought to make it pass — until it was corrected the
 /// doomed schedule there was due in TEN MINUTES, which made its assertion incapable of failing, and
 /// observing the delay is exactly what gives it teeth. Nothing here asserts how LONG anything took.
 /// Structured on <see cref="SystemSessionClockTests"/> and <see cref="SystemScheduleClockTests"/>
@@ -38,7 +38,7 @@ namespace CcpClient.Tests;
 public class SystemSoundClockTests
 {
     /// <summary>
-    /// SP-124. The doomed schedule's due time — the one delay in this file whose ELAPSING is the
+    /// The doomed schedule's due time — the one delay in this file whose ELAPSING is the
     /// subject rather than an incidental wait. Short enough to cost the suite a second, long enough
     /// that a stall between two adjacent statements would have to run into whole seconds; and if it
     /// ever did, the fact detects that and says so rather than blaming the product.
@@ -54,7 +54,7 @@ public class SystemSoundClockTests
     public async Task ACallbackThatThrows_IsContainedAndREPORTED_RatherThanKillingTheProcess()
     {
         // THE fact this file was written for. Without the containment this does not FAIL — it takes
-        // the test host down, which is precisely what happened to SP-101 and precisely what would
+        // the test host down, which is precisely what happened to the session clock and precisely what would
         // happen to a user's session.
         var faults = new List<Exception>();
         var reported = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -105,8 +105,8 @@ public class SystemSoundClockTests
         // null-reporter CONFIGURATION, and that is all it should be read as claiming.
         //
         // The shape is inherited verbatim from SystemScheduleClockTests, so the same limit applies
-        // to that sibling. SP-123 could only NAME that, because the file was outside its scope;
-        // SP-124 measured it there directly (`Failed: 0, Passed: 1` with the containment bared) and
+        // to that sibling. This packet could only NAME that, because the file was outside its scope;
+        // a later one measured it there directly (`Failed: 0, Passed: 1` with the containment bared) and
         // corrected its comment, so the cross-reference is no longer a debt.
         var clock = new SystemSoundClock();
         var barrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -123,7 +123,7 @@ public class SystemSoundClockTests
     [Fact]
     public void ANullCallback_IsRefusedOnTheCALLERSThread_NotLaterOnAPoolThread()
     {
-        // SP-123's second finding, and it only exists BECAUSE the containment landed. Both siblings
+        // This packet's second finding, and it only exists BECAUSE the containment landed. Both siblings
         // carry ArgumentNullException.ThrowIfNull(fire) and this clock carried neither that nor the
         // try/catch. With the catch alone, a null callback would become a NullReferenceException
         // inside Run — on a pool thread, caught, and reported as a log line: a wiring bug demoted
@@ -170,7 +170,7 @@ public class SystemSoundClockTests
         // The property every stop in the audio stack rests on — the duck watchdog and the pacing
         // timer are both disposed and re-armed under the arbitration gate.
         //
-        // SP-124 — WHY THIS FACT LOOKS LIKE THIS NOW, AND WHY IT DID NOT BITE BEFORE. The doomed
+        // WHY THIS FACT LOOKS LIKE THIS NOW, AND WHY IT DID NOT BITE BEFORE. The doomed
         // schedule used to be due in TEN MINUTES, so `cancelledFired` was false whether or not
         // Dispose suppressed anything: the assertion was trivially true and could not fail. Making
         // it bite needs the doomed schedule's own moment to ARRIVE inside the fact, and then three

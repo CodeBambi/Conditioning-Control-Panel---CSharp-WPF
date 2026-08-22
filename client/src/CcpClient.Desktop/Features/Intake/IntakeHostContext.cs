@@ -6,9 +6,9 @@ using CcpClient.Desktop.Persistence;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the coordinator-owned intake session context (survives a watchdog relaunch —
+/// The coordinator-owned intake session context (survives a watchdog relaunch —
 /// the DtrhLaunchCoordinator watchdog-ownership pattern): the transport participant, the
-/// two SP-005 stores, the services (pass / punch card), the SHARED loom store handle, the
+/// two persistence stores, the services (pass / punch card), the SHARED loom store handle, the
 /// subject id, and the sinks. Constructed host-locally (the DtrhHostWindow bark-pipeline
 /// precedent — CompositionRoot is out of this packet's File Scope; the app-wide lift is a
 /// future row). Store owner names are unique in the OperationRegistry.
@@ -57,11 +57,11 @@ public sealed class IntakeHostContext : IDisposable
 
     public PersistenceStore<IntakePunchCardDocument> PunchStore { get; }
 
-    /// <summary>SP-055: the persisted asset selection (read-only this row — the
+    /// <summary>The persisted asset selection (read-only this row — the
     /// Assets-tree row owns the write path) feeding the ONE active-pool definition.</summary>
     public PersistenceStore<AssetSelectionDocument> AssetSelectionStore { get; }
 
-    /// <summary>SP-128: the graded-run award record (`graded_run_awards.json`) — the store the
+    /// <summary>The graded-run award record (`graded_run_awards.json`) — the store the
     /// award consumer writes through.</summary>
     public PersistenceStore<GradedRunAwardsDocument> AwardsStore { get; }
 
@@ -69,7 +69,7 @@ public sealed class IntakeHostContext : IDisposable
 
     public IntakePunchCard PunchCard { get; }
 
-    /// <summary>SP-128: the graded-run award consumer. A completed run's verdict reaches it from
+    /// <summary>The graded-run award consumer. A completed run's verdict reaches it from
     /// <c>IntakeHostWindow.OnQuizResult</c> — upstream's <c>GamificationBridge.OnQuizCompleted</c>
     /// (<c>Services/GamificationBridge.cs:578-609</c>).</summary>
     public GradedRunAwards Awards { get; }
@@ -84,16 +84,16 @@ public sealed class IntakeHostContext : IDisposable
     /// <summary>
     /// The 4-digit local-fiction subject id (never transmitted), minted on FIRST READ.
     ///
-    /// <para>Lazy since SP-095, and not as an optimisation: its only reader is the page's boot
+    /// <para>Lazy, and not as an optimisation: its only reader is the page's boot
     /// config (<c>IntakeHostWindow.axaml.cs:612</c>), so a launch the pass gate REFUSES must not
     /// mint one. A user who has never taken an intake should not find an intake subject id
     /// sitting in their data directory because they once pressed a button and were told no.</para>
     /// </summary>
     public string SubjectId => _subjectId ??= IntakeSubjectId.LoadOrMint(_subjectIdPath, _log);
 
-    /// <summary>The intake payload probe, taken when the transport BINDS (SP-048 discipline —
+    /// <summary>The intake payload probe, taken when the transport BINDS (the payload-probe discipline —
     /// self-evidencing transcripts). Reading it before <see cref="StartTransport"/> is a bug, not
-    /// a default: SP-095 split the bind out of construction so a refused launch never opens a
+    /// a default: the bind was split out of construction so a refused launch never opens a
     /// loopback origin, and a probe invented for that window would describe nothing.</summary>
     public IntakeServingRoots.IntakePayloadProbe PayloadProbe => _payloadProbe
         ?? throw new InvalidOperationException(
@@ -115,7 +115,7 @@ public sealed class IntakeHostContext : IDisposable
     /// Everything <see cref="Start"/> does EXCEPT binding the loopback origin: the stores, the
     /// punch-card repairs, the subject id, the services and the sinks.
     ///
-    /// <para>SP-095 split this out because the weekly-pass gate has to be answered BEFORE a run
+    /// <para>This was split out because the weekly-pass gate has to be answered BEFORE a run
     /// opens (WPF checks <c>App.IntakePass.CanStartIntake</c> at
     /// <c>MainWindow/MainWindow.Lab.cs:124</c>, and its pass service is app-wide so the check
     /// costs nothing). The port's pass lives on this context, so a launch that is going to be
@@ -157,13 +157,13 @@ public sealed class IntakeHostContext : IDisposable
             host.LogDiagnostic("intake: punch-card load repairs applied — file heals on this save");
         }
 
-        // SP-055: the asset-selection store beside the other two (same shared <dataDir> —
+        // The asset-selection store beside the other two (same shared <dataDir> —
         // one asset_selection.json per install; the DTRH host opens its own reader).
         var assetSelectionStore = Persistence.AssetSelectionStore.Start(host, dataDir, "IntakeAssetSelection");
 
-        // SP-128: the graded-run award record, same shared <dataDir>, same typed-Degraded
+        // The graded-run award record, same shared <dataDir>, same typed-Degraded
         // handling as the other two. Starting a store only READS, so a launch the pass gate
-        // refuses still writes no file here (the SP-095 rule the subject id obeys).
+        // refuses still writes no file here (the same rule the subject id obeys).
         var awardsStore = new PersistenceStore<GradedRunAwardsDocument>(
             host.Registry.OwnerFor("IntakeGradedRunAwards"),
             new LogSinkAdapter(host),
@@ -200,12 +200,12 @@ public sealed class IntakeHostContext : IDisposable
     /// precede its stop — <see cref="PersistenceStore{TModel}.StopAsync"/> is not a flush
     /// (persistence-migration-contract §11).
     ///
-    /// <para>SP-128 added the awards store as the THIRD flushed store, reusing the existing
+    /// <para>The awards store joined as the THIRD flushed store, reusing the existing
     /// bounds unchanged (2 s flush inside a 3 s wait, 2 s stop) rather than inventing a new
     /// timeout shape. Worst case rises from <b>12 s to 17 s</b> before the participant's own
     /// dispose: three flushes at 3 s and four stops at 2 s. That is a bound, not an
     /// expectation — every wait here observes an already-completed task unless a write is
-    /// genuinely in flight (SP-073).</para>
+    /// genuinely in flight.</para>
     /// </summary>
     public void Dispose()
     {

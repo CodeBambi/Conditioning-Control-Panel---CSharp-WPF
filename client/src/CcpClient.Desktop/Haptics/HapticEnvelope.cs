@@ -109,7 +109,7 @@ public readonly record struct PrioritisedLevel(double Level, int Priority);
 ///
 /// <para><b>There is no 10 Hz loop here and that is deliberate.</b> Upstream's loop exists because it
 /// is the SENDER: it rate-limits the Lovense LAN API, re-asserts unchanged levels and heartbeats
-/// zeros (<c>HapticMixer.cs:68-97</c>). Those are DELIVERY properties, and SP-119's seam already puts
+/// zeros (<c>HapticMixer.cs:68-97</c>). Those are DELIVERY properties, and the sink's seam already puts
 /// delivery on the provider (<c>Services/Haptics/Core/HapticContracts.cs:70-73</c>). What is left is
 /// arithmetic, and arithmetic needs an instant, not a poll.</para>
 /// </summary>

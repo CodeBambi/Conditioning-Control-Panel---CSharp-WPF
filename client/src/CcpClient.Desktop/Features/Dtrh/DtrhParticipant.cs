@@ -4,22 +4,22 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// The DTRH host's owned transport infrastructure (SP-004): the §4 loopback origins, the
+/// The DTRH host's owned transport infrastructure: the §4 loopback origins, the
 /// §3.3 inbox, and the per-session unguessable bridge token. Construction starts nothing
-/// (SP-003 §4.4); <see cref="StartAsync"/> binds the origins; <see cref="StopAsync"/> is
+/// (the lifecycle contract §4.4); <see cref="StartAsync"/> binds the origins; <see cref="StopAsync"/> is
 /// idempotent teardown. The web surfaces themselves are phase-4 (window/dialog), selected
 /// by the probed capability states — never created here.
 /// </summary>
 public sealed class DtrhParticipant : IBackgroundParticipant
 {
-    /// <summary>SP-048: payload-root presence states for the published-artifact location guard.</summary>
+    /// <summary>Payload-root presence states for the published-artifact location guard.</summary>
     public enum DtrhPayloadState { Present, Missing, Incomplete }
 
-    /// <summary>SP-048: the payload-root probe outcome (state + observed file count).</summary>
+    /// <summary>The payload-root probe outcome (state + observed file count).</summary>
     public sealed record DtrhPayloadProbe(DtrhPayloadState State, int FileCount);
 
     /// <summary>
-    /// SP-048 (b1 land condition — published-artifact payload location DECIDED: beside the
+    /// The b1 land condition (published-artifact payload location DECIDED: beside the
     /// exe via the linked glob, served read-only through <see cref="AppContext.BaseDirectory"/>).
     /// Non-fatal presence probe: names the RESOLVED root and its state at startup so a boot
     /// transcript is self-evidencing about WHERE the payload is served from (a missing or
@@ -68,13 +68,13 @@ public sealed class DtrhParticipant : IBackgroundParticipant
     public Inbox Inbox => _inbox;
 
     public LoopbackServer Server => _server
-        ?? throw new InvalidOperationException("DtrhParticipant has not started (SP-004: start is phase 3).");
+        ?? throw new InvalidOperationException("DtrhParticipant has not started (start is phase 3).");
 
     public string Name => "DtrhHost";
 
     public bool Running { get; private set; }
 
-    /// <summary>Output-relative content roots (SP-009 copied-asset convention, SP-023).</summary>
+    /// <summary>Output-relative content roots (the copied-asset convention).</summary>
     public static string PayloadRoot => Path.Combine(AppContext.BaseDirectory, "payload", "dtrh");
 
     public static string OverlayRoot => Path.Combine(AppContext.BaseDirectory, "payload-overlay");
@@ -100,7 +100,7 @@ public sealed class DtrhParticipant : IBackgroundParticipant
         cancellationToken.ThrowIfCancellationRequested();
         if (Interlocked.Exchange(ref _started, 1) != 0)
         {
-            return Task.CompletedTask; // idempotent (SP-003)
+            return Task.CompletedTask; // idempotent (lifecycle contract)
         }
 
         Running = true;

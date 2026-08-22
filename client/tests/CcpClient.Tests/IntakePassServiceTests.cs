@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-054: the Weekly Intake Pass state machine (IntakePassService.cs port): ISO-week
+/// The Weekly Intake Pass state machine (IntakePassService.cs port): ISO-week
 /// arithmetic incl. the New-Year guard, the rollback guard, fail-closed, completion-spend
 /// ONLY, the typed AvailableNoEntitlementProvider reason (consult ruling 5), and the
 /// dual-provider refund against a fake seam. NeedsLogin is unreachable this build —

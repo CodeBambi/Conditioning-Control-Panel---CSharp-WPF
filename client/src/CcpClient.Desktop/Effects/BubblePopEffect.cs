@@ -10,9 +10,9 @@ namespace CcpClient.Desktop.Effects;
 /// (<c>Features/BubblePopFeatureControl.xaml.cs</c>, service <c>Services/BubbleService.cs</c>), and
 /// <b>the first module in this port the user is expected to ACT on rather than watch</b>.
 ///
-/// <para><b>Why this module exists (SP-113), and what it was built to find out.</b> Ten modules ran
+/// <para><b>Why this module exists, and what it was built to find out.</b> Ten modules ran
 /// and every one of them was something done TO the user: a picture, a sound, a question they type
-/// into. SP-112 refused Bubble Pop with a census rather than an excuse — <c>Input/**</c> handles no
+/// into. An earlier packet refused Bubble Pop with a census rather than an excuse — <c>Input/**</c> handles no
 /// mouse message at all, owns one window, places it once, and defines <c>Confirmed</c> as
 /// <c>IsForegroundWindow &amp;&amp; SystemKeyboardFocusIsThisWindow</c>, which is the exact inverse
 /// of what a bubble needs. That census was re-verified line by line before this module was written
@@ -21,15 +21,15 @@ namespace CcpClient.Desktop.Effects;
 /// <para><b>The answer, and it is the shape of this file.</b> <see cref="ISessionEffect"/> fits
 /// unchanged (fifth time). <see cref="OwnedSessionEffect"/> fits unchanged. This module takes no
 /// clock and owns no timer: both cadences — the spawn interval and the 30 ms animation step — live
-/// in <see cref="BubblePopSurfacePresenter"/>, on SP-106's rule that a cadence keeping a SURFACE
+/// in <see cref="BubblePopSurfacePresenter"/>, on the established rule that a cadence keeping a SURFACE
 /// correct is the surface's. What was genuinely new is the capability underneath
 /// (<c>Pointer/**</c>), not the spine.</para>
 ///
 /// <para><b>What "running" means here, and why it needed no eighth dot meaning.</b> A field that is
 /// on the desktop and that the window manager routes no click to is a picture of a game: visible,
-/// and impossible to play. That is <b>DEMAND</b>, SP-110's sixth meaning — <i>a claim on the user's
+/// and impossible to play. That is <b>DEMAND</b>, the Lock Card's sixth meaning — <i>a claim on the user's
 /// attention which the operating system grants and can revoke without this process doing
-/// anything</i> — with a different INSTRUMENT. SP-110's instrument was the foreground and the
+/// anything</i> — with a different INSTRUMENT. That module's instrument was the foreground and the
 /// keyboard focus; a bubble must take neither, so its instrument is the routing answer. The meaning
 /// is the same and the finding is that the meaning was never the mechanism. See
 /// <see cref="BubblePopSurfacePresenter.Running"/>.</para>

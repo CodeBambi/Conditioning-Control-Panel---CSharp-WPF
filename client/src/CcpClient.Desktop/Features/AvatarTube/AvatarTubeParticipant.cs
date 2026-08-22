@@ -5,15 +5,15 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.AvatarTube;
 
 /// <summary>
-/// The AvatarTube demonstrator participant (explicitly labeled DEMONSTRATOR — the SP-007/
-/// SP-013 pattern: really-functioning, superseded by the first real AvatarTube feature,
-/// owner may async-veto). It owns pack loading through the SP-009 embedded-asset manifest
+/// The AvatarTube demonstrator participant (explicitly labeled DEMONSTRATOR — the
+/// demonstrator pattern: really-functioning, superseded by the first real AvatarTube feature,
+/// owner may async-veto). It owns pack loading through the embedded-asset manifest
 /// (StandardAssetLoader avares:// opens), the ONE engine generation, the typed
-/// undecodable-asset capability state (SP-006 vocabulary — mechanism only; the
+/// undecodable-asset capability state (capability vocabulary — mechanism only; the
 /// warning-vs-diagnostics UX choice stays pending-owner), and the structured trace sink.
-/// Construction starts nothing (SP-003 §4.4); the tube opens on the user path in phase 4.
+/// Construction starts nothing (the lifecycle contract §4.4); the tube opens on the user path in phase 4.
 ///
-/// First-attempt leak REJECTs implemented as design: no timers outside the SP-004-owned
+/// First-attempt leak REJECTs implemented as design: no timers outside the owned
 /// engine operation; pack switch disposes the old pack's frames before activating the
 /// replacement (never two avatars); the view's event subscriptions are field-backed and
 /// symmetric, and <see cref="FrameSubscriberCount"/> exposes the real count to tests.
@@ -59,7 +59,7 @@ public sealed class AvatarTubeParticipant : IBackgroundParticipant
     /// <summary>Raised on the UI thread (inside the dispatch boundary) when the composition changed.</summary>
     public event EventHandler<AvatarFrameEventArgs>? FramePresented;
 
-    /// <summary>The typed SP-006 capability state of the active pack's decode probe.</summary>
+    /// <summary>The typed capability state of the active pack's decode probe.</summary>
     public CapabilityState AvatarCapability { get { lock (_gate) { return _capability; } } }
 
     public int ActivePackId { get { lock (_gate) { return _activePackId; } } }
@@ -145,7 +145,7 @@ public sealed class AvatarTubeParticipant : IBackgroundParticipant
 
     /// <summary>
     /// "Mod switching" demonstrator semantics (packet framing (b)): switch between the two
-    /// synthetic packs through the SAME SP-009 manifest path. The old pack's decoded frames
+    /// synthetic packs through the SAME manifest path. The old pack's decoded frames
     /// are dropped before the replacement activates (WPF disposal parity — never two
     /// avatars); the replacement is decode-probed fresh (capability re-probe per switch).
     /// </summary>
@@ -195,7 +195,7 @@ public sealed class AvatarTubeParticipant : IBackgroundParticipant
         }
         catch (AvatarPackLoadException ex)
         {
-            // Typed undecodable-asset path (SP-006 vocabulary; UX choice pending-owner):
+            // Typed undecodable-asset path (capability vocabulary; UX choice pending-owner):
             // static fallback + bounded diagnostics (one line per activation attempt —
             // never a busy retry loop: exactly one decode attempt per switch).
             _capability = new CapabilityState.Degraded(

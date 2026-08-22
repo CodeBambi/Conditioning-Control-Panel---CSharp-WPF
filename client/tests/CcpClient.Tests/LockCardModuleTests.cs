@@ -9,7 +9,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-110 — EIGHT modules under one spine, and this is the first that ASKS.
+/// EIGHT modules under one spine, and this is the first that ASKS.
 ///
 /// <para><b>What is under test here, and what is deliberately NOT.</b> These facts drive Lock Card
 /// through a RECORDING input presence, so the pacing, the phrase rotation, the typing rules, the
@@ -573,8 +573,8 @@ public class LockCardModuleTests
     {
         // Clause 3, and it is the one this whole packet is about. A card can be visible, topmost and
         // hit-testable while the operating system routes the keyboard somewhere else entirely —
-        // measured, not imagined (SP-110 plan.md §0, run 1). Nobody is being asked anything, and the
-        // dot must say so.
+        // measured, not imagined (this packet's plan.md §0, run 1). Nobody is being asked anything,
+        // and the dot must say so.
         await using var rig = await Rig.StartAsync();
         rig.EnableLockCard(perHour: 10);
         rig.Engine.Start();
@@ -609,7 +609,7 @@ public class LockCardModuleTests
     public async Task WhileTheCardIsUpAndUnansweredTheModuleIsLIVE_BecauseWaitingForAHumanIsTheWork()
     {
         // The packet's direct question, answered directly. A module that went Armed the moment it
-        // did its job would be the under-claim SP-109 refused for the audio half-row.
+        // did its job would be the under-claim refused earlier for the audio half-row.
         await using var rig = await Rig.StartAsync();
         rig.EnableLockCard(perHour: 10);
         rig.Engine.Start();
@@ -656,8 +656,8 @@ public class LockCardModuleTests
     [Fact]
     public async Task AnEmptyPhrasePoolIsDegradedButSTILLLive_TheSubliminalsAnswerNotThePinkFilterAnswer()
     {
-        // The line between a missing CHANNEL and missing CONTENT, drawn here exactly where SP-109
-        // drew it for a clip folder: enabling a phrase mid-session starts producing cards with no
+        // The line between a missing CHANNEL and missing CONTENT, drawn here exactly where it was
+        // drawn for a clip folder: enabling a phrase mid-session starts producing cards with no
         // re-arm, so the module really is running and the dot really is honest.
         await using var rig = await Rig.StartAsync();
         rig.EnableLockCard(perHour: 10);
@@ -1074,7 +1074,7 @@ public class LockCardModuleTests
         }
     }
 
-    /// <summary>The manual clock, SP-098's shape. Zero wall-clock.</summary>
+    /// <summary>The manual clock, in the shape every module test shares. Zero wall-clock.</summary>
     private sealed class ManualSessionClock : ISessionClock
     {
         private readonly List<Entry> _timers = [];

@@ -15,8 +15,8 @@ namespace CcpClient.Desktop.Views.Pages;
 /// first."</i> (<c>Services/Haptics/ButtplugProvider.cs:135</c>) does when the real problem is that
 /// Intiface is not running.</para>
 ///
-/// <para><b>SP-137: there used to be a THIRD "no" here, and it named the wrong cause.</b> These
-/// sentences said no effect module sends anything to the sink. SP-126 (D210) wired the limb and
+/// <para><b>There used to be a THIRD "no" here, and it named the wrong cause.</b> These
+/// sentences said no effect module sends anything to the sink. D210 wired the limb and
 /// SIX live call sites now fire it — <c>Effects/FlashSurfacePresenter.cs:314</c>,
 /// <c>Effects/MandatoryVideoEffect.cs:307</c>, <c>:340</c> and <c>:419</c>,
 /// <c>Effects/SubliminalsEffect.cs:223</c>, <c>Effects/BouncingTextField.cs:237</c> — each
@@ -49,15 +49,15 @@ public static class HapticsPanelNotices
     /// <see cref="HapticParticipant.Dot"/>. The two reachable states are spelled out here so a dark
     /// dot is never read as a fault.</para>
     ///
-    /// <para><b>SP-137 — the <see cref="EffectDotState.Armed"/> arm is the one nobody can read
+    /// <para><b>The <see cref="EffectDotState.Armed"/> arm is the one nobody can read
     /// TODAY and the one that would be worst tomorrow.</b> <c>Dot</c> is
     /// <c>Enabled &amp;&amp; LastObservation is { Confirmed: true }</c>
     /// (<c>HapticParticipant.cs:214-215</c>), <c>Confirmed</c> requires
     /// <c>ClientAdmitted &amp;&amp; DeviceCount &gt;= 1</c> (<c>IHapticSink.cs:136</c>), and
     /// <c>LastObservation</c> is assigned only past the <c>Sink.Route == None</c> early return
     /// (<c>HapticParticipant.cs:259-270</c>). <b>So this arm cannot render unless a route HAS been
-    /// admitted</b> — which is why neither "nothing sends anything to it yet" (the pre-SP-137
-    /// wording) nor "the sink admits no provider route" (SP-137's own first attempt) may appear
+    /// admitted</b> — which is why neither "nothing sends anything to it yet" (the earlier
+    /// wording) nor "the sink admits no provider route" (this file's own first attempt) may appear
     /// here: in the only world where a user reads this arm, a confirmed observation has given the
     /// limb non-empty <c>DeviceKeys</c> (<c>:103</c>) and <c>Send</c> reaches <c>Sends++</c>
     /// (<c>HapticLimb.cs:575-585</c>). Both would be self-refuting, not merely stale. What is true
@@ -137,12 +137,12 @@ public static class HapticsPanelNotices
     /// The absence line — what the Windows app's haptics page has that this one does not, and where
     /// the send really stops.
     ///
-    /// <para>It is on the PAGE rather than only in a record, on the precedent SP-111, SP-113, SP-115
-    /// and SP-117 set for a half-ported row.</para>
+    /// <para>It is on the PAGE rather than only in a record, on the precedent four earlier rows
+    /// set for a half-ported row.</para>
     ///
-    /// <para><b>SP-137 corrected the last sentence, which had TWO false clauses.</b> It read "even
+    /// <para><b>The last sentence was corrected; it had TWO false clauses.</b> It read "even
     /// with a device attached, nothing would move: no effect in this build sends anything to
-    /// haptics yet". Both halves went false at SP-126 (D210): the modules DO send — six live sites
+    /// haptics yet". Both halves went false at D210: the modules DO send — six live sites
     /// fire the limb — and with a route admitted those sends would go out, so the counterfactual
     /// was wrong too. What is true is one rung further out:
     /// <see cref="Haptics.HapticSinkFactory.AdmittedRoutes"/> is <c>[]</c>

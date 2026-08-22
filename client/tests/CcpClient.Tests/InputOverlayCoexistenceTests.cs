@@ -3,17 +3,17 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-110, trap 1. <b>Five landed modules draw through a click-through, always-on-top overlay.</b> A
+/// Trap 1. <b>Five landed modules draw through a click-through, always-on-top overlay.</b> A
 /// window that steals focus or z-order from it, or that leaves it input-opaque, breaks live sessions
 /// in the least visible way available: the desktop underneath stops taking clicks and nothing in the
 /// app looks wrong.
 ///
 /// <para><b>So <c>Overlay/**</c> is CONSUMED here, never edited.</b> These facts build the real
 /// <c>Win32OverlayPresence</c>, present a real click-through surface, and then measure it three
-/// times through <see cref="OverlayWindowProbe"/> — SP-099's own instrument, unmodified: before any
-/// card exists, while a card holds the foreground, and after the card is dismissed and its presence
-/// disposed. The overlay's own <c>OverlayCapabilityTests</c> are untouched and are not weakened by
-/// anything here.</para>
+/// times through <see cref="OverlayWindowProbe"/> — the overlay's own instrument, unmodified:
+/// before any card exists, while a card holds the foreground, and after the card is dismissed and
+/// its presence disposed. The overlay's own <c>OverlayCapabilityTests</c> are untouched and are
+/// not weakened by anything here.</para>
 ///
 /// <para>The card is placed at a rectangle DISJOINT from the overlay's, so the overlay's hit-test
 /// point is never occluded by the thing under test — otherwise "the point went past the overlay"
@@ -26,7 +26,7 @@ public class InputOverlayCoexistenceTests
     public void TheCardReallyTookTheForeground_WhichIsWhatMakesTheRestOfThisFileATest()
     {
         // Without this leg, every "the overlay is unchanged" fact below would be satisfied by a card
-        // that never came up. It is the same role SP-099's middle leg plays for click-through.
+        // that never came up. It is the same role the overlay's middle leg plays for click-through.
         var run = InputCaptureObservations.Coexistence;
 
         Assert.True(run.OverlayPresented == run.MachineHasInteractiveDesktop,
@@ -41,7 +41,7 @@ public class InputOverlayCoexistenceTests
     public void TheOverlayStillPassesInputThrough_BeforeDuringAndAfterACard()
     {
         // The property five landed modules depend on. Measured at three separate moments against the
-        // SAME point, through SP-099's own oracle.
+        // SAME point, through the overlay's own oracle.
         var run = InputCaptureObservations.Coexistence;
 
         Assert.True(run.Before.PointPassesThrough,
@@ -63,7 +63,7 @@ public class InputOverlayCoexistenceTests
     {
         // The z-order half. A card is topmost too, so while it is up it legitimately CONTESTS the
         // band with the overlay — which is why the claim is "above every ORDINARY window" and not
-        // "above every window" (the same wording, and the same reason, as SP-099's own z-order fact:
+        // "above every window" (the same wording, and the same reason, as the overlay's own z-order fact:
         // WPF re-raises its topmost windows on a cadence precisely because the band is shared).
         var run = InputCaptureObservations.Coexistence;
 

@@ -11,7 +11,7 @@ using CcpClient.Desktop.Audio;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// The real <see cref="IDtrhAudioBackend"/> on the SP-017-selected SoundFlow 1.4.1
+/// The real <see cref="IDtrhAudioBackend"/> on the selected SoundFlow 1.4.1
 /// (MiniAudio) — one playback device, per-channel SoundPlayers on its MasterMixer
 /// (channel ownership, audio-backend-spike.md §6). API shape mirrors the admitted spike
 /// harness (CcpSpike.Audio SoundFlowHarness.cs) — device period 10 ms recorded there.
@@ -39,10 +39,10 @@ public sealed class SoundFlowDtrhAudio : IDtrhAudioBackend
     public SoundFlowDtrhAudio(Action<string> log)
     {
         _log = log;
-        // SP-072: bounded orphan-safe construction (see AudioSeams.OrphanSafePlayerFactory).
-        // This ALSO removes the pre-SP-072 inline Task.Run(...).GetAwaiter().GetResult()
+        // Bounded orphan-safe construction (see AudioSeams.OrphanSafePlayerFactory).
+        // This ALSO removes the earlier inline Task.Run(...).GetAwaiter().GetResult()
         // duplicate of OffSyncContext — the factory constructs on a pool thread always, so
-        // the SP-025 property now lives in ONE place for both backends. The residual line
+        // the property now lives in ONE place for both backends. The residual line
         // verified by READING only: attach's `_device!.MasterMixer.AddComponent(p.Player)`.
         _players = new OrphanSafePlayerFactory<SoundFlowPlayer>(
             construct: (path, volume) =>
@@ -68,7 +68,7 @@ public sealed class SoundFlowDtrhAudio : IDtrhAudioBackend
             // pointers — match by NAME against THIS snapshot (WPF FriendlyName
             // prefix-matching parity, AudioService.cs:219-296).
             _engine.UpdateAudioDevicesInfo();
-            // Session facts (RDP Sink class on WSLg — SP-017 A6 shape; device names are
+            // Session facts (RDP Sink class on WSLg — the A6 shape; device names are
             // hardware endpoints, never user data).
             _log($"dtrh-audio: {_engine.PlaybackDevices.Count()} render endpoint(s): {string.Join(" | ", _engine.PlaybackDevices.Select(d => d.IsDefault ? d.Name + " (default)" : d.Name))}");
             DeviceInfo? info = null;
@@ -111,14 +111,14 @@ public sealed class SoundFlowDtrhAudio : IDtrhAudioBackend
             throw new InvalidOperationException("SoundFlowDtrhAudio: TryInit must succeed before players are created.");
         }
 
-        // SP-025 off-sync-context + SP-072 bound/orphan invariant live in the factory —
+        // The off-sync-context and bound/orphan invariants live in the factory —
         // construction always on a pool thread, never a SynchronizationContext.
         return _players.Create(path, volume);
     }
 
     public void Dispose()
     {
-        // SP-072: teardown runs under the factory lifecycle lock — serialized against
+        // Teardown runs under the factory lifecycle lock — serialized against
         // orphan disposal, never concurrent with it.
         _players.Teardown(() =>
         {
@@ -160,7 +160,7 @@ public sealed class SoundFlowDtrhAudio : IDtrhAudioBackend
 
         public void Pause() => _player.Pause();
 
-        // SoundFlow backend behavior fact (SP-017 A2): explicit Stop does NOT fire
+        // SoundFlow backend behavior fact (A2): explicit Stop does NOT fire
         // PlaybackEnded — interruption stays distinguishable from completion.
         public void Stop() => _player.Stop();
 

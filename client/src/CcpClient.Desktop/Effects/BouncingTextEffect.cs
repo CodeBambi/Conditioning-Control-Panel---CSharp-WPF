@@ -9,7 +9,7 @@ namespace CcpClient.Desktop.Effects;
 /// <summary>
 /// <b>Bouncing Text</b> — <b>the module this port refused to fake for nine waves</b>.
 ///
-/// <para>SP-106 read its window and said no with evidence rather than an excuse (D83/D84): its
+/// <para>An earlier packet read its window and said no with evidence rather than an excuse (D83/D84): its
 /// content is transparency-backed glyphs
 /// (<c>Services/Subliminal/BouncingTextService.cs:827-828</c>, <c>AllowsTransparency = true</c> and
 /// <c>Background = Brushes.Transparent</c>), and this port's overlay composites one uniform
@@ -26,7 +26,7 @@ namespace CcpClient.Desktop.Effects;
 /// hit test. D83 and D84 close together because they were the same missing thing seen twice.</para>
 ///
 /// <para><b>The module takes no clock and owns no timer</b>, exactly as
-/// <see cref="SpiralOverlayEffect"/> does and for SP-106's reason: an interval that decides when a
+/// <see cref="SpiralOverlayEffect"/> does and for the same reason: an interval that decides when a
 /// MODULE is due belongs to <see cref="PacedSessionEffect{TFiring}"/>, and a cadence that keeps a
 /// SURFACE correct belongs to the surface. A bouncing logo is never "due"; it is on, and what is on
 /// screen moves.</para>
@@ -48,7 +48,7 @@ public sealed class BouncingTextEffect : OwnedSessionEffect
     /// <summary>
     /// The row's label.
     ///
-    /// <para><b>It names the ported half</b>, on the precedent SP-109 set and SP-111 and SP-113
+    /// <para><b>It names the ported half</b>, on the precedent the audio half-row set and two modules since
     /// followed: the user reads the scope of the row before enabling anything, and the same string
     /// is pinned beside the dot it justifies.</para>
     /// </summary>
@@ -121,9 +121,9 @@ public sealed class BouncingTextEffect : OwnedSessionEffect
     /// the screen (continuous), change (moving), custody (non-drawing), reach (audio), demand
     /// (input) and motion (video read-back).
     ///
-    /// <para>It is not MOTION (SP-111's seventh): a bouncing logo that stopped moving is still a
+    /// <para>It is not MOTION (the seventh meaning): a bouncing logo that stopped moving is still a
     /// picture on the screen, whereas a video that stopped advancing is a dead one. It is not the
-    /// SCREEN (SP-105's second): a layered window can be present, visible, on top and composite
+    /// SCREEN (the second): a layered window can be present, visible, on top and composite
     /// NOTHING, and this is the first module in the port whose surface can be in that state — it is
     /// the state the whole capability was built to make impossible to claim. So <c>Live</c> means
     /// the operating system's own copy of the surface still carries the frame's opaque ink.</para>
@@ -215,7 +215,7 @@ public sealed class BouncingTextEffect : OwnedSessionEffect
         }
 
         // A continuous module's work IS a native window, and a native window belongs to a UI thread.
-        // SP-105's finding, unchanged for a sixth module: it is a property of DRAWING at arm time.
+        // The established finding, unchanged for a sixth module: it is a property of DRAWING at arm time.
         if (!Signal.IsBound)
         {
             return new CapabilityState.Unavailable(new CapabilityReason(
@@ -231,7 +231,7 @@ public sealed class BouncingTextEffect : OwnedSessionEffect
     /// <b>Ready narrows every healthy run</b>, and that is the condition on shipping this row at
     /// all.
     ///
-    /// <para>Two causes can be true at once and BOTH travel — SP-111's rule, after SP-109 shipped
+    /// <para>Two causes can be true at once and BOTH travel — the rule set after an earlier module shipped
     /// the defect once. The run-level cause goes first because it is the one the user can act on;
     /// the build-level one is always present, on healthy runs as well as broken ones, because the
     /// missing transforms are a property of the BUILD rather than of the run.</para>

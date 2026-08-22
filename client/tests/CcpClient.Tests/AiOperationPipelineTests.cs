@@ -6,10 +6,10 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Pipeline mechanics tests (SP-033 slice c1; ai-companion-admission.md §8 c1;
+/// Pipeline mechanics tests (slice c1; ai-companion-admission.md §8 c1;
 /// ai-operation-contract.md §§2-4, 11). Proves: owned operations, switch = generation
 /// invalidation + cancel + stale discard (cooperative AND uncooperative providers),
-/// selection ≠ availability (typed Unavailable + SP-006 capability state), endpoint
+/// selection ≠ availability (typed Unavailable + capability state), endpoint
 /// admission pre-socket (send-attempt counter zero), awareness consent suppression,
 /// panic (typed Cancelled + bounded drain + post-panic stale discard), and content-free
 /// diagnostics emission.
@@ -34,7 +34,7 @@ public class AiOperationPipelineTests
 
         public int Calls;
 
-        /// <summary>Deterministic first-call signal (SP-059 class-1 conversion): set at
+        /// <summary>Deterministic first-call signal (class-1 conversion): set at
         /// CompleteAsync entry so in-flight waits need no wall-clock poll.</summary>
         public TaskCompletionSource FirstCall { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -108,7 +108,7 @@ public class AiOperationPipelineTests
         var h = new Harness();
         var provider = h.RegisterLoopback();
         h.Pipeline.SelectProvider(AiProviderId.LocalOllama);
-        // Probe registered but NOT run: registration/selection never yield availability (SP-006).
+        // Probe registered but NOT run: registration/selection never yield availability.
 
         var result = await h.Pipeline.RunInteractiveAsync(Request);
 
@@ -146,7 +146,7 @@ public class AiOperationPipelineTests
         Assert.Equal(0, h.Pipeline.SendAttempts);
     }
 
-    // ---- endpoint admission: remote rejected before any socket (SP-019 item 7 shape) ----
+    // ---- endpoint admission: remote rejected before any socket (named item 7 shape) ----
 
     [Fact]
     public async Task ProvenRemoteProvider_RejectedByPolicy_BeforeSocket_ZeroSendAttempts()
@@ -198,7 +198,7 @@ public class AiOperationPipelineTests
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
         await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
-        Assert.Equal(1, provider.Calls); // exactly one send in flight (the pre-SP-059 poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
+        Assert.Equal(1, provider.Calls); // exactly one send in flight (the earlier poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
 
         h.Pipeline.SelectProvider(AiProviderId.Cloud); // the switch IS the cancellation
 
@@ -219,7 +219,7 @@ public class AiOperationPipelineTests
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
         await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
-        Assert.Equal(1, provider.Calls); // exactly one send in flight (the pre-SP-059 poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
+        Assert.Equal(1, provider.Calls); // exactly one send in flight (the earlier poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
 
         h.Pipeline.SelectProvider(AiProviderId.Cloud);
         provider.Release(); // the LATE reply arrives after the switch
@@ -243,7 +243,7 @@ public class AiOperationPipelineTests
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
         await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
-        Assert.Equal(1, provider.Calls); // exactly one send in flight (the pre-SP-059 poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
+        Assert.Equal(1, provider.Calls); // exactly one send in flight (the earlier poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
 
         var started = TestWait.MonotonicNow();
         await h.Pipeline.PanicAsync(TimeSpan.FromSeconds(10));
@@ -267,7 +267,7 @@ public class AiOperationPipelineTests
 
         var inFlight = h.Pipeline.RunInteractiveAsync(Request);
         await TestWait.Until(provider.FirstCall.Task, "the in-flight operation reaching the provider", () => $"calls={provider.Calls}");
-        Assert.Equal(1, provider.Calls); // exactly one send in flight (the pre-SP-059 poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
+        Assert.Equal(1, provider.Calls); // exactly one send in flight (the earlier poll waited for Calls == 1 — restored after the pre-completion consult caught the >= 1 drift)
 
         // Panic with a SHORT bound: the uncooperative op is still blocked; drain hits the bound.
         var started = TestWait.MonotonicNow();
@@ -343,18 +343,18 @@ public class AiOperationPipelineTests
         await h.Pipeline.RunInteractiveAsync(Request); // not-configured path
 
         var record = Assert.Single(h.Diagnostics.Records);
-        // The serialized shape is the SP-016 schema proof's domain; here: no field holds
+        // The serialized shape is the schema proof's domain; here: no field holds
         // the prompt text or any free text.
         var json = System.Text.Json.JsonSerializer.Serialize(record);
         Assert.DoesNotContain("prompt-text-never-in-diagnostics", json);
         Assert.Matches("^[a-z-]+$", record.StableCode!);
     }
 
-    // ---- SP-079: the two halves of the SP-069 output union, distinguishable in the ONE
+    // ---- The two halves of the reply-hygiene output union, distinguishable in the ONE
     // channel this seam owns (the diagnostic stable code composed at
     // AiOperationPipeline.cs:427). NOT a moderation surface: no AiModerationSurface is
     // constructed here, both EvaluateOutput calls still pass the same outputSurface, and the
-    // closed 6-Wired/5-Reserved inventory is untouched (SP-079 record.md §1).
+    // closed 6-Wired/5-Reserved inventory is untouched (record.md §1).
 
     private const string BlockCategory = "test-block-category";
 
@@ -377,7 +377,7 @@ public class AiOperationPipelineTests
     /// before the :360 guard is ever evaluated.</summary>
     private const string RawBlockText = "model said forbidden-token";
 
-    /// <summary>The reverse direction (the SP-069 BLOCK-MORE shape): the token is INSIDE a
+    /// <summary>The reverse direction (the BLOCK-MORE shape): the token is INSIDE a
     /// stripped reasoning block, so the hygienic text is "hello" and passes. Only the raw scan
     /// can refuse this, which is why deleting it would ADMIT text refused today.</summary>
     private const string RawOnlyBlockText = "<thinking>sensitive-token</thinking> hello";
@@ -439,7 +439,7 @@ public class AiOperationPipelineTests
         Assert.Equal("refused:output-hygienic", record.StableCode);
         Assert.DoesNotContain(h.Diagnostics.Records, r => r.StableCode == "refused:output");
         // Content-free (contract §12) on a path AiModerationCoverageTests.cs:332-334 does not
-        // exercise: this record is the only one the SP-079 mechanism writes. Ridden here rather
+        // exercise: this record is the only one this mechanism writes. Ridden here rather
         // than standing alone, because alone it would pass with the mechanism reverted.
         var serialized = System.Text.Json.JsonSerializer.Serialize(record);
         Assert.DoesNotContain(BlockCategory, serialized, StringComparison.Ordinal);
@@ -473,7 +473,7 @@ public class AiOperationPipelineTests
         var result = await h.Pipeline.RunInteractiveAsync(new AiRequest("clean input"));
 
         // The hygienic text is "hello" and passes. Deleting the raw scan ADMITS this reply,
-        // which is the SP-069 invariant this packet inherits: the union may only refuse MORE.
+        // which is the union invariant this packet inherits: the union may only refuse MORE.
         var refused = Assert.IsType<AiReply.Refused>(result.Reply);
         Assert.Equal(AiModerationSource.Output, refused.Refusal.Source);
         var record = Assert.Single(h.Diagnostics.Records, r => r.Outcome == AiDiagnosticOutcome.Refused);
@@ -521,7 +521,7 @@ public class AiOperationPipelineTests
 
         var result = await h.Pipeline.RunInteractiveAsync(new AiRequest("clean input"));
 
-        // The honest limit on this packet's claim, made mechanical (SP-079 record.md §6 item 1):
+        // The honest limit on this packet's claim, made mechanical (record.md §6 item 1):
         // when the same operation ALSO soft-hits, the soft-hit code still masks the refusal, so
         // the two halves are NOT distinguishable on this path. Pre-existing and deliberately
         // preserved; this fact is what stops a future reorder of the ?? chain from being silent.

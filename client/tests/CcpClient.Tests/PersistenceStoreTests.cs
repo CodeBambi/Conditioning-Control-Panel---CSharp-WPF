@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-087: the LIFECYCLE SHAPE of <see cref="PersistenceStore{TModel}"/>, pinned because a
+/// The LIFECYCLE SHAPE of <see cref="PersistenceStore{TModel}"/>, pinned because a
 /// board row asserted the opposite. The row read "five unbounded in-process disk-store
 /// waits sit on UI-reachable paths"; six of the seven cited sites wait on nothing at all,
 /// because <c>StartAsync</c> and <c>StopAsync</c> complete synchronously and hand back an
@@ -13,7 +13,7 @@ namespace CcpClient.Tests;
 /// thread calls <c>StartAsync</c> performs the load's blocking disk I/O itself.
 ///
 /// These four facts make that correction a thing the suite OBSERVES rather than a thing a
-/// record claims. F2 is the SP-072 read-from-inside shape: the thread id is recorded by the
+/// record claims. F2 is the read-from-inside shape: the thread id is recorded by the
 /// product calling the fake, not sampled by the test from outside.
 ///
 /// WHAT THESE FACTS DO NOT PROVE (the other half of the correction, established by reading

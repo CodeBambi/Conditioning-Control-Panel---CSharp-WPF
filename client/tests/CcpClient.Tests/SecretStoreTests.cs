@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// ISecretStore platform implementation proofs (SP-033 slice c1; contract §10; admission
+/// ISecretStore platform implementation proofs (contract §10; admission
 /// §6). Windows: DPAPI round-trip (CurrentUser scope). Linux: typed-Unavailable probe on
 /// WSL2 is the EXPECTED honest evidence (no session daemon — never faked; a working-daemon
 /// proof needs a desktop-session box, named limit). Settings documents carry opaque secret
@@ -17,7 +17,7 @@ public class SecretStoreTests
     [Fact]
     public void WindowsDpapi_RoundTrip_AndFileNeverContainsPlaintext()
     {
-        // SP-066: the OS gate REPORTS (Assert.SkipUnless), never a silent return — the skip
+        // The OS gate REPORTS (Assert.SkipUnless), never a silent return — the skip
         // is pinned by NAME in client/tests/floor/floor.json (allowedSkips; runs on Windows,
         // allowed-skipped on Linux).
         Assert.SkipUnless(OperatingSystem.IsWindows(),
@@ -35,7 +35,7 @@ public class SecretStoreTests
             Assert.Equal(secretValue, store.Get("ai-cloud-token"));
 
             // The on-disk bytes never carry the plaintext value.
-            // SP-066 framing (c): the loop carries these assertions — pin the source
+            // Vacuous-shape framing (c): the loop carries these assertions — pin the source
             // non-empty first so an empty enumeration can never silence them invisibly.
             Assert.NotEmpty(Directory.EnumerateFiles(root));
             foreach (var file in Directory.EnumerateFiles(root))
@@ -63,7 +63,7 @@ public class SecretStoreTests
     [Fact]
     public async Task LinuxProbe_TypedOutcome_NeverFaked()
     {
-        // SP-066: the OS gate REPORTS (Assert.SkipUnless), never a silent return — the skip
+        // The OS gate REPORTS (Assert.SkipUnless), never a silent return — the skip
         // is pinned by NAME in client/tests/floor/floor.json (allowedSkips; runs on the
         // Linux machine class — the WSL2 evidence box and any Linux CI — allowed-skipped
         // on Windows).
@@ -117,7 +117,7 @@ public class SecretStoreTests
     [Fact]
     public void SettingsDocument_CarriesSecretNames_NeverValues()
     {
-        // SP-066: the OS gate REPORTS (Assert.SkipUnless), never a silent return — the skip
+        // The OS gate REPORTS (Assert.SkipUnless), never a silent return — the skip
         // is pinned by NAME in client/tests/floor/floor.json (allowedSkips; runs on Windows,
         // allowed-skipped on Linux).
         Assert.SkipUnless(OperatingSystem.IsWindows(),

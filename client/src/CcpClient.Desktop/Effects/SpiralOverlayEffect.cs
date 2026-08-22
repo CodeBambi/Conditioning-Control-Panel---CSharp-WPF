@@ -10,17 +10,17 @@ namespace CcpClient.Desktop.Effects;
 /// (<c>Views/Tabs/StudioTabView.xaml.cs:490-491</c>), and <b>the first module in the port whose
 /// picture has to keep changing while it is on</b>.
 ///
-/// <para><b>Why this module exists (SP-106), and what it was built to find out.</b> Three modules
+/// <para><b>Why this module exists, and what it was built to find out.</b> Three modules
 /// ran under the spine and none of them had to move: Flash Images and Subliminals are PACED (fire,
 /// wait, fire) and Pink Filter is CONTINUOUS but STATIC (it goes up and stays up). Per-frame work
-/// was the untested axis, and SP-105's own verdict named the risk it carries: a module that must
+/// was the untested axis, and the continuous module's own verdict named the risk it carries: a module that must
 /// change every frame might end up re-implementing a scheduler to get its frames, which is exactly
 /// the thing <see cref="OwnedSessionEffect"/> was created to remove.</para>
 ///
 /// <para><b>The answer, and it is the shape of this file.</b> <see cref="ISessionEffect"/> fits
 /// unchanged (third time). <see cref="OwnedSessionEffect"/> fits unchanged. <b>This module takes no
 /// clock, implements no interval, and owns no timer</b> — the frame cadence lives in
-/// <see cref="SpiralSurfacePresenter"/>, beside the topmost cadence SP-105 already put there, on
+/// <see cref="SpiralSurfacePresenter"/>, beside the topmost cadence the continuous module already put there, on
 /// the precedent that a cadence which keeps a SURFACE correct is the surface's while an interval
 /// that decides when a MODULE is due is <see cref="PacedSessionEffect{TFiring}"/>'s. A spiral is
 /// never "due": it is on, and what is on screen turns.</para>
@@ -201,7 +201,7 @@ public sealed class SpiralOverlayEffect : OwnedSessionEffect
         // The paced modules never meet this: scheduling needs no UI, and their draw is a later posted
         // projection that is simply skipped while the boundary is unbound (contract §5.3). Here the
         // arm and the draw are the same act, so skip-until-bound has to be answered in the arm
-        // result rather than swallowed inside it. (SP-105's finding, unchanged for a fourth module —
+        // result rather than swallowed inside it. (the established finding, unchanged for a fourth module —
         // it is a property of DRAWING at arm time, not of being static.)
         if (!Signal.IsBound)
         {

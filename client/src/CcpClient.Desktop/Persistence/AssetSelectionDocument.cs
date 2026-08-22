@@ -5,10 +5,10 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Persistence;
 
 /// <summary>
-/// SP-055: the user's asset selection (WPF AppSettings parity — `DisabledAssetPaths`
+/// The user's asset selection (WPF AppSettings parity — `DisabledAssetPaths`
 /// AppSettings.cs:1613-1635 + `UseAssetWhitelist` :1637-1646), the persisted half of the
 /// ONE active-pool definition in <c>Features/Dtrh/DtrhUserMedia.cs</c>. App-global (it
-/// spans every user-media consumer), so it lives beside the other SP-005 documents, not
+/// spans every user-media consumer), so it lives beside the other settings documents, not
 /// inside a feature. New dedicated file <c>asset_selection.json</c> in the shared
 /// &lt;dataDir&gt; — additive by construction (a NEW document: no schema bump, no
 /// absent-member case; a Missing outcome is fresh defaults).

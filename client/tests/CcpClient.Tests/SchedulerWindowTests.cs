@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-118 — <c>IsInScheduledTimeWindow()</c> (<c>MainWindow/MainWindow.StartStop.cs:642-696</c>),
+/// <c>IsInScheduledTimeWindow()</c> (<c>MainWindow/MainWindow.StartStop.cs:642-696</c>),
 /// clause by clause.
 ///
 /// <para><b>Every fact in this file is about the predicate saying NO.</b> It decides whether an app
@@ -116,7 +116,7 @@ public class SchedulerWindowTests
         doc.Monday = doc.Tuesday = doc.Wednesday = doc.Thursday = doc.Friday = doc.Saturday = doc.Sunday = false;
         SetDay(doc, day, true);
 
-        // Depth-0 pin (SP-066 framing (c)): the loop below carries every assertion in this fact,
+        // Depth-0 pin (vacuous-shape framing (c)): the loop below carries every assertion in this fact,
         // so an empty source would make it pass while checking nothing. Seven is also the fact —
         // upstream's switch has seven arms and an unreachable default (:648-659).
         var everyDay = Enum.GetValues<DayOfWeek>();
@@ -402,7 +402,7 @@ public class SchedulerWindowTests
             }
         }
 
-        // Depth-0 pins (SP-066 framing (c)), and they are not bookkeeping: a sweep whose loop ran
+        // Depth-0 pins (vacuous-shape framing (c)), and they are not bookkeeping: a sweep whose loop ran
         // zero times, or whose predicate was stuck on one answer, would satisfy every assertion
         // inside the loop while proving nothing. Both verdicts must really have been produced.
         Assert.Equal(7 * 131, samples);

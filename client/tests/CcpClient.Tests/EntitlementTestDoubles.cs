@@ -3,7 +3,7 @@ using CcpClient.Desktop.Entitlement;
 
 namespace CcpClient.Tests;
 
-// SP-092 shared fixtures and seams for the entitlement tests.
+// Shared fixtures and seams for the entitlement tests.
 //
 // PRIVACY RULE, MECHANICAL RATHER THAN ASSUMED: no test in this suite contains a real token
 // and no test reads the developer's real %LOCALAPPDATA%/ConditioningControlPanel/auth_token.dat.

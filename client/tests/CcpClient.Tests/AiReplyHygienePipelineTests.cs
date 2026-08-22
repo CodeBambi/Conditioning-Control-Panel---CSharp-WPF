@@ -6,9 +6,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-069 seam facts: the three hygiene layers and the UNION moderation rule are LIVE in the
+/// Seam facts: the three hygiene layers and the UNION moderation rule are LIVE in the
 /// real pipeline at the reply seam (`AiOperationPipeline.cs`, `produced is AiReply.Generated`
-/// block), upstream of SP-068's link strip. Proves: the union rule in BOTH directions (a
+/// block), upstream of the link strip. Proves: the union rule in BOTH directions (a
 /// forbidden token visible only after hygiene blocks; a forbidden token removed by hygiene
 /// still blocks), H3 detection yields the typed `MalformedOutput` with the recoverable
 /// `"response"` text NEVER displayed, persisted, or executed, the port's own trigger echo is
@@ -188,7 +188,7 @@ public class AiReplyHygienePipelineTests
         // (TryLiftResponseField, AiResponseParser.cs:60); the port REFUSES — the text must not
         // reach the bubble (reply is not Generated), memory (no write admission, empty context,
         // nothing on disk), or any execution path (the port wires no command execution into the
-        // reply seam — AiEnvelopeValidator stays unwired, SP-044's row).
+        // reply seam — AiEnvelopeValidator stays unwired, per its board row).
         using var h = new Harness(Policy, Reply("{\"response\":\"recoverable text\",\"commands\":[{\"command\":\"bubbles\"}]}"));
         await h.AdmitAsync();
 
@@ -257,7 +257,7 @@ public class AiReplyHygienePipelineTests
     [Fact]
     public async Task HygieneEmptiedReply_TypedUnavailable_TurnPairNeverAppended()
     {
-        // Nothing but a scratchpad: H1 empties the reply; the SP-068 emptied path answers with
+        // Nothing but a scratchpad: H1 empties the reply; the emptied path answers with
         // the existing typed code and the atomic turn-pair rule holds (neither turn appended).
         using var h = new Harness(Policy, Reply("<think>only scratch</think>"));
         await h.AdmitAsync();

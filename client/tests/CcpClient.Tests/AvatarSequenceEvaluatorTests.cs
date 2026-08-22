@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Sequence-evaluator tests (SP-015 Step 2): every named verdict exercised on synthetic
+/// Sequence-evaluator tests: every named verdict exercised on synthetic
 /// capture series — pass AND fail shapes — incl. multiplied-speed falsification via
 /// non-uniform-delay schedule discrimination and the resume successor/cadence assertions.
 /// </summary>
@@ -111,7 +111,7 @@ public sealed class AvatarSequenceEvaluatorTests
     [Fact]
     public void ScheduleFit_LongHoldQuantizationDoesNotPhantomFail()
     {
-        // SP-015 Step-4 headed finding: the pose clip's 1400ms holds quantize within-hold
+        // Headed finding: the pose clip's 1400ms holds quantize within-hold
         // samples to residuals up to ~700ms — a max-residual phase fit phantom-FAILs the
         // true 1x cadence. The speed estimate is quantization-robust: poses at headed
         // capture spacing must pass, and a doubled-speed pose run must still fail.

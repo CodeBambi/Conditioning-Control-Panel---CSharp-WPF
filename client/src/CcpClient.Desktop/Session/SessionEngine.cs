@@ -39,7 +39,7 @@ public sealed class SessionEngine
 
     /// <param name="effects">The rack's modules, in WPF's rack order.</param>
     /// <param name="preset">The persisted preset the session saves before it starts anything.</param>
-    /// <param name="signal">Where <see cref="Changed"/> is delivered (SP-101). The engine raises its
+    /// <param name="signal">Where <see cref="Changed"/> is delivered. The engine raises its
     /// OWN notifications on START, STOP and quick-toggle, and those are raised from the caller's
     /// thread — teardown's, on the stop path — so they need the same marshalling the modules' do.
     /// Omitting it raises inline, which is what a caller with no UI at all wants.</param>
@@ -76,7 +76,7 @@ public sealed class SessionEngine
     }
 
     /// <summary>
-    /// What each module said the last time it was armed, by module id (SP-101). Empty before the
+    /// What each module said the last time it was armed, by module id. Empty before the
     /// first START.
     ///
     /// <para>This is the reason <see cref="ISessionEffect.Arm"/> stopped returning <c>void</c>: a
@@ -145,7 +145,7 @@ public sealed class SessionEngine
         {
             // The outcome is RECORDED rather than discarded: a module that armed nothing is a fact
             // about this session, and dropping it here would put the typed refusal back where it
-            // was before SP-101 — expressible and unobserved.
+            // was before — expressible and unobserved.
             _armOutcomes[effect.Id] = effect.Arm();
         }
 

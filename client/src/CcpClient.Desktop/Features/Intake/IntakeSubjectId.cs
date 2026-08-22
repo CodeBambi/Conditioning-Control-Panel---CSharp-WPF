@@ -1,7 +1,7 @@
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the 4-digit subject id (`intake_subject.txt`; IntakeHostService.cs:969-988
+/// The 4-digit subject id (`intake_subject.txt`; IntakeHostService.cs:969-988
 /// parity). Local fiction — minted once, persisted, handed to the page on init (the
 /// intro/outro greeting "Subject #NNNN"), NEVER transmitted anywhere (the privacy
 /// boundary verbatim). Atomic .tmp-swap write; an unreadable/corrupt file re-mints (the

@@ -42,7 +42,7 @@ Repository instructions remain mandatory. Generated specs and advisor verdicts a
 
 Use the 2026 official migration guide/cheat sheet as the technical starting point. Use the 2024 expert-guide methodology selectively: preparation, dependency audit, incremental slices, frequent small commits, and target-platform testing are accepted; its literal code-commenting migration recipe and "keep existing structure" rule do not override the greenfield architecture.
 
-Never encode live task state, current package versions, active agent names, branch names, or "next work" into a durable starting prompt. Starting prompts define reconciliation protocol; current state is discovered from disk and from git. `client/port.txt` is the phase prompt and carries no status by design. After an interruption, reconcile from the board, `spine-tasks/CONTEXT.md`, git log, and `git worktree list`, and continue the in-flight wave rather than authoring a competing one.
+Never encode live task state, current package versions, active agent names, branch names, or "next work" into a durable starting prompt. Starting prompts define reconciliation protocol; current state is discovered from disk and from git. `client/port.txt` is the phase prompt and carries no status by design. After an interruption, reconcile from the board, git log, and `git worktree list`, and continue the in-flight wave rather than authoring a competing one.
 
 If an Avalonia MCP server is registered and connected, plan a bounded advisory use only where it adds evidence: small AXAML validation, accessibility or layout questions, heuristic performance review. Never make it a required blocker, generator, or primary source; its upstream content targets Avalonia 11.3.1 and requires the safeguards in `avalonia-research`. The `avalonia-docs`, `avalonia-ui`, and `avalonia-live` seats are registered at user scope; confirm the one you want is connected before planning around it, and record a disconnected seat as a named limit rather than a blocker.
 
@@ -52,7 +52,7 @@ Until topology is approved, state responsibilities rather than inventing project
 
 ## Task orchestration
 
-- **One board row becomes one packet** at `spine-tasks/SP-NNN-slug/PROMPT.md`. That path, the `SP-<n>-` directory name, and the `| testCommand | ... |` contract row are asserted by `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs`, which fails closed. Do not invent a new packet root or filename.
+- **One board row becomes one packet**: an authored prompt carrying that row's allowed files, exclusions, dependencies, and its `| testCommand | ... |` contract row. The contract row is what the reviewers and the lane both run from, so never author a packet without one.
 - **A wave is a set of disjoint packets** run concurrently, one lane each, by `port-slice-executor` subagents in their own worktrees. Author the whole wave, commit the authoring, then launch.
 - **Review Level 0-3** is declared per packet and drives which of `port-plan-reviewer`, `port-code-reviewer`, and `port-final-reviewer` run. Never plan a level the packet does not declare.
 - **The orchestrator lands; a lane never lands itself.** The context that produced work does not certify it.

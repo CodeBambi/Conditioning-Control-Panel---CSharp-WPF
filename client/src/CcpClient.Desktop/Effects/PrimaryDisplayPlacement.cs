@@ -5,12 +5,12 @@ namespace CcpClient.Desktop.Effects;
 /// <summary>
 /// Where a bounded, centred rectangle goes on the primary display, in physical pixels.
 ///
-/// <para><b>Why this file exists, and it is SP-101's finding arriving a second time.</b> SP-110 gave
-/// <c>LockCardEffect</c> a private <c>DefaultPlacement</c>; SP-111 gave
+/// <para><b>Why this file exists, and it is the shared body's finding arriving a second time.</b> One packet gave
+/// <c>LockCardEffect</c> a private <c>DefaultPlacement</c>; the next gave
 /// <see cref="VideoSurfacePresenter"/> its own private copy of the same twenty lines. Both walk
 /// <see cref="OverlayDisplays.Enumerate"/>, both pick the primary display (falling back to index 0),
-/// both take a fraction of it and both centre it. SP-112 was about to write the THIRD copy, which is
-/// exactly the shape SP-101 refused for the effect template: a pattern that holds while three of its
+/// both take a fraction of it and both centre it. A third was about to be written, which is
+/// exactly the shape refused for the effect template: a pattern that holds while three of its
 /// parts are per-module copies is a pattern nobody is really sharing.</para>
 ///
 /// <para><b>What is deliberately NOT shared: the fractions, and what an empty enumeration means.</b>

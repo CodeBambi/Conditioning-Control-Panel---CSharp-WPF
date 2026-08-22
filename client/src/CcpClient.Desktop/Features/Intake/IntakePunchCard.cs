@@ -34,7 +34,7 @@ public sealed class IntakePendingDraft
 }
 
 /// <summary>
-/// SP-054: the intake punch card on SP-005 machinery (WPF Services/Progression/IntakePunchCardService.cs,
+/// The intake punch card on persistence machinery (WPF Services/Progression/IntakePunchCardService.cs,
 /// 395 lines — the transition and Sanitize bodies were read for this port). 8 holes, the
 /// FIRST HOLE FREE (:139-148); holes 2-8 need a completed intake AND the drafted session run
 /// ≥50% or to natural end (:181-210).
@@ -47,13 +47,13 @@ public sealed class IntakePendingDraft
 ///
 /// **UiEnabled=false parity (:55-62):** the card UI is HIDDEN in WPF itself (prize TBD)
 /// while stamping continues — greenfield parity = silent stamping, NO painted card (the
-/// SP-050 table's "NOTHING today" cell, honest).
+/// audit table's "NOTHING today" cell, honest).
 ///
 /// The 8th hole sets CompletedUtc; the prize is deliberately NOT granted client-side;
 /// <see cref="MarkPrizeClaimed"/> stops a double hand-over (:215-249).
 ///
 /// Persistence: WPF's 30s dirty-flush + atomic .tmp-swap + main→.tmp load ladder
-/// (:101-107, :261-290, :327-342) rides the SP-005 store (chained writer, atomic
+/// (:101-107, :261-290, :327-342) rides the persistence store (chained writer, atomic
 /// temp+rename+flush, typed Quarantined/NewerSchema outcomes); a punch saves IMMEDIATELY
 /// (:212-236 — "a punch is the payoff for an hour of work"). The load REPAIRS are ported
 /// as <see cref="Repair"/> (pure, returns whether anything changed so the caller saves and
@@ -226,7 +226,7 @@ public sealed class IntakePunchCard
     /// <summary>
     /// The load repairs (Sanitize :300-324), pure: fix anything a hand-edited or drifted
     /// file could assert; returns true when anything changed (the caller saves so the file
-    /// HEALS — the WPF :305-314 remarks). Run once after the store's phase-3 load; SP-005's
+    /// HEALS — the WPF :305-314 remarks). Run once after the store's phase-3 load; the store's
     /// typed Quarantined/NewerSchema outcomes replace WPF's .tmp load ladder (:261-290).
     /// </summary>
     public static bool Repair(IntakePunchCardDocument s, DateTimeOffset utcNow)

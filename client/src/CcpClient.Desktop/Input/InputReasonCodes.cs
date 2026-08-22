@@ -40,7 +40,7 @@ public static class InputReasonCodes
     /// keyboard focus is some other window, or the window manager routes a point inside it
     /// elsewhere. The foreground is lent by the OS and can be refused — measured: a plain
     /// <c>SetForegroundWindow</c> from a process that does not already own the foreground returns
-    /// FALSE and no keystroke arrives (SP-110 plan.md §0, run 1).
+    /// FALSE and no keystroke arrives (the packet plan.md §0, run 1).
     /// </summary>
     public const string InputNotCaptured = "input-not-captured";
 

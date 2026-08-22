@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-032 q2 DTRH bark routing conformance: the full WPF RouteBark event table
+/// Q2 DTRH bark routing conformance: the full WPF RouteBark event table
 /// (DtrhHostService.cs:618-650 → BarkService.cs:262-365), fill-key mapping, reused-voice
 /// constants, and typed unrouted/malformed handling.
 /// </summary>

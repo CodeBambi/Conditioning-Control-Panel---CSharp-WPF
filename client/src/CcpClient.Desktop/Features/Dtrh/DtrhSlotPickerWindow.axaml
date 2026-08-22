@@ -6,8 +6,8 @@
         Background="#0b0b16"
         WindowStartupLocation="CenterOwner">
   <!--
-    SP-024 slice b2: the pre-descent save picker. Ports the WPF OUTCOMES
-    (ChaosSlotPickerWindow.xaml.cs — archaeology cites in SP-024 record Step 1), never
+    Slice b2: the pre-descent save picker. Ports the WPF OUTCOMES
+    (ChaosSlotPickerWindow.xaml.cs — archaeology cites in the packet record Step 1), never
     the WPF mechanics. Visual grammar follows the b1 host surface (DtrhHostWindow.axaml:
     dark #0b0b16, pink accent) per dashboard-design — the greenfield has no theme-token
     system yet (recorded, not invented).

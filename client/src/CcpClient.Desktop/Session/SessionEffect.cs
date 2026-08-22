@@ -39,7 +39,7 @@ public enum EffectDotState
 /// which is why it is deliberately small: a stable identity, a display title, one persisted
 /// dial, a truthful dot, and an arm/disarm pair with an owned completion behind it.
 ///
-/// <para>Implementations must be idempotent (the SP-003 §5.3 participant rule at effect
+/// <para>Implementations must be idempotent (the lifecycle contract's §5.3 participant rule at effect
 /// granularity): arming an armed effect starts no second generation, and disarming a
 /// never-armed effect is a no-op.</para>
 /// </summary>
@@ -71,7 +71,7 @@ public interface ISessionEffect
     /// <summary>
     /// Raised when the dot, the counters or the dial move.
     ///
-    /// <para><b>Delivered on the UI thread whenever one exists</b> (SP-101). It used to be raised on
+    /// <para><b>Delivered on the UI thread whenever one exists</b>. It used to be raised on
     /// whatever thread moved the state, which pushed the marshalling onto every consumer; two
     /// consumers carried the same hand-written <c>CheckAccess</c>-or-<c>Post</c> body and agreed,
     /// and the fifteenth would not have. The producer now owns it — see
@@ -91,8 +91,8 @@ public interface ISessionEffect
     /// Take ownership of a live generation and schedule the work. Called by the session on
     /// START, and by the quick-toggle when a module is switched on mid-session.
     ///
-    /// <para><b>It returns a typed outcome (SP-101), and that is not decoration.</b> This method
-    /// returned <c>void</c> through SP-098 and SP-100, which meant "this module took the session and
+    /// <para><b>It returns a typed outcome, and that is not decoration.</b> This method
+    /// returned <c>void</c> through the first two modules, which meant "this module took the session and
     /// is paced" and "this module did nothing at all" were literally the same observation. Two
     /// modules whose only precondition is a persisted flag survive that; the modules still queued —
     /// the ones that need an audio device, a webcam, a display server — cannot, because a module

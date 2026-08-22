@@ -6,7 +6,7 @@ using CcpClient.Desktop.Session;
 namespace CcpClient.Desktop.Views.Pages;
 
 /// <summary>
-/// The Lock Card panel's sentences (SP-110), in their own file for the reason
+/// The Lock Card panel's sentences, in their own file for the reason
 /// <see cref="RampPanelNotices"/> and <see cref="AudioPanelNotices"/> are in theirs:
 /// <c>StudioPage.axaml.cs</c> carries every landed module's rendered claims and does not scale, and
 /// the extraction that fixes it is not this packet's risk to take. New text starts where the
@@ -51,10 +51,10 @@ public static class InputPanelNotices
     /// The live-state line, off the row's own dot plus its counters.
     ///
     /// <para>The <see cref="EffectDotState.Armed"/> arms are several sentences rather than one, on
-    /// the SP-105 finding this port keeps re-learning: a module that is Armed because no session is
+    /// the finding this port keeps re-learning: a module that is Armed because no session is
     /// running and a module that is Armed DURING a session because the OS will not give it the
     /// keyboard are completely different situations, and telling the second to "start a session" —
-    /// which they already did — is the exact message SP-105 had to split apart.</para>
+    /// which they already did — is the exact message that had to be split apart.</para>
     /// </summary>
     public static string DescribeCardState(
         EffectDotState dot,
@@ -89,7 +89,7 @@ public static class InputPanelNotices
         {
             // THE STATE THIS MODULE'S DOT EXISTS FOR. A card is up and the OS has the keyboard
             // somewhere else, so the user is not in fact being asked anything — measured as a real
-            // state, not imagined (SP-110 plan.md §0).
+            // state, not imagined (this row's plan §0).
             return "A card is on screen and the operating system has given the keyboard to another "
                 + "window, so nothing you type reaches it. Click the card to give it the keyboard back.";
         }
@@ -119,7 +119,7 @@ public static class InputPanelNotices
             // one of them. `Refused` is reached when the OS would not give the card the keyboard AND
             // when it did and only the ink read-back refused; those are opposite facts about the
             // operating system, and telling a user the first when the second happened is exactly the
-            // panel defect SP-105 and SP-109 each shipped once — a sentence true for one branch and
+            // panel defect two earlier rows each shipped once — a sentence true for one branch and
             // false for another that reaches it. The capability's own typed outcome is what tells
             // them apart, so it is what decides the words.
             LockCardResolution.Refused when lastPrompt is CapabilityState.Degraded =>

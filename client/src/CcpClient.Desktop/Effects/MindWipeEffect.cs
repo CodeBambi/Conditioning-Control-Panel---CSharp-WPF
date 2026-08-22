@@ -104,7 +104,7 @@ public sealed class MindWipeEffect : AudioCueEffect
     }
 
     /// <summary>The frequency dial. Writes and re-evaluates, the port's convention for every module's
-    /// dial since SP-105 — and it matters here because the dial changes the ODDS of the next window,
+    /// dial — and it matters here because the dial changes the ODDS of the next window,
     /// so a user who turns it up expects the next ten seconds to be more likely, not the one after
     /// the current schedule expires.</summary>
     public void SetPerHour(int perHour)

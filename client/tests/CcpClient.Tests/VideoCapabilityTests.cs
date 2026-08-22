@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-111 — what the operating system says about a video frame reaching a surface, and where the
+/// What the operating system says about a video frame reaching a surface, and where the
 /// chain stops.
 ///
 /// <para><b>The distinction every fact in this file exists to hold open:</b> "frames decoded" is not
@@ -173,7 +173,7 @@ public class VideoCapabilityTests
                 $"frame {i}: the bar control point must come back EXACTLY the colour the painter filled it with. "
                 + "Without this clause the picture count means nothing — the surface's window class registers no "
                 + "background brush, so an UNPAINTED window's device context holds whatever the OS left in it and "
-                + "reads as 'not the background' just as reliably as a painted one (SP-110's M-t)");
+                + "reads as 'not the background' just as reliably as a painted one (M-t)");
 
             Assert.Equal(9, frame.PictureSampled);
             Assert.Equal(frame.PictureSampled, frame.PictureMatched);

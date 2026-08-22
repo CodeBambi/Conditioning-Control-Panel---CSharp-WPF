@@ -4,11 +4,11 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-064 refusal pin — table-driven over the ONE registry (<see cref="HarnessEntryPoints.All"/>).
+/// The refusal pin — table-driven over the ONE registry (<see cref="HarnessEntryPoints.All"/>).
 /// A new class-1 flag added to the registry inherits the refusal pin automatically; a flag
 /// silently RE-classified out of Harness fails the count pin. Pure: no environment reads —
 /// Program.Main reads <see cref="CompositionRoot.ActiveDataRootOverride"/> itself, so these
-/// facts never mutate process env and need no ProcessEnvCollection membership (SP-062).
+/// facts never mutate process env and need no ProcessEnvCollection membership.
 /// The behavioral proof that the gate rides the REAL entry point is the real-process run
 /// (record.md Step 3) backed by the wiring assertion in HarnessEntryPointGuardTests — NOT an
 /// in-process Program.Main call (a gate regression would hang the suite or write the real
@@ -19,7 +19,7 @@ public class HarnessEntryPointGateTests
     [Fact]
     public void HarnessEntries_AreSingledOut_TableDrivenOverRegistry()
     {
-        // SP-066 framing (c): the loop carries the only assertions — pin the registry
+        // Loop framing (c): the loop carries the only assertions — pin the registry
         // non-empty (the count pin below covers the Harness subset; this covers All).
         Assert.NotEmpty(HarnessEntryPoints.All);
         foreach (var (flag, disposition) in HarnessEntryPoints.All)

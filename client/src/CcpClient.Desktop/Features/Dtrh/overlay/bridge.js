@@ -7,7 +7,7 @@
  * 'ready', and we buffer any message that lands before its handler is
  * registered - so neither side ever races the other's boot.
  * ----------------------------------------------------------------------------
- * PRODUCT DERIVATIVE (SP-023): payload blob 13af3f4d + the dtrh-admission.md
+ * PRODUCT DERIVATIVE: payload blob 13af3f4d + the dtrh-admission.md
  * §3.1 minimal transport-only diff, and NOTHING else:
  *   (a) import-time isHosted also accepts invokeCSharpAction (WebKitGTK);
  *   (b) send(): chrome.webview -> native postMessage(object); else

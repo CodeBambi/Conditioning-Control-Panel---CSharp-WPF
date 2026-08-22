@@ -1,4 +1,4 @@
-# Migration checklist validation — first visible slice (SP-007)
+# Migration checklist validation — first visible slice
 
 Task-board row 6 / A-012: every item of the official WPF→Avalonia migration checklist is exercised
 by the first visible slice (dashboard window + `demo.status-ticker` demonstrator card) with a
@@ -22,14 +22,14 @@ Official sources (all fetched 2026-07-19, verified current):
 | 7 | Pointer input (right-click quick-toggle) | `PointerPressed` handler on the card, explicit `PointerUpdateKind.RightButtonPressed` check, `e.Handled = true` — WPF parity outcome (FeatureCard.xaml.cs:248-261) | Real mouse_event right-down/up at card center (headed): tick text appeared (`tick 2`) and advanced (2→6); no popup/context menu appeared. WPF parity outcome reproduced | cheat sheet §Events (pointer events, routing, `e.Handled`) | observed |
 | 8 | Keyboard input path | Focusable card + `KeyBinding Gesture="Enter"` → same `ICommand` | Real input: left-click focuses card body, `{ENTER}` → tick row vanished (bounds reverted to 77), second `{ENTER}` → tick 10 running again | cheat sheet §Commands (`KeyBinding` same concept) | observed |
 | 9 | Scaling | App-measured layout probe (card DIP bounds + `RenderScaling`) + pixel sizes | 100% (Windows): `card 488.0x77.0 DIP @ scale 1`, UIA cross-check 488×77 px; all 3 monitors report scale 1.0 (GetDpiForMonitor — environment fact). 150% (WSL2/X11, official `AVALONIA_GLOBAL_SCALE_FACTOR=1.5`): `card 488.0x70.7 DIP @ scale 1.5`, X window 780×1020 px (= 520×680 × 1.5 exactly). DIP bounds scale-invariant; physical pixels scale exactly | cheat sheet §Platform services; Avalonia 12.1.0 source `src/Avalonia.X11/Screens/X11Screens.Scaling.cs:206-211` (env override), `src/Avalonia.Controls/TopLevel.cs:514` (RenderScaling get-only) | observed (Windows-150%: manual-gate) |
-| 10 | Teardown | Single guarded teardown (SP-003/SP-004 contracts); mid-operation window close | Headed: ticker running (tick 10) → CloseMainWindow → exit 0, settings file contained `"statusTickerEnabled": true` (flush). Unit: owned completion terminates `OperationOutcome.Cancelled` through the real composition root | startup-shutdown-contract §6; async-lifecycle-fault-contract §6 | observed |
+| 10 | Teardown | Single guarded teardown (startup and async-lifecycle contracts); mid-operation window close | Headed: ticker running (tick 10) → CloseMainWindow → exit 0, settings file contained `"statusTickerEnabled": true` (flush). Unit: owned completion terminates `OperationOutcome.Cancelled` through the real composition root | startup-shutdown-contract §6; async-lifecycle-fault-contract §6 | observed |
 
 ## Carve-outs and gates (named, never claimed)
 
 - **Left-click settings popup:** carved out (A-005 per-window contract; dashboard/feature rows own it).
   No left-click handler exists on the card; a wired no-op would be a capability lie. The headed
   keyboard-path click focuses the card only.
-- **Linux Wayland:** WSLg is XWayland-only (SP-006 session-probe facts, re-observed this task:
+- **Linux Wayland:** WSLg is XWayland-only (session-probe facts, re-observed this task:
   the app's own capability surface reports "linux wayland session with X11 offered via XWayland…
   session facts only — not a claim about the selected Avalonia backend"). `Avalonia.Wayland` opt-in
   is an open owner question under `architecture.md` A-002. Wayland evidence is a named gate — this task

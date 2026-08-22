@@ -6,7 +6,7 @@ using Reason = CcpClient.Desktop.Features.Intake.IntakePassService.IntakePassRea
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-095 (overturn round): the Graded Intake weekly-pass gate as a pure function.
+/// The overturn round: the Graded Intake weekly-pass gate as a pure function.
 ///
 /// <para>The packet first shipped this door UNGATED, on the reasoning that a local refusal would
 /// be a claim about the install. That was wrong in the direction that matters. Unlimited retakes
@@ -15,7 +15,7 @@ namespace CcpClient.Tests;
 /// (<c>Services/Progression/IntakePassService.cs:13</c>) and "The intake is a premium Exclusive …
 /// free accounts get ONE run per week … while retakes stay a reason to subscribe" (<c>:26-29</c>)
 /// — so an ungated door hands every user paid content. These facts are the closure of that hole,
-/// the same class SP-094 closed at <c>DtrhGate</c> for an undefined tier.</para>
+/// the same class that was closed at <c>DtrhGate</c> for an undefined tier.</para>
 ///
 /// <para>The other half is that the refusal must be HONEST. WPF gives a free, signed-out user
 /// <c>NeedsLogin</c> ("The pass is per-account, so there is nothing to hand out yet", <c>:15</c>;
@@ -119,7 +119,8 @@ public class IntakePassGateTests
     public void SignedOut_RefusesWithWpfsPerAccountCopy_AndIsItsOwnBranch()
     {
         // Unreachable in this build (no login provider exists), implemented rather than collapsed
-        // because the state is real upstream and collapsing it would be the boolean SP-092 bans.
+        // because the state is real upstream and collapsing it would be the boolean the
+        // entitlement capability bans.
         var needsAccount = Assert.IsType<IntakePassDecision.RefusedNeedsAccount>(
             IntakePassGate.Decide(State.NeedsLogin, Reason.LoginRequired, AnyDays));
 
@@ -194,7 +195,7 @@ public class IntakePassGateTests
     [Fact]
     public void Classify_NamesTheBranchAndTheReason_AndNeverTheMessage()
     {
-        // The log line's job is classification (the SP-092 discipline). A message in a log is how
+        // The log line's job is classification (the entitlement discipline). A message in a log is how
         // authored copy becomes an accidental telemetry field.
         Assert.Equal("proceed(premium)", IntakePassGate.Classify(
             IntakePassGate.Decide(State.Premium, Reason.PremiumEntitled, AnyDays)));

@@ -6,13 +6,13 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// LAB matrix (SP-035 slice c2; admission §8 c2): the REAL LoopbackOllamaProvider behind
+/// LAB matrix (slice c2; admission §8 c2): the REAL LoopbackOllamaProvider behind
 /// the REAL c1 pipeline against the deterministic loopback lab — real sockets on
 /// 127.0.0.1, zero external network. Rows: ok round-trip, mid-stream cancel (lab observes
 /// client-gone), timeout classification through the pipeline (token not poisoned), 429 /
 /// 500 / refusal / malformed / truncated with exact lab hit counts, slow-ok late
 /// completion → exactly 1 stale discard at the application seam (test-side
-/// uncooperative-transport decorator, SP-019 RequestDetachedAsync shape), LIVE panic
+/// uncooperative-transport decorator, the spike's RequestDetachedAsync shape), LIVE panic
 /// against a real in-flight network operation, remote-host pre-socket rejection in-product
 /// (both layers), and the offline zero-network re-verify.
 /// </summary>
@@ -21,7 +21,7 @@ public class AiProviderLabIntegrationTests
     private static readonly AiRequest Request = new("lab-prompt");
 
     /// <summary>
-    /// Test-side UNCOOPERATIVE transport (SP-019's RequestDetachedAsync dual-transport
+    /// Test-side UNCOOPERATIVE transport (the spike's RequestDetachedAsync dual-transport
     /// shape): the token is swallowed so the REAL network operation completes LATE; the
     /// pipeline's application seam — never the transport — is where the stale result dies.
     /// The socket, the lab, and the response body are fully real.
@@ -50,7 +50,7 @@ public class AiProviderLabIntegrationTests
             var options = new LoopbackOllamaProviderOptions
             {
                 Host = host ?? Lab.Host,
-                RequestTimeout = TestWait.InjectedBudget, // SP-063: never decides an outcome
+                RequestTimeout = TestWait.InjectedBudget, // Never decides an outcome
                 ProbeTimeout = TestWait.InjectedBudget,
                 Retry = retry ?? AiRetryPolicy.Off,
             };
@@ -75,7 +75,7 @@ public class AiProviderLabIntegrationTests
     }
 
     /// <summary>Waits for the lab (a real socket actor on another thread) to record a request.
-    /// Class 2 (SP-059): a real external actor — the tolerant window with the loud classifier,
+    /// Class 2: a real external actor — the tolerant window with the loud classifier,
     /// via the single approved helper. No bare deadline literal.</summary>
     private static async Task<AiLabRequestRecord> WaitForRecordAsync(AiProviderLab lab, AiLabMode mode)
     {
@@ -89,7 +89,7 @@ public class AiProviderLabIntegrationTests
     }
 
     /// <summary>The actor-state snapshot for in-flight waits: the differential between "the
-    /// request never left the client" and "it reached the lab but no reply came" (SP-059
+    /// request never left the client" and "it reached the lab but no reply came" (the
     /// pre-approach consult — the evidence must travel with the verdict).</summary>
     private static string InFlightState(Harness h) =>
         $"provider sends={h.Provider.SendAttempts} bytes={h.Provider.BytesReadSoFar} lab hits={h.Lab.HitCount}";
@@ -251,7 +251,7 @@ public class AiProviderLabIntegrationTests
     public async Task SlowOk_LateCompletion_ExactlyOneStaleDiscard_ZeroApplied()
     {
         // The REAL transport (socket, lab, 1.5s-late body) with a test-side token-swallowing
-        // decorator — the SP-019 detached-transport shape: a late arrival dies at the seam.
+        // decorator — the spike's detached-transport shape: a late arrival dies at the seam.
         using var h = new Harness(uncooperative: true);
         await h.SelectAndProbeAsync();
         h.Lab.Inject(AiLabMode.SlowOk);

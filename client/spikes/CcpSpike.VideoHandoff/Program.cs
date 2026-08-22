@@ -1,7 +1,7 @@
 namespace CcpSpike.VideoHandoff;
 
 /// <summary>
-/// SP-018 spike host. Modes:
+/// Video-handoff spike host. Modes:
 ///   (default)        decode-level matrix run (lab + native decode probes, M1-M8)
 ///   --audit-logs DIR sensitive-logging self-check over DIR (FAILS on any secret value)
 /// </summary>

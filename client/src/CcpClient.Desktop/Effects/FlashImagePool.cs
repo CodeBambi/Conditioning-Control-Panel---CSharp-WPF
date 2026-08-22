@@ -28,7 +28,7 @@ public interface IFlashImagePool
 /// the port's shape of WPF's <c>App.EffectiveAssetsPath/images</c>
 /// (<c>FlashService.cs:331</c>). One folder, not a second one for flashes.</para>
 ///
-/// <para><b>Active-pool discipline (SP-055).</b> Whether a file is still in play is decided by
+/// <para><b>Active-pool discipline.</b> Whether a file is still in play is decided by
 /// the port's ONE seam, <see cref="DtrhUserMedia.IsAssetActive"/> — the same uncheck that hides
 /// an image from the descent hides it from a flash, which is upstream's shipped contract
 /// (<c>AppSettings.cs:1637</c> gate + <c>IntakeHostService.cs:783-790</c> normalization). This

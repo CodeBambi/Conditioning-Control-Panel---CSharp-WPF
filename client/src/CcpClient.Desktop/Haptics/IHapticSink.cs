@@ -206,7 +206,7 @@ public sealed record HapticServerObservation(
 /// That is a named manual gate (<c>HapticSinkFactory.DeviceManualGate</c>) and no automated step on
 /// any platform discharges it.</para>
 ///
-/// <para><b>SP-126: FIVE statements in the effect spine now COMMAND this sink</b>, through
+/// <para><b>FIVE statements in the effect spine now COMMAND this sink</b>, through
 /// <see cref="IHapticLimb"/> and <see cref="HapticLimb"/> — a flash image placed, a clip really
 /// playing, a clip off the screen, a subliminal card shown, a bouncing word hitting an edge.
 /// Upstream drives haptics from <b>EIGHTEEN</b> sites in the whole
@@ -216,7 +216,7 @@ public sealed record HapticServerObservation(
 /// <c>HapticSiteCensusTests</c>, which re-derives the candidate set from the shipping bytes rather
 /// than trusting a figure typed into a comment. <b>This paragraph used to say THIRTEEN over three
 /// named files</b>, which was the count before the searched universe widened from a file list to
-/// the three directories — corrected at SP-120 and rewritten here at SP-126 (D202).</para>
+/// the three directories — corrected once and rewritten here (D202).</para>
 ///
 /// <para><b>Nothing is DELIVERED, and the reason is now one rung further out.</b> It is no longer
 /// that the modules are silent; it is that the limb has nothing to address.

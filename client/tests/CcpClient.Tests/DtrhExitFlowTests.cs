@@ -4,10 +4,10 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-027 slice b5: the graceful-exit flow (DtrhExitFlow — wind-down → bounded exit-done
+/// Slice b5: the graceful-exit flow (DtrhExitFlow — wind-down → bounded exit-done
 /// wait → force close; WPF CloseActive :149-160, exit :312-314, exit-done :316, exit
 /// watchdog 1200ms :880) and the 0x800700AA stale-profile-lock classification + typed
-/// recovery outcomes (DtrhProfileLock; SP-023 surprise #7).
+/// recovery outcomes (DtrhProfileLock; DTRH probe surprise #7).
 /// </summary>
 public class DtrhExitFlowTests
 {
@@ -95,7 +95,7 @@ public class DtrhExitFlowTests
     }
 }
 
-/// <summary>SP-027 slice b5: 0x800700AA stale-profile-lock classification + recovery.</summary>
+/// <summary>Slice b5: 0x800700AA stale-profile-lock classification + recovery.</summary>
 public class DtrhProfileLockTests
 {
     [Fact]

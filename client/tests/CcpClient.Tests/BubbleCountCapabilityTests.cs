@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-112's real-desktop facts. They ask the operating system ONE thing the module's own facts
+/// This module's real-desktop facts. They ask the operating system ONE thing the module's own facts
 /// cannot: whether the video capability holds a picture this process COMPOSED as readily as one its
 /// decoder produced — and whether the overlay and the input capability are unharmed by a module
 /// that uses both of the others in one game.
@@ -71,7 +71,7 @@ public class BubbleCountCapabilityTests
     {
         var run = Run;
 
-        // SP-111's coexistence run measured a card that ALREADY held the foreground while a video
+        // The earlier coexistence run measured a card that ALREADY held the foreground while a video
         // surface came up (its §5 leg 5). This is the opposite order and it is this module's own:
         // a picture goes up, comes down, and only then is the keyboard asked for. Nothing in either
         // capability promised that would work, so it is measured rather than assumed.
@@ -117,7 +117,7 @@ public class BubbleCountCapabilityTests
         var run = Run;
 
         // Without the differential, "the point went past the overlay" is also true of an overlay
-        // that stopped existing — SP-099's own lesson, and the reason this leg is re-run HERE on
+        // that stopped existing — the overlay's own lesson, and the reason this leg is re-run HERE on
         // the overlay itself rather than inherited from that packet.
         Assert.True(
             run.OverlayCatchesItsOwnPointWhenMadeOpaque == run.MachineHasInteractiveDesktop,

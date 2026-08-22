@@ -5,7 +5,7 @@ using CcpClient.Desktop.Persistence;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the Weekly Intake Pass state machine (WPF Services/Progression/IntakePassService.cs,
+/// The Weekly Intake Pass state machine (WPF Services/Progression/IntakePassService.cs,
 /// 320 lines — read for this port), placeholder-shaped per the packet's honesty framing (b):
 /// the entitlement hooks are TYPED SEAMS; completion-spend semantics land tested against
 /// fixtures.

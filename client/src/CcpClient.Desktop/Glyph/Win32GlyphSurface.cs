@@ -32,7 +32,7 @@ public readonly record struct GlyphNativeHandles(nint Window);
 /// over 10 colours, on the first call after the show and on every call after that.</item>
 /// </list>
 ///
-/// <para><b>SP-099's hazard, and why it cannot happen from here.</b> The recorded hazard is that
+/// <para><b>The overlay's hazard, and why it cannot happen from here.</b> The recorded hazard is that
 /// toggling <c>WS_EX_LAYERED</c> and then calling <c>UpdateLayeredWindow</c> succeeds and destroys
 /// the overlay's alpha read-back forever. Four things stop it. This class only ever touches a
 /// window it created itself; the layered style is set in the <c>CreateWindowExW</c> call and is
@@ -166,7 +166,7 @@ public sealed class Win32GlyphSurface : IGlyphSurface
 
         // The composite happens BEFORE the window is ever shown. A layered window that reaches the
         // screen before it has been composited is the first attempt's exact defect
-        // (CCP.Avalonia.Desktop.Windows/WindowsOverlaySurface.cs:26-45) and the state SP-099
+        // (CCP.Avalonia.Desktop.Windows/WindowsOverlaySurface.cs:26-45) and the state the overlay
         // measured; there is no instant at which this surface is in it.
         var composited = Composite(window, request.Bounds, frame, request.ConstantAlpha, out var compositeError);
         if (!composited)
@@ -174,7 +174,7 @@ public sealed class Win32GlyphSurface : IGlyphSurface
             return Unavailable(GlyphReasonCodes.GlyphCompositeRefused,
                 $"UpdateLayeredWindow({request.Bounds}, AC_SRC_ALPHA, constant {request.ConstantAlpha}) returned "
                 + $"FALSE for window 0x{window:X} (last-error {compositeError}); nothing is composited. Last-error "
-                + "87 here means the window is not layered, which is SP-099's measured hazard and cannot arise "
+                + "87 here means the window is not layered, which is the overlay's measured hazard and cannot arise "
                 + "from this class, which sets WS_EX_LAYERED at creation and never clears it");
         }
 
@@ -836,7 +836,7 @@ public sealed class Win32GlyphSurface : IGlyphSurface
 
     /// <summary>
     /// The click-through flip. <c>WS_EX_LAYERED</c> is re-asserted in the SAME word rather than
-    /// left to survive on its own, which is what makes SP-099's hazard unreachable from here: there
+    /// left to survive on its own, which is what makes that hazard unreachable from here: there
     /// is no instant at which this window is not layered, so there is no instant at which a
     /// composite could be mistaken for the toggle-then-ULW conversion.
     /// </summary>
@@ -928,7 +928,7 @@ public sealed class Win32GlyphSurface : IGlyphSurface
         }
 
         // WS_EX_LAYERED is set HERE, in the creation call, and is never cleared for the life of the
-        // window. That is SP-099's hazard closed structurally rather than by discipline.
+        // window. That is the overlay's hazard closed structurally rather than by discipline.
         _window = Win32GlyphInterop.CreateWindowExW(
             Win32GlyphInterop.WsExLayered | Win32GlyphInterop.WsExTransparent
                 | Win32GlyphInterop.WsExToolwindow | Win32GlyphInterop.WsExNoactivate,

@@ -1,4 +1,4 @@
-# AvatarTube Demonstrator — Rendered Animation Evidence (SP-015)
+# AvatarTube Demonstrator — Rendered Animation Evidence
 
 **Status:** DEMONSTRATOR — explicitly labeled in-window, really-functioning, superseded by the
 first real AvatarTube feature, owner may async-veto. Synthetic generated asset packs only (no
@@ -9,7 +9,7 @@ WPF assets copied). Row stays `WIP` — named limits below.
 source tree, never the docs site — `Avalonia.Base.xml`/`Avalonia.Controls.xml` zero gif
 mentions; `src/Avalonia.Base/Media/Imaging/` static-bitmap only; the cache's `AvaloniaGif
 1.0.0` targets Avalonia 0.9.3). The demonstrator shape is therefore **own-frame composition**:
-packs are still-frame sequences + per-frame delay metadata; ONE SP-004-owned operation
+packs are still-frame sequences + per-frame delay metadata; ONE owned operation
 advances frames on monotonic-deadline accumulation. The acceptance's timing properties are
 directly testable because the timing machinery is ours.
 
@@ -20,10 +20,10 @@ cell): magenta marker + 2 pack bits + 3 clip bits + 4 frame bits, luminance-deco
 ambiguity rejection. Frame delays are **NON-UNIFORM** (430-1400ms — a uniform-delay asset
 cannot falsify multiplied speed; >= ~400ms so slow captures sample every hold >= 2x).
 Generation is deterministic (pure integer math, no PRNG/clock); committed assets are
-pixel-identical to regeneration (unit test) and SHA-256 verified by the asset checks. Both packs are routed through SP-009's
+pixel-identical to regeneration (unit test) and SHA-256 verified by the asset checks. Both packs are routed through the asset
 manifest (5 embedded entries, case-exact IDs) — `--verify-assets` green on Debug AND Release.
 There is **no mod loader** — "mod switching" = two packs through the same manifest path
-(SP-009: schema covers mod, instances do not; real mod-loader semantics = named limit).
+(the manifest schema covers mod, instances do not; real mod-loader semantics = named limit).
 
 Evidence flow: capture (CopyFromScreen stage crop / XGetImage full window) -> app-side strip
 decode (`--avatar-strip-decode [--scan]`) -> pure sequence evaluator (`--avatar-sequence`)
@@ -45,12 +45,12 @@ emitting named verdicts. Temporal math lives in the evaluator, never in scripts.
 | Owner transitions | G10: real caption drag (+136,+88) -> tube delta (136,88) exact. G11: owner minimize -> tube hidden + `pause-begin` traced; restore -> visible + `pause-end` traced; successor semantics per G7 |
 | Leak long-run | G12: 25 attach/detach/pack-switch cycles -> REAL OperationRegistry counts stable (outstanding=2 = heartbeat+engine, subscribers=1). First-attempt timer/subscription-leak REJECT lessons cited in record.md |
 | Cleanup | G13: tube close -> window gone; dashboard close -> process exit 0 |
-| Undecodable asset | G14 (corrupt-demo): pack switch -> typed SP-006 `Degraded(asset-undecodable)` + static fallback rendered (fallback strip pack 3 clip 7; K3 PASS); bounded diagnostics (exactly one decode attempt per switch); UX choice (warning vs diagnostics-only) pending-owner, never implemented |
+| Undecodable asset | G14 (corrupt-demo): pack switch -> typed `Degraded(asset-undecodable)` + static fallback rendered (fallback strip pack 3 clip 7; K3 PASS); bounded diagnostics (exactly one decode attempt per switch); UX choice (warning vs diagnostics-only) pending-owner, never implemented |
 
 Demonstrator constants (WPF-parity values, **pending-owner**): fade 1000ms, min-hold 2000ms,
 click cooldown 3000ms, talk lead-out 500ms, dip 0.3/150ms, float ±4 DIP/2000ms, quantum 16ms.
 
-## WSLg/X11 session facts (`wslg-evidence.sh`; no input automation — SP-008 named limit)
+## WSLg/X11 session facts (`wslg-evidence.sh`; no input automation — a named limit)
 
 - **Contract on WSL2** (native-dir `~/ccp-sp015`, rsync, never /mnt/e): `dotnet build
   CcpClient.sln` green; **176/176 CcpClient.Tests + 22/22 CcpClient.HeadlessTests** —
@@ -74,7 +74,7 @@ click cooldown 3000ms, talk lead-out 500ms, dip 0.3/150ms, float ±4 DIP/2000ms,
 
 ## Named limits (row stays WIP)
 
-1. **Mod-loader semantics:** two synthetic packs via the SP-009 manifest path; no mod loader exists.
+1. **Mod-loader semantics:** two synthetic packs via the asset-manifest path; no mod loader exists.
 2. **Owner constants:** transition/liveness values are demonstrator constants pending-owner.
 3. **Undecodable-asset UX:** typed capability state + static fallback + bounded diagnostics implemented as MECHANISM; warning-vs-diagnostics choice pending-owner (log-only today, matching WPF).
 4. **Linux cadence/click/owner gates:** cadence Windows-headed only (WSLg jitter); click + owner transitions Windows-headed named gates; Wayland §5.1 untouched.

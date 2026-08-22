@@ -4,13 +4,13 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-122 — the Studio rack's presentation checks, and the capture path that earns them.
+/// The Studio rack's presentation checks, and the capture path that earns them.
 ///
 /// <para><b>What this file is NOT.</b> It is not the evidence. The evidence is four real captures
 /// of the running shell on a real Windows desktop, checked by <c>CcpVerify</c> against
 /// <c>client/tools/verify/checks.json</c>, with every check shown failing on a real capture of the
-/// opposite state and on a real seeded regression in <c>MainWindow.axaml</c>
-/// . A headless assembly cannot photograph anything and no fact here claims to.</para>
+/// opposite state and on a real seeded regression in <c>MainWindow.axaml</c>. A headless assembly
+/// cannot photograph anything and no fact here claims to.</para>
 ///
 /// <para><b>What it IS.</b> The things that can rot silently between headed runs: a rack check
 /// that stops being <c>presentation-verified</c>, a surface the capture script can no longer be
@@ -82,7 +82,7 @@ public class RackPresentationTests
     }
 
     /// <summary>
-    /// DERIVE THE SURFACE SET, NEVER RESTATE IT — the SP-094 audit's rule, applied to the manifest
+    /// DERIVE THE SURFACE SET, NEVER RESTATE IT — the audit's rule, applied to the manifest
     /// side. A check naming a surface <c>capture.ps1</c> cannot produce is a check nothing will
     /// ever run, and it would sit there looking like coverage. Both sides are read from disk: the
     /// script's own <c>ValidateSet</c>, and the manifest's own surfaces.
@@ -186,7 +186,7 @@ public class RackPresentationTests
             }
         }
 
-        // Not bookkeeping, and not only the vacuity pin the shape guard wants (SP-066): every
+        // Not bookkeeping, and not only the vacuity pin the shape guard wants: every
         // comparison above SKIPS exactly one neighbour, the check's own colour. So this arithmetic
         // holds only if every rack check expects one of the rack's five named liveries — and a
         // check expecting a colour the rack does not paint is a check nothing can ever satisfy.
@@ -281,9 +281,9 @@ public class RackPresentationTests
     }
 
     /// <summary>
-    /// SP-107's hole, closed and kept closed. <c>capture.ps1</c> puts a top-most window on the
+    /// The real-desktop hole, closed and kept closed. <c>capture.ps1</c> puts a top-most window on the
     /// interactive desktop and reads that desktop back, exactly as <c>RealDesktopCollection</c>'s
-    /// fixtures do, and it ran OUTSIDE their lease until SP-122. Every element of the contract is
+    /// fixtures do, and it ran OUTSIDE their lease until this packet. Every element of the contract is
     /// asserted because dropping any one of them silently breaks a different half of it: the wrong
     /// path contends with nobody, <c>FileShare.None</c> makes the holder unnameable, and a
     /// <c>StreamWriter</c>'s BOM makes <c>HolderProcessId</c> read "no readable holder".
@@ -310,7 +310,7 @@ public class RackPresentationTests
             script, @"^Take-Lease[ \t]*\r?$", System.Text.RegularExpressions.RegexOptions.Multiline);
         Assert.True(call.Success,
             "capture.ps1 defines Take-Lease but never CALLS it at top level — the script would run "
-            + "unleased, which is exactly the SP-107 condition this guard exists to prevent");
+            + "unleased, which is exactly the contended-desktop condition this guard exists to prevent");
 
         // Taken before the app is launched, released after it exits: the WINDOW is the thing that
         // must not contend, not merely the pixel read.
@@ -353,7 +353,7 @@ public class RackPresentationTests
     }
 
     /// <summary>
-    /// SP-116's rule: an unfenced screen read is a defect, not a flake — 34 misses in 1200 unfenced
+    /// The rule is that an unfenced screen read is a defect, not a flake — 34 misses in 1200 unfenced
     /// reads, 0 in 1500 fenced. The fence must be taken BEFORE the read, which is the only ordering
     /// that means anything, and the harness must fail rather than continue when it cannot be taken.
     /// </summary>

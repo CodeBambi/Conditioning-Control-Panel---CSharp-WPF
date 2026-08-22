@@ -30,7 +30,7 @@ public sealed class Win32VideoPresence : IVideoPresence
     /// other application can take the top of the band away, and the port's own overlay carries the
     /// same <c>Reassert</c> for the same reason. Measured while this capability was being written:
     /// a surface placed topmost lost its own centre point to the shipping product's window within
-    /// milliseconds (SP-111 plan.md §0, Q4). A capability that gave up on the first loss would be
+    /// milliseconds (the packet plan.md §0, Q4). A capability that gave up on the first loss would be
     /// unusable on the desktop it is meant to run on.</para>
     ///
     /// <para><b>Re-asserting cannot manufacture the answer.</b> It can only make this surface MORE
@@ -400,7 +400,7 @@ public sealed class Win32VideoPresence : IVideoPresence
         // Created at the requested rectangle and NOT visible: the surface reaches the screen only at
         // the SetWindowPos in Present, by which time the OS already holds its alpha. The window class
         // registers NO background brush on purpose — every pixel on this surface is one this presence
-        // put there, which is what makes the bar read-back mean something (SP-110's M-t).
+        // put there, which is what makes the bar read-back mean something (the M-t mutation).
         _window = Win32VideoInterop.CreateWindowExW(
             Win32VideoInterop.WsExLayered | Win32VideoInterop.WsExToolwindow | Win32VideoInterop.WsExNoactivate,
             _windowClassName,
@@ -528,7 +528,7 @@ public sealed class Win32VideoPresence : IVideoPresence
                 // The control point: a pixel inside the bar the painter fills and never draws
                 // picture into. Its EQUALITY with the requested colour is what proves the fill
                 // happened — without it, a surface nobody ever painted reads back "not the
-                // background" just as reliably as a painted one (SP-110's M-t).
+                // background" just as reliably as a painted one (the M-t mutation).
                 var control = Win32VideoInterop.GetPixel(dc, 1, 1);
                 letterboxHeld = control == _letterbox;
                 unchecked

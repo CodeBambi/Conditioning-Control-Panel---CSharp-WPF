@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Ai;
 /// <summary>
 /// The diagnostics sink for AI operations (contract §12). The pipeline emits exactly one
 /// <see cref="AiDiagnosticRecord"/> per operation. The record's schema is content-free BY
-/// CONSTRUCTION (enums, stable codes, counts, durations, generation IDs — the SP-016
+/// CONSTRUCTION (enums, stable codes, counts, durations, generation IDs — the
 /// structural proof in AiOperationContractTests covers the schema); sinks must never be
 /// handed prompts, completions, user text, window titles, keywords, memory contents,
 /// secrets, or raw envelopes.

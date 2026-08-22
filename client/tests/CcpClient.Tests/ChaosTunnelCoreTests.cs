@@ -4,10 +4,10 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-061: the tunnel page protocol state machine (WPF ChaosTunnelService.cs parity):
+/// The tunnel page protocol state machine (WPF ChaosTunnelService.cs parity):
 /// pending FIFO until ready, streak dedup, RunAgain re-arm, exit-done fast path vs the
 /// watchdog force, typed sfx handling, malformed/unknown tolerance. All synchronous — no
-/// waits at all (the exit watchdog's elapsed path is invoked DIRECTLY; SP-059 discipline).
+/// waits at all (the exit watchdog's elapsed path is invoked DIRECTLY; deterministic-wait discipline).
 /// </summary>
 public sealed class ChaosTunnelCoreTests
 {

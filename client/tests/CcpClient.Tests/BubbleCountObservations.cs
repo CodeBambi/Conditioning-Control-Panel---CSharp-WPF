@@ -7,7 +7,7 @@ using CcpClient.Desktop.Video;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-112's one expensive real-desktop run, and it exists to answer ONE question the module's own
+/// This module's one expensive real-desktop run, and it exists to answer ONE question the module's own
 /// facts cannot: <b>does the video capability hold a picture this process COMPOSED, as readily as
 /// one its decoder produced?</b>
 ///
@@ -18,7 +18,7 @@ namespace CcpClient.Tests;
 /// takes). If the seam is a seam, the OS holds the bubble; if it is shaped around the decoder, this
 /// is where that shows.</para>
 ///
-/// <para><b>And the ORDER SP-111 never took.</b> Its coexistence run measured a card that already
+/// <para><b>And the ORDER the video-surface packet never took.</b> Its coexistence run measured a card that already
 /// held the foreground while a video surface came up. This module does the opposite: it puts a
 /// picture up, takes it down, and only THEN asks for the keyboard. That is a different question
 /// about the same two capabilities, so it is asked here rather than assumed from there.</para>
@@ -29,13 +29,13 @@ namespace CcpClient.Tests;
 /// </summary>
 internal static class BubbleCountObservations
 {
-    /// <summary>The clip's picture size — the same 320x240 SP-111's fixture uses, decoded by the
+    /// <summary>The clip's picture size — the same 320x240 the video-surface fixture uses, decoded by the
     /// operating system's own media stack out of a file this suite synthesises in managed code.</summary>
     internal const int ClipWidth = 320;
 
     internal const int ClipHeight = 240;
 
-    /// <summary>Deliberately not the clip's aspect, for SP-111's reason: a 400x240 surface over a 4:3
+    /// <summary>Deliberately not the clip's aspect, for the video-surface fixture's reason: a 400x240 surface over a 4:3
     /// picture pillarboxes, so the bar the read-back's control point lives in is a real bar.</summary>
     internal const int SurfaceWidth = 400;
 
@@ -47,11 +47,11 @@ internal static class BubbleCountObservations
     /// desktop.</summary>
     internal static PaintedRun Painted => LazyPainted.Value;
 
-    /// <summary>Where this packet's fixture media lives — its own folder, never SP-111's.</summary>
+    /// <summary>Where this packet's fixture media lives — its own folder, never the video-surface fixture's.</summary>
     internal static string MediaFolder =>
         Path.Combine(Path.GetTempPath(), "ccp-sp112-bubblecount", $"pid{Environment.ProcessId}");
 
-    /// <summary>The overlay's state at one moment, read entirely through SP-099's own
+    /// <summary>The overlay's state at one moment, read entirely through the overlay's own
     /// instrument.</summary>
     internal readonly record struct OverlayReading(
         bool PointPassesThrough,
@@ -266,7 +266,7 @@ internal static class BubbleCountObservations
         video.Dispose();
         clip?.Dispose();
 
-        // ---- and only NOW the question: the order SP-111's own run never took ----
+        // ---- and only NOW the question: the order the video-surface run never took ----
         var cardBounds = new InputBounds(
             Math.Max(0, (screenWidth / 2) + 140),
             Math.Max(0, (screenHeight / 2) + 120),

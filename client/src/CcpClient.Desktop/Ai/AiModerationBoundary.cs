@@ -4,7 +4,7 @@ namespace CcpClient.Desktop.Ai;
 
 // Moderation boundary (admission §8 slice c3; contract §7; ai-companion-admission.md §3).
 // The guard is code OUTSIDE the model: it evaluates an INJECTED policy document whose
-// default is the SP-019 "verdict-rejected shape only" posture (Empty — no category,
+// default is the spike's "verdict-rejected shape only" posture (Empty — no category,
 // wordlist, soft-hit value, or threshold invented; §9.2 #1 owner-pending). User-authored
 // prompt sections can never widen or bypass it (contract §7 rule 4): request text is only
 // ever the subject under evaluation, never a policy source. WPF sentinel-string refusal
@@ -33,7 +33,7 @@ public sealed record AiModerationRule(string CategoryCode, AiModerationAction Ac
 
 /// <summary>
 /// The injected moderation policy document (contract §7 rule 5). Shape-validated at
-/// construction; the DEFAULT is <see cref="Empty"/> — the SP-019 "verdict-rejected shape
+/// construction; the DEFAULT is <see cref="Empty"/> — the spike's "verdict-rejected shape
 /// only" posture: the document shape exists and is validated, but no category, wordlist,
 /// or soft-hit value is invented (admission §3 rule 5; §9.2 #1 owner-pending). A consumer
 /// (owner-supplied settings row, future slice) injects a real document; the guard
@@ -67,7 +67,7 @@ public sealed record AiModerationPolicy
 
     public IReadOnlyList<AiModerationRule> Rules { get; }
 
-    /// <summary>The default posture: shape only, zero values (SP-019 limit 3; admission §3 rule 5). Every evaluation passes.</summary>
+    /// <summary>The default posture: shape only, zero values (spike limit 3; admission §3 rule 5). Every evaluation passes.</summary>
     public static AiModerationPolicy Empty { get; } = new([]);
 }
 
@@ -172,7 +172,7 @@ public sealed record AiEscalationState(int HitsInWindow, bool WarningShown, bool
 /// resets window + warning (WPF ModerationCounter.cs:108-200, ported as typed mechanism;
 /// values injected). Session-scoped by design (record.md §3.2 rule 4): WPF persists
 /// across restarts against DECIDED thresholds; persisting placeholder-valued state would
-/// encode undecided values into an SP-005 schema. The state stays serializable-shaped
+/// encode undecided values into a persisted schema. The state stays serializable-shaped
 /// (hits + cooldown-end, the WPF ModerationCounterPersistedState shape) so persistence
 /// lands additively when thresholds are owner-decided. Divergence from WPF restart
 /// survival is recorded, never claimed as parity.

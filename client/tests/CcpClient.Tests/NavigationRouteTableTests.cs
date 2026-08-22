@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-091 guards on the declared rail. These are deliberately NOT the packet's proof that
+/// Guards on the declared rail. These are deliberately NOT the packet's proof that
 /// navigation works — driving a gesture to a destination is, and that lives in
 /// <c>NavigationShellHeadlessTests</c>. What lives here is the pure-logic half no rendered
 /// frame can express: which doors may exist at all, and what the router does with an id that
@@ -19,7 +19,7 @@ public class NavigationRouteTableTests
         Assert.NotEmpty(declared);
 
         // Ids are dispatch identity: stable, lowercase, never a display string. A door whose id
-        // drifts with its label is the SP-014 failure re-created one layer up.
+        // drifts with its label is the stable-identity failure re-created one layer up.
         Assert.Equal(declared.Select(r => r.Id).Distinct(StringComparer.Ordinal).Count(), declared.Count);
         foreach (var route in declared)
         {
@@ -31,10 +31,10 @@ public class NavigationRouteTableTests
         }
 
         // The two-hop boundary, made mechanical, and it OUTLIVED the reason it was written.
-        // SP-091 wrote it to stop an ungated DTRH door appearing before an entitlement service
-        // existed; SP-092 landed the capability and SP-094 opened the Play door behind it. The
-        // assertion is unchanged and still binding for a second, permanent reason: WPF reaches
-        // DTRH in TWO hops — rail door "Play" then the hero card's FALL IN (§3) — so a rail
+        // It was written to stop an ungated DTRH door appearing before an entitlement service
+        // existed; a later packet landed the capability and another opened the Play door behind
+        // it. The assertion is unchanged and still binding for a second, permanent reason: WPF
+        // reaches DTRH in TWO hops — rail door "Play" then the hero card's FALL IN (§3) — so a rail
         // door named for the feature would be the one-hop launcher WPF deliberately does not
         // have (MainWindow.Presets.cs:1007,1036).
         foreach (var text in declared.SelectMany(r => new[] { r.Id, r.Label, r.Tooltip }))
@@ -82,7 +82,7 @@ public class NavigationRouteTableTests
 
         // "library" is one of WPF's six rail doors (§8.1) that the port has no destination for
         // and therefore does not declare — so it is a real undeclared id, which "play" stopped
-        // being when SP-094 landed the Play page. Pinned against the declared set rather than
+        // being when the Play page landed. Pinned against the declared set rather than
         // assumed, so this fixture cannot silently stop testing anything again.
         const string undeclared = "library";
         Assert.DoesNotContain(undeclared, declared);

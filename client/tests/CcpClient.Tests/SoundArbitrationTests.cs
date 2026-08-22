@@ -5,19 +5,19 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-029 slice q1: arbitration core — channel ownership (voice stop-replace + generation,
+/// Arbitration core — channel ownership (voice stop-replace + generation,
 /// whisper real-event busy, SFX pool 8 drop-on-overflow), queue ordering + freshness,
 /// ducking refcount symmetry (overlapping + watchdog + panic release-all), device re-probe,
-/// off-sync-context construction (SP-025 regression), panic cleanup. All against RECORDING
+/// off-sync-context construction (a regression guard), panic cleanup. All against RECORDING
 /// FAKES + a manual clock — never the real SoundFlow backend (backend-event evidence = Step 3
-/// console harness). WPF parity cites per test (SP-029 record.md Step 1 archaeology).
+/// console harness). WPF parity cites per test (record.md Step 1 archaeology).
 /// </summary>
 public sealed class SoundArbitrationTests
 {
     private readonly List<string> _log = [];
 
-    /// <param name="log">SP-073: an optional per-test sink. The default keeps every existing
-    /// fact on the shared <see cref="_log"/> list; the SP-073 facts pass a concurrent sink
+    /// <param name="log">An optional per-test sink. The default keeps every existing
+    /// fact on the shared <see cref="_log"/> list; the repeated-close facts pass a concurrent sink
     /// because their release phase genuinely has two product threads logging at once (the
     /// unwedged probe and the teardown thread), and <see cref="_log"/> is an unsynchronised
     /// <see cref="List{T}"/>.</param>
@@ -32,8 +32,8 @@ public sealed class SoundArbitrationTests
             MaxSfxVoices = maxSfx,
             DuckWatchdog = TimeSpan.FromMinutes(5),
             VoicePacingDelay = TimeSpan.FromSeconds(2),
-            // Budgets whose elapsing is NOT the subject get the shared 60s injection (SP-063);
-            // the SP-071 give-up facts pass their own short literal (elapsing IS the subject).
+            // Budgets whose elapsing is NOT the subject get the shared 60s injection;
+            // the give-up facts pass their own short literal (elapsing IS the subject).
             TeardownBudget = teardownBudget ?? TestWait.InjectedBudget,
         }, log ?? _log.Add);
         return (arb, backend, duck, clock);
@@ -347,7 +347,7 @@ public sealed class SoundArbitrationTests
         Assert.Equal("Speakers (Realtek)", backend.RequestedDeviceName);
     }
 
-    // ---------- SP-070: the session-disable EXPIRES (WPF d33b5d8d, #778/#779) ----------
+    // ---------- The session-disable EXPIRES (WPF d33b5d8d, #778/#779) ----------
 
     [Fact]
     public void Recovery_EndpointReturns_AfterCooldownNextPlay_PlaysAgain()
@@ -600,7 +600,7 @@ public sealed class SoundArbitrationTests
         Assert.Equal(3, backend.EnumerateCallCount);
     }
 
-    // ---------- SP-071: teardown off the UI thread (host close must not wait on a wedged probe) ----------
+    // ---------- Teardown off the UI thread (host close must not wait on a wedged probe) ----------
 
     // The give-up facts inject a 200ms budget whose ELAPSING is the subject (TestWait
     // population 2). Every rendezvous is a deterministic signal: the probe is PROVEN parked
@@ -754,7 +754,8 @@ public sealed class SoundArbitrationTests
     {
         // Negative control — ordinary teardown is unchanged: no probe in flight → the
         // backend is disposed exactly once with the same observable outcome as before
-        // SP-071 (panic line as before, channels stopped) and NO give-up/completion lines.
+        // the teardown moved off the UI thread (panic line as before, channels stopped)
+        // and NO give-up/completion lines.
         var (arb, backend, _, _) = Make();
         Initialized(arb);
         arb.PlayVoice("v.mp3", 1f);
@@ -765,12 +766,12 @@ public sealed class SoundArbitrationTests
         Assert.Equal(1, backend.DisposeCallCount);
         Assert.True(player.Stopped && player.Disposed); // PanicReset still ran on the caller
         Assert.DoesNotContain(_log, l => l.Contains("teardown exceeds") || l.Contains("backgrounded backend teardown"));
-        Assert.Contains(_log, l => l.Contains("panic-reset")); // the pre-SP-071 observable line
+        Assert.Contains(_log, l => l.Contains("panic-reset")); // the original observable line
     }
 
-    // ---------- SP-073: the give-up residue is bounded across REPEATED host closes ----------
+    // ---------- The give-up residue is bounded across REPEATED host closes ----------
 
-    // SP-071 left ONE thread per close parked on _initLock until the wedged native call
+    // The off-UI-thread teardown left ONE thread per close parked on _initLock until the wedged native call
     // returned, and framed that residue as "bounded by user close actions". The census
     // (record.md §1) found the count is governed by host OPENS, not closes: every
     // DtrhHostWindow builds its own arbitration (DtrhHostWindow.axaml.cs:214) and disposes it
@@ -804,14 +805,14 @@ public sealed class SoundArbitrationTests
             }
 
             // THE BOUND: N wedged closes leave ZERO teardown threads holding an OS thread.
-            // Pre-SP-073 this count is N — one parked on _initLock per close, for the life of
+            // Before the bound this count is N — one parked on _initLock per close, for the life of
             // the process if the endpoint never unwedges.
             TestWait.UntilSync(
                 () => open.All(c => !c.arb.TeardownThreadOutstanding),
                 $"all {cycles} wedged closes released their teardown thread (residue does not accumulate)",
                 () => $"outstanding={open.Count(c => c.arb.TeardownThreadOutstanding)}/{cycles}");
             Assert.Equal(cycles, sink.Count(l => l.Contains("teardown exceeds"))); // one give-up line per close
-            Assert.All(open, c => Assert.Equal(0, c.backend.DisposeCallCount));    // SP-071: give-up never touches the backend
+            Assert.All(open, c => Assert.Equal(0, c.backend.DisposeCallCount));    // give-up never touches the backend
 
             // ...and the handoff did not SKIP the disposal (the forbidden overflow): released
             // one wedge at a time, every backend is disposed EXACTLY once, by a teardown thread.
@@ -845,7 +846,7 @@ public sealed class SoundArbitrationTests
     [Fact]
     public void Teardown_GiveUp_NoThreadOutstandingInsideTheWedgedInit_DisposedOnceAfterRelease()
     {
-        // The inside-the-wedged-operation read (SP-072's disposeCountAtTeardownEnd shape, not
+        // The inside-the-wedged-operation read (the disposeCountAtTeardownEnd shape, not
         // an end-state observation): the residue is read ON the wedged thread, INSIDE the
         // still-in-flight native init. That is the only window where "no teardown thread is
         // outstanding" means anything — after the release the drain spawns one to perform the
@@ -883,14 +884,14 @@ public sealed class SoundArbitrationTests
         probe.Join(); // publishes the values written on the probe thread
 
         Assert.False(outstandingInsideWedge);      // THE FACT: no thread held while the wedge was
-        Assert.Equal(0, disposeCountInsideWedge);  // SP-071: and the backend was untouched there
+        Assert.Equal(0, disposeCountInsideWedge);  // and the backend was untouched there
         Assert.Equal(1, backend.DisposeCallCount); // handed off, never skipped
         Assert.Equal(TeardownThreadName, backend.DisposingThreadName); // never the wedged probe thread
         Assert.True(backend.DisposingThreadIsBackground);
         Assert.Equal(1, sink.Count(l => l.Contains("teardown exceeds")));
         TestWait.UntilSync(
             () => sink.Count(l => l.Contains("backgrounded backend teardown completed")) == 1,
-            "the SP-071 give-up/completion pair still lands exactly once",
+            "the give-up/completion pair still lands exactly once",
             () => TeardownState(backend));
     }
 
@@ -955,10 +956,11 @@ public sealed class SoundArbitrationTests
     [Fact]
     public void Teardown_NoContention_DisposalNeverRunsOnTheCallerThread()
     {
-        // SP-071 REGRESSION GUARD, not an SP-073 fact: pre-SP-073 code passes it too, so it is
-        // deliberately NOT counted in the packet's revert matrix. It exists because SP-073's
-        // uncontended branch sits one edit away from "we hold the lock, just dispose here",
-        // which is SP-071 reverted — the native device teardown back on the UI close handler.
+        // A REGRESSION GUARD for the off-UI-thread teardown, not a bounded-residue fact: code from
+        // before the bound passes it too, so it is deliberately NOT counted in the packet's revert
+        // matrix. It exists because the bound's uncontended branch sits one edit away from "we hold
+        // the lock, just dispose here", which is the off-UI-thread teardown reverted — the native
+        // device teardown back on the UI close handler.
         var (arb, backend, _, _) = Make();
         Initialized(arb);
         var callerThreadId = Environment.CurrentManagedThreadId;
@@ -982,7 +984,7 @@ public sealed class SoundArbitrationTests
         }
     }
 
-    // ---------- off-sync-context construction (SP-025 regression) ----------
+    // ---------- off-sync-context construction (regression) ----------
 
     [Fact]
     public void OffSyncContext_SyncContextThread_DoesNotDeadlock_RunsOffContext()
@@ -997,7 +999,7 @@ public sealed class SoundArbitrationTests
             var result = OffSyncContext.Run(() =>
             {
                 // OffSyncContext must marshal AWAY from the never-pumping context; inside
-                // the work there is no context and no deadlock (SP-025 AssetDataProvider class).
+                // the work there is no context and no deadlock (the AssetDataProvider class).
                 Assert.Null(SynchronizationContext.Current);
                 workThread = Environment.CurrentManagedThreadId;
                 return 42;
@@ -1005,7 +1007,7 @@ public sealed class SoundArbitrationTests
             Assert.Equal(42, result);
         });
         t.Start();
-        Assert.True(t.Join(TimeSpan.FromSeconds(10)), "deadlocked on a sync-context thread — the SP-025 wedge class");
+        Assert.True(t.Join(TimeSpan.FromSeconds(10)), "deadlocked on a sync-context thread — the off-sync-context wedge class");
         Assert.True(workThread is not null && workThread != t.ManagedThreadId); // marshaled to a context-free thread
     }
 
@@ -1098,10 +1100,10 @@ public sealed class SoundArbitrationTests
         Assert.Equal(0, arb.ActiveSfxVoices);
     }
 
-    // ---------- SP-072: an abandoned player construction never reaches the mixer ----------
+    // ---------- An abandoned player construction never reaches the mixer ----------
 
     // The budget whose ELAPSING is the subject (TestWait population 2 — same pinned-literal
-    // discipline as SP-071's GiveUpBudget). Every rendezvous below is a deterministic signal
+    // discipline as the GiveUpBudget). Every rendezvous below is a deterministic signal
     // (gates + the recorded event stream), never timing.
     private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200);
 
@@ -1130,10 +1132,10 @@ public sealed class SoundArbitrationTests
         public volatile OrphanPlayer? LastPlayer;
         public int AttachCount;
         public int DisposeCount;
-        public int ConstructCount; // SP-083: ConstructStarted is a one-shot latch and cannot count N
+        public int ConstructCount; // ConstructStarted is a one-shot latch and cannot count N
         public readonly OrphanSafePlayerFactory<OrphanPlayer> Factory;
 
-        // SP-083 instrumentation, in SP-073's InsideWedgedInit/InsideWedgedEnumerate shape
+        // Cap instrumentation, in the InsideWedgedInit/InsideWedgedEnumerate shape
         // (FakeBackend below): InsideWedgedConstruct runs ON the construction thread, INSIDE the
         // native stand-in, after any gate is released and BEFORE construct returns — i.e. before
         // the product's settling finally can run. That is the only window in which "how many
@@ -1187,7 +1189,7 @@ public sealed class SoundArbitrationTests
             get { lock (Log) return Log.Count(l => l.Contains("construction abandoned")); }
         }
 
-        /// <summary>SP-083 cap refusals — disjoint from <see cref="AbandonmentLines"/> by wording.</summary>
+        /// <summary>Cap refusals — disjoint from <see cref="AbandonmentLines"/> by wording.</summary>
         public int CapRefusalLines
         {
             get { lock (Log) return Log.Count(l => l.Contains("abandoned construction(s) still parked")); }
@@ -1292,7 +1294,7 @@ public sealed class SoundArbitrationTests
     public void Construction_OrphanDisposal_OrderedAgainstDeviceTeardown()
     {
         // The ordering fact: abandoned-player disposal NEVER overlaps device teardown
-        // (SP-071 made that teardown concurrent). The teardown delegate parks INSIDE the
+        // (that teardown was made concurrent). The teardown delegate parks INSIDE the
         // lifecycle lock (the wedged native device teardown); the late construction
         // completes during it; disposal must land strictly after teardown releases the lock.
         var h = new OrphanHarness(ConstructionBudget) { ConstructGate = new ManualResetEventSlim(false) };
@@ -1389,7 +1391,7 @@ public sealed class SoundArbitrationTests
         Assert.Equal(1, h.DisposeCount); // the refused construction never ran
     }
 
-    // ---------- SP-083: the outstanding ABANDONED constructions are bounded ----------
+    // ---------- The outstanding ABANDONED constructions are bounded ----------
 
     [Fact]
     public void Construction_AtTheOutstandingCap_FurtherCreatesRefusedWithoutStartingAConstruction()
@@ -1581,7 +1583,7 @@ public sealed class SoundArbitrationTests
         // work. Create reaches `slot.Abandoned = true; CountAbandoned(slot);` two ways: (a) the
         // caller's task.Wait expired, so the construction IS parked — the route every other fact
         // here takes; or (b) task.Wait returned TRUE and Monitor.TryEnter(_lifecycle, budget)
-        // timed out because a wedged native teardown holds the lifecycle lock (the SP-071 class
+        // timed out because a wedged native teardown holds the lifecycle lock (the give-up class
         // that bounded TryEnter exists for). On route (b) the construction has already RETURNED,
         // so no pool thread is parked and the count must NOT rise. If it did, this slot's
         // settling finally has already run and can never run again, so the increment would leak
@@ -1644,7 +1646,7 @@ public sealed class SoundArbitrationTests
     [Fact]
     public void PlaySfx_ConstructionTimeout_TypedFailed_NeverInPool()
     {
-        // The bound's caller vocabulary (SP-072): the typed construction expiry rides the
+        // The bound's caller vocabulary: the typed construction expiry rides the
         // EXISTING catch → SoundOutcome.Failed — no new refusal semantic, no silent player.
         var (arb, backend, _, _) = Make();
         Initialized(arb);
@@ -1679,7 +1681,7 @@ public sealed class SoundArbitrationTests
 
     private sealed class NeverPumpingSyncContext : SynchronizationContext
     {
-        public override void Post(SendOrPostCallback d, object? state) { /* never pumped — the SP-025 wedge condition */ }
+        public override void Post(SendOrPostCallback d, object? state) { /* never pumped — the off-sync-context wedge condition */ }
         public override void Send(SendOrPostCallback d, object? state) => throw new NotSupportedException();
     }
 
@@ -1693,10 +1695,10 @@ public sealed class SoundArbitrationTests
         public string? TryInitError { get; set; }
         public bool ThrowOnTryInit { get; set; }
         public Action<FakePlayer>? PlayerHook { get; set; }
-        // SP-072: inject a typed construction failure (the bound's expiry) at the seam.
+        // Inject a typed construction failure (the bound's expiry) at the seam.
         public Exception? ThrowOnCreatePlayer { get; set; }
 
-        // SP-071 cross-thread teardown instrumentation. Both gates null = today's synchronous
+        // Cross-thread teardown instrumentation. Both gates null = today's synchronous
         // behavior, so the landed facts are byte-identical. TryInitRelease parked = the wedged
         // native call; the fake RECORDS the moment TryInit returns and the moment Dispose is
         // called on it so the ordering fact asserts the order, not merely that nothing threw.
@@ -1707,7 +1709,7 @@ public sealed class SoundArbitrationTests
         private int _disposeCallCount;
         public int DisposeCallCount => Volatile.Read(ref _disposeCallCount);
 
-        // SP-073 instrumentation. InsideWedgedInit/InsideWedgedEnumerate run ON the wedged
+        // Repeated-close instrumentation. InsideWedgedInit/InsideWedgedEnumerate run ON the wedged
         // thread, INSIDE the native call, after the test releases it and BEFORE it returns —
         // the only window in which "no teardown thread is outstanding while the wedge is
         // still held" can be observed at all (afterwards the drain spawns one). The disposing

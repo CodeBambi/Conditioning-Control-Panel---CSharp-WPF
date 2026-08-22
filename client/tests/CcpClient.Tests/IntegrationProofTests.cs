@@ -41,15 +41,15 @@ public class IntegrationProofTests
         Assert.IsType<CcpClient.Desktop.Features.AvatarTube.AvatarTubeParticipant>(host.Participants[3]);
         Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhSaveSlots>(host.Participants[4]);
         Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhParticipant>(host.Participants[5]);
-        // SP-046: the companion AI chain composes last (memory store started in phase-3 order).
+        // The companion AI chain composes last (memory store started in phase-3 order).
         Assert.IsType<CcpClient.Desktop.Features.Companion.CompanionParticipant>(host.Participants[6]);
-        // SP-098: the conditioning session's phase-3 start loads the preset WITHOUT starting a
+        // The conditioning session's phase-3 start loads the preset WITHOUT starting a
         // session — WPF's engine runs only when the user presses START
         // (MainWindow/MainWindow.StartStop.cs:34,105).
         var session = Assert.IsType<CcpClient.Desktop.Session.SessionParticipant>(host.Participants[7]);
         Assert.True(session.Running);
         Assert.False(session.Engine.Running);
-        // SP-118: the SCHEDULER registers last and its phase-3 start ALSO starts no session. It
+        // The SCHEDULER registers last and its phase-3 start ALSO starts no session. It
         // arms a 60-second grace and nothing else — and on a fresh install the enable is off, so
         // even when the grace elapses the first thing the tick does is return
         // (MainWindow/MainWindow.StartStop.cs:604). The one participant in this list that CAN
@@ -60,7 +60,7 @@ public class IntegrationProofTests
         Assert.False(scheduler.Scheduler.Polling);
         Assert.False(scheduler.Scheduler.Enabled);
         Assert.Null(scheduler.Scheduler.Last);
-        // SP-119: the HAPTIC sink registers last, and its phase-3 start CONNECTS TO NOTHING. This
+        // The HAPTIC sink registers last, and its phase-3 start CONNECTS TO NOTHING. This
         // build admits no provider client, so the participant never asks — a product that opened a
         // WebSocket to ws://127.0.0.1:12345 with nothing able to speak the protocol would be making
         // a connection no user could benefit from. The gate is closed too, and closed through the
@@ -88,7 +88,7 @@ public class IntegrationProofTests
         Assert.False(ticker.IsOperationLive); // ...but the restored flag (fresh install) keeps the operation OFF
         Assert.IsType<LoadOutcome.Missing>(store.LastLoadOutcome); // loaded in phase 3, fresh install
 
-        // The trace the window displays records every phase outcome (incl. SP-006's
+        // The trace the window displays records every phase outcome (incl. the
         // CapabilityProbes phase).
         Assert.Equal(4, host.Trace.Entries.Count);
         Assert.All(host.Trace.Entries, entry => Assert.EndsWith(": ok", entry));

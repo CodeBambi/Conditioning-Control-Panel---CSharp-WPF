@@ -72,7 +72,7 @@ function Invoke-Headed([string]$exe, [string]$workDir) {
     }
     if ($p.HasExited) { return @{ Ok = $false; Detail = "exited $($p.ExitCode) before window" } }
     if ($null -eq $window) { $p.Kill(); return @{ Ok = $false; Detail = 'no UIA window within 25s (killed)' } }
-    # SP-091: the probe measures the shell's rail doors now, not the retired demonstrator card.
+    # The probe measures the shell's rail doors now, not the retired demonstrator card.
     # A stale needle here does not merely fail — line 76 KILLS the app and reports "no render
     # evidence", so a publish run reads as a rendering regression when nothing is wrong.
     $probe = (Get-WindowTexts $window | Where-Object { $_ -like 'layout-probe: door*' }) -join ';'

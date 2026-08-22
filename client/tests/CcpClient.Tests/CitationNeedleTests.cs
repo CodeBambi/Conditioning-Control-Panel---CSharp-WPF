@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-131 — the floor's hold on <c>client/tools/citations/detect.mjs --needles</c> and on the
+/// The floor's hold on <c>client/tools/citations/detect.mjs --needles</c> and on the
 /// needle records in <c>client/docs/upstream-citation-inventory.json</c>.
 ///
 /// <para><b>What this guards, and what it deliberately refuses to guard.</b> The detector is a
@@ -29,7 +29,7 @@ namespace CcpClient.Tests;
 /// — moved/gone/ambiguous/out-of-range classification and the coverage arithmetic — is fixtured in
 /// <c>client/tools/citations/self-test.mjs</c> (F15-F24), and <b>no standing gate in this
 /// repository runs that file</b> (<c>self-test.mjs:5-12</c>). Wiring it into one is a separate
-/// board row with its own acceptance and was out of SP-131's scope. These facts therefore prove the
+/// board row with its own acceptance and was out of this packet's scope. These facts therefore prove the
 /// contract and the data, not the classification.</para>
 /// </summary>
 public sealed class CitationNeedleTests

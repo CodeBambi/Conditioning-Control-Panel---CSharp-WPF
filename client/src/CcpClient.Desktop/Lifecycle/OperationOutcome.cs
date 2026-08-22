@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Lifecycle;
 /// <summary>
 /// Typed terminal outcome of an owned operation (async-lifecycle-fault-contract §2).
 /// Expected failures are typed values, never exceptions-as-control-flow. The failure
-/// kinds reuse the SP-003 taxonomy (<see cref="InitFailureKind"/>) — Recoverable and
+/// kinds reuse the lifecycle-contract taxonomy (<see cref="InitFailureKind"/>) — Recoverable and
 /// Degraded are activated here as operation-outcome classifications supplied
 /// per-operation by the owner. Capability availability/probes are row 5, not this type.
 /// </summary>

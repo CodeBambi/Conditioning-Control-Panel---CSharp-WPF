@@ -17,7 +17,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-091: the navigation shell, driven by REAL headless input on the REAL controls
+/// The navigation shell, driven by REAL headless input on the REAL controls
 /// (<c>HeadlessWindowExtensions</c>), from a cold composition-root boot with NO command-line
 /// arguments. The subject is the GESTURE reaching a DESTINATION, not the route dictionary —
 /// a test that called <c>Router.Navigate("studio")</c> and asserted <c>Current == "studio"</c>
@@ -163,7 +163,7 @@ public class NavigationShellHeadlessTests
     public async Task SystemDoor_RendersTheLiveStartupTraceAndCapabilityStates()
     {
         // The third door's destination is LIVE data from the real composition root, which is
-        // what separates it from a decorative page. The SP-003/SP-006 proofs moved here when
+        // what separates it from a decorative page. The participant and capability proofs moved here when
         // the demonstrator card was retired; they are asserted where they now live.
         var (host, window) = await BootAsync();
 
@@ -190,11 +190,11 @@ public class NavigationShellHeadlessTests
         // they can drift, and this is what catches it. A fifth door cannot appear without
         // reddening a named test.
         //
-        // SP-094 opened the Play door and the DTRH assertion below is UNCHANGED and still
+        // A later wave opened the Play door and the DTRH assertion below is UNCHANGED and still
         // holds: DTRH is not a door. WPF reaches it in two hops — rail door then the Play
         // page's hero card (§3) — so the rail names the PAGE, never the feature behind it.
         //
-        // SP-095 opened the Graded Intake door and added NOTHING else: the Chaos tunnel and the
+        // The next wave opened the Graded Intake door and added NOTHING else: the Chaos tunnel and the
         // AvatarTube demonstrator were investigated and refused a door (§11 D30, D31), so the
         // array below is the mechanical record of that decision. A door per demo flag would red
         // this test.
@@ -212,7 +212,7 @@ public class NavigationShellHeadlessTests
         Assert.Equal(ShellRoutes.Declared.Count, window.Router.Routes.Count);
 
         // No door names a surface WPF does not navigate to. "tunnel" and "avatar" are the two
-        // SP-095 refused; keeping them out mechanically is what stops the refusal from decaying
+        // that were refused; keeping them out mechanically is what stops the refusal from decaying
         // into a comment nobody reads.
         foreach (var text in doors.SelectMany(d => new[] { d.Name ?? "", d.Content as string ?? "" }))
         {
@@ -305,7 +305,7 @@ public class NavigationShellHeadlessTests
     [AvaloniaFact]
     public async Task DoorLabelMutation_LeavesRoutingIntact_AndTheLabelNeverResolves()
     {
-        // The SP-014 lesson carried into navigation: the route id is dispatch identity and the
+        // The lesson carried into navigation: the route id is dispatch identity and the
         // rendered label is display text. Mutating what the user reads must not move a door.
         var (host, window) = await BootAsync();
 
@@ -333,7 +333,7 @@ public class NavigationShellHeadlessTests
         // gestures indistinguishable.
         //
         // The comment here used to say the port had no spiral effect to flip and that the gesture
-        // was therefore unhandled (§9 D6). SP-106 gave this row an effect, so the gesture IS
+        // was therefore unhandled (§9 D6). A later wave gave this row an effect, so the gesture IS
         // handled now — and every assertion below still holds unchanged, because none of them was
         // ever about the row being unported: a right-click must open no menu, select nothing and
         // navigate nowhere whether or not there is a dial behind it. What the gesture does to the

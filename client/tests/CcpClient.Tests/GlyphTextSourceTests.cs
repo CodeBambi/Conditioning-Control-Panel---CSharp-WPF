@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-115. The GDI+ rasteriser that turns a word into per-pixel-alpha pixels.
+/// The GDI+ rasteriser that turns a word into per-pixel-alpha pixels.
 ///
 /// <para><b>These facts exist because the sweep found the file completely uncovered.</b> Round 1
 /// mutated the premultiplied pixel format to a straight-alpha one, the transparent clear to an

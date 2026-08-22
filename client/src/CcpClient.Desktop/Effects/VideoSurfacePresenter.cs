@@ -8,7 +8,7 @@ namespace CcpClient.Desktop.Effects;
 /// Something that draws ON a clip's pictures, one picture at a time, before they go to the
 /// operating system.
 ///
-/// <para><b>Added at SP-112 for the video capability's SECOND consumer, and it is justified by what
+/// <para><b>Added for the video capability's SECOND consumer, and it is justified by what
 /// the FIRST consumer already needs rather than by what the second one wants.</b> Upstream's
 /// Mandatory Video does not hand the decoder's own output straight to a surface: its
 /// blurred-background composite draws the picture into something else
@@ -29,7 +29,7 @@ namespace CcpClient.Desktop.Effects;
 /// can refuse AFTER <see cref="Opening"/> has been called (the surface may refuse the placement, the
 /// clip may decode nothing, the first picture may not be held) — so a painter that acquired anything
 /// in <see cref="Opening"/> would have to release it on a signal this interface does not give it.
-/// SP-112's own painter holds nothing but its own arithmetic and is discarded with the firing, which
+/// This port's own painter holds nothing but its own arithmetic and is discarded with the firing, which
 /// is why it did not need one; the first painter that holds a resource will.</para>
 ///
 /// <para><b>Threading.</b> Called on the surface thread, inline with the frame advance, so it must
@@ -126,15 +126,15 @@ public interface IVideoSurface
 /// A real video surface with a clip on it — the port's SECOND kind of picture that has to keep
 /// changing while it is on, and the first whose frames come from a file rather than from arithmetic.
 ///
-/// <para><b>Two modules play through ONE instance of this</b> (SP-112): Mandatory Video, which
+/// <para><b>Two modules play through ONE instance of this</b>: Mandatory Video, which
 /// introduced it, and Bubble Count, which paints bubbles onto its pictures. Sharing is what makes
 /// the two video-class rows mutually exclusive without this port having upstream's interaction
 /// queue, and it is why <see cref="Begin"/> refuses in type while a clip is already playing rather
 /// than quietly replacing it.</para>
 ///
 /// <para><b>Where the cadence lives, and why.</b> In the PRESENTER, on the injected
-/// <see cref="ISessionClock"/>, exactly as <see cref="SpiralSurfacePresenter"/> puts it — SP-105's
-/// precedent and SP-106's finding: an <b>interval that decides when a MODULE is due</b> belongs to
+/// <see cref="ISessionClock"/>, exactly as <see cref="SpiralSurfacePresenter"/> puts it — the same
+/// precedent and the same finding: an <b>interval that decides when a MODULE is due</b> belongs to
 /// <see cref="PacedSessionEffect{TFiring}"/>, and a <b>cadence that keeps a SURFACE correct</b> is
 /// the surface's. Mandatory Video has BOTH, which is the first time one module has needed the two
 /// apart: its firing interval is upstream's <c>ScheduleNext</c>
@@ -222,7 +222,7 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
     /// <para><b>The divergence from upstream's fullscreen-per-monitor cover lives here</b>, and it
     /// is deliberate. Upstream sizes its video window to the FULL screen bounds of every screen
     /// (<c>Services/Video/VideoService.cs:2633-2636</c>, <c>:2040-2045</c>). This port places one
-    /// bounded rectangle on the primary display, for the same two reasons SP-110's card did
+    /// bounded rectangle on the primary display, for the same two reasons the Lock Card's did
     /// (D110): five other modules draw through a click-through overlay that a fullscreen cover
     /// would blank, and a fullscreen topmost surface the user cannot dismiss is the one shape this
     /// port must not ship while it has no panic key. Recorded as D123.</para>
@@ -354,7 +354,7 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
                 VideoReasonCodes.VideoPresenceDisposed, "this video surface was disposed")));
         }
 
-        // ONE CLIP AT A TIME, AND IT IS THE CAPABILITY THAT SAYS SO — added at SP-112, when this
+        // ONE CLIP AT A TIME, AND IT IS THE CAPABILITY THAT SAYS SO — added when this
         // surface acquired a second module. Both consumers already refuse a firing while a clip is
         // up (MandatoryVideoEffect.Compose's first guard, BubbleCountEffect's), but Compose runs on
         // the CLOCK thread and Begin runs on the SURFACE thread, so a module can pass its own guard
@@ -506,7 +506,7 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
     /// </summary>
     private static VideoBounds? DefaultPlacement()
     {
-        // SP-112 extracted the display walk and the centring into PrimaryDisplayPlacement, which
+        // Extracted the display walk and the centring into PrimaryDisplayPlacement, which
         // three modules now share. What stays HERE is what is genuinely this surface's: its own
         // fractions (D123) and its own answer to "no display at all" — NULL rather than the card's
         // minimum rectangle, because the module's dot and its arm result both read

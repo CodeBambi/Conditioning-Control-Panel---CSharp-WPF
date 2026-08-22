@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the session-drafting sink (the degraded-delivery contract encoded): a completed
+/// The session-drafting sink (the degraded-delivery contract encoded): a completed
 /// intake run drafts a session document that is **marked never-runnable** — no session
 /// engine exists in greenfield (the row's verbatim contract: "the drafted session is never
 /// runnable (no session engine — punches pend forever, silently)").

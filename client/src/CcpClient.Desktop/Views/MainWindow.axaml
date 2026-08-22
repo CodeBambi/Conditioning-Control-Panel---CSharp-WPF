@@ -5,11 +5,11 @@
         Title="CCP Client"
         Background="#FF141018">
   <!--
-    SP-091: the navigation shell. Rail + page host + a diagnostic footer, modelled on the
+    The navigation shell. Rail + page host + a diagnostic footer, modelled on the
     v6.8.1 Studio rack the owner pointed at (wpf-surface-reachability.md §8.3) rather than on
     any WPF layout code. The demonstrator card that used to live here is retired: its own text
     said "the first real feature card supersedes it", and the Spiral Overlay module is that
-    supersession. The SP-003/SP-006 startup-trace and capability proofs moved to the System
+    supersession. The startup-trace and capability proofs moved to the System
     page; they are never deleted.
 
     FIVE doors, and every one of them has a working destination (§9 D1, §10 D14, §11 D25): Studio
@@ -23,7 +23,7 @@
     AutomationProperties.Name on each door is "<route id> door" and that shape is load-bearing:
     the headed capture harness DERIVES the rail's door set from these UIA names and demands a
     layout probe per door (client/tools/verify/capture.ps1:136-151, after a hard-coded list went
-    blind to SP-094's door). Adding a door widens the harness by itself; renaming one to anything
+    blind to a later door). Adding a door widens the harness by itself; renaming one to anything
     that is not "<id> door" makes it invisible to that check again.
   -->
   <Window.Styles>
@@ -150,7 +150,7 @@
       <Setter Property="HorizontalContentAlignment" Value="Center" />
     </Style>
 
-    <!-- SP-094: the Play page's DTRH hero card. CornerRadius 16 is WPF's PlayCard radius
+    <!-- The Play page's DTRH hero card. CornerRadius 16 is WPF's PlayCard radius
          (Views/Tabs/PlayTabView.xaml:252 derives the band's 15 from "the card's 16 minus its
          1px border"), which is why the band below is 15. -->
     <Style Selector="Border.hero">
@@ -233,7 +233,7 @@
       <Setter Property="LineHeight" Value="18" />
     </Style>
 
-    <!-- SP-095: the Graded Intake pass gate. WPF's intake scrim is #CC0A0A14 at CornerRadius 12
+    <!-- The Graded Intake pass gate. WPF's intake scrim is #CC0A0A14 at CornerRadius 12
          (Views/Tabs/GradedIntakeTabView.xaml:192) — a different, more opaque scrim than the DTRH
          band's #A8120A1E, and deliberately kept at WPF's own value rather than unified with it.
          The message still gets its OWN OPAQUE PLATE: that is the §10 D23 lesson, found by a headed
@@ -245,7 +245,7 @@
       <Setter Property="CornerRadius" Value="12" />
     </Style>
 
-    <!-- SP-097: the FAILURE livery, and it exists to be told apart from the two refusal liveries
+    <!-- The FAILURE livery, and it exists to be told apart from the two refusal liveries
          above at a glance. WPF's failure surface is a modal MessageBox with MessageBoxImage.Warning
          (MainWindow/MainWindow.Lab.cs:164-165, :269-270, :336-337) — a different WINDOW, so WPF
          never has to make a failure look unlike a refusal. The port reuses the plate idiom, which
@@ -328,7 +328,7 @@
     </Style>
 
     <!-- ==========================================================================
-         SP-098 — the session action bar, the rack row's live dot, and module dials.
+         The session action bar, the rack row's live dot, and module dials.
          ========================================================================== -->
 
     <!-- WPF's persistent bottom action bar (§8.6). The port carries ONE control off it, the
@@ -413,7 +413,7 @@
   </Window.Styles>
 
   <DockPanel>
-    <!-- Diagnostic footer: the SP-007 layout probe (now measuring the rail's doors, which is
+    <!-- Diagnostic footer: the layout probe (now measuring the rail's doors, which is
          what the headed harness drives) and the current route. Content-free, UIA-readable on
          Windows, logged once on first layout so it is stderr-readable on Linux. -->
     <Border DockPanel.Dock="Bottom" Classes="footer">
@@ -423,7 +423,7 @@
       </StackPanel>
     </Border>
 
-    <!-- SP-098 — the session action bar. Docked AFTER the diagnostic footer so it sits ABOVE
+    <!-- The session action bar. Docked AFTER the diagnostic footer so it sits ABOVE
          it, which is where WPF's action bar is: at the foot of the app, on every page (§8.6).
          It is shell chrome and not a page concern, exactly as §8.6's own design consequence
          says, so a session started here survives every navigation.

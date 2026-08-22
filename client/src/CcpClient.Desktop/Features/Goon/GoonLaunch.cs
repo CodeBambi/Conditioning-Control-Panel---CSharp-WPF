@@ -5,14 +5,14 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Goon;
 
 /// <summary>
-/// SP-130: THE one place a <see cref="GoonHostWindow"/> is constructed — the
+/// THE one place a <see cref="GoonHostWindow"/> is constructed — the
 /// <see cref="Navigation.LoomLaunch"/> / <see cref="Dtrh.DtrhLaunch"/> /
 /// <see cref="Intake.IntakeLaunch"/> pattern: one construction site, several callers, no second
 /// launcher. TWO callers reach this object: the Play page's Goon card (the user path), and
-/// <c>--goon-demo</c>, which SP-132 built through all four of its sites — parsed in
+/// <c>--goon-demo</c>, which was built through all four of its sites — parsed in
 /// <c>Program.cs</c> beside <c>--intake-demo</c>, threaded through <c>BuildAvaloniaApp</c> into
 /// <c>new App(...)</c>, and classified <c>Demo</c> in <c>Lifecycle/HarnessEntryPoints.cs</c>.
-/// SP-130 was granted that flag and correctly REFUSED to half-wire it (D259), because a flag in
+/// An earlier packet was granted that flag and correctly REFUSED to half-wire it (D259), because a flag in
 /// <c>App.axaml.cs</c> alone would have been a dial nothing could turn; D265 records what changed.
 /// The flag carries no drive and no auto-close: the headed evidence for this surface is taken
 /// through real input, and either modifier would be a HARNESS entry point rather than a Demo one.
@@ -51,14 +51,14 @@ public sealed class GoonLaunch
     public Action<GoonHostWindow> Open { get; set; } = static window => window.Show();
 
     /// <summary>Where the participant's data directory lives. Null is the product default (the
-    /// install's own data root through the SP-057 choke point); set only by tests.</summary>
+    /// install's own data root through the data-root choke point); set only by tests.</summary>
     public string? DataDirectory { get; set; }
 
     /// <summary>How many times the launch gesture arrived (presses, not windows).</summary>
     public int LaunchCount { get; private set; }
 
     /// <summary>Raised when the launch flow THREW, so the page can render the fault instead of
-    /// losing it (the SP-097 lesson: a discarded task's exception is seen by nobody).</summary>
+    /// losing it (the launch-fault lesson: a discarded task's exception is seen by nobody).</summary>
     public event Action<Exception>? Faulted;
 
     /// <summary>The exception the last faulted launch threw, or null if none has.</summary>

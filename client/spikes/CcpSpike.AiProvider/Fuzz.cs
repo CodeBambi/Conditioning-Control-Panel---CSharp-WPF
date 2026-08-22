@@ -3,7 +3,7 @@ using CcpClient.Desktop.Ai;
 namespace CcpSpike.AiProvider;
 
 /// <summary>
-/// Step-3 strict-envelope fuzz matrix against SP-016's REAL <see cref="AiEnvelopeValidator"/>.
+/// Step-3 strict-envelope fuzz matrix against the AI-operation contract's REAL <see cref="AiEnvelopeValidator"/>.
 /// Zero-execution is PROVEN two ways per case: a rejected payload has NO
 /// <see cref="AiExecutionPlan"/> (type-enforced — the validator's internal ctor makes an
 /// invalid envelope unconvertible), so the canary CANNOT be invoked; a valid payload's plan

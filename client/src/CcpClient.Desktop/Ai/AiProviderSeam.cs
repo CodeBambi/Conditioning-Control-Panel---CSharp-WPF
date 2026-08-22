@@ -2,7 +2,7 @@ namespace CcpClient.Desktop.Ai;
 
 // Provider strategy seam (contract §3; admission §2). Providers carry stable typed IDs;
 // exactly one is SELECTED at a time (a settings-level fact). Selection NEVER claims
-// availability: readiness is an SP-006 capability state, and only a real probe of the
+// availability: readiness is a capability state, and only a real probe of the
 // selected backend yields Available. The rejected shapes are WPF's identity-check
 // IsAvailable (Services/AiService.cs:52) and local always-true (LocalAiService.cs:46).
 
@@ -36,14 +36,14 @@ public sealed record AiProviderDescriptor(AiProviderId Id, AiEndpointClass Endpo
 /// <summary>
 /// One AI request. The prompt is user/model text: it NEVER enters diagnostics (contract §12)
 /// or logs; the pipeline carries it only to the selected provider.
-/// <see cref="History"/> is the assembled conversation context (SP-047): prior
+/// <see cref="History"/> is the assembled conversation context: prior
 /// user/assistant pairs, OLDEST FIRST, provider-neutral (contract §5 rule 3). Null/empty =
-/// no context (the pre-SP-047 shape; payloads are byte-identical). Assembly is
+/// no context (the earlier shape; payloads are byte-identical). Assembly is
 /// PIPELINE-OWNED: interactive operations carry the memory store's consent-gated pairs
 /// (WPF full-history shape, LocalAiService.cs:531-548); awareness operations NEVER carry
 /// history (WPF stateless ambient path, LocalAiService.cs:476-502) — the pipeline
 /// overwrites/strips this field, so a caller-supplied value never reaches a provider.
-/// CLOSED DOOR (SP-047 pre-completion consult): a future in-memory-history consumer
+/// CLOSED DOOR (pre-completion consult): a future in-memory-history consumer
 /// (quiz-style stateless multi-turn, admission §5 rule 5 — never the persistent store)
 /// cannot pass history through this field today; admitting one requires an explicit seam
 /// change (retirement condition recorded in record.md §6).
@@ -52,14 +52,14 @@ public sealed record AiRequest(string Prompt, IReadOnlyList<AiMemoryTurn>? Histo
 
 /// <summary>
 /// A provider implementation (c1: test fakes only; c2 lands the first real one). The probe
-/// is the ONLY availability authority (SP-006): a provider without a probe, or whose probe
+/// is the ONLY availability authority: a provider without a probe, or whose probe
 /// has not run, is selected-but-unproven → typed Unavailable.
 /// </summary>
 public interface IAiProvider
 {
     AiProviderDescriptor Descriptor { get; }
 
-    /// <summary>The SP-006 probe for this provider's capability state. Null = never provable (registration/selection prove nothing).</summary>
+    /// <summary>The capability probe for this provider's capability state. Null = never provable (registration/selection prove nothing).</summary>
     Func<CancellationToken, Task<Capabilities.CapabilityState>>? Probe => null;
 
     /// <summary>Produces a reply. MUST observe the cancellation token — cancellation, never a timeout alone, unblocks in-flight work (contract §2 rule 1).</summary>
@@ -67,7 +67,7 @@ public interface IAiProvider
 }
 
 /// <summary>
-/// The typed result of one AI operation (contract §1): the terminal outcome IS SP-004's
+/// The typed result of one AI operation (contract §1): the terminal outcome IS the owner's
 /// OperationOutcome; the domain payload (<see cref="Reply"/>) rides only with Completed.
 /// <see cref="Admission"/> carries the awareness suppression decision (Admitted for
 /// interactive operations).

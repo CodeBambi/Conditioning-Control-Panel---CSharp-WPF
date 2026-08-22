@@ -1,6 +1,6 @@
-# WebView + DTRH spike evidence (SP-011)
+# WebView + DTRH spike evidence
 
-**Date:** 2026-07-19/20 · **Task:** SP-011 (task-board row "Spike official WebView with the copied DTRH payload") · **Feeds:** BLOCKED row "Admit DTRH browser and origin design" (owner reviews this spike)
+**Date:** 2026-07-19/20 · **Task:** task-board row "Spike official WebView with the copied DTRH payload" · **Feeds:** BLOCKED row "Admit DTRH browser and origin design" (owner reviews this spike)
 
 **Verdict shape:** every acceptance item has a NAMED observation below (PASS / FAIL / DIAGNOSED-BLOCKED + evidence pointer). Headline: the package restores/builds clean against the 12.1.0 baseline; the **exact unchanged payload boots and renders on Windows** (engine live t=1502ms cold, 360 fps steady-state, exit 0); on WSLg/X11 the embedded control **loads but never presents** (precisely diagnosed; adapter auto-fell-back to WebKitGTK which declares dialog-only scenarios), while **NativeWebDialog renders the page for real**; the unchanged WebView2-shaped `bridge.js` transports on Windows but **cannot transport on Linux** (`invokeCSharpAction` page→host works there — the admit row's "minimal transport-only edit" question is empirically live).
 

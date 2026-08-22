@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-013 Step 2: owner-monitor working-area capping math (pure functions, no display).
+/// Owner-monitor working-area capping math (pure functions, no display).
 /// Screen.WorkingArea/Bounds are physical pixels; Scaling converts to DIP (12.1.0 XML docs).
 /// Constants are WPF-parity (fixed 520x640, min 420x360), pending-owner.
 /// </summary>

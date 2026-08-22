@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Scheduling;
 
 /// <summary>
-/// SP-118: the <b>Scheduler</b> row's persisted settings — WPF's ten, and exactly its ten.
+/// The <b>Scheduler</b> row's persisted settings — WPF's ten, and exactly its ten.
 ///
 /// <para>The shipping editor is <c>Features/SchedulerFeatureControl.xaml</c>, hosted by the Studio
 /// rack at <c>Views/Controls/Studio/SchedulerRackPanel.xaml:92</c>, and it carries <b>an enable, a
@@ -30,7 +30,7 @@ namespace CcpClient.Desktop.Scheduling;
 /// entry, which would delete the fallback branch and with it one of this module's refusals —
 /// the one where a user's typo silently moves the window to 16:00-22:00.</para>
 ///
-/// <para>One document per module, on the precedent SP-101 set and SP-105 restated (divergence
+/// <para>One document per module, on a precedent set earlier and since restated (divergence
 /// D71): <c>Persistence/**</c> is outside this packet's File Scope, and the substantive half of
 /// that argument is unchanged — the store's Degraded load path takes the WHOLE document to
 /// defaults, so one hand-broken value in a shared file would reset every other module's dials.</para>

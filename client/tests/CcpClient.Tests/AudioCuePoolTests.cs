@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-109 — the audio clip pool, on a real folder.
+/// The audio clip pool, on a real folder.
 ///
 /// <para><b>Why this file exists, and it is a code-review correction.</b> The pool shipped with no
 /// facts at all, and the one behaviour it owns is <b>the stated ground of this packet's dot

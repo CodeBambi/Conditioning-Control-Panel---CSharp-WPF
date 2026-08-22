@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Cooldown machinery tests (SP-042 slice c5; contract §4 rule 2; admission §5 rule 3).
+/// Cooldown machinery tests (slice c5; contract §4 rule 2; admission §5 rule 3).
 /// Proves: the 4 typed classes, extend-not-shrink per (kind, key), live-check boundary
 /// (admitted at exact equality — WPF `UtcNow &lt; expiresAt` KeywordTriggerService.cs:94),
 /// expiry + prune-on-access, class/key independence, and the recorded WPF baseline VALUES
@@ -29,7 +29,7 @@ public class AiAwarenessCooldownTests
         var clock = new Clock();
         var registry = new AiCooldownRegistry(clock.Read);
 
-        // SP-066 framing (c): the loop carries the only assertions — pin the source
+        // Loop framing (c): the loop carries the only assertions — pin the source
         // non-empty so an emptied enum can never silence them invisibly.
         Assert.NotEmpty(Enum.GetValues<AiCooldownKind>());
         foreach (var kind in Enum.GetValues<AiCooldownKind>())

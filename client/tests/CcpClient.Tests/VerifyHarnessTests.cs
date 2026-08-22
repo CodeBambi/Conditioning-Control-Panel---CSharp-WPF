@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-008 tier-3 assertion-logic unit tests: the CcpVerify check evaluator and manifest
+/// Tier-3 assertion-logic unit tests: the CcpVerify check evaluator and manifest
 /// loader on SYNTHETIC pixel buffers (no Avalonia runtime, no captures). Pass case,
 /// per-check fail case, tolerance and fraction boundaries, region shapes, manifest
 /// validation. The 85 landed tests stay untouched; these are additive.

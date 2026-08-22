@@ -51,8 +51,8 @@ public readonly record struct FlashDraw
     }
 
     /// <summary>WPF's shipped defaults (<c>AppSettings.cs:839</c>, <c>:853</c>, <c>:925</c>) — what
-    /// a build with no Visuals document draws with, and what every flash drew between SP-100 and
-    /// SP-117.</summary>
+    /// a build with no Visuals document draws with, and what every flash drew before the
+    /// Visuals dials existed.</summary>
     public static FlashDraw Defaults { get; } = new(
         VisualsPresetDocument.DefaultImageScalePercent,
         VisualsPresetDocument.DefaultFlashOpacityPercent,

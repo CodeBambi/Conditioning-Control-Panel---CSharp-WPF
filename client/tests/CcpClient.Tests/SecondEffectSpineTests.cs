@@ -8,10 +8,10 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-101 — TWO modules under one spine, and the three template hazards SP-098's review named.
+/// TWO modules under one spine, and the three template hazards the spine's review named.
 ///
 /// <para><b>What this file is really testing.</b> Not subliminals. The claim under test is that the
-/// session spine SP-098 built for one effect is a template rather than an accident: that a second
+/// session spine built for one effect is a template rather than an accident: that a second
 /// module with a different pacing period, a different default, a different pool and a different
 /// counting rule runs under the same engine, the same clock, the same operation registry and the
 /// same stop, without either module changing to accommodate the other. Every fact below fails if
@@ -125,7 +125,7 @@ public class SecondEffectSpineTests
         await using var rig = await Rig.StartAsync();
 
         // Subliminals ships OFF (AppSettings.cs:1234), so a cold START arms it and it schedules
-        // nothing. Before SP-101 that was literally the same observation as a successful arm.
+        // nothing. Before this packet that was literally the same observation as a successful arm.
         rig.Engine.Start();
 
         var flash = Assert.IsType<CapabilityState.Available>(rig.Engine.ArmOutcomes[FlashImagesEffect.EffectId]);
@@ -135,18 +135,18 @@ public class SecondEffectSpineTests
         Assert.Equal(EffectReasonCodes.EffectDialOff, subliminal.Reason.Code);
 
         // And the session can NAME the holes rather than merely having them, in rack order.
-        // SP-105 added a third module that also ships off (Pink Filter,
-        // CCP.Core/Models/AppSettings.cs:3726), SP-108 a fourth (Intensity Ramp, :2575-2580) and
-        // SP-109 a fifth and sixth (both audio modules), and SP-110 a seventh (Lock Card, which ships
-        // off at CCP.Core/Models/AppSettings.cs:3331) — so this list has grown four times. SP-112
-        // adds an eighth module that ships off (Bubble Count, AppSettings.cs's own
+        // A later wave added a third module that also ships off (Pink Filter,
+        // CCP.Core/Models/AppSettings.cs:3726), then a fourth (Intensity Ramp, :2575-2580) and
+        // a fifth and sixth (both audio modules), and a seventh (Lock Card, which ships
+        // off at CCP.Core/Models/AppSettings.cs:3331) — so this list has grown four times. An
+        // eighth module that ships off was added later (Bubble Count, AppSettings.cs's own
         // BubbleCountEnabled default), and it lands BEFORE the lock card because that is the rack's
         // order (StudioTabView.xaml.cs:499-505). The FACT is unchanged and the assertion is stronger
         // each time: SEVEN modules declined the same session for the same reason and all seven are
-        // named, which is the whole point of a typed arm. SP-113 adds a ninth (Bubble Pop, whose
+        // named, which is the whole point of a typed arm. A ninth followed (Bubble Pop, whose
         // BubblesEnabled ships false at CCP.Core/Models/AppSettings.cs:2737-2738) and it lands at the HEAD of GAMES &
         // CARDS, which is the rack's order (StudioTabView.xaml.cs:499).
-        // SP-115 adds a TENTH (Bouncing Text, whose BouncingTextEnabled ships false at
+        // A TENTH followed (Bouncing Text, whose BouncingTextEnabled ships false at
         // CCP.Core/Models/AppSettings.cs:3598) and it lands after Spiral Overlay, which is the
         // rack's order.
         Assert.Equal(
@@ -266,7 +266,7 @@ public class SecondEffectSpineTests
         rig.Engine.Stop();
 
         // Exact, not "at least": a single notification raised up the mover's own thread — which is
-        // what every module did before SP-101, and what the fifteenth would have gone on doing —
+        // what every module did before this packet, and what the fifteenth would have gone on doing —
         // makes these two numbers differ.
         Assert.True(changes > 0, "the session raised no Changed at all, so this fact proved nothing");
         Assert.Equal(changes, insideAPost);
@@ -296,7 +296,7 @@ public class SecondEffectSpineTests
         clock.Replay(0);
 
         // Nothing fired: a schedule the user's own slider move replaced must not still arrive at
-        // the old pace. And the LIVE schedule is untouched — before SP-101 the stale callback
+        // the old pace. And the LIVE schedule is untouched — before this packet the stale callback
         // nulled the pending slot, so the dot said Armed while a firing sat on the clock, and the
         // next Disarm found nothing to dispose and left the timer behind.
         Assert.Equal(0, lab.Effect.SubliminalCount);
@@ -752,7 +752,7 @@ public class SecondEffectSpineTests
         public void HideAll() => HideAllCalls++;
     }
 
-    /// <summary>The manual clock, SP-098's shape: due timers fire in due order inside
+    /// <summary>The manual clock, the session spine's shape: due timers fire in due order inside
     /// <see cref="Advance"/>. Zero wall-clock.</summary>
     private sealed class ManualSessionClock : ISessionClock
     {

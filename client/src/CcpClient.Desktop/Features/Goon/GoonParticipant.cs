@@ -5,7 +5,7 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Goon;
 
 /// <summary>
-/// SP-130: the Goon host's owned transport infrastructure — the <see cref="Intake.IntakeParticipant"/>
+/// The Goon host's owned transport infrastructure — the <see cref="Intake.IntakeParticipant"/>
 /// shape exactly: a THIRD §4 <see cref="LoopbackServer"/> (own ephemeral ports, own per-session
 /// bridge token, own inbox), started and stopped with the Goon window.
 ///
@@ -15,7 +15,7 @@ namespace CcpClient.Desktop.Features.Goon;
 /// taint checks meaningful, traversal refusal, nosniff and deny-by-default 415 — all tested.
 /// Re-deriving Range handling to obtain a prettier route prefix would be a cosmetic risk.</para>
 ///
-/// <para><b>THE BORROW, and why SP-130's construction was wrong (SP-132, D266).</b> SP-130 passed
+/// <para><b>THE BORROW, and why the first construction was wrong (D266).</b> That construction passed
 /// the goon tree as BOTH roots, so that "nothing else is reachable on this origin". The first run
 /// that ever loaded the page found what that costs: <b>the goon page hotlinks twelve assets out of
 /// the DTRH tree by ABSOLUTE path</b> — <c>ui/audio.js:112</c> declares
@@ -37,14 +37,14 @@ namespace CcpClient.Desktop.Features.Goon;
 /// admits the WHOLE DTRH payload tree, not the twelve files that motivated it: <b>1542 dtrh files
 /// minus the 3 this tree shadows (<c>index.html</c>, <c>boot.js</c>, <c>bridge.js</c>) = 1539 files
 /// that were unreachable on this origin before and are reachable at <c>/dtrh/*</c> now</b>, of
-/// which 1537 serve and 2 (<c>.md</c>) answer 415. SP-130's "nothing else is reachable on this
+/// which 1537 serve and 2 (<c>.md</c>) answer 415. The original "nothing else is reachable on this
 /// origin" is deliberately given up, and one line reverts it.
 /// <c>GoonServingTests.TheBorrowsAdmissionSurface_IsMeasured_AndBoundedToTheDtrhPayloadTree</c>
 /// pins that number so it cannot grow without review.</para>
 ///
 /// <para><b>Why it is acceptable anyway</b>, beside the number rather than instead of it: the
 /// MECHANISM is not new — the intake origin has borrowed these same <c>bubbles/sfx</c> files since
-/// SP-054 (<c>IntakeServingTests.The_Borrow_Falls_Through_To_The_Dtrh_Tree</c>) — and this
+/// the intake host landed (<c>IntakeServingTests.The_Borrow_Falls_Through_To_The_Dtrh_Tree</c>) — and this
 /// construction is NARROWER than that one in one respect, because <c>/media/*</c> keeps the goon
 /// tree's own root rather than the dtrh one. Every §4 control is unchanged and still applies to the
 /// fallback: GET-only, MIME allowlist + 415, traversal refusal, nosniff. <b>No user media is
@@ -112,7 +112,7 @@ public sealed class GoonParticipant : IDisposable
         $"{Server.PageOrigin}/dtrh/{page}?bridge={BridgeToken}";
 
     /// <summary>Bind the origins (idempotent). The payload probe is logged BEFORE the bind so the
-    /// transcript is self-evidencing about where the page is served from (SP-048 discipline).</summary>
+    /// transcript is self-evidencing about where the page is served from (the payload-probe discipline).</summary>
     public GoonServingRoots.GoonPayloadProbe Start()
     {
         if (Interlocked.Exchange(ref _started, 1) != 0)
@@ -133,7 +133,7 @@ public sealed class GoonParticipant : IDisposable
         return probe;
     }
 
-    /// <summary>Idempotent teardown (SP-003 discipline).</summary>
+    /// <summary>Idempotent teardown (lifecycle discipline).</summary>
     public void Dispose()
     {
         if (!Running)

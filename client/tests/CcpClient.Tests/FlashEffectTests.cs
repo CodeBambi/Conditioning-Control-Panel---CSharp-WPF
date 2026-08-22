@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-098 — the parts of Flash Images that are pure enough to pin exactly: the pacing law, the
+/// The parts of Flash Images that are pure enough to pin exactly: the pacing law, the
 /// persisted dials and their clamps, and the real image pool over a real folder.
 ///
 /// <para>These are the behaviour-visible facts of the ported half. The half that is NOT ported
@@ -101,7 +101,7 @@ public class FlashEffectTests
         var high = FlashSchedule.MaximumInterval(perHour);
         var drawn = Enumerable.Range(0, 2000).Select(_ => FlashSchedule.NextInterval(perHour, random)).ToArray();
 
-        // The population is asserted before it is swept (SP-066 framing (c)): a sweep over an
+        // The population is asserted before it is swept (loop framing (c)): a sweep over an
         // empty sequence is the vacuous shape that passes while proving nothing.
         Assert.NotEmpty(drawn);
         Assert.All(drawn, d => Assert.InRange(d, low, high));
@@ -239,7 +239,7 @@ public class FlashEffectTests
     public void ADeselectedImage_IsNeverDrawn_ThroughThePortsOneActivePoolSeam()
     {
         using var folder = new TempAssets("keep.png", "dropped.png");
-        // SP-055: whether a file is in play is decided by DtrhUserMedia.IsAssetActive, the ONE
+        // Whether a file is in play is decided by DtrhUserMedia.IsAssetActive, the ONE
         // seam every consumer shares — so the same uncheck that hides an image from the descent
         // hides it from a flash. The path is assets-root-relative with '/' separators, which is
         // the normalization that seam ports verbatim.

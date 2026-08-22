@@ -69,7 +69,7 @@ public static class AudioPresenceFactory
 
             // Linux CAN play audio, and this port's own backend already does it there: SoundFlow
             // ships libminiaudio.so per-RID and enumerated a real endpoint under WSLg during the
-            // SP-017 spike (client/docs/audio-backend-spike.md:13,39). So the refusal is NOT "no
+            // spike (client/docs/audio-backend-spike.md:13,39). So the refusal is NOT "no
             // sound on Linux" — it is that this build has no way to EARN the claim. Available here
             // means the OS confirmed a render session for this process, and that proof is WASAPI
             // (IAudioSessionManager2 / IAudioSessionControl2 / IAudioMeterInformation). The

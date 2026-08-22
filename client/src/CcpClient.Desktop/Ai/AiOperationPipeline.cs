@@ -6,7 +6,7 @@ namespace CcpClient.Desktop.Ai;
 
 /// <summary>
 /// The AI operation pipeline (admission §8 slice c1; contract §§1–4, 11). Every
-/// interactive/awareness operation is an SP-004 owned operation on the pipeline's single
+/// interactive/awareness operation is an owned operation on the pipeline's single
 /// <see cref="AsyncOperationOwner"/> — no new async machinery.
 ///
 /// Semantics fixed here:
@@ -16,7 +16,7 @@ namespace CcpClient.Desktop.Ai;
 ///   to B. The point-of-application check is <see cref="AsyncOperationOwner.IsLive"/>
 ///   (generation current AND not cancelled — IsCurrent alone is insufficient because
 ///   Cancel() does not invalidate application; pre-approach consult, record.md §4.1).
-/// - Selection ≠ availability (contract §3 rule 3): readiness is the SP-006 capability
+/// - Selection ≠ availability (contract §3 rule 3): readiness is the probed capability
 ///   state named "ai.provider.{id}"; registration/selection/OS checks never yield
 ///   availability. A selected-but-unproven provider yields AiReply.Unavailable
 ///   (provider-unproven). The cloud descriptor registers with NO implementation and a
@@ -29,7 +29,7 @@ namespace CcpClient.Desktop.Ai;
 ///   drains this pipeline's outstanding completions with a bound. c2 re-verifies live
 ///   against a real network operation; c7 carries the UI-quiet headed proof.
 ///
-/// Construction starts nothing (SP-003): the owner's first generation is armed lazily on
+/// Construction starts nothing (the lifecycle contract): the owner's first generation is armed lazily on
 /// first use (<see cref="EnsureArmed"/>).
 /// </summary>
 public sealed class AiOperationPipeline
@@ -60,7 +60,7 @@ public sealed class AiOperationPipeline
         _admissionPolicy = admissionPolicy ?? throw new ArgumentNullException(nameof(admissionPolicy));
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _moderation = moderation ?? throw new ArgumentNullException(nameof(moderation));
-        _memory = memory; // OPTIONAL (SP-040 lane-disjointness): existing call sites compile unchanged.
+        _memory = memory; // OPTIONAL (lane-disjointness): existing call sites compile unchanged.
         _owner = registry.OwnerFor("Ai");
     }
 
@@ -73,12 +73,12 @@ public sealed class AiOperationPipeline
         get { lock (_gate) { return _selected; } }
     }
 
-    /// <summary>The SP-006 capability name for a provider's readiness state.</summary>
+    /// <summary>The capability name for a provider's readiness state.</summary>
     public static string CapabilityName(AiProviderId id) => $"ai.provider.{id.Value}";
 
     /// <summary>
     /// Registers a provider implementation. Its probe (if any) is DECLARED with the
-    /// capability registry — registration alone never yields Available (SP-006); the probe
+    /// capability registry — registration alone never yields Available; the probe
     /// must run (CapabilityProbeRunner) before operations through this provider can succeed.
     /// </summary>
     public void RegisterProvider(IAiProvider provider)
@@ -159,9 +159,9 @@ public sealed class AiOperationPipeline
 
     /// <summary>
     /// Awareness operation with the TYPED consent state (c5; admission §5 rule 1; pre-approach
-    /// consult, SP-042 record.md §4.1 (a)): the typed state is the admission vocabulary —
+    /// consult, the packet record §4.1 (a)): the typed state is the admission vocabulary —
     /// granularity (per-context-field/per-source) tightens HERE without contract change
-    /// (§9.2 #4 owner-pending). The bool overload is RETIRED (SP-046 c7): every call site
+    /// (§9.2 #4 owner-pending). The bool overload is RETIRED (slice c7): every call site
     /// speaks the typed state.
     /// </summary>
     public Task<AiOperationResult> RunAwarenessAsync(AiRequest request, AiAwarenessConsent consent)
@@ -247,7 +247,7 @@ public sealed class AiOperationPipeline
             : AiModerationSurfaces.AwarenessReplyOutput;
         string? softHitCode = null;
 
-        // SP-079: the hygienic half of the SP-069 union is otherwise indistinguishable in the
+        // The hygienic half of the reply-hygiene union is otherwise indistinguishable in the
         // only channel this seam owns. This is a DIAGNOSTIC stable code, NOT a moderation
         // surface: no AiModerationSurface is constructed, the closed inventory
         // (AiModerationBoundary.cs:101-151) and its 6/5 pin are untouched, and BOTH
@@ -282,7 +282,7 @@ public sealed class AiOperationPipeline
                 break;
         }
 
-        // Memory→prompt assembly (SP-047; admission §4 rule 1; contract §5): INTERACTIVE
+        // Memory→prompt assembly (admission §4 rule 1; contract §5): INTERACTIVE
         // operations carry the store's consent-gated pairs (the WPF full-history shape,
         // LocalAiService.cs:531-548). Assembly is PIPELINE-OWNED — History is ALWAYS
         // overwritten, never passed through from the caller (pre-approach consult: a
@@ -302,7 +302,7 @@ public sealed class AiOperationPipeline
             request = request with { History = null };
         }
 
-        // The ONLY I/O path: an SP-004 owned operation under the current generation.
+        // The ONLY I/O path: an owned operation under the current generation.
         EnsureArmed();
         AiReply? reply = null;
         var completion = _owner.RunAsync($"ai.{operationClass.ToString().ToLowerInvariant()}", async token =>
@@ -322,7 +322,7 @@ public sealed class AiOperationPipeline
 
             if (produced is AiReply.Generated generated)
             {
-                // SP-069 reply hygiene, upstream of every consumer (WPF AiTextHygiene.Clean /
+                // Reply hygiene, upstream of every consumer (WPF AiTextHygiene.Clean /
                 // StripMetadataTags and AiResponseParser.LooksLikeEnvelopeLeak; shipped fix
                 // 932d829a). REMOVAL ONLY — H1 reasoning blocks + tokenizer artifacts, then
                 // H2 metadata-tag echoes (the port's own trigger: AiAwarenessService.cs:229
@@ -330,7 +330,7 @@ public sealed class AiOperationPipeline
                 var afterH1 = AiTextHygiene.Clean(generated.Text);
                 var hygienic = AiTextHygiene.StripMetadataTags(afterH1);
 
-                // H3 envelope-leak DETECTION as a union (SP-069 pre-approach consult): the
+                // H3 envelope-leak DETECTION as a union (pre-approach consult): the
                 // port's trigger composed with a leak ("[Category: …] {\"response\":…}") is
                 // only visible before H2, while a truncation fragment is only certain after
                 // it — check both. Detection only: no lift, no unescape, no repair, no
@@ -349,7 +349,7 @@ public sealed class AiOperationPipeline
                 // before the reply is applied. Model-produced Generated text only; app-authored
                 // Fallback text is a recorded non-claim (record.md §2 row 12). Output blocks
                 // never escalate (WPF: model output is never the user's doing).
-                // SP-069 UNION rule: the gate evaluates the RAW text AND the hygienic text and
+                // UNION rule: the gate evaluates the RAW text AND the hygienic text and
                 // blocks if EITHER hits — it can only refuse more, never less. WPF moderates
                 // the sanitized text only (OpenAiCompatibleService.cs:630-631); the union is a
                 // deliberate fail-closed divergence (record.md §4). EvaluateOutput is pure
@@ -380,7 +380,7 @@ public sealed class AiOperationPipeline
                     }
                 }
 
-                // SP-068 F3 (audit row C3, strip half): model-invented URLs are removed
+                // F3 (audit row C3, strip half): model-invented URLs are removed
                 // BEFORE the text reaches memory, the bubble, or disk (WPF
                 // AiTextHygiene.StripUnsanctionedLinks applied at CompanionBrain.cs:269
                 // chat / :356 reaction; the port issues the model no links, so every
@@ -391,7 +391,7 @@ public sealed class AiOperationPipeline
                 // invented links — no reply at all"): typed Unavailable from the EXISTING
                 // vocabulary, and the turn pair is NEVER appended (the port's equivalent
                 // of WPF's user-turn rollback — both appends live in the block below, so
-                // skipping it keeps the pair atomic). SP-069: the strip reads the HYGIENIC
+                // skipping it keeps the pair atomic). Hygiene runs first: the strip reads the HYGIENIC
                 // text; a reply emptied by H1/H2 lands in the same emptied path.
                 var stripped = AiPrivacyFilters.StripUnsanctionedLinks(hygienic);
                 if (stripped.Length == 0)
@@ -408,7 +408,7 @@ public sealed class AiOperationPipeline
                 }
             }
 
-            // Memory persist (admission §4 rule 5; SP-040 slice c4 — discharges c3 inventory
+            // Memory persist (admission §4 rule 5; slice c4 — discharges c3 inventory
             // row 6's Reserved→Wired seam): ONLY after the output boundary passes, inside the
             // live operation, before reply application. Append-never — a blocked turn returns
             // above before any append (the WPF append-then-rollback strengthened, P2/H5
@@ -418,7 +418,7 @@ public sealed class AiOperationPipeline
             // text is c3's recorded non-claim. Consent is enforced by the store at write
             // admission; the save is enqueued, not awaited (WPF latency discipline,
             // LocalAiService.cs:644). Consumption of persisted memory as prompt context
-            // landed in SP-047 (the assembly seam above; the store's consent-gated
+            // landed later (the assembly seam above; the store's consent-gated
             // ReadPromptContext).
             if (_memory is not null && operationClass == AiOperationClass.Interactive && produced is AiReply.Generated passed)
             {
@@ -434,7 +434,7 @@ public sealed class AiOperationPipeline
         var outcome = await completion.ConfigureAwait(false);
         var appliedReply = outcome is OperationOutcome.Completed ? reply : null;
 
-        // SP-079: SUBSTITUTES for the shared refused:output that StableCodeOf (:523) would
+        // SUBSTITUTES for the shared refused:output that StableCodeOf (:523) would
         // otherwise emit on the hygienic-only block; never a second record, never a second
         // field. Exactly ONE emission changes: a hygienic-only output block with no prior soft
         // hit, refused:output becomes refused:output-hygienic (that changed emission IS this

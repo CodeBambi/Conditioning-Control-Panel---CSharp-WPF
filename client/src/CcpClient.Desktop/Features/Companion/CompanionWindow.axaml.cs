@@ -5,7 +5,7 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Companion;
 
 /// <summary>
-/// The companion UI surface (SP-046 slice c7). Owned, modeless, ShowInTaskbar=false
+/// The companion UI surface (slice c7). Owned, modeless, ShowInTaskbar=false
 /// (W-04 window-contract discipline; placement decision record.md §2.1). The window owns
 /// its view-model's lifetime: Escape with no confirm open closes; the confirm overlay
 /// focuses NO by default every time it opens (WPF MessageBox default-No parity,

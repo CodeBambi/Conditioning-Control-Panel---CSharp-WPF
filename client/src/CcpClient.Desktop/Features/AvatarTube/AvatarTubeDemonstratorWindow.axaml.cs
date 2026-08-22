@@ -9,7 +9,7 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.AvatarTube;
 
 /// <summary>
-/// The explicitly-labeled DEMONSTRATOR AvatarTube surface (SP-015; SP-007/SP-013 pattern:
+/// The explicitly-labeled DEMONSTRATOR AvatarTube surface (the demonstrator pattern:
 /// really-functioning, superseded by the first real AvatarTube feature, owner may
 /// async-veto). Every behavior routes through the ONE engine — no parallel timers, no
 /// second timing authority (first-attempt leak REJECTs). Transition/liveness constants are
@@ -103,7 +103,7 @@ public partial class AvatarTubeDemonstratorWindow : Window
 
         CapabilityText.Text = $"capability avatar-animation: {Describe(_participant.AvatarCapability)}";
         // The stage's SCREEN origin + scale: the headed harness's capture rect (physical
-        // pixels, UIA-readable — the SP-007 layout-probe pattern).
+        // pixels, UIA-readable — the layout-probe pattern).
         var stageOrigin = AvatarStage.PointToScreen(new Point(0, 0));
         ProbeText.Text =
             $"avatar-probe: pack={args.PackId} clip={args.LayerA.ClipId} frame={args.LayerA.FrameIndex} " +

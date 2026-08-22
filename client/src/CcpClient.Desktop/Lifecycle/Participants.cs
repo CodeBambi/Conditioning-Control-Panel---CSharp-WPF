@@ -17,11 +17,11 @@ public interface IBackgroundParticipant
 }
 
 /// <summary>
-/// Demonstrator participant proving the ownership rule end-to-end (SP-003 contract §5.4)
+/// Demonstrator participant proving the ownership rule end-to-end (contract §5.4)
 /// and the async/fault shape (async-lifecycle-fault-contract): its tick loop is a
 /// registered operation on its own generation, and one user-visible update (the tick
 /// text in the placeholder window) flows through the real dispatch boundary. It is not a
-/// product feature. Construction starts nothing (SP-003 contract §4.4).
+/// product feature. Construction starts nothing (contract §4.4).
 /// </summary>
 public sealed class HeartbeatParticipant : IBackgroundParticipant
 {

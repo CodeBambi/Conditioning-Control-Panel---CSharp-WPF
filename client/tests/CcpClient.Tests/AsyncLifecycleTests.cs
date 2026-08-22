@@ -67,12 +67,12 @@ public class AsyncLifecycleTests
     }
 
     /// <summary>
-    /// SP-142, fact 1 of 3. <c>CancellationTokenSource.Cancel()</c> runs its registrations
+    /// Fact 1 of 3. <c>CancellationTokenSource.Cancel()</c> runs its registrations
     /// synchronously on the calling thread, so an owner that cancels inside its own lock runs
     /// FOREIGN code with that lock held — and <c>IsLive</c> is reached the other way round, from
     /// under a caller's own lock (<c>Session/OwnedSessionEffect.cs</c>'s <c>Dot</c> holds the effect
     /// gate across it). No deadlock was ever observed; the only thing preventing one was an
-    /// unenforced convention that every cancellation callback stay lock-free, and SP-106 was
+    /// unenforced convention that every cancellation callback stay lock-free, and an earlier packet was
     /// reverted for exactly that inversion. The existing suite could not see it because every other
     /// test drives this on ONE thread.
     /// </summary>
@@ -81,7 +81,7 @@ public class AsyncLifecycleTests
         => Assert.IsType<OperationOutcome.Cancelled>(
             await TheOwnersGateIsFreeWhileACancellationCallbackRuns(owner => owner.Cancel()));
 
-    /// <summary>SP-142, fact 2 of 3: <see cref="AsyncOperationOwner.Begin"/> reaches the same cycle,
+    /// <summary>Fact 2 of 3: <see cref="AsyncOperationOwner.Begin"/> reaches the same cycle,
     /// because it cancels the generation it retires.</summary>
     [Fact]
     public async Task Begin_RunsThePreviousGenerationsCallbacks_WithoutHoldingTheOwnersGate()
@@ -89,7 +89,7 @@ public class AsyncLifecycleTests
             await TheOwnersGateIsFreeWhileACancellationCallbackRuns(owner => _ = owner.Begin()));
 
     /// <summary>
-    /// SP-142, fact 3 of 3, and the one that needs no second thread at all.
+    /// Fact 3 of 3, and the one that needs no second thread at all.
     ///
     /// <para><b>Why it bites, which is not obvious.</b> A <c>lock</c> is re-entrant. In the pre-fix
     /// shape the retired generation's callback ran INSIDE <c>lock (_gate)</c> and before
@@ -286,7 +286,7 @@ public class AsyncLifecycleTests
         Assert.Equal(0, registry.OutstandingOperations);
         Assert.NotNull(heartbeat.Completion);
         Assert.IsType<OperationOutcome.Cancelled>(await heartbeat.Completion!); // no unhandled exception
-        Assert.Equal(1, heartbeat.StopCount); // SP-003 teardown invariants undisturbed
+        Assert.Equal(1, heartbeat.StopCount); // lifecycle teardown invariants undisturbed
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class AsyncLifecycleTests
         var host = new ApplicationHost(log, [orphan], new StartupTrace(), registry, boundary, TimeSpan.FromMilliseconds(100));
         await host.StartParticipantsAsync(CancellationToken.None);
 
-        await host.ShutdownAsync(); // bounded wait expires; teardown must not throw (SP-003 invariant)
+        await host.ShutdownAsync(); // bounded wait expires; teardown must not throw (lifecycle invariant)
 
         Assert.Equal(1, registry.UnobservedOperations);
         Assert.Contains(log.Messages, m => m.Contains("unobserved") && m.Contains("orphan", StringComparison.OrdinalIgnoreCase));
@@ -348,7 +348,7 @@ public class AsyncLifecycleTests
         boundary.Bind(fake); // phase 4
         heartbeat.TickReporter = texts.Enqueue;
 
-        // Class 2 (SP-059): a REAL 500ms heartbeat timer actor — the tolerant window with the
+        // Class 2: a REAL 500ms heartbeat timer actor — the tolerant window with the
         // loud classifier; the condition (a tick reached the reporter) is unchanged.
         await TestWait.Until(() => !texts.IsEmpty, "a tick should reach the reporter through the boundary (real 500ms heartbeat)", cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(fake.Posted > 0);
@@ -369,7 +369,7 @@ public class AsyncLifecycleTests
         await heartbeat.StartAsync(CancellationToken.None);
         await heartbeat.StopAsync(); // immediate: the token is cancelled before (or during) the loop's first check
 
-        // Zero-tick regression pin (SP-067): deterministic because BOTH exits now agree —
+        // Zero-tick regression pin: deterministic because BOTH exits now agree —
         // the OCE path (loop ticked, then Delay observed the token) and the zero-tick
         // post-loop return both yield Cancelled; no interleaving is being controlled.
         // What breaks it: the defective post-loop `return OperationOutcome.Completed.Instance`

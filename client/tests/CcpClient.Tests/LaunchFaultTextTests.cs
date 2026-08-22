@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-097: what a user reads when a launch THREW past the gate. Pure text composition, so it is
+/// What a user reads when a launch THREW past the gate. Pure text composition, so it is
 /// provable here rather than only through a page.
 ///
 /// <para>The trap this packet was authored against is a catch that renders something and drops the
@@ -160,7 +160,7 @@ public class LaunchFaultTextTests
                 LaunchFaultText.Compose(headline, new EmptyMessageException())));
         }
 
-        // The SP-066 framing-(c) pin: an empty set would make the loop below check nothing.
+        // The framing-(c) pin: an empty set would make the loop below check nothing.
         Assert.NotEmpty(swept);
         Assert.True(swept.Count >= 100, $"only {swept.Count} strings were swept; the derivation has narrowed");
 
@@ -172,7 +172,7 @@ public class LaunchFaultTextTests
             Assert.False(
                 normalized.Contains("\n\n", StringComparison.Ordinal),
                 $"{name} contains a BLANK LINE. That wedges the Avalonia 12.1.1 layout pass on the lock/fault "
-                + "plates (measured at SP-097, wpf-surface-reachability.md §13 D43): the press that raises the "
+                + "plates (measured at wpf-surface-reachability.md §13 D43): the press that raises the "
                 + "band never returns, so the app and this suite HANG rather than fail. Use a single newline");
 
             // A leading or trailing line break is the same empty line at an edge. Applied only to
@@ -316,7 +316,7 @@ public class LaunchFaultTextTests
             "You've taken your free Graded Intake",
         ];
 
-        // The SP-066 framing-(c) pin: every assertion below lives inside a loop, so an empty
+        // The framing-(c) pin: every assertion below lives inside a loop, so an empty
         // vocabulary would make this fact pass while checking nothing.
         Assert.NotEmpty(refusalWords);
 
@@ -344,7 +344,7 @@ public class LaunchFaultTextTests
             IntakePassGate.SpentMessageOneDay,
         ];
 
-        // The SP-066 framing-(c) pin: the assertions below are all inside the loop.
+        // The framing-(c) pin: the assertions below are all inside the loop.
         Assert.NotEmpty(refusals);
 
         foreach (var refusal in refusals)

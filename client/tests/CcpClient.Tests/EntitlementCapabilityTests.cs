@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-092: the entitlement capability that reads the shipping WPF app's existing login.
+/// The entitlement capability that reads the shipping WPF app's existing login.
 ///
 /// <para>THE FACT THIS FILE EXISTS TO PROVE. "You are not a patron" and "I could not tell" are
 /// different answers, and the second must never be reported as the first. A silent downgrade

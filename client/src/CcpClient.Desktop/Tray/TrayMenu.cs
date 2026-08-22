@@ -10,7 +10,7 @@ namespace CcpClient.Desktop.Tray;
 /// <c>HMENU</c>, an <c>NSMenu</c>, a DBus menu layout) left to the backend.</para>
 ///
 /// <para><b>Why <see cref="IsRestore"/> exists.</b> A tray menu whose items cannot bring the
-/// window back is the hazard this whole packet is about: SP-094 refused to tuck precisely
+/// window back is the hazard this whole packet is about: the port refused to tuck precisely
 /// because the icon had no menu, and a menu with no way back would be that same refusal wearing
 /// a costume. So exactly one item must be marked as the restore, <see cref="TrayMenu"/> refuses
 /// to construct without it, and the mistake is impossible rather than merely discouraged.</para>
@@ -102,7 +102,7 @@ public sealed class TrayMenu
         {
             throw new ArgumentException(
                 $"a tray menu must carry exactly one restore item and this one carries {restores}. The icon exists to "
-                + "be a way back to a window; a menu that cannot restore it rebuilds the hazard SP-094 refused to ship "
+                + "be a way back to a window; a menu that cannot restore it rebuilds the hazard the port refused to ship "
                 + "(wpf-surface-reachability.md §10 D20)",
                 nameof(items));
         }

@@ -24,7 +24,7 @@ public readonly record struct OverlayDisplay(
 /// <para><b>What it does not do.</b> Report DPI. WPF carries a per-monitor scale because its
 /// window positions are device-independent units and it has to convert (<c>:4141</c>); a Win32
 /// top-level window's coordinates are already physical pixels. DPI becomes a real concern the
-/// moment content is drawn on the surface, and nothing is drawn (SP-099 divergence D55).</para>
+/// moment content is drawn on the surface, and nothing is drawn (divergence D55).</para>
 /// </summary>
 public static class OverlayDisplays
 {

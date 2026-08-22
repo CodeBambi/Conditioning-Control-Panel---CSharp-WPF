@@ -52,7 +52,7 @@ public static class GlyphReasonCodes
     /// <summary>
     /// <c>UpdateLayeredWindow</c> itself returned FALSE. The detail carries the Win32 last-error,
     /// because 87 (<c>ERROR_INVALID_PARAMETER</c>) is the specific answer this surface would get
-    /// for a window that is not layered — SP-099's measured hazard — and it must never be reported
+    /// for a window that is not layered — the overlay's measured hazard — and it must never be reported
     /// as a generic failure.
     /// </summary>
     public const string GlyphCompositeRefused = "glyph-composite-refused";

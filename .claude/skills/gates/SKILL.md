@@ -33,7 +33,7 @@ Narrow to one class while iterating with `--filter "FullyQualifiedName~TheTestCl
 
 ### Tree 2: greenfield client (`client/**`)
 
-> **The CCP.\* Avalonia attempt was DELETED at SP-141 (2026-08-22).** It used to be Tree 2 here, gated by
+> **The CCP.\* Avalonia attempt was DELETED on 2026-08-22.** It used to be Tree 2 here, gated by
 > `./ConditioningControlPanel/tools/run-gates.sh`. **That script and the whole tree are gone** - do not look
 > for them, and do not treat their absence as a broken checkout. Nothing in the repo now builds
 > `ConditioningControlPanel.sln` automatically; that gap is an open P0 on the task board.
@@ -63,7 +63,7 @@ Rules when the floor fails:
 
 - A count mismatch means the pin moved. Bump `total` only in the same commit as the test change that moved it, and state the reason in the commit message. Never widen the pin, disable a test, or special-case to make the step pass.
 - A skip that is not in `allowedSkips` names the offender. `allowedSkips` is not a quarantine list; a test qualifies only when its precondition is a property of the machine or OS that configuration cannot satisfy.
-- Never export `CCP_DATA_ROOT` process-wide. It makes the SP-057 pin skip and the floor goes blind.
+- Never export `CCP_DATA_ROOT` process-wide. It makes the data-root isolation pin skip and the floor goes blind.
 
 If the change touched documents that guards read (`client/docs/**`, inventory JSON), re-run at minimum `UpstreamPayloadInventoryTests`, `AiOperationContractTests`, and `VersionDerivationTests` after the doc edit, not before.
 

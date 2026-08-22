@@ -12,7 +12,7 @@ namespace CcpClient.Tests;
 /// conditional, no early return, nothing that can silence an assertion. The claim and the effect
 /// are separate fields precisely so a backend that returns success without putting a window on
 /// screen shows up as an inequality rather than as a green test. Same shape as
-/// <see cref="TrayObservations"/> (SP-093).</para>
+/// <see cref="TrayObservations"/>.</para>
 ///
 /// <para>The lifecycle runs ONCE per suite execution and is cached: it puts a real window on the
 /// user's real screen for the duration of a few dozen syscalls, and there is no reason to do that

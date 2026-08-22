@@ -28,8 +28,8 @@ public sealed record IntakeHarnessOptions(string? Drive = null, bool KillRendere
 /// outright upstream: <c>Premium</c> = "Patron. The pass system does not apply - unlimited runs,
 /// no week, no door" (<c>Services/Progression/IntakePassService.cs:13</c>), and "The intake is a
 /// premium Exclusive … free accounts get ONE run per week … while retakes stay a reason to
-/// subscribe" (<c>:26-29</c>). SP-095 first shipped this door ungated, which handed every user
-/// the patron privilege — an OVER-GRANT of the same class SP-094 closed at <c>DtrhGate</c>.
+/// subscribe" (<c>:26-29</c>). This door first shipped ungated, which handed every user
+/// the patron privilege — an OVER-GRANT of the same class closed at <c>DtrhGate</c>.
 /// <see cref="IntakePassGate"/> is the correction; §11 D26 records it.</para>
 ///
 /// <para><b>What is still NOT ported:</b> the second refusal, <c>App.Ai.IsAvailable</c>
@@ -53,12 +53,12 @@ public sealed class IntakeLaunch
     }
 
     /// <summary>
-    /// The ENTITLEMENT seam SP-054 built (<see cref="IntakePassService.IIntakeEntitlementSource"/>),
+    /// The ENTITLEMENT seam (<see cref="IntakePassService.IIntakeEntitlementSource"/>),
     /// and the only thing a test substitutes here. Null is this build's real product default —
     /// <see cref="IntakePassService.NoEntitlementSource"/>, no provider at all — which is why
     /// every user of this build reaches
     /// <see cref="IntakePassDecision.RefusedUndeterminable"/>. Nothing stubs the DECISION: the
-    /// gate is a pure function over whatever the seam reports, exactly as SP-092 designed the
+    /// gate is a pure function over whatever the seam reports, exactly as the design intends the
     /// entitlement capability to be exercised. Must be set before the first
     /// <see cref="Coordinator"/> access, because the context reads it once.
     /// </summary>
@@ -66,7 +66,7 @@ public sealed class IntakeLaunch
 
     /// <summary>
     /// Where the intake session's stores live. Null is the product default — the install's own
-    /// data root through the SP-057 choke point. Set only by tests, and for the same reason
+    /// data root through the data-root choke point. Set only by tests, and for the same reason
     /// <c>CompositionRoot.SettingsPathFactory</c> exists: preparing the context to ask about the
     /// pass really starts <c>intake_settings.json</c>, <c>intake_punchcard.json</c> and the
     /// subject id, and a test must never write those into a developer's real
@@ -104,7 +104,7 @@ public sealed class IntakeLaunch
     public event Action<IntakePassDecision>? Decided;
 
     /// <summary>
-    /// SP-097: raised when the launch flow THREW. WPF wraps its whole handler and shows the user a
+    /// Raised when the launch flow THREW. WPF wraps its whole handler and shows the user a
     /// warning dialog reading "Couldn't start Graded Intake:" plus the message
     /// (<c>MainWindow/MainWindow.Lab.cs:161-166</c>); the port raises this and
     /// <see cref="Views.Pages.IntakePage"/> renders the fault plate from it. Never an
@@ -125,7 +125,7 @@ public sealed class IntakeLaunch
     ///
     /// <para>The whole body is wrapped, as WPF's handler is (<c>:109-166</c>). Preparing the
     /// context really starts stores and reads files, and this method is called STRAIGHT from a
-    /// click handler — so before SP-097 a throw here escaped into Avalonia's dispatcher with
+    /// click handler — so before this event existed a throw here escaped into Avalonia's dispatcher with
     /// nothing on screen to show for it.</para>
     /// </summary>
     /// <returns>The gate's decision; <c>null</c> when no decision was taken because a live run was
@@ -154,7 +154,7 @@ public sealed class IntakeLaunch
 
             LastDecision = decision;
             // State + reason CODE and the decision CLASS — never the message, never a day count
-            // attached to a person (the SP-092 logging discipline).
+            // attached to a person (the entitlement-logging discipline).
             _host.LogDiagnostic($"intake: pass gate — {state}/{reason} -> {IntakePassGate.Classify(decision)}");
             Decided?.Invoke(decision);
 

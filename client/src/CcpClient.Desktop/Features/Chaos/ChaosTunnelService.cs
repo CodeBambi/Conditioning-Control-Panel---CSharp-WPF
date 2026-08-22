@@ -28,7 +28,7 @@ public sealed class ChaosTunnelService
 {
     /// <summary>Exit watchdog (WPF :153/:880 parity — "ask the page to wind down,
     /// watchdog-force after 1200ms"). A product timer; tests invoke the elapsed path
-    /// directly, never wait on it (SP-059 timing discipline).</summary>
+    /// directly, never wait on it (the timing discipline).</summary>
     private static readonly TimeSpan ExitWatchdogInterval = TimeSpan.FromMilliseconds(1200);
 
     /// <summary>Z-guard cadence (WPF :448 parity).</summary>
@@ -49,16 +49,16 @@ public sealed class ChaosTunnelService
         _dashboard = dashboard;
     }
 
-    /// <summary>The tunnel data root (rides CCP_DATA_ROOT through the SP-057 choke point —
+    /// <summary>The tunnel data root (rides CCP_DATA_ROOT through the data-root choke point —
     /// never SpecialFolder here, DataRootChokePointGuardTests).</summary>
     public static string DataRoot() =>
         Path.Combine(Path.GetDirectoryName(CompositionRoot.DefaultSettingsPath())!, "chaos", "tunnel");
 
     /// <summary>Per-surface WebView2 profile (WPF browser_data_chaos_tunnel parity, :218;
-    /// the SP-049 named-per-surface discipline).</summary>
+    /// the named-per-surface discipline).</summary>
     public static string ProfileDir() => Path.Combine(DataRoot(), "wv2-profile");
 
-    /// <summary>Output-relative payload roots (the SP-009 copied-asset convention).</summary>
+    /// <summary>Output-relative payload roots (the copied-asset convention).</summary>
     public static string TunnelPayloadRoot() => Path.Combine(AppContext.BaseDirectory, "payload", "tunnel");
 
     public static string VendorPayloadRoot() => Path.Combine(AppContext.BaseDirectory, "payload", "vendor");
@@ -229,7 +229,7 @@ public sealed class ChaosTunnelService
             case ChaosTunnelCore.PageOutcome.SfxCue:
                 // HANDLED TYPED (consult ruling 4): the cues exist upstream but the client
                 // has no chaos sound-library port — a content gap owned by that row, never
-                // claimed as WPF parity (SP-051's falsified framing). Presence+shape only.
+                // claimed as WPF parity (the falsified framing). Presence+shape only.
                 _host.LogDiagnostic("chaos-tunnel: sfx cue received (unresolvable here: no chaos sound-library port — greenfield content gap)");
                 break;
             case ChaosTunnelCore.PageOutcome.PowerupClick:

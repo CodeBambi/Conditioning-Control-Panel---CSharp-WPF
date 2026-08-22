@@ -14,7 +14,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-013 headless interaction tests for the demonstrator feature popup. Draw-level ONLY
+/// Headless interaction tests for the demonstrator feature popup. Draw-level ONLY
 /// (verification-harness.md evidence-class rule): real in-memory layout, real input routing,
 /// real Extent/Viewport/Offset — but NO compositor/window-manager/DPI/activation claims.
 /// Presentation facts (working-area containment, real wheel/trackpad/touch) are the
@@ -51,7 +51,7 @@ public class FeaturePopupHeadlessTests
     [AvaloniaFact]
     public async Task OwnedModelessPopup_CarriesTheContractChrome()
     {
-        // SP-091: the demonstrator CARD that used to open this popup by left-click is retired,
+        // The demonstrator CARD that used to open this popup by left-click is retired,
         // so the manager has no user path and is infrastructure only (A-014 integration rule).
         // The W-04 chrome contract it enforces is still worth pinning, so this fact keeps the
         // assertions and drops only the retired gesture. --popup-demo remains its WSLg driver.

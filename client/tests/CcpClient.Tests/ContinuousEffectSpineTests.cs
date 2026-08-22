@@ -7,9 +7,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-105 — THREE modules under one spine, and only two of them have a clock.
+/// THREE modules under one spine, and only two of them have a clock.
 ///
-/// <para><b>The claim under test.</b> SP-101 proved the spine was a template for a second PACED
+/// <para><b>The claim under test.</b> An earlier packet proved the spine was a template for a second PACED
 /// module and said in its own verdict that this was the untested axis: the spine might have been
 /// quietly assumed to be a scheduler. Every fact below fails if <see cref="ISessionEffect"/> turns
 /// out to need a schedule — and the sharpest of them is the one that asserts the continuous module
@@ -79,7 +79,7 @@ public class ContinuousEffectSpineTests
         // WPF's stop closes every filter window (MainWindow.StartStop.cs:338 ->
         // OverlayService.cs:407 -> :1233-1249).
         //
-        // WHAT THIS ASSERTS, precisely (corrected at SP-105 final review — the comment used to say
+        // WHAT THIS ASSERTS, precisely (corrected at final review — the comment used to say
         // the withdraw "has already happened when Stop returns", and that is not what is proved):
         // Stop DECIDES synchronously, and the withdraw is POSTED — ReleaseWork ends in
         // Signal.Post(_surface.Withdraw), and EffectSignal.Post is "always a post, never inline"
@@ -205,17 +205,17 @@ public class ContinuousEffectSpineTests
         Assert.IsType<CapabilityState.Available>(rig.Engine.ArmOutcomes[FlashImagesEffect.EffectId]);
         Assert.IsType<CapabilityState.Available>(rig.Engine.ArmOutcomes[PinkFilterEffect.EffectId]);
 
-        // Subliminals ships off, and so does SP-108's Intensity Ramp
+        // Subliminals ships off, and so does the Intensity Ramp
         // (CCP.Core/Models/AppSettings.cs:2574-2579); the continuous module took the session.
         //
-        // SP-109 adds two more modules that ship off — Mind Wipe and Brain Drain's audio half — and
-        // SP-110 a third, Lock Card (AppSettings.cs:3331), and SP-112 a fourth, Bubble Count, so
+        // Two more modules that ship off were added later — Mind Wipe and Brain Drain's audio half — and
+        // then a third, Lock Card (AppSettings.cs:3331), and a fourth, Bubble Count, so
         // this list grows again in rack order. The FACT is unchanged and the assertion is stronger:
-        // six modules declined the same session for the same reason and all six are named. SP-113
+        // six modules declined the same session for the same reason and all six are named. A later packet
         // adds a fifth that ships off (Bubble Pop, CCP.Core/Models/AppSettings.cs:2737-2738's BubblesEnabled default),
         // and it lands FIRST in GAMES & CARDS because that is the rack's order
         // (StudioTabView.xaml.cs:499).
-        // SP-115 adds a sixth that ships off (Bouncing Text,
+        // A later packet adds a sixth that ships off (Bouncing Text,
         // CCP.Core/Models/AppSettings.cs:3598), and it lands after Spiral Overlay in the rack's order.
         Assert.Equal(
             [
@@ -235,28 +235,28 @@ public class ContinuousEffectSpineTests
         // the continuous pair (:192-193). It is also StudioTabView's rack order (:484-493) with the
         // unported rows removed. The list IS the order, so this pins it where a reader will look.
         //
-        // SP-106 added the fourth member. The fact is unchanged and the assertion is STRONGER: the
+        // A later packet added the fourth member. The fact is unchanged and the assertion is STRONGER: the
         // rack's order is upstream's for four modules now, and Spiral Overlay sits where the rack
         // puts it (fourth, between Subliminals and Pink Filter) rather than where OverlayService's
         // own body starts it (second of the pair). Those two orders disagree upstream and D90
         // records which one the port took and why.
         //
-        // SP-108 adds the fifth, and it is the first member from a group other than EFFECTS. It goes
+        // The Intensity Ramp adds the fifth, and it is the first member from a group other than EFFECTS. It goes
         // LAST for two upstream reasons that agree: the rack puts TIMING after EFFECTS, GAMES & CARDS
         // and IMMERSION (StudioTabView.xaml.cs:482-541), and StartEngine starts the ramp timer after
         // every effect service (MainWindow.StartStop.cs:265-269).
         //
-        // SP-109 adds two IMMERSION rows, and they land BETWEEN the effects and the ramp — which is
+        // Two IMMERSION rows were added later, and they land BETWEEN the effects and the ramp — which is
         // where both orders that matter put them, and they agree again: the rack's group order, and
         // StartEngine's own (Mind Wipe :229-230 and Brain Drain :241-244 come after every effect
         // service and before the ramp timer). Mind Wipe first, Brain Drain second, in both.
         //
-        // SP-110 opens the GAMES & CARDS group with Lock Card, and it lands between the effects and
+        // Lock Card opens the GAMES & CARDS group, and it lands between the effects and
         // the IMMERSION pair for the same reason: that is the rack's group order
         // (StudioTabView.xaml.cs:483/498/508/530) AND StartEngine's own (:206-209 comes after the
         // overlay service and before Mind Wipe at :229-230).
         //
-        // SP-113 puts Bubble Pop at the HEAD of that group, which is upstream's own rack order
+        // Bubble Pop then sits at the HEAD of that group, which is upstream's own rack order
         // (Add("bubbles", ...) at :499, before bubblecount at :501 and lockcard at :503) and is
         // uncontested by StartEngine, which never starts the ambient bubble game at all.
         Assert.Equal(
@@ -443,7 +443,7 @@ public class ContinuousEffectSpineTests
         }
     }
 
-    /// <summary>The manual clock, SP-098's shape. Zero wall-clock.</summary>
+    /// <summary>The manual clock, in the established shape. Zero wall-clock.</summary>
     private sealed class ManualSessionClock : ISessionClock
     {
         private readonly List<Entry> _timers = [];

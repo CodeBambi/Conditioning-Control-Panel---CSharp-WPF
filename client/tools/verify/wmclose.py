@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# CCP greenfield verification — X11 graceful close via WM_DELETE_WINDOW (SP-010).
+# CCP greenfield verification — X11 graceful close via WM_DELETE_WINDOW.
 # Contract: client/docs/release-publish-gates.md §6. Same libX11 ctypes mechanism as the
-# proven xgetimage.py (SP-008). Three modes:
+# proven xgetimage.py. Three modes:
 #   wmclose.py "<title needle>" --check     find the window AND assert its XID advertises
 #                                           WM_DELETE_WINDOW via XGetWMProtocols (the WSLg
 #                                           RAIL reparent trap: never send blind)

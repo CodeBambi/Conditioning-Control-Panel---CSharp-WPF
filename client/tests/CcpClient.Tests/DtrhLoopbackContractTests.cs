@@ -41,7 +41,7 @@ public sealed class DtrhLoopbackContractTests : IDisposable
         _server = new LoopbackServer(payload, overlay, media, _inbox, Token, _log,
             longPollTimeout: TimeSpan.FromMilliseconds(200));
         _server.Start();
-        LoopbackListenerRegistry.RegisterLoopbackServer(nameof(DtrhLoopbackContractTests), _server); // SP-059 T-15 self-check coverage
+        LoopbackListenerRegistry.RegisterLoopbackServer(nameof(DtrhLoopbackContractTests), _server); // T-15 self-check coverage
     }
 
     public void Dispose()
@@ -174,7 +174,7 @@ public sealed class DtrhLoopbackContractTests : IDisposable
     [Fact]
     public async Task CorsOnErrors_MediaRefusalsCarryCorsHeaders()
     {
-        // SP-011 W18 lesson: a CORS-less error surfaces to fetch() as an opaque TypeError.
+        // W18 lesson: a CORS-less error surfaces to fetch() as an opaque TypeError.
         using var client = new HttpClient();
         var missing = await client.GetAsync(_server.MediaOrigin + "/media/nope.mp3", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
@@ -252,7 +252,7 @@ public sealed class DtrhLoopbackContractTests : IDisposable
     [Fact]
     public async Task Inbox_LongPollHangs_UntilEnqueue()
     {
-        // SP-059 class-1: a DEDICATED server sharing the fixture's _inbox/_log (a different
+        // Class-1: a DEDICATED server sharing the fixture's _inbox/_log (a different
         // inbox would not be woken by the enqueue below) with a generous 5s long-poll timeout —
         // the shared fixture's 200ms is load-bearing for the fast-empty ack-purge tests but
         // here it created a real load race (server poll expiring before the enqueue). No
@@ -297,7 +297,7 @@ public sealed class DtrhLoopbackContractTests : IDisposable
         Assert.DoesNotContain("wrong-token", _log.All, StringComparison.Ordinal);
     }
 
-    // ---------- SP-027 b5: HARNESS-ONLY blocked-route injection (W18 class) ----------
+    // ---------- b5: HARNESS-ONLY blocked-route injection (W18 class) ----------
 
     [Fact]
     public async Task BlockedRoutePrefix_Answers403_WithCors_WhileOtherRoutesSurvive()
@@ -313,7 +313,7 @@ public sealed class DtrhLoopbackContractTests : IDisposable
             longPollTimeout: TimeSpan.FromMilliseconds(200),
             blockedRoutePrefixes: ["/media/"]);
         server.Start();
-        LoopbackListenerRegistry.RegisterLoopbackServer("DtrhLoopbackContractTests.blocked-route", server); // SP-059 T-15 self-check coverage
+        LoopbackListenerRegistry.RegisterLoopbackServer("DtrhLoopbackContractTests.blocked-route", server); // T-15 self-check coverage
         try
         {
             using var client = new HttpClient();

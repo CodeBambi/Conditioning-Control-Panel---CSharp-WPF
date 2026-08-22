@@ -41,8 +41,8 @@ Every capability query returns exactly one typed `CapabilityState`:
 
 ## 3. Probe execution
 
-1. Probes execute as SP-004 **owned operations** (`async-lifecycle-fault-contract.md` §1): one owner (`CapabilityProbes`), a cancellation generation, an owned completion per probe, and a typed `OperationOutcome`. No probe runs detached; no probe starts from a constructor.
-2. Probes run in the dedicated named startup phase **`CapabilityProbes`**, sequenced after `CoreServices` and before `UserInterface` (SP-003 §1: feature rows may register phases). Sequencing after `CoreServices` guarantees the persistence store's load-time temp handling cannot race probe files in the same directory. The phase body awaits every probe's completion, so all states are populated before the window exists — and the phase itself always returns `Success`: **capability states never fail startup**; a `Faulted` state is truthful information, not a startup error.
+1. Probes execute as **owned operations** (`async-lifecycle-fault-contract.md` §1): one owner (`CapabilityProbes`), a cancellation generation, an owned completion per probe, and a typed `OperationOutcome`. No probe runs detached; no probe starts from a constructor.
+2. Probes run in the dedicated named startup phase **`CapabilityProbes`**, sequenced after `CoreServices` and before `UserInterface` (startup contract §1: feature rows may register phases). Sequencing after `CoreServices` guarantees the persistence store's load-time temp handling cannot race probe files in the same directory. The phase body awaits every probe's completion, so all states are populated before the window exists — and the phase itself always returns `Success`: **capability states never fail startup**; a `Faulted` state is truthful information, not a startup error.
 3. Outcome→state mapping (the only bridge across the row-3/row-5 boundary):
    - probe body returned a state → that state is applied;
    - `OperationOutcome.Failed` → `Faulted` with the exception class as the reason (the registry's single trap boundary classifies; there is no second catch);
@@ -68,7 +68,7 @@ Every capability query returns exactly one typed `CapabilityState`:
 
 `async-lifecycle-fault-contract.md` §2 reserved capability-availability states and runtime probes to this contract. The boundary is now active:
 
-- **Row 3 (SP-004) owns operation outcomes**: `Completed` / `Cancelled` / `Failed(kind, reason)` per owned operation, where `Recoverable`/`Degraded` are per-operation failure classifications supplied by an owner.
+- **Row 3 owns operation outcomes**: `Completed` / `Cancelled` / `Failed(kind, reason)` per owned operation, where `Recoverable`/`Degraded` are per-operation failure classifications supplied by an owner.
 - **Row 5 (this contract) owns capability states**: `Available` / `Unavailable` / `Degraded(survivingSemantics)` / `PermissionRequired` / `DependencyMissing` / `Faulted` per capability, derived only from probes.
 - The two vocabularies meet at exactly one place: §3 rule 3's outcome→state mapping. A capability state's `Degraded` is not an operation outcome's `Degraded`; neither type references the other.
 
@@ -78,7 +78,7 @@ Graceful fallback is admitted only for **explicitly optional** behavior (a featu
 
 ## 8. Demonstrator capabilities
 
-Chosen because they resist gaming (SP-006 packet): both probe for real, both have environments where the honest answer is *not* `Available`, and neither requires a backend that does not exist yet (which would invite stub-probing — the exact first-attempt sin).
+Chosen because they resist gaming: both probe for real, both have environments where the honest answer is *not* `Available`, and neither requires a backend that does not exist yet (which would invite stub-probing — the exact first-attempt sin).
 
 ### 8.1 `display-session` (environment-evidence)
 
@@ -105,7 +105,7 @@ Exercises the persistence store's filesystem guarantees **for real** in the actu
 
 ## 9. Integration proof
 
-1. The `CapabilityProbes` phase appears in the startup trace (`CapabilityProbes: ok`) and the placeholder window lists every registered capability with its current typed state — the composition root's probe results are visibly reachable from a user path (SP-003 §10 pattern).
+1. The `CapabilityProbes` phase appears in the startup trace (`CapabilityProbes: ok`) and the placeholder window lists every registered capability with its current typed state — the composition root's probe results are visibly reachable from a user path (startup contract §10 pattern).
 2. A composition-root walk test runs the **real** composition root through the real phase runner (no test-double substitution on that path) and asserts every registered capability left the `not-probed` state via its real probe.
 3. WSL2 is part of this contract's subject matter: the recorded evidence includes the **actual observed demonstrator states** under WSL2/WSLg (record.md). A `Degraded` report there is the honesty proof, not a failure.
 

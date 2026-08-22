@@ -135,11 +135,11 @@ public static class SchedulerPanelNotices
     /// <summary>
     /// The absence line — what the Windows app does at an auto-start that this build does not.
     ///
-    /// <para>On the PAGE rather than only in a record, on the precedent SP-111, SP-113, SP-115 and
-    /// SP-117 set for a half-ported row. The minimize IS ported (<c>ShellTray.Duck</c>, upstream's
+    /// <para>On the PAGE rather than only in a record, on the precedent four earlier rows
+    /// set for a half-ported row. The minimize IS ported (<c>ShellTray.Duck</c>, upstream's
     /// <c>MinimizeToTray()</c> at <c>MainWindow/MainWindow.StartStop.cs:615</c>); the two tray
     /// balloons beside it (<c>:616</c>, <c>:631</c>) are not, because <c>ShellTray</c> exposes no
-    /// entry for an arbitrary notification and <c>Tray/**</c> was outside SP-118's File Scope.</para>
+    /// entry for an arbitrary notification and <c>Tray/**</c> was outside that packet's File Scope.</para>
     /// </summary>
     public static string DescribeAbsences() =>
         "When the scheduler starts a session it tucks this window out of the way, exactly as the "

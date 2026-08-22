@@ -5,17 +5,17 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-090: the two <c>allowedSkips</c> PERMANENT BANS, made mechanical.
+/// The two <c>allowedSkips</c> PERMANENT BANS, made mechanical.
 ///
 /// <para>WHAT THIS BINDS. <c>client/tests/floor/floor.json</c> is the port's one mechanical
 /// pre-land gate and its integrity rests entirely on <c>allowedSkips</c> being honest. Its
 /// <c>admissionRule</c> names two tests that may NEVER be listed there, because a skip of
-/// either hides the exact defect the pin exists to catch: the SP-057 pin (its skip means
-/// someone exported CCP_DATA_ROOT process-wide — the vacuous 896/1 green SP-062 closed) and
+/// either hides the exact defect the pin exists to catch: the data-root pin (its skip means
+/// someone exported CCP_DATA_ROOT process-wide — the vacuous 896/1 green since closed) and
 /// the named privacy flake (route classes only, never a filename or query). Until this file
 /// both bans were TEXT. The only other place they appear is
 /// <c>check-floor.mjs:236-238</c>, and that is an error-MESSAGE string, not a check — it does
-/// not even contain either test name, naming them only by description ("the SP-057 pin", "the
+/// not even contain either test name, naming them only by description ("the data-root pin", "the
 /// named privacy flake"), so a reader hitting that failure cannot check the list without going
 /// back to the JSON.</para>
 ///
@@ -57,12 +57,12 @@ public sealed class AllowedSkipsBanGuardTests
     /// facts so a substituted reader cannot quietly point them at a fixture.</summary>
     private const string PinRelativePath = "client/tests/floor/floor.json";
 
-    /// <summary>Permanent ban (1): the SP-057 pin. HARD-CODED — never read from the file.</summary>
+    /// <summary>Permanent ban (1): the data-root pin. HARD-CODED — never read from the file.</summary>
     private const string BannedSp057Pin =
         "CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault";
 
     /// <summary>Permanent ban (2): the named privacy flake. HARD-CODED — never read from the
-    /// file. SP-085 fixed it at source; it stays banned regardless.</summary>
+    /// file. It was fixed at source; it stays banned regardless.</summary>
     private const string BannedPrivacyFlake =
         "CcpClient.Tests.ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery";
 
@@ -210,7 +210,7 @@ public sealed class AllowedSkipsBanGuardTests
     [Fact]
     public void BothBannedNames_StillResolveToARealFactInThisAssembly()
     {
-        // The THIRD door, which the delete/add trap leaves open: RENAME. Rename the SP-057 pin
+        // The THIRD door, which the delete/add trap leaves open: RENAME. Rename the data-root pin
         // and the membership fact still passes (the old name is still absent), the declaration
         // fact still passes (admissionRule still carries the old text), and the NEW name may
         // then be listed with impunity — the ban evaporates with no red anywhere. Both banned

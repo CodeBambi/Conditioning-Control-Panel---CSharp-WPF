@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-027 slice b5: the watchdog state machine (DtrhWatchdog) + the native signal's typed
+/// Slice b5: the watchdog state machine (DtrhWatchdog) + the native signal's typed
 /// capability outcomes (DtrhProcessFailed). Sizing case = W17: renderer kill → bridge beats
 /// ~28s more → silence; detection must fire at last-beat + threshold, recovery must be
 /// exactly-once with the episode latch (the latent WPF double-Recover bug, consult C1).

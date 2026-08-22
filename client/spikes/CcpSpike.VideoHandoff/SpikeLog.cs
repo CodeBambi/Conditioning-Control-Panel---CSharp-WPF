@@ -1,6 +1,6 @@
 namespace CcpSpike.VideoHandoff;
 
-/// <summary>JSONL observation log (SP-017 pattern). EVERY line passes through Redact.Scrub.</summary>
+/// <summary>JSONL observation log (audio spike pattern). EVERY line passes through Redact.Scrub.</summary>
 public static class SpikeLog
 {
     private static string? _path;

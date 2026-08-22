@@ -6,10 +6,10 @@ namespace CcpClient.Desktop.Session;
 /// <summary>
 /// The part of a rack module that has nothing to do with WHEN it works.
 ///
-/// <para><b>Why this class exists (SP-105).</b> SP-101 wrote one shared body,
+/// <para><b>Why this class exists.</b> An earlier packet wrote one shared body,
 /// <see cref="PacedSessionEffect{TFiring}"/>, out of the two modules that existed — and both of them
 /// were TIMED. Its own template verdict named the risk out loud: the spine might have been quietly
-/// assumed to be a scheduler. SP-105 built a module that is simply <i>on</i> — Pink Filter, which
+/// assumed to be a scheduler. Then came a module that is simply <i>on</i> — Pink Filter, which
 /// WPF drives with no timer, no tick and no interval at all
 /// (<c>MainWindow/MainWindow.Presets.cs:1255</c> is <c>flag = !flag; App.Overlay?.RefreshOverlays();</c>
 /// and that is the whole mechanism) — and the answer is in this file's existence:
@@ -40,7 +40,7 @@ namespace CcpClient.Desktop.Session;
 /// must therefore be lock-free and safe against a thread holding the gate.</para>
 ///
 /// <para><b>The rule stands, and its original justification no longer does — read both halves.</b>
-/// Until SP-142 the operation owner cancelled a generation while holding ITS OWN lock and ran the
+/// The operation owner used to cancel a generation while holding ITS OWN lock and run the
 /// cancellation callback synchronously beneath it, so any lock this class took inside such a
 /// callback was taken UNDER the owner's, while <see cref="Dot"/> takes them the other way round
 /// (it holds <see cref="Gate"/> and calls <c>IsLive</c>, which takes the owner's,
@@ -48,14 +48,14 @@ namespace CcpClient.Desktop.Session;
 /// cancels outside its own lock (<c>OperationRegistry.cs:173-190</c>, <c>:196-205</c>), so a
 /// cancellation callback holds no lock of the owner's and taking <see cref="Gate"/> inside one no
 /// longer inverts anything. No deadlock was ever observed — the convention below was the only thing
-/// preventing one — but SP-106 was reverted for exactly that inversion, so the history is kept.</para>
+/// preventing one — but an earlier attempt was reverted for exactly that inversion, so the history is kept.</para>
 ///
 /// <para><b>The lock-free callback discipline is NOT retired with it.</b> Its remaining reason is
 /// independent of who holds which lock: the callback runs on whatever thread called
 /// <c>Cancel</c>/<c>Begin</c> — a teardown thread, the UI thread, or a pool thread, and a subclass
 /// may not assume which — it runs inside the canceller's call, so anything it blocks on blocks that
 /// caller, and a callback that takes locks is fragile against every future caller rather than
-/// against one known ordering. <b>Keep <see cref="ReleaseWork"/> lock-free.</b> What SP-142 changed
+/// against one known ordering. <b>Keep <see cref="ReleaseWork"/> lock-free.</b> What the removal changed
 /// is that closing the residual window in <see cref="ReleaseIfStillOurs"/> under <see cref="Gate"/>
 /// is now POSSIBLE; it is deliberately still not done. See <see cref="ReleaseIfStillOurs"/>.</para>
 /// </summary>
@@ -172,7 +172,7 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// the caller's next observation must already see the work, or a stop/advance ordering becomes a
     /// race for a paced module and a stop/redraw ordering becomes one for a continuous module.
     ///
-    /// <para><b>One deliberate divergence, inherited from SP-098.</b> WPF's <c>Start()</c> returns
+    /// <para><b>One deliberate divergence, inherited from the first ported module.</b> WPF's <c>Start()</c> returns
     /// at <c>if (_isRunning) return;</c>, so a module that was OFF when the engine started can never
     /// be armed by turning it on mid-session. Here the GENERATION is idempotent — arming twice
     /// starts no second generation, which is the re-entrant double-toggle guard — but the WORK is
@@ -211,7 +211,7 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// <summary>
     /// Stop the work. WPF's stops clear the running flag, cancel the token and drop whatever the
     /// module had live (<c>FlashService.cs:367-380</c>, <c>SubliminalService.cs:113-118</c>,
-    /// <c>OverlayService.cs:398-409</c>).
+    /// <c>OverlayService.cs:430-441</c>).
     ///
     /// <para>The work is released HERE, synchronously, rather than being left to the cancellation
     /// callback: after this returns, nothing this module scheduled may fire and nothing it put on
@@ -354,7 +354,7 @@ public abstract class OwnedSessionEffect : ISessionEffect
     {
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         // Lock-free callback on purpose. The original reason is spent — the owner cancelled inside
-        // its own lock until SP-142 and now cancels outside it (OperationRegistry.cs:173-190,
+        // its own lock and now cancels outside it (OperationRegistry.cs:173-190,
         // :196-205), so this no longer runs beneath that lock — but the rule stays for the reason
         // that outlived it: this runs synchronously inside whatever thread called Cancel/Begin (a
         // teardown thread, the UI thread, a pool thread; a subclass may not assume which), so
@@ -374,7 +374,7 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// <summary>
     /// Release this module's work, unless a LATER generation has taken it over.
     ///
-    /// <para><b>Why this guard exists (SP-106, found by a test rather than by reading).</b> The
+    /// <para><b>Why this guard exists (found by a test rather than by reading).</b> The
     /// parked operation's tail runs on a thread-pool continuation
     /// (<c>TaskCreationOptions.RunContinuationsAsynchronously</c>), so it arrives some time AFTER
     /// the <see cref="Disarm"/> that cancelled it — and "some time after" can be after the user has
@@ -400,7 +400,7 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// the new work — and then withdraw it. Much narrower than the window this guard closes, and
     /// still open.</para>
     ///
-    /// <para><b>Closing it under <see cref="Gate"/> was attempted at SP-106 and REVERTED, because at
+    /// <para><b>Closing it under <see cref="Gate"/> was attempted once and REVERTED, because at
     /// the time it inverted lock order against the operation owner.</b> Both chains were real:</para>
     /// <list type="bullet">
     /// <item><b>owner lock, then effect lock:</b> <see cref="Disarm"/> calls <c>_owner.Cancel()</c>,
@@ -411,14 +411,14 @@ public abstract class OwnedSessionEffect : ISessionEffect
     /// <c>_owner.IsLive(...)</c>, which takes the owner's lock
     /// (<c>Lifecycle/OperationRegistry.cs:215-221</c>) — this half is unchanged.</item>
     /// </list>
-    /// <para><b>SP-142 removed the first chain: the owner now cancels OUTSIDE its own lock</b>
+    /// <para><b>The first chain is now removed: the owner cancels OUTSIDE its own lock</b>
     /// (<c>Lifecycle/OperationRegistry.cs:173-190</c> and <c>:196-205</c>, pinned by
     /// <c>AsyncLifecycleTests</c>'s three ordering facts). A cancellation callback therefore holds
     /// no lock of the owner's, the cycle a dot repaint could have completed against a teardown stop
     /// no longer exists, and <b>closing the residual window under <see cref="Gate"/> is now
-    /// possible</b>. It is deliberately NOT closed here: SP-142 was scoped to remove the inversion
+    /// possible</b>. It is deliberately NOT closed here: that change was scoped to remove the inversion
     /// and nothing else, so the window stays open by decision and a follow-up row owns it. No
-    /// deadlock was ever observed at any point — what SP-106 hit was an inversion reachable in
+    /// deadlock was ever observed at any point — what the reverted attempt hit was an inversion reachable in
     /// principle by two threads that both exist, and the suite could not see it because every test
     /// drives arm/disarm on one thread.</para>
     ///

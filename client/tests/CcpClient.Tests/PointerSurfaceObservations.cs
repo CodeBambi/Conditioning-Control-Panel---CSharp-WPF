@@ -13,8 +13,8 @@ namespace CcpClient.Tests;
 ///
 /// <para>Keeping both in one record is what lets every fact assert at statement depth 0 — no
 /// conditional, no early return, nothing that can silence an assertion. Same shape and same lineage
-/// as <see cref="OverlayObservations"/> (SP-099), <see cref="InputCaptureObservations"/> (SP-110)
-/// and <see cref="VideoSurfaceObservations"/> (SP-111).</para>
+/// as <see cref="OverlayObservations"/>, <see cref="InputCaptureObservations"/>
+/// and <see cref="VideoSurfaceObservations"/>.</para>
 ///
 /// <para><b>Each run happens ONCE per suite execution and is cached.</b> These runs put real
 /// always-on-top windows on the user's screen and SYNTHESISE MOUSE CLICKS at them, and there is no
@@ -485,7 +485,7 @@ internal static class PointerSurfaceObservations
     // ---------------------------------------------------------------------------------------
 
     /// <summary>The overlay's state at one moment, read entirely through
-    /// <see cref="OverlayWindowProbe"/> — SP-099's own instrument, unmodified.</summary>
+    /// <see cref="OverlayWindowProbe"/> — the overlay's own instrument, unmodified.</summary>
     internal readonly record struct OverlayReading(
         bool PointPassesThrough,
         bool AboveEveryOrdinaryWindow,
@@ -494,7 +494,7 @@ internal static class PointerSurfaceObservations
         bool IsForeground);
 
     /// <summary>The card's state at one moment, read entirely through
-    /// <see cref="InputWindowProbe"/> — SP-110's own instrument, unmodified.</summary>
+    /// <see cref="InputWindowProbe"/> — the input card's own instrument, unmodified.</summary>
     internal readonly record struct CardReading(bool Visible, bool IsForeground, bool HoldsSystemKeyboardFocus);
 
     /// <param name="MachineHasInteractiveDesktop">The machine fact.</param>

@@ -1,6 +1,6 @@
 # Asset and packaged-output manifest
 
-**Status:** active deliverable of task-board row 8 (SP-009). Owner decisions applied: A-014 (schema and policy exist only with a real consumer — no mod loader, no runtime override resolution, no copied-asset convention before the first copied consumer), the Release rule (Debug, Release, and published artifacts are separate gates), and `first-attempt-systemic-lessons.md` §"Asset presence, lookup, and packaging need one manifest" (one typed catalogue; build tests open every required asset from real output, case-sensitive).
+**Status:** active deliverable of task-board row 8. Owner decisions applied: A-014 (schema and policy exist only with a real consumer — no mod loader, no runtime override resolution, no copied-asset convention before the first copied consumer), the Release rule (Debug, Release, and published artifacts are separate gates), and `first-attempt-systemic-lessons.md` §"Asset presence, lookup, and packaging need one manifest" (one typed catalogue; build tests open every required asset from real output, case-sensitive).
 
 ## Purpose and scope
 
@@ -37,7 +37,7 @@ The catalogue lives under `Assets/` and is embedded through the same `<AvaloniaR
 
 Both directions run as unit tests (`CcpClient.Tests`) against the real built assembly:
 
-1. **Forward (manifest → binary):** every required `embedded` entry opens as a stream via `StandardAssetLoader` on the entry assembly (`avares://CcpClient.Desktop/<path>`). `StandardAssetLoader(assembly)` needs no Avalonia app/platform initialization (verified against the 12.1.0 source; SP-007 landed the same standalone pattern). The class is `[Unstable]` — recorded; the static `AssetLoader` requires `AvaloniaLocator` (app init) and is unusable pre-lifetime, so the pinned-baseline `StandardAssetLoader` is the honest mechanism here.
+1. **Forward (manifest → binary):** every required `embedded` entry opens as a stream via `StandardAssetLoader` on the entry assembly (`avares://CcpClient.Desktop/<path>`). `StandardAssetLoader(assembly)` needs no Avalonia app/platform initialization (verified against the 12.1.0 source; the first visible slice landed the same standalone pattern). The class is `[Unstable]` — recorded; the static `AssetLoader` requires `AvaloniaLocator` (app init) and is unusable pre-lifetime, so the pinned-baseline `StandardAssetLoader` is the honest mechanism here.
 2. **Completeness sweep (binary → manifest):** enumerate every embedded asset at the assembly ROOT (`StandardAssetLoader.GetAssets(new Uri("avares://CcpClient.Desktop/"), null)` — ordinal prefix filter, exact embedded case preserved, verified 12.1.0) and FAIL on any embedded asset with no manifest entry. Drift protection: an asset added to `Assets/` without a manifest entry breaks the build's test suite. **Any future `<AvaloniaResource>` glob outside `Assets/` is caught by the same root sweep** — rooting at the assembly root, not at `Assets/`, is deliberate. **Named exclusion (rule from observation):** bundle-ROOT entries beginning with `!` are Avalonia compiler-owned metadata — observed on 12.1.0: `!AvaloniaResourceXamlInfo` (the compiled-XAML `ClassToResourcePathIndex`; the bundle itself is `!AvaloniaResources`). The rule is root-level ONLY: a `!`-prefixed name inside a real directory (e.g. a future `Assets/!notes.png`) is a product asset and must fail the sweep when unmanifested — the observed evidence covers root entries only, and a hypothetical compiler entry under a subdirectory failing loudly is the correct failure mode.
 3. **Case-exactness (named check):** for every `embedded` entry the manifest `path` must match an enumerated asset's path **ordinal case-exactly** (`StringComparison.Ordinal`), not merely open successfully. Avalonia packs assets into the `!AvaloniaResources` bundle with an ordinal case-sensitive index, so `Open` already fails on case drift on every platform — the named check pins the manifest text to the embedded case explicitly, and it is the check that will matter for future `copied` assets where the filesystem (ext4 vs NTFS) decides case behavior. Works-on-Windows/breaks-on-ext4 is the drift this row exists to prevent.
 4. **Copied direction (assert-empty):** the set of manifest entries with `source: copied` must be empty (none exist; no output-directory convention is invented without a consumer — A-014). The first copied consumer's row defines the convention and extends this direction to real file existence checks.
@@ -52,7 +52,7 @@ The real binary carries a diagnostic mode:
 CcpClient.Desktop --verify-assets
 ```
 
-- Runs as a **bounded path at the top of `Main`, before the startup phases** — no window, no lifetime, no participants (SP-003 phase discipline: nothing starts that asset opening does not need).
+- Runs as a **bounded path at the top of `Main`, before the startup phases** — no window, no lifetime, no participants (startup phase discipline: nothing starts that asset opening does not need).
 - Reads the embedded manifest through `StandardAssetLoader` (the parse IS the self-entry open), then opens every required `embedded` entry through the same `avares://` mechanism.
 - Prints **one diagnostic line per failure** (`asset FAIL <id> <path>: <reason>`); a success line per opened asset plus a summary goes to stdout. Exit `0` when the manifest parses and every required asset opens; non-zero otherwise (unreadable/invalid manifest = non-zero).
 - **Stream-only constraint (row-9 integrity):** the verifier never touches `Assembly.Location`, `AppContext.BaseDirectory`, or output-relative paths for embedded assets — `avares://` stream opens only. Single-file publish returns an empty `Assembly.Location` and loads bundled assemblies from memory; embedded resources keep working. This constraint is what makes row 9 "one new invocation" instead of "rewrite the verifier".
@@ -65,11 +65,11 @@ Publish strategy is task-board row 9's open decision; this row runs NO publish (
 ## Evidence classes (this row)
 
 - Claimed here: Debug AND Release build-output runs of `--verify-assets` on Windows AND WSL2 Linux, plus the two-direction unit tests on both platforms. The case-exactness check is meaningful on ext4 for the copied-asset future; on embedded assets the ordinal bundle index already enforces it cross-platform (verified, 12.1.0 source).
-- Deferred: published-artifact runs (row 9, hook above); headed/rendered asset display (SP-007 already landed the rendered `avares://` Image evidence; not re-claimed here).
+- Deferred: published-artifact runs (row 9, hook above); headed/rendered asset display (the first visible slice already landed the rendered `avares://` Image evidence; not re-claimed here).
 
 ## Measured budgets
 
-Measured 2026-07-19 (SP-009 Step 4); cold precondition VERIFIED by deleting all `bin/obj` and confirming zero remained before the cold run (SP-008 surprise #5 discipline). Machines: Windows .NET SDK 10.0.302; WSL2 Ubuntu 26.04 SDK 10.0.110 (native-dir copy, never /mnt/e). "Validation tests" = `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj --filter FullyQualifiedName~AssetManifestTests` (21 tests).
+Measured 2026-07-19 (Step 4); cold precondition VERIFIED by deleting all `bin/obj` and confirming zero remained before the cold run (the harness's surprise #5 discipline). Machines: Windows .NET SDK 10.0.302; WSL2 Ubuntu 26.04 SDK 10.0.110 (native-dir copy, never /mnt/e). "Validation tests" = `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj --filter FullyQualifiedName~AssetManifestTests` (21 tests).
 
 | Check | Windows cold | Windows incremental | WSL2 cold | WSL2 incremental | Budget |
 |---|---|---|---|---|---|

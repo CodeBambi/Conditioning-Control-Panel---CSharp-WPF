@@ -8,17 +8,17 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the Graded Intake host shell (ChaosWebViewHost parity on the landed b-series
+/// The Graded Intake host shell (ChaosWebViewHost parity on the landed b-series
 /// pattern; WPF IntakeHostService.cs + ChaosWebViewHost.cs archaeology in record.md Step 1).
 ///
-/// Surface: capability-driven (SP-006, never an OS guess) — embedded WebView2 on Windows;
+/// Surface: capability-driven (probed, never an OS guess) — embedded WebView2 on Windows;
 /// the NativeWebDialog path is NOT ADMITTED for intake (the page's web-shim has no §3.3
 /// inbox transport — a dialog would run the page standalone and silently lose results);
 /// anything else = the honest unsupported surface. Boot contract (IntakeHostService.cs
 /// :240-301 + ChaosWebViewHost Post :242-254): host→page messages queue until the page's
 /// `ready`, then init flushes (the shim's preBuffer replays anything early,
 /// web-shim.js:56-62) followed by the fullscreen echo (:302). Host→page = synthetic
-/// MessageEvent dispatch on window.chrome.webview (SP-011 W4, byte-identical to DTRH).
+/// MessageEvent dispatch on window.chrome.webview (spike W4, byte-identical to DTRH).
 ///
 /// Window behaviors: per-instance profile (browser_data_intake parity →
 /// DtrhProfileLock.WebView2ProfileDir("intake")); autoplay-without-gesture (:123);
@@ -168,13 +168,13 @@ public partial class IntakeHostWindow : Window
         var probe = _context.PayloadProbe;
         if (probe.State != IntakeServingRoots.IntakePayloadState.Present)
         {
-            // Typed honest surface (SP-048 discipline): never a substitute tree.
+            // Typed honest surface (the payload-probe discipline): never a substitute tree.
             Surface = "payload-missing";
             UnsupportedPanel.IsVisible = true;
             UnsupportedDetail.Text =
                 $"intake payload root '{probe.Root}' -> {probe.State} ({probe.FileCount} files)"
                 + (probe.MissingFile is null ? "" : $"; required file '{probe.MissingFile}' absent")
-                + ".\nThe intake tree serves from payload/intake beside the exe (the SP-023 copied-asset convention). "
+                + ".\nThe intake tree serves from payload/intake beside the exe (the copied-asset convention). "
                 + "Never a silent substitute.";
             SetStatus($"intake: payload {probe.State} — honest surface");
             _host.LogDiagnostic($"intake: payload {probe.State} — honest surface shown (no substitute)");
@@ -226,7 +226,7 @@ public partial class IntakeHostWindow : Window
         }
         catch (Exception ex) when (DtrhProfileLock.IsStaleProfileLock(ex) && !_profileRetryUsed)
         {
-            // The 0x800700AA stale-profile-lock class (SP-023 surprise #7): recover honestly
+            // The 0x800700AA stale-profile-lock class (recorded surprise #7): recover honestly
             // (kill the stale children holding OUR profile) and retry ONCE — never a crash loop.
             _profileRetryUsed = true;
             _host.LogDiagnostic("intake: navigation threw the stale-profile-lock class (0x800700AA) — recovering (typed, never silent)");
@@ -242,7 +242,7 @@ public partial class IntakeHostWindow : Window
         if (args is Avalonia.Platform.WindowsWebView2EnvironmentRequestedEventArgs wv2)
         {
             wv2.UserDataFolder = DtrhProfileLock.WebView2ProfileDir("intake");
-            // :123 parity — the binaural bed starts with no gesture (SP-011 W10 verified class).
+            // :123 parity — the binaural bed starts with no gesture (spike W10 verified class).
             wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
             _host.LogDiagnostic("intake: WebView2 UserDataFolder set (browser_data_intake parity); autoplay-policy=no-user-gesture-required");
         }
@@ -503,15 +503,15 @@ public partial class IntakeHostWindow : Window
 
     // ---------- the completion loop (:393-568) ----------
 
-    /// <summary>quiz-result → XP (computed, never granted) → graded awards (RECORDED since
-    /// SP-128) → pass spend → draft (marked never-runnable) → punch stamp → session-drafted
+    /// <summary>quiz-result → XP (computed, never granted) → graded awards (RECORDED,
+    /// never merely computed) → pass spend → draft (marked never-runnable) → punch stamp → session-drafted
     /// reply. The window STAYS OPEN.
     /// Order pinned from the WPF evidence: XP :443-446, spend :465, draft :478-484,
     /// punch :519, reply :556/:564.
     /// <para>Every bare <c>:NNN</c> in this method resolves against
-    /// <c>Services/Quiz/IntakeHostService.cs</c> and was RE-DERIVED at SP-128 against
+    /// <c>Services/Quiz/IntakeHostService.cs</c> and was RE-DERIVED against
     /// <c>71ab1bac2</c>: the whole block had drifted when <c>f7b4c317c</c> added 106 lines to
-    /// that file, the only commit to touch it since SP-058's baseline <c>0c9947a6</c> (D232).</para></summary>
+    /// that file, the only commit to touch it since the stated baseline <c>0c9947a6</c> (D232).</para></summary>
     private void OnQuizResult(JsonElement raw)
     {
         IntakeQuizRun? run;
@@ -540,8 +540,8 @@ public partial class IntakeHostWindow : Window
         var xp = IntakeDraft.ComputeCompletionXp(run);
         _host.LogDiagnostic($"intake: completion XP computed, not granted ({xp}; no XP store — typed seam)");
 
-        // 1b. The graded verdict (SP-058; #870; :48-55 const, :431-435 emit, :451-453 mantra
-        // credit) — RECORDED since SP-128. The verdict now reaches the award consumer, which
+        // 1b. The graded verdict (#870; :48-55 const, :431-435 emit, :451-453 mantra
+        // credit) — RECORDED, not merely computed. The verdict now reaches the award consumer, which
         // ports GamificationBridge.cs:598-609: top_of_the_class at the 90% bar and honor_roll
         // over 3 DISTINCT categories. The MANTRA credit is still a typed seam (no quest
         // verifier). passed is always true (:433 — an intake has no fail state), so the passed
@@ -639,7 +639,7 @@ public partial class IntakeHostWindow : Window
     }
 
     /// <summary>Host→page (admission §3.2 parity): synthetic MessageEvent dispatch on
-    /// window.chrome.webview (SP-011 W4/W6 proven, byte-identical). No inbox path exists
+    /// window.chrome.webview (spike W4/W6 proven, byte-identical). No inbox path exists
     /// for intake (the page has no §3.3 transport — the dialog path is not admitted).</summary>
     public void SendToPage(object msg)
     {
@@ -679,10 +679,10 @@ public partial class IntakeHostWindow : Window
     // ---------- HARNESS-ONLY drive (--intake-drive; the fx-drive precedent) ----------
 
     /// <summary>HARNESS-ONLY: a timed script of RAW page JSON fed through the REAL
-    /// parse+dispatch path (headed evidence without input automation — SP-008 named
+    /// parse+dispatch path (headed evidence without input automation — the named
     /// limit). Steps: <c>quiz-result@t; quiz-result:topmarks@t; intake-close@t;
     /// fullscreen-set:on|off@t; exit@t; serve-probe:&lt;path&gt;@t (the running host GETs a
-    /// payload-art path from its own loopback — SP-058 per-file serving proof);
+    /// payload-art path from its own loopback — per-file serving proof);
     /// loom-file:&lt;name&gt;@t</c> (a staged GIF read from the shared overlay staging —
     /// the dtrh loom-file convention — sent as the REAL loom-save).</summary>
     private void ScheduleDrive()
@@ -701,7 +701,7 @@ public partial class IntakeHostWindow : Window
             var json = IntakeHarness.DriveStepToJson(bare);
             if (json is null && bare.StartsWith("serve-probe:", StringComparison.Ordinal))
             {
-                // SP-058 HARNESS-ONLY: the RUNNING host GETs a payload-art path from its OWN
+                // HARNESS-ONLY: the RUNNING host GETs a payload-art path from its OWN
                 // loopback server and logs the real status/bytes/sha256 — per-file
                 // request/response proof through the §4 serving contract (route-class logging
                 // redacts filenames, so the page's own fetch can never name the file; payload

@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-040 slice c4 pipeline persist proofs (ai-companion-admission.md §4 rules 1/5, §8 c4;
+/// Slice c4 pipeline persist proofs (ai-companion-admission.md §4 rules 1/5, §8 c4;
 /// contract §5). Proves the moderation-gated persist with rollback discipline: per-turn
 /// pairs persist ONLY after c3's output boundary passes (file-content proof); a blocked
 /// turn is typed, rolled back, and NEVER hits disk (zero file content); awareness turns
@@ -238,7 +238,7 @@ public class AiMemoryPipelineTests
         Assert.Empty(h.Memory.ReadRecent(10));
     }
 
-    // ---- SP-068 F3: the unsanctioned-link strip on the interactive persist path (audit row C3) ----
+    // ---- F3: the unsanctioned-link strip on the interactive persist path (audit row C3) ----
 
     [Fact]
     public async Task InteractiveReply_InventedUrlStripped_StrippedTextPersisted_FileContentProof()

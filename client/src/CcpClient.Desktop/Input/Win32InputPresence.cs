@@ -14,14 +14,14 @@ public readonly record struct InputNativeHandles(nint Window);
 /// system actually did.
 ///
 /// <para><b>The whole design in one paragraph.</b> Putting a window on screen is easy and proves
-/// nothing; SP-099 established that for the overlay and the same is true here with the polarity
+/// nothing; the overlay capability established that and the same is true here with the polarity
 /// reversed. What is hard — and what this class does — is (1) getting the foreground from an
 /// operating system that is entitled to refuse it, and (2) never claiming to have got it when it
 /// did not. Both halves are measured rather than assumed: the escalation ladder below exists
 /// because a plain <c>SetForegroundWindow</c> from a non-foreground process was measured returning
 /// FALSE with every injected keystroke going to the other application, and the confirmation exists
 /// because that state is indistinguishable, from inside the process, from a card the user is typing
-/// into (SP-110 <c>plan.md</c> §0).</para>
+/// into (the packet <c>plan.md</c> §0).</para>
 ///
 /// <para><b>Nothing here synthesises input.</b> The suite does, to prove delivery; the product never
 /// does. A capability that pressed keys to check it could receive keys would be putting characters
@@ -260,7 +260,7 @@ public sealed class Win32InputPresence : IInputPresence
                 $"the OS reports the card 0x{window:X} as the foreground window but the FOREGROUND THREAD's "
                 + $"keyboard focus as {Describe(SystemKeyboardFocus())}; keystrokes are routed elsewhere. This is "
                 + "the read that must be GetGUIThreadInfo(0) — the thread-local read answers 'ours' for a window "
-                + "nobody can type into (SP-110 plan.md §0)");
+                + "nobody can type into (the packet plan.md §0)");
         }
 
         if (!observation.HitTestRoutesHere)
@@ -519,7 +519,7 @@ public sealed class Win32InputPresence : IInputPresence
     // ---------- the OS round trips ----------
 
     /// <summary>
-    /// The escalation ladder, and every rung of it was measured before it was written (SP-110
+    /// The escalation ladder, and every rung of it was measured before it was written (the packet
     /// plan.md §0).
     ///
     /// <para>Rung 1 is what WPF does: <c>SetForegroundWindow</c>
@@ -612,11 +612,11 @@ public sealed class Win32InputPresence : IInputPresence
     /// background. Returns the ink count.
     ///
     /// <para><b>Why the read-back is from the WINDOW and not from what was written.</b> The same
-    /// argument SP-100 made for the overlay's content: a <c>DrawText</c> that returned says a GDI
+    /// argument made for the overlay's content: a <c>DrawText</c> that returned says a GDI
     /// call succeeded; pixels read back out of the window's DC say the OS holds them in the surface
     /// the compositor draws from. Measured before this was written: immediately after the draw, with
     /// no wait of any kind, the window's DC returns 161 non-background pixels of 7600 sampled
-    /// (SP-110 plan.md §0, F6).</para>
+    /// (the packet plan.md §0, F6).</para>
     /// </summary>
     private int PaintNow()
     {

@@ -5,10 +5,10 @@ using CcpClient.Desktop.Capabilities;
 
 namespace CcpClient.Desktop.Persistence;
 
-// ISecretStore platform implementations (SP-033; contract §10; admission §6).
+// ISecretStore platform implementations (contract §10; admission §6).
 // Settings documents carry opaque secret NAMES, never values (persistence-migration-contract
 // §9). There is NEVER a plaintext fallback: where no platform secret service is reachable
-// the probe reports a typed SP-006 Unavailable and store operations throw the typed
+// the probe reports a typed Unavailable and store operations throw the typed
 // SecretStoreUnavailableException.
 
 /// <summary>Typed failure for secret-store operations when the platform backend is unavailable or rejects the operation. <see cref="Exception.Message"/> carries stable codes only — never secret values, never names with user data.</summary>
@@ -22,7 +22,7 @@ public sealed class SecretStoreUnavailableException : Exception
 }
 
 /// <summary>
-/// Platform admission (admission §6 rule 2): the store for the current OS plus its SP-006
+/// Platform admission (admission §6 rule 2): the store for the current OS plus its capability
 /// probe. Windows = DPAPI (CurrentUser scope — WPF discipline, SecureAuthTokenStore.cs:40,66)
 /// via crypt32 P/Invoke (ProtectedData is not inbox on a plain net10.0 TFM and the project
 /// file is outside this packet's File Scope — zero new packages). Linux = freedesktop
@@ -172,7 +172,7 @@ public sealed class SecretToolSecretStore : ISecretStore
     }
 
     /// <summary>
-    /// The SP-006 probe: binary on PATH + a real lookup round-trip. A lookup that fails
+    /// The capability probe: binary on PATH + a real lookup round-trip. A lookup that fails
     /// with an empty/clean "not found" exit proves the daemon is reachable; an error on
     /// stderr (e.g. "Cannot autolaunch D-Bus without X11 $DISPLAY") proves it is not.
     /// </summary>

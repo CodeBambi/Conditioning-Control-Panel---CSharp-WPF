@@ -30,25 +30,25 @@ public sealed record FlashFiring(FlashEvent Event, IReadOnlyList<string> Drawn);
 ///
 /// <para><b>WHAT THIS PORTS.</b> WPF's flash has two halves. The first is a scheduler over the
 /// user's image pool: an interval derived from a dial, a variance band, a floor, and a draw of N
-/// images per firing. That half is pure, and it is ported here, exactly (SP-098). The second half
+/// images per firing. That half is pure, and it is ported here, exactly. The second half
 /// puts those images on the screen ABOVE every other application — one layered, always-on-top,
 /// <c>WS_EX_TRANSPARENT</c> click-through window per flash, re-asserted to <c>HWND_TOPMOST</c> as
 /// other layers fight it (<c>Services/Flash/FlashService.cs:3615</c>, <c>:3667-3668</c>,
 /// <c>:3862-3868</c>, <c>:206-240</c>). That half is a platform capability with its own evidence
-/// (SP-099's <see cref="Overlay.IOverlayPresence"/>), and SP-100 hands the drawn paths to it.</para>
+/// (<see cref="Overlay.IOverlayPresence"/>), and this module hands the drawn paths to it.</para>
 ///
 /// <para><b>The drawing is downstream, and it never leads.</b> The pacing, the pool, the count and
 /// the stop are exactly what they were before a surface existed, and they do not consult one: a
 /// flash comes due, draws from the pool, counts, re-schedules and — if there is somewhere to draw —
-/// appears. Where there is no overlay (every non-Windows build refuses one honestly, SP-099 D56)
+/// appears. Where there is no overlay (every non-Windows build refuses one honestly, divergence D56)
 /// the flash still comes due, still counts and still stops; it is a flash nobody sees, which is
 /// neither a crash nor a refusal to run. Nothing in this class pretends the difference away: the
 /// presenter keeps the surface's typed <c>CapabilityState</c> verbatim.</para>
 ///
-/// <para><b>SP-101: what is left in this file.</b> The arm, the disarm, the one-shot, the
+/// <para><b>What is left in this file.</b> The arm, the disarm, the one-shot, the
 /// generation, the counter, the dot and the projection moved to
 /// <see cref="PacedSessionEffect{TFiring}"/> when Subliminals was built and turned out to need
-/// exactly the same body. Nothing here changed behaviour — every SP-098 and SP-100 fact passes
+/// exactly the same body. Nothing here changed behaviour — every earlier fact passes
 /// unaltered — and what remains is what is genuinely Flash Images': its rack key, its dial, its
 /// pacing law, its pool, and the one ordering rule below.</para>
 /// </summary>

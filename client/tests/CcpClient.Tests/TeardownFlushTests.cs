@@ -6,10 +6,10 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Persistence contract §11: the store's flush occupies SP-003's reserved slot at the head
+/// Persistence contract §11: the store's flush occupies the participant contract's reserved slot at the head
 /// of the single guarded teardown — dirty settings are on disk BEFORE generations cancel
 /// and before reverse-order participant stop; clean/never-loaded stores flush nothing;
-/// repeated shutdown stays a no-op (SP-003 invariants intact).
+/// repeated shutdown stays a no-op (participant-contract invariants intact).
 /// </summary>
 public class TeardownFlushTests
 {
@@ -39,7 +39,7 @@ public class TeardownFlushTests
         Assert.Equal("dirty-at-shutdown", document["greeting"]!.GetValue<string>());
         Assert.Equal(1, document["schemaVersion"]!.GetValue<int>());
 
-        // SP-003 invariant: repeated shutdown is a no-op.
+        // Participant-contract invariant: repeated shutdown is a no-op.
         await host.ShutdownAsync();
         Assert.Equal(1, probe.StopCount);
     }

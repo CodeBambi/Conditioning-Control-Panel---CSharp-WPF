@@ -26,7 +26,7 @@ public readonly record struct VideoClipInfo(
 
     /// <summary>The OS reports a picture with real dimensions. It says NOTHING about whether any
     /// frame reached a surface — that is <see cref="IVideoPresence"/>'s question, and keeping the
-    /// two apart is the whole of SP-111.</summary>
+    /// two apart is the whole of this capability.</summary>
     public bool HasPicture => Asked && Width > 0 && Height > 0;
 }
 

@@ -45,7 +45,7 @@ public interface ISubliminalSurface
 ///
 /// <para><b>The envelope, and the divergence inside it.</b> WPF animates the window's opacity: 50 ms
 /// in, <c>hold</c> at the target, 50 ms out (<c>:1253-1281</c>). This surface has one uniform alpha
-/// and no frame loop — SP-099's own residual is that <c>Present</c> is wrong per frame, and SP-100
+/// and no frame loop — the overlay capability's own residual is that <c>Present</c> is wrong per frame, and the flash path
 /// took the same decision for the flash fade (D60). So the card appears at its target opacity
 /// immediately, stays for the WHOLE envelope, and leaves. The time it occupies is exactly WPF's
 /// (<c>50 + max(100, frames*17) + 50</c> ms); what is missing is the ramp at each end.</para>
@@ -54,7 +54,7 @@ public sealed class SubliminalSurfacePresenter : ISubliminalSurface, IDisposable
 {
     /// <summary>One card at a time. WPF holds one keep-alive window per screen and replaces its
     /// content outright on the next show (<c>SubliminalService.cs:29-32</c>); the port places on the
-    /// primary display only (the same single-display limit SP-100 recorded for flashes), so one.</summary>
+    /// primary display only (the same single-display limit recorded for flashes), so one.</summary>
     public const int MaxConcurrentSurfaces = 1;
 
     /// <summary>WPF's fade-in, in milliseconds (<c>SubliminalService.cs:1253</c>).</summary>

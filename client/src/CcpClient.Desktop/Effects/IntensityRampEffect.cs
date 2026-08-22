@@ -9,7 +9,7 @@ namespace CcpClient.Desktop.Effects;
 /// <b>Intensity Ramp</b> — WPF's TIMING rack row (<c>Views/Tabs/StudioTabView.xaml.cs:538-541</c>),
 /// and <b>the first ported module that draws nothing at all</b>.
 ///
-/// <para><b>Why this module exists (SP-108).</b> Four modules ran under this spine and every one of
+/// <para><b>Why this module exists.</b> Four modules ran under this spine and every one of
 /// them was from WPF's EFFECTS group and painted an overlay, so every seam the port had proven —
 /// <see cref="OwnedSessionEffect"/>, <c>OverlaySurfaceSet</c>, the dot's three states, a presenter
 /// owning the cadence — had only ever been proven against pixel-pushing. This module is from a
@@ -26,11 +26,9 @@ namespace CcpClient.Desktop.Effects;
 ///
 /// <para><b>THE SEAM'S FOURTH VERDICT — what "running" means with nothing to look at.</b></para>
 /// <list type="bullet">
-/// <item>Paced <see cref="EffectDotState.Live"/> is a claim about the CLOCK: a firing is scheduled
-/// (SP-101/SP-105).</item>
-/// <item>Continuous <c>Live</c> is a claim about the SCREEN: a surface is confirmed up (SP-105).</item>
-/// <item>Moving <c>Live</c> is the screen AND that it will be a different screen a moment from now
-/// (SP-106).</item>
+/// <item>Paced <see cref="EffectDotState.Live"/> is a claim about the CLOCK: a firing is scheduled.</item>
+/// <item>Continuous <c>Live</c> is a claim about the SCREEN: a surface is confirmed up.</item>
+/// <item>Moving <c>Live</c> is the screen AND that it will be a different screen a moment from now.</item>
 /// <item><b>Non-drawing <c>Live</c> is a claim about CUSTODY: this module holds dials belonging to
 /// other modules, is driving them, and owes them back.</b></item>
 /// </list>
@@ -41,10 +39,10 @@ namespace CcpClient.Desktop.Effects;
 /// module is running that the user cannot observe by ANY means, which is the same class of lie as a
 /// <c>Live</c> tint on a platform whose overlay refuses. <b>Having a timer is not sufficient to be
 /// paced</b>: the 2-second tick is a CADENCE that keeps borrowed dials correct, not an INTERVAL that
-/// decides when this module is due (SP-106's distinction, one module further on). A ramp is never
+/// decides when this module is due (the moving module's distinction, one module further on). A ramp is never
 /// due; it is <i>on</i>.</para>
 ///
-/// <para><b>And why not "change", which is SP-106's rule.</b> At full progress the ramp stops moving
+/// <para><b>And why not "change", which is the moving module's rule.</b> At full progress the ramp stops moving
 /// anything, and at multiplier 1.0× it never moved anything — and in both cases it is still running:
 /// it holds your dials, moving the multiplier slider starts them climbing with no re-arm, and STOP
 /// still gives them back. A rule that demanded motion would report the finished ramp as not running
@@ -102,7 +100,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// <c>Gate</c> and calls <see cref="ReleaseWork"/>. Nothing here ever takes <c>Gate</c> while
     /// holding this, and nothing calls out of this class while holding it: every external call
     /// (reading a dial, writing a dial, scheduling a tick) happens on a snapshot taken and released
-    /// first. That is what makes SP-106 §4.2's lock-order inversion unreachable here.</para>
+    /// first. That is what makes the recorded lock-order inversion unreachable here.</para>
     /// </summary>
     private readonly object _hold = new();
 
@@ -118,7 +116,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
 
     /// <param name="clock">The cadence this module re-samples its progress on. It is here rather
     /// than in a presenter for one reason: there is no presenter, because there is nothing to
-    /// present. SP-106 put a cadence in a surface because the cadence was keeping a SURFACE correct;
+    /// present. The moving module put a cadence in a surface because the cadence was keeping a SURFACE correct;
     /// this one keeps borrowed DIALS correct, and it belongs where they are driven from.</param>
     /// <param name="dials">What this ramp is allowed to drive. Empty is a legal composition and
     /// produces a typed refusal, never a silent no-op.</param>
@@ -263,7 +261,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// <summary>
     /// Link the Flash Images module's opacity to this ramp (same handler upstream) — WPF's FIRST
     /// link switch (<c>MainWindow/MainWindow.StartStop.cs:506-510</c>), admissible here only since
-    /// SP-117 gave flash opacity a dial on a ported panel. D93's other two links, master volume and
+    /// flash opacity gained a dial on a ported panel. D93's other two links, master volume and
     /// subliminal volume, are still absent because their dials still are.
     /// </summary>
     public void SetLinkFlashOpacity(bool linked) =>
@@ -414,7 +412,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// WPF writes and reconciles all five links every 2 seconds. In this port a re-apply reaches
     /// <c>OverlaySurfaceSet.Place</c>, which calls <c>Present</c> — a walk of the OS's whole
     /// top-level z-order plus a hit test in both polarities, momentarily clearing click-through
-    /// (SP-106, <c>Overlay/Win32OverlayPresence.cs:547-576</c>). Spending that twice a second for a
+    /// (<c>Overlay/Win32OverlayPresence.cs:547-576</c>). Spending that twice a second for a
     /// value that has not changed is the same cost that makes a 60 Hz module unportable (D84). The
     /// user-visible outcome is identical and the port does it about twenty times an hour instead of
     /// eighteen hundred. Recorded as D96.</para>

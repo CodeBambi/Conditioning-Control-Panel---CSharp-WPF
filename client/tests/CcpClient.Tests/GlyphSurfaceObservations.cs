@@ -8,7 +8,7 @@ using CcpClient.Desktop.Video;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-115's real-desktop runs. Three of them, each executed ONCE per suite and cached, in the shape
+/// This capability's real-desktop runs. Three of them, each executed ONCE per suite and cached, in the shape
 /// <see cref="OverlayObservations"/> and <see cref="VideoSurfaceObservations"/> established: a real
 /// window on the real desktop is expensive and machine-global, so it is created once and every fact
 /// reads the recorded run.
@@ -430,7 +430,7 @@ internal static class GlyphSurfaceObservations
     ///
     /// <para><b>Why it is worth staging rather than classing as unreachable.</b> The
     /// <c>glyph-uniform-alpha-mode</c> refusal is the product's own guard for the exact conversion
-    /// SP-099 recorded, and a first draft of this packet classified it as a branch nothing could
+    /// the overlay recorded, and a first draft of this packet classified it as a branch nothing could
     /// reach. It is reachable with instruments this suite already shipped: the surface exposes its
     /// own handle, and the probe already declares the call.</para>
     /// </summary>
@@ -710,7 +710,7 @@ internal static class GlyphSurfaceObservations
     /// <summary>
     /// Reads the composited desktop over the backdrop and returns the sample points.
     ///
-    /// <para>The capture goes through <see cref="FlashPixelProbe.CaptureDesktop"/>, which is SP-100's
+    /// <para>The capture goes through <see cref="FlashPixelProbe.CaptureDesktop"/>, which is the flash
     /// instrument and carries the DPI mapping this test host needs: USER32 virtualises window
     /// coordinates while the screen device context is physical, so reading the desktop at a window's
     /// own coordinates samples the WRONG POINT. The mapping is derived from the OS itself.</para>
@@ -825,8 +825,8 @@ internal static class GlyphSurfaceObservations
     {
         var (screenWidth, screenHeight) = GlyphWindowProbe.PrimarySize;
 
-        // The four landed rectangles keep SP-113's own positions, so this run is a strict extension
-        // of the arrangement that packet proved rather than a rearrangement of it.
+        // The four landed rectangles keep their own positions, so this run is a strict extension
+        // of the arrangement already proved rather than a rearrangement of it.
         var overlayBounds = new OverlayBounds(
             Math.Max(0, (screenWidth / 2) - 660), Math.Max(0, (screenHeight / 2) - 150), 200, 150);
         var (overlayX, overlayY) = overlayBounds.Centre;

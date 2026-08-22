@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-109 — <b>the packet's central trap, stated as assertions.</b>
+/// <b>The packet's central trap, stated as assertions.</b>
 ///
 /// <para>An earlier wave refused to ship an audio module because "nothing in this project can
 /// actually verify that a sound played". A test that asserted <c>Play()</c> returned would be the

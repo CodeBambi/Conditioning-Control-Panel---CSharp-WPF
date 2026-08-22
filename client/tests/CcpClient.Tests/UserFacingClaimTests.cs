@@ -6,14 +6,14 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-137 — the guard for a claim that goes FALSE without anybody editing it.
+/// The guard for a claim that goes FALSE without anybody editing it.
 ///
 /// <para><b>The defect class.</b> <c>port-lessons.md</c> wave 62: <i>"A frozen record is not a stale
 /// sentence; a present-tense claim is. Rot is a property of TENSE, not of age."</i> A record may say
 /// <i>"at this land the count was thirteen"</i> forever. A string that tells a user <b>"this build
 /// cannot X"</b> goes false the moment another lane makes the build able to X — and nothing in this
-/// repository detected that. It happened twice: SP-135 built the WebView2 deny hook and left
-/// <c>GoonDoors.cs</c> telling the user the browser can still ask; SP-126 wired the haptic limb and
+/// repository detected that. It happened twice: one packet built the WebView2 deny hook and left
+/// <c>GoonDoors.cs</c> telling the user the browser can still ask; another wired the haptic limb and
 /// left <c>HapticsPanelNotices.cs</c> telling the user no module sends anything. In both cases the
 /// XML docs beside the code were maintained (<c>HapticLimb.cs:139-140</c>,
 /// <c>IHapticSink.cs:223</c>) and the sentence the USER reads was not.</para>
@@ -74,7 +74,7 @@ namespace CcpClient.Tests;
 /// <para><b>Shape note.</b> Every needle lives in a class-level constant and every file walk lives in
 /// a helper, so no <c>[Fact]</c> body carries a platform, environment or filesystem predicate.
 /// <c>client/tests/floor/**</c> — and therefore <c>vacuous-shape-ledger.json</c> — is closed to this
-/// packet, so a silencing shape here could not have been dispositioned (SP-135's D295 trap).</para>
+/// packet, so a silencing shape here could not have been dispositioned (the D295 trap).</para>
 /// </summary>
 public sealed class UserFacingClaimTests
 {
@@ -89,23 +89,23 @@ public sealed class UserFacingClaimTests
     /// <summary>The typed outcome that arm returns.</summary>
     private const string UnsupportedPlatformNeedle = "\"unsupported-platform\"";
 
-    /// <summary>The haptic limb, as held by an effect module (SP-126, D210).</summary>
+    /// <summary>The haptic limb, as held by an effect module (D210).</summary>
     private const string LimbNeedle = "IHapticLimb";
 
     private const string PracticeHostFile = "client/src/CcpClient.Desktop/Features/Goon/GoonHostWindow.axaml.cs";
     private const string DenyHookFile = "client/src/CcpClient.Desktop/Features/Dtrh/WebViewPermissionDeny.cs";
     private const string EffectsDirectory = "client/src/CcpClient.Desktop/Effects";
 
-    /// <summary>The clause SP-135 falsified. Its RETURN would mean the correction was reverted.</summary>
+    /// <summary>The clause the deny hook falsified. Its RETURN would mean the correction was reverted.</summary>
     private const string FalsifiedVoiceClause = "so the browser can still ask you. Closing that needs a";
 
-    /// <summary>The clause SP-126 falsified, in the absence line.</summary>
+    /// <summary>The clause the haptic limb falsified, in the absence line.</summary>
     private const string FalsifiedHapticClause = "no effect in this build sends";
 
-    /// <summary>The clause SP-126 falsified, in the Armed arm.</summary>
+    /// <summary>The clause the haptic limb falsified, in the Armed arm.</summary>
     private const string FalsifiedArmedClause = "nothing sends anything to it yet";
 
-    /// <summary>SP-137's OWN first replacement for the Armed arm, banned by name. It was false in
+    /// <summary>This packet's OWN first replacement for the Armed arm, banned by name. It was false in
     /// the only world where that arm renders — the dot cannot be lit unless a route has been
     /// admitted. A packet about sentences that go false may not leave its own behind.</summary>
     private const string SelfRefutingArmedClause = "the sink admits no provider route";
@@ -178,7 +178,7 @@ public sealed class UserFacingClaimTests
     {
         var limbSites = CountFilesContaining(RepoPath(EffectsDirectory), LimbNeedle);
         Assert.True(limbSites > 0,
-            "no effect module holds an IHapticLimb — if SP-126 was reverted, the absence line must go "
+            "no effect module holds an IHapticLimb — if the haptic limb was reverted, the absence line must go "
             + "back to saying the modules are silent");
 
         var absence = HapticAbsenceText();
@@ -268,7 +268,7 @@ public sealed class UserFacingClaimTests
 
     /// <summary>
     /// Does the VoiceNotes sentence agree with the code? With the hook in place it must state the
-    /// platform split and must NOT carry the clause SP-135 falsified; without it, the old clause is
+    /// platform split and must NOT carry the clause the deny hook falsified; without it, the old clause is
     /// the honest one.
     /// </summary>
     private static bool VoiceVerdict(bool windowsDenies, string sentence) =>
@@ -297,7 +297,7 @@ public sealed class UserFacingClaimTests
     /// admitted (<c>HapticParticipant.cs:214-215</c> → <c>IHapticSink.cs:136</c> →
     /// <c>HapticParticipant.cs:259-270</c>). Bound SEPARATELY from the absence line because a
     /// needle over the two joined would let the absence line satisfy it while this arm said
-    /// anything at all — which is how SP-137's own first attempt shipped a sentence that is FALSE
+    /// anything at all — which is how this packet's own first attempt shipped a sentence that is FALSE
     /// on the only day it renders. Both self-refuting wordings are banned by name.
     /// </summary>
     private static bool HapticArmedArmVerdict(bool modulesCommandTheLimb, string sentence) =>
@@ -326,7 +326,7 @@ public sealed class UserFacingClaimTests
     // ---------- the walk (helpers: never inside a [Fact] body) ----------
 
     /// <summary>Files under <paramref name="root"/> carrying <paramref name="needle"/>, over the
-    /// SP-137 universe rule: every <c>.cs</c> at any depth, excluding any <c>bin</c> or <c>obj</c>
+    /// The universe rule: every <c>.cs</c> at any depth, excluding any <c>bin</c> or <c>obj</c>
     /// path segment.</summary>
     private static int CountFilesContaining(string root, string needle) =>
         Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)

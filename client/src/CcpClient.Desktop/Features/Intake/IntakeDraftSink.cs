@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the session-drafting SINK (IntakeHostService.cs:421-427 + UniqueSessionPath
+/// The session-drafting SINK (IntakeHostService.cs:421-427 + UniqueSessionPath
 /// :515-528 parity): writes the drafted-session document (marked never-runnable) into
 /// &lt;dataDir&gt;/intake/drafted_sessions/ as <c>{name}.session.json</c> with collision
 /// suffixes -2…-999, atomic .tmp-swap. The sink is the whole delivery — there is no

@@ -38,7 +38,7 @@ public interface IBouncingTextSurface
 /// <summary>
 /// The bouncing logo, composited on a real per-pixel-alpha surface.
 ///
-/// <para><b>The cadence lives HERE, not in the module</b> — SP-106's rule, unchanged for a second
+/// <para><b>The cadence lives HERE, not in the module</b> — the established rule, unchanged for a second
 /// moving module: an INTERVAL that decides when a MODULE is due belongs to
 /// <see cref="PacedSessionEffect{TFiring}"/>, and a CADENCE that keeps a SURFACE correct belongs to
 /// the surface. A bouncing logo is never "due"; it is on, and what is on screen moves. So
@@ -281,7 +281,7 @@ public sealed class BouncingTextSurfacePresenter : IBouncingTextSurface, IDispos
         }
 
         // The cadence dies WITH the surface. A moving module whose timer outlived its window would
-        // keep re-compositing something nobody can see, which is SP-106's own finding about the
+        // keep re-compositing something nobody can see, which is the first moving module's own finding about the
         // shared body applied to a second moving module.
         timer?.Dispose();
         if (surface is not null)
@@ -343,7 +343,7 @@ public sealed class BouncingTextSurfacePresenter : IBouncingTextSurface, IDispos
         if (!held)
         {
             // A surface that stopped holding its composite is not a surface. Retire it rather than
-            // keep feeding a window the OS no longer draws — the same rule SP-111's presenter has.
+            // keep feeding a window the OS no longer draws — the same rule the video presenter has.
             LastPlacement = state;
             Withdraw();
             return;

@@ -9,8 +9,8 @@ namespace CcpClient.Desktop.Ai;
 /// Bounded-retry policy for the loopback Ollama provider (admission §9.2 #6 — the VALUES
 /// are owner-pending; this is the typed placeholder SHAPE). WPF-observed shape:
 /// <c>OpenAiCompatibleService.cs:425-427</c> — exactly one retry, 429/5xx only, fixed
-/// 1200ms; SP-019 refined the delay to Retry-After honored clamped ≤2s (spike limit 8:
-/// placeholder, not owner-approved). DEFAULT IS OFF (conservative posture, SP-035
+/// 1200ms; the spike refined the delay to Retry-After honored clamped ≤2s (spike limit 8:
+/// placeholder, not owner-approved). DEFAULT IS OFF (conservative posture, a
 /// pre-approach consult; the c6 none-admitted-default precedent): no retry happens unless
 /// a policy is explicitly enabled.
 /// </summary>
@@ -21,7 +21,7 @@ public sealed record AiRetryPolicy(bool Enabled, int MaxRetries, TimeSpan MaxDel
 
     /// <summary>
     /// The WPF-observed placeholder shape (§9.2 #6, NOT owner-approved values): exactly one
-    /// bounded retry on 429/5xx, Retry-After honored clamped to ≤2s (SP-019 items 3-4:
+    /// bounded retry on 429/5xx, Retry-After honored clamped to ≤2s (spike items 3-4:
     /// exactly-2-hits, no retry-storm).
     /// </summary>
     public static readonly AiRetryPolicy WpfObservedPlaceholder = new(true, 1, TimeSpan.FromSeconds(2));
@@ -56,7 +56,7 @@ public sealed record LoopbackOllamaProviderOptions
 /// WPF-observed NATIVE protocol — <c>POST {host}api/chat</c>, payload
 /// <c>{model, messages, stream:false, think:false}</c> (LocalAiService.cs:374-390, :23-24),
 /// with the request's history turns (if any) rendered oldest-first before the final user
-/// message (SP-047 memory→prompt assembly), reply extracted from <c>message.content</c>.
+/// message (the memory→prompt assembly), reply extracted from <c>message.content</c>.
 /// Semantics:
 /// - Cancellation: the caller's token is the ONLY cancellation mechanism. The body is read
 ///   as a stream (<see cref="HttpCompletionOption.ResponseHeadersRead"/>) so a mid-stream
@@ -64,7 +64,7 @@ public sealed record LoopbackOllamaProviderOptions
 ///   external token propagates (the pipeline types it Cancelled).
 /// - Timeout: linked-CTS <c>CancelAfter</c> with <c>HttpClient.Timeout = Infinite</c>;
 ///   disambiguation by token ORIGIN (external-cancelled vs timeout-fired), never
-///   exception-type guessing (SP-019 item 2). Timeout → <see cref="AiReply.Unavailable"/>
+///   exception-type guessing (spike item 2). Timeout → <see cref="AiReply.Unavailable"/>
 ///   (<c>timeout</c>); the external token is never cancelled by a timeout.
 /// - Retry: <see cref="AiRetryPolicy"/> placeholder — 429/5xx only, Retry-After honored
 ///   clamped to ≤<see cref="AiRetryPolicy.MaxDelay"/>; never on refusal/parse/other-4xx.
@@ -73,7 +73,7 @@ public sealed record LoopbackOllamaProviderOptions
 ///   attempt, NO string-sniffing (contract §7 rule 3).
 /// - Malformed/truncated: the full document parses BEFORE any text is extracted; any parse
 ///   or shape failure → <see cref="AiReply.Unavailable"/> (<c>malformed-output</c>) — never
-///   a partial apply, a truncated prefix is never surfaced (SP-019 item 6).
+///   a partial apply, a truncated prefix is never surfaced (spike item 6).
 /// - Remote hosts: a non-loopback host is rejected BEFORE any socket opens — both in the
 ///   probe (probing a remote host would itself be undeclared remote traffic) and in
 ///   <see cref="CompleteAsync"/> (<see cref="SendAttempts"/> stays 0; the pipeline's
@@ -102,16 +102,16 @@ public sealed class LoopbackOllamaProvider : IAiProvider
 
     public AiProviderDescriptor Descriptor { get; }
 
-    /// <summary>Provider-side send-seam instrument: incremented IMMEDIATELY before each socket write. Pre-socket rejections leave this at 0 (SP-019 item 7 discipline, in-product).</summary>
+    /// <summary>Provider-side send-seam instrument: incremented IMMEDIATELY before each socket write. Pre-socket rejections leave this at 0 (spike item 7 discipline, in-product).</summary>
     public int SendAttempts => Volatile.Read(ref _sendAttempts);
 
     /// <summary>Body bytes read so far by the in-flight request (true mid-stream position proof; content-free).</summary>
     public int BytesReadSoFar { get; private set; }
 
     /// <summary>
-    /// The SP-006 probe — the ONLY availability authority. Classification is config-pure
+    /// The capability probe — the ONLY availability authority. Classification is config-pure
     /// and runs FIRST: a non-loopback host yields typed Unavailable with ZERO socket
-    /// contact. A loopback host is probed with <c>GET {host}api/version</c> (the SP-019
+    /// contact. A loopback host is probed with <c>GET {host}api/version</c> (the spike's
     /// item-8 probe URL) under a short bound; Available iff HTTP 200, with the Detail
     /// honestly scoped (service reachable; MODEL PRESENCE UNPROVEN — no /api/tags, no pull).
     /// </summary>
@@ -154,7 +154,7 @@ public sealed class LoopbackOllamaProvider : IAiProvider
                     {
                         // Bounded retry (placeholder shape): Retry-After honored, clamped
                         // to ≤ MaxDelay; WPF's fixed 1200ms when no header is present
-                        // (OpenAiCompatibleService.cs:425-427 + SP-019 refinement).
+                        // (OpenAiCompatibleService.cs:425-427 + the spike's refinement).
                         var delay = TimeSpan.FromMilliseconds(1200);
                         if (resp.Headers.RetryAfter?.Delta is { } retryAfter)
                         {
@@ -242,7 +242,7 @@ public sealed class LoopbackOllamaProvider : IAiProvider
     {
         // History turns render OLDEST FIRST before the final user message (the WPF
         // outgoing-list order, LocalAiService.cs:531-548, minus system/enrichment — the
-        // greenfield request shape carries neither). Null/empty history ⇒ the pre-SP-047
+        // greenfield request shape carries neither). Null/empty history ⇒ the earlier
         // single-message payload, byte-identical.
         var history = request.History;
         var messages = history is { Count: > 0 }

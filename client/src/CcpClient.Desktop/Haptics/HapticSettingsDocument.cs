@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Haptics;
 
 /// <summary>
-/// SP-119: the haptic sink's persisted setting — WPF's <c>HapticSettings.Enabled</c>, the master
+/// The haptic sink's persisted setting — WPF's <c>HapticSettings.Enabled</c>, the master
 /// toggle the premium gate guards (<c>MainWindow/MainWindow.Haptics.cs:500</c>, written only after
 /// the gate has let the handler past <c>:489-497</c>).
 ///
@@ -14,7 +14,7 @@ namespace CcpClient.Desktop.Haptics;
 /// (<c>Views/Tabs/HapticsTabView.xaml</c>, 1640 lines of surface over
 /// <c>Services/Haptics/**</c>'s 9193). <b>Every one of them configures a provider or a mixer, and
 /// this build admits neither.</b> Persisting them would write settings nothing reads — the exact
-/// debt <c>Persistence/SessionPresetDocument.cs:17-23</c> recorded and SP-117 closed by waiting for
+/// debt <c>Persistence/SessionPresetDocument.cs:17-23</c> recorded and an earlier packet closed by waiting for
 /// the surface that honours them. They arrive with the provider that honours them.</para>
 ///
 /// <para><b>Auto-connect in particular is ABSENT rather than present-and-inert</b> (D93's rule).

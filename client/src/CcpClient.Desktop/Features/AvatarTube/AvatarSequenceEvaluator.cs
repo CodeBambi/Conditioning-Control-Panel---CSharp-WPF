@@ -36,7 +36,7 @@ public static class AvatarSchedule
     /// cadence, 0.5 = doubled speed, 2.0 = halved). Within-hold capture quantization is
     /// ZERO-MEAN noise on the slope (unlike max-residual phase fits, whose error grows with
     /// the clip's longest hold — the 1400ms pose hold produced 704ms phantom residuals
-    /// under a residual fit, SP-015 Step 4 finding). Non-uniform delays keep the slope
+    /// under a residual fit, a Step 4 finding). Non-uniform delays keep the slope
     /// identifiable; capture-timestamp jitter contributes ~jitter/span (≤0.07 at span ≥3s).
     /// </summary>
     public static double SpeedEstimate(

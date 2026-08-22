@@ -64,7 +64,7 @@ internal static class Win32OverlayInterop
     public const uint GwHwndnext = 2;
 
     /// <summary>The window is asked to repaint. Serviced from the retained frame so an overlay
-    /// that the OS invalidates does not go blank (SP-100).</summary>
+    /// that the OS invalidates does not go blank.</summary>
     public const uint WmPaint = 0x000F;
 
     /// <summary>Plain copy. The only raster op this capability uses: a frame replaces the
@@ -244,7 +244,7 @@ internal static class Win32OverlayInterop
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern nint GetModuleHandleW(string? name);
 
-    // ---- the content mechanism (SP-100) ----------------------------------------------------
+    // ---- the content mechanism ----------------------------------------------------
     // GDI, deliberately: the surface is composited from a uniform LWA_ALPHA, which is exactly the
     // mode in which ordinary painting into the window's own DC reaches the screen. The alternative
     // (UpdateLayeredWindow) is mutually exclusive with SetLayeredWindowAttributes and would take

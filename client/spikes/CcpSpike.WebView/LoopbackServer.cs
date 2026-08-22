@@ -4,7 +4,7 @@ using System.Text;
 namespace CcpSpike.WebView;
 
 /// <summary>
-/// SP-011 loopback: two GET-only origins on 127.0.0.1, ephemeral ports (retry loop —
+/// Spike loopback: two GET-only origins on 127.0.0.1, ephemeral ports (retry loop —
 /// HttpListener cannot bind port 0). Page origin serves the READ-ONLY payload tree
 /// overlay-first; media origin serves the payload's assets dir with CORS scoped to the
 /// page origin (preserves the WPF ccp.game/ccp.assets cross-origin split so taint checks
@@ -334,7 +334,7 @@ public sealed class LoopbackServer : IDisposable
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _stopped, 1) != 0) return; // idempotent teardown (SP-003 discipline)
+        if (Interlocked.Exchange(ref _stopped, 1) != 0) return; // idempotent teardown (shared teardown discipline)
         _cts.Cancel();
         try { _page.Stop(); } catch { /* best effort */ }
         try { _media.Stop(); } catch { /* best effort */ }

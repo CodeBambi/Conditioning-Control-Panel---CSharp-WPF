@@ -8,9 +8,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-123 — the DTRH bark composition, driven.
+/// The DTRH bark composition, driven.
 ///
-/// <para><b>Why this file exists.</b> The SP-121 census found that
+/// <para><b>Why this file exists.</b> The zero-execution census found that
 /// <c>DtrhHostWindow.InitBarkPipeline</c> was the SOLE construction site of four types with zero
 /// executed lines, inside an 833-line <c>Window</c> that also had zero. The window is not drivable
 /// — it needs a real <c>ApplicationHost</c> carrying a <c>DtrhParticipant</c> and a

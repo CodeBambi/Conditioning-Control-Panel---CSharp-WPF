@@ -10,9 +10,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-007 first-visible-slice proofs: the demo.status-ticker toggle starts/cancels a REAL
-/// SP-004 owned operation with typed outcomes; the ring derives from the operation
-/// authority; the flag round-trips through the SP-005 store (FILE-content asserts, never
+/// First-visible-slice proofs: the demo.status-ticker toggle starts/cancels a REAL
+/// owned operation with typed outcomes; the ring derives from the operation
+/// authority; the flag round-trips through the settings store (FILE-content asserts, never
 /// view-model state); restore-then-start is ordered through the real composition root; the
 /// avares:// asset stream-opens. All through the REAL composition root and phase runner —
 /// no mocks (contract §10.2 pattern).
@@ -55,7 +55,7 @@ public class StatusTickerSliceTests
         Assert.False(completion!.IsCompleted); // a real long-running operation
 
         var ticksBefore = ticker.TickCount;
-        // Class 2 (SP-059): a REAL 500ms ticker — poll for the first tick via the approved
+        // Class 2 (timing discipline): a REAL 500ms ticker — poll for the first tick via the approved
         // helper (returns at the first tick; tolerant window) instead of a fixed 1200ms sleep.
         await TestWait.Until(() => ticker.TickCount > ticksBefore, "the tick ADVANCES — the operation is real (500ms real interval)", () => $"ticks={ticker.TickCount}", cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(ticker.TickCount > ticksBefore); // the tick ADVANCES — the operation is real
@@ -102,10 +102,10 @@ public class StatusTickerSliceTests
         var completion = ticker.Completion;
         ticker.SetEnabled(false); // immediate: the token is cancelled before (or during) the loop's first check
 
-        // Zero-tick regression pin (SP-067): deterministic because BOTH exits agree — the
+        // Zero-tick regression pin: deterministic because BOTH exits agree — the
         // OCE path and the token-observed post-loop return both yield Cancelled.
         // What breaks it: a post-loop `return OperationOutcome.Completed.Instance` shape
-        // returning here (the SP-067 heartbeat defect class).
+        // returning here (the heartbeat defect class).
         Assert.NotNull(completion);
         Assert.IsType<OperationOutcome.Cancelled>(await completion!);
 
@@ -115,7 +115,7 @@ public class StatusTickerSliceTests
     [Fact]
     public async Task ToggleBeforePhase3Start_Throws_ToggleOn_WithoutStart_IsACompositionBug()
     {
-        // Construction starts nothing (SP-003 §4.4): toggling a never-started participant
+        // Construction starts nothing (participant contract §4.4): toggling a never-started participant
         // must fail loudly, not silently no-op.
         var host = new CompositionRoot { SettingsPathFactory = () => Path.Combine(Path.GetTempPath(), "ccp-sp007-neverboot", "settings.json") }
             .Build(new StartupTrace());
@@ -186,7 +186,7 @@ public class StatusTickerSliceTests
         Assert.NotNull(host.Capabilities);
         foreach (var name in host.Capabilities!.Names)
         {
-            // Probed, never left "not-probed" — the SP-006 capability surface survives intact.
+            // Probed, never left "not-probed" — the capability surface survives intact.
             if (host.Capabilities.GetState(name) is CapabilityState.Unavailable unavailable)
             {
                 Assert.NotEqual("not-probed", unavailable.Reason.Code);

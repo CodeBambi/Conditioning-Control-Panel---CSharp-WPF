@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-009 asset-manifest proofs (asset-manifest.md §Two-direction validation rule):
+/// Asset-manifest proofs (asset-manifest.md §Two-direction validation rule):
 /// forward opens, root completeness sweep, the case-exactness NAMED check (ordinal), the
 /// assert-empty copied direction, and schema validation of synthetic user/mod/copied
 /// entries. All against the REAL built CcpClient.Desktop assembly — no mocks.
@@ -125,18 +125,18 @@ public class AssetManifestTests
     [Fact]
     public void CopiedDirection_RealManifest_AllCopiedEntriesPresentCaseExact_SweepClean()
     {
-        // SP-023 (first copied consumer — the documented extension of the assert-empty
+        // First copied consumer (the documented extension of the assert-empty
         // direction): 3700 copied entries (1542 DTRH payload + 2 product overlay + 2138
-        // intake payload, SP-054's flagged glue bundle + 18 tunnel backdrop payload, SP-061:
+        // intake payload, the flagged glue bundle + 18 tunnel backdrop payload:
         // 9 tunnel + 9 vendor/three) verified against the REAL output
         // directory — existence, ordinal case-exactness, sweep.
         //
-        // 2137 -> 2138 at the SP-054 land (orchestrator, upstream sync v6.6.3 -> v6.7.4,
-        // merge 42286638): upstream added `intake/core/accents.js` while SP-054 was in
+        // 2137 -> 2138 at the glue-bundle land (orchestrator, upstream sync v6.6.3 -> v6.7.4,
+        // merge 42286638): upstream added `intake/core/accents.js` while that work was in
         // flight, so the manifest generated from the pre-sync tree was one entry short of
         // the tree the glob now copies. The count is the tripwire that caught it — bump it
         // WITH the reason, never to silence a sweep failure.
-        // 3682 -> 3700 at SP-061: the tunnel backdrop trees (`payload/tunnel` 9 +
+        // 3682 -> 3700 at the tunnel backdrop land: the trees (`payload/tunnel` 9 +
         // `payload/vendor/three` 9 — the import-map resolution closure, derived in
         // the current payload inventory).
         var entries = LoadRealManifest();
@@ -160,7 +160,7 @@ public class AssetManifestTests
     [Fact]
     public void CopiedDirection_CaseDrift_IsNamedFailure()
     {
-        // ext4 vs NTFS drift protection (SP-009 §3): a differently-cased on-disk file must
+        // ext4 vs NTFS drift protection (asset-manifest.md §3): a differently-cased on-disk file must
         // fail the ordinal walk even though File.Exists would tolerate it on NTFS.
         var root = Path.Combine(Path.GetTempPath(), "ccp-sp023-manifest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "PAYLOAD"));
@@ -195,7 +195,7 @@ public class AssetManifestTests
     [Fact]
     public void SelfCheck_RealAssembly_ExitZero_WithPerAssetLines()
     {
-        // The --verify-assets path exercised from unit tests (SP-009 Step 3): same code
+        // The --verify-assets path exercised from unit tests: same code
         // the real binary runs, same assembly, captured output.
         var output = new StringWriter();
         var exit = AssetSelfCheck.Run(DesktopAssembly, output);

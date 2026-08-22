@@ -284,7 +284,7 @@ public static class AssetVerifier
     }
 
     /// <summary>
-    /// Copied direction (asset-manifest.md §Two-direction rule 4, extended by SP-023 — the
+    /// Copied direction (asset-manifest.md §Two-direction rule 4, extended by the
     /// first copied consumer, per the documented extension point): forward = every required
     /// copied entry exists under <paramref name="outputRoot"/> with ordinal case-exact
     /// segments (File.Exists alone is case-tolerant on NTFS — the walk enumerates and
@@ -369,7 +369,7 @@ public static class AssetVerifier
 /// <summary>
 /// The <c>--verify-assets</c> diagnostic self-check (asset-manifest.md §--verify-assets
 /// self-check contract): a bounded path that runs BEFORE the startup phases — no window,
-/// no lifetime, no participants (SP-003 phase discipline: nothing starts that asset
+/// no lifetime, no participants (phase discipline: nothing starts that asset
 /// opening does not need). Opens the embedded manifest and every required embedded asset
 /// through the same avares:// mechanism the app uses, prints one diagnostic line per
 /// failure, exit 0 on full pass, non-zero otherwise.
@@ -417,7 +417,7 @@ public static class AssetSelfCheck
             output.WriteLine($"asset OK {entry.Id} {entry.Path}");
         }
 
-        // Copied direction (SP-023, first copied consumer): output-relative existence +
+        // Copied direction (first copied consumer): output-relative existence +
         // case-exactness + completeness sweep, rooted at the binary's own directory (the
         // stream-only constraint is embedded-only by design; copied checks are
         // output-relative by definition and single-file-safe: content sits BESIDE the exe).

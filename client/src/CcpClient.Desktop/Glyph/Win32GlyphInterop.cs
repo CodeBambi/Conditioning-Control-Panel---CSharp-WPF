@@ -11,7 +11,7 @@ namespace CcpClient.Desktop.Glyph;
 /// shared surface would mean editing it. (2) The two capabilities drive <b>mutually exclusive</b>
 /// Win32 mechanisms on a window — <c>SetLayeredWindowAttributes</c> there,
 /// <c>UpdateLayeredWindow</c> here — and calling either one on the other's window is the exact
-/// hazard SP-099 measured. Keeping the declarations apart means there is no import through which
+/// hazard the overlay measured. Keeping the declarations apart means there is no import through which
 /// this file could reach the overlay's call, and no import through which the overlay could reach
 /// this one. <b>Note what is deliberately ABSENT below: there is no
 /// <c>SetLayeredWindowAttributes</c> declaration anywhere in this capability.</b></para>

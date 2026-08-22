@@ -17,7 +17,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-015 headless interaction tests for the AvatarTube DEMONSTRATOR surface. Draw-level
+/// Headless interaction tests for the AvatarTube DEMONSTRATOR surface. Draw-level
 /// ONLY (verification-harness.md evidence-class rule): real in-memory layout, real routed
 /// input, real engine state — never compositor/window-manager/presentation claims. The
 /// rendered-frame evidence matrix is the Windows-headed Step 4's job.
@@ -66,7 +66,7 @@ public class AvatarTubeHeadlessTests
         var deadline = clock.NowMs + ms;
         while (clock.NowMs < deadline)
         {
-            // Class 2 (SP-059): the engine's async loop must observe the advance — the
+            // Class 2 (timing discipline): the engine's async loop must observe the advance — the
             // tolerant window with the loud classifier via the single approved helper.
             await TestWait.Until(() => clock.DelayPending, $"engine loop parked (clock at {clock.NowMs}ms)");
             clock.Advance(Math.Min(16, deadline - clock.NowMs));
@@ -79,7 +79,7 @@ public class AvatarTubeHeadlessTests
     {
         var (host, _, participant, tube) = await BootAsync();
         var layerA = Control<Image>(tube, "LayerAImage");
-        // Class 2 (SP-059): the first frame renders through the REAL headless dispatcher —
+        // Class 2 (timing discipline): the first frame renders through the REAL headless dispatcher —
         // the tolerant window with the loud classifier via the single approved helper.
         await TestWait.Until(() => layerA.Source is not null, "the first frame rendering through the real dispatcher");
 
@@ -200,7 +200,7 @@ public class AvatarTubeHeadlessTests
         participant.CorruptPackForDemo(SyntheticAvatarPacks.Pulse.PackId);
 
         Click(Control<Button>(tube, "PackButton"));
-        // Class 2 (SP-059): the capability text lands via the next dispatcher projection —
+        // Class 2 (timing discipline): the capability text lands via the next dispatcher projection —
         // poll the POSITIVE condition via the approved helper instead of a fixed sleep.
         await TestWait.Until(
             () => Control<TextBlock>(tube, "CapabilityText").Text?.Contains("Degraded", StringComparison.Ordinal) == true,

@@ -6,8 +6,8 @@ namespace CcpClient.Desktop.Session;
 /// <summary>
 /// The body every self-paced rack module has, written once.
 ///
-/// <para><b>Why this class exists, and what it is really for (SP-101).</b> SP-098 built one effect
-/// and SP-100 made it draw. Thirteen more modules follow the same shape, and the failure this
+/// <para><b>Why this class exists, and what it is really for.</b> One effect was built first,
+/// and a later packet made it draw. Thirteen more modules follow the same shape, and the failure this
 /// packet was created to catch is fourteen copies of <c>FlashImagesEffect</c> with the nouns
 /// changed. Everything below is the part that was identical between Flash Images and Subliminals
 /// once both were written: the single one-shot on the injected clock re-armed at the tail of each
@@ -15,13 +15,13 @@ namespace CcpClient.Desktop.Session;
 /// boundary the UI projection goes through. A module contributes its identity, its dial, its
 /// interval and its payload — nothing else.</para>
 ///
-/// <para><b>What moved OUT of here, and why (SP-105).</b> The arm/disarm pair, the owned generation
+/// <para><b>What moved OUT of here, and why.</b> The arm/disarm pair, the owned generation
 /// and its parked completion, the dial-off and generation-cancelled refusals, the change signal and
-/// the dot now live in <see cref="OwnedSessionEffect"/>. That was not tidying: SP-105 built the
+/// the dot now live in <see cref="OwnedSessionEffect"/>. That was not tidying: a later packet built the
 /// first CONTINUOUS module — Pink Filter, which WPF drives with no timer at all
 /// (<c>MainWindow/MainWindow.Presets.cs:1255</c>) — and every one of those parts was needed by it
 /// verbatim while every part still in this file was meaningless to it. The split is the answer to
-/// SP-101's own open question: the spine is <see cref="ISessionEffect"/>, and this class is one
+/// the shared body's own open question: the spine is <see cref="ISessionEffect"/>, and this class is one
 /// implementation of it rather than the spine itself. <b>Nothing in this file's behaviour changed;
 /// what changed is where the shared half lives.</b></para>
 ///
@@ -94,10 +94,10 @@ public abstract class PacedSessionEffect<TFiring> : OwnedSessionEffect
     /// A paced module's answer to "is the work really running": a firing is genuinely on the clock.
     /// It is a claim about the CLOCK, and it stays true over a firing that will show nothing —
     /// Subliminals with an empty pool is correctly <c>Live</c>. A continuous module cannot answer
-    /// this way, which is why the clause is the module's and not the base's (SP-105).
+    /// this way, which is why the clause is the module's and not the base's.
     ///
-    /// <para><b>Overridable, and it was SEALED until SP-109 (the packet's only shared-code change,
-    /// and it is one word).</b> SP-105 made this clause abstract in
+    /// <para><b>Overridable, and it was SEALED until the fifth module (that packet's only shared-code change,
+    /// and it is one word).</b> An earlier packet made this clause abstract in
     /// <see cref="OwnedSessionEffect"/> on the finding that "the AUTHORITY behind the third one is
     /// the module's, not the base's" — and then this class immediately took that authority back for
     /// every paced module by sealing its answer. That held for four modules because for all four the
@@ -198,7 +198,7 @@ public abstract class PacedSessionEffect<TFiring> : OwnedSessionEffect
         // if it still holds THIS firing — and if it does NOT, this callback belongs to a schedule
         // that has already been superseded or cancelled, so it does nothing at all.
         //
-        // Both halves matter. Blindly clearing the slot (what this was before SP-101) would null
+        // Both halves matter. Blindly clearing the slot (what this was before) would null
         // out the LIVE timer's identity, leaving the dot reporting Armed with a firing on the clock
         // and, worse, leaving Disarm nothing to dispose. Letting the superseded callback proceed
         // would fire at the OLD pace immediately after the user moved the frequency slider, which
@@ -209,7 +209,7 @@ public abstract class PacedSessionEffect<TFiring> : OwnedSessionEffect
         }
 
         // A spent one-shot is still an undisposed timer. Dropping the handle here — which is what
-        // this did before SP-101 — leaks one OS timer per firing for the life of a session, and at
+        // this did before — leaks one OS timer per firing for the life of a session, and at
         // the subliminal module's own default that is five an hour... per minute. Disposing from
         // inside a timer's own callback is documented as safe and is what makes the count of live
         // handles after a stop exactly zero rather than "however many fired".

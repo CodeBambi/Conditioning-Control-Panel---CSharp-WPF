@@ -11,7 +11,7 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Goon;
 
 /// <summary>
-/// SP-130: the Goon Game practice host shell. The <see cref="Intake.IntakeHostWindow"/> pattern,
+/// The Goon Game practice host shell. The <see cref="Intake.IntakeHostWindow"/> pattern,
 /// over the payload the port now ships (<see cref="GoonServingRoots"/>).
 ///
 /// <para><b>This is a HOST, not a game.</b> The duel runs entirely in the page on an in-process
@@ -33,8 +33,8 @@ namespace CcpClient.Desktop.Features.Goon;
 ///
 /// <para><b>Named limits, not silences.</b> (1) There is no relaunch coordinator for this
 /// surface, so a watchdog recovery demand closes the window honestly with a diagnostic rather
-/// than being silently left on a black page. (2) This host grants the page NO permissions and,
-/// since SP-135, DENIES them: the shipping app grants the microphone unprompted
+/// than being silently left on a black page. (2) This host grants the page NO permissions and
+/// now DENIES them: the shipping app grants the microphone unprompted
 /// (<c>GoonHostService.cs:489</c>, D244) and this one refuses it, through a hand-rolled
 /// <c>PermissionRequested</c> hook on the raw <c>CoreWebView2</c> pointer
 /// (<see cref="WebViewPermissionDeny"/>, vtable slot 23) that answers every kind but autoplay with
@@ -56,7 +56,7 @@ public partial class GoonHostWindow : Window
     private DispatcherTimer? _watchTimer;
     private DispatcherTimer? _exitTimer;
     private DtrhProcessFailed.DtrhProcessFailedSignal? _processFailedSignal;
-    // SP-135: the PermissionRequested deny hook — the microphone residual D250 named on THIS
+    // The PermissionRequested deny hook — the microphone residual D250 named on THIS
     // surface. Independent of the watchdog by design.
     private WebViewPermissionDeny.PermissionDenySignal? _permissionDenySignal;
     private readonly DtrhExitFlow _exitFlow = new();
@@ -79,7 +79,7 @@ public partial class GoonHostWindow : Window
     public bool BootMessagesSent => _sentBootMessages;
 
     /// <summary>
-    /// SP-132: the page-state slot before the page has ever answered. It reads FALSE rather than
+    /// The page-state slot before the page has ever answered. It reads FALSE rather than
     /// UNKNOWN on purpose — a harness that cannot tell "not yet" from "no" would still refuse —
     /// and <c>pageread=</c> carries the difference beside it, so a page that answered "not ready"
     /// and a page that never answered at all are distinguishable in the transcript.
@@ -102,7 +102,7 @@ public partial class GoonHostWindow : Window
             Height = screen.WorkingArea.Height * 0.85 / screen.Scaling;
         }
 
-        // SP-132: the probe line republishes on every layout pass of the web host, so the rect it
+        // The probe line republishes on every layout pass of the web host, so the rect it
         // publishes is the rect that is really there — the MainWindow.axaml.cs:194-202 shape.
         WebHost.LayoutUpdated += (_, _) => PublishProbe();
 
@@ -226,7 +226,7 @@ public partial class GoonHostWindow : Window
             UnsupportedDetail.Text =
                 $"goon payload root '{probe.Root}' -> {probe.State} ({probe.FileCount} files)"
                 + (probe.MissingFile is null ? "" : $"; required file '{probe.MissingFile}' absent")
-                + ".\nThe goon tree serves from payload/goon beside the exe (the SP-023 copied-asset "
+                + ".\nThe goon tree serves from payload/goon beside the exe (the copied-asset "
                 + "convention; the bytes stay owned by the legacy tree). Never a silent substitute.";
             SetStatus($"goon: payload {probe.State} — honest surface");
             PublishProbe();
@@ -270,7 +270,7 @@ public partial class GoonHostWindow : Window
         _web.WebMessageReceived += OnWebMessage;
         _web.NavigationCompleted += (_, e) =>
         {
-            // SP-132: a FAILED navigation is a typed state on the probe, never a silence. The
+            // A FAILED navigation is a typed state on the probe, never a silence. The
             // headed harness refuses on it, so an error page cannot be photographed and reported
             // as the title screen. Avalonia's args expose IsSuccess and this code does not invent
             // a status code it has not verified exists — the platform's own detail, when there is
@@ -289,7 +289,7 @@ public partial class GoonHostWindow : Window
         }
         catch (Exception ex) when (DtrhProfileLock.IsStaleProfileLock(ex) && !_profileRetryUsed)
         {
-            // The 0x800700AA stale-profile-lock class (SP-023 surprise #7): recover honestly and
+            // The 0x800700AA stale-profile-lock class (recorded surprise #7): recover honestly and
             // retry ONCE — never a crash loop.
             _profileRetryUsed = true;
             _host.LogDiagnostic("goon: navigation threw the stale-profile-lock class (0x800700AA) — recovering (typed)");
@@ -379,7 +379,7 @@ public partial class GoonHostWindow : Window
         }
     }
 
-    /// <summary>SP-135 — the D250 close, on the surface D250 was named for: every permission the
+    /// <summary>The D250 close, on the surface D250 was named for: every permission the
     /// page asks the BROWSER for is answered DENY, so the prompt never reaches the user and the
     /// microphone is refused rather than merely un-granted. Autoplay alone is left at the browser
     /// default (this host passes --autoplay-policy=no-user-gesture-required at :312 and the page
@@ -486,7 +486,7 @@ public partial class GoonHostWindow : Window
                 _heartbeats++;
                 _watchdog.Heartbeat(DateTimeOffset.UtcNow);
                 if (_heartbeats % 15 == 1) _host.LogDiagnostic($"goon: heartbeat #{_heartbeats}");
-                // SP-132: the page's own 2 s cadence (boot.js:2587) drives the state re-read until
+                // The page's own 2 s cadence (boot.js:2587) drives the state re-read until
                 // it reports settled. A boot ok that never arrives therefore still converges, and
                 // this host adds no clock of its own to make that happen.
                 if (_sentBootMessages) ReadPageState();
@@ -497,7 +497,7 @@ public partial class GoonHostWindow : Window
                 return;
             case GoonProtocol.GoonPageMessage.Log log:
                 _host.LogDiagnostic($"goon page log: {log.Msg}");
-                // SP-132: `boot ok` (boot.js:431) is emitted immediately after openFirstScreen(),
+                // `boot ok` (boot.js:431) is emitted immediately after openFirstScreen(),
                 // so it is the earliest moment the page's own state is worth reading — settled,
                 // app built, loader hidden, first screen mounted.
                 if (log.Msg is { } msg && msg.StartsWith("boot ok", StringComparison.Ordinal)) ReadPageState();
@@ -607,7 +607,7 @@ public partial class GoonHostWindow : Window
     internal const string DefaultDisplayName = "Player";
 
     /// <summary>Host→page: the synthetic <c>MessageEvent</c> dispatch on
-    /// <c>window.chrome.webview</c> that DTRH and intake already use (SP-011 W4). The goon page's
+    /// <c>window.chrome.webview</c> that DTRH and intake already use (spike W4). The goon page's
     /// own listener is <c>bridge.js:66</c> and needs no shadow — which is why zero payload bytes
     /// are forked for this surface.</summary>
     public void SendToPage(object msg)
@@ -632,7 +632,7 @@ public partial class GoonHostWindow : Window
 
     private void SetStatus(string s) => Dispatcher.UIThread.Post(() => Status.Text = s);
 
-    // ---------- SP-132: the probe line (headed-evidence seam) ----------
+    // ---------- The probe line (headed-evidence seam) ----------
 
     /// <summary>
     /// The expression evaluated IN THE PAGE. It reads the page's own object graph — <c>__gg</c>,

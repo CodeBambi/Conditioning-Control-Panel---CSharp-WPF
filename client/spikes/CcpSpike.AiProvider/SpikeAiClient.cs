@@ -31,11 +31,11 @@ public sealed record SpikeResult(
 
 /// <summary>
 /// Cancellable spike provider client against the fake OpenAI-compatible loopback lab.
-/// Implements the SP-016 contract mechanics under test:
+/// Implements the AI-operation contract mechanics under test:
 ///  - endpoint admission policy (spike-local, allow-list values pending-owner): ONLY
 ///    AiEndpointClass.Loopback is admitted; anything else is rejected BEFORE any socket
 ///    opens (proven by <see cref="SendAttempts"/> staying 0).
-///  - SP-004 generation discipline: the caller advances <see cref="CurrentGeneration"/>;
+///  - generation discipline: the caller advances <see cref="CurrentGeneration"/>;
 ///    a completion applied for a stale generation is discarded at the application seam
 ///    (<see cref="ApplyResult"/>) with an explicit stale-discard record.
 ///  - typed outcomes per contract §1/§11; per-request timeout is a failure classifier,
@@ -64,7 +64,7 @@ public sealed class SpikeAiClient
     /// <summary>Body bytes read so far by the in-flight request (mid-stream position proof for the hang row).</summary>
     public int BytesReadSoFar { get; private set; }
 
-    /// <summary>The current application generation (SP-004). Advanced by the harness on cancel/switch.</summary>
+    /// <summary>The current application generation. Advanced by the harness on cancel/switch.</summary>
     public int CurrentGeneration { get; private set; }
 
     /// <summary>Results actually APPLIED at the application seam (must be 0 for cancelled/stale operations).</summary>
@@ -184,13 +184,13 @@ public sealed class SpikeAiClient
     /// <summary>
     /// Detached completion path (the dual-transport stale proof): a request that IGNORES the
     /// caller's token and completes after the generation may have advanced. The application
-    /// seam — never the transport — is where stale results die (SP-004 §3 rule 2).
+    /// seam — never the transport — is where stale results die (the generation-discipline rule).
     /// </summary>
     public Task<SpikeResult> RequestDetachedAsync(string userText, int generation) =>
         RequestAsync(userText, generation, CancellationToken.None);
 
     /// <summary>
-    /// The application seam (SP-004 §3 rule 2): a completion for a stale generation is
+    /// The application seam (the generation-discipline rule): a completion for a stale generation is
     /// discarded with an explicit record; only current-generation results apply.
     /// </summary>
     public bool ApplyResult(SpikeResult result)
@@ -209,7 +209,7 @@ public sealed class SpikeAiClient
     private SpikeResult Complete(string body, int partialBytes, int generation, long started, int labHitsBefore)
     {
         // Shape discrimination by explicit fields, never string-sniffing: provider-refusal
-        // shape first, then the strict envelope validator (SP-016 real code path).
+        // shape first, then the strict envelope validator (the contract's real code path).
         try
         {
             using var doc = JsonDocument.Parse(body, new JsonDocumentOptions { MaxDepth = 16 });
@@ -230,7 +230,7 @@ public sealed class SpikeAiClient
             return new SpikeResult(SpikeOutcomeKind.MalformedOutput, new AiReply.Unavailable(AiReplyCodes.MalformedOutput), generation, Elapsed(started), SendAttempts - labHitsBefore, partialBytes, dm);
         }
 
-        // Strict envelope path: SP-016's real validator. Rejected output = typed outcome,
+        // Strict envelope path: the contract's real validator. Rejected output = typed outcome,
         // NEVER a partial apply (no repair, no salvage — contract §8 rule 2).
         var result = AiEnvelopeValidator.Validate(body, _policy);
         if (!result.Accepted)

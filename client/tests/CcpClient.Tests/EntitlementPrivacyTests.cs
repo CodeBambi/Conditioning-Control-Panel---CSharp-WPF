@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-092, the other half: the borrowed credential is read, used and dropped.
+/// The other half: the borrowed credential is read, used and dropped.
 ///
 /// <para>The rules are not style preferences. The token is another application's live bearer
 /// held only because DPAPI's <c>CurrentUser</c> scope lets this process decrypt it

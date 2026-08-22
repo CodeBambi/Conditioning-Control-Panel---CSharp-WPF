@@ -83,7 +83,7 @@ internal static class TrayObservations
             ActivationsRaised: Volatile.Read(ref raised));
     }
 
-    // ---------- SP-096: the menu ----------
+    // ---------- The menu ----------
 
     /// <summary>WPF's four entries in WPF's order (<c>TrayIconService.cs:96-110</c>), with the
     /// actions replaced by counters so a run can say WHICH one fired.</summary>

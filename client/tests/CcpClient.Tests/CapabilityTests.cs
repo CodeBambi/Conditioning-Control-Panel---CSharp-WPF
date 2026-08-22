@@ -100,7 +100,7 @@ public class CapabilityTests
 
         await runner.RunAllAsync(new CancellationToken(canceled: true));
 
-        // SP-066 framing (c): the loop carries the only assertions — pin the registry
+        // Loop framing (c): the loop carries the only assertions — pin the registry
         // non-empty so a probe-registry regression turns RED, not vacuous.
         Assert.NotEmpty(registry.Names);
         foreach (var name in registry.Names)
@@ -134,7 +134,7 @@ public class CapabilityTests
         Assert.Equal(CapabilityReasonCodes.NotProbed, unavailable.Reason.Code);
     }
 
-    // SP-084: a probe that returns a state while its generation token is already cancelled
+    // A probe that returns a state while its generation token is already cancelled
     // must not have that state recorded as a probe verdict. Two arrivals, both of which walk
     // straight past the OperationCanceledException mapping the mid-flight test above covers.
 
@@ -197,7 +197,7 @@ public class CapabilityTests
         owner.Cancel();
         await run;
 
-        // SP-066 framing (c): the loop carries the per-name assertions — pin the registry
+        // Loop framing (c): the loop carries the per-name assertions — pin the registry
         // non-empty so a probe-registry regression turns RED, not vacuous.
         Assert.NotEmpty(registry.Names);
         foreach (var name in registry.Names)
@@ -452,9 +452,9 @@ public class CapabilityTests
             Assert.Contains("CapabilityProbes: ok", trace.Entries);
 
             var capabilities = Assert.IsType<CapabilityRegistry>(host!.Capabilities);
-            // SP-046: the companion participant's probes register at construction (before
+            // The companion participant's probes register at construction (before
             // the demonstrator registrations) — registration order IS this list's order.
-            // SP-119 appends the haptic sink, and registering it is the point rather than a side
+            // The haptic sink is appended, and registering it is the point rather than a side
             // effect: it refuses EVERY user on EVERY platform, and a capability that refuses
             // everyone while staying invisible in the one place the port reports what it cannot do
             // is exactly the shape the truthful-capability contract exists to prevent.
@@ -475,7 +475,7 @@ public class CapabilityTests
             Assert.DoesNotContain("Connect your device in Intiface first",
                 hapticState.Reason.Detail, StringComparison.OrdinalIgnoreCase);
 
-            // SP-046 AI provider probes: real typed states. local-ollama is a REAL
+            // AI provider probes: real typed states. local-ollama is a REAL
             // loopback probe — Available iff an Ollama-shaped service answers api/version
             // (environment fact, honestly read either way); cloud is deterministic typed
             // absence (credentials-absent — inventory, never invented).
@@ -494,7 +494,7 @@ public class CapabilityTests
             Assert.True(fsState is CapabilityState.Available or CapabilityState.Degraded,
                 $"unexpected fs state: {fsState}");
 
-            // SP-023 DTRH probes: ran for real against this machine's engines — every
+            // DTRH probes: ran for real against this machine's engines — every
             // platform reports an honest typed state (Available with dependency evidence,
             // Unavailable with the admitted-shape reason, or DependencyMissing), never
             // not-probed after the phase.
@@ -507,7 +507,7 @@ public class CapabilityTests
                     $"unexpected {name} state: {state}");
             }
 
-            // SP-094: the entitlement capability is registered here so its state reaches the
+            // The entitlement capability is registered here so its state reaches the
             // System page — the one place the port reports what it cannot do. The probe ran
             // for real against this machine and reports one of the honest typed states.
             var entitlementState = capabilities.GetState("host-login-entitlement");

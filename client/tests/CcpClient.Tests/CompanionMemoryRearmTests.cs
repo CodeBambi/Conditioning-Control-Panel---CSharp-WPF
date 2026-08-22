@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-046 regression guard: persist-after-clear-after-panic. Written while chasing a
+/// Regression guard: persist-after-clear-after-panic. Written while chasing a
 /// headed-run inspection FALSE ALARM (the inspection script read the camelCase JSON field
 /// with the wrong case — the live behavior was correct all along). Kept as the regression
 /// guard for the clear → panic → re-arm → re-persist sequence through the real pipeline

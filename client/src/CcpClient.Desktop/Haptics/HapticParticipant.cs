@@ -9,7 +9,7 @@ namespace CcpClient.Desktop.Haptics;
 /// <summary>
 /// The haptic sink's APP-LIFETIME owner.
 ///
-/// <para><b>Why this is a participant and not part of the session (SP-117 §1).</b> Upstream's
+/// <para><b>Why this is a participant and not part of the session.</b> Upstream's
 /// haptic service is a static on the application, constructed at startup
 /// (<c>ConditioningControlPanel/App.xaml.cs:533</c>, <c>:2060</c>), auto-connected there
 /// (<c>:2103-2105</c>), all-stopped at exit (<c>:4406</c>) and disposed last (<c>:4524</c>) — and
@@ -17,12 +17,12 @@ namespace CcpClient.Desktop.Haptics;
 /// never starts it and never stops it. It outlives every session. So it is owned where the app is
 /// owned.</para>
 ///
-/// <para><b>No second lifetime model</b> (SP-118 §3's rule, applied to a sink instead of a driver).
+/// <para><b>No second lifetime model</b> (the scheduler's rule, applied to a sink instead of a driver).
 /// This is the port's existing <see cref="IBackgroundParticipant"/>, registered LAST in
 /// <c>CompositionRoot.DefaultParticipants</c>, which buys four properties from machinery that
 /// already exists: phase 3 starts it after every store it might read; teardown stops it FIRST,
 /// because participant stop is reverse order, so the sink and its limb are released before the
-/// session that drives them (SP-126 — and the guarantee that nothing is left running does NOT rest
+/// session that drives them (and the guarantee that nothing is left running does NOT rest
 /// on that order, because <see cref="ShutdownStopAsync"/> has already all-stopped in the pre-drain
 /// head slot below); its document flushes in the reserved pre-drain slot; and — the one that matters
 /// most here — <see cref="ShutdownStopAsync"/> occupies the HEAD of that same pre-drain slot, which
@@ -31,7 +31,7 @@ namespace CcpClient.Desktop.Haptics;
 /// after the app is gone. This cannot be left to Haptics.Dispose() further down"</i>
 /// (<c>App.xaml.cs:4401-4407</c>).</para>
 ///
-/// <para><b>Construction starts nothing</b> (SP-003 contract §4.4), and start connects to nothing:
+/// <para><b>Construction starts nothing</b> (the lifecycle contract §4.4), and start connects to nothing:
 /// see <see cref="StartAsync"/>.</para>
 /// </summary>
 public sealed class HapticParticipant : IBackgroundParticipant
@@ -62,7 +62,7 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// it must precede. Never used on a product path.
     /// </param>
     /// <param name="clock">
-    /// SP-126: the LIMB's timing seam. It belongs to the app-scoped haptic owner rather than to a
+    /// The LIMB's timing seam. It belongs to the app-scoped haptic owner rather than to a
     /// session, which is upstream's own arrangement — the mixer's output loop is the haptic
     /// service's and is independent of every module's timer
     /// (<c>Services/Haptics/Core/HapticMixer.cs:224-247</c>). Null takes the real one.
@@ -88,7 +88,7 @@ public sealed class HapticParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, HapticSettingsDocument.FileName),
             HapticSettingsDocument.CurrentSchemaVersion);
 
-        // SP-126. The gate is the master toggle AND the entitlement decision, asked HERE and never
+        // The gate is the master toggle AND the entitlement decision, asked HERE and never
         // at a module, which is upstream's central refusal (HapticMixer.cs:191-204, :843) and the
         // reason D204's activity readout keeps firing for a user who can feel nothing. The device
         // roster is whatever the LAST observation named — null on every run of this build, because
@@ -114,7 +114,7 @@ public sealed class HapticParticipant : IBackgroundParticipant
     public IHapticSink Sink { get; }
 
     /// <summary>
-    /// SP-126: the one limb, and the only thing that drives <see cref="Sink"/>.
+    /// The one limb, and the only thing that drives <see cref="Sink"/>.
     ///
     /// <para>It is owned HERE, beside the sink, for the reason this whole participant exists:
     /// upstream's mixer is a member of the app-scoped haptic service, constructed at startup and
@@ -193,9 +193,9 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// <list type="bullet">
     /// <item><b>Off</b> — the enable is off, OR nothing in this build can reach a device.</item>
     /// <item><b>Armed</b> — the enable is on and a device is really reachable.</item>
-    /// <item><b>Live</b> — <b>STILL UNREACHABLE, and SP-126 did not change that.</b> Live would have
+    /// <item><b>Live</b> — <b>STILL UNREACHABLE, and the limb did not change that.</b> Live would have
     /// to mean "something is being SENT". Nothing is, and the reason is no longer that the modules
-    /// are silent: since SP-126 five statements in the effect spine command
+    /// are silent: five statements in the effect spine now command
     /// <see cref="Limb"/> at the right moments with upstream's own envelopes. What stops a send is
     /// one rung further out — <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, so no server
     /// was ever asked, so <see cref="LastObservation"/> names no device, so
@@ -208,7 +208,7 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// <c>() =&gt; App.Settings?.Current?.Haptics?.Enabled</c>
     /// (<c>Views/Tabs/StudioTabView.xaml.cs:520</c>) — so the row HAS a dot, unlike Visuals'
     /// <c>null</c> at <c>:496</c>. It is earned rather than read off the checkbox: the second
-    /// conjunct asks the sink what the server last said, which is SP-109's fifth dot meaning (reach)
+    /// conjunct asks the sink what the server last said, which is the fifth dot meaning (reach)
     /// applied to a resource in another process.</para>
     /// </summary>
     public EffectDotState Dot =>
@@ -302,7 +302,7 @@ public sealed class HapticParticipant : IBackgroundParticipant
             catch (Exception ex)
             {
                 // Type name only: an authority's exception message can carry a URL, a header, or the
-                // bearer itself, and this string is destined for a log (the SP-092 discipline).
+                // bearer itself, and this string is destined for a log (the entitlement-logging discipline).
                 outcome = new EntitlementOutcome.Unavailable(new EntitlementReason(
                     EntitlementReasonCodes.TierAuthorityFault,
                     "the entitlement lookup failed: " + ex.GetType().Name));
@@ -381,7 +381,7 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// twice was a real defect upstream fixed rather than a hypothetical.</para>
     ///
     /// <para><b>The latch is never reset, and that is a decision.</b> A participant's life is the
-    /// process's (SP-003 §5): nothing in this port stops one and starts it again, and upstream's
+    /// process's (the lifecycle contract §5): nothing in this port stops one and starts it again, and upstream's
     /// equivalent latch is process-lifetime too. If a restartable participant ever exists, this must
     /// be cleared in <see cref="StartAsync"/> — a stop that has already been "spent" would then
     /// silently decline to countermand a device on the second run, which is the one failure in this
@@ -413,7 +413,7 @@ public sealed class HapticParticipant : IBackgroundParticipant
         // a route is admitted the sink holds a WebSocket or an HttpClient, and leaking one on the
         // failure path is how a process keeps a connection open after it has given up.
         //
-        // SP-126: the LIMB is released BEFORE the sink, and the order is the same one this method
+        // The LIMB is released BEFORE the sink, and the order is the same one this method
         // has always been about. The limb holds scheduled one-shot wakes; a wake that fired after
         // the sink went away would be a level-set into a disposed object on a pool thread, which is
         // exactly the race upstream lost when its all-stop was only ever scheduled
@@ -437,7 +437,7 @@ public sealed class HapticParticipant : IBackgroundParticipant
     {
         AllStops++;
         AllStopSequence = _sequence?.Invoke() ?? -1;
-        // SP-126: the limb's own state goes FIRST and without touching the sink, which is upstream's
+        // The limb's own state goes FIRST and without touching the sink, which is upstream's
         // gate-close arm exactly — drop every transient and zero every layer (HapticMixer.cs:264,
         // ClearAll at :1044-1049), THEN stop the devices once (:265). A limb that all-stopped for
         // itself would spend the stop budget twice on the teardown path, which is the defect

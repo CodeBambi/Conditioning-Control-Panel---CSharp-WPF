@@ -1,14 +1,14 @@
 using System.Collections.Concurrent;
 using CcpClient.Desktop.Features.Dtrh;
 
-// T-15 leaked-listener self-check, generalized (SP-059): after ALL collections finish, any
+// T-15 leaked-listener self-check, generalized: after ALL collections finish, any
 // undisposed loopback listener fails the run LOUD.
 [assembly: Xunit.AssemblyFixture(typeof(CcpClient.Tests.LoopbackListenerLeakSelfCheck))]
 
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Live loopback-listener registry (T-15 self-check, generalized by SP-059 from AiProviderLab-
+/// Live loopback-listener registry (T-15 self-check, generalized from AiProviderLab-
 /// only to EVERY loopback <c>HttpListener</c> the suite binds: the AI lab, §4 LoopbackServer
 /// fixtures, and private harnesses). A leaked entry at assembly teardown = a leaked listener
 /// holding a loopback port; the assembly fixture fails the run LOUD naming owner + port.
@@ -51,7 +51,7 @@ public static class LoopbackListenerRegistry
     }
 }
 
-/// <summary>Assembly-teardown self-check (T-15, generalized SP-059): runs AFTER all
+/// <summary>Assembly-teardown self-check (T-15, generalized): runs AFTER all
 /// collections (no parallel-lab race), adds zero test cases. Any listener still registered
 /// leaked.</summary>
 public sealed class LoopbackListenerLeakSelfCheck : IDisposable

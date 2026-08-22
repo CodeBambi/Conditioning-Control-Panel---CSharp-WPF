@@ -7,7 +7,7 @@ using CcpClient.Desktop.Session;
 namespace CcpClient.Desktop.Views.Pages;
 
 /// <summary>
-/// The two audio panels' sentences (SP-109), in their own file for the reason
+/// The two audio panels' sentences, in their own file for the reason
 /// <see cref="RampPanelNotices"/> is in its: <c>StudioPage.axaml.cs</c> carries every landed module's
 /// rendered claims and does not scale, and the extraction that fixes it is not this packet's risk to
 /// take. New text starts where the extraction would put it.
@@ -30,10 +30,10 @@ public static class AudioPanelNotices
     /// The live-state line for a rolled audio module, off the row's own dot plus its counters.
     ///
     /// <para>The <see cref="EffectDotState.Armed"/> arms are deliberately several sentences rather
-    /// than one, on the SP-105 finding: a module that is Armed because no session is running and a
+    /// than one, on a finding this port keeps re-learning: a module that is Armed because no session is running and a
     /// module that is Armed <b>during</b> a session because the OS confirms no render session are
     /// completely different situations, and telling the second one to "start a session" — which they
-    /// already did — is the exact message SP-105 had to split apart for Linux users.</para>
+    /// already did — is the exact message that had to be split apart for Linux users.</para>
     /// </summary>
     public static string DescribeCueState(
         EffectDotState dot, string noun, int cueCount, AudioCueEvent? last, bool sessionRunning, bool rendering)
@@ -62,7 +62,7 @@ public static class AudioPanelNotices
             // Session running, audio confirmed, and this module's schedule is still not on the clock.
             // AN EARLIER VERSION REPEATED THE "nothing plays until the session starts" SENTENCE HERE
             // — which is false in front of a user who has already started one, and is precisely the
-            // instruction SP-105 had to split apart for its own module. Found by writing this
+            // instruction that had to be split apart for another module. Found by writing this
             // branch's fact rather than by reading. It is reachable: a module whose generation was
             // cancelled, or one switched on between the arm and the repaint, lands here.
             return $"This module is not scheduled right now, though the session is running and audio "

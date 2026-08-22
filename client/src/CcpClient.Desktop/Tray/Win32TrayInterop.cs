@@ -190,7 +190,7 @@ internal static class Win32TrayInterop
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern nint GetModuleHandleW(string? name);
 
-    // ---------- the context menu (SP-096) ----------
+    // ---------- the context menu ----------
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern nint CreatePopupMenu();

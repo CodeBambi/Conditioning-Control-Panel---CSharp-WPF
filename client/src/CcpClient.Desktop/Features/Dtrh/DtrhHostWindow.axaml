@@ -5,7 +5,7 @@
         Width="1280" Height="800"
         Background="#0b0b16">
   <!--
-    SP-023 DTRH host shell (dtrh-admission.md §5): the embedded NativeWebView is the
+    DTRH host shell (dtrh-admission.md §5): the embedded NativeWebView is the
     WINDOWS surface (WebView2); on Linux the game rides a NativeWebDialog toplevel and
     this window carries the honest state surface only. Where neither capability is
     Available the honest unsupported surface shows — no classic fallback, ever.
@@ -24,7 +24,7 @@
       <!-- The NativeWebView is created PROGRAMMATICALLY and only on the embedded path:
            in the tree it creates its native adapter whenever the window shows — even
            IsVisible=false — which would start WebView2 on unsupported runs and attempt
-           the non-presenting embedded GTK adapter on Linux (SP-011 L4). -->
+           the non-presenting embedded GTK adapter on Linux (spike L4). -->
       <Panel x:Name="WebHost" />
     </Panel>
   </DockPanel>

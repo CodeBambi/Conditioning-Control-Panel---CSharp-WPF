@@ -61,7 +61,7 @@ public abstract record HapticGateDecision
 /// haptics — on which the rail unlocks and the mixer opens while the checkbox still refuses. The
 /// port has no <c>DailyFreeService</c> and no <c>/config/daily-feature</c> fetch, so term 2 has
 /// nothing to bind to; the divergence and the source discrepancy are both recorded
-/// (wpf-surface-reachability.md §SP-119).</para>
+/// (wpf-surface-reachability.md, the haptics section).</para>
 ///
 /// <para><b>Where the port improves on WPF, deliberately.</b> <c>App.Patreon?.HasPremiumAccess != true</c>
 /// renders a NULL Patreon service — "I could not tell" — as "you are not a patron", in a modal box
@@ -136,7 +136,7 @@ public static class HapticGate
             // so it is the same refusal WPF gives. An UNDEFINED tier is neither: `>=` on a raw enum
             // would open the door for (EntitlementTier)99, so the comparison never runs on a value
             // this build does not define. HostLoginEntitlement closes the same hole at the source
-            // (SP-094) and DtrhGate takes the same second guard; this is the third, on the only
+            // and DtrhGate takes the same second guard; this is the third, on the only
             // direction where a mistake hands out a paid feature.
             tier => !Enum.IsDefined(tier)
                 ? new HapticGateDecision.RefusedUnverified(

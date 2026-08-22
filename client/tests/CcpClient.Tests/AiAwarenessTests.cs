@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Awareness service tests (SP-042 slice c5; contract §4; admission §5). Proves:
+/// Awareness service tests (slice c5; contract §4; admission §5). Proves:
 /// code-enforced typed consent at admission (default NOT GIVEN; denied = typed Suppressed,
 /// observable, zero network), cooldown-suppressed typed outcomes, context packaging under
 /// consent with every field through the c3 input boundary (blocking = zero transmission),
@@ -50,7 +50,7 @@ public class AiAwarenessTests
 
         public IReadOnlyList<AiMemoryTurn> ReadRecent(int maxTurns) => [];
 
-        // SP-047 interface member (mechanical): the awareness path never consumes context.
+        // Interface member (mechanical): the awareness path never consumes context.
         public IReadOnlyList<AiMemoryTurn> ReadPromptContext() => [];
 
         public void Append(AiMemoryTurn turn) => Interlocked.Increment(ref Appends);
@@ -250,7 +250,7 @@ public class AiAwarenessTests
             ["cat", "app", forbidden, "0m"],
             ["cat", "app", "title", forbidden],
         ];
-        // SP-066 framing (c): the loop carries the only assertions — pin the source
+        // Loop framing (c): the loop carries the only assertions — pin the source
         // non-empty so an empty case set can never silence them invisibly.
         Assert.NotEmpty(cases);
         foreach (var fields in cases)
@@ -398,7 +398,7 @@ public class AiAwarenessTests
             // GetForegroundWindow returns 0 and the probe honestly reports Unavailable
             // (no-foreground-window). A failure here on CI means the session precondition
             // was lost, not a product regression.
-            // SP-082: that precondition is now ENFORCED by the product's own typed answer
+            // That precondition is now ENFORCED by the product's own typed answer
             // instead of being stated in prose and then asserted away. The gate REPORTS
             // (Assert.SkipWhen), never a silent return — pinned by NAME in
             // client/tests/floor/floor.json (allowedSkips; may-skip semantics — green when a
@@ -440,7 +440,7 @@ public class AiAwarenessTests
         h.Service.Consent = AiAwarenessConsent.Given;
         var observation = h.Service.ObserveForegroundTitle();
 
-        // SP-082: the zero-leak assertions MOVED up from the tail of this body. They are
+        // The zero-leak assertions MOVED up from the tail of this body. They are
         // session-INDEPENDENT, so they must execute even when the platform arm below skips;
         // left at the tail an Assert.Skip* would abort the fact and silently delete them.
         // Their truth value is identical at both positions: ObserveForegroundTitle has
@@ -454,7 +454,7 @@ public class AiAwarenessTests
 
         if (OperatingSystem.IsWindows())
         {
-            // SP-082: same session precondition as TitleProbe above, inherited indirectly —
+            // Same session precondition as TitleProbe above, inherited indirectly —
             // this fact runs the real capability probe before observing. The gate REPORTS
             // (Assert.SkipWhen), never a silent return — pinned by NAME in
             // client/tests/floor/floor.json (allowedSkips; may-skip semantics). The code is
@@ -494,9 +494,9 @@ public class AiAwarenessTests
         Assert.Equal(CapabilityReasonCodes.UnknownCapability, state.Reason.Code);
     }
 
-    // ---- SP-089: the real capture path, guarded on every machine class ----
+    // ---- The real capture path, guarded on every machine class ----
     //
-    // SP-082 conditioned the two facts above on the product's own typed
+    // The two facts above are conditioned on the product's own typed
     // no-foreground-window answer. That is right, and it is not touched here. Its price:
     // AiAwarenessTests.cs:415 was the ONLY execution of the capture path in client/tests,
     // so once it may skip, a broken P/Invoke, a renamed export, a CharSet regression or an
@@ -511,7 +511,7 @@ public class AiAwarenessTests
     // leaves every declaration intact and reds only F2.
 
     /// <summary>
-    /// SP-089: one capture attempt as a VALUE, so a single Assert.Equal carries the whole
+    /// One capture attempt as a VALUE, so a single Assert.Equal carries the whole
     /// outcome. Deliberately a test-local record rather than
     /// <c>CapabilityState.Available(title)</c>: that type's documented discipline is a
     /// content-free detail (title LENGTH only, AiAwarenessService.cs:277-285). Nothing leaks
@@ -521,7 +521,7 @@ public class AiAwarenessTests
     private sealed record Sp089Capture(bool Captured, string Title);
 
     /// <summary>
-    /// SP-089 fixture. EVERY platform decision lives here, in a non-<c>[Fact]</c> body, so
+    /// The capture fixture. EVERY platform decision lives here, in a non-<c>[Fact]</c> body, so
     /// both facts below carry zero detected vacuous shapes and the orchestrator-owned
     /// vacuous-shape-ledger.json stays untouched (VacuousShapeDetector.Scan analyses
     /// [Fact]/[Theory] bodies only — VacuousShapeDetector.cs:84-107). Honest cost, recorded
@@ -537,11 +537,11 @@ public class AiAwarenessTests
         /// ANSI marshaller reads them back narrow, so a ONE-character title would survive
         /// unchanged and the mutation would stay green.
         /// </summary>
-        internal const string ProbeTitle = "SP-089 éüß 中文テスト Живот";
+        internal const string ProbeTitle = "Capture probe éüß 中文テスト Живот";
 
         /// <summary>Parent that makes the window MESSAGE-ONLY: never visible, never in the
         /// z-order, never activatable, never enumerated, and excluded from HWND_BROADCAST.
-        /// It therefore cannot become the foreground window, so it cannot flip either SP-082
+        /// It therefore cannot become the foreground window, so it cannot flip either
         /// skip predicate in either direction.</summary>
         private static readonly IntPtr HwndMessage = new(-3);
 
@@ -599,10 +599,10 @@ public class AiAwarenessTests
                 // moment someone needs it (measured: a SUCCESSFUL create can leave a
                 // non-zero last-error behind).
                 throw new InvalidOperationException(
-                    "SP-089 fixture: CreateWindowExW returned NULL for a message-only STATIC window " +
+                    "Capture fixture: CreateWindowExW returned NULL for a message-only STATIC window " +
                     $"(Win32 error {Marshal.GetLastWin32Error()}). The capture path was NOT exercised. " +
                     "This is a hostile window station, not a product regression — but it is still a red, " +
-                    "because a guard that quietly stands down is the hole SP-089 exists to close.");
+                    "because a guard that quietly stands down is the hole this fact exists to close.");
             }
 
             try
@@ -637,7 +637,7 @@ public class AiAwarenessTests
             if (declarations.Count == 0)
             {
                 throw new InvalidOperationException(
-                    $"SP-089: no [DllImport] declaration parsed out of NativeMethods in {ServicePath} — " +
+                    $"No [DllImport] declaration parsed out of NativeMethods in {ServicePath} — " +
                     "the capture path's declarations are the subject of this fact, so an unparseable " +
                     "or emptied holder is a failure, never a pass.");
             }
@@ -652,13 +652,13 @@ public class AiAwarenessTests
             if (at < 0)
             {
                 throw new InvalidOperationException(
-                    $"SP-089: `{Marker}` not found in {ServicePath} — the holder this fact pins is gone or renamed.");
+                    $"`{Marker}` not found in {ServicePath} — the holder this fact pins is gone or renamed.");
             }
 
             var open = source.IndexOf('{', at + Marker.Length);
             if (open < 0)
             {
-                throw new InvalidOperationException($"SP-089: NativeMethods in {ServicePath} has no body brace.");
+                throw new InvalidOperationException($"NativeMethods in {ServicePath} has no body brace.");
             }
 
             var depth = 0;
@@ -674,7 +674,7 @@ public class AiAwarenessTests
                 }
             }
 
-            throw new InvalidOperationException($"SP-089: NativeMethods body in {ServicePath} is unbalanced.");
+            throw new InvalidOperationException($"NativeMethods body in {ServicePath} is unbalanced.");
         }
 
         private static string Squash(string text) => Regex.Replace(text.Trim(), @"\s+", " ");
@@ -697,7 +697,7 @@ public class AiAwarenessTests
             }
 
             throw new InvalidOperationException(
-                $"SP-089: repo root not found walking up from {AppContext.BaseDirectory} " +
+                $"Repo root not found walking up from {AppContext.BaseDirectory} " +
                 "(anchor client/CcpClient.sln) — this fact refuses to skip.");
         }
 
@@ -719,7 +719,7 @@ public class AiAwarenessTests
     }
 
     /// <summary>
-    /// SP-089 F2. Exercises the product's REAL text-reading P/Invokes — GetWindowTextLengthW
+    /// Fact F2. Exercises the product's REAL text-reading P/Invokes — GetWindowTextLengthW
     /// then GetWindowTextW, through the product's own declarations — against a handle the
     /// test created, and requires every character back. GetForegroundWindow is never called,
     /// so no foreground window is required and this cannot skip: it is the guard that still
@@ -732,7 +732,7 @@ public class AiAwarenessTests
     }
 
     /// <summary>
-    /// SP-089 F1. Pins the shipped declaration TEXT: module, entry point, and CharSet on both
+    /// Fact F1. Pins the shipped declaration TEXT: module, entry point, and CharSet on both
     /// text imports. It executes nothing, which is the point — it catches the one regression
     /// F2 provably cannot see (a CharSet change on GetWindowTextLengthW is behaviourally
     /// inert), and it reds cleanly naming the line where F2's own named mutation reds by
@@ -745,7 +745,7 @@ public class AiAwarenessTests
         Assert.Equal(Sp089CaptureProbe.ExpectedDeclarations, Sp089CaptureProbe.ReadShippedNativeMethodDeclarations());
     }
 
-    // ---- SP-068 F1: incognito hard-drop at the packaging seam (audit row A6) ----
+    // ---- F1: incognito hard-drop at the packaging seam (audit row A6) ----
 
     [Fact]
     public async Task Packaging_IncognitoTitle_HardDrop_TypedPrivacyFiltered_ZeroTransmission()
@@ -793,7 +793,7 @@ public class AiAwarenessTests
         Assert.NotNull(cleanRequest);
     }
 
-    // ---- SP-068 F2: title scrubbing at the packaging seam (audit row A10) ----
+    // ---- F2: title scrubbing at the packaging seam (audit row A10) ----
 
     [Fact]
     public async Task Packaging_ScrubsTitle_ShapePreserved_RawNeverTransmitted()
@@ -844,7 +844,7 @@ public class AiAwarenessTests
         Assert.Equal(0, h.Provider.Calls);
     }
 
-    // ---- SP-068 F3: the strip on the awareness reply paths (audit row C3, strip half) ----
+    // ---- F3: the strip on the awareness reply paths (audit row C3, strip half) ----
 
     [Fact]
     public async Task Reaction_ReplyWithInventedUrl_StrippedBeforeApplication()

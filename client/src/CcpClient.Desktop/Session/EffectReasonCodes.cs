@@ -6,7 +6,7 @@ namespace CcpClient.Desktop.Session;
 /// They live beside their consumer, as <see cref="Overlay.OverlayReasonCodes"/> and
 /// <see cref="Tray.TrayReasonCodes"/> do.
 ///
-/// <para><b>Why arming has reason codes at all (SP-101, hazard 1 from SP-098's review).</b>
+/// <para><b>Why arming has reason codes at all (hazard 1 from the first module's review).</b>
 /// <c>Arm()</c> returned <c>void</c>, so "this module took the session and is paced" and "this
 /// module did nothing" were the same observation. That is survivable for two modules whose only
 /// precondition is a persisted flag. It is not survivable for the modules still to come, whose
@@ -43,14 +43,14 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// A CONTINUOUS module's work is a native window, and this composition has no surface to place
-    /// one on (SP-105). Distinct from <see cref="EffectNoUiThread"/>: there, a surface exists and
+    /// one on. Distinct from <see cref="EffectNoUiThread"/>: there, a surface exists and
     /// there is no thread that may legally touch it; here there is no surface at all, which is what
     /// a build or a test that composed the module without one produces.
     /// </summary>
     public const string EffectNoSurface = "effect-no-surface";
 
     /// <summary>
-    /// No UI thread is bound, so a continuous module's surface could not be placed (SP-105).
+    /// No UI thread is bound, so a continuous module's surface could not be placed.
     ///
     /// <para><b>This code exists because a continuous module cannot use skip-until-bound the way a
     /// paced one does.</b> A paced module schedules on a clock — no UI needed — and its DRAW is a
@@ -76,7 +76,7 @@ public static class EffectReasonCodes
     public const string PinkFilterTransparent = "pink-filter-transparent";
 
     /// <summary>
-    /// Spiral Overlay: the module is on and there is no spiral to draw (SP-106). WPF's start has
+    /// Spiral Overlay: the module is on and there is no spiral to draw. WPF's start has
     /// the same second condition — <c>settings.SpiralEnabled &amp;&amp; !string.IsNullOrEmpty(spiralPath)</c>
     /// (<c>Services/Notifications/OverlayService.cs:377</c>) — and its third fallback is a spiral
     /// compiled into the application, which this port does not bundle (D86). So on a fresh install
@@ -105,7 +105,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// Intensity Ramp: this composition gave the ramp no dials at all, so there is nothing for it to
-    /// drive (SP-108). The <see cref="EffectNoSurface"/> shape on a module that has no surface: a
+    /// drive. The <see cref="EffectNoSurface"/> shape on a module that has no surface: a
     /// build or a test that composed the module without its targets, said in type rather than run as
     /// a timer that writes nothing.
     /// </summary>
@@ -113,7 +113,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// Intensity Ramp: dials exist and the user has linked none of them, so the ramp will run for
-    /// the whole session and change nothing (SP-108). Every link ships OFF
+    /// the whole session and change nothing. Every link ships OFF
     /// (<c>CCP.Core/Models/AppSettings.cs:2589-2621</c>), so this is the state a freshly enabled ramp
     /// is in until the user ticks something — which makes it the one refusal here a user is likely to
     /// meet, and the reason the arm result is <see cref="Capabilities.CapabilityState.Degraded"/>
@@ -141,12 +141,12 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// An AUDIO module was armed and the audio capability itself is unavailable here — no render
-    /// endpoint, or a platform where this build cannot earn an audio claim at all (SP-109). Nothing
+    /// endpoint, or a platform where this build cannot earn an audio claim at all. Nothing
     /// will be heard, so the module is <c>Unavailable</c> rather than <c>Degraded</c> and its dot
     /// reads <c>Armed</c> rather than <c>Live</c>.
     ///
     /// <para><b>This takes the PINK FILTER answer, not the SUBLIMINALS answer, and the line between
-    /// them is the one SP-109 had to draw.</b> A subliminal over an empty phrase pool is
+    /// them is the one the audio modules had to draw.</b> A subliminal over an empty phrase pool is
     /// <c>Degraded</c>/<c>Live</c> because the module is genuinely running and only its CONTENT is
     /// missing. A tint whose overlay was refused is <c>Degraded</c>/<c>Armed</c> because its whole
     /// output CHANNEL is gone and the user can observe nothing by any means. Audio with no render
@@ -162,7 +162,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// An AUDIO module's clip folder is empty, so the schedule runs and every roll that comes up
-    /// plays nothing (SP-109). Upstream's own outcome: both services return before the roll when the
+    /// plays nothing. Upstream's own outcome: both services return before the roll when the
     /// file array is empty (<c>MindWipeService.cs:706-710</c>, <c>BrainDrainService.cs:181</c>),
     /// counting nothing and playing nothing while the timer keeps running.
     ///
@@ -175,7 +175,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// <b>Brain Drain is HALF this port, permanently, and this code is how the row says so on every
-    /// healthy run rather than only when something breaks (SP-109).</b>
+    /// healthy run rather than only when something breaks.</b>
     ///
     /// <para>Upstream's single <c>BrainDrainEnabled</c> flag drives two unrelated mechanisms. The
     /// AUDIO half is the paced one-shot this port has ported
@@ -196,8 +196,8 @@ public static class EffectReasonCodes
     public const string BrainDrainVisualHalfAbsent = "braindrain-visual-half-absent";
 
     /// <summary>
-    /// An INPUT module is armed and this process cannot put a window in front of a human at all
-    /// (SP-110): no interactive window station, no display, or a platform whose capture this build
+    /// An INPUT module is armed and this process cannot put a window in front of a human at all:
+    /// no interactive window station, no display, or a platform whose capture this build
     /// cannot earn — the Linux and macOS branches of <c>Input.InputPresenceFactory</c>.
     ///
     /// <para><b>It takes the Pink Filter answer</b> — <c>Unavailable</c> in the arm result and
@@ -209,7 +209,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// An INPUT module's phrase pool is empty, so the schedule runs and every card that comes due has
-    /// nothing to ask (SP-110). Upstream's own outcome: its show path returns before showing anything
+    /// nothing to ask. Upstream's own outcome: its show path returns before showing anything
     /// when no phrase is enabled (<c>Services/LockCard/LockCardService.cs:275-280</c>), while the
     /// timer keeps running.
     ///
@@ -222,7 +222,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// A VIDEO module is armed and this process cannot put a moving picture in front of a human at
-    /// all (SP-111): no interactive window station, no display, no desktop compositor, no usable
+    /// all: no interactive window station, no display, no desktop compositor, no usable
     /// media stack, or a platform whose read-back this build cannot earn — the Linux and macOS
     /// branches of <c>Video.VideoPresenceFactory</c>.
     ///
@@ -245,7 +245,7 @@ public static class EffectReasonCodes
     public const string VideoNoClip = "video-no-clip";
 
     /// <summary>
-    /// Mandatory Video ships as its VIDEO half only: <b>the clip's SOUND is not ported</b> (SP-111).
+    /// Mandatory Video ships as its VIDEO half only: <b>the clip's SOUND is not ported</b>.
     ///
     /// <para>Upstream plays the soundtrack through the same LibVLC player that draws the picture, at
     /// the app's video volume and through the user's chosen output device
@@ -262,8 +262,8 @@ public static class EffectReasonCodes
     public const string VideoSilentHalfAbsent = "video-silent-half-absent";
 
     /// <summary>
-    /// A POINTER module is armed and this process cannot put a clickable target on a desktop at all
-    /// (SP-113): no interactive window station, no display, no desktop, or a platform whose
+    /// A POINTER module is armed and this process cannot put a clickable target on a desktop at all:
+    /// no interactive window station, no display, no desktop, or a platform whose
     /// non-activating routing this build cannot earn — the Linux and macOS branches of
     /// <c>Pointer.PointerSurfaceFactory</c>.
     ///
@@ -275,7 +275,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// A POINTER module's field is on the desktop and the window manager routes a click at NONE of
-    /// its targets to them (SP-113): they are covered, or something above them owns those points.
+    /// its targets to them: they are covered, or something above them owns those points.
     ///
     /// <para><b>Degraded in the arm result, and Armed in the dot</b> — which is a THIRD answer, not
     /// either of the two the port already had. It is not the Pink Filter answer, because the channel
@@ -288,7 +288,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// Bubble Pop ships as its CLICKABLE half only: <b>the pop SOUND and the whole reward chain are
-    /// not ported</b> (SP-113).
+    /// not ported</b>.
     ///
     /// <para>Upstream pays every pop with a pooled-device sound, an XP grant with a lucky roll, an
     /// achievement tick, a haptic pulse and a Discord presence update
@@ -304,7 +304,7 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// Bouncing Text: the opacity dial is at zero, so the module is engaged and there is nothing to
-    /// composite (SP-115). WPF's clamp lets the dial reach zero
+    /// composite. WPF's clamp lets the dial reach zero
     /// (<c>CCP.Core/Models/AppSettings.cs:3624</c>) and WPF at zero still creates an always-on-top
     /// window holding fully transparent text - the exact ghost this port refuses to construct.
     /// <b>Degraded</b>, because the module really did take the session and really will show nothing;
@@ -314,21 +314,21 @@ public static class EffectReasonCodes
 
     /// <summary>
     /// Bouncing Text: this build could not turn the word into pixels, so there is nothing whose
-    /// composite could be confirmed (SP-115). The <see cref="SpiralNotDecoded"/> shape for a
+    /// composite could be confirmed. The <see cref="SpiralNotDecoded"/> shape for a
     /// rasteriser rather than a decoder: the channel is fine and the CONTENT never arrived.
     /// </summary>
     public const string BouncingTextNoRaster = "bouncing-text-no-raster";
 
     /// <summary>
     /// Bouncing Text: the operating system reports no display this process may put a surface on, so
-    /// the logo has nowhere to bounce (SP-115). <b>Unavailable</b>, not Degraded - this is the whole
+    /// the logo has nowhere to bounce. <b>Unavailable</b>, not Degraded - this is the whole
     /// channel being gone, which is the Pink Filter answer.
     /// </summary>
     public const string BouncingTextNoDisplay = "bouncing-text-no-display";
 
     /// <summary>
     /// Bouncing Text ships as its MOTION half: <b>the six per-frame transform effects, the XP award
-    /// and the second logo are not ported</b> (SP-115).
+    /// and the second logo are not ported</b>.
     ///
     /// <para>Upstream combines breathing, wobble, spin, velocity tilt, squash-and-stretch and a
     /// corner burst into one scale/rotation applied to a live WPF visual every frame

@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Ai;
 // Command execution (admission §8 slice c6; contract §8 rule 6, §9): validated envelope →
 // execution plan → per-effect dispatch behind master + per-effect consent gates
 // (post-validation), with generation supersession checked per command at dispatch
-// (SP-019 limit 7 — the verdict the validator could never emit, landed here).
+// (spike limit 7 — the verdict the validator could never emit, landed here).
 //
 // WPF archaeology (READ-ONLY): master gate Services/Commands/AiCommandService.cs:42,
 // per-effect IsEffectAllowed map AiCommandService.cs:182-200 (defaults
@@ -53,14 +53,14 @@ public sealed record AiExecutionGates(
     /// WPF baseline (contract §8 rule 6; CompanionPromptSettings.cs:106-110) has master OFF
     /// but bubbles/subliminal/bounce ON; the greenfield pipeline executes only the
     /// owner-admitted subset, default NONE (conservative pending-owner posture —
-    /// admission §8 c6 row; the row's verbatim text is recorded in SP-044 record.md §2.1).
+    /// admission §8 c6 row; the row's verbatim text is recorded in the packet record §2.1).
     /// </summary>
     public static AiExecutionGates NoneAdmitted(int generation, Func<int, bool> isGenerationLive) =>
         new(false, _ => false, generation, isGenerationLive);
 
     /// <summary>
     /// Derives the execution gates from the SAME policy instance the validator consumed
-    /// (single consent source — pre-approach consult, SP-044 record.md §3.1.1): the two
+    /// (single consent source — pre-approach consult, the packet record §3.1.1): the two
     /// gate evaluations cannot drift apart unless consent genuinely changed between
     /// validation and dispatch (which the dispatch re-gate then catches, typed).
     /// </summary>
@@ -98,11 +98,11 @@ public sealed class AiCommandExecutor
 
     /// <summary>
     /// Dispatches a plan under the current gates. Per command, in order (first match wins):
-    /// stale generation → NotExecuted(SupersededGeneration) (SP-019 limit 7 — checked PER
+    /// stale generation → NotExecuted(SupersededGeneration) (spike limit 7 — checked PER
     /// COMMAND, so a mid-dispatch flip supersedes the rest); master off → ConsentGated("master");
     /// effect not allowed → ConsentGated(kind); no handler → NotExecuted(EffectUnavailable);
     /// else dispatch → Valid. Dispatch is all-or-nothing at the execution layer
-    /// (pre-completion consult, SP-044 record.md §3.2.3): a faulting handler faults
+    /// (pre-completion consult, the packet record §3.2.3): a faulting handler faults
     /// <see cref="Execute"/> — commands after the fault are NEVER dispatched (no partial
     /// silent application), and the caller gets no execution result at all. Contract §9's
     /// per-command verdict guarantee lives at the ENVELOPE layer (validation already gave

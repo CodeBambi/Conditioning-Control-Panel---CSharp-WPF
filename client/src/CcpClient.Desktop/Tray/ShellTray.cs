@@ -4,7 +4,7 @@ using CcpClient.Desktop.Capabilities;
 namespace CcpClient.Desktop.Tray;
 
 /// <summary>
-/// SP-096. The shell's duck/restore, and the ONE consumer of <see cref="ITrayPresence"/> anywhere
+/// The shell's duck/restore, and the ONE consumer of <see cref="ITrayPresence"/> anywhere
 /// in the port. WPF's counterpart is <c>Services/Notifications/TrayIconService.cs</c> plus the two
 /// <c>MainWindow</c> entry points it is driven through
 /// (<c>MainWindow/MainWindow.RemoteControl.cs:1517</c>, <c>:1554</c>).
@@ -59,7 +59,7 @@ public sealed class ShellTray : IDisposable
     /// <param name="exit">WPF's "Exit" entry (<c>TrayIconService.cs:109-111</c> ->
     /// <c>MainWindow/MainWindow.xaml.cs:323-343</c>, ending in <c>Application.Current.Shutdown()</c>).</param>
     /// <param name="presenceFactory">The backend. Defaults to the platform's own — Windows gets the
-    /// real one, every other platform gets the typed refusal (SP-093).</param>
+    /// real one, every other platform gets the typed refusal.</param>
     public ShellTray(
         Window shell,
         Action<string> log,
@@ -215,7 +215,7 @@ public sealed class ShellTray : IDisposable
         }
 
         // The MENU first, and the icon only if the menu is really there. An icon whose right-click
-        // leads nowhere is the SP-093 shape SP-094 refused to build a tuck on; the port does not
+        // leads nowhere is the shape the port refused to build a tuck on; it does not
         // hide anything, so this is not load-bearing for safety here — but placing an icon that
         // cannot be asked to do anything would still be placing a dead control.
         var menuState = presence.SetMenu(Menu);

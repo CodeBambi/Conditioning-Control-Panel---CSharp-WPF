@@ -6,9 +6,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-054: the host support pieces — subject id (local fiction), the save-image sink
+/// The host support pieces — subject id (local fiction), the save-image sink
 /// (magic/ceiling/clamp/atomic), the drafting sink (sanitize + collision suffixes +
-/// never-runnable round-trip), the serving-root probe (SP-048 discipline), the niche
+/// never-runnable round-trip), the serving-root probe (the serving discipline), the niche
 /// bank clamp, the media manifest sampling, and the borrowed-constant drift net
 /// (consult 7c — a DTRH retune must not silently retune intake).
 /// </summary>
@@ -109,7 +109,7 @@ public sealed class IntakeHostSupportTests : IDisposable
         Assert.Equal("index.html", incomplete.MissingFile);
 
         File.WriteAllText(Path.Combine(incompleteDir, "index.html"), "<html/>");
-        // SP-058: index.html alone is no longer enough — core/accents.js is a required
+        // index.html alone is no longer enough — core/accents.js is a required
         // file (ai.js:24 imports it; a missing module kills the whole ES-module graph).
         var noAccents = IntakeServingRoots.Probe(incompleteDir);
         Assert.Equal(IntakeServingRoots.IntakePayloadState.Incomplete, noAccents.State);

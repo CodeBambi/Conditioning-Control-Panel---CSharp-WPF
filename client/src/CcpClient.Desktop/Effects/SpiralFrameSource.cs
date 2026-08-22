@@ -73,7 +73,7 @@ public interface ISpiralAnimation : IDisposable
 /// opaque black before each draw, so a GIF with transparent pixels shows black through them rather
 /// than the desktop. Upstream's spiral window is transparency-backed and would show the desktop;
 /// this is the same constraint — and the same recorded divergence family — that
-/// <see cref="GdiPlusFlashFrameSource"/> already carries for flashes (SP-100 D57).</para>
+/// <see cref="GdiPlusFlashFrameSource"/> already carries for flashes (D57).</para>
 ///
 /// <para><b>What it deliberately does NOT do: cache the clip.</b> Upstream decodes every frame up
 /// front into <c>BitmapSource</c>s and then has to defend itself against its own cache — a

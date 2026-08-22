@@ -16,7 +16,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-119 — the Haptics rack row, driven by REAL headless input on the REAL controls, from a cold
+/// The Haptics rack row, driven by REAL headless input on the REAL controls, from a cold
 /// composition-root boot with no command-line arguments and NO substituted seams at all.
 ///
 /// <para><b>Nothing is injected here, and that is deliberate.</b> The other headless suites replace
@@ -225,12 +225,12 @@ public class HapticsRowHeadlessTests
 
         // The sentence that stops a landed capability being read as a working feature.
         //
-        // SP-137 re-pointed this needle, and did NOT weaken it. SP-126 (D210) wired the limb, six
+        // A later wave re-pointed this needle, and did NOT weaken it. D210 wired the limb, six
         // effect sites command it, and "no effect sends anything" became FALSE on the page while
         // the XML docs beside the code were kept current. What the page must say is where the send
         // REALLY stops — the sink, not the modules — and it must no longer blame the modules.
         //
-        // The METHOD NAME moved with the assertion, and that is deliberate. SP-137 first kept the
+        // The METHOD NAME moved with the assertion, and that is deliberate. That wave first kept the
         // old name and justified it with "the floor pin is name-anchored", which is FALSE:
         // check-floor.mjs:222 compares a COUNT, and matches names only for NotExecuted results
         // (:231). This fact is not skipped, so renaming changes no pinned name and no total. A

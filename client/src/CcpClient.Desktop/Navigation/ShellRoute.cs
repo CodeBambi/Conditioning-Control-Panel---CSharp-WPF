@@ -2,7 +2,7 @@ namespace CcpClient.Desktop.Navigation;
 
 /// <summary>
 /// One door in the shell's rail. <see cref="Id"/> is dispatch identity and never a display
-/// string (the SP-014 lesson: the rendered label is mutable display text and must never
+/// string (the lesson learned: the rendered label is mutable display text and must never
 /// participate in routing); <see cref="Label"/> and <see cref="Tooltip"/> are display text.
 ///
 /// <para>The record carries NO page. The rail's pages are mounted by the shell, and the

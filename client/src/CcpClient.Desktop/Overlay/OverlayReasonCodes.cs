@@ -33,7 +33,7 @@ public static class OverlayReasonCodes
     /// <para>This is the code that catches the first attempt's exact defect.
     /// <c>CCP.Avalonia.Desktop.Windows/WindowsOverlaySurface.cs:26-45</c> sets
     /// <c>WS_EX_LAYERED</c> and never calls <c>SetLayeredWindowAttributes</c>. Measured on this
-    /// machine before this file was written (SP-099 record.md): such a window reports
+    /// machine before this file was written (the packet record.md): such a window reports
     /// <c>IsWindowVisible = TRUE</c> while <c>GetLayeredWindowAttributes</c> returns FALSE.</para>
     /// </summary>
     public const string OverlayNotComposited = "overlay-not-composited";
@@ -99,7 +99,7 @@ public static class OverlayReasonCodes
     /// <summary>
     /// A frame was offered whose pixel size is not the presented surface's size. Stretching it
     /// would put a rectangle on the user's screen that nobody asked for and would hide a stale
-    /// frame behind a plausible picture; refusing names the mismatch instead (SP-100).
+    /// frame behind a plausible picture; refusing names the mismatch instead.
     /// </summary>
     public const string OverlayFrameSizeMismatch = "overlay-frame-size-mismatch";
 

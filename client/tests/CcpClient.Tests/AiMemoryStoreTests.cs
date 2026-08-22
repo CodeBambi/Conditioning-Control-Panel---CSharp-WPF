@@ -8,8 +8,8 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-040 slice c4 store tests (ai-companion-admission.md §4, §8 c4): the first
-/// IAiMemoryStore on SP-005 machinery — round-trips, corrupt-document quarantine →
+/// Slice c4 store tests (ai-companion-admission.md §4, §8 c4): the first
+/// IAiMemoryStore on the persistence machinery — round-trips, corrupt-document quarantine →
 /// typed Degraded once at startup (b2 precedent), schemaVersion + migration journal,
 /// unknown-member preserve, consent-gated writes (typed no-op on denial, never silent,
 /// never throws), pair-cap MECHANISM (value owner-pending), both-answers schema shape
@@ -56,7 +56,7 @@ public class AiMemoryStoreTests
         Assert.IsType<LoadOutcome.Missing>(store.LastLoadOutcome);
         Assert.False(store.IsDegraded);
         Assert.Empty(store.ReadRecent(10));
-        Assert.False(File.Exists(path)); // empty memory stays file-less (SP-024 empty-slot discipline)
+        Assert.False(File.Exists(path)); // empty memory stays file-less (the empty-slot discipline)
     }
 
     [Fact]
@@ -302,7 +302,7 @@ public class AiMemoryStoreTests
         Assert.IsType<LoadOutcome.NewerSchema>(store.LastLoadOutcome);
         Assert.True(store.IsDegraded);
 
-        store.Append(UserTurn); // writes locked out (SP-005 contract §4 rule 7)
+        store.Append(UserTurn); // writes locked out (persistence contract §4 rule 7)
         Assert.Equal(AiMemoryWriteAdmission.WritesDisabled, store.LastWriteAdmission);
 
         store.Clear();

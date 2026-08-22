@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Video;
 ///
 /// <para><b>Why the decode refusals and the surface refusals are kept apart.</b> "This file is not
 /// playable" and "the frames are not reaching a surface" are the two halves of this port's oldest
-/// failure shape, and collapsing them into one code would hide exactly the distinction SP-111 was
+/// failure shape, and collapsing them into one code would hide exactly the distinction this capability was
 /// created to hold open: a decoder returning bytes proves a FILE is readable and nothing more.
 /// A caller that cannot tell a bad file from a dead surface reports the wrong thing to the user and
 /// the wrong thing to a bug report.</para>
@@ -49,7 +49,7 @@ public static class VideoReasonCodes
 
     /// <summary>
     /// The surface is on screen and the window manager routes a point inside it somewhere ELSE:
-    /// another window is covering it there. Measured on this machine while SP-111 was being written
+    /// another window is covering it there. Measured on this machine while this capability was being written
     /// — the shipping WPF product's own topmost window owned the point (plan.md §0, Q4).
     /// </summary>
     public const string VideoSurfaceOccluded = "video-surface-occluded";
@@ -68,7 +68,7 @@ public static class VideoReasonCodes
     public const string VideoNothingPresented = "video-nothing-presented";
 
     /// <summary>
-    /// A clip is already playing on this surface, so a second one was not opened (SP-112).
+    /// A clip is already playing on this surface, so a second one was not opened.
     ///
     /// <para><b>Added by the video capability's SECOND consumer, for a collision the FIRST one
     /// already tried to prevent and could not.</b> <c>MandatoryVideoEffect.Compose</c>'s first guard

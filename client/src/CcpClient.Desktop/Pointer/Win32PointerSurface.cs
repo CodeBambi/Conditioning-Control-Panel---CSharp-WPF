@@ -15,7 +15,7 @@ public readonly record struct PointerNativeHandles(nint Window);
 /// <para><b>Why one window per target and not one shared host.</b> Upstream has both paths. The
 /// shared-host path decides which bubble was hit in USER SPACE, from an immutable disc snapshot
 /// rebuilt once per UI tick and read on the mouse-hook thread (<c>Services/BubbleService.cs</c>
-/// primer §4c/§4e and gotcha 4) — which is exactly the race SP-110 predicted for this packet: the
+/// primer §4c/§4e and gotcha 4) — which is exactly the race predicted for this packet: the
 /// hit test's answer is a function of a position that changes between asking and clicking. The
 /// per-window path (<c>:3113</c>, <c>MouseLeftButtonDown</c> on the bubble's own window) has no such
 /// gap, because the arbiter is the window manager at the instant of the click, over the position the
@@ -59,7 +59,7 @@ public sealed class Win32PointerSurface : IPointerSurface
     /// <summary>
     /// The outermost rows and columns of a target are background at every size, so the ink
     /// differential always has a control point that the painter fills and never draws on. Same
-    /// constant and same reason as the card's (SP-110's review: a fixed <c>(2,2)</c> fell inside a
+    /// constant and same reason as the card's (its own review: a fixed <c>(2,2)</c> fell inside a
     /// band once the proportional inset collapsed).
     /// </summary>
     public const int ControlMargin = 3;
@@ -626,7 +626,7 @@ public sealed class Win32PointerSurface : IPointerSurface
     /// <summary>
     /// Read the target's own client area BACK out of the operating system, differentially.
     ///
-    /// <para><b>Why the differential and not a bare non-background count.</b> SP-110's M-t: this
+    /// <para><b>Why the differential and not a bare non-background count.</b> The M-t mutation: this
     /// window class registers no background brush, so an UNPAINTED window's device context holds
     /// whatever the OS left in it — which differs from any chosen colour just as reliably as paint
     /// does. So a control point in a margin the painter fills and never draws on must read back

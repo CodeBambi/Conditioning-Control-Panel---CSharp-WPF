@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// SP-114: the build-warning gate. Makes "0 warnings / 0 errors" a MEASURED fact.
+// The build-warning gate. Makes "0 warnings / 0 errors" a MEASURED fact.
 //
 // WHY THIS EXISTS
 // Every landed wave of this port has reported "0 warnings / 0 errors" and not one of those
-// claims was ever checked by anything but a human reading build output. SP-113 found its own
+// claims was ever checked by anything but a human reading build output. An earlier wave found its own
 // reading filter, `grep -E "error|warning CS|Build succ"`, CANNOT MATCH `warning xUnit2013`;
 // it had reported clean four times off that filtered stream, and the two real warnings only
 // surfaced because a reviewer forced a full rebuild. `check-floor.mjs` never had any warning
 // handling at all — it is a TEST floor and runs `--no-build` by design.
 //
-// THE SECOND, INDEPENDENT TRAP, MEASURED ON THE BASE TREE AT SP-114 (evidence: this packet's
+// THE SECOND, INDEPENDENT TRAP, MEASURED ON THE BASE TREE (evidence: this packet's
 // measure-01..04 logs)
 //   1. cold `dotnet build client/CcpClient.sln -c Debug --nologo`, one induced CS0219 -> "1 Warning(s)"
 //   2. THE SAME COMMAND AGAIN, source unchanged, warning still in the file -> "0 Warning(s)"
@@ -106,14 +106,14 @@ function fail(message) {
 
 // ---------------------------------------------------------------------------
 // Parsing. Every function here is pure and exported so the --self-test corpus can
-// exercise it against literal build output, including the exact line SP-113's filter
+// exercise it against literal build output, including the exact line the retired filter
 // could not match.
 // ---------------------------------------------------------------------------
 
 // MSBuild's canonical diagnostic format is
 //   [origin[(line,col)] : ]warning <CODE>: <text>[ [<project>]]
 // The category word is lower-case `warning` and is followed by the code. THE CODE IS A
-// WILDCARD ON PURPOSE: SP-113's filter hardcoded `warning CS`, which matches CS0219 and
+// WILDCARD ON PURPOSE: the retired filter hardcoded `warning CS`, which matches CS0219 and
 // CS0067 and is structurally incapable of matching xUnit2013, NU1701, MSB3277, AVLN3001,
 // CA1416, IL2026 or any future analyzer prefix. Matching `warning <anything>:` is the whole
 // correction.
@@ -178,7 +178,7 @@ export function parseErrors(output) {
 /**
  * MSBuild's own summary counters. Returns null for either counter it did not find, and the
  * caller FAILS on a null: this gate never reports a count it did not read. That is the direct
- * lesson of SP-113 — a number obtained from a stream you did not verify is not a measurement.
+ * lesson of the retired filter — a number obtained from a stream you did not verify is not a measurement.
  */
 export function parseSummary(output) {
   let warnings = null;
@@ -262,7 +262,7 @@ export function evaluate({ exitCode, output, slnText }) {
     problems.push(
       `project(s) in client/CcpClient.sln that produced NO output line in this build: ${missing.join(", ")}. ` +
       "A project that quietly left the build is unobserved, and its warnings would read as zero " +
-      "(same defect class as SP-065's 'a suite outside the floor')."
+      "(same defect class as the test floor's 'a suite outside the floor')."
     );
   }
 
@@ -305,7 +305,7 @@ export function evaluate({ exitCode, output, slnText }) {
 }
 
 // ---------------------------------------------------------------------------
-// Self-test corpus. Literal build-output lines, including the exact SP-113 line.
+// Self-test corpus. Literal build-output lines, including the exact line the retired filter missed.
 // ---------------------------------------------------------------------------
 
 const P = "C:\\repo\\client\\tests\\CcpClient.Tests\\CcpClient.Tests.csproj";
@@ -313,7 +313,7 @@ const P = "C:\\repo\\client\\tests\\CcpClient.Tests\\CcpClient.Tests.csproj";
 export const SELF_TEST_POSITIVES = [
   // The compiler warning this packet induced to prove the gate bites.
   `C:\\repo\\client\\tests\\CcpClient.Tests\\Probe.cs(7,13): warning CS0219: The variable 'unused' is assigned but its value is never used [${P}]`,
-  // THE SP-113 LINE. `grep -E "error|warning CS|Build succ"` cannot match this, and four clean
+  // THE LINE THE RETIRED FILTER MISSED. `grep -E "error|warning CS|Build succ"` cannot match this, and four clean
   // reports were made off a stream filtered that way. It is in this corpus by name, forever.
   `C:\\repo\\client\\tests\\CcpClient.Tests\\Probe.cs(42,9): warning xUnit2013: Do not use Assert.Equal() to check for collection size. [${P}]`,
   // Restore-time and MSBuild-level warnings: origin is a project file, no (line,col).
@@ -344,7 +344,7 @@ export const SELF_TEST_NEGATIVES = [
   `C:\\repo\\client\\src\\A.cs(1,1): error CS0103: The name 'x' does not exist in the current context [${P}]`,
 ];
 
-// SP-113's retired filter, kept here as an executable exhibit rather than a story.
+// The retired filter, kept here as an executable exhibit rather than a story.
 const SP113_FILTER = /error|warning CS|Build succ/;
 
 export function runSelfTest(log = console.log) {
@@ -377,14 +377,14 @@ export function runSelfTest(log = console.log) {
     failures.push("the same warning from two projects collapsed to one");
   }
 
-  // THE EXHIBIT: SP-113's filter versus this one, on the line that fooled it.
+  // THE EXHIBIT: the retired filter versus this one, on the line that fooled it.
   const sp113Line = SELF_TEST_POSITIVES[1];
   if (SP113_FILTER.test(sp113Line)) {
-    failures.push("SP-113's filter is recorded as unable to match the xUnit2013 line, but it matched it — " +
+    failures.push("the retired filter is recorded as unable to match the xUnit2013 line, but it matched it — " +
       "the exhibit is wrong and the record built on it must be re-checked");
   }
   if (parseWarnings(sp113Line).length !== 1) {
-    failures.push("this gate failed to match the xUnit2013 line SP-113's filter missed — the correction does not work");
+    failures.push("this gate failed to match the xUnit2013 line the retired filter missed — the correction does not work");
   }
 
   // Summary reading, including the refusal case.
@@ -441,13 +441,13 @@ export function runSelfTest(log = console.log) {
   }
 
   if (failures.length > 0) {
-    log("WARNING GATE SELF-TEST FAILED (SP-114):");
+    log("WARNING GATE SELF-TEST FAILED:");
     for (const f of failures) log(`  ${f}`);
     return 1;
   }
-  log(`WARNING GATE SELF-TEST OK (SP-114): ${SELF_TEST_POSITIVES.length} positive, ` +
+  log(`WARNING GATE SELF-TEST OK: ${SELF_TEST_POSITIVES.length} positive, ` +
     `${SELF_TEST_NEGATIVES.length} negative corpus lines, plus dedup, summary, ` +
-    "fail-closed and SP-113-filter exhibits.");
+    "fail-closed and retired-filter exhibits.");
   return 0;
 }
 
@@ -481,7 +481,7 @@ export async function main(argv = []) {
   try {
     slnText = fs.readFileSync(SLN_PATH, "utf8");
   } catch {
-    console.error(`WARNING GATE FAILED (SP-114):\n  solution not found at ${SLN_PATH}`);
+    console.error(`WARNING GATE FAILED:\n  solution not found at ${SLN_PATH}`);
     return 1;
   }
 
@@ -502,7 +502,7 @@ export async function main(argv = []) {
   const verdict = evaluate({ exitCode, output, slnText });
 
   if (!verdict.ok) {
-    console.error("WARNING GATE FAILED (SP-114):");
+    console.error("WARNING GATE FAILED:");
     for (const p of verdict.problems) {
       console.error(`  ${p}`);
     }
@@ -511,7 +511,7 @@ export async function main(argv = []) {
   }
 
   console.log(
-    `WARNING GATE OK (SP-114): 0 warnings, 0 errors across ${verdict.builtProjects.length} project(s) ` +
+    `WARNING GATE OK: 0 warnings, 0 errors across ${verdict.builtProjects.length} project(s) ` +
     `[${verdict.builtProjects.join(", ")}] in ${CONFIGURATION}, forced non-incremental.`
   );
   if (verdict.restoreNoOp) {

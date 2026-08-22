@@ -5,10 +5,10 @@ using CcpClient.Desktop.Effects;
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
-/// SP-112: the Bubble Count module's persisted dials — the port's counterpart of WPF's
+/// The Bubble Count module's persisted dials — the port's counterpart of WPF's
 /// <c>BubbleCountEnabled</c> / <c>BubbleCountFrequency</c> / <c>BubbleCountDifficulty</c>.
 ///
-/// <para><b>One document per module</b>, on the precedent SP-101 set and every module since has
+/// <para><b>One document per module</b>, on the per-module precedent every module since the first has
 /// applied (D71/D80): the store's Degraded load path takes the WHOLE document to defaults, so one
 /// hand-broken value in a shared file would reset every other module's dials.</para>
 ///

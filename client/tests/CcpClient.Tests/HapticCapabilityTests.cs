@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-119 — the haptic SEAM and its refusal.
+/// The haptic SEAM and its refusal.
 ///
 /// <para>Every fact here is about a capability with no provider behind it, which is exactly why the
 /// classification is tested as a TRUTH TABLE over directly-constructed observations rather than

@@ -35,7 +35,7 @@
       "minPixelFraction": 0.8
     },
 
-    // SP-122 — THE RACK. Every check below reads a real capture of the Studio rack's Flash Images
+    // THE RACK. Every check below reads a real capture of the Studio rack's Flash Images
     // row; every one has been shown FAILING on a real capture of the opposite state.
     //
     // TOLERANCES ARE SIZED BELOW 10 ON PURPOSE, and this is the tolerance rule in its natural
@@ -116,7 +116,7 @@
       "minPixelFraction": 0.9
     },
 
-    // SP-132 -- THE GOON PAGE. The first checks in this manifest that read pixels the PRODUCT DID
+    // THE GOON PAGE. The first checks in this manifest that read pixels the PRODUCT DID
     // NOT PAINT: a payload page rendered by a real WebView2 inside the Goon practice host, driven
     // there by real input (Play door, then PRACTICE) and confirmed through UIAutomation before any
     // pixel was taken. Every fraction below is measured.

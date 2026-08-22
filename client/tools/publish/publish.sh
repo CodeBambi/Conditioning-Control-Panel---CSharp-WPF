@@ -3,7 +3,7 @@
 # Self-contained single-file per RID. Artifact naming DERIVES from the one version
 # authority (client/Directory.Build.props) via `dotnet msbuild -getProperty:Version` —
 # never a hardcoded or reparsed version string. Run from a native ext4 dir (never
-# /mnt/e — SP-005/007/008/009 pattern). Usage:
+# /mnt/e — a repeatedly proven failure). Usage:
 #   ./publish.sh [linux-x64]
 set -euo pipefail
 
@@ -18,7 +18,7 @@ NAME="CcpClient.Desktop-$VERSION-$RID"
 OUT="$ROOT/artifacts/publish/$NAME"
 # Always publish to a CLEAN output dir: an incremental `dotnet publish` into an existing
 # single-file output dir silently DROPS the native sidecars (libSkiaSharp/libHarfBuzzSharp)
-# and the app then dies with a native-load failure at startup (SP-010).
+# and the app then dies with a native-load failure at startup.
 rm -rf "$OUT"
 dotnet publish "$CSPROJ" -c Release -r "$RID" --self-contained true -p:PublishSingleFile=true -o "$OUT" --nologo
 

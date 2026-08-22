@@ -36,7 +36,7 @@ public sealed record SchedulerTickOutcome(
     SchedulerAction Action, string Code, string Detail, ScheduleWindowReading? Reading);
 
 /// <summary>
-/// SP-118 — the <b>Scheduler</b>: WPF's <c>SchedulerTimer_Tick</c>
+/// The <b>Scheduler</b>: WPF's <c>SchedulerTimer_Tick</c>
 /// (<c>MainWindow/MainWindow.StartStop.cs:601-639</c>).
 ///
 /// <para><b>This is the first thing the port has built that OWNS the engine rather than running
@@ -60,7 +60,7 @@ public sealed record SchedulerTickOutcome(
 /// </list>
 ///
 /// <para><b>It drives the REAL engine, never a seam.</b> There is no <c>ISchedulerTarget</c> here
-/// and there will not be one: SP-110's review found a user-harm defect that survived a whole
+/// and there will not be one: an earlier review found a user-harm defect that survived a whole
 /// mutation sweep because "the test double diverged from the product exactly where the bug lived",
 /// and the cheapest way not to repeat that is not to have a double. A unit test builds a real
 /// <see cref="SessionEngine"/> over an empty effect list.</para>

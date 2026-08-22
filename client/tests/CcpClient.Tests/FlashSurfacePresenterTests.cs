@@ -9,7 +9,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-100 — how a flash reaches a surface, and what happens when there is no surface to reach.
+/// How a flash reaches a surface, and what happens when there is no surface to reach.
 ///
 /// <para>Everything here runs on an injected clock. The stagger between a flash's images, each
 /// surface's lifetime and WPF's topmost cadence are all timings a user can see, so they are ported
@@ -86,13 +86,13 @@ public class FlashSurfacePresenterTests
     }
 
     // ---------------------------------------------------------------------------------
-    //  the residuals SP-099 left, answered
+    //  the residuals the overlay left, answered
     // ---------------------------------------------------------------------------------
 
     [Fact]
     public void PresentIsCalledOncePerSurfacePerFlash_AndNeverToChangeContent()
     {
-        // SP-099 residual 2: Present walks every top-level window and can issue up to 64
+        // Residual 2: Present walks every top-level window and can issue up to 64
         // round-trips. Correct at flash cadence, wrong as a render loop. Content goes through
         // Paint, which walks nothing.
         var rig = new Rig();
@@ -114,7 +114,7 @@ public class FlashSurfacePresenterTests
     [Fact]
     public void IsPresentingIsNeverConsulted_ASurfaceThatLiesAboutItIsStillPresented()
     {
-        // SP-099 residual 3: IsPresenting is a latch over the last operation's outcome, not a live
+        // Residual 3: IsPresenting is a latch over the last operation's outcome, not a live
         // fact about the screen. A presenter that trusted it would skip the placement of a
         // recycled surface and paint into a window that is no longer showing.
         var rig = new Rig();
@@ -136,7 +136,7 @@ public class FlashSurfacePresenterTests
     [Fact]
     public void TopmostIsReassertedOnWpfsCadence_OnlyWhileSomethingIsShowing()
     {
-        // SP-099 residual 5 / D53: WPF re-raises every live flash window about once a second
+        // Residual 5 / D53: WPF re-raises every live flash window about once a second
         // (FlashService.cs:206-243) because the band is contested — measured on this machine, the
         // window that owned the point was the shipping WPF product itself. The cadence exists for
         // exactly as long as a surface does, so a stopped session leaves no timer behind.
@@ -206,7 +206,7 @@ public class FlashSurfacePresenterTests
     {
         // Every non-Windows build. The flash must not throw, must not retry, must not pretend —
         // and the reason a caller can read must be the backend's own typed refusal, which carries
-        // the route and the manual gate that would settle it (SP-099 D56).
+        // the route and the manual gate that would settle it (D56).
         var rig = new Rig { PresenceFactory = () => OverlayPresenceFactory.CreateFor(OverlayHostPlatform.Linux) };
 
         rig.Presenter.Show(["a.png", "b.png"]);
@@ -412,7 +412,7 @@ public class FlashSurfacePresenterTests
     [Fact]
     public async Task WithARefusingOverlay_TheFlashStillComesDue_StillCounts_AndStillStops()
     {
-        // The Linux path, driven on this Windows box. Every SP-098 fact about the schedule must
+        // The Linux path, driven on this Windows box. Every earlier fact about the schedule must
         // hold with no surface at all: a flash nobody sees is not a crash and not a refusal to run.
         var clock = new ManualClock();
         var presenter = new FlashSurfacePresenter(
@@ -557,7 +557,7 @@ public class FlashSurfacePresenterTests
     }
 
     /// <summary>
-    /// The manual clock, same shape as SP-098's: due timers fire in due order inside
+    /// The manual clock, in the established shape: due timers fire in due order inside
     /// <see cref="Advance"/>, and a timer a callback schedules fires in the same pass when it is
     /// already due. Zero wall-clock.
     /// </summary>
@@ -751,7 +751,7 @@ public class FlashSurfacePresenterTests
         /// against the effect's own Fired event.</summary>
         public Action? OnShow { get; set; }
 
-        /// <summary>What this double last "placed" (SP-101). Settable, so a fact can drive the
+        /// <summary>What this double last "placed". Settable, so a fact can drive the
         /// module panel's surface line through every state a real presenter can report.</summary>
         public CapabilityState? LastPlacement { get; set; }
 

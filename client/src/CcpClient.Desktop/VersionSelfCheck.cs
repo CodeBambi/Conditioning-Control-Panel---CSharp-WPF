@@ -21,7 +21,7 @@ public static class VersionSelfCheck
     /// <summary>
     /// Bounded diagnostic path at the top of <c>Main</c> (same shape as
     /// <c>--verify-assets</c>): prints the informational version and exits. No window,
-    /// no lifetime, no participants (SP-003 phase discipline).
+    /// no lifetime, no participants (phase discipline).
     /// </summary>
     public static int Run(Assembly assembly, TextWriter output)
     {

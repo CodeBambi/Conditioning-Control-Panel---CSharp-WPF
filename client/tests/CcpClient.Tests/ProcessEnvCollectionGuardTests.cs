@@ -5,15 +5,15 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-086: the <see cref="ProcessEnvCollection"/> membership convention, made mechanical.
+/// The <see cref="ProcessEnvCollection"/> membership convention, made mechanical.
 ///
-/// <para>WHAT THIS BINDS. SP-062 established the only isolation this suite has against a
-/// process-wide <c>CCP_DATA_ROOT</c> mutation: CO-LOCATION. The one in-suite mutator of the
+/// <para>WHAT THIS BINDS. The only isolation this suite has against a process-wide
+/// <c>CCP_DATA_ROOT</c> mutation is CO-LOCATION. The one in-suite mutator of the
 /// variable lives in <see cref="DataRootOverrideEnvTests"/>, and every class that READS the
 /// variable joins the same collection so xunit's intra-collection sequentiality serializes
 /// them (the collection's own doc comment, DataRootOverrideTests.cs:116-120, is explicit that
 /// <c>DisableParallelization</c> is a non-relied-upon hint on this runner and that
-/// intra-collection sequentiality is the actual mechanism). SP-068's scheduling reshuffle then
+/// intra-collection sequentiality is the actual mechanism). A later scheduling reshuffle then
 /// exposed the pre-existing hole. Until this guard the convention was TEXT: the next class to
 /// build a real <c>CompositionRoot</c> silently rejoined the racy default collection, and the
 /// symptom arrived as an unrelated packet's scheduling change reddening a test it never
@@ -40,10 +40,10 @@ namespace CcpClient.Tests;
 /// transitively through a call it does not name is invisible to it, and it binds only the
 /// tokens enumerated below — a new door into the variable is invisible until someone adds its
 /// name here. Membership is proven by an ATTRIBUTE, never by an executed demonstration that two
-/// classes actually serialize; that executed proof is SP-062's probe, not this file.</para>
+/// classes actually serialize; that executed proof is the mutator's own probe, not this file.</para>
 ///
 /// <para>TWO BLIND SPOTS IN THE CONSTRUCTION HALF, NAMED, because that half is the actual
-/// SP-068 failure shape and no other assertion in the suite backs it up. (1) SPELLING. The
+/// failure shape and no other assertion in the suite backs it up. (1) SPELLING. The
 /// construction detector is <c>\bnew\s+CompositionRoot\b</c>, so a TARGET-TYPED construction —
 /// <c>CompositionRoot root = new() { ... };</c>, <c>=&gt; new() { ... }</c>, <c>return new();</c>
 /// — is a DIRECT construction that reads the variable and is INVISIBLE here. There are zero
@@ -52,7 +52,7 @@ namespace CcpClient.Tests;
 /// across 25 files under client/tests, 24 of them in BarkPipelineTests.cs, including
 /// expression-bodied factories at IntakeDraftTests.cs:27 and IntakeProfilerTests.cs:29). The
 /// trigger this guard exists for — the next class that builds a real root — therefore has a
-/// foreseeable spelling it does not bind. Closing that needs type inference, which SP-086
+/// foreseeable spelling it does not bind. Closing that needs type inference, which this guard
 /// deliberately did not build. (2) INITIALIZER-TEXT CONTAMINATION. The redirect test asks
 /// whether the brace-matched initializer CONTAINS <see cref="RedirectSeam"/> anywhere, so a
 /// nested construction that assigns it, or an incidental mention of the identifier inside a
@@ -86,7 +86,7 @@ public partial class ProcessEnvCollectionGuardTests
     /// here routes through DefaultSettingsPath() (DtrhProfileLock.cs:32-33/:37,
     /// ChaosTunnelService.cs:54-55). Held as class-level literals on purpose — the local
     /// sanitizer blanks string literals, so this guard never reports itself, and no
-    /// env-predicate shape lands in a [Fact] body (SP-066 detector surface).
+    /// env-predicate shape lands in a [Fact] body (the detector surface).
     /// </summary>
     private static readonly string[] DataRootEntryPoints =
     [
@@ -114,7 +114,7 @@ public partial class ProcessEnvCollectionGuardTests
     private static readonly string[] VariableSpellings = ["DataRootOverrideVariable", "CCP_DATA_ROOT"];
 
     /// <summary>Named positive control for the CONSTRUCTION half: five real
-    /// <c>CompositionRoot</c> constructions, zero direct tokens (the class SP-068 fixed).</summary>
+    /// <c>CompositionRoot</c> constructions, zero direct tokens (the previously fixed class).</summary>
     private const string ConstructionControl = "CompositionRootValidationTests";
 
     /// <summary>Named positive control for the TOKEN half: the only class in the tree bound by
@@ -229,11 +229,11 @@ public partial class ProcessEnvCollectionGuardTests
                 $"[{string.Join("; ", reasons[name])}] but does not carry [Collection(nameof({CollectionName}))]. " +
                 "CCP_DATA_ROOT is PROCESS-WIDE and DataRootOverrideEnvTests mutates it in-suite; collection " +
                 "membership IS the isolation (intra-collection sequentiality serializes this class against that " +
-                "mutator — SP-062, re-applied in-lane by SP-068). Two correct fixes, in this order: give the " +
+                "mutator). Two correct fixes, in this order: give the " +
                 "construction an explicit SettingsPathFactory pointing at a per-test temp path so it never reads " +
                 "the variable at all (keeps the suite parallel), or — when the fact's subject IS the default path " +
                 "or the override itself — add the attribute and accept the serialization. A suppression list is " +
-                "not a fix: it is the convention as text again, which is the defect SP-086 closes.");
+                "not a fix: it is the convention as text again, which is the defect this guard closes.");
         }
 
         Assert.True(strays.Count == 0,
@@ -552,7 +552,7 @@ public partial class ProcessEnvCollectionGuardTests
 
     /// <summary>The two project roots this guard binds, plus a refusal for anything else. Kept
     /// out of the [Fact] bodies with the rest of the tree-existence plumbing so no fs-predicate
-    /// shape lands in a fact (SP-066 detector surface).</summary>
+    /// shape lands in a fact (the detector surface).</summary>
     private static List<string> SourcesOutsideTheKnownProjects(string testsRoot)
     {
         var strays = new List<string>();

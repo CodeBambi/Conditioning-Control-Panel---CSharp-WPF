@@ -5,7 +5,7 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the intake launch coordinator (the DtrhLaunchCoordinator pattern): owns the
+/// The intake launch coordinator (the DtrhLaunchCoordinator pattern): owns the
 /// session-scoped watchdog + relaunch-once state (WPF _relaunchedOnce / _recoveryWindowed
 /// parity — survives window recreation; NEVER a restart loop) and the host context
 /// (stores/services/transport, coordinator-lifetime). Idempotent Launch (a live instance
@@ -47,7 +47,7 @@ public sealed class IntakeLaunchCoordinator
     public event Action? FlowEnded;
 
     /// <summary>
-    /// The session context, prepared but NOT bound to a transport (SP-095). The weekly-pass gate
+    /// The session context, prepared but NOT bound to a transport. The weekly-pass gate
     /// in <see cref="IntakeLaunch"/> reads <see cref="IntakeHostContext.Pass"/> through this
     /// before deciding whether a run may open, which is WPF's ordering — the pass check happens
     /// before <c>IntakeHostService.Launch</c> ever runs (<c>MainWindow/MainWindow.Lab.cs:124</c>
@@ -75,7 +75,7 @@ public sealed class IntakeLaunchCoordinator
     /// <summary>The watchdog's typed recovery outcome (UI thread). Relaunch = tear down +
     /// recreate ONCE, forced WINDOWED (:110-115 — _recoveryWindowed parity), with the
     /// relaunch-path stale-profile recovery BEFORE recreation (the deterministic
-    /// 0x800700AA case — SP-023 surprise #7). Exhausted = honest close.</summary>
+    /// 0x800700AA case — recorded surprise #7). Exhausted = honest close.</summary>
     private void OnRecoveryRequested(DtrhWatchdog.DtrhRecoveryOutcome outcome)
     {
         switch (outcome)

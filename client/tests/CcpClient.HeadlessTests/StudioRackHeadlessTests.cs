@@ -18,7 +18,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-098 — the conditioning session and the Flash Images rack row, driven by REAL headless
+/// The conditioning session and the Flash Images rack row, driven by REAL headless
 /// input on the REAL controls, from a cold composition-root boot with NO command-line
 /// arguments. The user story under test is the one the product did not have until this packet:
 /// press START, an effect really runs; press STOP, it really stops.
@@ -82,7 +82,7 @@ public class StudioRackHeadlessTests
 
     private static void Click(MainWindow window, Control control, MouseButton button = MouseButton.Left)
     {
-        // SP-112: bring it into view FIRST. The rack scrolls now (ten rows are taller than the
+        // Bring it into view FIRST. The rack scrolls now (ten rows are taller than the
         // window), and a row scrolled out of the viewport is clipped and not hit-testable — a real
         // click at its own centre selects nothing, which is what a user with a mouse wheel does
         // before clicking. Measured rather than assumed: the ramp row's own centre stopped
@@ -400,7 +400,7 @@ public class StudioRackHeadlessTests
         var window = boot.Window;
         OpenStudioAndFlashModule(window);
 
-        // SP-101: this line used to say the drawing half was "not ported yet", which SP-100 made
+        // This line used to say the drawing half was "not ported yet", which the overlay made
         // false on Windows and left true on Linux. It now reads the presenter's own state, so it
         // still says something BEFORE anything is pressed — a user must not have to press START and
         // watch to find out how this effect reaches the screen — without asserting a platform.
@@ -442,7 +442,7 @@ public class StudioRackHeadlessTests
 
         // THIS FACT USED TO ASSERT THE OPPOSITE, and the assertion was right at the time: WPF's
         // rule for a row it cannot wire honestly is to omit the dot (StudioTabView.xaml.cs:494-496)
-        // and leave the gesture unhandled (:659), and until SP-106 there was no spiral effect to
+        // and leave the gesture unhandled (:659), and until the spiral landed there was no effect to
         // report or to flip. There is now, so §9 D5/D6 CLOSE for the last row that had them open.
         // Nothing was weakened to get here: the rule is unchanged and the row simply stopped
         // qualifying for it.
@@ -452,7 +452,7 @@ public class StudioRackHeadlessTests
             e => e.Classes.Contains("dot"));
 
         // Every rack row, without exception — which is the claim that was not available before, and
-        // which SP-108's fifth row (from a different rack GROUP) had to keep true rather than dent.
+        // which the fifth row (from a different rack GROUP) had to keep true rather than dent.
         foreach (var name in new[]
         {
             "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
@@ -480,9 +480,9 @@ public class StudioRackHeadlessTests
     [AvaloniaFact]
     public async Task TheBouncingTextRow_LandsAfterSpiral_CarriesTheGrammar_AndItsTitleNamesThePortedHalf()
     {
-        // SP-115. The row that was ABSENT for nine waves, because its window is transparency-backed
+        // The row that was ABSENT for nine waves, because its window is transparency-backed
         // glyphs and this port's overlay refused per-pixel alpha by design (D83). The title names
-        // the ported half beside the dot it justifies, on the precedent SP-109/SP-111/SP-113 set.
+        // the ported half beside the dot it justifies, on the precedent the audio, video and bubble rows set.
         var boot = await BootAsync();
         var window = boot.Window;
         Click(window, window.FindControl<RadioButton>("DoorStudio")!);
@@ -677,7 +677,7 @@ public class StudioRackHeadlessTests
     }
 
     // =====================================================================================
-    //  SP-105 — the rack rows that switch the other two modules on
+    //  The rack rows that switch the other two modules on
     // =====================================================================================
 
     [AvaloniaFact]
@@ -688,8 +688,8 @@ public class StudioRackHeadlessTests
         Click(window, window.FindControl<RadioButton>("DoorStudio")!);
 
         // WPF's EFFECTS group is flash, video, subliminal, spiral, pinkfilter, visuals
-        // (StudioTabView.xaml.cs:483-497). SP-111 lands Mandatory Video SECOND, where upstream puts
-        // it; SP-117 lands Visuals SIXTH and LAST, where upstream puts it, so the EFFECTS group is
+        // (StudioTabView.xaml.cs:483-497). Mandatory Video lands SECOND, where upstream puts
+        // it; Visuals lands SIXTH and LAST, where upstream puts it, so the EFFECTS group is
         // now upstream's complete group with nothing closed up around. The ORDER is upstream's and
         // is asserted, because a rack that reorders itself as modules land stops being the rack the
         // user learned.
@@ -702,7 +702,7 @@ public class StudioRackHeadlessTests
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
                 "RowBouncingText", "RowPinkFilter", "RowVisuals",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
-                // SP-119: Haptics is LAST in IMMERSION, immediately after Brain Drain and before
+                // Haptics is LAST in IMMERSION, immediately after Brain Drain and before
                 // the TIMING group, which is upstream's own position
                 // (StudioTabView.xaml.cs:513/519/530).
                 "RowHaptics",
@@ -710,10 +710,10 @@ public class StudioRackHeadlessTests
             ],
             rows);
 
-        // SP-105: three of the four had an effect whose state could be reported, and D5/D6 stayed
-        // open for exactly one row. SP-106 gave that row an effect, so the loop below is now every
+        // Three of the four had an effect whose state could be reported, and D5/D6 stayed
+        // open for exactly one row. The spiral gave that row an effect, so the loop below is now every
         // row on the page WITH AN EFFECT BEHIND IT — see
-        // TheSpiralRow_NowCarriesTheGrammarToo_AndD5D6CloseForTheWholeRack. SP-108 adds a fifth from
+        // TheSpiralRow_NowCarriesTheGrammarToo_AndD5D6CloseForTheWholeRack. A fifth was added from
         // a different rack GROUP (TIMING), placed after the EFFECTS block exactly as upstream orders
         // its groups (StudioTabView.xaml.cs:482-541).
         foreach (var name in new[]
@@ -730,7 +730,7 @@ public class StudioRackHeadlessTests
                 e => e.Classes.Contains("dot"));
         }
 
-        // SP-117 — AND THE ONE ROW THAT MUST NOT HAVE ONE. The method's name has always said "every
+        // AND THE ONE ROW THAT MUST NOT HAVE ONE. The method's name has always said "every
         // row WITH A PORTED EFFECT BEHIND IT", and Visuals is the first row in this rack with no
         // effect behind it at all: upstream's entry passes null where every other row passes a dot
         // predicate (StudioTabView.xaml.cs:496) because there is no master toggle to read, and its
@@ -741,7 +741,7 @@ public class StudioRackHeadlessTests
             Descendant<RadioButton>(window, "RowVisuals").GetVisualDescendants()
                 .OfType<Avalonia.Controls.Shapes.Ellipse>());
 
-        // SP-118 — AND THE ROW THAT HAS A DOT WITH NO EFFECT BEHIND IT, which is the inverse case
+        // AND THE ROW THAT HAS A DOT WITH NO EFFECT BEHIND IT, which is the inverse case
         // and is new to this rack. Upstream passes a dot predicate for Scheduler
         // (StudioTabView.xaml.cs:536) where it passes null for Visuals (:496), so the row carries
         // one; what it does NOT carry is a module — the scheduler is owned at app lifetime and
@@ -755,7 +755,7 @@ public class StudioRackHeadlessTests
             window.Session.Engine.Effects,
             e => string.Equals(e.Id, "scheduler", StringComparison.Ordinal));
 
-        // SP-119 — THE SECOND ROW OF THAT KIND, and the first that is a SINK rather than a driver.
+        // THE SECOND ROW OF THAT KIND, and the first that is a SINK rather than a driver.
         // Upstream passes a dot predicate here too (() => App.Settings?.Current?.Haptics?.Enabled,
         // StudioTabView.xaml.cs:520), so the row carries one; and like the scheduler it is not on
         // Engine.Effects, because it is owned at app lifetime (App.xaml.cs:533, :2060) and the
@@ -780,7 +780,7 @@ public class StudioRackHeadlessTests
         var row = Descendant<RadioButton>(window, "RowSubliminals");
         var page = (CcpClient.Desktop.Views.Pages.StudioPage)window.PageFor(ShellRoutes.Studio);
 
-        // D72, closed. The module landed in SP-101 with no row, so until this gesture existed only
+        // D72, closed. The module landed with no row, so until this gesture existed only
         // a test or a hand-edited file could switch it on. It ships OFF
         // (CCP.Core/Models/AppSettings.cs:1234), which is why the dot starts unlit.
         Assert.False(window.Session.Subliminals.Enabled);
@@ -918,7 +918,7 @@ public class StudioRackHeadlessTests
     }
 
     // =====================================================================================
-    //  SP-108 — the rack's SECOND GROUP, and the row for a module that draws nothing
+    //  The rack's SECOND GROUP, and the row for a module that draws nothing
     // =====================================================================================
 
     [AvaloniaFact]
@@ -929,7 +929,7 @@ public class StudioRackHeadlessTests
         Click(window, window.FindControl<RadioButton>("DoorStudio")!);
 
         // WPF has FOUR groups — EFFECTS, GAMES & CARDS, IMMERSION, TIMING (§8.3, built at
-        // StudioTabView.xaml.cs:483/498/508/530) — and until SP-108 the port had rows in exactly one
+        // StudioTabView.xaml.cs:483/498/508/530) — and until the second group the port had rows in exactly one
         // of them, because every module it had ported was an EFFECT that painted an overlay. The
         // group headers are upstream's own strings (st4_studio_group_effects / _timing,
         // en.json:4816,4819).
@@ -937,7 +937,7 @@ public class StudioRackHeadlessTests
             .Where(t => t.Classes.Contains("rack-group"))
             .Select(t => t.Text)
             .ToList();
-        // SP-109 adds IMMERSION and SP-110 adds GAMES & CARDS, and each lands exactly where upstream
+        // The audio row adds IMMERSION and the lock card adds GAMES & CARDS, and each lands exactly where upstream
         // puts it: the group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
         // (StudioTabView.xaml.cs:483/498/508/530), so the port now has all four and NOTHING was
         // reordered as they arrived. A rack that reshuffles itself as modules land stops being the
@@ -954,7 +954,7 @@ public class StudioRackHeadlessTests
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
                 "RowBouncingText", "RowPinkFilter", "RowVisuals",
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
-                // SP-119: Haptics is LAST in IMMERSION, immediately after Brain Drain and before
+                // Haptics is LAST in IMMERSION, immediately after Brain Drain and before
                 // the TIMING group, which is upstream's own position
                 // (StudioTabView.xaml.cs:513/519/530).
                 "RowHaptics",
@@ -1087,7 +1087,7 @@ public class StudioRackHeadlessTests
         Click(window, Descendant<CheckBox>(window, "RampLinkPinkFilterToggle"));
         Assert.True(window.Session.RampPreset.Current.LinkPinkFilterOpacity);
 
-        // SP-117 — THE THIRD SWITCH, and the reason it is admissible now is the reason it was
+        // THE THIRD SWITCH, and the reason it is admissible now is the reason it was
         // refused before, not a change of mind. D93's rule is that a link whose dial has no ported
         // panel is ABSENT rather than present-and-inert; the Visuals row IS flash opacity's panel,
         // so the precondition is discharged for this one link and for no other.
@@ -1111,7 +1111,7 @@ public class StudioRackHeadlessTests
     }
 
     // =====================================================================================
-    //  SP-117 — the Visuals row: a rack row that is not a module
+    //  The Visuals row: a rack row that is not a module
     // =====================================================================================
 
     [AvaloniaFact]
@@ -1198,7 +1198,7 @@ public class StudioRackHeadlessTests
         Assert.Equal("12", Descendant<TextBlock>(window, "VisualsDurationValue").Text);
 
         // The dials are not decoration: the reading the presenter will use for the next flash is
-        // the one the user just set. This is the whole point of the row — before SP-117 these three
+        // the one the user just set. This is the whole point of the row — before this row these three
         // numbers were constants inside FlashSurfacePresenter.
         var draw = window.Session.Visuals.Draw();
         Assert.Equal(200, draw.ScalePercent);
@@ -1212,7 +1212,7 @@ public class StudioRackHeadlessTests
         Assert.Contains("200%", line, StringComparison.Ordinal);
         Assert.Contains("12 seconds", line, StringComparison.Ordinal);
 
-        // SP-117's sweep survivor M-bg, closed. Every other check here reads a slider the user just
+        // Sweep survivor M-bg, closed. Every other check here reads a slider the user just
         // moved, so a panel that RELOADED from a constant instead of from the document changed no
         // measured outcome — and the sliders would have silently reset to WPF's defaults on the
         // next reload. The rack's right-click is the product's own reload path
@@ -1295,7 +1295,7 @@ public class StudioRackHeadlessTests
         }
     }
 
-    /// <summary>Manual clock (the SP-043 <c>ManualClock</c> shape). Zero wall-clock.</summary>
+    /// <summary>Manual clock (the <c>ManualClock</c> shape). Zero wall-clock.</summary>
     private sealed class ManualSessionClock : ISessionClock
     {
         private sealed class Entry
@@ -1355,7 +1355,7 @@ public class StudioRackHeadlessTests
     }
 
     // =====================================================================================
-    //  SP-109 — the two rows nobody can SEE, and the one that is half a row
+    //  The two rows nobody can SEE, and the one that is half a row
     // =====================================================================================
 
     [AvaloniaFact]
@@ -1463,7 +1463,7 @@ public class StudioRackHeadlessTests
         Click(window, Descendant<RadioButton>(window, "RowMindWipe"));
 
         // Every DRAWING module's panel ends in a "where did the pixels go" line. These two cannot
-        // have one, so the absence is asserted the way SP-108 asserted the ramp's.
+        // have one, so the absence is asserted the way the ramp's was.
         var names = window.GetVisualDescendants().OfType<Control>().Select(c => c.Name).ToList();
         Assert.DoesNotContain("MindWipeSurfaceState", names);
         Assert.DoesNotContain("BrainDrainSurfaceState", names);
@@ -1527,7 +1527,7 @@ public class StudioRackHeadlessTests
     }
 
     // =================================================================================
-    //  SP-110 — the one row that ASKS
+    //  The one row that ASKS
     // =================================================================================
 
     [AvaloniaFact]
@@ -1543,7 +1543,7 @@ public class StudioRackHeadlessTests
         // from it. A user is entitled to know that before they tick the box, not the first time a
         // card lands in the middle of somebody else's chat window.
         //
-        // "LEADS" is a POSITIONAL claim, so it is pinned positionally as SP-109's missing-half
+        // "LEADS" is a POSITIONAL claim, so it is pinned positionally as the audio rows' missing-half
         // notice is: the warning sits above the enable, so nobody can reach the switch without
         // passing it. Pinning only the text would stay green if it were moved to the bottom.
         var panel = Descendant<StackPanel>(window, "LockCardModulePanel");
@@ -1668,7 +1668,7 @@ public class StudioRackHeadlessTests
     }
 
     // =====================================================================================
-    //  SP-111 — the row that plays a FILE, and it is half a row
+    //  The row that plays a FILE, and it is half a row
     // =====================================================================================
 
     [AvaloniaFact]
@@ -1748,7 +1748,7 @@ public class StudioRackHeadlessTests
     }
 
     // =====================================================================================
-    //  SP-112 - the row that consumes TWO capabilities, and the group order the rack decides
+    //  The row that consumes TWO capabilities, and the group order the rack decides
     // =====================================================================================
 
     [AvaloniaFact]
@@ -1765,7 +1765,7 @@ public class StudioRackHeadlessTests
         // the rack is the order the user has learned. Asserted on the RENDERED rack rather than on
         // a list, so a reordered panel reds here.
         //
-        // SP-113 lands Bubble Pop at the head of the group — Add("bubbles", ...) at :499 — so the
+        // Bubble Pop lands at the head of the group — Add("bubbles", ...) at :499 — so the
         // whole of upstream's GAMES & CARDS order that this port has rows for is now pinned here.
         var rows = window.GetVisualDescendants().OfType<RadioButton>()
             .Where(r => r.Classes.Contains("rack-row"))
@@ -1943,7 +1943,7 @@ public class StudioRackHeadlessTests
     }
 
     // ---------------------------------------------------------------------------------
-    //  SP-113 — the row the user ACTS on
+    //  The row the user ACTS on
     // ---------------------------------------------------------------------------------
 
     [AvaloniaFact]

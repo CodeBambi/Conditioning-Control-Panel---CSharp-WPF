@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Video;
 ///
 /// <para><b>Top-down is a NORMALISATION, not an assumption, and the measurement is why.</b> Media
 /// Foundation hands RGB32 back with <c>MF_MT_DEFAULT_STRIDE = -1280</c> for the port's own fixture
-/// media (SP-111 plan.md §0, Q3): the OS's buffer is BOTTOM-UP. A presenter that ignored the sign
+/// media (the packet plan.md §0, Q3): the OS's buffer is BOTTOM-UP. A presenter that ignored the sign
 /// would blit every video upside down, and no solid-colour fixture could ever catch it — which is
 /// exactly why the decoder flips into this type instead of passing the OS's orientation through.
 /// <see cref="Sample"/> below is what a read-back compares against, and it would compare a mirrored
@@ -119,7 +119,7 @@ public sealed class VideoFrame
     /// Nine fractions, spread over the picture and deliberately not on a lattice.
     ///
     /// <para><b>Their ASYMMETRY is not what makes the fingerprint tell a picture from its own
-    /// mirror, and the mutation sweep is what established that</b> (SP-111 record §4, M-av). The
+    /// mirror, and the mutation sweep is what established that</b> (the packet record §4, M-av). The
     /// fold above is ORDER-dependent, so a mirrored picture yields a different SEQUENCE of colours
     /// and therefore a different value even from a mirror-invariant point set. An earlier version of
     /// this comment claimed the asymmetry was load-bearing; a mutation that made the set exactly

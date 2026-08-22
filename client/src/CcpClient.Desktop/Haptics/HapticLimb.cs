@@ -22,9 +22,9 @@ public enum HapticMoment
 }
 
 /// <summary>
-/// <b>The limb: upstream's mixer arithmetic over SP-119's sink, with no output loop.</b>
+/// <b>The limb: upstream's mixer arithmetic over the haptic sink, with no output loop.</b>
 ///
-/// <para>SP-126, option C+ (<c>client/docs/haptic-limb-census.md</c> §9). It is a command
+/// <para>Option C+ (<c>client/docs/haptic-limb-census.md</c> §9). It is a command
 /// vocabulary — <see cref="IHapticLimb"/>'s five moments plus <see cref="SetLayer"/> — over a
 /// SHARED-INSTANT evaluator: transients sum within a priority group, groups arbitrate by MAX,
 /// continuous layers form a soft-ramped floor underneath, and the concurrency cap keeps a burst from
@@ -35,7 +35,7 @@ public enum HapticMoment
 /// because it is the SENDER: it is <i>"the self-imposed rate limit for the Lovense LAN API"</i>
 /// (<c>HapticMixer.cs:68-70</c>), it re-asserts unchanged targets every second so a provider using
 /// short <c>timeSec</c> repeats gets a heartbeat (<c>:86-92</c>), and it re-stamps zeros for two
-/// seconds after a stop (<c>:93-97</c>). <b>All three are DELIVERY properties</b>, and SP-119's seam
+/// seconds after a stop (<c>:93-97</c>). <b>All three are DELIVERY properties</b>, and the sink's seam
 /// already assigns delivery to the provider in as many words — <i>"Lovense: timeSec 0 + keep-alive
 /// refresh, or short-timeSec repeats — provider's choice"</i>
 /// (<c>Services/Haptics/Core/HapticContracts.cs:70-73</c>, quoted on <see cref="IHapticSink"/>).

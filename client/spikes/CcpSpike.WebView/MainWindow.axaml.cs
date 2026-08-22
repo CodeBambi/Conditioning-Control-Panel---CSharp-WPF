@@ -103,7 +103,7 @@ public partial class MainWindow : Window
             // NativeWebDialog (the GTK adapter's declared SupportedScenarios): separate
             // window; has WebMessageReceived but NO InvokeScript (host->page unavailable).
             Web.IsVisible = false;
-            var dlg = new NativeWebDialog { Title = "SP-011 dialog" };
+            var dlg = new NativeWebDialog { Title = "WebView spike dialog" };
             dlg.EnvironmentRequested += OnEnvironmentRequested;
             dlg.AdapterCreated += (_, _) => _log.Log($"webview(dialog): AdapterCreated");
             dlg.AdapterDestroyed += (_, _) => _log.Log("webview(dialog): AdapterDestroyed");
@@ -392,7 +392,7 @@ public partial class MainWindow : Window
 
     private void Teardown()
     {
-        if (_teardownDone) return; // idempotent (SP-003 discipline)
+        if (_teardownDone) return; // idempotent (shared teardown discipline)
         _teardownDone = true;
         _log.Log($"spike: teardown t={ElapsedMs()}ms engineLive={_engineLive} heartbeats={_heartbeats}");
         _server.Dispose();

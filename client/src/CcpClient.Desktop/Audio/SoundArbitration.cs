@@ -1,6 +1,6 @@
 namespace CcpClient.Desktop.Audio;
 
-/// <summary>The arbitration channels (SP-017 §6 channel ownership — ONE generic player REJECTED).</summary>
+/// <summary>The arbitration channels (§6 channel ownership — ONE generic player REJECTED).</summary>
 public enum SoundChannel
 {
     /// <summary>Companion voice: exclusive, stop-replace newest-wins + generation token.</summary>
@@ -13,7 +13,7 @@ public enum SoundChannel
     Sfx,
 }
 
-/// <summary>Why a request was dropped (typed — drops are never silent, SP-017 discipline).</summary>
+/// <summary>Why a request was dropped (typed — drops are never silent, by discipline).</summary>
 public enum SoundDropReason
 {
     /// <summary>SFX pool at capacity — "a one-shot SFX played late is worse than silence" (ChaosSfx.cs:91-107).</summary>
@@ -66,16 +66,16 @@ public interface IDuckHandle : IDisposable
 /// <summary>Tuning surface for <see cref="SoundArbitration"/> (every default WPF-cited or packet-decreed).</summary>
 public sealed class SoundArbitrationOptions
 {
-    /// <summary>SFX pool bound = 8 (SP-025 packet decree; WPF ChaosSfx cap-6 cited, ChaosSfx.cs:91-107).</summary>
+    /// <summary>SFX pool bound = 8 (packet decree; WPF ChaosSfx cap-6 cited, ChaosSfx.cs:91-107).</summary>
     public int MaxSfxVoices { get; init; } = 8;
 
-    /// <summary>Suppression window after a failed device init: the next play attempt after expiry schedules a single-flight re-probe (WPF OutputCooldown = 30s, AudioService.Playback.cs:104; SP-070 — the disable EXPIRES, #779 parity).</summary>
+    /// <summary>Suppression window after a failed device init: the next play attempt after expiry schedules a single-flight re-probe (WPF OutputCooldown = 30s, AudioService.Playback.cs:104; the disable EXPIRES, #779 parity).</summary>
     public TimeSpan RecoveryCooldown { get; init; } = TimeSpan.FromSeconds(30);
 
-    /// <summary>Consecutive failed device-init attempts at which a still-dead endpoint logs ONE escalation line (WPF OutputFailuresToTrip = 5, AudioService.Playback.cs:101). Port role = the escalation transition only: the port disables on the FIRST init failure (WPF arms at the streak because its failure unit is a per-play waveOutOpen; a port play is never a device attempt — SP-070 record §design).</summary>
+    /// <summary>Consecutive failed device-init attempts at which a still-dead endpoint logs ONE escalation line (WPF OutputFailuresToTrip = 5, AudioService.Playback.cs:101). Port role = the escalation transition only: the port disables on the FIRST init failure (WPF arms at the streak because its failure unit is a per-play waveOutOpen; a port play is never a device attempt — the packet record §design).</summary>
     public int RecoveryFailureThreshold { get; init; } = 5;
 
-    /// <summary>Bound on the CALLER's wait for the backgrounded backend teardown (SP-071: the close handler must never wait unbounded on a wedged native init). On expiry the caller logs ONE typed give-up line and returns WITHOUT touching the backend — the teardown still disposes it exactly once when the native call returns. SP-073: the wait is on the DISPOSAL rather than on a thread, because no teardown thread parks on the wedge any more (the give-up residue must not accumulate over repeated host closes). Default 2s = the local precedent (TeardownBarkPipeline's store waits, DtrhHostWindow.axaml.cs:257-260).</summary>
+    /// <summary>Bound on the CALLER's wait for the backgrounded backend teardown (the close handler must never wait unbounded on a wedged native init). On expiry the caller logs ONE typed give-up line and returns WITHOUT touching the backend — the teardown still disposes it exactly once when the native call returns. The wait is on the DISPOSAL rather than on a thread, because no teardown thread parks on the wedge any more (the give-up residue must not accumulate over repeated host closes). Default 2s = the local precedent (TeardownBarkPipeline's store waits, DtrhHostWindow.axaml.cs:257-260).</summary>
     public TimeSpan TeardownBudget { get; init; } = TimeSpan.FromSeconds(2);
 
     /// <summary>Duck watchdog: force-unduck after this hold (WPF DuckWatchdogMs 300_000, AudioService.cs:39).</summary>
@@ -86,14 +86,14 @@ public sealed class SoundArbitrationOptions
 }
 
 /// <summary>
-/// The APP-WIDE sound arbitration core (SP-029 slice q1) on the SP-017-selected SoundFlow
+/// The APP-WIDE sound arbitration core (slice q1) on the spike-selected SoundFlow
 /// backend. Channel ownership (spike §6, owner-ratified 2026-07-21):
 /// voice = exclusive stop-replace + generation token; whisper = exclusive with real-event
 /// busy; SFX = bounded pool (8), drop-on-overflow typed. Plus ordinary/priority voice
 /// queueing with caller-supplied freshness, reference-counted ducking (machinery against
 /// the <see cref="IAudioDuckSink"/> seam), the device re-probe discipline, and panic cleanup.
 ///
-/// WPF parity anchors (READ-ONLY evidence, SP-029 record.md Step 1): stop-replace +
+/// WPF parity anchors (READ-ONLY evidence, the packet record.md Step 1): stop-replace +
 /// identity filter (AvatarTubeWindow.Speech.cs:473,:1594,:1623-1632); priority = clear-all
 /// + play-now (:319-360); pacing 2.0 s floor (:112-119,148-164); WPF has NO ms-age queue
 /// expiry — freshness here is mechanism-only, policy values are q2's; whisper busy replaces
@@ -155,14 +155,14 @@ public sealed class SoundArbitration : IDisposable
 
     private bool _tornDown;
 
-    // SP-071 teardown handoff state: 0 = running (or never started), 1 = completed,
+    // Teardown handoff state: 0 = running (or never started), 1 = completed,
     // 2 = caller gave up. Interlocked transitions only; meaningful once Dispose starts the
     // backgrounded teardown. Closes the give-up/completion log race: the completion line is
     // logged only when the give-up line was (a transition pair), and a teardown finishing in
     // the budget race logs neither.
     private int _teardownState;
 
-    // SP-073 handoff state. `_backendDisposeOwed` is published (full fence) by the teardown
+    // Handoff state. `_backendDisposeOwed` is published (full fence) by the teardown
     // thread BEFORE it attempts `_initLock` and is NEVER cleared: every later release of that
     // lock re-offers to perform the disposal, and `_backendDisposeClaimed` makes the perform
     // exactly-once across both spawn paths, so a redundant offer is a no-op rather than a
@@ -215,7 +215,7 @@ public sealed class SoundArbitration : IDisposable
     public int QueuedVoiceCount { get { lock (_gate) { return _voiceQueue.Count; } } }
 
     /// <summary>
-    /// A voice line is actively playing (SP-032 q2 addition — the anti-stale gate's
+    /// A voice line is actively playing (q2 addition — the anti-stale gate's
     /// "speaking" state, WPF BarkService.cs:1358-1365; outcome-mapping: WPF's IsSpeaking is
     /// bubble-visible and greenfield has no bubble, so voice-player-active is the analog).
     /// </summary>
@@ -231,7 +231,7 @@ public sealed class SoundArbitration : IDisposable
     public string? ActiveDeviceName { get { lock (_gate) { return _activeDeviceName; } } }
 
     /// <summary>
-    /// SP-073: this instance's backgrounded teardown still OWNS an OS thread. The residue an
+    /// This instance's backgrounded teardown still OWNS an OS thread. The residue an
     /// app session accumulates is the SUM of this over every arbitration the session builds —
     /// one per DTRH host window (DtrhHostWindow.axaml.cs:214 construct, :258 dispose), and
     /// host windows recur per session (WPF parity: the Lab doors re-launch the host on every
@@ -239,7 +239,7 @@ public sealed class SoundArbitration : IDisposable
     /// DtrhHostService.cs:39 `_relaunchedOnce`). So the count is exposed per instance and
     /// summed by the observer, never as process-global state.
     ///
-    /// <para>SCOPE, precisely: this reports the residue SP-073 removes — a teardown thread
+    /// <para>SCOPE, precisely: this reports the residue the handoff removes — a teardown thread
     /// parked on `_initLock` waiting out a wedged native call. It is NOT a general residue
     /// counter and must not be read as one. `_teardownThread` is a SINGLE slot written by both
     /// spawn paths and `_backendDisposeOwed` is never cleared, so every post-teardown
@@ -265,7 +265,7 @@ public sealed class SoundArbitration : IDisposable
         }
         finally
         {
-            // SP-073: OUTSIDE the lock body — this runs after Monitor.Exit has returned.
+            // OUTSIDE the lock body — this runs after Monitor.Exit has returned.
             DrainOwedBackendDisposalAfterRelease();
         }
     }
@@ -275,7 +275,7 @@ public sealed class SoundArbitration : IDisposable
     /// mechanism): the requested NAME is matched against a FRESH enumeration; absent → typed
     /// fallback to default (WPF AudioService.cs:292-293); zero endpoints / failed init →
     /// audio SUPPRESSED with a cooldown window, never session-permanent (WPF #779,
-    /// AudioService.cs:163-166 — SP-070); the backend itself re-enumerates again immediately
+    /// AudioService.cs:163-166); the backend itself re-enumerates again immediately
     /// before native init and passes only the fresh snapshot's DeviceInfo. Short locks only:
     /// `_gate` is never held across `EnumerateDevices` / `TryInit`.
     /// </summary>
@@ -290,7 +290,7 @@ public sealed class SoundArbitration : IDisposable
         }
         finally
         {
-            // SP-073: OUTSIDE the lock body — this runs after Monitor.Exit has returned.
+            // OUTSIDE the lock body — this runs after Monitor.Exit has returned.
             DrainOwedBackendDisposalAfterRelease();
         }
     }
@@ -357,7 +357,7 @@ public sealed class SoundArbitration : IDisposable
 
     /// <summary>
     /// One failed device init: suppress + count + arm the cooldown window from the injected
-    /// clock (SP-070; WPF NoteOutputFailure, AudioService.Playback.cs:393-417 parity). Logs
+    /// clock (WPF NoteOutputFailure, AudioService.Playback.cs:393-417 parity). Logs
     /// on TRANSITIONS only: the healthy→suppressed trip line, and ONE escalation line when
     /// the streak reaches <see cref="SoundArbitrationOptions.RecoveryFailureThreshold"/> —
     /// never a line per refused play.
@@ -766,7 +766,7 @@ public sealed class SoundArbitration : IDisposable
 
         if (_audioDisabledForSession)
         {
-            // SP-070 (#779 parity): suppression EXPIRES. Checked BEFORE `!_initialized` — a
+            // #779 parity: suppression EXPIRES. Checked BEFORE `!_initialized` — a
             // failed STARTUP init leaves _initialized false, and refusing as "not
             // initialised" would strand the recovery forever (pre-approach consult finding).
             // Cooldown enforced BEFORE any attempt: the kick schedules a single-flight
@@ -1153,11 +1153,11 @@ public sealed class SoundArbitration : IDisposable
         // (it serializes backend DEVICE calls), and a player dispose racing the backgrounded
         // _backend.Dispose() (device stop + engine teardown) would be a new concurrent-
         // native-call pair by a different door. Sequencing it to completion here preserves
-        // the pre-SP-071 order (PanicReset(); _backend.Dispose();) and keeps the
+        // the original order (PanicReset(); _backend.Dispose();) and keeps the
         // WhisperBusyChanged event on the caller's thread.
         PanicReset();
 
-        // SP-071: the backend teardown runs OFF the calling thread. The UI caller (the DTRH
+        // The backend teardown runs OFF the calling thread. The UI caller (the DTRH
         // host close handler, DtrhHostWindow.axaml.cs:153 → :258) must never wait unbounded
         // on a wedged native init — the ONLY case with a probe in flight is a dead endpoint.
         // A timeout on _initLock that CONTINUES would run _backend.Dispose() concurrently
@@ -1165,14 +1165,14 @@ public sealed class SoundArbitration : IDisposable
         // caller's OBSERVATION is bounded. Named + IsBackground (WPF 5a168554 remedy shape);
         // a wedged thread never blocks process exit.
         //
-        // SP-073: that thread must not PARK on the wedge either. SP-071 bounded the caller and
+        // That thread must not PARK on the wedge either. Bounding the caller alone
         // left one thread per close parked on _initLock until the native call returned, and
         // the residue was framed as "bounded by user close actions" — false: host closes are
         // automatic (watchdog relaunch/exhaustion, forced exit, page exit-done, page
         // boot-error, dialog close) and, decisively, host OPENS recur per app session, one new
         // arbitration each (DtrhHostWindow.axaml.cs:214). Nothing bounded the count. So the
         // thread now takes the lock with a ZERO timeout: on success it releases immediately
-        // and disposes outside the lock (SP-071's barrier-then-dispose shape, unchanged); on
+        // and disposes outside the lock (the barrier-then-dispose shape, unchanged); on
         // failure it publishes the owed disposal and EXITS, and the thread holding the lock
         // performs the teardown after ITS release. Same disposal, same instant, one fewer
         // thread — see RunHandoffTeardown / DrainOwedBackendDisposalAfterRelease.
@@ -1196,14 +1196,14 @@ public sealed class SoundArbitration : IDisposable
         {
             // Bounded give-up: NEVER touches _backend in any way — the disposal still lands
             // exactly once when the native call finally returns and its thread releases.
-            _log($"sound: backend teardown exceeds {(int)_options.TeardownBudget.TotalMilliseconds}ms on an in-flight native call — close not blocked, teardown continues in background (SP-071; WPF 5a168554 remedy shape)");
+            _log($"sound: backend teardown exceeds {(int)_options.TeardownBudget.TotalMilliseconds}ms on an in-flight native call — close not blocked, teardown continues in background (WPF 5a168554 remedy shape)");
         }
         // State 1 on the budget race: the teardown completed as the budget expired — no
         // give-up, no line.
     }
 
     /// <summary>
-    /// The Dispose-side teardown body (SP-073). Publishes the owed disposal with a full fence
+    /// The Dispose-side teardown body. Publishes the owed disposal with a full fence
     /// BEFORE attempting the lock — every interleaving argument rests on that order — then
     /// takes `_initLock` with a ZERO timeout as a barrier only.
     ///
@@ -1228,7 +1228,7 @@ public sealed class SoundArbitration : IDisposable
 
         // Barrier only: an in-flight probe holds _initLock across its backend calls, so
         // acquiring it here means this teardown never starts against a live native init. The
-        // dispose itself runs OUTSIDE the lock exactly as it did before SP-073 —
+        // dispose itself runs OUTSIDE the lock exactly as it did before —
         // SoundFlowAudioBackend.Dispose:126-138 routes into OrphanSafePlayerFactory.Teardown,
         // which takes the `_lifecycle` lock (AudioSeams.cs:324); holding _initLock across
         // that would nest two locks that AudioSeams.cs:178-181 states are never nested.
@@ -1237,7 +1237,7 @@ public sealed class SoundArbitration : IDisposable
     }
 
     /// <summary>
-    /// The owed-disposal check every `_initLock` scope runs after releasing the lock (SP-073).
+    /// The owed-disposal check every `_initLock` scope runs after releasing the lock.
     /// Called from the `finally` of <see cref="Initialize"/> and <see cref="EnumerateDevices"/>
     /// — OUTSIDE their lock bodies, which is what closes the release race described in
     /// <see cref="RunHandoffTeardown"/>.
@@ -1253,13 +1253,13 @@ public sealed class SoundArbitration : IDisposable
         // runs on whatever thread owned the lock — the recovery probe's THREAD-POOL thread
         // (AudioSeams.cs:133-137), or a future UI-thread caller (Initialize is called on the
         // UI thread at DtrhHostWindow.axaml.cs:220). Running a native device teardown there
-        // would be the SP-071 class by a new door. One line instead: _backend.Dispose() runs
+        // would be the wedged-teardown class by a new door. One line instead: _backend.Dispose() runs
         // only ever on a teardown thread.
         StartBackendTeardownThread(PerformBackendDisposeOnce);
     }
 
     /// <summary>
-    /// The ONLY place a teardown thread is created (SP-073): named + IsBackground so a wedged
+    /// The ONLY place a teardown thread is created: named + IsBackground so a wedged
     /// native call never blocks process exit (WPF 5a168554 remedy shape). The field is
     /// published before Start, which closes the started-but-not-yet-published mode of
     /// <see cref="TeardownThreadOutstanding"/>. That does NOT make the property a general
@@ -1284,7 +1284,7 @@ public sealed class SoundArbitration : IDisposable
             // ran — nothing is owed, no later release can drain, the backend is never disposed,
             // and both this line and the caller's "teardown continues in background" overstate
             // the outcome. FILED, NOT FIXED HERE (record.md §9): it is not a regression —
-            // pre-SP-073 an unguarded Start() throw was swallowed by TeardownBarkPipeline's
+            // previously an unguarded Start() throw was swallowed by TeardownBarkPipeline's
             // catch (DtrhHostWindow.axaml.cs:258) and the backend was likewise never disposed —
             // and a post-verification code edit would invalidate this packet's revert matrix.
             _log($"sound: backend teardown thread could not start ({ex.GetType().Name}: {ex.Message}) — disposal stays owed for the next lock release");
@@ -1292,7 +1292,7 @@ public sealed class SoundArbitration : IDisposable
     }
 
     /// <summary>
-    /// The single site that disposes the backend (SP-073). Entered ONLY on a teardown thread
+    /// The single site that disposes the backend. Entered ONLY on a teardown thread
     /// and NEVER while holding a lock, so `_initLock` is never nested over the backend's own
     /// `_lifecycle` lock. Claimed, so the two spawn paths (the Dispose-side attempt and the
     /// post-release drain) can both offer and exactly one performs.

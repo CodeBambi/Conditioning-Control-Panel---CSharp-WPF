@@ -27,19 +27,19 @@ public static class CapabilityReasonCodes
     /// <summary>The probe itself faulted; the detail carries the exception class (contract §3 rule 3).</summary>
     public const string ProbeFault = "probe-fault";
 
-    /// <summary>An animation asset exists but cannot decode on this target (SP-015 AvatarTube demonstrator).</summary>
+    /// <summary>An animation asset exists but cannot decode on this target (the AvatarTube demonstrator).</summary>
     public const string AssetUndecodable = "asset-undecodable";
 
     /// <summary>
-    /// No credentials exist for a provider and none are invented (SP-033; admission §2
+    /// No credentials exist for a provider and none are invented (admission §2
     /// rule 6 — the cloud provider's typed absence: inventory, never admission).
     /// </summary>
     public const string CredentialsAbsent = "credentials-absent";
 
-    /// <summary>No reachable platform secret service (SP-033; e.g. WSL2 without a session D-Bus daemon). Never a plaintext fallback.</summary>
+    /// <summary>No reachable platform secret service (e.g. WSL2 without a session D-Bus daemon). Never a plaintext fallback.</summary>
     public const string SecretServiceUnreachable = "secret-service-unreachable";
 
-    /// <summary>A loopback provider endpoint did not answer its probe (connection refused or bounded probe timeout — SP-035).</summary>
+    /// <summary>A loopback provider endpoint did not answer its probe (connection refused or bounded probe timeout).</summary>
     public const string HostUnreachable = "host-unreachable";
 }
 
@@ -48,7 +48,7 @@ public sealed record CapabilityReason(string Code, string Detail);
 
 /// <summary>
 /// Typed capability-availability state (runtime-capability-contract §1). Exactly one per
-/// capability query. Row-5 vocabulary: operation outcomes stay in SP-004; the only bridge
+/// capability query. Row-5 vocabulary: operation outcomes stay in the async-lifecycle contract; the only bridge
 /// is the probe outcome→state mapping (contract §6).
 /// </summary>
 public abstract record CapabilityState

@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-121: the guards on the zero-execution census (<c>client/docs/task-board.md:33</c>).
+/// The guards on the zero-execution census (<c>client/docs/task-board.md:33</c>).
 ///
 /// <para>WHAT THIS DOES NOT DO. It sets NO threshold, NO target and NO gate on the census count.
 /// The board row asks which shipped types have ZERO executed lines, not a percentage, and a
@@ -44,7 +44,7 @@ namespace CcpClient.Tests;
 /// today. The honest statement of this guard's reach: it closes the literal-reuse route and NAMES
 /// the route it leaves open, rather than claiming a completeness it cannot deliver.</para>
 ///
-/// <para>SP-124 — WHY THE CROSS-VALIDATION NO LONGER TOUCHES THE COMMITTED DOCUMENT. Until this
+/// <para>WHY THE CROSS-VALIDATION NO LONGER TOUCHES THE COMMITTED DOCUMENT. Until this
 /// packet, <c>census.mjs</c>'s hand-rolled ECMA-335 reader was cross-validated by recomputing two
 /// of its numbers here by reflection and comparing them to SCALARS STORED IN
 /// <c>execution-census.md</c>. The cross-validation was the only check on that reader anywhere in
@@ -70,7 +70,7 @@ namespace CcpClient.Tests;
 /// <see cref="StaleCheck_IsQuietWhenTheDocumentDescribesTheAssembly"/>) against SYNTHETIC documents
 /// in the temp directory, never against the committed one.</para>
 ///
-/// <para>HONESTY. Every fact here but the three SP-124 ones is pure logic over committed files.
+/// <para>HONESTY. Every fact here but three is pure logic over committed files.
 /// Those three shell out to <c>node</c> — a new precedent for <c>client/tests/**</c>, justified
 /// because both tier-1 gates and this tool are themselves node scripts, so node is already a hard
 /// requirement of this tree. If node is absent they FAIL rather than skip. None of these facts runs
@@ -246,7 +246,7 @@ public sealed class ExecutionCensusTests
         // a filter inside the render loop would shorten the list while the headline kept its number.
         Assert.Equal(zero, ZeroListRows(census).Count);
 
-        // SP-124: the two relations the old reflection anchor carried, restated over STORED scalars
+        // The two relations the old reflection anchor carried, restated over STORED scalars
         // only. They are arithmetic INSIDE the document, so they do not move when a lane adds a
         // shipped type — which is why they survive here while the live comparison did not. What
         // they still catch: a universe quietly shrunk against its own metadata table cannot hide,

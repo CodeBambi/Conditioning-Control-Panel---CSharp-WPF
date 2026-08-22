@@ -13,7 +13,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-096: the shell's duck and restore, on a REAL Avalonia window.
+/// The shell's duck and restore, on a REAL Avalonia window.
 ///
 /// <para><b>The fact this file exists for is the first one.</b> WPF tucks the main window into the
 /// tray while the descent runs; the port minimizes instead, and the reason is a measured Avalonia
@@ -61,7 +61,7 @@ public class ShellTrayHeadlessTests
             "re-showing the owner brought the owned window back, so a hide/show pair would have been survivable");
 
         // And the second half of the same seam: while the owner is hidden a new owned window cannot
-        // even be created, which is what the SP-027 watchdog's one permitted relaunch does
+        // even be created, which is what the watchdog's one permitted relaunch does
         // (DtrhLaunchCoordinator.cs:113 -> :167).
         var relaunch = new Window { Width = 100, Height = 100 };
         shell.Hide();
@@ -84,14 +84,14 @@ public class ShellTrayHeadlessTests
         var relaunchOverMinimized = new Window { Width = 100, Height = 100 };
         relaunchOverMinimized.Show(owner);
         Assert.True(relaunchOverMinimized.IsVisible,
-            "an owned window could not be shown over a MINIMIZED owner, which is what the SP-027 watchdog relaunch does");
+            "an owned window could not be shown over a MINIMIZED owner, which is what the watchdog relaunch does");
     }
 
     [AvaloniaFact]
     public void DuckingWithAnUnavailableTray_MinimizesAndNeverHides_AndSaysWhyThereIsNoIcon()
     {
         // THE BRANCH LINUX GETS, treated as the main case. TrayPresenceFactory hands every
-        // non-Windows run an UnsupportedTrayPresence (SP-093), which refuses SetMenu, Place and
+        // non-Windows run an UnsupportedTrayPresence, which refuses SetMenu, Place and
         // ShowNotification. The shell must then do exactly what it does with a working tray minus
         // the icon: minimize, keep its taskbar button, and never hide.
         var (shell, tray, _) = Build(() => TrayPresenceFactory.CreateFor(TrayHostPlatform.Linux));
@@ -131,8 +131,8 @@ public class ShellTrayHeadlessTests
         Assert.Equal(WindowState.Minimized, shell.WindowState);
         Assert.True(tray.IsIconPlaced);
 
-        // The menu goes up BEFORE the icon: an icon whose right-click leads nowhere is the SP-093
-        // shape SP-094 refused to build on.
+        // The menu goes up BEFORE the icon: an icon whose right-click leads nowhere is the shape
+        // the Play door refused to build on.
         Assert.Equal(new[] { "SetMenu", "Place", "ShowNotification" }, presence.Calls.ToArray());
         Assert.Equal(4, presence.LastMenu!.Items.Count);
     }
@@ -167,7 +167,7 @@ public class ShellTrayHeadlessTests
     public void TheIconsActivation_RestoresTheRealWindow_ThroughTheSameFunnel()
     {
         // WPF admits a single left-click deliberately, because "clicking the tray icon does nothing"
-        // reads as the app being gone (TrayIconService.cs:112-119). SP-093 already proves the
+        // reads as the app being gone (TrayIconService.cs:112-119). The tray capability already proves the
         // shell's own click notification reaches Activated through the real window proc; this is
         // the other end of that wire.
         var presence = new AvailablePresence();
@@ -274,7 +274,7 @@ public class ShellTrayHeadlessTests
     [AvaloniaFact]
     public async Task TheMenusExitEntry_WithNoClassicLifetime_SaysSoAndShutsNothingDown()
     {
-        // SP-097: the ONE menu entry whose effect had never been executed by anything. WPF's Exit
+        // The ONE menu entry whose effect had never been executed by anything. WPF's Exit
         // (TrayIconService.cs:109-111 -> MainWindow/MainWindow.xaml.cs:323-343) ends in
         // Application.Current.Shutdown(); the port's counterpart is the classic desktop lifetime's
         // Shutdown(), which reaches the one guarded teardown (App.axaml.cs:88-95).
@@ -336,7 +336,7 @@ public class ShellTrayHeadlessTests
     [AvaloniaFact]
     public async Task TheDtrhFlowENDING_RestoresTheShell_ThroughDtrhLaunchsOwnFunnel()
     {
-        // SP-097: SP-096 proved the duck and every restore route ShellTray owns. What had no fact
+        // An earlier packet proved the duck and every restore route ShellTray owns. What had no fact
         // is DtrhLaunch's own wiring of the restore — `coordinator.FlowEnded += RestoreOwner`
         // (Features/Dtrh/DtrhLaunch.cs) — the single funnel every real flow end goes through:
         // host window closed, picker cancelled, descend failed. WPF restores at the same point
@@ -346,7 +346,7 @@ public class ShellTrayHeadlessTests
         // REAL default descent seam, and cancelling it is WPF's own back-out (slot == null -> no
         // launch, MainWindow.Lab.cs:246-247) which raises FlowEnded from the real coordinator.
         // Only the DUCK is invoked directly, because the duck's real trigger is HostOpened — a
-        // WebView2 host window no headless frame can present. That half is SP-096's; this is the
+        // WebView2 host window no headless frame can present. That half is the duck's; this is the
         // half it left open.
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp097-restore-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot

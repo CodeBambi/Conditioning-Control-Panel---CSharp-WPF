@@ -1,7 +1,7 @@
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the intake-save-image sink (IntakeHostService.cs:547-555, :589-635 parity): a
+/// The intake-save-image sink (IntakeHostService.cs:547-555, :589-635 parity): a
 /// page-rendered spiral PNG written to the user's keepsake folder
 /// (&lt;dataDir&gt;/intake_spirals). Discipline: 12MB base64-char ceiling (:554 →
 /// "too-big"), PNG 8-byte magic validation (:628-631 → "bad-image"), index clamped 1..99

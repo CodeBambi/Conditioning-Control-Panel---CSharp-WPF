@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-135 — the WebView2 permission DENY hook (<see cref="WebViewPermissionDeny"/>), which closes
+/// The WebView2 permission DENY hook (<see cref="WebViewPermissionDeny"/>), which closes
 /// D250: the port could neither grant nor refuse, so WebView2's own prompt was the residual.
 ///
 /// <para><b>THE DEFECT THIS FILE EXISTS TO CATCH IS "IT COMPILED".</b> A COM event handler attached
@@ -24,7 +24,7 @@ namespace CcpClient.Tests;
 /// identical in 1.0.2535.41 <c>:3287-3618</c> and 1.0.3179.45 <c>:2875-3206</c>, 61 slots).
 /// <see cref="PublishedVtableOrder_PutsPermissionRequestedAt23And24_AndReproducesTheShippingProcessFailedSlots"/>
 /// asserts that the SAME transcription predicts the slot constants of
-/// <see cref="DtrhProcessFailed"/>, which have been shipping in this tree since SP-027 and were not
+/// <see cref="DtrhProcessFailed"/>, which have been shipping in this tree since the DTRH host landed and were not
 /// chosen here. So any insertion, deletion or shift at or before slot 25 moves index 25 off
 /// <c>add_ProcessFailed</c> and reddens this file. Avalonia 12.0.1 corroborates independently, from
 /// metadata that is not a positional count: its generated
@@ -130,7 +130,7 @@ public class WebViewPermissionTests
         Assert.Equal(removePermission, PrivateSlot(typeof(WebViewPermissionDeny), "RemovePermissionRequestedSlot"));
 
         // THE ANCHOR: the same transcription must predict the slots this tree has been SHIPPING since
-        // SP-027, which nothing in this packet chose. Any drift at or before 25 reds here.
+        // the DTRH host landed, which nothing in this packet chose. Any drift at or before 25 reds here.
         Assert.Equal(25, Array.IndexOf(PublishedCoreWebView2VtableOrder, "add_ProcessFailed"));
         Assert.Equal(26, Array.IndexOf(PublishedCoreWebView2VtableOrder, "remove_ProcessFailed"));
         Assert.Equal(25, PrivateSlot(typeof(DtrhProcessFailed), "AddProcessFailedSlot"));
@@ -391,7 +391,7 @@ public class WebViewPermissionTests
             .ToArray();
         Assert.Equal(expectedHosts.OrderBy(f => f, StringComparer.Ordinal).ToArray(), actualHosts);
 
-        // COVERED BY SP-135: the two DTRH surfaces and the Goon practice host — the surface D250 was
+        // COVERED BY THIS PACKET: the two DTRH surfaces and the Goon practice host — the surface D250 was
         // named for. NOT covered, and stated here so it cannot be read off the green: Intake and the
         // Chaos tunnel embed the same WebView2 and were outside this packet's File Scope, so the
         // browser still owns the prompt there.

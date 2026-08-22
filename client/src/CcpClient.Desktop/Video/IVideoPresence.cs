@@ -51,7 +51,7 @@ public sealed record VideoSurfaceRequest(VideoBounds Bounds, uint Letterbox = 0x
 /// it creates is invisible to every human.</param>
 /// <param name="DisplayCount">The OS's own monitor count (<c>SM_CMONITORS</c>).</param>
 /// <param name="CompositionEnabled"><c>DwmIsCompositionEnabled</c>. The desktop compositor is what
-/// puts a window's pixels on a screen; measured <c>True</c> on the machine SP-111 was written on.
+/// puts a window's pixels on a screen; measured <c>True</c> on the machine this was written on.
 /// <b>Kept because it is a documented BOOL out-parameter with no struct behind it</b> — unlike
 /// <c>DwmGetCompositionTimingInfo</c>, whose frame counters this capability deliberately does NOT
 /// read (plan.md §0, Q4 finding 3: the shipping DLL accepts a 292-byte struct where the SDK header
@@ -88,7 +88,7 @@ public sealed record VideoDisplayObservation(
 /// over.</para>
 ///
 /// <para><b><see cref="LetterboxHeld"/> is not optional and its absence is a measured failure
-/// mode.</b> SP-110's mutation sweep found that deleting the paint call entirely survived a
+/// mode.</b> An earlier mutation sweep found that deleting the paint call entirely survived a
 /// read-back that merely counted pixels differing from the background — because the window class
 /// registers no background brush, so an UNPAINTED window's device context holds whatever the OS left
 /// in it. A control point in a bar the painter FILLS and never draws picture into must read back
@@ -102,7 +102,7 @@ public sealed record VideoDisplayObservation(
 /// <param name="AboveEveryOrdinaryWindow">The OS's own top-level z-order walk puts it before the
 /// first visible non-topmost window. The ORDERING, never the <c>WS_EX_TOPMOST</c> flag.</param>
 /// <param name="HitTestWinner">What the window manager routes the surface's centre point to. This is
-/// the occlusion question, and it BIT while SP-111 was being written: the shipping WPF product's own
+/// the occlusion question, and it BIT while this capability was being written: the shipping WPF product's own
 /// topmost window owned the point (plan.md §0, Q4).</param>
 /// <param name="LetterboxHeld">See the remarks above.</param>
 /// <param name="PictureSampled">How many points inside the picture band were read back. The read's
@@ -199,7 +199,7 @@ public sealed record VideoSurfaceObservation(
 /// <c>Effects.MandatoryVideoEffect</c>). And that the composited desktop carried it — a window's own
 /// device context is what the OS holds FOR the window, and a foreign topmost window can own the same
 /// point on screen; that stronger leg is the test harness's, it is machine-conditional, and it is
-/// measured rather than assumed (SP-111 record §5).</para>
+/// measured rather than assumed (the packet record §5).</para>
 ///
 /// <para><b>Thread affinity.</b> A native window belongs to the thread that created it. Call
 /// <see cref="Present"/>/<see cref="Show"/>/<see cref="Withdraw"/>/<see cref="IDisposable.Dispose"/>

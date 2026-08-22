@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-118 — the scheduler that OWNS the engine.
+/// The scheduler that OWNS the engine.
 ///
 /// <para><b>What makes this file different from the other thirteen modules' files.</b> Every one of
 /// those drives a module INSIDE a session someone started; this one starts the session. So the
@@ -17,7 +17,7 @@ namespace CcpClient.Tests;
 ///
 /// <para><b>No double stands in for the engine.</b> These facts drive a REAL
 /// <see cref="SessionEngine"/> over a real <see cref="PersistenceStore{TModel}"/>, with an empty
-/// effect list. SP-110's review found a user-harm defect that a whole mutation sweep had missed
+/// effect list. A later review found a user-harm defect that a whole mutation sweep had missed
 /// because "the test double diverged from the product exactly where the bug lived"; the cheapest
 /// way not to repeat that is not to have a double.</para>
 ///
@@ -520,7 +520,7 @@ public class SchedulerModuleTests
     [Fact]
     public async Task TheTenSettingsSurviveARestart_BecauseTheStoreIsInEveryLifecycleList()
     {
-        // SP-117 found a landed store that was in NONE of StartAsync/LogIfDegraded/StopAsync/
+        // A later wave found a landed store that was in NONE of StartAsync/LogIfDegraded/StopAsync/
         // FlushAsync, so a whole module's dials were silently lost at every launch (D178). This
         // document's are the settings that decide whether a session appears tomorrow morning, so
         // the round trip is pinned rather than assumed.
@@ -581,7 +581,7 @@ public class SchedulerModuleTests
             Assert.True(root.Validate(out _));
             var host = root.Build(new StartupTrace());
 
-            // SP-119 registered the haptic sink after this one, so the scheduler is now the
+            // The haptic sink was registered after this one, so the scheduler is now the
             // second-from-last participant. Its ORDER relative to the session — the property this
             // fact is about — is unchanged: it still registers after the session, so phase 3 still
             // starts it after the session's preset load and teardown still stops it first of the two.
@@ -796,7 +796,7 @@ public class SchedulerModuleTests
     {
         // M-aw SURVIVED round 1: replacing the CompareExchange identity with a bare Exchange. The
         // difference only shows when a SPENT callback is delivered while a DIFFERENT tick owns the
-        // slot — the exact shape ScheduledFire was written for (SP-101 hazard 3). With a bare
+        // slot — the exact shape ScheduledFire was written for (template hazard 3). With a bare
         // Exchange the stale callback clears the live tick's slot, runs a tick that is not due, and
         // arms a second timer: two one-shots on the clock and a dot reading off the wrong one.
         await using var rig = await Rig.StartAsync("16:00", "22:00", enabled: true);
@@ -819,7 +819,7 @@ public class SchedulerModuleTests
     {
         // M-az SURVIVED round 1: _owner.Cancel() dropped from StopAsync. Nothing else in the
         // product reads the generation once _running is false, so the line is defence — but it is
-        // the participant contract's own requirement (SP-003 §5.3, and what HeartbeatParticipant
+        // the participant contract's own requirement (§5.3, and what HeartbeatParticipant
         // does), and it is the second half of the guard every scheduled callback re-checks.
         var rig = await Rig.StartAsync("16:00", "22:00", enabled: true);
         await rig.PassTheGrace();
@@ -853,7 +853,7 @@ public class SchedulerModuleTests
             };
             Assert.True(root.Validate(out _));
             var host = root.Build(new StartupTrace());
-            // SP-119 registered the haptic sink after this one; the slot this fact is about is
+            // The haptic sink was registered after this one; the slot this fact is about is
             // unchanged and the scheduler still flushes in it.
             var participant = Assert.IsType<SchedulerParticipant>(host.Participants[^2]);
             Assert.IsType<StartupOutcome.Success>(

@@ -5,14 +5,14 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-064 unclassified-literal guard: every <c>"--..."</c> string literal under
+/// Unclassified-literal guard: every <c>"--..."</c> string literal under
 /// client/src must be classified in <see cref="HarnessEntryPoints"/> — a new drive/demo
 /// flag that nobody classified fails HERE with its file:line, so the refusal cannot be
 /// forgotten by the next feature slice. Mirrors DataRootChokePointGuardTests (repo-root
 /// walk, never-skip, file:line violations). One fact, three assertion groups:
 /// (1) every literal classified; (2) no stale registry entries (a classified flag whose
 /// literal left the tree); (3) the gate's wiring in Program.cs — HarnessFlagsIn AFTER the
-/// SP-057 override read, BEFORE the composition root — so the pin cannot be satisfied by a
+/// data-root override read, BEFORE the composition root — so the pin cannot be satisfied by a
 /// helper the real launch never calls while Program.Main stays ungated.
 /// </summary>
 public partial class HarnessEntryPointGuardTests
@@ -47,7 +47,7 @@ public partial class HarnessEntryPointGuardTests
                     {
                         violations.Add($"{normalized}:{i + 1}: \"{literal}\" is not classified in " +
                             "Lifecycle/HarnessEntryPoints.cs — every startup flag literal needs a " +
-                            "disposition (Harness / Demo / SelfCheck / Modifier / NotAStartupFlag), SP-064");
+                            "disposition (Harness / Demo / SelfCheck / Modifier / NotAStartupFlag)");
                     }
                 }
             }
@@ -62,7 +62,7 @@ public partial class HarnessEntryPointGuardTests
         Assert.True(stale.Length == 0,
             "registry entries with no literal in client/src (stale classification): " + string.Join(", ", stale));
 
-        // (3) Wiring: the gate call in Program.cs must sit between the SP-057 override
+        // (3) Wiring: the gate call in Program.cs must sit between the data-root override
         // read and the composition-root construction — the real entry point, in the order
         // that fires before anything can write (framing b). Index-order assertion on the
         // real source, the choke-point-guard pattern applied to call ORDER.
@@ -74,10 +74,10 @@ public partial class HarnessEntryPointGuardTests
         var rootConstruction = program.IndexOf("new CompositionRoot", StringComparison.Ordinal);
         Assert.True(overrideRead >= 0 && gateCall >= 0 && rootConstruction >= 0,
             $"Program.cs wiring tokens missing (overrideRead={overrideRead}, gateCall={gateCall}, rootConstruction={rootConstruction}) — " +
-            "the SP-064 gate must call HarnessEntryPoints.HarnessFlagsIn in Program.Main");
+            "the gate must call HarnessEntryPoints.HarnessFlagsIn in Program.Main");
         Assert.True(overrideRead < gateCall && gateCall < rootConstruction,
             $"gate order broken (overrideRead={overrideRead}, gateCall={gateCall}, rootConstruction={rootConstruction}) — " +
-            "the refusal must fire AFTER the SP-057 override read and BEFORE the composition root exists");
+            "the refusal must fire AFTER the data-root override read and BEFORE the composition root exists");
     }
 
     private static string FindRepoRoot()

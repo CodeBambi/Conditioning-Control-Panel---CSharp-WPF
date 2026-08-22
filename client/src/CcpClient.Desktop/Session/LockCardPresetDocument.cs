@@ -5,13 +5,13 @@ using CcpClient.Desktop.Effects;
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
-/// SP-110: the Lock Card module's persisted dials — the port's counterpart of WPF's
+/// The Lock Card module's persisted dials — the port's counterpart of WPF's
 /// <c>LockCardEnabled</c> / <c>LockCardFrequency</c> / <c>LockCardRepeats</c> /
 /// <c>LockCardStrict</c> / <c>LockCardPhrases</c>, read into the service at
 /// <c>MainWindow/MainWindow.StartStop.cs:206-209</c> and inside its show path
 /// (<c>Services/LockCard/LockCardService.cs:267-296</c>).
 ///
-/// <para><b>One document per module</b>, on the precedent SP-101 set and SP-105/SP-106/SP-108/SP-109
+/// <para><b>One document per module</b>, on the per-module precedent four earlier modules already
 /// applied (D71/D80): the store's Degraded load path takes the WHOLE document to defaults, so one
 /// hand-broken value in a shared file would reset every other module's dials.</para>
 ///

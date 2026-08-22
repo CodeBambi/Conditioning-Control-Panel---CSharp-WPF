@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-098 — the conditioning session spine, and the one effect running under it.
+/// The conditioning session spine, and the one effect running under it.
 ///
 /// <para><b>The subject of this file is not a flag.</b> WPF's <c>START</c> starts real work and
 /// its stop really stops it (<c>MainWindow/MainWindow.StartStop.cs:159-410</c>). Every fact
@@ -296,11 +296,11 @@ public class SessionSpineTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    // "spiral" USED to sit in this list, as the rack row with no effect behind it. SP-106 gave it
+    // "spiral" USED to sit in this list, as the rack row with no effect behind it. A later wave gave it
     // one, so it moved out of this theory and into ContinuousEffectSpineTests' rack-order fact and
     // MovingEffectSpineTests' own quick-toggle facts. The FACT here is unchanged and is still the
     // one WPF's `default: return` describes; what changed is which ids are unknown, and after
-    // SP-106 there is no ported row left that a gesture falls through.
+    // that change there is no ported row left that a gesture falls through.
     [InlineData("visuals")]
     [InlineData("Flash")]
     public async Task QuickToggle_ForARowWithNoEffect_IsASilentNoOp(string? id)
@@ -554,7 +554,7 @@ public class SessionSpineTests
     }
 
     /// <summary>
-    /// The manual clock (the <c>SoundArbitrationTests.ManualClock</c> shape, SP-043): due
+    /// The manual clock (the <c>SoundArbitrationTests.ManualClock</c> shape): due
     /// timers fire in due order inside <see cref="Advance"/>, and a timer scheduled by a
     /// callback fires in the same pass if it is already due. Zero wall-clock.
     /// </summary>

@@ -3,8 +3,8 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the intake settings document on SP-005 machinery (`intake_settings.json`).
-/// The row's "settings keys on SP-005" — a DEDICATED document, not DemoSettings (a
+/// The intake settings document on persistence machinery (`intake_settings.json`).
+/// The row's "settings keys on the store" — a DEDICATED document, not DemoSettings (a
 /// self-declared non-feature model, persistence-migration-contract §1 rule 4) and not the
 /// Persistence/ folder (out of File Scope). Deviation from WPF (which keeps these keys in
 /// settings.json — AppSettings.cs:3040-3106): recorded in record.md; a future settings row

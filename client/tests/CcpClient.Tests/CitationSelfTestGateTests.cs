@@ -6,15 +6,15 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-133: the floor's hold on <c>client/tools/citations/self-test.mjs</c>, which is the only
+/// The floor's hold on <c>client/tools/citations/self-test.mjs</c>, which is the only
 /// fixtured guard on what <c>detect.mjs</c> CLASSIFIES.
 ///
-/// <para><b>Why this file exists.</b> SP-088 fixtured F1-F14 and SP-131 added F15-F24 (moved /
+/// <para><b>Why this file exists.</b> F1-F14 were fixtured first and F15-F24 added later (moved /
 /// gone / ambiguous / out-of-range, and the coverage arithmetic), and <b>no standing gate ran any
 /// of them</b>: <c>check-floor.mjs</c> discovers csproj entries under <c>client/tests/</c>, so a
 /// node file under <c>client/tools/</c> is invisible to it and the classifier's green held only as
 /// of the last time a human ran the script by hand (<c>task-board.md:49</c> and <c>:330</c>). This
-/// class is the bridge. What SP-131 already pins in <see cref="CitationNeedleTests"/> is the tool's
+/// class is the bridge. What <see cref="CitationNeedleTests"/> already pins is the tool's
 /// CONTRACT (both modes exit 0, both print the coverage block) and its DATA (needle schema,
 /// one-line resolution at a frozen SHA); neither touches the mechanism, and this does.</para>
 ///

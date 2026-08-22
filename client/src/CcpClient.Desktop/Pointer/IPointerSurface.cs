@@ -27,7 +27,7 @@ public readonly record struct PointerBounds(int X, int Y, int Width, int Height)
 /// <param name="Fill">The background the whole client area is filled with, 0x00RRGGBB. The ink
 /// read-back is a DIFFERENTIAL against this exact value, so it is not decoration: without a fill
 /// this process controls, "these pixels are not the background" is satisfied by an unpainted
-/// window whose device context holds whatever the OS last left in it (SP-110's M-t).</param>
+/// window whose device context holds whatever the OS last left in it (the M-t mutation).</param>
 /// <param name="Ink">The colour the disc is drawn in. Must differ from <paramref name="Fill"/>, or
 /// the content check could never distinguish a painted target from a blank one.</param>
 public sealed record PointerTargetRequest(PointerBounds Bounds, uint Fill, uint Ink)
@@ -138,8 +138,8 @@ public readonly record struct PointerStationObservation(
 /// a recycled shell that kept the flag is <i>"a now-clickable bubble stuck click-through
 /// (unpoppable)"</i> (<c>:4880-4892</c>).</param>
 /// <param name="AboveEveryOrdinaryWindow">The OS's own top-level z-order walk. Not "above every
-/// window": another topmost window legitimately contests the band, which is SP-099's wording and
-/// SP-099's reason.</param>
+/// window": another topmost window legitimately contests the band, which is the overlay's wording and
+/// the overlay's reason.</param>
 /// <param name="HitTestWinner">What <c>WindowFromPoint</c> at <paramref name="HitTestPoint"/>
 /// returned.</param>
 /// <param name="HitTestPoint">Where it was asked. Carried so a reader can tell WHICH point an
@@ -149,7 +149,7 @@ public readonly record struct PointerStationObservation(
 /// claim.</b></param>
 /// <param name="BackgroundHeld">A control point in a margin the painter fills and never draws on
 /// read back EXACTLY the requested fill. Without this leg, "these pixels are not the background" is
-/// satisfied by a window nothing ever painted (SP-110's M-t, and the same remedy).</param>
+/// satisfied by a window nothing ever painted (the M-t mutation, and the same remedy).</param>
 /// <param name="InkedPixels">How many sampled pixels in the disc band differ from the fill.</param>
 /// <param name="SampledPixels">How many were sampled, so a zero can be told from an unread band.</param>
 public readonly record struct PointerTargetObservation(
@@ -174,7 +174,7 @@ public readonly record struct PointerTargetObservation(
         false, 0, false, false, default, false, false, false, 0, (0, 0), 0, 0, false, 0, 0);
 
     /// <summary>The window manager routes a click at this target's own point TO this target.
-    /// <b>The exact inverse of SP-099</b>, asked per target.</summary>
+    /// <b>The exact inverse of the overlay's click-through claim</b>, asked per target.</summary>
     public bool HitTestRoutesHere => Window != 0 && HitTestWinner == Window;
 
     /// <summary>
@@ -214,12 +214,12 @@ public readonly record struct PointerTargetObservation(
 /// operating system whether that is really so.
 ///
 /// <para><b>This is the third thing this port has had to prove about a window, and it is the
-/// hardest.</b> SP-099 proved a surface is click-THROUGH and its review recorded that as the
-/// property most easily faked: a window that does not exist satisfies it too. SP-110 proved the
+/// hardest.</b> The overlay capability proved a surface is click-THROUGH and its review recorded that as the
+/// property most easily faked: a window that does not exist satisfies it too. The input capability proved the
 /// inverse for a keyboard-taking window and found that <c>GetGUIThreadInfo(<i>ourThread</i>)</c>
 /// LIES — it is thread-local and answered "our window has focus" while every injected keystroke
 /// went to another application. <b>This capability must prove a click LANDS on a window that must
-/// NOT take the foreground</b>, so it cannot lean on either of the two facts SP-110's chain leaned
+/// NOT take the foreground</b>, so it cannot lean on either of the two facts that chain leaned
 /// on. Its whole evidence base is the window manager's routing answer plus the foreground
 /// <i>staying where it was</i>.</para>
 ///
@@ -240,10 +240,10 @@ public readonly record struct PointerTargetObservation(
 /// <see cref="MouseActivateRefusals"/> is evidence a fact can read and never an input to
 /// <see cref="CapabilityState.Available"/>.</para>
 ///
-/// <para><b>Keyed from birth, and that is deliberate.</b> Every operation names a target. SP-112
+/// <para><b>Keyed from birth, and that is deliberate.</b> Every operation names a target. An earlier review's
 /// §2.3 F5 found the video and input capabilities are SINGLE-TENANT — neither knows whose clip or
 /// whose card is up — and that every guard against a second consumer had to be written in the
-/// module. SP-109's audio presence solved it with per-module keyed slots. A pointer capability has
+/// module. The audio presence solved it with per-module keyed slots. A pointer capability has
 /// MANY live targets by construction, so it takes the keyed answer at design time rather than at
 /// the second consumer.</para>
 ///

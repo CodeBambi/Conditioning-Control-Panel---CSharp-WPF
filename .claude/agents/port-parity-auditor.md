@@ -25,7 +25,7 @@ Paths are repository-relative; the checkout path differs per machine. You audit 
    ```
    node client/tests/floor/check-floor.mjs
    ```
-   In an ORCHESTRATOR tree, confirm it reports green against the pin in `client/tests/floor/floor.json`. In a LANE tree it will not match the pin, and that is correct: a lane never edits the shared pin, it declares `spine-tasks/<packet>/floor-delta.json`, and the orchestrator sums the deltas at land. There, confirm the observed total equals `pin + declared delta` and that the declared delta matches the tests actually present in the diff. **A lane diff that touches `client/tests/floor/floor.json` at all is a finding.** Then READ the new tests and judge whether they pin the claimed semantics or merely execute the code. A test that passes against a deliberately broken implementation is a finding, not coverage.
+   In an ORCHESTRATOR tree, confirm it reports green against the pin in `client/tests/floor/floor.json`. In a LANE tree it will not match the pin, and that is correct: a lane never edits the shared pin, it reports its count change in its final report, and the orchestrator sums the deltas at land. There, confirm the observed total equals `pin + reported delta` and that the reported delta matches the tests actually present in the diff. **A lane diff that touches `client/tests/floor/floor.json` at all is a finding.** Then READ the new tests and judge whether they pin the claimed semantics or merely execute the code. A test that passes against a deliberately broken implementation is a finding, not coverage.
 
 ## Output contract
 

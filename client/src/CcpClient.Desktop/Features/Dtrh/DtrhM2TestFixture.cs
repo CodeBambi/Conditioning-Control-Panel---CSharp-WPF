@@ -2,15 +2,15 @@ namespace CcpClient.Desktop.Features.Dtrh;
 
 using System.Text.Json;
 
-/// <summary>SP-057: the committed m2test fixture could not be parsed into a
+/// <summary>The committed m2test fixture could not be parsed into a
 /// <see cref="DtrhSlotDocument"/>. Typed + loud — a test clone NEVER falls back to the
-/// live slot document (the SP-052 Run B hazard: a clone of the owner's live profile
+/// live slot document (the Run B hazard: a clone of the owner's live profile
 /// produced confidently-wrong evidence for a non-owner cell).</summary>
 public sealed class DtrhM2TestFixtureException(string message, Exception? inner = null)
     : InvalidOperationException(message, inner);
 
 /// <summary>
-/// SP-057: the DECLARED starting document for <c>--dtrh-m2test</c> (HARNESS-ONLY).
+/// The DECLARED starting document for <c>--dtrh-m2test</c> (HARNESS-ONLY).
 /// Before this seam the test clone deep-copied the LIVE slot document, so evidence
 /// inherited whatever the owner's real profile happened to hold. The clone now starts
 /// from this committed fixture — a verbatim JSON document, reviewable in diff.
@@ -20,7 +20,7 @@ public sealed class DtrhM2TestFixtureException(string message, Exception? inner 
 /// and fixture-origin can never be mistaken for live-profile data (consult b2). Values
 /// stay schema-valid (no unknown ids).
 ///
-/// In-code because the project file is outside SP-057's File Scope (no new
+/// In-code because the project file is outside this packet's File Scope (no new
 /// Content/EmbeddedResource glob possible). "Missing" is therefore compile-impossible;
 /// "malformed" throws <see cref="DtrhM2TestFixtureException"/> and is pinned by unit
 /// test. If a future row moves this to a real file, only <see cref="Load"/>'s default

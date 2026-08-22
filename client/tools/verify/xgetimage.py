@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# CCP greenfield verification harness — tier 2 WSLg/X11 capture (SP-008).
+# CCP greenfield verification harness — tier 2 WSLg/X11 capture.
 # Finds the app's X window by name and captures it via XGetImage (libX11 ctypes) to a BMP.
-# Why: WSLg RAIL windows are invisible to Windows-side GDI capture (SP-007 surprise #3);
+# Why: WSLg RAIL windows are invisible to Windows-side GDI capture;
 # no extra packages (no xdotool/scrot) exist in the WSL2 image. Usage:
 #   python3 xgetimage.py "<window title substring>" <out.bmp>
 import ctypes
@@ -58,10 +58,10 @@ def main():
     crop = None
     if len(sys.argv) >= 7 and sys.argv[3] == "--crop":
         # Window-relative pixel coordinates from the app's layout probe: --crop X Y W H.
-        # Observed on WSLg (SP-008): the probe's PointToScreen output equals the card's
+        # Observed on WSLg: the probe's PointToScreen output equals the card's
         # offset within the X window (window opens at the Avalonia monitor origin, the X
         # window is the client area) — a window-relative crop lands exactly on the card
-        # (966/1464 border pixels, the SP-007 count). X root coordinates are a DIFFERENT
+        # (966/1464 border pixels, the measured count). X root coordinates are a DIFFERENT
         # space (WSLg tiles monitors under one root); never mix them.
         crop = tuple(int(v) for v in sys.argv[3 + 1:3 + 5])
     display = X11.XOpenDisplay(None)

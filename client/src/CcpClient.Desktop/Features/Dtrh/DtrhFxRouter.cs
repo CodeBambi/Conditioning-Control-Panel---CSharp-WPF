@@ -1,7 +1,7 @@
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// The b3 protocol router (SP-025): maps the b3-owned page messages onto the real native
+/// The b3 protocol router: maps the b3-owned page messages onto the real native
 /// effects (<see cref="DtrhNativeEffects"/>) — kept UI-free so unit tests drive it with
 /// recording fakes, never the real backends. The host window owns all window behavior
 /// (payload-state mirror, video window, focus reclaim); this class owns ONLY the

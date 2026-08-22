@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    SP-018 quarantined video-handoff spike host. NOT referenced by client/CcpClient.sln.
+    Quarantined video-handoff spike host. NOT referenced by client/CcpClient.sln.
     Inherits client/Directory.Build.props (single <Version> authority) — nothing else.
     Console host: acceptance is native-decoder-event-verified probe evidence, not a test project.
     Package admission verified on 2026-07-21: LibVLCSharp 3.10.0 + VideoLAN.LibVLC.Windows 3.0.23.1;
     Linux native = distro libvlc via apt (no official Linux nuget exists — verified).
-    Browser layer (Step 3) reuses SP-011-admitted Avalonia.Controls.WebView 12.0.1.
+    Browser layer (Step 3) reuses the WebView-spike-admitted Avalonia.Controls.WebView 12.0.1.
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -16,7 +16,7 @@
     <LangVersion>12.0</LangVersion>
     <RootNamespace>CcpSpike.VideoHandoff</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <!-- NativeControlHost (WebView) needs supportedOS in the Win32 manifest (SP-011 integration consequence). -->
+    <!-- NativeControlHost (WebView) needs supportedOS in the Win32 manifest (WebView spike integration consequence). -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 

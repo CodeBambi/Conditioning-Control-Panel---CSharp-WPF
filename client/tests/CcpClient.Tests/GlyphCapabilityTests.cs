@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-115. What the operating system says about a per-pixel-alpha composite on this machine.
+/// What the operating system says about a per-pixel-alpha composite on this machine.
 ///
 /// <para>Every fact reads a cached real-desktop run (<see cref="GlyphSurfaceObservations"/>) through
 /// <see cref="GlyphWindowProbe"/>, an independent second copy of every P/Invoke the product uses.
@@ -77,7 +77,7 @@ public class GlyphCapabilityTests
         Assert.Equal(machine ? 153 : -1, control.UniformAlphaSurvivedTheRefusal);
 
         Assert.True(control.StyleToggleClearsUniformAlpha == machine,
-            "clearing WS_EX_LAYERED did NOT wipe the uniform alpha, so SP-099's first line does not reproduce "
+            "clearing WS_EX_LAYERED did NOT wipe the uniform alpha, so the recorded first line does not reproduce "
             + "here and the hazard this design avoids is a different one than recorded");
         Assert.Equal(machine, control.ToggleThenPerPixelSucceeds);
         Assert.Equal(-1, control.UniformAlphaAfterToggle);

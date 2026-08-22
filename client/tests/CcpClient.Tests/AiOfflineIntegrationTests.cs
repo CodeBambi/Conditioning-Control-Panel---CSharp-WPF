@@ -6,9 +6,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Offline zero-network integration proof (SP-033 slice c1; contract §11; admission §2
+/// Offline zero-network integration proof (slice c1; contract §11; admission §2
 /// rule 8 / §6 rule 3): with NO provider proven available, the interactive, awareness,
-/// and command-validation paths perform ZERO outbound send attempts — the SP-019
+/// and command-validation paths perform ZERO outbound send attempts — the spike's
 /// send-attempt-counter discipline as a product test. Loopback and cloud classes degrade
 /// independently (§11 rule 4).
 /// </summary>

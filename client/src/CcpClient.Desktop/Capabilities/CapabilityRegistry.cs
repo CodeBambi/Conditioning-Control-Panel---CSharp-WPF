@@ -72,10 +72,10 @@ public sealed class CapabilityRegistry
 }
 
 /// <summary>
-/// Runs every registered probe as an SP-004 owned operation (contract §3) and applies the
+/// Runs every registered probe as an owned operation (contract §3) and applies the
 /// outcome→state mapping — the only bridge across the row-3/row-5 boundary (contract §6):
 /// probe-returned state → applied; Failed → Faulted with the exception class; Cancelled →
-/// stays not-probed. Probe exceptions are trapped once at the SP-004 registry boundary —
+/// stays not-probed. Probe exceptions are trapped once at the registry boundary —
 /// never unhandled here, never Available.
 /// </summary>
 public sealed class CapabilityProbeRunner(AsyncOperationOwner owner, CapabilityRegistry registry)

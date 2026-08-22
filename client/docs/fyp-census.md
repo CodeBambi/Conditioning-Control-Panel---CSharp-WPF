@@ -1,6 +1,6 @@
 # For You Feed — census against the shipping WPF source
 
-**SP-125.** Evidence tree: this repository at `b76856a7` (`feat/crossplatform`), read on 2026-08-21.
+Evidence tree: this repository at `b76856a7` (`feat/crossplatform`), read on 2026-08-21.
 Method: the repeatable inventory rules and source citations stated in this document.
 
 **Verdict: REFUSED, with the inventory below.** Not "too big" — *the wrong shape*. Two of the seven
@@ -114,13 +114,13 @@ pattern of record: `(^|[^A-Za-z])fyp`, case-insensitive.
 All 15 FYP settings properties, and the consent union, are defined in
 `ConditioningControlPanel/Models/AppSettings.cs` — the shipping WPF project's own tree.
 
-**CORRECTED 2026-08-22 (SP-141). What this section said before was false, and it is worth stating why
+**CORRECTED 2026-08-22. What this section said before was false, and it is worth stating why
 rather than just deleting it.** It read: *the settings live in a tree the constitution calls failure
 evidence*, and argued that `ConditioningControlPanel.csproj:52` carried
 `<ProjectReference Include="CCP.Core..." />` so `CCP.Core` was **a compile dependency of the shipping
 WPF product**. **`main` has never had that `ProjectReference`, and has never contained a `CCP.*`
 directory at all.** Both the reference and the relocated `Models/` tree were artifacts of this port
-branch's own undeclared divergence — 1180 files of it, deleted at SP-141 (D326).
+branch's own undeclared divergence — 1180 files of it, deleted on 2026-08-22 (D326).
 
 **So the "real tension with `docs/constitution.md:32`" that §7 D209 was written to resolve did not exist
 in the shipping product.** It was manufactured by the branch the census was measured on, and then
@@ -146,7 +146,7 @@ du -sh                                                             ->  228K
 `{"name":"fyp","disposition":"not-ported","fileCountAtBaseline":8}`. Two independent records agree,
 so this number is not resting on my walk alone.
 
-**It is 8, not 184.** The 184-file tree is `web/goon/`, a different board row. The SP-125 packet's
+**It is 8, not 184.** The 184-file tree is `web/goon/`, a different board row. This packet's
 framing ("3 new files against Goon Game's 25 files plus 184 payload files") is correct that FYP is
 the smaller payload; it is the *code* count that was wrong.
 

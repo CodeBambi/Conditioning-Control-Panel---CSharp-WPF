@@ -6,11 +6,11 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-094: the Tier-2 door in front of Down The Rabbit Hole, proved as a pure function so all
+/// The Tier-2 door in front of Down The Rabbit Hole, proved as a pure function so all
 /// three branches are decidable without a window (the rendered half lives in
 /// <c>PlayPageHeadlessTests</c>).
 ///
-/// <para>THE FAILURE THIS FILE EXISTS TO PREVENT. SP-092 separated "you are not a patron" from
+/// <para>THE FAILURE THIS FILE EXISTS TO PREVENT. The entitlement capability separated "you are not a patron" from
 /// "I could not tell" at the capability. The UI is where that separation dies, because both
 /// look like "no" on a card — and today they are not even equally likely: this build ships
 /// <see cref="UnconfiguredTierSource"/>, so <b>every real user gets the "could not tell"
@@ -228,7 +228,7 @@ public class DtrhGateTests
     [InlineData(99)]
     public async Task AnAuthorityNamingATierThisBuildDoesNotDefine_IsUnavailable_NeverEntitled(int rawTier)
     {
-        // SP-094 closes the hole AT THE SOURCE too (board row: "the entitlement capability can
+        // This packet closes the hole AT THE SOURCE too (board row: "the entitlement capability can
         // be talked into an over-grant by an undefined enum value"). Every other hole in this
         // capability was closed toward REFUSAL; this was the only one leaning toward granting.
         var capability = new HostLoginEntitlement(

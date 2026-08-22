@@ -90,7 +90,7 @@
           </Border>
         </Border>
 
-        <!-- SP-097 — THE FAILURE SURFACE. WPF's is a blocking MessageBox titled "Graded Intake"
+        <!-- THE FAILURE SURFACE. WPF's is a blocking MessageBox titled "Graded Intake"
              reading "Couldn't start Graded Intake:" plus the exception message, with
              MessageBoxImage.Warning (MainWindow/MainWindow.Lab.cs:161-166). The port had none: the
              button called IntakeLaunch.Launch() synchronously, so a throw while preparing the

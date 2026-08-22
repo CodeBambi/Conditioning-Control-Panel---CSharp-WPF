@@ -4,13 +4,13 @@ using CcpClient.Desktop.Video;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-111's synthesised media: a minimal uncompressed 32bpp RIFF/AVI, written in PURE MANAGED CODE
+/// Synthesised media: a minimal uncompressed 32bpp RIFF/AVI, written in PURE MANAGED CODE
 /// with no encoder, no codec and no interop anywhere in it — the video sibling of
 /// <see cref="TestWav"/>.
 ///
 /// <para><b>Why the suite synthesises its own clips.</b> The owner's real media directory
 /// (<c>Z:\CCP Vids</c>) <b>does not exist on this machine and neither does the Z: volume</b>
-/// (SP-111 plan.md §0, Q0). That is a NAMED LIMIT rather than a blocker: every fact in this packet
+/// (plan.md §0, Q0). That is a NAMED LIMIT rather than a blocker: every fact in this packet
 /// runs against media this file produced, and nothing in the packet has ever been run against a real
 /// library clip. A fixture that skipped instead would have hidden the whole capability.</para>
 ///

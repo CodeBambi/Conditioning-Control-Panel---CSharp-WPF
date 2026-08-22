@@ -4,12 +4,12 @@ using CcpClient.Desktop.Features.Dtrh;
 namespace CcpClient.Desktop.Features.Chaos;
 
 /// <summary>
-/// The tunnel surface's capability probe (SP-023 capability-honesty pattern). ONE capability
+/// The tunnel surface's capability probe (the capability-honesty pattern). ONE capability
 /// only — deliberately NO dialog capability (pre-approach consult ruling 3b): a NativeWebDialog
 /// tunnel on Linux could only render the page's black curtain (the page's sole host transport
 /// is window.chrome.webview, absent on WebKitGTK) and the dialog toplevel exposes no
 /// keep-below control, so the below-Topmost contract cannot be honored — an unfalsifiable
-/// surface is not admitted (the SP-054 intake precedent). A green dialog capability row for
+/// surface is not admitted (the intake precedent). A green dialog capability row for
 /// an unadmitted surface is exactly the divergence the capability contract bans.
 /// </summary>
 public static class ChaosTunnelCapabilityProbes
@@ -28,7 +28,7 @@ public static class ChaosTunnelCapabilityProbes
                 "the tunnel page's only host transport is window.chrome.webview "
                 + "(Resources/web/tunnel/main.js:20-21,40) — absent on WebKitGTK; and the "
                 + "NativeWebDialog toplevel exposes no keep-below control, so below-Topmost "
-                + "cannot be honoured (SP-025 b3 Linux-toplevel-z-order precedent). "
+                + "cannot be honoured (the b3 Linux-toplevel-z-order precedent). "
                 + "Linux tunnel surface not admitted."));
         }
 

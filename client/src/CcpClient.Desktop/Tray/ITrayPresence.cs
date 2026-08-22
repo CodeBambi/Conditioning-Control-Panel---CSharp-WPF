@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Tray;
 /// window that has left the taskbar.
 ///
 /// <para><b>The contract that makes this capability worth having.</b> Every method returns a
-/// typed <see cref="CapabilityState"/> (SP-006, <c>runtime-capability-contract.md</c> §1), and
+/// typed <see cref="CapabilityState"/> (<c>runtime-capability-contract.md</c> §1), and
 /// <see cref="CapabilityState.Available"/> is returned ONLY after the platform's tray mechanism
 /// was really invoked and really confirmed the effect. A backend that cannot place an icon
 /// returns <see cref="CapabilityState.Unavailable"/> with a <see cref="TrayReasonCodes"/> code —
@@ -45,7 +45,7 @@ public interface ITrayPresence : IDisposable
     CapabilityState Remove();
 
     /// <summary>
-    /// Installs the menu a right-click on the icon opens (SP-096; WPF builds its equivalent once at
+    /// Installs the menu a right-click on the icon opens (WPF builds its equivalent once at
     /// <c>Services/Notifications/TrayIconService.cs:95-110</c>).
     /// <see cref="CapabilityState.Available"/> means the platform really holds a menu with these
     /// entries — a backend must ask the platform BACK for the menu it just built and compare, the
@@ -57,7 +57,7 @@ public interface ITrayPresence : IDisposable
     /// pointer, which is a headed claim no headless run discharges.</para>
     ///
     /// <para>Independent of <see cref="Place"/> and orderable either way: a menu on no icon is
-    /// unreachable but harmless, and an icon with no menu is exactly the SP-093 shape SP-094
+    /// unreachable but harmless, and an icon with no menu is exactly the shape the port
     /// refused to tuck onto.</para>
     /// </summary>
     CapabilityState SetMenu(TrayMenu menu);

@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-127 — the pin under <c>client/docs/trainer-card-census.md</c>.
+/// The pin under <c>client/docs/trainer-card-census.md</c>.
 ///
 /// <para><b>Why this exists.</b> The port has been wrong about an upstream count five times
 /// (haptic sites 8 → 13 → 14 → 18, For You Feed 3 → 9) and every correction came from WIDENING THE
@@ -27,7 +27,7 @@ namespace CcpClient.Tests;
 /// worktree). Root-not-found, a missing census document, <b>and a missing reference tree</b> are all
 /// hard FAILURES. <see cref="HapticSiteCensusTests"/> and <c>FypCensusTests</c> instead carry an
 /// "unreachable reference tree" branch for a fully-absent <c>ConditioningControlPanel/</c>; this
-/// guard does not, for three independent reasons that all point the same way. (1) The SP-127 packet
+/// guard does not, for three independent reasons that all point the same way. (1) This packet
 /// asked for exactly this: a missing reference tree FAILS rather than skips. (2) That tree is
 /// in-repo, so the branch is unreachable on every real checkout and buys nothing. (3) The branch's
 /// SHAPE — an early return past a filesystem predicate — is a silencing shape that

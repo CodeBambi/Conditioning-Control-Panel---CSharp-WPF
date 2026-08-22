@@ -4,11 +4,11 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-113 trap 2: <b>four surfaces now share one desktop</b>, and the three that landed first have
+/// Trap 2: <b>four surfaces now share one desktop</b>, and the three that landed first have
 /// to survive the fourth.
 ///
-/// <para>The click-through overlay (SP-099/SP-100, five modules draw on it), the Lock Card
-/// (SP-110, which TAKES the foreground and the keyboard), the video surface (SP-111, a layered
+/// <para>The click-through overlay (five modules draw on it), the Lock Card
+/// (which TAKES the foreground and the keyboard), the video surface (a layered
 /// topmost window this process paints and reads back), and now a set of always-on-top windows that
 /// CATCH clicks. <c>Overlay/**</c>, <c>Input/**</c>, <c>Audio/**</c> and <c>Video/**</c> are
 /// byte-identical to base after this packet: they are CONSUMED here, and every reading of them is
@@ -27,9 +27,9 @@ public class PointerCoexistenceTests
     [Fact]
     public void ALLFOURSurfacesReallyReachedTheDesktop_OrEveryReadingBelowIsATestOfNothingHappening()
     {
-        // The positive control, and it is the same role SP-099's middle leg and SP-110's first leg
-        // play: without it, "the overlay still passes clicks through" is equally true of an overlay
-        // that was never presented.
+        // The positive control, and it is the same role the overlay's middle leg and the input
+        // card's first leg play: without it, "the overlay still passes clicks through" is equally
+        // true of an overlay that was never presented.
         var run = PointerSurfaceObservations.Coexistence;
 
         Assert.Equal(run.MachineHasInteractiveDesktop, run.OverlayPresented);
@@ -69,7 +69,7 @@ public class PointerCoexistenceTests
         var run = PointerSurfaceObservations.Coexistence;
 
         // Not "above every window": a pointer target is topmost too and legitimately contests the
-        // band. That is SP-099's own wording and SP-099's own reason.
+        // band. That is the overlay's own wording and the overlay's own reason.
         Assert.Equal(run.MachineHasInteractiveDesktop, run.OverlayBefore.AboveEveryOrdinaryWindow);
         Assert.Equal(run.MachineHasInteractiveDesktop, run.OverlayDuringOpen.AboveEveryOrdinaryWindow);
         Assert.Equal(run.MachineHasInteractiveDesktop, run.OverlayDuringMove.AboveEveryOrdinaryWindow);

@@ -1,6 +1,6 @@
 # Browser-to-native online-video handoff spike — evidence + supported/unsupported matrix
 
-**Date:** 2026-07-21 · **Task:** SP-018 (task-board row "Spike browser-to-native online-video handoff") · **Status:** spike outcome, **matrix PENDING-OWNER ratification** (like every spike row; the board row stays `WIP`)
+**Date:** 2026-07-21 · **Task:** task-board row "Spike browser-to-native online-video handoff" · **Status:** spike outcome, **matrix PENDING-OWNER ratification** (like every spike row; the board row stays `WIP`)
 
 Quarantined spike host: `client/spikes/CcpSpike.VideoHandoff/` (console + Avalonia browser host, NOT in `client/CcpClient.sln`; inherits only `client/Directory.Build.props`). Raw observations are summarized in the evidence below and in the retained platform result files.
 
@@ -14,9 +14,9 @@ Quarantined spike host: `client/spikes/CcpSpike.VideoHandoff/` (console + Avalon
 | **VideoLAN.LibVLC.Windows** | 3.0.23.1 | 2026-04-16 | LGPL-2.1-or-later | bundled libvlc win-x64 | WPF pins 3.0.21 |
 | Linux native | distro `libvlc` 3.0.23-1 via apt (Ubuntu 26.04) | — | LGPL-2.1-or-later | apt (`libvlc5`, `libvlccore9` — already installed) | NO official `VideoLAN.LibVLC.Linux.*` nuget exists (flatcontainer 404 verified 2026-07-21) |
 | FFmpeg.AutoGen (doc-level alternative) | 8.1.0 | 2026-04-28 | license-file (bindings LGPL; natives LGPL/GPL build-dependent) | external FFmpeg builds (no official native nuget) | hand-rolled demux pipeline = spike-overkill vs one-call URL open; recorded, not admitted |
-| `Avalonia.Controls.WebView` (browser layer) | 12.0.1 | SP-011-admitted | MIT | WebView2 (Windows) / WebKitGTK 2.52.3 (WSLg) | reuse, no new admission |
+| `Avalonia.Controls.WebView` (browser layer) | 12.0.1 | spike-admitted | MIT | WebView2 (Windows) / WebKitGTK 2.52.3 (WSLg) | reuse, no new admission |
 
-SP-017's LibVLCSharp rejection does not apply: that was backend-shape-for-AUDIO (per-instance player, no sample mixer); per-instance decode IS the video-handoff shape. LGPL sidecar/relink obligations = SP-010 packaging note, pending-owner.
+The audio spike's LibVLCSharp rejection does not apply: that was backend-shape-for-AUDIO (per-instance player, no sample mixer); per-instance decode IS the video-handoff shape. LGPL sidecar/relink obligations = a packaging note, pending-owner.
 
 **Fixtures (deterministic, committed):** lavfi-generated (`testsrc2` 96x96@10fps 2s + 440Hz sine; license-safe): clip.mp4 (h264+aac, +faststart, SHA-256 `eb14abd6…9fbc`), clip.webm (vp8+vorbis, `5b32afa0…cdfb`), HLS fMP4 v7 (EXT-X-MAP), HLS TS variant, DASH static MPD (SegmentTemplate fMP4). ffmpeg exists on the Windows box but NOT on WSL2 — fixtures generated once and committed so neither platform needs it at runtime.
 
@@ -46,7 +46,7 @@ Pre-declared success thresholds (declared before runs): duration ∈ [1500, 2500
 - **V3 — libvlc native teardown segfaults in this probe shape** (media/player release in ANY order incl. GC-then-release, both version combos, Windows) → spike hard-exits (`_exit`) after flushing line-durable evidence. **Clean teardown is owned by the unified-video row.**
 - **V4 — HLS playlists expose no tracks at playlist level via LibVLCSharp 3.10 parse API** (sub-items absent for media playlists); track evidence for HLS = decoder-format-callback observed chroma/dims (`decoded:I420 96x98` — decoder-proposed dims include H.264 coded-height padding). Codec NAME for HLS not observable through this API (recorded, not faked). DASH parse exposes `h264 96x96` directly. Adaptive demuxers report Time=0 → position-based progression evidence pre-declared.
 - **V5 — signed-token URLs persisted in the WebView2 HTTP cache** (`Cache_Data/data_1`, caught BY the audit on the first browser run). Mitigation: `Cache-Control: no-store` AT THE SOURCE on signed/gated endpoints + signed-embed pages; re-audit GREEN over the entire scratch INCLUDING the profile. Product implication: token-bearing media URLs need no-store at source and/or profile hygiene (owner decision for the host row).
-- **V6 — WebKitGTK InvokeScript works and returns RAW results where WebView2 returns JSON-encoded** (SP-011 L6 said the API exists; this spike is the first empirical exercise — discovery pipeline runs identically on WSLg; both result shapes must be accepted).
+- **V6 — WebKitGTK InvokeScript works and returns RAW results where WebView2 returns JSON-encoded** (spike L6 said the API exists; this spike is the first empirical exercise — discovery pipeline runs identically on WSLg; both result shapes must be accepted).
 - **V7 — WebKitGTK 2.52.3 denies ClearKey EME** (`TypeError`); EME-signaling DETECTION still works (the attempt is observed).
 - **V8 — adaptive demuxer Time/Position reporting is FLAKY ACROSS RUNS** (HLS-TS and DASH: one run maxPos=0.63-0.73, the next maxPos=0.00 with identical frames+end). Progression evidence for those rows is the pre-declared frame-paced wall-clock prong (delivered frames + wall-time-to-end ≥ 1500 ms); Time/Position are reported but never required for adaptive sources.
 
@@ -62,7 +62,7 @@ WPF hands bare URLs straight to libvlc (`VideoService.cs:1341`, `DualMonitorVide
 4. **Codec NAME for HLS not observable** via LibVLCSharp 3.10 parse API (V4); decoder-format dims + frames are the track evidence.
 5. **libvlc teardown crashes in the probe shape** (V3) — clean teardown unproven, owned by the unified-video row; hard-exit is a spike harness choice, not a product pattern.
 6. **Software decode only in the probe** (V1); hw-decode viability with real presentation is the unified-video row's evidence to produce.
-7. **No Wayland claim** (§5.1 untouched); WSLg = X11/XWayland session facts. Linux browser-discovery evidence is WebKitGTK-embedded (never presents visually — SP-011 L4 inherited; discovery/transport unaffected).
+7. **No Wayland claim** (§5.1 untouched); WSLg = X11/XWayland session facts. Linux browser-discovery evidence is WebKitGTK-embedded (never presents visually — spike L4 inherited; discovery/transport unaffected).
 8. **Final matrix ratification, approved-site list, and native decoder SELECTION for the unified-video row are pending-owner** — this doc records a spike outcome, not a product decision.
 9. Signed/cookie/header fixture secrets are per-run random and never logged (audit GREEN); the registry lives in gitignored scratch only.
 10. WebM cannot be an HLS segment (spec); HLS evidence uses h264 fMP4/TS. Public test vectors (e.g. Apple bipbop) unnecessary — owned fixtures covered every row; none fetched.

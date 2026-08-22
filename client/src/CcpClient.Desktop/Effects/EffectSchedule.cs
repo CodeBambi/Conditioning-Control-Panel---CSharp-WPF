@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Effects;
 /// <summary>
 /// One paced effect's interval law, as DATA.
 ///
-/// <para><b>Why this exists (SP-101).</b> WPF paces Flash Images and Subliminals with the same four
+/// <para><b>Why this exists.</b> WPF paces Flash Images and Subliminals with the same four
 /// lines and three different numbers: a base spacing implied by a frequency dial, a uniform variance
 /// band around it, and a floor applied last —
 /// <c>Services/Flash/FlashService.cs:549-555</c> and

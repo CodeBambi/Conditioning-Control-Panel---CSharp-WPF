@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-066 (board row 49 part 1): the vacuous-SHAPE guard. Runs the committed detector
+/// Board row 49 part 1: the vacuous-SHAPE guard. Runs the committed detector
 /// surface (<see cref="VacuousShapeDetector"/>) over both test projects and pins every
 /// site against the committed ledger (<c>client/tests/floor/vacuous-shape-ledger.json</c>).
 /// A NEW unclassified silencing shape fails HERE with file:line; a stale ledger entry
@@ -35,7 +35,7 @@ public class VacuousShapeGuardTests
     {
         var ledgerPath = Path.Combine([FindRepoRoot(), .. LedgerParts]);
         Assert.True(File.Exists(ledgerPath),
-            $"vacuous-shape ledger not found at {ledgerPath} — the guard refuses to skip (SP-066)");
+            $"vacuous-shape ledger not found at {ledgerPath} — the guard refuses to skip");
 
         List<LedgerEntry> entries;
         using (var doc = JsonDocument.Parse(File.ReadAllText(ledgerPath)))
@@ -66,7 +66,7 @@ public class VacuousShapeGuardTests
             {
                 violations.Add($"{site.Path}:{site.Line}: {site.Key} carries silencing shape(s) " +
                     $"[{string.Join(", ", site.Shapes)}] with NO ledger entry — disposition it in " +
-                    "client/tests/floor/vacuous-shape-ledger.json (SP-066: a silenced assertion must never pass silently again)");
+                    "client/tests/floor/vacuous-shape-ledger.json (a silenced assertion must never pass silently again)");
                 continue;
             }
 
@@ -74,7 +74,7 @@ public class VacuousShapeGuardTests
             {
                 violations.Add($"{site.Path}:{site.Line}: {site.Key} is ledgered expectDetected=false ({entry.Verdict}) " +
                     $"but the detector sees it with shape(s) [{string.Join(", ", site.Shapes)}] — a mitigated or deleted " +
-                    "site reappeared; either restore the mitigation or re-disposition the entry (SP-066 resurrection guard)");
+                    "site reappeared; either restore the mitigation or re-disposition the entry (resurrection guard)");
                 continue;
             }
 
@@ -92,7 +92,7 @@ public class VacuousShapeGuardTests
             if (entry.ExpectDetected && !detectedByKey.ContainsKey(entry.Key))
             {
                 violations.Add($"vacuous-shape-ledger.json: stale entry {entry.Key} ({entry.Verdict}) is no longer detected — " +
-                    "the test was renamed, deleted, or its shapes resolved; update or re-disposition the entry (SP-066)");
+                    "the test was renamed, deleted, or its shapes resolved; update or re-disposition the entry");
             }
         }
 

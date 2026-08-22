@@ -2,15 +2,15 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="CcpClient.Desktop.Features.AvatarTube.AvatarTubeDemonstratorWindow"
         Width="320" Height="380"
-        Title="AvatarTube DEMONSTRATOR (SP-015)"
+        Title="AvatarTube DEMONSTRATOR"
         Background="#FF141018"
         CanResize="False"
         ShowInTaskbar="False"
         WindowStartupLocation="Manual">
   <StackPanel Margin="10">
-    <!-- Explicit DEMONSTRATOR label (SP-007/SP-013 pattern): really-functioning, superseded
+    <!-- Explicit DEMONSTRATOR label (the demonstrator pattern): really-functioning, superseded
          by the first real AvatarTube feature, owner may async-veto. -->
-    <TextBlock Text="AvatarTube DEMONSTRATOR (SP-015) — synthetic packs, not a product feature; the first real AvatarTube supersedes it."
+    <TextBlock Text="AvatarTube DEMONSTRATOR — synthetic packs, not a product feature; the first real AvatarTube supersedes it."
                FontSize="10" Opacity="0.7" TextWrapping="Wrap" Foreground="#FFE8E0EE" />
 
     <!-- The tube: two crossfade layers at natural size (crisp strip; nearest-neighbor),

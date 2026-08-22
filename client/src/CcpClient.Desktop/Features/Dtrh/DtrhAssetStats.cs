@@ -26,8 +26,8 @@ public sealed class DtrhAssetStat
 }
 
 /// <summary>The cumulative per-asset engagement document (b4): name → stat row. WPF writes
-/// a bare dictionary (DtrhAssetStatsStore.cs:88-113); the greenfield wraps it in the SP-005
-/// envelope (schema/journal) — no WPF back-compat need (no legacy installs, SP-024).
+/// a bare dictionary (DtrhAssetStatsStore.cs:88-113); the greenfield wraps it in the persistence
+/// envelope (schema/journal) — no WPF back-compat need (no legacy installs).
 /// Names are case-insensitive (they are filenames; WPF rebuilds the comparer on load,
 /// DtrhAssetStatsStore.cs:46-55).</summary>
 public sealed class DtrhAssetStatsDocument
@@ -46,7 +46,7 @@ public sealed class DtrhAssetStatsDocument
 /// chaosRun.js:487-492) and the host SUMS them into the app-global store so the
 /// favorites ranking can bias future draws (hostMedia.js setFavorites). Semantics ported
 /// from WPF DtrhAssetStatsStore.cs: name ≤260 chars, every delta max(0,·) (:60-80),
-/// persist on each merge (:88-113 — WPF writes each merge too; here the SP-005 enqueue),
+/// persist on each merge (:88-113 — WPF writes each merge too; here the persistence enqueue),
 /// case-insensitive names (:46-55), TopAssets ranking weighted + grabs*8 + pops*2
 /// (:96-110). Purely additive telemetry with no gameplay authority — safe to lose.
 /// Media-logging rule (packet honesty framing c): merges log PRESENCE+SHAPE only
@@ -135,7 +135,7 @@ public sealed class DtrhAssetStats
 
             if (touched > 0)
             {
-                _ = _store.Save(); // WPF persists on each merge (:88-113); SP-005 serializes the write
+                _ = _store.Save(); // WPF persists on each merge (:88-113); the store serializes the write
                 _log($"dtrh-meta: asset-stats merged ({touched} row(s))");
             }
 

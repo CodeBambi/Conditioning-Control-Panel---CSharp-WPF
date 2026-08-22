@@ -17,7 +17,7 @@ public static class Program
     {
         // Diagnostic self-check (asset-manifest.md §--verify-assets self-check contract):
         // a bounded path BEFORE any phase — no window, no lifetime, no participants, no
-        // startup side effects (SP-003 phase discipline). The normal path below is
+        // startup side effects (phase discipline). The normal path below is
         // byte-identical to before this flag existed.
         if (args.Contains(AssetSelfCheck.Flag, StringComparer.Ordinal))
         {
@@ -31,7 +31,7 @@ public static class Program
             return VersionSelfCheck.Run(typeof(Program).Assembly, Console.Out);
         }
 
-        // SP-015 bounded diagnostics (same discipline: pre-phase, no window, no participants).
+        // Bounded diagnostics (same discipline: pre-phase, no window, no participants).
         // --generate-avatar-packs <dir>: deterministic synthetic pack regeneration.
         if (args.Contains(Features.AvatarTube.AvatarEvidence.GenerateFlag, StringComparer.Ordinal))
         {
@@ -85,7 +85,7 @@ public static class Program
         ILogSink log = new DebugLogSink();
         InstallPanicHooks(log);
 
-        // SP-057 HARNESS-ONLY profile isolation seam: validate CCP_DATA_ROOT pre-phase so a
+        // HARNESS-ONLY profile isolation seam: validate CCP_DATA_ROOT pre-phase so a
         // bad override fails HERE (bounded, exit 1) instead of mid-composition — and NEVER
         // falls back to the real profile (framing d). The active override is logged once
         // (the harness's own path; the real profile path is never newly logged) — the line
@@ -104,10 +104,10 @@ public static class Program
                 return 1;
             }
 
-            log.Log($"data-root override active: {CompositionRoot.DataRootOverrideVariable} -> {resolved} (HARNESS-ONLY isolation seam, SP-057)");
+            log.Log($"data-root override active: {CompositionRoot.DataRootOverrideVariable} -> {resolved} (HARNESS-ONLY isolation seam)");
         }
 
-        // SP-064: HARNESS-ONLY entry points REFUSE to run unsealed. The SP-057 seam only
+        // HARNESS-ONLY entry points REFUSE to run unsealed. The isolation seam only
         // isolates when someone remembers to set it; for flags whose only purpose is
         // automated evidence capture / failure injection, forgetting must fail loudly HERE
         // — before the composition root, a window, or any profile write. Everything before
@@ -125,7 +125,7 @@ public static class Program
             }
         }
 
-        // SP-027 slice b5 HARNESS-ONLY failure injection (parsed EARLY — the blocked-route
+        // Slice b5 HARNESS-ONLY failure injection (parsed EARLY — the blocked-route
         // prefix threads into the composition root below; the kill flag rides into App):
         // --dtrh-kill-renderers kills the profile-matched WebView2 children once the
         // engine is live (and again on the relaunched instance → exhaustion);
@@ -133,7 +133,7 @@ public static class Program
         var dtrhKillRenderers = args.Contains("--dtrh-kill-renderers", StringComparer.Ordinal);
         var dtrhBlockRoute = ArgValue(args, "--dtrh-block-route");
 
-        // SP-046 c7 product config seam: --ai-ollama-host <url> points the companion's
+        // The c7 product config seam: --ai-ollama-host <url> points the companion's
         // loopback provider at a specific host (headed-evidence lab, alternate local port).
         // Loopback-only boundary: a non-loopback host classifies remote and is rejected
         // pre-socket (admission policy + provider defense in depth) — the flag can NEVER
@@ -169,22 +169,22 @@ public static class Program
                 return 0;
         }
 
-        // --popup-demo (SP-013 WSLg evidence): opens the demonstrator popup at startup.
-        // WSLg has no input automation (SP-008 named limit) — the popup cannot be
+        // --popup-demo (WSLg evidence): opens the demonstrator popup at startup.
+        // WSLg has no input automation (a named limit) — the popup cannot be
         // left-clicked there, so it must open itself; probe facts go to stderr.
         var popupDemo = args.Contains("--popup-demo", StringComparer.Ordinal);
 
-        // SP-015 demonstrator flags: open the AvatarTube tube at startup (same WSLg
+        // Demonstrator flags: open the AvatarTube tube at startup (same WSLg
         // no-input-automation reasoning), corrupt the pulse pack in-memory (typed
         // undecodable-asset path evidence), and/or mirror the engine trace to a JSONL file.
         var avatarDemo = args.Contains("--avatartube-demo", StringComparer.Ordinal);
         var avatarCorrupt = args.Contains("--avatar-corrupt-demo", StringComparer.Ordinal);
-        // WSLg has no input automation (SP-008 limit): the demo can open already animated.
+        // WSLg has no input automation (a named limit): the demo can open already animated.
         var avatarAnimate = args.Contains("--avatar-animate", StringComparer.Ordinal);
         var avatarTrace = ArgValue(args, "--avatar-trace");
 
-        // SP-023 DTRH host slice b1: --dtrh-demo [page] opens the DTRH flow at startup
-        // (same WSLg no-input-automation reasoning). b2 (SP-024): the default path opens
+        // DTRH host slice b1: --dtrh-demo [page] opens the DTRH flow at startup
+        // (same WSLg no-input-automation reasoning). b2: the default path opens
         // the save picker first (hero-card outcome); --dtrh-quick skips it (Quick Start
         // outcome). --dtrh-picker-timeout <seconds> auto-commits the picker's current
         // selection (timed drive for no-input platforms — never an input claim).
@@ -199,16 +199,16 @@ public static class Program
         var dtrhAutoClose = int.TryParse(ArgValue(args, "--dtrh-auto-close"), out var closeSeconds)
             ? closeSeconds
             : 0;
-        // SP-025 slice b3: --dtrh-fx-drive "<steps>" — HARNESS-ONLY timed injection of raw
+        // Slice b3: --dtrh-fx-drive "<steps>" — HARNESS-ONLY timed injection of raw
         // page JSON through the real dispatch path (headed/WX native-effects evidence
         // without gameplay; runs are b4-gated).
         var dtrhFxDrive = ArgValue(args, "--dtrh-fx-drive");
-        // SP-026 slice b4: --dtrh-m2test — HARNESS-ONLY meta test mode (init m2Test:true +
+        // Slice b4: --dtrh-m2test — HARNESS-ONLY meta test mode (init m2Test:true +
         // in-memory clone; the payload's m2test.js drives the full meta vocabulary +
         // payout round-trip page-originated; the real save is never touched).
         var dtrhM2Test = args.Contains("--dtrh-m2test", StringComparer.Ordinal);
 
-        // SP-049 THE LOOM studio (--loom-demo): the v6.6.3 standalone studio window at
+        // THE LOOM studio (--loom-demo): the v6.6.3 standalone studio window at
         // startup (the --dtrh-demo demonstrator class — the greenfield dashboard has no
         // Spiral Overlay card yet; typed named limit, record.md Step 1). --loom-drive
         // "<steps>" is HARNESS-ONLY (scripted pointer through the engine's own
@@ -220,13 +220,13 @@ public static class Program
             ? loomCloseSeconds
             : 0;
 
-        // SP-054 Graded Intake host (--intake-demo): the demonstrator class (the
+        // Graded Intake host (--intake-demo): the demonstrator class (the
         // --loom-demo precedent; the dashboard flip-tile/nudge is the BLOCKED inventory's
         // item — flagged scope expansion, record.md glue bundle). --intake-drive "<steps>"
         // is HARNESS-ONLY (raw page JSON through the real dispatch path: quiz-result /
         // intake-close / fullscreen-set / exit / loom-file). --intake-kill-renderers arms
         // the W17 watchdog-relaunch injection on the intake profile. --intake-auto-close
-        // <seconds> closes on a timer (SP-008 no-input exit evidence).
+        // <seconds> closes on a timer (no-input exit evidence).
         var intakeDemo = args.Contains("--intake-demo", StringComparer.Ordinal);
         var intakeDrive = ArgValue(args, "--intake-drive");
         var intakeKillRenderers = args.Contains("--intake-kill-renderers", StringComparer.Ordinal);
@@ -234,8 +234,8 @@ public static class Program
             ? intakeCloseSeconds
             : 0;
 
-        // SP-132 Goon practice DEMONSTRATOR (--goon-demo): opens the practice host at startup
-        // (the --intake-demo shape verbatim). THE PARSE LIVES HERE ON PURPOSE. SP-130 was granted
+        // Goon practice DEMONSTRATOR (--goon-demo): opens the practice host at startup
+        // (the --intake-demo shape verbatim). THE PARSE LIVES HERE ON PURPOSE. An earlier packet was granted
         // this flag and refused to build it, because a flag added to App.axaml.cs alone would be
         // a dial nothing can turn (D259) — nothing mechanically requires the literal to sit in
         // this file rather than that one, and the version that passes every test while doing
@@ -248,12 +248,12 @@ public static class Program
         // would be a HARNESS entry point rather than a Demo one.
         var goonDemo = args.Contains("--goon-demo", StringComparer.Ordinal);
 
-        // SP-061 Chaos tunnel backdrop DEMONSTRATOR (--tunnel-demo): the opaque
+        // Chaos tunnel backdrop DEMONSTRATOR (--tunnel-demo): the opaque
         // below-Topmost surface at startup (the --loom-demo demonstrator class; no
         // dashboard entry point exists — typed named limit). --tunnel-drive "<steps>" is
         // HARNESS-ONLY (timed steps: topmost-show/topmost-hide over the REAL DtrhVideoWindow
         // Topmost surface, tunnel-close/tunnel-show cycles, finish). --tunnel-auto-close
-        // <seconds> closes on a timer (SP-008 no-input exit evidence).
+        // <seconds> closes on a timer (no-input exit evidence).
         var tunnelDemo = args.Contains("--tunnel-demo", StringComparer.Ordinal);
         var tunnelDrive = ArgValue(args, "--tunnel-drive");
         var tunnelAutoClose = int.TryParse(ArgValue(args, "--tunnel-auto-close"), out var tunnelCloseSeconds)

@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-106 — how a MOVING effect reaches a surface, and how it keeps changing once it is there.
+/// How a MOVING effect reaches a surface, and how it keeps changing once it is there.
 ///
 /// <para>The FOURTH consumer of the overlay capability and of <see cref="OverlaySurfaceSet"/>, and
 /// the first one that has to keep working after the placement succeeded. Flash Images places up to
@@ -139,7 +139,7 @@ public class SpiralSurfacePresenterTests
         rig.Presenter.Engage(SpiralPath, Dial);
 
         // Two, and only two. A THIRD would be a per-surface lifetime, which a layer that is up
-        // until the session ends must not have (SP-105's nullable lifetime); a lifetime of "four
+        // until the session ends must not have (the static module's nullable lifetime); a lifetime of "four
         // hours" is a timer that exists, that a stop has to cancel, and that fires in a session
         // nobody meant it to reach.
         Assert.Equal(2, rig.Clock.PendingCount);
@@ -244,7 +244,7 @@ public class SpiralSurfacePresenterTests
         // clause is "I still hold an advance handle", not "a callback will really arrive".
         //
         // That is exactly the grade of evidence PacedSessionEffect.ScheduleArmed has carried since
-        // SP-098 (it, too, is a held one-shot), and ISessionClock exposes nothing to ask. What
+        // the session spine (it, too, is a held one-shot), and ISessionClock exposes nothing to ask. What
         // COVERS the real failure is the behavioural fact above,
         // Running_GoesFalseWhileTheDecoderCannotProduceTheNextFrame_…, which sees the picture stop
         // rather than the timer vanish. Written down here so nobody reads Running as stronger than
@@ -603,7 +603,7 @@ public class SpiralSurfacePresenterTests
         public void Dispose() => _current = null;
     }
 
-    /// <summary>The manual clock, SP-098's shape, plus one thing a moving module needs: the ability
+    /// <summary>The manual clock, the session spine's shape, plus one thing a moving module needs: the ability
     /// to make every pending timer vanish without touching anything else, which is how the
     /// "the frames stopped arriving" state is reached deliberately. Zero wall-clock.</summary>
     private sealed class ManualClock : ISessionClock

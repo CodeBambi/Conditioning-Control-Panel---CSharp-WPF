@@ -27,20 +27,20 @@ public interface IFlashSurface
 
     /// <summary>
     /// The last thing the OS said when this surface tried to place something, verbatim, or null
-    /// before anything has been attempted (SP-101).
+    /// before anything has been attempted.
     ///
     /// <para>It is on the INTERFACE because the Studio module panel has to tell the user where their
     /// flashes are going, and the only honest answer is the one the surface itself last got: an
     /// <see cref="CapabilityState.Available"/> on a Windows build with an overlay, and a typed
     /// refusal carrying its reason code and manual gate everywhere the overlay is absent. The panel
     /// used to assert the platform instead, and asserting a platform is exactly how it came to be
-    /// telling Windows users something false (SP-100's own closing note).</para>
+    /// telling Windows users something false (the record's own closing note).</para>
     /// </summary>
     CapabilityState? LastPlacement { get; }
 }
 
 /// <summary>
-/// The consumer SP-099 was built for: Flash Images, drawn on real overlay surfaces.
+/// The consumer the overlay capability was built for: Flash Images, drawn on real overlay surfaces.
 ///
 /// <para><b>One surface per image, as WPF spawns one window per image</b>
 /// (<c>FlashService.cs:1110-1140</c>), staggered by <see cref="StaggerMilliseconds"/>
@@ -50,22 +50,22 @@ public interface IFlashSurface
 /// exists upstream for the per-flash layered-window path — the exact path this uses.</para>
 ///
 /// <para><b>Topmost is re-asserted on a cadence</b>, because the band is contested and the port
-/// measured a contender on the developer's own desktop (SP-100 record §1: the window that owned the
+/// measured a contender on the developer's own desktop (the packet record §1: the window that owned the
 /// point was the shipping WPF product). WPF re-raises every live flash window about once a second
 /// (<c>:206-243</c>); so does this, through the injected clock, for exactly as long as a surface is
 /// up — never on a wall clock, and never when nothing is showing.</para>
 ///
-/// <para><b>SP-101: what moved out.</b> The slot pool, the present-then-paint sequence, the
+/// <para><b>What moved out.</b> The slot pool, the present-then-paint sequence, the
 /// withdraw-on-failed-paint rule, the verbatim outcome bookkeeping, the no-display refusal and the
 /// cadence are now <see cref="OverlaySurfaceSet"/>, shared with the Subliminals card. What stays
 /// here is what is genuinely a FLASH: the stagger, the placement roll, the geometry and the
 /// constants. Not one call to the overlay changed order.</para>
 ///
-/// <para><b>SP-117: three of those constants became DIALS.</b> The size, the opacity and the
+/// <para><b>Three of those constants became DIALS.</b> The size, the opacity and the
 /// duration are the Visuals row's three sliders (<see cref="VisualsDials"/>), and this presenter
 /// pulls a <see cref="FlashDraw"/> reading for each flash instead of reading four fixed numbers.
 /// The constants below stay, unchanged in value, as the DEFAULTS a build with no document draws
-/// with — which is what every flash between SP-100 and SP-117 drew with. The reading is taken ONCE
+/// with — which is what every flash drew with before the dials existed. The reading is taken ONCE
 /// per <see cref="Show"/>, never per surface, because upstream takes it once per flash
 /// (<c>FlashService.cs:1028-1034</c>, <c>:655-656</c>) and this presenter staggers a flash's
 /// surfaces across 300 ms each.</para>
@@ -81,7 +81,7 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     public const int StaggerMilliseconds = 300;
 
     /// <summary>WPF's <c>FlashDuration</c> DEFAULT, in seconds
-    /// (<c>CCP.Core/Models/AppSettings.cs:925-930</c>). Since SP-117 the dial itself is ported
+    /// (<c>CCP.Core/Models/AppSettings.cs:925-930</c>). The dial itself is now ported
     /// (<see cref="VisualsDials"/>) and this is what a build with no document draws with.</summary>
     public const int FlashDurationSeconds = VisualsPresetDocument.DefaultFlashDurationSeconds;
 
@@ -123,10 +123,10 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
     /// <param name="frames">Turns a path into pixels.</param>
     /// <param name="display">Where surfaces may go; null when the OS reports no display.</param>
     /// <param name="random">Placement rolls.</param>
-    /// <param name="draw">The Visuals row's three dials, read once per flash (SP-117). Null means
+    /// <param name="draw">The Visuals row's three dials, read once per flash. Null means
     /// <see cref="FlashDraw.Defaults"/> — WPF's shipped numbers, which is what this presenter drew
     /// with before the dials existed.</param>
-    /// <param name="haptics">SP-126: the haptic limb, told once per PLACED IMAGE. Null is ABSENT
+    /// <param name="haptics">The haptic limb, told once per PLACED IMAGE. Null is ABSENT
     /// rather than silent — a build with no limb never reaches the sink at all, and the difference
     /// between "no limb here" and "the limb decided nothing" must stay legible.</param>
     public FlashSurfacePresenter(
@@ -302,11 +302,11 @@ public sealed class FlashSurfacePresenter : IFlashSurface, IDisposable
         // Click-through, which is WPF's WS_EX_TRANSPARENT arm (:3668). WPF's other arm exists to
         // serve pop / hydra / XP mechanics this port does not have, and a surface that catches
         // clicks it does nothing with would swallow the user's input — the exact desktop-breaking
-        // failure OverlayInputNotPassingThrough exists to refuse (SP-100 divergence).
+        // failure OverlayInputNotPassingThrough exists to refuse (a recorded divergence).
         var request = new OverlaySurfaceRequest(placement, draw.Opacity, ClickThrough: true);
         _surfaces.Place(slot, request, frame, draw.Lifetime);
 
-        // SP-126, census sites 1-3. WPF fires FlashDecayVibeAsync() from all THREE of
+        // Haptic census sites 1-3. WPF fires FlashDecayVibeAsync() from all THREE of
         // SpawnFlashWindow's mutually exclusive spawn arms (FlashService.cs:1453, :1480, :1516) —
         // one ladder per WINDOW, not one per flash — and each call replaces the ladder already
         // running (HapticService.cs:774-776). AFTER the placement, because upstream's arms fire

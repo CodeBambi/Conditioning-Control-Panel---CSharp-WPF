@@ -5,8 +5,8 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-110. <b>This is the exact inverse of SP-099, and the trap is the same one facing the other
-/// way.</b> That packet proved a surface is click-THROUGH, and its final review recorded that
+/// <b>This is the exact inverse of the overlay packet, and the trap is the same one facing the
+/// other way.</b> That packet proved a surface is click-THROUGH, and its final review recorded that
 /// "input passes through" is the property most easily faked — a window that does not exist satisfies
 /// it too. Proving input is CAPTURED is faked just as cheaply, and in more ways: a handler was
 /// attached, <c>WS_EX_TRANSPARENT</c> was not set, <c>SetForegroundWindow</c> returned, a focus API
@@ -73,11 +73,11 @@ public class InputCapabilityTests
         // as long as it lives, whatever the desktop is doing. Meanwhile the foreground, and every
         // keystroke, belong to the catcher on the first thread.
         //
-        // Measured in exactly this shape before any product code was written (SP-110 plan.md §0,
+        // Measured in exactly this shape before any product code was written (this packet's plan.md §0,
         // run 1): SetForegroundWindow returned FALSE, zero injected keystrokes arrived, and
         // GetGUIThreadInfo(ourThread).hwndFocus still answered "our window". A capability built on
-        // that read would be an OS API, correctly called, certifying nothing — the inverse-SP-099
-        // fake this whole packet exists to avoid.
+        // that read would be an OS API, correctly called, certifying nothing — the inverse of the
+        // overlay packet's own fake, which this whole packet exists to avoid.
         var control = InputWindowProbe.RunNegativeControl();
 
         Assert.Equal(InputWindowProbe.MachineHasInteractiveDesktop, control.ParkedWindowCreated);
@@ -98,7 +98,7 @@ public class InputCapabilityTests
     [Fact]
     public void THENEGATIVECONTROLIsIDEMPOTENT_BecauseASecondCallInOneProcessUsedToDestroyItsOwnTrap()
     {
-        // SP-112 found this by landing a module that changed nothing in this file and reddened it
+        // This was found by landing a module that changed nothing in this file and reddened it
         // anyway: adding test classes moved this class's cases in xunit's within-class order, and
         // the ORDER is the determinant. RunNegativeControl was not idempotent — the SECOND call in
         // a process reported ThreadLocalFocusClaimsTheParkedWindow = FALSE.
@@ -168,7 +168,7 @@ public class InputCapabilityTests
         Assert.True(run.OsSaysCardIsForeground == run.MachineHasInteractiveDesktop,
             $"GetForegroundWindow() answers {run.ForegroundWinner}, not the card 0x{run.Window:X}. The foreground is "
             + "LENT by the operating system and it can refuse: a plain SetForegroundWindow from a non-foreground "
-            + "process was measured returning FALSE with every keystroke going elsewhere (SP-110 plan.md §0). "
+            + "process was measured returning FALSE with every keystroke going elsewhere (this packet's plan.md §0). "
             + "Presence said: " + InputCaptureObservations.Describe(run.PromptState));
         Assert.True(run.OsSaysSystemFocusIsCard == run.MachineHasInteractiveDesktop,
             $"GetGUIThreadInfo(0).hwndFocus is not the card 0x{run.Window:X}: the OS is routing the keyboard "
@@ -184,10 +184,10 @@ public class InputCapabilityTests
     [Fact]
     public void TheWindowManagerRoutesAPointInsideThePrompt_ToThePrompt()
     {
-        // SP-099's fact with the sign flipped. There it was "the point must NOT be the surface";
+        // The overlay's fact with the sign flipped. There it was "the point must NOT be the surface";
         // here it must BE the card. The same instrument answers both, which is what makes the pair
         // meaningful: an oracle that always answered "the top window" would pass this and fail
-        // SP-099's, and one that never did would fail this and pass that.
+        // the overlay's, and one that never did would fail this and pass that.
         var run = InputCaptureObservations.Lifecycle;
 
         Assert.True((run.HitTestWinnerWhilePrompting == run.Window && run.Window != 0)
@@ -229,7 +229,7 @@ public class InputCapabilityTests
     [Fact]
     public void TheOperatingSystemHoldsInkForThePromptsOwnClientArea()
     {
-        // The content link, and it is the same grade of evidence as SP-100's overlay read-back: the
+        // The content link, and it is the same grade of evidence as the overlay read-back: the
         // pixels are read back OUT of the window's device context, not counted in the buffer that
         // was written. A card that is focused and blank is a question the user cannot read.
         var run = InputCaptureObservations.Lifecycle;
@@ -325,8 +325,8 @@ public class InputCapabilityTests
     public void AnObservationThatWasNeverAsked_IsNotConfirmed_WhateverItsOtherFieldsSay()
     {
         // The Asked clause exists so a build with no mechanism cannot produce a confirmation out of
-        // a record full of defaults. SP-109 found the same hole by mutation (M-c) and closed it the
-        // same way; both observations here carry it and both are pinned.
+        // a record full of defaults. An earlier packet found the same hole by mutation (M-c) and
+        // closed it the same way; both observations here carry it and both are pinned.
         var neverAsked = InputCaptureObservation.NotAsked with
         {
             WindowExists = true,

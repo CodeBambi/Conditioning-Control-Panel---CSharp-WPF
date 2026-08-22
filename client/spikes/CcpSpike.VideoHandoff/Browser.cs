@@ -7,8 +7,8 @@ using Avalonia.Threading;
 namespace CcpSpike.VideoHandoff;
 
 /// <summary>
-/// Windows browser→native handoff layer (Step 3). SP-011-pattern Avalonia host with the
-/// SP-011-admitted Avalonia.Controls.WebView 12.0.1 (WebView2 on Windows). Per matrix row:
+/// Windows browser→native handoff layer (Step 3). WebView-spike-pattern Avalonia host with the
+/// spike-admitted Avalonia.Controls.WebView 12.0.1 (WebView2 on Windows). Per matrix row:
 /// page-side DISCOVERY (InvokeScript on the live DOM) → TRANSFER to the native decoder →
 /// decode-event-verified playback or a typed limitation. Presentation stays out of scope.
 /// </summary>
@@ -77,7 +77,7 @@ public sealed class BrowserWindow : Window
     public BrowserWindow(Lab lab, string scratch)
     {
         _lab = lab;
-        Title = "SP-018 video handoff spike";
+        Title = "video handoff spike";
         Width = 900; Height = 640;
         _web = new NativeWebView();
         Content = _web;

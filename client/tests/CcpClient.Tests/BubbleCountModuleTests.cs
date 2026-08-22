@@ -10,7 +10,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-112 — Bubble Count: the first module that consumes capabilities it did not shape, and the
+/// Bubble Count: the first module that consumes capabilities it did not shape, and the
 /// first that consumes TWO of them in one firing.
 ///
 /// <para>Nothing here touches a desktop, a decoder or a file: the surface and the input presence are
@@ -496,7 +496,7 @@ public class BubbleCountModuleTests
 
         var state = Assert.IsType<CapabilityState.Unavailable>(rig.Effect.Arm());
 
-        // SP-111's rule after SP-109 shipped its opposite once: where both causes are true, BOTH
+        // The established rule, after its opposite shipped once: where both causes are true, BOTH
         // travel. The CODE is the video one because the game cannot even begin without a picture.
         Assert.Equal(EffectReasonCodes.VideoSurfaceUnavailable, state.Reason.Code);
         Assert.Contains("reach a display", state.Reason.Detail, StringComparison.Ordinal);
@@ -568,7 +568,7 @@ public class BubbleCountModuleTests
         rig.Presence.CanReachAUser = true;
         Assert.Equal(EffectDotState.Live, rig.Effect.Dot);
 
-        // Clause 4 — MOTION (SP-111's seventh meaning), while THIS module's clip is up.
+        // Clause 4 — MOTION (the dot's seventh meaning), while THIS module's clip is up.
         rig.Clock.AdvanceToNextDue();
         Assert.True(rig.Effect.Playing);
         rig.Surface.Running = false;
@@ -576,7 +576,7 @@ public class BubbleCountModuleTests
         rig.Surface.Running = true;
         Assert.Equal(EffectDotState.Live, rig.Effect.Dot);
 
-        // Clause 5 — DEMAND (SP-110's sixth meaning), while THIS module's question is up. The clip
+        // Clause 5 — DEMAND (the dot's sixth meaning), while THIS module's question is up. The clip
         // has to have really shown bubbles first: a clip that showed none is abandoned and never
         // asked about, which is its own fact below.
         rig.Surface.PaintFrames(TimeSpan.FromSeconds(12), TimeSpan.FromMilliseconds(100));
@@ -642,7 +642,7 @@ public class BubbleCountModuleTests
         Assert.Equal(1, started!.Value.Ordinal);
         Assert.Equal(BubbleCountDifficulty.Hard, started.Value.Difficulty);
 
-        // THE PAINTER REALLY REACHES THE CAPABILITY. This is the seam SP-112 added, and without it
+        // THE PAINTER REALLY REACHES THE CAPABILITY. This is the seam this packet added, and without it
         // the clip would play with nothing on it to count.
         var painter = Assert.IsType<BubbleCountRun>(rig.Surface.LastPainter);
         Assert.Equal(BubbleCountDifficulty.Hard, painter.Difficulty);
@@ -792,7 +792,7 @@ public class BubbleCountModuleTests
     {
         // Found by the mutation sweep: the identity guard had no fact, because the double stops
         // feeding the callback the moment it is dismissed. The OS does not: it delivers what was
-        // already in its queue, and SP-110 found the same hazard from the other side - a stale
+        // already in its queue, and the Lock Card found the same hazard from the other side - a stale
         // keystroke applied to a finished attempt would count a guess nobody made.
         using var rig = new Rig();
         rig.Pool.Clips.Add("only.mp4");
@@ -880,7 +880,7 @@ public class BubbleCountModuleTests
         rig.Surface.PaintFrames(TimeSpan.FromSeconds(12), TimeSpan.FromMilliseconds(100));
 
         // DEGRADED, which is the case that traps a user: the OS gave the card the keyboard and only
-        // the ink read-back said no, so the window is still up. SP-110's load-bearing dismiss.
+        // the ink read-back said no, so the window is still up. The Lock Card's load-bearing dismiss.
         rig.Presence.NextPromptOutcome = new CapabilityState.Degraded(
             "the OS gave it the keyboard",
             new CapabilityReason(InputReasonCodes.InputPromptNotInked, "and nothing legible reached it"));
@@ -1165,15 +1165,15 @@ public class BubbleCountModuleTests
     }
 
     // ---------------------------------------------------------------------------------------
-    //  THE SHARED PLACEMENT — SP-101's finding, arriving a second time
+    //  THE SHARED PLACEMENT — an earlier finding, arriving a second time
     // ---------------------------------------------------------------------------------------
 
     [Fact]
     public void ALLTHREEPlacementsShareOneHelper_RatherThanCarryingAThirdCopyOfIt()
     {
-        // The centring arithmetic is one function now. SP-110 gave the Lock Card a private copy and
-        // SP-111 gave the video surface another; this packet was about to write the third, which is
-        // exactly the shape SP-101 refused for the effect template.
+        // The centring arithmetic is one function now. The Lock Card was given a private copy and
+        // the video surface another; this packet was about to write the third, which is
+        // exactly the shape refused earlier for the effect template.
         var display = new CcpClient.Desktop.Overlay.OverlayBounds(100, 200, 1000, 800);
 
         var card = PrimaryDisplayPlacement.Centred(
@@ -1289,7 +1289,7 @@ public class BubbleCountModuleTests
     /// <para>It MIRRORS the product where the product's own transitions matter — <c>Begin</c> marks
     /// the surface showing only when it succeeded, hands the painter its <c>Opening</c> exactly as
     /// <see cref="VideoSurfacePresenter"/> does, and leaves <c>LastPlacement</c> holding the last
-    /// outcome after a clip ends. SP-110 shipped a double that diverged from the product in
+    /// outcome after a clip ends. The Lock Card shipped a double that diverged from the product in
     /// precisely the state a defect lived in, and this is that lesson kept.</para>
     /// </summary>
     private sealed class RecordingVideoSurface : IVideoSurface
@@ -1375,7 +1375,7 @@ public class BubbleCountModuleTests
     /// <summary>
     /// An input presence that records what it was asked and delivers keystrokes the way the OS
     /// would. It mirrors the product's own prompting transition (set from the OS's CONFIRMATION,
-    /// which excludes ink, so a Degraded card is still up) for the reason SP-110's review found.
+    /// which excludes ink, so a Degraded card is still up) for the reason the Lock Card's review found.
     /// </summary>
     private sealed class RecordingInputPresence : IInputPresence
     {

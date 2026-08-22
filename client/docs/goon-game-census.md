@@ -1,6 +1,6 @@
 # Goon Game — census against the shipping WPF source
 
-**SP-129.** Evidence scope: the shipping WPF source, re-derived from the committed tree on
+Evidence scope: the shipping WPF source, re-derived from the committed tree on
 2026-08-21. Method: the repeatable inventory rules and source citations stated in this document.
 
 **Verdict: BUILDABLE-IN-PART — and the reason the rest is unbuildable is NOT capability.** One unit
@@ -53,7 +53,7 @@ matches a second independent record** — `client/docs/upstream-payload-inventor
 (`"fileCountAtBaseline": 184`) — and the board itself classes that field as record data rather than
 an assertion, so the agreement is corroboration, not discharge.
 
-**I did not need the merge-delta interpretation.** SP-127 found its row's numbers were files added
+**I did not need the merge-delta interpretation.** The trainer-card census found its row's numbers were files added
 at one merge rather than directory totals; here both readings would have to be tested only if the
 totals disagreed, and they do not. Both numbers are measured from today's bytes and both are pinned.
 
@@ -134,7 +134,7 @@ implements, plus a developer cockpit, as though it were the work of giving a use
 The first sweep matched `Goon`-prefixed identifiers and file base names, reported **4**, and missed
 `ConsentSheetMsg` — a type whose name carries neither the surface's token nor its file's name. It was
 caught only when the closure was implemented as a guard over *declared type names* rather than over
-tokens, which is the same lesson SP-125 drew from the two `Chaos/` files that contain no occurrence
+tokens, which is the same lesson the FYP census drew from the two `Chaos/` files that contain no occurrence
 of `fyp`. A second, smaller version of the same error was caught in the same pass: a first closure
 read `GoonContracts.cs:54`'s **trailing** comment as code and pulled in a sixth file.
 
@@ -154,7 +154,7 @@ git ls-files | grep -i goon | grep -v Resources/web/goon/ | grep -v Services/Goo
 | `docs/GOON_{GAME_PLAN,GAME_PROTOCOL,DISCORD_CONTRACT,VOICE_PLAN}.md` | 4 | 1072 | The upstream design contracts, including a **language-neutral wire protocol** | **NO** |
 | `Resources/features/goon_game.png` | 1 | — | The Lab card art | **NO** |
 
-`Services/Media/Transfer/` is **SP-125's `Services/Fyp/Online/` finding running in mirror image**:
+`Services/Media/Transfer/` is **the FYP census's `Services/Fyp/Online/` finding running in mirror image**:
 not a foreign subsystem hiding inside the surface's directory, but the surface's own subsystem
 hiding outside it, invisible to a directory-shaped row. Its only consumers outside itself are the
 three Goon files and one hook in the Assets tab (`MainWindow/MainWindow.Assets.cs:1504`), whose own
@@ -201,13 +201,13 @@ of this surface), `Models/AppSettings.cs` (the settings; **D209's resolution is 
 
 **`TransferCacheStore.cs` contains no occurrence of the token `goon` at all** and was found only
 because the sweep promoted the surface's own type names to needles — the plan's reveal rule, and the
-same mechanism that found SP-125's two `Chaos/` files.
+same mechanism that found the FYP census's two `Chaos/` files.
 
 **A methodological correction, stated rather than applied silently.** Plan §13.1 assigns `SHARED` to
 any file with a compile-time consumer outside the surface. Read literally that makes `GoonHostService`
 SHARED, because `App.xaml.cs` and `MainWindow.Lab.cs` name it. That is wrong: those are this
 surface's **entry points**, not other surfaces consuming it for their own behaviour. `SHARED` is
-applied here in SP-125's sense — a consumer that uses the type to do *its own* work, the way five
+applied here in the FYP census's sense — a consumer that uses the type to do *its own* work, the way five
 surfaces fetched media through `FypOnlineCoordinator`. By that test **no file of this surface is
 SHARED**, and the fact is recorded so a reader can re-derive under either reading.
 
@@ -233,7 +233,7 @@ outbound network boundary at all today.**
 ## 3. The already-shipped check: all nine duel elements are native in the port
 
 Plan §5.2 makes this check mandatory rather than opportunistic, because it is the check the haptic
-count that missed a shipped module, and the one that produced SP-127's sharpest sub-finding. Here it lands
+count that missed a shipped module, and the one that produced the trainer-card census's sharpest sub-finding. Here it lands
 differently, and in the port's favour.
 
 `GoonContracts.cs:44-54` freezes the draft pool — the nine things a duel throws:
@@ -602,7 +602,7 @@ unit**, because the port already ships both halves:
 
 | Piece | Upstream | Port | Verdict |
 |---|---|---|---|
-| The enumerator | `GoonHostService.cs:362` calls `DtrhAssetManifest.Build()` — the comment at `:359-361` says it *"Reuses the DtRH manifest builder verbatim (asset-tree deselection, size caps, sampling) — one enumerator for every web core"* | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhUserMedia.cs` is **the port of that same file**, carrying its extensions, caps, walk depth, skipped-count and downsample, plus SP-055's single active-pool definition | **ALREADY SHIPPED** |
+| The enumerator | `GoonHostService.cs:362` calls `DtrhAssetManifest.Build()` — the comment at `:359-361` says it *"Reuses the DtRH manifest builder verbatim (asset-tree deselection, size caps, sampling) — one enumerator for every web core"* | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhUserMedia.cs` is **the port of that same file**, carrying its extensions, caps, walk depth, skipped-count and downsample, plus the single active-pool definition | **ALREADY SHIPPED** |
 | The frame | `GoonHostService.cs:372-378` posts `{type, images, videos, skipped, truncated, received}` | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhProtocol.cs:271` builds `{type, images, videos, skipped, truncated}` — **field-for-field identical** | **ALREADY SHIPPED, minus one field** |
 | The one field that differs | `received` (`:377`), the accepted-artifact list | absent | **NOT NEEDED for this unit**: the inbox is purged at page boot (`TransferInboxStore.cs:62-72`, and `GoonHostService.cs:368` does it immediately before listing precisely so the rows *"are always empty"*), and a practice-only build has no media channel to fill it. It is a frame-shape stub |
 
@@ -765,7 +765,7 @@ guard walks `ConditioningControlPanel/` **by directory, recursively** on every r
 count and reads **the exact line** of every citation below. The directory roots and the needles live
 in the test, not here, so editing this document can never shrink the search.
 
-**§10.4 is this packet's repair of SP-127's pin defect.** That guard pinned *paths* and matched an
+**§10.4 is this packet's repair of the trainer-card census's pin defect.** That guard pinned *paths* and matched an
 expression *anywhere in the file*, so its suite was green while three of its own citations were wrong
 by 3 and 5 lines. Here a citation that drifts by **one** line reds the suite.
 
@@ -1008,7 +1008,7 @@ Every term is re-derived from the shipping bytes on every run.
 - **Every numeric token in this document is pinned or disclaimed.** One fact extracts all of them
   and requires each to appear in §10's tables or in §9. Exclusions are **enumerated CLASSES**, never
   a list of literals: `File.ext:NNN` and `:NNN` citation forms, `§N.N` section references, `DNNN`
-  divergence ids, `SP-NNN` packet ids, row ids, ISO dates, `vN.N` versions, hash-algorithm names,
+  divergence ids, row ids, ISO dates, `vN.N` versions, hash-algorithm names,
   hex shas, and headings.
 - **WHERE THE SWEEP CAN LEAK, enumerated — and the list is AS COMPLETE AS FIVE ROUNDS OF
   ADVERSARIAL TESTING HAVE MADE IT, which is not the same as complete.** Five structurally distinct

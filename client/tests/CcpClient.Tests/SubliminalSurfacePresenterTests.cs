@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-101 — how a subliminal reaches a surface, and what happens when there is no surface to reach.
+/// How a subliminal reaches a surface, and what happens when there is no surface to reach.
 ///
 /// <para>The SECOND consumer of the overlay capability, and therefore the first evidence that
 /// <see cref="OverlaySurfaceSet"/> is really shared rather than merely extracted: every fact below
@@ -58,7 +58,7 @@ public class SubliminalSurfacePresenterTests
 
         rig.Presenter.Show(Card);
 
-        // SP-100's measurement, inherited: painting a HIDDEN layered window is discarded by the OS,
+        // The overlay's measurement, inherited: painting a HIDDEN layered window is discarded by the OS,
         // so show-then-paint is not a style choice. It is in the shared set, which is why this fact
         // and the flash's assert the same ordering about different content.
         var presence = Assert.Single(rig.Presences);
@@ -295,7 +295,7 @@ public class SubliminalSurfacePresenterTests
 
         // The machine property IS the expectation. No skip, no platform branch, and both branches
         // assert something real: on Windows a card comes back, on Linux nothing does and nothing
-        // throws — which is the same shape SP-100 used for the flash's decoder.
+        // throws — which is the same shape the overlay used for the flash's decoder.
         Assert.Equal(run.RasteriserAvailable, run.Rendered);
         Assert.True(run.EmptySizeRefused,
             "a zero-sized card must come back null rather than throwing or allocating a buffer the surface would blit");
@@ -310,7 +310,7 @@ public class SubliminalSurfacePresenterTests
         Assert.Equal(run.RasteriserAvailable ? SubliminalCardObservations.CardHeight : 0, run.Height);
 
         // SubBackgroundTransparent ships FALSE (AppSettings.cs:1333), so upstream's default card is
-        // opaque edge to edge. On a surface with one uniform alpha and no per-pixel alpha (SP-100
+        // opaque edge to edge. On a surface with one uniform alpha and no per-pixel alpha (the overlay
         // D57) that is the only way the card is not a hole onto the desktop.
         Assert.Equal(run.RasteriserAvailable, run.CornersAreTheBackgroundColour);
     }
@@ -436,7 +436,7 @@ public class SubliminalSurfacePresenterTests
         public OverlayFrame? Render(string text, int width, int height) => null;
     }
 
-    /// <summary>The manual clock, SP-098's shape. Zero wall-clock.</summary>
+    /// <summary>The manual clock, the session spine's shape. Zero wall-clock.</summary>
     private sealed class ManualClock : ISessionClock
     {
         private readonly List<Entry> _timers = [];

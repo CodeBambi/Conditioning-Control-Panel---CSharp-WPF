@@ -4,10 +4,10 @@ using System.Text.Json;
 namespace CcpClient.Desktop.Features.AvatarTube;
 
 /// <summary>
-/// Deterministic generator of the two synthetic AvatarTube packs (SP-015 contract-named
+/// Deterministic generator of the two synthetic AvatarTube packs (the contract-named
 /// deliverable). "Mod switching" in this demonstrator = switching between THESE TWO packs,
-/// both routed through the SP-009 embedded-asset manifest (embedded entries, case-exact
-/// IDs) — there is no mod loader (SP-009: the schema covers mod sources; instances do not).
+/// both routed through the embedded-asset manifest (embedded entries, case-exact
+/// IDs) — there is no mod loader (the schema covers mod sources; instances do not).
 ///
 /// Machine-checkable by construction: every frame carries the <see cref="AvatarStripCodec"/>
 /// counter strip (pack + clip + frame index) and every clip's delays are NON-UNIFORM — a

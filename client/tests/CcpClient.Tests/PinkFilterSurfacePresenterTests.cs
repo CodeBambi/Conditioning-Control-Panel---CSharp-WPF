@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-105 — how a CONTINUOUS effect reaches a surface, and how it stays there.
+/// How a CONTINUOUS effect reaches a surface, and how it stays there.
 ///
 /// <para>The THIRD consumer of the overlay capability and of <see cref="OverlaySurfaceSet"/>, and
 /// the first one whose surface has no end. Flash Images places up to ten rectangles for six
@@ -322,7 +322,7 @@ public class PinkFilterSurfacePresenterTests
         public void Dispose() => _current = null;
     }
 
-    /// <summary>The manual clock, SP-098's shape. Zero wall-clock.</summary>
+    /// <summary>The manual clock, in the shape every module test shares. Zero wall-clock.</summary>
     private sealed class ManualClock : ISessionClock
     {
         private readonly List<Entry> _timers = [];

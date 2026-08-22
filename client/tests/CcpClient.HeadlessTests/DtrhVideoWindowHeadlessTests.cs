@@ -10,7 +10,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-025 slice b3: the covering video window's draw-level facts (verification-harness
+/// The covering video window's draw-level facts (verification-harness
 /// evidence-class rule): the frame the backend presents lands on the window's Image, the
 /// surface is black (letterbox), topmost covering shape. No rendered frames, no
 /// presentation claims — the headed/WX steps own pixels.

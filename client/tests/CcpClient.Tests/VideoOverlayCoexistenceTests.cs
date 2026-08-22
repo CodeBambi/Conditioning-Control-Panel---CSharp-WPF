@@ -4,14 +4,14 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-111 trap 1, discharged by MEASUREMENT rather than by assumption: a video surface opening and
+/// The first named trap, discharged by MEASUREMENT rather than by assumption: a video surface opening and
 /// closing must not break the click-through overlay five modules draw through, and must not take the
 /// foreground away from the Lock Card.
 ///
 /// <para><b><c>Overlay/**</c> and <c>Input/**</c> were not edited.</b> They are CONSUMED: the run
 /// builds a real <see cref="CcpClient.Desktop.Overlay.Win32OverlayPresence"/> and a real
-/// <see cref="CcpClient.Desktop.Input.Win32InputPresence"/> and measures both through SP-099's and
-/// SP-110's own instruments — <see cref="OverlayWindowProbe"/> and <see cref="InputWindowProbe"/>,
+/// <see cref="CcpClient.Desktop.Input.Win32InputPresence"/> and measures both through the overlay's and
+/// the input capability's own instruments — <see cref="OverlayWindowProbe"/> and <see cref="InputWindowProbe"/>,
 /// unmodified — before a video surface exists, while one is up holding a picture, and after it has
 /// come down and been disposed.</para>
 ///
@@ -53,7 +53,7 @@ public class VideoOverlayCoexistenceTests
             Assert.True(
                 reading.PointPassesThrough,
                 $"{moment}: the window manager must still route the overlay's own centre PAST it. This is "
-                + "SP-099's whole capability and a video surface must not cost it");
+                + "the overlay's whole capability and a video surface must not cost it");
             Assert.True(
                 reading.TransparentStyleHeld,
                 $"{moment}: WS_EX_TRANSPARENT must survive the video surface's whole lifecycle");
@@ -79,7 +79,7 @@ public class VideoOverlayCoexistenceTests
                 + "always has been");
 
             // The OS still holds its uniform alpha: 0.6 of 255 is 153, and a layered window whose
-            // attributes were lost reads -1 (SP-099's ghost detector).
+            // attributes were lost reads -1 (the overlay's ghost detector).
             Assert.Equal(run.MachineHasInteractiveDesktop ? 153 : -1, reading.Alpha);
         }
     }
@@ -114,7 +114,7 @@ public class VideoOverlayCoexistenceTests
 
         // THE TRAP-1 FACT. A video surface that stole the foreground would end a question the user
         // was being asked, and the module would keep reporting the card as live while every keystroke
-        // went somewhere else — which is exactly the state SP-110's own probe measured and refused.
+        // went somewhere else — which is exactly the state the input capability's own probe measured and refused.
         Assert.Equal(run.MachineHasInteractiveDesktop, run.CardDuring.IsForeground);
         Assert.Equal(run.MachineHasInteractiveDesktop, run.CardDuring.HoldsSystemKeyboardFocus);
 

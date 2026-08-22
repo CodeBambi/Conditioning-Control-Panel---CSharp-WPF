@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-026 slice b4: the meta-progression engine on the b2 slot documents (SP-005
+/// Slice b4: the meta-progression engine on the b2 slot documents (persistence
 /// machinery, no parallel save file, no schema bump). Op matrix (each op's mutation +
 /// clamp/validation vs WPF DtrhMetaBridge.cs:89-397), payout math (DtrhHostService.cs:510-613
 /// + ChaosUpgrades.cs:578-610), payout-result round-trip, request-run persist→init
@@ -39,7 +39,7 @@ public class DtrhMetaTests
 
         public void ResetMeta(bool testMode, DtrhSlotDocument? testFixture = null)
         {
-            // SP-057: test mode declares its starting document EXPLICITLY (the fixture
+            // Test mode declares its starting document EXPLICITLY (the fixture
             // argument); omitting it falls to the committed sentinel fixture — the live
             // slot document is never the clone source.
             Meta = new DtrhMeta(
@@ -486,7 +486,7 @@ public class DtrhMetaTests
     {
         using var h = new Harness();
         h.Seed(d => { d.Sparks = 7; d.RunsCompleted = 3; d.BestScore = 42; });
-        // SP-057: the test run's starting state is DECLARED (fixture argument), never the
+        // The test run's starting state is DECLARED (fixture argument), never the
         // seeded live document — the values mirror the old clone so the payout math below
         // pins the same lines.
         h.ResetMeta(testMode: true, testFixture: new DtrhSlotDocument { Sparks = 7, RunsCompleted = 3, BestScore = 42 });
@@ -506,7 +506,7 @@ public class DtrhMetaTests
     public void AwardRun_TestMirror_BanksOnlyThreeFields()
     {
         using var h = new Harness();
-        h.ResetMeta(testMode: true, testFixture: new DtrhSlotDocument()); // SP-057: declared fresh fixture
+        h.ResetMeta(testMode: true, testFixture: new DtrhSlotDocument()); // declared fresh fixture
         var sparks = h.Meta.AwardRun(new DtrhMeta.RunRewardInput(
             RunDurationSec: 180, DifficultyMult: 1.0, SparkGainMult: 1.0, Score: 400,
             TrickleDrops: 0, DripFeedMaxed: false, BestCombo: 12, Defused: 7, ElapsedSec: 180));
@@ -539,7 +539,7 @@ public class DtrhMetaTests
     [Fact]
     public void RequestRun_NonOwner_PersistsSetup_ClampsToPresetCeiling_AndInitRoundTrips()
     {
-        // SP-052: this b4 test asserted the UNCONDITIONAL 1200 clamp (the defect). Updated,
+        // This b4 test asserted the UNCONDITIONAL 1200 clamp (the defect). Updated,
         // not weakened: the harness owns nothing, so 1200 is now the NON-OWNER ceiling —
         // the exact main line it matches is cited per assertion; the owner branch has its
         // own test below (RequestRun_Owner_PersistsSetup_HourglassCeiling_RoundTrips).
@@ -655,7 +655,7 @@ public class DtrhMetaTests
     [Fact]
     public void RequestRun_Endless_OwnedToggle_RoundTrips_AndStaysOffHabitRail()
     {
-        // The Bottomless Fall end-to-end (SP-052 defect 2): gated persist
+        // The Bottomless Fall end-to-end (defect 2): gated persist
         // (DtrhHostService.cs:478-480), init carry (:509), run-config carry (:1043),
         // deal re-check (ChaosModels.cs:206), habit-rail exclusion (:1073-1074).
         using var h = new Harness();
@@ -826,7 +826,7 @@ public class DtrhMetaTests
     public async Task AbsentProgressionMembers_FlaggedOnce_NotSilent()
     {
         using var dir = new Harness.TempDir();
-        // A b2-era slot file: only the b2 members inside the SP-005 envelope.
+        // A b2-era slot file: only the b2 members inside the persistence envelope.
         File.WriteAllText(Path.Combine(dir.Root, "dtrh_slot1.json"),
             "{\"schemaVersion\":1,\"migrationJournal\":[],\"sparks\":10,\"gold\":5,\"runsCompleted\":2,"
             + "\"bestScore\":100,\"craftedItems\":{\"ragdoll\":1}}");

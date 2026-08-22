@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-014 stable-identity quick-toggle dispatch proofs (A-004; the row's core claim).
+/// Stable-identity quick-toggle dispatch proofs (A-004; the row's core claim).
 /// The replaced mechanism: the first attempt's localized <c>switch (card.Title)</c>
 /// (CCP.Avalonia SettingsTabView.axaml.cs:382) — dispatch keyed on mutable display text.
 /// These tests prove the replacement falsifiably: the stable card ID is the ONLY key,
@@ -43,12 +43,12 @@ public class QuickToggleDispatchTests
         Assert.False(ticker.IsOperationLive);
         vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId); // the ONE command path (A-004)
 
-        Assert.True(ticker.IsOperationLive); // live-start (SP-004 owned operation)
-        Assert.True(vm.TickerLit); // ring derives from operation liveness, never the flag (SP-007 rule)
+        Assert.True(ticker.IsOperationLive); // live-start (owned operation)
+        Assert.True(vm.TickerLit); // ring derives from operation liveness, never the flag
 
         Assert.IsType<OperationOutcome.Completed>(await store.SaveImmediate());
         var json = await File.ReadAllTextAsync(settingsPath, TestContext.Current.CancellationToken);
-        Assert.Contains("\"statusTickerEnabled\": true", json); // SP-005 file-content proof
+        Assert.Contains("\"statusTickerEnabled\": true", json); // file-content proof
 
         vm.ToggleCommand.Execute(StatusTickerParticipant.FeatureId);
         Assert.False(ticker.IsOperationLive); // live-stop through the same path

@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Provider-level unit tests for the first REAL provider (SP-035 slice c2;
+/// Provider-level unit tests for the first REAL provider (slice c2;
 /// ai-companion-admission.md §8 c2). Every row runs against the in-process deterministic
 /// loopback lab (real sockets on 127.0.0.1, zero external network): request round-trip,
 /// timeout classification (bounded, token-NOT-cancelled disambiguation), bounded retry
@@ -22,7 +22,7 @@ public class LoopbackOllamaProviderTests
         new(new LoopbackOllamaProviderOptions
         {
             Host = lab.Host,
-            RequestTimeout = TestWait.InjectedBudget, // SP-063: never decides an outcome
+            RequestTimeout = TestWait.InjectedBudget, // never decides an outcome
             ProbeTimeout = TestWait.InjectedBudget,
             Retry = retry ?? AiRetryPolicy.Off,
         });
@@ -246,7 +246,7 @@ public class LoopbackOllamaProviderTests
         using var cts = new CancellationTokenSource();
 
         var task = provider.CompleteAsync(Request, cts.Token);
-        // Class 2 (SP-059): first bytes over a REAL loopback socket — the tolerant window
+        // Class 2: first bytes over a REAL loopback socket — the tolerant window
         // with the loud classifier via the single approved helper.
         await TestWait.Until(
             () => provider.BytesReadSoFar > 0,

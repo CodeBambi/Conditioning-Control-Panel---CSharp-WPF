@@ -6,10 +6,10 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-054: the punch card (IntakePunchCardService.cs port): first-hole-free, pending-draft
+/// The punch card (IntakePunchCardService.cs port): first-hole-free, pending-draft
 /// queueing + the 8/90-day eviction (the honest bound on "punches pend silently"), the
 /// ≥50%/natural-end redemption seams, 8th-hole completion, prize-claim-once, the load
-/// REPAIRS, and the SP-005 round-trip.
+/// REPAIRS, and the persistence round-trip.
 /// </summary>
 public sealed class IntakePunchCardTests : IDisposable
 {

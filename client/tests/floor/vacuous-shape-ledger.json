@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "purpose": "SP-066 vacuous-shape ledger: every test whose assertion can be lexically silenced (early return / all-assertions-guarded / no assertion token / platform / env / fs predicate / dynamic skip) is dispositioned here. The guard (VacuousShapeGuardTests) fails with file:line on any detected site absent here, any live entry not detected or shape-drifted, and any expectDetected:false entry that reappears. LEXICAL ONLY: runtime vacuity (assertions in called helpers read absent; loops over possibly-empty collections read asserting) is NOT detected — see record.md framing (b).",
+  "purpose": "Vacuous-shape ledger: every test whose assertion can be lexically silenced (early return / all-assertions-guarded / no assertion token / platform / env / fs predicate / dynamic skip) is dispositioned here. The guard (VacuousShapeGuardTests) fails with file:line on any detected site absent here, any live entry not detected or shape-drifted, and any expectDetected:false entry that reappears. LEXICAL ONLY: runtime vacuity (assertions in called helpers read absent; loops over possibly-empty collections read asserting) is NOT detected — see record.md framing (b).",
   "keying": "path::OuterClass[.Nested].Method — the line field is informational only; moving a test never un-covers it",
   "detector": "client/tests/CcpClient.Tests/VacuousShapeDetector.cs — the single exact surface shared by this enumeration and the guard",
   "entries": [
@@ -39,7 +39,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard. SP-082 added dynamic-skip: a session precondition, skip conditioned on the product's own typed no-foreground-window code (reachable two ways — the probe state handed back verbatim, AiAwarenessService.cs:574-576, or a capture miss at observation time, :579-582); any other code still fails. Never conditioned on the OS, an env var, a CI flag, or Debugger.IsAttached. Pinned may-skip by NAME in floor.json allowedSkips. The consent arm and the two zero-leak assertions moved above the gate so they execute on every machine class."
+      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard. A later change added dynamic-skip: a session precondition, skip conditioned on the product's own typed no-foreground-window code (reachable two ways — the probe state handed back verbatim, AiAwarenessService.cs:574-576, or a capture miss at observation time, :579-582); any other code still fails. Never conditioned on the OS, an env var, a CI flag, or Debugger.IsAttached. Pinned may-skip by NAME in floor.json allowedSkips. The consent arm and the two zero-leak assertions moved above the gate so they execute on every machine class."
     },
     {
       "key": "CcpClient.Tests/AiAwarenessTests.cs::AiAwarenessTests.TitleProbe_PlatformTypedState_WindowsAvailable_LinuxUnavailable",
@@ -53,7 +53,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard. SP-082 added dynamic-skip: a session precondition, skip conditioned on the product's own typed no-foreground-window code (AiAwarenessService.cs:295, produced at :315-319); any other code — linux-unprobed, unsupported-platform, the privacy drops — still fails. Never conditioned on the OS, an env var, a CI flag, or Debugger.IsAttached. Pinned may-skip by NAME in floor.json allowedSkips. assertions-all-nested is unchanged: the skip token is not an assertion to the detector, so every remaining Assert.* still sits inside a platform arm."
+      "reason": "exhaustive if/else platform arms — every supported OS (Windows/Linux) lands in an asserting arm; the platform predicate is the branch mechanism, not a guard. A later change added dynamic-skip: a session precondition, skip conditioned on the product's own typed no-foreground-window code (AiAwarenessService.cs:295, produced at :315-319); any other code — linux-unprobed, unsupported-platform, the privacy drops — still fails. Never conditioned on the OS, an env var, a CI flag, or Debugger.IsAttached. Pinned may-skip by NAME in floor.json allowedSkips. assertions-all-nested is unchanged: the skip token is not an assertion to the detector, so every remaining Assert.* still sits inside a platform arm."
     },
     {
       "key": "CcpClient.Tests/AiMemoryStoreTests.cs::AiMemoryStoreTests.ConsentDenied_WriteIsTypedNoOp_NothingOnDisk_NeverThrows",
@@ -416,7 +416,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "the SP-062 pin: the Assert.SkipWhen IS the loud tripwire by design (a process-wide CCP_DATA_ROOT export must report, never read green). PERMANENTLY BANNED from allowedSkips (framing f)"
+      "reason": "the data-root pin: the Assert.SkipWhen IS the loud tripwire by design (a process-wide CCP_DATA_ROOT export must report, never read green). PERMANENTLY BANNED from allowedSkips (framing f)"
     },
     {
       "key": "CcpClient.Tests/DataRootOverrideTests.cs::DataRootOverrideTests.ResolveDataRoot_ValidAbsolutePath_NormalizesAndCreates",
@@ -964,7 +964,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "SP-118. The single File.Exists is the argument of an Assert.True at body depth 0 — the predicate IS the assertion, and a scheduler whose settings never reached disk FAILS here rather than being silenced. Same disposition, same shape and same mechanical reason as the AiMemoryStoreTests fs-predicate entries above. The enclosing try/finally exists only to delete the temp directory and does not guard the assertions (the detector classifies try/finally as non-guarding for exactly this reason)"
+      "reason": "The single File.Exists is the argument of an Assert.True at body depth 0 — the predicate IS the assertion, and a scheduler whose settings never reached disk FAILS here rather than being silenced. Same disposition, same shape and same mechanical reason as the AiMemoryStoreTests fs-predicate entries above. The enclosing try/finally exists only to delete the temp directory and does not guard the assertions (the detector classifies try/finally as non-guarding for exactly this reason)"
     },
     {
       "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheSubscription_LandsOnSlot23_AndTypesEveryFailure",
@@ -976,7 +976,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "SP-135. The CCW this fact needs (Marshal.GetComInterfaceForObject) is a Windows COM facility, so the subscription cannot be exercised elsewhere. The non-Windows arm is NOT silent: WindowsOrTypedUnsupported() asserts the product's typed unsupported-platform refusal and its detail text before returning, so every supported OS lands in an asserting arm. The deny DECISION carries no such predicate at all - it was extracted into WebViewPermissionDeny.AnswerRequest (pure vtable traffic, no CCW) precisely so the eight TheAnswer_* facts in this file run on every platform, which took this file from twelve shaped sites to three"
+      "reason": "The CCW this fact needs (Marshal.GetComInterfaceForObject) is a Windows COM facility, so the subscription cannot be exercised elsewhere. The non-Windows arm is NOT silent: WindowsOrTypedUnsupported() asserts the product's typed unsupported-platform refusal and its detail text before returning, so every supported OS lands in an asserting arm. The deny DECISION carries no such predicate at all - it was extracted into WebViewPermissionDeny.AnswerRequest (pure vtable traffic, no CCW) precisely so the eight TheAnswer_* facts in this file run on every platform, which took this file from twelve shaped sites to three"
     },
     {
       "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.TheHandlerAttachedAtSlot23_Fires_AndDeniesTheMicrophone",
@@ -988,7 +988,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm as the entry above. This is the fact that proves the pointer handed to slot 23 is the handler that denies - it invokes that CCW through its own vtable and observes DENY arrive at put_State - so it cannot be expressed without the CCW it needs. The deny DECISION it corroborates is asserted platform-independently by the eight TheAnswer_* facts, which drive WebViewPermissionDeny.AnswerRequest (pure vtable traffic, no CCW) and carry no platform predicate at all"
+      "reason": "Same Windows-CCW precondition and the same asserting non-Windows arm as the entry above. This is the fact that proves the pointer handed to slot 23 is the handler that denies - it invokes that CCW through its own vtable and observes DENY arrive at put_State - so it cannot be expressed without the CCW it needs. The deny DECISION it corroborates is asserted platform-independently by the eight TheAnswer_* facts, which drive WebViewPermissionDeny.AnswerRequest (pure vtable traffic, no CCW) and carry no platform predicate at all"
     },
     {
       "key": "CcpClient.Tests/WebViewPermissionTests.cs::WebViewPermissionTests.Dispose_DetachesAtSlot24_ToleratesAZombieBrowser_AndIsIdempotent",
@@ -1000,7 +1000,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "SP-135, same Windows-CCW precondition and the same asserting non-Windows arm as the two entries above. Detach can only be exercised on a subscription that exists, and the subscription needs the CCW; making it cross-platform by reflecting the signal's internal constructor was possible and was REJECTED, because a token this fact invented rather than received would make Assert.Equal(DefaultToken, remove.TokenSeen) tautological and lose the attach-to-detach round trip. The deny decision itself needs no CCW and is asserted everywhere by the eight TheAnswer_* facts over WebViewPermissionDeny.AnswerRequest"
+      "reason": "Same Windows-CCW precondition and the same asserting non-Windows arm as the two entries above. Detach can only be exercised on a subscription that exists, and the subscription needs the CCW; making it cross-platform by reflecting the signal's internal constructor was possible and was REJECTED, because a token this fact invented rather than received would make Assert.Equal(DefaultToken, remove.TokenSeen) tautological and lose the attach-to-detach round trip. The deny decision itself needs no CCW and is asserted everywhere by the eight TheAnswer_* facts over WebViewPermissionDeny.AnswerRequest"
     }
   ]
 }

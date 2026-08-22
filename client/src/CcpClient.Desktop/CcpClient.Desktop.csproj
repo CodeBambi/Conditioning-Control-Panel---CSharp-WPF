@@ -12,8 +12,8 @@
          through the composition root with injected dependencies (startup-shutdown-contract §7),
          never via the runtime XAML loader. -->
     <NoWarn>$(NoWarn);AVLN3001</NoWarn>
-    <!-- SP-023 / dtrh-admission.md §1 integration consequence: Avalonia's Win32
-         NativeControlHost crashes without supportedOS entries (SP-011 empirical). -->
+    <!-- dtrh-admission.md §1 integration consequence: Avalonia's Win32
+         NativeControlHost crashes without supportedOS entries (empirical). -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
@@ -25,24 +25,24 @@
     <PackageReference Include="Avalonia" Version="12.1.1" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
-    <!-- SP-023 / dtrh-admission.md §1: pinned 12.0.1 (current latest, MIT, dep
+    <!-- dtrh-admission.md §1: pinned 12.0.1 (current latest, MIT, dep
          Avalonia@12.0.0 minimum — nearest-wins to the 12.1.1 baseline). -->
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
     <PackageReference Include="Keincheck" Version="0.11.0" />
-    <!-- SP-025 / audio-backend-spike.md §1 (live-feed re-confirmed 2026-07-22): SoundFlow
+    <!-- audio-backend-spike.md §1 (live-feed re-confirmed 2026-07-22): SoundFlow
          1.4.1, MIT (nupkg LICENSE.md), net8.0 TFM (runs on net10.0), bundled miniaudio
-         natives per-RID (win-x64/linux-x64) — flows into SP-010 natives-beside-exe. -->
+         natives per-RID (win-x64/linux-x64) — flows into the natives-beside-exe rule. -->
     <PackageReference Include="SoundFlow" Version="1.4.1" />
-    <!-- SP-025 / video-handoff-spike.md §1 (live-feed re-confirmed 2026-07-22): LibVLCSharp
-         3.10.0 (LGPL-2.1-or-later — SP-010 sidecar note, pending-owner) + bundled libvlc
+    <!-- video-handoff-spike.md §1 (live-feed re-confirmed 2026-07-22): LibVLCSharp
+         3.10.0 (LGPL-2.1-or-later — sidecar note, pending-owner) + bundled libvlc
          win-x64 3.0.23.1. Linux uses the distro libvlc 3.0.23-1 (apt libvlc5/libvlccore9 —
-         no official Linux libvlc nuget exists, SP-018). -->
+         no official Linux libvlc nuget exists). -->
     <PackageReference Include="LibVLCSharp" Version="3.10.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- SP-023 payload serving (asset class: copied — SP-009 first copied consumer).
+    <!-- DTRH payload serving (asset class: copied — the first copied consumer).
          The DTRH payload stays READ-ONLY in the legacy tree (trust anchor: git tree
          40be29df, dtrh-admission.md §6); a LINKED glob copies the bytes unmodified to
          output payload/dtrh/ — the single source of truth is never duplicated in git.
@@ -52,7 +52,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <!-- SP-054 intake payload serving (the SAME copied-asset convention + trust-anchor
+    <!-- Intake payload serving (the SAME copied-asset convention + trust-anchor
          discipline as the dtrh glob above; flagged scope expansion — record.md glue bundle).
          The intake tree serves overlay-first on the intake host's §4 server; the dtrh
          tree below it is the borrow fallback (vendor/three, chime mp3s). READ-ONLY. -->
@@ -61,7 +61,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <!-- SP-061 tunnel backdrop payload serving (the SAME copied-asset convention +
+    <!-- Tunnel backdrop payload serving (the SAME copied-asset convention +
          trust-anchor discipline as the dtrh/intake globs; DOCUMENTED File-Scope amendment —
          record.md Step 2). TWO roots because the page's import map resolves ../vendor/three
          relative to /tunnel/ (tunnel/index.html:29-34; WPF maps the Resources/web root for
@@ -71,7 +71,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <!-- SP-130 goon payload serving: the FIFTH instance of the SP-023 linked-glob pattern
+    <!-- Goon payload serving: the FIFTH instance of the DTRH linked-glob pattern
          above, and byte-identical in shape. 184 files stay READ-ONLY and OWNED by the legacy
          tree (goon-game-census.md 5.3 proposes exactly this glob and proposes copying
          nothing); 164 of them are what the page actually loads. The practice host serves

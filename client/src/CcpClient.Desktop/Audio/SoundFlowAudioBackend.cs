@@ -9,11 +9,11 @@ using SoundFlow.Structs;
 namespace CcpClient.Desktop.Audio;
 
 /// <summary>
-/// The real <see cref="IAudioBackend"/> on the SP-017-selected SoundFlow 1.4.1 (MiniAudio) —
+/// The real <see cref="IAudioBackend"/> on the spike-selected SoundFlow 1.4.1 (MiniAudio) —
 /// one playback device, per-channel SoundPlayers on its MasterMixer (channel ownership,
-/// audio-backend-spike.md §6). API shape mirrors the admitted spike harness and the SP-025
+/// audio-backend-spike.md §6). API shape mirrors the admitted spike harness and the
 /// DTRH seam (Features/Dtrh/SoundFlowDtrhAudio.cs — which stays the DTRH-LOCAL owner; this
-/// is the app-wide arbitration backend; the boundary is recorded in SP-029 record.md).
+/// is the app-wide arbitration backend; the boundary is recorded in the packet record.md).
 ///
 /// F1 discipline (process-fatal crash class, observed 2× 2026-07-21): an unvalidated
 /// DeviceInfo.Id reaches ma_device_init as a wild native pointer → uncatchable 0xC0000005.
@@ -38,7 +38,7 @@ public sealed class SoundFlowAudioBackend : IAudioBackend
     public SoundFlowAudioBackend(Action<string> log)
     {
         _log = log;
-        // SP-072: bounded orphan-safe construction (see AudioSeams.OrphanSafePlayerFactory).
+        // Bounded orphan-safe construction (see AudioSeams.OrphanSafePlayerFactory).
         // The residual line verified by READING only (no headless fact can reach it):
         // attach's `_device!.MasterMixer.AddComponent(p.Player)`.
         _players = new OrphanSafePlayerFactory<SoundFlowPlayer>(
@@ -117,7 +117,7 @@ public sealed class SoundFlowAudioBackend : IAudioBackend
             throw new InvalidOperationException("SoundFlowAudioBackend: TryInit must succeed before players are created.");
         }
 
-        // SP-025 off-sync-context + SP-072 bound/orphan invariant live in the factory —
+        // Off-sync-context + bound/orphan invariant live in the factory —
         // construction always on a pool thread, never a SynchronizationContext.
         return _players.Create(path, volume);
     }
@@ -125,7 +125,7 @@ public sealed class SoundFlowAudioBackend : IAudioBackend
     /// <inheritdoc/>
     public void Dispose()
     {
-        // SP-072: teardown runs under the factory lifecycle lock — serialized against
+        // Teardown runs under the factory lifecycle lock — serialized against
         // orphan disposal, never concurrent with it.
         _players.Teardown(() =>
         {
@@ -169,7 +169,7 @@ public sealed class SoundFlowAudioBackend : IAudioBackend
 
         public void Pause() => _player.Pause();
 
-        // SoundFlow backend behavior fact (SP-017 A2): explicit Stop does NOT fire
+        // SoundFlow backend behavior fact (spike fact A2): explicit Stop does NOT fire
         // PlaybackEnded — interruption stays distinguishable from completion. The
         // arbitration generation filter covers backends that DO fire (NAudio F2 class).
         public void Stop() => _player.Stop();

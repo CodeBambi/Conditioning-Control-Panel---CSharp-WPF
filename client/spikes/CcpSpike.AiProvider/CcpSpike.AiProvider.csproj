@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    SP-019 quarantined AI-provider spike host. NOT referenced by client/CcpClient.sln.
+    Quarantined AI-provider spike host. NOT referenced by client/CcpClient.sln.
     Inherits client/Directory.Build.props (single <Version> authority) — nothing else.
     Console host: acceptance is lab-verified probe evidence, not a test project.
     ProjectReference to CcpClient.Desktop is packet-permitted (PROMPT File Scope):
-    it exercises SP-016's REAL AiEnvelopeValidator/vocabulary — references are not
+    it exercises the AI-operation contract's REAL AiEnvelopeValidator/vocabulary — references are not
     product-code changes. Zero product-code change is the quarantine invariant.
   -->
   <PropertyGroup>

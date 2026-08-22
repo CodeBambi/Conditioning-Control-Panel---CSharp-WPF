@@ -9,7 +9,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-105 — the first module in the port with no schedule.
+/// The first module in the port with no schedule.
 ///
 /// <para><b>What is really under test.</b> Not a tint. Every fact below is about whether a module
 /// that is simply <i>on</i> can live under the same spine as two modules that fire on a clock — and
@@ -260,7 +260,7 @@ public class PinkFilterEffectTests
         var first = lab.Effect.Completion;
         lab.Effect.Arm();
 
-        // The GENERATION is idempotent (SP-003 §5.3 at effect granularity) and the WORK is not:
+        // The GENERATION is idempotent (the §5.3 rule at effect granularity) and the WORK is not:
         // arming again re-tints, which is what makes a mid-session switch-on do something.
         Assert.Same(first, lab.Effect.Completion);
         Assert.Equal(2, lab.Surface.Engagements);
@@ -363,7 +363,7 @@ public class PinkFilterEffectTests
 
     /// <summary>
     /// A cheap structural tripwire over the module's constructor and base class, and it is named for
-    /// what it is rather than for what it protects (SP-105 final review).
+    /// what it is rather than for what it protects (the final review's wording).
     ///
     /// <para><b>This is not where the fake timer is caught.</b> Reflection over a constructor is
     /// defeatable in one line — a clock constructed in a field initialiser, or reached through a

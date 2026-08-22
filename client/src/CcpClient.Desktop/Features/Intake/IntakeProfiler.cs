@@ -1,7 +1,7 @@
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the deterministic QuizRunResult → five-axes profiler, ported from the READ-ONLY
+/// The deterministic QuizRunResult → five-axes profiler, ported from the READ-ONLY
 /// WPF evidence (Services/Quiz/IntakeProfiler.cs — the full source was read for this port;
 /// line cites below). DETERMINISTIC: no RNG, no clock, no I/O. Same trajectory in ⇒ same
 /// profile out.

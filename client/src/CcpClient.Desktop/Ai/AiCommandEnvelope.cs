@@ -72,7 +72,7 @@ public enum AiNotExecutedReason
     /// <summary>The owning generation was invalidated before execution (provider switch / panic — contract §3).</summary>
     SupersededGeneration,
 
-    /// <summary>The command passed every gate but no effect backend exists to dispatch to (c6 execution-level reason — the typed placeholder: no flash/subliminal/spiral/etc. backends exist in the greenfield client yet). Extends contract §9's reason set at EXECUTION level; orchestrator follow-up recorded in SP-044 record.md §3.1.4.</summary>
+    /// <summary>The command passed every gate but no effect backend exists to dispatch to (c6 execution-level reason — the typed placeholder: no flash/subliminal/spiral/etc. backends exist in the greenfield client yet). Extends contract §9's reason set at EXECUTION level; orchestrator follow-up recorded in the packet record §3.1.4.</summary>
     EffectUnavailable,
 }
 
@@ -233,7 +233,7 @@ public static class AiEnvelopeValidator
             if (root.ValueKind != JsonValueKind.Object)
                 return Reject("root-not-object");
 
-            // F1 (SP-019): System.Text.Json accepts duplicate object keys; TryGetProperty is
+            // F1 (spike finding): System.Text.Json accepts duplicate object keys; TryGetProperty is
             // last-wins while EnumerateObject sees all — a parser-differential hazard against
             // the strict-schema intent (contract §8). Duplicates are REJECTED, the only
             // contract-consistent answer.

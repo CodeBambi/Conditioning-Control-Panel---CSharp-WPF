@@ -6,9 +6,9 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// The b3 native-effects owner (dtrh-admission.md §7 slice b3): everything the DTRH page
 /// asks the host to do that is NOT rendered in-world — native SFX cues, the one-shot
 /// whisper, the covering native video, and the world freeze that pauses video + voice.
-/// WPF parity cites per member (READ-ONLY archaeology, SP-025 record Step 1).
+/// WPF parity cites per member (READ-ONLY archaeology, the packet record Step 1).
 ///
-/// Channel ownership (SP-017 selection, owner-ratified 2026-07-21):
+/// Channel ownership (the audio selection, owner-ratified 2026-07-21):
 ///   SFX   — bounded pool, max <see cref="DtrhNativeEffectsOptions.MaxSfxVoices"/> simultaneous,
 ///           DROP-on-overflow (ChaosSfx.cs:91-107 parity: "a one-shot SFX played late is
 ///           worse than silence"); pool reclaims on the backend's real PlaybackEnded.
@@ -46,15 +46,15 @@ public sealed class DtrhNativeEffects : IDisposable
         _video = video;
         _options = options;
         _log = log;
-        // Injectable clock/timer seam (SP-043, additive-only): the segment-cap timer is the
+        // Injectable clock/timer seam (additive-only): the segment-cap timer is the
         // one wall-clock element in this class; tests drive it deterministically. The
         // default is the REAL clock (SystemSoundClock = System.Threading.Timer) — product
         // behavior unchanged.
         //
-        // SP-123: the real clock is handed this module's log as its callback-fault reporter.
+        // The real clock is handed this module's log as its callback-fault reporter.
         // The cap callback (:338) stops a covering video and reclaims focus on a POOL thread —
         // an exception escaping it would be unhandled and would end the process mid-session
-        // (SP-101 class; SchedulerParticipant.cs:63-64 is the same wiring for the same reason).
+        // (a known class; SchedulerParticipant.cs:63-64 is the same wiring for the same reason).
         _clock = clock ?? new SystemSoundClock(ex => _log(
             $"dtrh-fx: a scheduled callback faulted and was contained — {ex.GetType().Name}: {ex.Message}"));
         _video.PlaybackEnded += OnVideoEnded;
@@ -80,7 +80,7 @@ public sealed class DtrhNativeEffects : IDisposable
     // ============================ SFX ============================
 
     /// <summary>sfx {name, scale} (DtrhHostService.cs:222-234): VN gate first (`:223` —
-    /// stingers stay silent while she speaks), then resolution through the SP-051 audited
+    /// stingers stay silent while she speaks), then resolution through the audited
     /// chain table (<see cref="AuditedChains"/>) or the generic chain — see
     /// <see cref="ResolveSfxCue"/>. scale default 0.6 (`:226`).</summary>
     public void PlaySfx(string? name, double scale)
@@ -95,7 +95,7 @@ public sealed class DtrhNativeEffects : IDisposable
         if (resolution.Path is not { } path)
         {
             // Silent no-op parity (ChaosSfx.cs:75-93: absent asset = silence, logged).
-            // SP-051: an audited cue whose chain misses the pool is a NAMED content gap —
+            // An audited cue whose chain misses the pool is a NAMED content gap —
             // typed + logged with its WPF chain cited, never an unrecorded drop.
             _log(resolution.GapNote is { } gap
                 ? $"dtrh-fx: sfx '{name}' — {gap}; silent no-op"
@@ -110,7 +110,7 @@ public sealed class DtrhNativeEffects : IDisposable
             if (_sfxPool.Count >= _options.MaxSfxVoices)
             {
                 // Drop-on-overflow (ChaosSfx.cs:91-107 parity; bound 8 = the packet decree,
-                // SP-017 named limit 7's pending-owner value decided by SP-025).
+                // named limit 7's pending-owner value, since decided).
                 _log($"dtrh-fx: sfx pool full ({_options.MaxSfxVoices}) — dropping '{name}'");
                 return;
             }
@@ -121,7 +121,7 @@ public sealed class DtrhNativeEffects : IDisposable
             }
             catch (Exception ex)
             {
-                // SP-072: construction is now BOUNDED and can refuse typed (timeout / torn
+                // Construction is BOUNDED and can refuse typed (timeout / torn
                 // down). The layer's refusal idiom is the logged silent no-op — same as an
                 // unresolved cue. Contains an exception that used to ESCAPE to the router.
                 _log($"dtrh-fx: sfx '{name}' construction failed ({ex.GetType().Name}) — silent no-op");
@@ -134,7 +134,7 @@ public sealed class DtrhNativeEffects : IDisposable
         player.PlaybackEnded += (_, _) =>
         {
             lock (_gate) _sfxPool.Remove(player);
-            // Backend-event completion (SP-017 discipline: completion claims come from
+            // Backend-event completion (the audio discipline: completion claims come from
             // backend-emitted events, never call returns).
             _log($"dtrh-fx: sfx '{name}' completed (backend PlaybackEnded, pool {ActiveSfxVoices}/{_options.MaxSfxVoices})");
             try { player.Dispose(); } catch { /* best-effort */ }
@@ -152,7 +152,7 @@ public sealed class DtrhNativeEffects : IDisposable
         }
     }
 
-    // ============================ SP-051 audited chain resolution ============================
+    // ============================ Audited chain resolution ============================
 
     /// <summary>The complete audited WPF ChaosSfx cue→fallback-chain table. Candidates are the chain member
     /// BASENAMES in override→fallback order (the greenfield pool is flat; WPF keeps them
@@ -177,7 +177,7 @@ public sealed class DtrhNativeEffects : IDisposable
             ["boon_reveal_common"] = new(["thud.mp3", "Pop2.mp3"], 0.65,
                 "chaos/thud.mp3 → bubbles/Pop2.mp3", "ChaosSfx.cs:25-30"),
             // ChaosSfx.cs:33 helper is @0.7, but the DTRH page path rides the generic chain
-            // at the PAGE scale (DtrhHostService.cs:262 → ChaosSfx.cs:47) — the SP-049
+            // at the PAGE scale (DtrhHostService.cs:262 → ChaosSfx.cs:47) — the loom
             // precedent: chain → chime2.mp3, page-supplied scale kept, test-pinned.
             ["boon_pick"] = new(["boon_pick.mp3", "chime2.mp3"], null,
                 "chaos/boon_pick.mp3 → chime2.mp3", "ChaosSfx.cs:33 (+ page path DtrhHostService.cs:262)"),
@@ -191,7 +191,7 @@ public sealed class DtrhNativeEffects : IDisposable
                 "chaos/ticktock.mp3", "ChaosSfx.cs:37; page path ChaosSfx.cs:47"),
         };
 
-    /// <summary>Resolve one cue against the sfx pool through the audited chains (SP-051):
+    /// <summary>Resolve one cue against the sfx pool through the audited chains:
     /// the table row when the token is listed, else the generic chain
     /// (<c>chaos/{name}.mp3</c> → flat {name}.mp3, page scale — ChaosSfx.cs:47). First
     /// candidate on disk wins (ChaosSfx.cs:62-79). Unresolved non-empty cue = typed
@@ -225,7 +225,7 @@ public sealed class DtrhNativeEffects : IDisposable
 
         var path = ResolveSfx(candidates);
         if (path is not null) return new ChaosSfxResolution(path, scale, null);
-        // Two honest gap phrasings (SP-051 pre-completion consult): an AUDITED table row's
+        // Two honest gap phrasings (pre-completion consult): an AUDITED table row's
         // members are verified WPF sound-library content (a future content row); a GENERIC
         // cue's file may not exist even in the WPF library (page-sent detonate_thud/dive
         // don't) — claim only what was verified.
@@ -343,10 +343,10 @@ public sealed class DtrhNativeEffects : IDisposable
             });
     }
 
-    /// <summary>Media-description for logs (packet framing c, SP-018 V5 class): files
+    /// <summary>Media-description for logs (packet framing c, the V5 media-logging class): files
     /// under a <see cref="DtrhNativeEffectsOptions.PresenceOnlyRoots"/> root log
     /// presence+shape (bytes + extension class), NEVER a filename; everything else
-    /// (payload/staged scope, SP-025) keeps the bare filename.</summary>
+    /// (payload/staged scope) keeps the bare filename.</summary>
     private string DescribeMedia(string path)
     {
         foreach (var root in _options.PresenceOnlyRoots)
@@ -375,7 +375,7 @@ public sealed class DtrhNativeEffects : IDisposable
             {
                 foreach (var file in Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories))
                 {
-                    // SP-055: files under the user-media root route through the ONE
+                    // Files under the user-media root route through the ONE
                     // active-pool definition (VideoService.cs:6640-6663 parity — upstream
                     // filters this pool against DisabledAssetPaths with the same Norm).
                     if (_options.UserMediaRoot is { } umRoot
@@ -460,7 +460,7 @@ public sealed class DtrhNativeEffects : IDisposable
         }
         catch (Exception ex)
         {
-            // SP-072: construction is now BOUNDED and can refuse typed (timeout / torn
+            // Construction is BOUNDED and can refuse typed (timeout / torn
             // down) — logged, channel stays silent (the old voice was already stopped
             // above, exactly as on any replacement). Contains an exception that used to
             // ESCAPE to the host's harness/dispatch path.
@@ -482,7 +482,7 @@ public sealed class DtrhNativeEffects : IDisposable
         _voice = player;
         player.Play();
         // Filename logging is PAYLOAD/OVERLAY-scope only (shipped + harness-staged clips).
-        // b4's user/mod media admission must gate these lines to presence+shape (SP-018 V5 class).
+        // b4's user/mod media admission must gate these lines to presence+shape (the V5 media-logging class).
         _log($"dtrh-fx: whisper playing ({DescribeMedia(path)})");
     }
 
@@ -641,13 +641,13 @@ public sealed class DtrhNativeEffects : IDisposable
         (float)Math.Clamp(_options.MasterVolume / 100.0 * scale, 0.0, 1.0);
 }
 
-/// <summary>One audited WPF ChaosSfx fallback chain (SP-051). <see cref="Candidates"/> are
+/// <summary>One audited WPF ChaosSfx fallback chain. <see cref="Candidates"/> are
 /// flat basenames in override→fallback order; <see cref="WpfChain"/> keeps the WPF-relative
 /// spelling for gap logs. <see cref="FixedScale"/> null = the page-supplied scale passes
 /// through (WPF generic path, ChaosSfx.cs:47); a value = the WPF helper's fixed scale.</summary>
 public sealed record ChaosSfxChain(string[] Candidates, double? FixedScale, string WpfChain, string Cite);
 
-/// <summary>The typed outcome of resolving one sfx cue (SP-051): either a pool
+/// <summary>The typed outcome of resolving one sfx cue: either a pool
 /// <see cref="Path"/> + effective <see cref="Scale"/>, or an unplayed cue whose
 /// <see cref="GapNote"/> names the content gap with its WPF chain cited (null note = an
 /// unlisted/empty cue — the plain silent no-op).</summary>
@@ -665,21 +665,21 @@ public sealed record DtrhNativeEffectsOptions
     /// <summary>Video pool roots (media trees enumerated for *.mp4/*.webm/*.m4v).</summary>
     public required IReadOnlyList<string> VideoRoots { get; init; }
 
-    /// <summary>b4 media-logging rule (packet framing c; SP-018 V5 class): any resolved
+    /// <summary>b4 media-logging rule (packet framing c; the V5 class): any resolved
     /// file under one of these roots logs PRESENCE+SHAPE ONLY (bytes + extension class) —
     /// never a filename. The user-media root lives here; payload/overlay roots keep names
-    /// (SP-025's recorded payload/staged scope).</summary>
+    /// (the recorded payload/staged scope).</summary>
     public IReadOnlyList<string> PresenceOnlyRoots { get; init; } = [];
 
-    /// <summary>SP-055: the user-media assets root (&lt;dataDir&gt;/assets) — when set,
+    /// <summary>The user-media assets root (&lt;dataDir&gt;/assets) — when set,
     /// pool files under it route through the ONE active-pool definition. Null → no
     /// deselection filtering (callers without the store keep all-active behavior).</summary>
     public string? UserMediaRoot { get; init; }
 
-    /// <summary>SP-055: the normalized deselection set (from <c>DtrhUserMedia.BuildDisabledSet</c>).</summary>
+    /// <summary>The normalized deselection set (from <c>DtrhUserMedia.BuildDisabledSet</c>).</summary>
     public HashSet<string>? DisabledAssets { get; init; }
 
-    /// <summary>SP-055: the whitelist gate (AppSettings.cs:1637 documented contract —
+    /// <summary>The whitelist gate (AppSettings.cs:1637 documented contract —
     /// false = all files active).</summary>
     public bool UseAssetWhitelist { get; init; }
 
@@ -708,7 +708,7 @@ public enum DtrhPlayerState
 public interface IDtrhAudioPlayer : IDisposable
 {
     /// <summary>Backend-emitted completion — NEVER fires on explicit Stop on SoundFlow
-    /// (SP-017 A2 backend behavior fact); the effects layer still identity-filters (F2).</summary>
+    /// (the A2 backend behavior fact); the effects layer still identity-filters (F2).</summary>
     event EventHandler? PlaybackEnded;
 
     DtrhPlayerState State { get; }
@@ -725,14 +725,14 @@ public interface IDtrhAudioPlayer : IDisposable
 /// <summary>The audio backend seam (real = SoundFlow 1.4.1; tests = recording fake).</summary>
 public interface IDtrhAudioBackend : IDisposable
 {
-    /// <summary>Initialise the playback device. F1 discipline (SP-017, process-fatal crash
+    /// <summary>Initialise the playback device. F1 discipline (the process-fatal crash
     /// class): RE-ENUMERATE immediately before init, match the requested device by NAME,
     /// pass only a FRESH enumeration snapshot's DeviceInfo — never a stored one; persist
     /// the NAME, never the Id. null/missing name → default device.</summary>
     bool TryInit(string? deviceName, out string? error);
 
     /// <summary>Create (not yet playing) a player for a local audio file at a gain 0..1.
-    /// SP-025: implementations MUST construct off-sync-context; SP-072: they MUST bound the
+    /// Implementations MUST construct off-sync-context, and MUST bound the
     /// caller's wait and keep the orphan invariant (an abandoned construction never reaches
     /// the mixer, never plays, is disposed exactly once, ordered against device teardown) —
     /// both live in <see cref="OrphanSafePlayerFactory{TPlayer}"/>; budget expiry throws

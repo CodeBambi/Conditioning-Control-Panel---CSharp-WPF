@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    SP-011 quarantined spike host. NOT referenced by client/CcpClient.sln.
+    Quarantined WebView spike host. NOT referenced by client/CcpClient.sln.
     Inherits client/Directory.Build.props (single <Version> authority) — nothing else.
     Build-only: acceptance is headed evidence, not a test project.
   -->

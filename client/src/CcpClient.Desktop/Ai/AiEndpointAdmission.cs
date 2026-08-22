@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Ai;
 /// <summary>
 /// Endpoint admission policy seam (contract §6 rules 2-3; admission §2 rule 5). The policy
 /// decides which endpoint CLASSES an operation may reach; enforcement happens BEFORE any
-/// socket opens (SP-019 item 7 shape — the send-attempt counter is the proof instrument).
+/// socket opens (spike item 7 shape — the send-attempt counter is the proof instrument).
 /// Allow-list governance (which remote hosts, if any, are admissible) is owner-pending
 /// (admission §9.2 #2); this slice ships the loopback-only placeholder only.
 /// </summary>

@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Haptics;
 /// <summary>
 /// <b>The haptic limb: the five MOMENTS a ported effect module can tell the haptic sink about.</b>
 ///
-/// <para>SP-126. Upstream drives haptics from eighteen command sites in the
+/// <para>Upstream drives haptics from eighteen command sites in the
 /// <c>Services/{Flash,Video,Subliminal}</c> family; ten of them have a port trigger point and those
 /// ten reach exactly FIVE statements in this build (<c>client/docs/haptic-limb-census.md</c> §3.1).
 /// This interface is those five statements' vocabulary and nothing else.</para>
@@ -76,8 +76,8 @@ public interface IHapticLimb
 
     /// <summary>
     /// Census site 18 — <b>a bouncing word has hit a screen edge</b>
-    /// (<c>Services/Subliminal/BouncingTextService.cs:516</c>), in a module this port shipped at
-    /// SP-115.
+    /// (<c>Services/Subliminal/BouncingTextService.cs:516</c>), in a module this port shipped in
+    /// an earlier wave.
     ///
     /// <para>Upstream fires between the bounce bookkeeping and the 10 % text re-roll (<c>:516</c>
     /// against <c>:519</c>), and this port's trigger point sits in the same place in the same

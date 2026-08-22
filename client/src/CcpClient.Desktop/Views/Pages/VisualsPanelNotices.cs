@@ -52,8 +52,8 @@ public static class VisualsPanelNotices
     /// The absence line — the two controls upstream's page has that this one does not, each with
     /// the reason a user can act on.
     ///
-    /// <para>It is on the PAGE rather than only in a record, on the precedent SP-111, SP-113 and
-    /// SP-115 set for a half-ported row: an absence the user can see is an absence the user was
+    /// <para>It is on the PAGE rather than only in a record, on the precedent three earlier rows
+    /// set for a half-ported row: an absence the user can see is an absence the user was
     /// told about.</para>
     /// </summary>
     public static string DescribeAbsences() =>

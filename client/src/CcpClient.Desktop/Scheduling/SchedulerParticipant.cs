@@ -8,7 +8,7 @@ namespace CcpClient.Desktop.Scheduling;
 /// The scheduler's APP-LIFETIME owner: the participant that keeps a tick on the clock while no
 /// session exists.
 ///
-/// <para><b>Why this is a participant and not part of the session (SP-117 §1.1).</b> Every other
+/// <para><b>Why this is a participant and not part of the session.</b> Every other
 /// ported row lives inside <see cref="SessionEngine.Effects"/> and is armed by START. This one has
 /// to run when nothing is running — that is the whole feature — so it is owned where the app is
 /// owned. WPF's is owned the same way: the timer is a <c>MainWindow</c> field created during
@@ -25,7 +25,7 @@ namespace CcpClient.Desktop.Scheduling;
 /// reserved pre-drain slot; and its poll runs on an owned generation, so the host's
 /// cancel-and-drain kills it too.</para>
 ///
-/// <para><b>Construction starts nothing</b> (SP-003 contract §4.4). Nothing here can begin a
+/// <para><b>Construction starts nothing</b> (<c>startup-shutdown-contract.md</c> §4.4). Nothing here can begin a
 /// session until phase 3 has started the participant AND the 60-second grace has elapsed.</para>
 /// </summary>
 public sealed class SchedulerParticipant : IBackgroundParticipant
@@ -92,7 +92,7 @@ public sealed class SchedulerParticipant : IBackgroundParticipant
 
     /// <summary>
     /// Whether this participant's operation generation is still live. It is the participant
-    /// contract's own property — stop cancels the generation (SP-003 §5.3) — and it is the second
+    /// contract's own property — stop cancels the generation (<c>startup-shutdown-contract.md</c> §5.3) — and it is the second
     /// half of the guard every scheduled callback re-checks before it does anything
     /// (<c>_running</c> being the first). Exposed because a scheduler that can start a session is
     /// the one participant whose "am I still allowed to act" answer is worth being able to ask
@@ -189,7 +189,7 @@ public sealed class SchedulerParticipant : IBackgroundParticipant
     {
         // CompareExchange, not Exchange: clear the slot only if it still holds THIS tick. If it
         // does not, this callback belongs to a schedule that was superseded or cancelled and it
-        // does nothing at all (the SP-101 identity rule).
+        // does nothing at all (the identity rule).
         if (Interlocked.CompareExchange(ref _pending, null, token) != token)
         {
             return;

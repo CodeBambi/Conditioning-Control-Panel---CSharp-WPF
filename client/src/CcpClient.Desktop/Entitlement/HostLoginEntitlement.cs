@@ -37,7 +37,7 @@ namespace CcpClient.Desktop.Entitlement;
 public sealed class HostLoginEntitlement
 {
     /// <summary>The name this capability's readiness would be registered under. Registration is
-    /// a LATER packet's job (SP-092 wires nothing); the constant lives here so the name is not
+    /// a LATER packet's job (this one wires nothing); the constant lives here so the name is not
     /// invented twice.</summary>
     public const string CapabilityName = "host-login-entitlement";
 
@@ -100,7 +100,7 @@ public sealed class HostLoginEntitlement
     }
 
     /// <summary>
-    /// The SP-006 probe: can this environment read the shipping app's login at all? It
+    /// The capability probe: can this environment read the shipping app's login at all? It
     /// deliberately answers a NARROWER question than <see cref="ResolveAsync"/> and never
     /// claims a tier — a readable login with no authority behind it is
     /// <see cref="CapabilityState.Degraded"/>, naming exactly what survives, not
@@ -165,7 +165,7 @@ public sealed class HostLoginEntitlement
             TierLookupStatus.Entitled when lookup.Tier is { } tier && Enum.IsDefined(tier) =>
                 new EntitlementOutcome.Entitled(tier, lookup.Detail),
             TierLookupStatus.Entitled when lookup.Tier is not null =>
-                // SP-094: the ONE hole in this capability that leaned toward GRANTING. The
+                // THE ONE HOLE in this capability that leaned toward GRANTING. The
                 // missing-tier arm below was already closed toward refusal, but an UNDEFINED
                 // enum value slipped past it: (EntitlementTier)0 or (EntitlementTier)99 from a
                 // rogue or malformed authority response rendered as entitled(0) / entitled(99),

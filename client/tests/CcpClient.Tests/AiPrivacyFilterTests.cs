@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-068 pure-filter facts: F1 incognito hard-drop (union of WPF's two divergent marker
+/// Pure-filter facts: F1 incognito hard-drop (union of WPF's two divergent marker
 /// lists), F2 title scrubbing (WPF values verbatim), F3 unsanctioned-link strip (WPF strip
 /// half verbatim; the port has no sanctioned-link source, so every reply URL condemns its
 /// sentence). Every filter carries a NEGATIVE CONTROL — input that must pass through

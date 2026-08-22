@@ -11,7 +11,7 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// cannot bind port 0). Page origin: /health, /dtrh/* overlay-first over the READ-ONLY
 /// payload copy, /bridge/&lt;token&gt;/inbox long-poll (§3.3). Media origin: /media/* with
 /// CORS scoped to the page origin (preserves the WPF ccp.game/ccp.assets cross-origin split
-/// so taint checks stay meaningful), OPTIONS preflight, CORS-on-errors (SP-011 W18 lesson).
+/// so taint checks stay meaningful), OPTIONS preflight, CORS-on-errors (spike W18 lesson).
 /// Range 206/416; MIME allowlist + nosniff + 415 deny-by-default (allowlist pinned by the
 /// §4.4 extension sweep of the trust-anchored tree); traversal refusal 403.
 /// Sensitive-logging ban (§4.8): route classes only — query strings are stripped (the
@@ -84,14 +84,14 @@ public sealed class LoopbackServer : IDisposable
         _bridgeToken = bridgeToken;
         _log = log;
         _longPollTimeout = longPollTimeout ?? TimeSpan.FromSeconds(25);
-        // SP-027 b5 HARNESS-ONLY (failure injection, W18 class): route prefixes that
+        // HARNESS-ONLY (failure injection, W18 class): route prefixes that
         // answer 403 so the page/host typed-failure path is exercised on demand.
         _blockedRoutePrefixes = blockedRoutePrefixes ?? [];
     }
 
     private readonly IReadOnlyList<string> _blockedRoutePrefixes;
 
-    /// <summary>HARNESS-ONLY blocked-route injection (SP-027 b5): true when the path hits
+    /// <summary>HARNESS-ONLY blocked-route injection (slice b5): true when the path hits
     /// a blocked prefix (both origins — the check runs before any file resolution).</summary>
     private bool IsBlockedRoute(string path) =>
         _blockedRoutePrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
@@ -106,7 +106,7 @@ public sealed class LoopbackServer : IDisposable
     }
 
     /// <summary>
-    /// §4.1 ephemeral-port retry loop. Empirical (SP-023): a FAILED HttpListener.Start()
+    /// §4.1 ephemeral-port retry loop. Empirical: a FAILED HttpListener.Start()
     /// disposes the instance (a retry on the same instance throws ObjectDisposedException),
     /// so every attempt uses a FRESH listener; the failed one is closed. Collisions are
     /// real: the 49152–65535 range IS the OS dynamic client range, so outbound connections
@@ -174,7 +174,7 @@ public sealed class LoopbackServer : IDisposable
 
         if (IsBlockedRoute(path))
         {
-            // SP-027 b5 HARNESS-ONLY blocked-route injection (W18 class).
+            // HARNESS-ONLY blocked-route injection (W18 class).
             _log.Log($"dtrh-loopback: GET {RouteClass(path)} -> 403 (HARNESS blocked-route injection)");
             await Refuse(ctx, 403, "refused: blocked route (HARNESS-ONLY failure injection)", RouteClass(path));
             return;
@@ -303,7 +303,7 @@ public sealed class LoopbackServer : IDisposable
 
         if (IsBlockedRoute(path))
         {
-            // SP-027 b5 HARNESS-ONLY blocked-route injection (W18 class; CORS-on-errors).
+            // HARNESS-ONLY blocked-route injection (W18 class; CORS-on-errors).
             _log.Log($"dtrh-loopback: GET {RouteClass(path)} -> 403 (HARNESS blocked-route injection)");
             await Refuse(ctx, 403, "refused: blocked route (HARNESS-ONLY failure injection)", RouteClass(path), cors: true);
             return;
@@ -370,7 +370,7 @@ public sealed class LoopbackServer : IDisposable
     /// serving). Route-scoped MIME table (the user-media extensions); CORS clean so the
     /// page's WebGL texture upload stays untainted (WPF ccp.assets "Allow" parity,
     /// DtrhHostService.cs:90). No-store N/A: these URLs carry NO credentials (loopback,
-    /// no query tokens — SP-018 V5's credentialed-URL case does not apply; recorded).</summary>
+    /// no query tokens — the V5 credentialed-URL case does not apply; recorded).</summary>
     private async Task HandleUserMedia(HttpListenerContext ctx, string path)
     {
         var rel = path["/umedia/".Length..];
@@ -536,7 +536,7 @@ public sealed class LoopbackServer : IDisposable
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _stopped, 1) != 0) return; // idempotent teardown (SP-003 discipline)
+        if (Interlocked.Exchange(ref _stopped, 1) != 0) return; // idempotent teardown (lifecycle discipline)
         _cts.Cancel();
         _inbox.ReleaseAll(); // hanging long-polls complete empty before the listeners stop
         try { _page.Stop(); } catch { /* best effort */ }

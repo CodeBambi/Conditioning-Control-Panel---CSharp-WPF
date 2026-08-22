@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-119 — the haptics premium gate, which consumes <c>Entitlement/**</c> UNCHANGED.
+/// The haptics premium gate, which consumes <c>Entitlement/**</c> UNCHANGED.
 ///
 /// <para>The one rule every fact here serves: <b>"I could not tell" must never render as "you are
 /// not a patron."</b> The shipping app breaks it on this exact surface —
@@ -86,7 +86,7 @@ public class HapticGateTests
     public void ATIERThisBuildDoesNOTDefineIsUNKNOWN_NeverGranted()
     {
         // The one direction where a mistake hands out a paid feature: `>=` on a raw enum would open
-        // for (EntitlementTier)99. HostLoginEntitlement closes it at the source (SP-094) and
+        // for (EntitlementTier)99. HostLoginEntitlement closes it at the source and
         // DtrhGate takes the same second guard; this is the third.
         var decision = HapticGate.Decide(new EntitlementOutcome.Entitled((EntitlementTier)99, "rogue"));
 

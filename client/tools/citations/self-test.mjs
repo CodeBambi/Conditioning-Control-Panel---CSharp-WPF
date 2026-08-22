@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// self-test.mjs — the facts that bind detect.mjs (SP-088).
+// self-test.mjs — the facts that bind detect.mjs.
 //
-// WHY THIS EXISTS, AND HOW IT REACHES THE .NET SUITE (SP-133)
+// WHY THIS EXISTS, AND HOW IT REACHES THE .NET SUITE
 // check-floor.mjs discovers only csproj entries under tests/ in client/CcpClient.sln
 // (:80-107) and runs them (:364), so a node file under client/tools/ is invisible to it
-// and NOTHING RAN THIS FILE from SP-088 until SP-133. It now runs on every floor run:
+// and NOTHING RAN THIS FILE until the .NET bridge below was added. It now runs on every floor run:
 // client/tests/CcpClient.Tests/CitationSelfTestGateTests.cs spawns
 //   node --test-reporter=tap client/tools/citations/self-test.mjs
 // and reds the suite on a failing fact. THAT MAKES THE TAP TRANSCRIPT A CONTRACT: the
@@ -25,7 +25,7 @@
 // inventory, the real WPF tree, or the real port sources.
 //
 // CONCURRENCY
-// Up to eight lanes share os.tmpdir() with SP-056's fixtures. Each fixture directory is
+// Up to eight lanes share os.tmpdir() with other suites' fixtures. Each fixture directory is
 // ccp-sp088-<randomUUID> (distinct prefix so a stray directory is attributable) and is
 // removed in a finally, mirroring UpstreamPayloadInventoryTests.cs:546. A fixed fixture
 // name would corrupt two lanes at 8-way concurrency.
@@ -626,9 +626,9 @@ test("F14: a citation naming CCP.*/tests but credited to a shipping path is coun
   });
 });
 
-// ================================================ F15-F24 the SP-131 needle mode
+// ======================================================= F15-F24 the needle mode
 //
-// THESE ARE THE CLASSIFICATION HALF, AND SP-133 IS WHAT PUT THEM ON THE FLOOR: until then
+// THESE ARE THE CLASSIFICATION HALF, AND THE .NET BRIDGE IS WHAT PUT THEM ON THE FLOOR: until then
 // no standing gate ran this file, so their green held only as of the last hand-run.
 // client/tests/CcpClient.Tests/CitationNeedleTests.cs pins the exit contract of BOTH modes,
 // the coverage block, and every needle resolving at exactly one line in the FROZEN baseline

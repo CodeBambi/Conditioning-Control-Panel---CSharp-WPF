@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// SP-053: the reduced-motion inheritance probe seam (task-board P1 row "Webview
+/// The reduced-motion inheritance probe seam (task-board P1 row "Webview
 /// prefers-reduced-motion inheritance probe" — a PRE-EXISTING DTRH host obligation
-/// surfaced by the SP-050 audit, range-proven NOT a v6.6.3 delta). The DTRH page probes
+/// surfaced by the audit, range-proven NOT a v6.6.3 delta). The DTRH page probes
 /// `matchMedia('(prefers-reduced-motion: reduce)')` itself (payload
 /// `shared/capability.js:35` — READ-ONLY; reduced → 2D mode, `canTry3d:false` at :57).
 /// This seam measures what the EMBEDDED engine answers for that exact query against the

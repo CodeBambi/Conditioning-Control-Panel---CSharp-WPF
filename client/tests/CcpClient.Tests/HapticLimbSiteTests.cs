@@ -12,7 +12,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-126 — <b>the five port trigger points</b>: that each of them tells the limb the right moment,
+/// <b>The five port trigger points</b>: that each of them tells the limb the right moment,
 /// with the right argument, at the right place in its own sequence, and that the ones the census
 /// calls absent stay absent.
 ///
@@ -213,7 +213,7 @@ public class HapticLimbSiteTests
     public void EVERYWALLBOUNCETellsTheLimbONCE_AndTheStepsBetweenTellItNothing()
     {
         // Upstream fires BouncingTextBounceAsync() at BouncingTextService.cs:516, between the bounce
-        // bookkeeping and the 10 % re-roll at :519 — in a module this port shipped at SP-115.
+        // bookkeeping and the 10 % re-roll at :519 — in a module this port has already shipped.
         var limb = new RecordingLimb();
         var field = new BouncingTextField(
             new BouncingTextPresentation(
@@ -296,7 +296,7 @@ public class HapticLimbSiteTests
     [Fact]
     public async Task ABUSYLIMBDoesNotLightTheRackDot_BecauseLiveWouldMeanSomethingIsBeingSENT()
     {
-        // SP-119 gave this row three dot values and Live is unreachable BY CONSTRUCTION. The reason
+        // This row was given three dot values and Live is unreachable BY CONSTRUCTION. The reason
         // has moved — the modules are no longer silent — but the dot has not, and must not: both of
         // its conjuncts are about what a SERVER said, and a limb touches neither. Views/** is closed
         // to this packet and nothing here asks it to change.

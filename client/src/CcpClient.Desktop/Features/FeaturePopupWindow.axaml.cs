@@ -10,7 +10,7 @@ using Avalonia.VisualTree;
 namespace CcpClient.Desktop.Features;
 
 /// <summary>
-/// Demonstrator feature popup (board row "Prove feature-popup scrolling") — the SP-007
+/// Demonstrator feature popup (board row "Prove feature-popup scrolling") — the
 /// demonstrator card's left-click settings popup as a REAL window implementing the W-04
 /// contract (window-behavior-manifest; WPF evidence FeaturePopupWindow.xaml(.cs),
 /// MainWindow.Presets.cs:846-873): owned modeless, taskbar-absent, non-resizable,
@@ -59,7 +59,7 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
         PositionChanged += (_, _) => UpdatePopupProbe(); // drags move the window without a layout pass
     }
 
-    /// <summary>Demo-run probe sink (SP-013 --popup-demo): probe lines are mirrored to stderr on WSLg, where no UIA exists.</summary>
+    /// <summary>Demo-run probe sink (--popup-demo): probe lines are mirrored to stderr on WSLg, where no UIA exists.</summary>
     public Action<string>? DiagnosticSink { get; set; }
 
     /// <summary>THE one close operation (W-04): title-bar button and Escape both land here.</summary>
@@ -242,7 +242,7 @@ public partial class FeaturePopupWindow : Window, FeaturePopupManager.IPopup
     /// <summary>
     /// The observable scrolling-evidence channel (row verification language): changing
     /// Extent/Viewport/Offset plus whether the final control is inside the viewport —
-    /// UIA-readable, same pattern as the SP-007 layout probe.
+    /// UIA-readable, same pattern as the layout probe.
     /// </summary>
     private void UpdateScrollProbe()
     {

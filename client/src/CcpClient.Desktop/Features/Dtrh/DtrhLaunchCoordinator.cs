@@ -4,12 +4,12 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// The two WPF entry points into the hole (SP-024 slice b2; MainWindow.Lab.cs:103-183):
+/// The two WPF entry points into the hole (slice b2; MainWindow.Lab.cs:103-183):
 /// <see cref="LaunchWithPickerAsync"/> = the hero card (save picker right before the hole
 /// opens; cancel backs out, no launch — :123-127) and <see cref="QuickStartAsync"/> =
 /// Quick Start (skips the picker BY DESIGN, reuses the last-chosen slot — :161-165).
 /// Both descend through <see cref="DtrhSaveSlots.DescendInto"/> and open the b1 host
-/// shell. Owned async: the descend's store writes are SP-004 owned operations whose
+/// shell. Owned async: the descend's store writes are owned operations whose
 /// completions are awaited; failures surface as typed diagnostics, never swallowed.
 /// </summary>
 public sealed class DtrhLaunchCoordinator
@@ -21,7 +21,7 @@ public sealed class DtrhLaunchCoordinator
     private readonly bool _m2Test;
     private readonly bool _killRenderers;
     private readonly DtrhSaveSlots _slots;
-    // SP-027 slice b5: the session-scoped watchdog + relaunch-once state (WPF
+    // Slice b5: the session-scoped watchdog + relaunch-once state (WPF
     // _relaunchedOnce parity — survives window recreation; NEVER a restart loop).
     private readonly DtrhWatchdog _watchdog = new();
     private int _currentSlot;
@@ -105,7 +105,7 @@ public sealed class DtrhLaunchCoordinator
                 }
 
                 // Relaunch-into-locked-profile is the deterministic 0x800700AA case
-                // (consult (b)2; SP-023 surprise #7): kill the stale children holding
+                // (consult (b)2; recorded surprise #7): kill the stale children holding
                 // OUR profile BEFORE recreating the window, or the one relaunch burns
                 // on a lock panic. Typed outcome, logged — never silent.
                 var recovery = DtrhProfileLock.TryRecover(DtrhProfileLock.WebView2ProfileDir());

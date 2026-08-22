@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-054: the profiler matrix vs the WPF-pinned cases (IntakeProfiler.cs full-source port).
+/// The profiler matrix vs the WPF-pinned cases (IntakeProfiler.cs full-source port).
 /// Binary endorsement, heat weighting, A5 inversion at heat ≥ 3, the exclusion rules, and
 /// the under-sampled → 0.5 neutral contract.
 /// </summary>

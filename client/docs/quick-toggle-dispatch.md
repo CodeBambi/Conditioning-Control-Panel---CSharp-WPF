@@ -1,6 +1,6 @@
 # Quick-toggle dispatch contract
 
-**Status:** implemented on the demonstrator card (`demo.status-ticker`) — SP-014.
+**Status:** implemented on the demonstrator card (`demo.status-ticker`).
 **Scope:** one card, one command path, contract + demonstrator evidence. Multi-card
 acceptance awaits real feature cards (named limit below). Authority: architecture A-004;
 capability-inventory §Feature-card interaction.
@@ -41,9 +41,9 @@ identity) is what this contract ports.
    per-surface switch statements.
 3. **Immediate toggle.** A single plain right-click press reverses the state at once. No
    context menu, no confirmation, no intermediate choice. `e.Handled = true`.
-4. **Ring from operation liveness.** The lit ring derives from the SP-004 operation
-   authority (`IsOperationLive`), never the persisted flag (SP-007 rule).
-5. **Persistence.** The flag mutates through the SP-005 store and saves; file-content
+4. **Ring from operation liveness.** The lit ring derives from the owned-operation
+   authority (`IsOperationLive`), never the persisted flag (a standing rule).
+5. **Persistence.** The flag mutates through the persistence store and saves; file-content
    proof (`"statusTickerEnabled": true`), restore-on-restart.
 6. **Exception taxonomy** (contract-only in the client today — no such cards exist here;
    no fake cards synthesized):
@@ -67,10 +67,10 @@ identity) is what this contract ports.
    `ContextFlyout`; test/advanced actions (when they exist) use separate buttons or an
    explicit modified gesture and never consume plain right-click.
 
-## Demonstrator evidence (SP-014)
+## Demonstrator evidence
 
 - Unit (`CcpClient.Tests/QuickToggleDispatchTests.cs`): stable-ID resolution toggles the
-  real SP-004 operation + SP-005 file-content persistence; **title-mutation negative
+  real owned operation + file-content persistence; **title-mutation negative
   test** (mutate `CardTitle` → dispatch still resolves via ID; old and mutated title
   strings never resolve); capitalization/whitespace/null near-misses never resolve;
   unknown/neutral IDs silent no-op; one-entry dispatch + command/dispatch convergence.
@@ -81,7 +81,7 @@ identity) is what this contract ports.
   card while right-click over the title text still toggles; no `ContextMenu`/
   `ContextFlyout` exists or opens.
 - Windows-headed smoke: real SendInput
-  right-click toggles, ring pixel flip, persistence file proof, **toggle while the SP-013
+  right-click toggles, ring pixel flip, persistence file proof, **toggle while the
   modeless popup is open**, no-context-menu negative, title-region click parity. The
   no-context-menu negative is a composite that covers BOTH menu configurations: the
   process-window count catches a native popup menu, the UIA Menu/MenuItem scan inside the
@@ -90,7 +90,7 @@ identity) is what this contract ports.
 
 ## Named limits (row stays WIP)
 
-- **Languages:** the client has NO localization system (A-014 honest absence; SP-009/SP-010
+- **Languages:** the client has NO localization system (A-014 honest absence; independently
   verified). Language-switch invariance is not demonstrable; the falsifiable stand-in is
   the title-mutation negative test (mutating the displayed title cannot break dispatch).
 - **Themes:** one theme exists; theme-invariance is unproven (dispatch touches no theme
@@ -98,8 +98,8 @@ identity) is what this contract ports.
 - **Exception classes:** locked/help/Visuals/System are CONTRACT-ONLY with WPF evidence
   above — none are demonstrable with one demonstrator card; no fake cards were synthesized.
 - **Session:** no session concept exists in the client. "Live-starts/stops during a
-  session" is proven as: real SP-004 operation liveness changes on toggle (SP-007 rule)
-  + right-click toggle while the SP-013 modeless popup is open. The WPF-session sense
+  session" is proven as: real owned-operation liveness changes on toggle (a standing rule)
+  + right-click toggle while the modeless popup is open. The WPF-session sense
   (`App.IsEngineRunning` gating service start/stop) remains a named limit.
 - **Multi-card acceptance:** one card, one entry. The full row acceptance (every card, all
   languages/themes, running session) awaits real feature cards and supersedes this

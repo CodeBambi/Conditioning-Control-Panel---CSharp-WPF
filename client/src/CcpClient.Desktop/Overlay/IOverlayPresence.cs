@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Overlay;
 /// the user's clicks go straight through it to whatever they were aiming at.
 ///
 /// <para><b>The contract that makes this capability worth having.</b> Every operation returns a
-/// typed <see cref="CapabilityState"/> (SP-006, <c>runtime-capability-contract.md</c> §1), and
+/// typed <see cref="CapabilityState"/> (<c>runtime-capability-contract.md</c> §1), and
 /// <see cref="CapabilityState.Available"/> is returned ONLY after the OPERATING SYSTEM was asked
 /// back and confirmed the effect: that the window exists and is visible, that it holds the
 /// geometry that was requested, that a non-zero alpha is held for it so the compositor draws it,
@@ -33,10 +33,10 @@ namespace CcpClient.Desktop.Overlay;
 /// delivered input. Both are headed claims (<c>client/docs/verification-harness.md</c>) and nothing
 /// here discharges them.</para>
 ///
-/// <para><b>Content (SP-100).</b> <see cref="Paint"/> puts pixels on a presented surface, and its
+/// <para><b>Content.</b> <see cref="Paint"/> puts pixels on a presented surface, and its
 /// <see cref="CapabilityState.Available"/> is earned the same way as every other: the operating
 /// system is asked for the surface's content back and returns the frame. That is one step further
-/// than SP-099 went and one step short of a human seeing it.</para>
+/// than the presence check went and one step short of a human seeing it.</para>
 ///
 /// <para><b>What a caller does with Unavailable.</b> Not draw. There is no lesser overlay to
 /// degrade to — a surface that is invisible, buried, or swallowing clicks is worse for the user
@@ -87,7 +87,7 @@ public interface IOverlayPresence : IDisposable
     /// <para>The frame's pixel size must equal the presented surface's size
     /// (<see cref="OverlayReasonCodes.OverlayFrameSizeMismatch"/> otherwise): this capability
     /// scales nothing, because a scaler here would silently decide the port's DPI policy on a
-    /// surface whose coordinates are physical pixels (SP-099 divergence D55).</para>
+    /// surface whose coordinates are physical pixels (divergence D55).</para>
     /// </summary>
     CapabilityState Paint(OverlayFrame frame);
 

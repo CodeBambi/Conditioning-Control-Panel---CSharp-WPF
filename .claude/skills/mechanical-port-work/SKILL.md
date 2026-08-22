@@ -13,7 +13,7 @@ Proceed only when all exist:
 
 - an approved unblocked row in `client/docs/task-board.md`;
 - linked owner decision and behavior contract;
-- an authored packet at `spine-tasks/SP-NNN-slug/PROMPT.md` with allowed files, exclusions, dependencies, its `| testCommand |` contract row, and headed gates;
+- an authored packet with allowed files, exclusions, dependencies, its `| testCommand |` contract row, and headed gates;
 - clean or intentionally isolated working tree/worktree;
 - no unresolved product/platform decision.
 

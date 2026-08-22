@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Engine + participant tests (SP-015 Step 2): cadence math at exact declared deadlines
+/// Engine + participant tests: cadence math at exact declared deadlines
 /// (non-uniform delays honored), pause/resume successor-frame + unchanged cadence,
 /// pack-switch cleanliness, REAL-registry timer/subscription stability across N cycles,
 /// and the typed undecodable-asset capability state. Deterministic via ManualAvatarClock.
@@ -59,7 +59,7 @@ public sealed class AvatarAnimationEngineTests
 
         // Uptime past the new pack's first declared delay (700ms): the swap must rebase
         // the frame clock — a stale deadline burst-advances through the whole clip in one
-        // tick (SP-015 Step-4 headed finding: switch burst f0..f5 at t+23ms).
+        // tick (headed finding: switch burst f0..f5 at t+23ms).
         var pulse = AvatarPackTests.LoadFromMemory(SyntheticAvatarPacks.Pulse,
             SyntheticAvatarPacks.GenerateSheetPixels(SyntheticAvatarPacks.Pulse, out var pw, out _), pw);
         engine.SetPack(pulse);
@@ -152,11 +152,11 @@ public sealed class AvatarAnimationEngineTests
     {
         var (engine, _, _, _) = CreateEngine();
         engine.Start();
-        // Zero-tick regression pin (SP-067): stop lands before (or during) the loop's first
+        // Zero-tick regression pin: stop lands before (or during) the loop's first
         // check — no clock advance, no settle. Deterministic because BOTH exits agree: the
         // OCE path (ManualAvatarClock.Delay observes the token via WaitAsync) and the
         // token-observed post-loop return both yield Cancelled. What breaks it: a post-loop
-        // `return OperationOutcome.Completed.Instance` shape returning here (the SP-067
+        // `return OperationOutcome.Completed.Instance` shape returning here (the
         // heartbeat defect class).
         Assert.NotNull(engine.Completion); // the owned completion is registered at Start (contract §1)
         await StopAndAssertCancelledAsync(engine);
@@ -310,8 +310,8 @@ public sealed class AvatarAnimationEngineTests
         engine.SetMode(AvatarMode.Animated);
         await AdvanceUntilAsync(clock, () => engine.CurrentFrame.ClipId == SyntheticAvatarPacks.ClipIdle, 3000);
 
-        // Cooldown-ignored is a TRACE event (the engine's hot path never logs, SP-015
-        // Step-4 finding) — collect the Traced stream, not the log sink.
+        // Cooldown-ignored is a TRACE event (the engine's hot path never logs — a headed
+        // finding) — collect the Traced stream, not the log sink.
         var traced = new List<string>();
         engine.Traced += (_, e) => { lock (traced) { traced.Add(e.Kind); } };
         // Accepted click: min-hold applies, then the click clip settles as layerA.

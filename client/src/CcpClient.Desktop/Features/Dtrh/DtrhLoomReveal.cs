@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// SP-049: loom-reveal — the studio rack's 📂 shows the saved GIF in the OS file manager
+/// Loom-reveal — the studio rack's 📂 shows the saved GIF in the OS file manager
 /// (loomStudio.js:749; WPF LoomHostService.cs:108-117: <c>explorer.exe /select,"&lt;path&gt;"</c>).
 /// The path comes ONLY from <see cref="DtrhLoom.GifPathFor"/> (slug whitelist + existence —
 /// page strings never become paths). Linux has no /select equivalent: the folder opens

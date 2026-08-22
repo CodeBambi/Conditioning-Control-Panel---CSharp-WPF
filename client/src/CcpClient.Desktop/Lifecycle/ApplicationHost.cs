@@ -52,7 +52,7 @@ public sealed class ApplicationHost
     }
 
     /// <summary>
-    /// SP-092's entitlement capability, composed once by <see cref="CompositionRoot.Build"/>
+    /// The entitlement capability, composed once by <see cref="CompositionRoot.Build"/>
     /// so the object the DTRH gate consults is the SAME object whose probe the System page
     /// reports. Null only in owner-less test hosts built through the convenience constructor;
     /// a UI surface that needs it says so loudly rather than degrading into an ungated door.
@@ -82,7 +82,7 @@ public sealed class ApplicationHost
     public bool IsShutdown => Volatile.Read(ref _shutdownStarted) != 0;
 
     /// <summary>
-    /// Content-free diagnostic surface for headed verification harnesses (SP-007 layout
+    /// Content-free diagnostic surface for headed verification harnesses (layout
     /// probe). Never carries user content or secrets.
     /// </summary>
     public void LogDiagnostic(string message) => _log.Log(message);
@@ -119,14 +119,14 @@ public sealed class ApplicationHost
     }
 
     /// <summary>
-    /// The single idempotent teardown entry point (SP-003 contract §6; async contract §6).
+    /// The single idempotent teardown entry point (contract §6; async contract §6).
     /// Runs exactly once per process; every later invocation from any path is a no-op.
     /// Order: cancel every generation and drain every owned completion (bounded wait is a
     /// backstop only; cancellation terminates well-behaved operations), then stop
     /// participants in reverse start order. Never throws: unobserved operations are
     /// recorded in registry state, and one participant's stop failure is logged while
-    /// teardown continues to the rest. The settings flush occupies the head slot SP-003
-    /// reserved (activated by SP-005, persistence contract §11). There is no second teardown path for async work.
+    /// teardown continues to the rest. The settings flush occupies the head slot the lifecycle
+    /// contract reserved (persistence contract §11). There is no second teardown path for async work.
     /// </summary>
     public async Task ShutdownAsync()
     {
@@ -135,10 +135,10 @@ public sealed class ApplicationHost
             return;
         }
 
-        // Persistence contract §11 (SP-005): the settings flush occupies the reserved head
+        // Persistence contract §11: the settings flush occupies the reserved head
         // slot — it completes BEFORE generations are cancelled/drained and before reverse-order
         // participant stop. Attempted on every path including panic (contract §11 rule 4);
-        // bounded internally; guarded here too so teardown never throws (SP-003 invariant).
+        // bounded internally; guarded here too so teardown never throws (a teardown invariant).
         if (_preDrainFlush is not null)
         {
             try

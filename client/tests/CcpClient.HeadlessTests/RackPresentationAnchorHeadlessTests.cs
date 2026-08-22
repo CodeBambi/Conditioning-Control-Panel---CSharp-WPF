@@ -14,7 +14,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-122 — the join between the rack's real brushes and the headed manifest that reads them back
+/// The join between the rack's real brushes and the headed manifest that reads them back
 /// off composited pixels (<c>client/tools/verify/checks.json</c>).
 ///
 /// <para><b>The gap this closes.</b> The manifest names four colours; the product names them in

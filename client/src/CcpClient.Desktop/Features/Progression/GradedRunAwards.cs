@@ -5,7 +5,7 @@ using CcpClient.Desktop.Persistence;
 namespace CcpClient.Desktop.Features.Progression;
 
 /// <summary>
-/// SP-128: the persisted graded-run award record (`graded_run_awards.json`).
+/// The persisted graded-run award record (`graded_run_awards.json`).
 ///
 /// <para>Upstream's equivalent state lives on <c>AchievementProgress</c>
 /// (<c>CCP.Core/Models/AchievementProgress.cs:13</c> for the unlocked set, <c>:169</c> for the
@@ -75,7 +75,7 @@ public sealed record GradedRunAwardOutcome(
     int DistinctCategories);
 
 /// <summary>
-/// SP-128: the graded-run award consumer — upstream's <c>GamificationBridge.OnQuizCompleted</c>
+/// The graded-run award consumer — upstream's <c>GamificationBridge.OnQuizCompleted</c>
 /// perfect branch (<c>Services/GamificationBridge.cs:598-609</c>), ported as the OUTCOME rather
 /// than the mechanism.
 ///

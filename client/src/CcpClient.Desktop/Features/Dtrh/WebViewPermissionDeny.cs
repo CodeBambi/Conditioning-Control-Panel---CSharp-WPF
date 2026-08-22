@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// SP-135 — the host's answer to <c>CoreWebView2.PermissionRequested</c>: <b>DENY</b>, so the
+/// The host's answer to <c>CoreWebView2.PermissionRequested</c>: <b>DENY</b>, so the
 /// browser's own permission prompt never reaches the user and the port's stated posture becomes a
 /// mechanism instead of an argument (closes D250).
 ///
@@ -58,7 +58,7 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// <c>put_State</c> slot 7; args3 e61670bc-3dce-4177-86d2-c629ae3cb6ac <c>put_SavesInProfile</c>
 /// slot 12; <c>COREWEBVIEW2_PERMISSION_STATE_DENY</c> = 2.</para>
 ///
-/// <para>Capability honesty (SP-006): where the platform cannot deliver this hook — the Linux
+/// <para>Capability honesty: where the platform cannot deliver this hook — the Linux
 /// WebKitGTK dialog path, whose <c>permission-request</c> signal Avalonia exposes nowhere — the
 /// outcome is typed <c>Unavailable</c> and the caller SAYS SO. A failed attach never becomes
 /// silence: the port must not be quieter about this than it was when it had no handler at all.</para>

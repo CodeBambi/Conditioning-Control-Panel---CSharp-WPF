@@ -227,7 +227,7 @@ internal static class Win32InputInterop
     /// <summary>
     /// The escalation's one non-obvious call. Attaching this thread's input queue to the current
     /// foreground thread's is what makes <see cref="SetForegroundWindow"/> succeed from a process
-    /// that does not already own the foreground — measured, and measured to be NECESSARY (SP-110
+    /// that does not already own the foreground — measured, and measured to be NECESSARY (the packet
     /// plan.md §0: plain <c>SetForegroundWindow</c> returned FALSE, the attach-then-ask returned
     /// TRUE). Always detached immediately; never held across anything.
     /// </summary>

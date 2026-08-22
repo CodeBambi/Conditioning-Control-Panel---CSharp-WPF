@@ -11,12 +11,12 @@ namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
 /// The DTRH host shell (slice b1; dtrh-admission.md §3/§5). Surface selection is driven
-/// by the PROBED capability states (SP-006 — never an OS guess): Windows embedded
+/// by the PROBED capability states (never an OS guess): Windows embedded
 /// WebView2 vs Linux NativeWebDialog vs honest unsupported. Boot contract (WPF
 /// archaeology, DtrhHostService.cs:166-211 + ChaosWebViewHost.cs:301-305): the host
 /// queues host→page messages until the page's `ready`, then flushes init + manifest in
 /// order and claims keyboard focus (DtrhHostService.cs:169-172). Host→page: Windows =
-/// synthetic MessageEvent dispatch on window.chrome.webview (SP-011 W4, byte-identical);
+/// synthetic MessageEvent dispatch on window.chrome.webview (spike W4, byte-identical);
 /// Linux = §3.3 inbox enqueue (retained delivery = the pre-ready queue, replay-equivalent).
 /// Page→host: WebMessageReceived on both (FIRST GATE proven on the dialog path).
 /// </summary>
@@ -32,30 +32,30 @@ public partial class DtrhHostWindow : Window
     private bool _engineLive;
     private int _heartbeats;
     private readonly CancellationTokenSource _closing = new();
-    // SP-025 slice b3: the native effects owner + its router/backends (window-scoped
+    // Slice b3: the native effects owner + its router/backends (window-scoped
     // lifetime — constructed at Opened, torn down at Closing; DisposeAll :896 parity).
     private DtrhNativeEffects? _fx;
     private DtrhFxRouter? _router;
     private SoundFlowDtrhAudio? _audio;
     private DtrhVideoWindow? _videoWindow;
-    // SP-026 slice b4: the meta-progression engine (ops/payout/request-run/asset-stats)
+    // Slice b4: the meta-progression engine (ops/payout/request-run/asset-stats)
     // bound to the descended slot; test mode (--dtrh-m2test) runs the declared fixture
-    // in memory (SP-057 — never a clone of the live document).
+    // in memory (never a clone of the live document).
     private readonly int _slot;
     private readonly bool _m2Test;
     private DtrhMeta? _meta;
     private DtrhAssetStats? _assetStats;
     private DtrhLoom? _loom;
-    // SP-049: the shared loom bridge subset (save/delete/reveal + list) — one write path
+    // The shared loom bridge subset (save/delete/reveal + list) — one write path
     // for this window and the standalone studio window (DtrhLoomWindow).
     private DtrhLoomDispatch? _loomDispatch;
-    // SP-027 slice b5: the session watchdog (coordinator-owned — survives relaunch),
+    // Slice b5: the session watchdog (coordinator-owned — survives relaunch),
     // the native ProcessFailed subscription (Windows embedded only — W17 immediate
     // route), the 5s heartbeat watch, and the run-active gate for the 10s/20s limits.
     private readonly DtrhWatchdog? _watchdog;
     private DispatcherTimer? _watchTimer;
     private DtrhProcessFailed.DtrhProcessFailedSignal? _processFailedSignal;
-    // SP-135: the PermissionRequested deny hook (Windows embedded only). Independent of the
+    // The PermissionRequested deny hook (Windows embedded only). Independent of the
     // watchdog — a permission answer has nothing to do with process recovery.
     private WebViewPermissionDeny.PermissionDenySignal? _permissionDenySignal;
     private bool _runActive;
@@ -65,10 +65,10 @@ public partial class DtrhHostWindow : Window
     private DispatcherTimer? _exitTimer;
     private bool _recoveryClosing;
     private bool _profileRetryUsed;
-    // SP-027 b5 HARNESS-ONLY: --dtrh-kill-renderers arms the W17 renderer-kill injection
+    // HARNESS-ONLY: --dtrh-kill-renderers arms the W17 renderer-kill injection
     // at engine-live (and again on the relaunched instance → exhaustion evidence).
     private readonly bool _killRenderers;
-    // SP-032 q2: the bark content pipeline (event → rule → gate → payload → q1's
+    // Slice q2: the bark content pipeline (event → rule → gate → payload → q1's
     // arbitration). Window-scoped lifetime (constructed at Opened, flushed + torn down at
     // Closing); SKIPPED entirely in m2 test mode (WPF RouteBark _testMode parity,
     // DtrhHostService.cs:622 — no rotation/lifetime leakage into the live document).
@@ -110,12 +110,12 @@ public partial class DtrhHostWindow : Window
 
         if (m2Test)
         {
-            _host.LogDiagnostic("dtrh: M2 TEST MODE — meta engine runs the declared fixture in memory, the real save is never touched (HARNESS-ONLY, SP-057)");
+            _host.LogDiagnostic("dtrh: M2 TEST MODE — meta engine runs the declared fixture in memory, the real save is never touched (HARNESS-ONLY)");
         }
 
         Opened += (_, _) =>
         {
-            // SP-055: the asset selection loads FIRST — InitNativeEffects' video pool
+            // The asset selection loads FIRST — InitNativeEffects' video pool
             // reads the same set + flag, so it must precede every effects/manifest init.
             InitAssetSelection();
             InitMetaEngine();
@@ -162,7 +162,7 @@ public partial class DtrhHostWindow : Window
     }
 
     /// <summary>b4: bind the meta engine to the descended slot's store (the b2 slot
-    /// document rides SP-005 machinery — no parallel save file, no schema bump).
+    /// document rides persistence machinery — no parallel save file, no schema bump).
     /// Broadcast = SendToPage (meta snapshots answer applied ops).</summary>
     private void InitMetaEngine()
     {
@@ -182,10 +182,10 @@ public partial class DtrhHostWindow : Window
         _host.LogDiagnostic($"dtrh: meta engine bound to slot {_slot}{(_m2Test ? " (TEST clone)" : "")}");
     }
 
-    // ---------- SP-032 q2 bark pipeline (bark message → q1 arbitration) ----------
+    // ---------- Slice q2 bark pipeline (bark message → q1 arbitration) ----------
 
     /// <summary>
-    /// SP-055: the persisted asset selection feeding the ONE active-pool definition
+    /// The persisted asset selection feeding the ONE active-pool definition
     /// (read-only this row; the Assets-tree row owns the write path). Loaded once at
     /// window open — nothing mutates the set until that row lands. Best-effort stopped in
     /// <see cref="TeardownBarkPipeline"/>.
@@ -200,8 +200,8 @@ public partial class DtrhHostWindow : Window
     /// <summary>
     /// Construct the bark content pipeline host-locally (CompositionRoot.cs is outside this
     /// slice's File Scope — the app-wide lift is a future row): q1's SoundArbitration over a
-    /// second SoundFlow engine (miniaudio devices coexist — SP-029 DTRH boundary), the
-    /// companion-state document on the SP-005 machinery (<DataDirectory>/companion.json),
+    /// second SoundFlow engine (miniaudio devices coexist — the DTRH audio boundary), the
+    /// companion-state document on the persistence machinery (<DataDirectory>/companion.json),
     /// and the compact built-in rule set. Voice assets do not ship in this slice (named
     /// limit) — audio variants surface text-only with a typed reason until the voice-content
     /// row. m2Test skips construction entirely (WPF _testMode early-return parity,
@@ -216,7 +216,7 @@ public partial class DtrhHostWindow : Window
         }
 
         var backend = new SoundFlowAudioBackend(_host.LogDiagnostic);
-        // SP-123: the arbitration graph is built by DtrhBarkRouting.Composition.cs — same objects, same
+        // The arbitration graph is built by DtrhBarkRouting.Composition.cs — same objects, same
         // arguments, same order — so the wiring can be driven by a fact instead of only by a
         // headed run. Everything else in this method stayed exactly where it was.
         _barkArbitration = DtrhBarkRouting.CreateArbitration(backend, _host.LogDiagnostic);
@@ -238,7 +238,7 @@ public partial class DtrhHostWindow : Window
         _bark = DtrhBarkRouting.CreatePipeline(
             _barkArbitration, _barkStore, _dtrh.DataDirectory, _host.LogDiagnostic);
         _bark.BarkSurfaced += payload =>
-            // Presence+shape ONLY (SP-016 content-free class): rule id + suppression shape,
+            // Presence+shape ONLY (the content-free class): rule id + suppression shape,
             // NEVER the bark text. The surface itself (portrait/bubble) is a future UI row.
             _host.LogDiagnostic($"dtrh: bark surfaced (rule '{payload.RuleId}', class {payload.Class}, audio {(payload.AudioPath is null ? "none" : "resolved")})");
         _host.LogDiagnostic($"dtrh: bark pipeline up ({_bark.RuleCount} rule(s); voice assets = named limit)");
@@ -297,7 +297,7 @@ public partial class DtrhHostWindow : Window
         }
     }
 
-    // ---------- b3 native effects (SP-025) ----------
+    // ---------- b3 native effects ----------
 
     /// <summary>The media roots the effects resolve against: the served payload assets
     /// (overlay-first, §4 mirrored host-side). The overlay assets dir is product-owned
@@ -325,13 +325,13 @@ public partial class DtrhHostWindow : Window
             // b4: the user-media videos dir joins the native pool (WPF parity: native
             // payloads play the user's pool; DtrhHostService EffectPayloadFactory).
             VideoRoots = [PayloadAssets, OverlayAssets, DtrhUserMedia.VideosFolder(_dtrh.UserMediaRoot)],
-            // SP-055: the pool's user-media files route through the ONE active-pool
+            // The pool's user-media files route through the ONE active-pool
             // definition (VideoService.cs:6640-6663 parity — deselected videos never play).
             UserMediaRoot = _dtrh.UserMediaRoot,
             DisabledAssets = _disabledAssets,
             UseAssetWhitelist = _useAssetWhitelist,
             // Media-logging rule (packet framing c): anything under the user-media root
-            // logs presence+shape ONLY — never a filename (SP-018 V5 class).
+            // logs presence+shape ONLY — never a filename (the V5 media-logging class).
             PresenceOnlyRoots = [_dtrh.UserMediaRoot],
             MasterVolume = 80, // the init literal this window sends (b2); the settings seam is a named limit.
         }, _host.LogDiagnostic);
@@ -352,7 +352,7 @@ public partial class DtrhHostWindow : Window
         try { _fx?.Dispose(); } catch { /* best-effort */ }
         _fx = null;
         _router = null;
-        // SoundFlow teardown is proven Δ0 handles/Δ0 threads (SP-017 A8); libvlc release
+        // SoundFlow teardown is proven Δ0 handles/Δ0 threads (fact A8); libvlc release
         // at exit stays SKIPPED (V3 — OS reclaims; unified-video row owns clean teardown).
         try { _audio?.Dispose(); } catch { /* best-effort */ }
         _audio = null;
@@ -404,7 +404,7 @@ public partial class DtrhHostWindow : Window
     /// JSON fed through the REAL parse+dispatch path (pre-approach consult item 7).
     /// Steps: <code>sfx:name[:scale]@t; payload:video|audio@t; freeze:on|off@t;
     /// vn:on|off@t; run-started@t; run-ended@t; buy:<upgrade-id>@t; request-run-hd@t</code>
-    /// (@t seconds, default spacing 4s). buy:/request-run-hd are SP-052's ownership-gate
+    /// (@t seconds, default spacing 4s). buy:/request-run-hd are the ownership-gate
     /// round-trip drivers (HARNESS-ONLY, harness-seeded ownership at cost 0).</summary>
     private void ScheduleFxDrive()
     {
@@ -484,7 +484,7 @@ public partial class DtrhHostWindow : Window
 
             if (json is null && bare == "probe-missing-media")
             {
-                // SP-027 b5 HARNESS-ONLY missing-media injection (W19 class): point the
+                // HARNESS-ONLY missing-media injection (W19 class): point the
                 // probe at a media URL that does not exist — the server answers a typed
                 // 404 (CORS-on-errors), the probe logs the LOAD ERROR, the page survives.
                 _ = Task.Delay(TimeSpan.FromSeconds(seconds), _closing.Token).ContinueWith(
@@ -528,25 +528,25 @@ public partial class DtrhHostWindow : Window
         "payload:audio" => "{\"type\":\"fire-payload\",\"kind\":\"audio\",\"strength\":60,\"durationMult\":1.0}",
         "run-started" => "{\"type\":\"run-started\",\"difficulty\":\"Gentle\",\"mode\":\"dtrh-web\"}",
         "run-ended" => "{\"type\":\"run-ended\",\"score\":0,\"durationSec\":1,\"difficulty\":\"Gentle\"}",
-        // SP-027 b5: a page-exit message through the real dispatch path WITHOUT a real
+        // b5: a page-exit message through the real dispatch path WITHOUT a real
         // wind-down behind it — the bounded exit-done wait expires & the watchdog forces
         // the close (the timeout cell of the exit matrix; the fast path is real ESC-hold).
         "exit" => "{\"type\":\"exit\"}",
-        // SP-026 b4: a REAL request-run through the real dispatch path (the gating message
+        // b4: a REAL request-run through the real dispatch path (the gating message
         // for runs — freeze bubbles only exist in-run). 150s, drafts OFF (a legit setup
         // toggle — draft holds park the field up to 60s/run and eat the catch window);
         // effect share ramps with intensity (chaosRun.js:3178-3181), the deep chambers
         // deal the freeze bubbles.
         "request-run" => "{\"type\":\"request-run\",\"setup\":{\"difficulty\":\"Easy\",\"durationSec\":150,\"waveCount\":4,\"motion\":\"Mixed\",\"effectIntensity\":0.85,\"colorFlashes\":true,\"boonDraftEnabled\":false,\"allowCurses\":true,\"dartersEnabled\":true,\"key1\":\"Q\",\"key2\":\"E\",\"enabledVariants\":null}}",
-        // SP-026 b4: a deterministic full-field run-ended for the payout banking proof
+        // b4: a deterministic full-field run-ended for the payout banking proof
         // (the page's own run-ended is the gameplay path; this pins the math evidence).
         "run-ended-full" => "{\"type\":\"run-ended\",\"score\":5200,\"durationSec\":180,\"elapsedSec\":172,\"difficulty\":\"Gentle\",\"difficultyMult\":1.0,\"sparkGainMult\":1.0,\"bestCombo\":11,\"defused\":7,\"trickleDrops\":3,\"dripFeedMaxed\":false,\"sessionStats\":{\"bubblesPopped\":57}}",
-        // SP-052: HARNESS-ONLY ownership-gate round-trip driver — a REAL request-run whose
+        // HARNESS-ONLY ownership-gate round-trip driver — a REAL request-run whose
         // setup exceeds the non-owner ceiling (99999s) AND arms the endless toggle, so the
         // dealt run-config transcript proves both ownership gates (dur 7200 vs 1200,
         // endless true vs false) with no gameplay claims (auto-close ends the session).
         "request-run-hd" => "{\"type\":\"request-run\",\"setup\":{\"difficulty\":\"Easy\",\"durationSec\":99999,\"waveCount\":4,\"endless\":true,\"motion\":\"Mixed\",\"effectIntensity\":0.85,\"colorFlashes\":true,\"boonDraftEnabled\":true,\"allowCurses\":true,\"dartersEnabled\":true,\"key1\":\"Q\",\"key2\":\"E\",\"enabledVariants\":null}}",
-        // SP-052: HARNESS-ONLY ownership seed — a REAL purchase-upgrade meta-command through
+        // HARNESS-ONLY ownership seed — a REAL purchase-upgrade meta-command through
         // the real dispatch path. cost:0 because headed evidence can't grind the economy;
         // validation is integrity, not anti-cheat (DtrhMetaBridge.cs:13-21).
         _ when step.StartsWith("buy:", StringComparison.Ordinal) => BuyDriveJson(step[4..]),
@@ -563,7 +563,7 @@ public partial class DtrhHostWindow : Window
         var name = System.Text.Json.JsonSerializer.Serialize(parts[0]);
         var scale = parts.Length > 1 && double.TryParse(parts[1], out var s) ? s : 0.6;
         // Invariant culture: a decimal-comma session culture would emit 0,6 → malformed
-        // JSON (observed in run A; the SP-024 {0:N0} culture lesson's class).
+        // JSON (observed in run A; the {0:N0} culture lesson's class).
         return $"{{\"type\":\"sfx\",\"name\":{name},\"scale\":{scale.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}";
     }
 
@@ -592,7 +592,7 @@ public partial class DtrhHostWindow : Window
         }
         catch (Exception ex) when (DtrhProfileLock.IsStaleProfileLock(ex) && !_profileRetryUsed)
         {
-            // b5: the 0x800700AA stale-profile-lock class (SP-023 surprise #7) — recover
+            // b5: the 0x800700AA stale-profile-lock class (recorded surprise #7) — recover
             // honestly (kill the stale children holding OUR profile) and retry ONCE.
             _profileRetryUsed = true;
             _host.LogDiagnostic($"dtrh: navigation threw the stale-profile-lock class (0x800700AA) — recovering (typed, never silent)");
@@ -633,7 +633,7 @@ public partial class DtrhHostWindow : Window
         {
             wv2.UserDataFolder = DtrhProfileLock.WebView2ProfileDir();
             // WPF parity (DtrhHostService.cs:119-120): the game's audio bed / drift voice
-            // must start without a click; SP-011 W10 verified the flag end-to-end.
+            // must start without a click; spike W10 verified the flag end-to-end.
             wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
             _host.LogDiagnostic("dtrh: WebView2 UserDataFolder set; autoplay-policy=no-user-gesture-required");
         }
@@ -691,14 +691,14 @@ public partial class DtrhHostWindow : Window
             return;
         }
 
-        // SP-053: host-side OS read at probe start — the exact API WPF's OS cap wraps
+        // Host-side OS read at probe start — the exact API WPF's OS cap wraps
         // (SystemParametersInfo GET; null = named limit / GET failure, never defaulted).
         // Paired with the engine's probe-motion messages (re-read at each arrival below).
         var osAtNav = DtrhMotionPreference.ReadOsClientAreaAnimation();
         _host.LogDiagnostic($"dtrh-motion: host OS ClientAreaAnimation={(osAtNav?.ToString() ?? "null")} " +
             $"source={(OperatingSystem.IsWindows() ? "SystemParametersInfo(GET)" : "named-limit")}");
 
-        // Ported spike probe sequence (SP-011 W4/W6), driven identically on both surfaces:
+        // Ported spike probe sequence (W4/W6), driven identically on both surfaces:
         // probe-h2p AFTER the page's module registered its handler; probe-buffered BEFORE
         // the +4s late registration — bridge.js must buffer and replay it. Results mirror
         // back via bridge.log (page→host), so the no-InvokeScript dialog path evidences
@@ -718,7 +718,7 @@ public partial class DtrhHostWindow : Window
         });
     }
 
-    /// <summary>SP-026 b4 HARNESS-ONLY: on the probe page, send every SERVED media URL
+    /// <summary>b4 HARNESS-ONLY: on the probe page, send every SERVED media URL
     /// (Loom spirals + the user-media manifest) as probe-img messages so the probe renders
     /// them in the same engine — the pixel-verifiable serve→display proof for media that
     /// the pane-gated Loom rack can't reach deterministically in a scripted drive.
@@ -778,7 +778,7 @@ public partial class DtrhHostWindow : Window
         _exitTimer.Start();
     }
 
-    // ---------- b5 watchdog + native process-failure signal (SP-027) ----------
+    // ---------- b5 watchdog + native process-failure signal ----------
 
     /// <summary>The 5s heartbeat watch (WPF :819-841). Ticks no-op until the page reports
     /// ready (WPF IsReady guard :830) — a still-loading page can't false-trip.</summary>
@@ -836,7 +836,7 @@ public partial class DtrhHostWindow : Window
         }
     }
 
-    /// <summary>SP-135: subscribe the DENYING PermissionRequested handler at AdapterCreated, so the
+    /// <summary>Subscribe the DENYING PermissionRequested handler at AdapterCreated, so the
     /// browser's own permission prompt never reaches the user (D250). Deliberately NOT guarded by
     /// the watchdog the way <see cref="AttachProcessFailedSignal"/> is: a permission answer has
     /// nothing to do with process recovery, and a null watchdog must never make the deny silently
@@ -902,7 +902,7 @@ public partial class DtrhHostWindow : Window
     }
 
     /// <summary>HARNESS-ONLY (--dtrh-kill-renderers; the W17 injection): kill every
-    /// msedgewebview2 child holding OUR profile — the exact SP-011 kill-renderer.ps1
+    /// msedgewebview2 child holding OUR profile — the exact kill-renderer.ps1
     /// shape — once the engine is live (first kill), and again on the RELAUNCHED
     /// instance (second kill → the one relaunch is spent → typed exhaustion → honest
     /// close). The watchdog/ProcessFailed detection + relaunch-once machine is the
@@ -954,7 +954,7 @@ public partial class DtrhHostWindow : Window
     /// harness-only fx-drive feeds — consult item 7).</summary>
     private void HandleWebMessageBody(string body)
     {
-        // Protocol v1 dispatcher (SP-024 slice b2): every frame parses to a TYPED outcome —
+        // Protocol v1 dispatcher (slice b2): every frame parses to a TYPED outcome —
         // Handled, Deferred(slice), UnknownType, ForwardVersion, Malformed. Never silent,
         // never crashes. Presence+shape logging only (§4.8 sensitive-logging ban).
         switch (DtrhProtocol.ParsePageMessage(body))
@@ -989,7 +989,7 @@ public partial class DtrhHostWindow : Window
         }
     }
 
-    /// <summary>SP-053: pair the engine's probe-motion answer with a FRESH host-side OS
+    /// <summary>Pair the engine's probe-motion answer with a FRESH host-side OS
     /// read at message arrival (OS state verified immediately before the engine reading
     /// is interpreted) and log the typed verdict. Tolerant parse — a malformed motion
     /// frame degrades to Unknown, never crashes the probe run.</summary>
@@ -1095,7 +1095,7 @@ public partial class DtrhHostWindow : Window
                 SetStatus("dtrh: page reported boot-error — closed honestly");
                 Close();
                 return;
-            // SP-025 slice b3: the native-effects messages route to REAL effects.
+            // Slice b3: the native-effects messages route to REAL effects.
             case DtrhProtocol.DtrhPageMessage.Sfx:
             case DtrhProtocol.DtrhPageMessage.FirePayload:
             case DtrhProtocol.DtrhPageMessage.FreezeState:
@@ -1108,9 +1108,9 @@ public partial class DtrhHostWindow : Window
 
                 _router.Handle(message);
                 return;
-            // SP-032 q2: bark events route through the content pipeline on q1's arbitration
+            // Slice q2: bark events route through the content pipeline on q1's arbitration
             // (DtrhBarkRouting = the WPF RouteBark table). Presence+shape logging ONLY —
-            // event name + outcome shape, NEVER bark text (SP-016 content-free class).
+            // event name + outcome shape, NEVER bark text (the content-free class).
             case DtrhProtocol.DtrhPageMessage.Bark bark:
                 if (_bark is null)
                 {
@@ -1134,7 +1134,7 @@ public partial class DtrhHostWindow : Window
                     _ => barkOutcome.GetType().Name,
                 }}");
                 return;
-            // SP-026 slice b4: progression/payout + media stats route to the meta engine.
+            // Slice b4: progression/payout + media stats route to the meta engine.
             case DtrhProtocol.DtrhPageMessage.MetaCommand metaCommand:
                 if (_meta is null)
                 {
@@ -1226,7 +1226,7 @@ public partial class DtrhHostWindow : Window
         _web?.Focus();
         if (_web is not null)
         {
-            // Behavioral evidence of the claim (SP-011 W14 class): the page reports whether
+            // Behavioral evidence of the claim (the W14 class): the page reports whether
             // keyboard focus actually reached the document.
             _ = _web.InvokeScript("document.hasFocus()")
                 .ContinueWith(
@@ -1277,7 +1277,7 @@ public partial class DtrhHostWindow : Window
 
     /// <summary>
     /// Host→page (admission §3.2): Windows embedded = synthetic MessageEvent dispatch on
-    /// window.chrome.webview (SP-011 W4/W6 proven, byte-identical — never unified onto
+    /// window.chrome.webview (spike W4/W6 proven, byte-identical — never unified onto
     /// polling); Linux dialog = §3.3 inbox (retained seq delivery, replay-equivalent).
     /// </summary>
     public void SendToPage(object msg)
@@ -1304,7 +1304,7 @@ public partial class DtrhHostWindow : Window
 
     private void SetStatus(string s) => Dispatcher.UIThread.Post(() => Status.Text = s);
 
-    /// <summary>Shared capability-state description (SP-049: the studio window's honest
+    /// <summary>Shared capability-state description (the studio window's honest
     /// unsupported surface renders the same text — one formatter, never two).</summary>
     internal static string DescribeState(CapabilityState? state) => state switch
     {

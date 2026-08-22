@@ -28,7 +28,7 @@ public readonly record struct OverlayNativeHandles(nint Window);
 /// <see cref="CapabilityState.Unavailable"/> carrying the failing check and the Win32 last-error.
 /// There are exactly FOUR places in this file that construct <c>Available</c> - Present,
 /// SetClickThrough, Paint and Withdraw - and every one of them sits downstream of an OS round trip
-/// that was asked and answered (SP-100 added the fourth, and its round trip is reading the surface's
+/// that was asked and answered (the content check added the fourth, and its round trip is reading the surface's
 /// content back out of the OS).</para>
 ///
 /// <para><b>Why the hit test is asked twice.</b> "The point does not route to this window" is
@@ -43,13 +43,13 @@ public readonly record struct OverlayNativeHandles(nint Window);
 /// <para><b>Why topmost is re-asserted in a loop.</b> Topmost is contested, and the shipping
 /// product proves it: <c>Services/Flash/FlashService.cs:206-243</c> re-raises every live flash
 /// window on a cadence precisely because other layers bury an already-showing flash. Measured on
-/// this machine while SP-099 was being written, the window that won the hit test under a
+/// this machine while this capability was being written, the window that won the hit test under a
 /// click-through surface was the shipping WPF app itself, topmost and re-raising. So each hit-test
 /// query is preceded by WPF's own <c>SetWindowPos(HWND_TOPMOST, SWP_NOACTIVATE)</c>
 /// (<c>:3867</c>), bounded by <see cref="MaxRaiseAttempts"/> iterations — a count, never a
 /// wall-clock wait.</para>
 ///
-/// <para><b>Content (SP-100).</b> <see cref="Paint"/> blits a <see cref="OverlayFrame"/> into the
+/// <para><b>Content.</b> <see cref="Paint"/> blits a <see cref="OverlayFrame"/> into the
 /// window's own device context and then reads the surface BACK from the OS to confirm it holds
 /// those pixels. GDI, not <c>UpdateLayeredWindow</c>: ULW is mutually exclusive with
 /// <c>SetLayeredWindowAttributes</c>, so taking it would remove the alpha read-back that
@@ -78,7 +78,7 @@ public sealed class Win32OverlayPresence : IOverlayPresence
     /// cost paid to learn something a spread sample already answers. The four corners and the
     /// centre are always included.
     ///
-    /// <para><b>The exact limit of what this can catch, measured (SP-100 divergence D64).</b> It
+    /// <para><b>The exact limit of what this can catch, measured (divergence D64).</b> It
     /// catches the class that matters and the class that actually happens: the blit reported
     /// success and the surface holds something else, or nothing. It CANNOT catch an error that the
     /// read-back shares — <see cref="EnsureFrameSurfaces"/> builds the frame section and the
@@ -626,7 +626,7 @@ public sealed class Win32OverlayPresence : IOverlayPresence
     /// independent DIB section says the pixels are in the surface the compositor draws from — a
     /// different surface from the one that was written, reached by a different call. Measured
     /// before this was written: immediately after the blit, with no wait of any kind, the window's
-    /// DC returns exactly the painted colour (SP-100 record §1).</para>
+    /// DC returns exactly the painted colour (the packet record §1).</para>
     /// </summary>
     private CapabilityState? ConfirmContent(OverlayFrame frame)
     {

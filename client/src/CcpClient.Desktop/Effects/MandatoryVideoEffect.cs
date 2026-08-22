@@ -32,13 +32,13 @@ public sealed record MandatoryVideoFiring(MandatoryVideoEvent Event, string Path
 /// <see cref="CapabilityState.Degraded"/> on EVERY run however healthy, carrying
 /// <see cref="EffectReasonCodes.VideoSilentHalfAbsent"/>. That last one is the part that matters:
 /// every other module in the rack reports a clean <c>Available</c> when everything works, and this
-/// one must not, because the absence is a property of the BUILD rather than of the run. SP-109's
+/// one must not, because the absence is a property of the BUILD rather than of the run.
 /// Brain Drain set the precedent and the reasoning is unchanged.</para>
 ///
 /// <para><b>The two clocks, and why they are two.</b> The FIRING interval is upstream's
 /// <c>ScheduleNext</c> (<c>VideoService.cs:2216-2229</c>) and belongs to
 /// <see cref="PacedSessionEffect{TFiring}"/>. The FRAME cadence belongs to
-/// <see cref="VideoSurfacePresenter"/>, on SP-105's precedent that a cadence keeping a SURFACE
+/// <see cref="VideoSurfacePresenter"/>, on the precedent that a cadence keeping a SURFACE
 /// correct is the surface's. This is the first module in the port that needs both, and neither had
 /// to be invented for it.</para>
 ///
@@ -77,7 +77,7 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     /// <param name="pool">Where the clips come from.</param>
     /// <param name="surface">Where the pictures go.</param>
     /// <param name="random">The jitter's source; injected so a fact can pin the arithmetic.</param>
-    /// <param name="haptics">SP-126: the haptic limb. It hears the clip START once the surface has
+    /// <param name="haptics">The haptic limb. It hears the clip START once the surface has
     /// confirmed the picture, and the clip STOP on every path that takes it back off — which is
     /// where this module deliberately does better than the source it ports (see
     /// <see cref="OnDisarmed"/>).</param>
@@ -208,7 +208,7 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     ///
     /// <para>The six before it were the <b>clock</b> (paced), the <b>screen</b> (continuous),
     /// <b>change</b> (moving), <b>custody</b> (non-drawing), <b>reach</b> (audio) and <b>demand</b>
-    /// (input). CHANGE is the closest and it is a different fact: SP-098's "moving" is a claim about
+    /// (input). CHANGE is the closest and it is a different fact: the first module's "moving" is a claim about
     /// this process's own animation state, which this process authors and knows. <b>MOTION is a claim
     /// about what the operating system is HOLDING, read back — the first of the seven that can be
     /// false while every call this process made succeeded.</b></para>
@@ -225,7 +225,7 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     /// <para><b>Why the third clause is a DISJUNCTION.</b> A session spends almost all of its time
     /// between clips. A bare "the picture is moving" conjunct would darken the dot for the 95 % of a
     /// session with nothing playing, which is the opposite lie from the one it prevents — the same
-    /// shape, and the same answer, as SP-110's third clause.</para>
+    /// shape, and the same answer, as the Lock Card's third clause.</para>
     /// </summary>
     protected override bool WorkIsRunning =>
         ScheduleArmed && _surface.CanReachADisplay && (!_surface.Showing || _surface.Running);
@@ -298,7 +298,7 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
         }
         else
         {
-            // SP-126, census sites 6 and 7. Upstream raises the continuous video layer at
+            // Haptic census sites 6 and 7. Upstream raises the continuous video layer at
             // VideoService.cs:2580 (LibVLC) and VideoService.Browser.cs:452 (the default engine),
             // both immediately under its own "Playback is REAL from here: a window (and, on the
             // LibVLC path, a registered media player) exists" (:2567-2576). So this belongs on the
@@ -314,7 +314,7 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     /// Stop the clip. Unconditional and first on the way down, the same rule the audio modules'
     /// teardown follows: a panic must be able to clear the screen even with a wedged UI thread.
     ///
-    /// <para><b>SP-126 — THE HAPTIC STOP IS HERE AS WELL AS IN <see cref="OnClipEnded"/>, AND THAT
+    /// <para><b>THE HAPTIC STOP IS HERE AS WELL AS IN <see cref="OnClipEnded"/>, AND THAT
     /// IS A DELIBERATE DIVERGENCE FROM THE SOURCE (D203).</b> Upstream's
     /// <c>StopVideoBackgroundVibeAsync</c> has exactly one caller in the whole shipping tree —
     /// <c>Services/Video/VideoService.cs:6580</c>, inside <c>Cleanup()</c> — while
@@ -394,7 +394,7 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
 
     /// <summary>
     /// The missing half, in the words the panel renders and the arm result carries. ONE string, so
-    /// the two cannot drift into two accounts of one absence — SP-109's rule, kept.
+    /// the two cannot drift into two accounts of one absence — the audio modules' rule, kept.
     /// </summary>
     public const string VideoPanelNoticeText =
         "This row is the VIDEO half of upstream's Mandatory Video. The clip's SOUND is not ported: upstream "
@@ -414,7 +414,7 @@ public sealed class MandatoryVideoEffect : PacedSessionEffect<MandatoryVideoFiri
     private void OnClipEnded()
     {
         RefreshSchedule();
-        // SP-126, census site 12: the natural end, the max-length cap, and the surface stopping
+        // Haptic census site 12: the natural end, the max-length cap, and the surface stopping
         // holding the picture. The other half of the stop is OnDisarmed, and BOTH are needed.
         _haptics?.VideoStopped();
         RaiseChanged();

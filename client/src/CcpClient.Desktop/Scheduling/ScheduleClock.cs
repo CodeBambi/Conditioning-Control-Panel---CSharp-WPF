@@ -52,7 +52,7 @@ public interface IScheduleClock
 /// <summary>
 /// The real clock, on <see cref="System.Threading.Timer"/>.
 ///
-/// <para><b>A faulting callback must not take the process with it (SP-101, measured there rather
+/// <para><b>A faulting callback must not take the process with it (measured rather
 /// than theorised).</b> A timer callback runs on a thread-pool thread with no caller above it, so
 /// an exception escaping it is an UNHANDLED exception and .NET terminates the process. That
 /// matters more here than anywhere else in the port: this callback runs while nothing else is

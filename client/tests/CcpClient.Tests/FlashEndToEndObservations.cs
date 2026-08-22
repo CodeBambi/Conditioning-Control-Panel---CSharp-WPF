@@ -10,7 +10,7 @@ namespace CcpClient.Tests;
 ///
 /// <para>Nothing is stubbed except the CLOCK (so the stagger and the lifetime need no wall-clock
 /// wait) and the DISPLAY (taken from the probe's own screen reading rather than from the product's
-/// enumeration, which is a thing under test in SP-099 and must not be an input here).</para>
+/// enumeration, which is a thing under test elsewhere and must not be an input here).</para>
 ///
 /// <para><b>Why the check counts pixels of a colour instead of looking at a rectangle.</b> A flash
 /// is placed at a RANDOM point (WPF's <c>PickSpawnPoint</c>, <c>FlashService.cs:2360</c>) and the
@@ -44,7 +44,7 @@ internal static class FlashEndToEndObservations
     /// <param name="DesktopPixelsDuring">…while it is up.</param>
     /// <param name="DesktopPixelsAfterHide">…after the presenter is told to hide everything.</param>
     /// <param name="DesktopPixelsSampledDuring">
-    /// SP-107: how many pixels the screen read actually RETURNED for the measurement above.
+    /// How many pixels the screen read actually RETURNED for the measurement above.
     /// <c>CountOf</c> of an empty capture is 0, which is the same number as "the flash is not on the
     /// screen" — so without this the two are indistinguishable in the failure. A full-screen
     /// CAPTUREBLT allocates a ~20 MB DIB, and three concurrent floor runs are exactly when that
@@ -52,7 +52,7 @@ internal static class FlashEndToEndObservations
     /// it and nothing is silenced by it.
     /// </param>
     /// <param name="CompositorFenceHeldDuring">
-    /// SP-116, and the fifth verdict behind a count of zero. Whether the screen read that produced
+    /// The fifth verdict behind a count of zero. Whether the screen read that produced
     /// <see cref="Run.DesktopPixelsDuring"/> was ordered behind the compositor at all. Without that
     /// edge a layered top-most window this process had just shown and painted was absent from the
     /// read 34 times in 1200 on this machine, with the window owning its own centre point every
@@ -62,13 +62,13 @@ internal static class FlashEndToEndObservations
     /// capture's fence under a name that says "During". Diagnostic only; nothing is asserted on it.
     /// </param>
     /// <param name="DesktopUniformPixelsDuring">
-    /// SP-107: how many of those returned pixels equal the first one. A read that came back UNIFORM
+    /// How many of those returned pixels equal the first one. A read that came back UNIFORM
     /// is a blank or asleep display, which is a third verdict again — different from "the allocation
     /// failed" and from "the flash was not on the screen". Diagnostic only.
     /// </param>
     /// <param name="DesktopFirstPixelDuring">…and what that first pixel was. Diagnostic only.</param>
     /// <param name="PlacementScreen">
-    /// SP-107 (review finding). <see cref="OverlayWindowProbe.PrimarySize"/> as read ONCE at the top
+    /// Review finding. <see cref="OverlayWindowProbe.PrimarySize"/> as read ONCE at the top
     /// of <see cref="Measure"/>, which is what every rectangle in this run is derived from.
     /// </param>
     /// <param name="PlacementHorizontal">The virtual/physical horizontal pair at that same moment.</param>
@@ -111,7 +111,7 @@ internal static class FlashEndToEndObservations
         bool CorruptFileDecodes)
     {
         /// <summary>
-        /// SP-107 (review finding): whether the display metrics the flash was PLACED through are
+        /// Review finding: whether the display metrics the flash was PLACED through are
         /// still the ones the screen was READ through. False means the desktop was rescaled or
         /// re-resolved in between, so the capture mapped the requested rectangle by a different
         /// ratio than the placement used and sampled a region the flash was never in. Diagnostic
@@ -136,7 +136,7 @@ internal static class FlashEndToEndObservations
 
         try
         {
-            // SP-107 (review finding): the display is read ONCE here and every rectangle below is
+            // Review finding: the display is read ONCE here and every rectangle below is
             // derived from it, while CaptureDesktop re-reads the resolutions on every call. Both
             // readings are recorded so a change between them names itself instead of arriving as an
             // unexplained "the flash was not on the desktop".
@@ -214,7 +214,7 @@ internal static class FlashEndToEndObservations
         CountDesktopWithSampleSize(display, evidence, area).Count;
 
     /// <summary>
-    /// SP-107 diagnostic. A screen read that came back UNIFORM is a blank or asleep display, not a
+    /// Diagnostic. A screen read that came back UNIFORM is a blank or asleep display, not a
     /// desktop missing a flash. Returns how many of the sampled pixels equal the first one, and what
     /// that first one is, so the failure text can tell those two verdicts apart. Nothing is asserted
     /// about either value.
@@ -250,7 +250,7 @@ internal static class FlashEndToEndObservations
         var captureHorizontal = FlashPixelProbe.HorizontalResolutions;
         var captureVertical = FlashPixelProbe.VerticalResolutions;
         var pixels = FlashPixelProbe.CaptureDesktop(rect.X, rect.Y, rect.Width, rect.Height);
-        // SP-116 (review finding): read on THIS call, before the evidence write below takes another
+        // Review finding: read on THIS call, before the evidence write below takes another
         // capture and overwrites the static. A field called "…During" that reports a LATER read's
         // fence would be exactly the kind of true-looking number this packet exists to refuse.
         var fenceHeld = FlashPixelProbe.CompositorFenceHeld;

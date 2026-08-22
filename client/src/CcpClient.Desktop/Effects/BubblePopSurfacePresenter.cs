@@ -63,7 +63,7 @@ public interface IBubblePopSurface
 /// <b>Bubble Pop, on a real pointer surface</b> — the port's first module the user is expected to
 /// ACT on rather than watch.
 ///
-/// <para><b>Where the cadences live, and why that is SP-106's answer applied again.</b> There are
+/// <para><b>Where the cadences live, and why that is the established answer applied again.</b> There are
 /// two: the spawn timer (<c>60000/frequency</c> ms, <c>Services/BubbleService.cs:188</c>) and the
 /// animation step (<c>STEP_MS = 30</c>, <c>:53</c>). Both are here, in the presenter, on the injected
 /// <see cref="ISessionClock"/>, and <see cref="BubblePopEffect"/> takes no clock at all — the same
@@ -76,7 +76,7 @@ public interface IBubblePopSurface
 /// repositions every live target through <see cref="IPointerSurface.Move"/>, which re-asks the
 /// operating system everything <see cref="IPointerSurface.Open"/> asked. <c>Input/**</c> has ONE
 /// <c>SetWindowPos</c> in the whole folder (<c>Win32InputPresence.cs:206</c>) and no move seam at
-/// all — SP-112's census, re-verified in this packet's plan.</para>
+/// all — the earlier census, re-verified in this packet's plan.</para>
 ///
 /// <para><b>What is NOT ported</b>, declared rather than stubbed: the pop SOUND and its pooled
 /// <c>WaveOutEvent</c> devices (<c>:1971-2016</c>); XP, the lucky roll, achievements, haptics and
@@ -456,7 +456,7 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
     /// <para><b>Nothing here decides WHICH bubble was clicked.</b> The window manager did, at the
     /// instant of the click, over the rectangle the OS itself holds — which is the whole reason each
     /// target is its own top-level window. Upstream's hosted path decides this in user space from a
-    /// snapshot rebuilt once per UI tick (primer §4c/§4e), and that is the race SP-110 predicted for
+    /// snapshot rebuilt once per UI tick (primer §4c/§4e), and that is the race predicted for
     /// this packet.</para>
     /// </summary>
     private void OnPress(PointerPress press)

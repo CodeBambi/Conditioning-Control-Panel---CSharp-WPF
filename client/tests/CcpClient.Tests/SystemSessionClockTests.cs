@@ -4,21 +4,21 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-101 — the REAL clock every module will pace on in the product.
+/// The REAL clock every module will pace on in the product.
 ///
-/// <para><b>Why this file exists.</b> SP-098's land named it structurally: every session fact in
+/// <para><b>Why this file exists.</b> The session spine's land named it structurally: every session fact in
 /// the suite substitutes a manual clock, so <see cref="SystemSessionClock"/> — the one implementation
 /// that ships, and the seam all fifteen modules' pacing runs through — was compiled and never
 /// executed. A schedule that never fired, a negative delay that threw, or a disposed handle that
 /// went off anyway would have reached a user with a green suite behind it.</para>
 ///
-/// <para><b>And how it is covered without a wall-clock wait — with ONE deliberate exception, named
-/// (SP-124).</b> Every fact here waits on a DETERMINISTIC SIGNAL through the approved helper: no
+/// <para><b>And how it is covered without a wall-clock wait — with ONE deliberate exception,
+/// named.</b> Every fact here waits on a DETERMINISTIC SIGNAL through the approved helper: no
 /// <c>Thread.Sleep</c>, no bare <c>Task.Delay</c>, no clock poll. The negative observation — that a
 /// cancelled schedule does not fire — is proved with an ordering barrier rather than by waiting.
 /// <see cref="DisposingTheHandleBeforeItIsDue_SuppressesTheCallback"/> is the exception and it is
 /// deliberate: <b>its subject IS a due time arriving</b>, so it schedules at a short delay and waits
-/// for the resulting signals. That is not a tolerance bought to make it pass — until SP-124 the
+/// for the resulting signals. That is not a tolerance bought to make it pass — until it was corrected the
 /// doomed schedule there was due in TEN MINUTES, which made its assertion incapable of failing, and
 /// observing the delay is exactly what gives it teeth. No fact here asserts how LONG anything
 /// took.</para>
@@ -26,7 +26,7 @@ namespace CcpClient.Tests;
 public class SystemSessionClockTests
 {
     /// <summary>
-    /// SP-124. The doomed schedule's due time — the one delay in this file whose ELAPSING is the
+    /// The doomed schedule's due time — the one delay in this file whose ELAPSING is the
     /// subject rather than an incidental wait. Short enough to cost the suite a second, long enough
     /// that a stall between two adjacent statements would have to run into whole seconds; and if it
     /// ever did, the fact detects that and says so rather than blaming the product.
@@ -71,7 +71,7 @@ public class SystemSessionClockTests
     {
         // The property every stop in the port rests on.
         //
-        // SP-124 — WHY THIS FACT LOOKS LIKE THIS NOW, AND WHY IT DID NOT BITE BEFORE. The doomed
+        // WHY THIS FACT LOOKS LIKE THIS NOW, AND WHY IT DID NOT BITE BEFORE. The doomed
         // schedule used to be due in TEN MINUTES, so `cancelledFired` was false whether or not
         // Dispose suppressed anything: the assertion was trivially true and could not fail. Making
         // it bite needs the doomed schedule's own moment to ARRIVE inside the fact, and then three

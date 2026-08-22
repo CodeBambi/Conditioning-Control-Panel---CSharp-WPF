@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-115 — the MODULE, constructed and armed, on the lab pattern
+/// The MODULE, constructed and armed, on the lab pattern
 /// <see cref="SpiralOverlayEffectTests"/> established.
 ///
 /// <para><b>Why this file exists, stated plainly: the first draft of this packet shipped the module
@@ -150,7 +150,7 @@ public class BouncingTextEffectTests
     [Fact]
     public void WHEREBOTHCAUSESAreTrue_BOTHTravel_AndTheRunLevelOneFIRST()
     {
-        // SP-111's rule, after SP-109 shipped the defect once: a run-level cause the user can act on
+        // The established rule, after the defect shipped once: a run-level cause the user can act on
         // must not be replaced by the build-level one that is always present.
         using var lab = new Lab(enabled: true, opacity: 0);
 

@@ -7,12 +7,12 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-055: the ONE active-pool definition (asset deselection honored everywhere —
+/// The ONE active-pool definition (asset deselection honored everywhere —
 /// #762/#798/#619 parity). Pins the normalization verbatim (FlashService.GetMediaFiles
 /// :2855-2867 / IntakeHostService.cs:776-790 / DtrhAssetManifest.cs:116-165), the
 /// UseAssetWhitelist gate (AppSettings.cs:1637 documented contract), the distinct
 /// skip-vs-deselect semantics, the both-folders accepted bound, both consumers agreeing
-/// on one fixture, and the persisted AssetSelectionDocument on SP-005 machinery.
+/// on one fixture, and the persisted AssetSelectionDocument on the persistence machinery.
 /// </summary>
 public sealed class AssetActivePoolTests : IDisposable
 {
@@ -220,7 +220,7 @@ public sealed class AssetActivePoolTests : IDisposable
         Assert.Contains(_log, l => l.Contains("pool of 3"));
     }
 
-    // ---------- the persisted document on SP-005 machinery ----------
+    // ---------- the persisted document on the persistence machinery ----------
 
     private PersistenceStore<AssetSelectionDocument> NewStore(string dir)
     {

@@ -5,12 +5,12 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Companion;
 
 /// <summary>
-/// The companion feature participant (SP-046 slice c7; admission §8): the PRODUCT
+/// The companion feature participant (slice c7; admission §8): the PRODUCT
 /// composition point for the full AI chain — pipeline, provider seam, moderation
 /// boundary, memory store, awareness service, command executor — owned by ONE
 /// participant (the DtrhParticipant precedent: a participant owns feature machinery;
-/// construction starts nothing, SP-003). Until this slice no product CompositionRoot
-/// constructed the pipeline (SP-040 record §7 item 9).
+/// construction starts nothing, per the lifecycle contract). Until this slice no product CompositionRoot
+/// constructed the pipeline (recorded in the packet record §7 item 9).
 ///
 /// Composition facts:
 /// - <see cref="Pipeline"/>: the c1 pipeline over the shared capability registry;
@@ -20,11 +20,11 @@ namespace CcpClient.Desktop.Features.Companion;
 ///   diagnostics = a <see cref="CollectingAiDiagnosticsSink"/> (content-free by
 ///   construction, contract §12).
 /// - Provider: the c2 <see cref="LoopbackOllamaProvider"/> registered (its probe is the
-///   ONLY availability authority — SP-006); the cloud is an INVENTORY descriptor with
+///   ONLY availability authority); the cloud is an INVENTORY descriptor with
 ///   typed absence (credentials-absent — admission §2 rule 6; never selected).
-///   Default selection = LocalOllama (recorded decision, SP-046 record.md §2.3: the
+///   Default selection = LocalOllama (recorded decision, the packet record §2.3: the
 ///   only admissible endpoint class; selection ≠ availability).
-/// - <see cref="Memory"/>: the c4 store with its OWN named owner "AiMemory" (the SP-024
+/// - <see cref="Memory"/>: the c4 store with its OWN named owner "AiMemory" (the earlier
 ///   lesson), consent read from <see cref="MemoryConsent"/> at every write admission.
 /// - <see cref="Awareness"/>: the c5 service; consent + cooldown values are the typed
 ///   states the surface drives (session-scoped placeholders — never persisted, §9.2
@@ -32,13 +32,13 @@ namespace CcpClient.Desktop.Features.Companion;
 /// - <see cref="Executor"/>: the c6 executor composed with the none-admitted default
 ///   posture (admission §9.2 #5): the pipeline executes only the owner-admitted subset,
 ///   default NONE. The c7 surface does NOT dispatch reply commands — no effect backends
-///   exist and the admissible set is owner-pending (SP-044 record §3.1.7: dispatch
+///   exist and the admissible set is owner-pending (the command record §3.1.7: dispatch
 ///   timing is an owner-facing behavior decision). The executor is COMPOSED (the wiring
 ///   this slice owns), not consumed.
 ///
 /// Session-state holders (<see cref="MemoryConsent"/>) are runtime-only: every default
 /// is an owner-pending placeholder, so no persistence schema is decided here (the
-/// SP-040 RetentionMaxPairs-null discipline — a persisted value reads as a decision).
+/// RetentionMaxPairs-null discipline — a persisted value reads as a decision).
 /// </summary>
 public sealed class CompanionParticipant : IBackgroundParticipant
 {
@@ -66,7 +66,7 @@ public sealed class CompanionParticipant : IBackgroundParticipant
             infra.Registry, capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics, moderation, _memory);
 
         // The provider probe registers into the SHARED registry at construction so the
-        // CapabilityProbes phase proves it (registration never yields Available — SP-006).
+        // CapabilityProbes phase proves it (registration never yields Available).
         Pipeline.RegisterProvider(providerOverride ?? new LoopbackOllamaProvider(
             ollamaHostOverride is { Length: > 0 } host
                 ? new LoopbackOllamaProviderOptions { Host = new Uri(host, UriKind.Absolute) }
@@ -79,7 +79,7 @@ public sealed class CompanionParticipant : IBackgroundParticipant
             new CapabilityReason("credentials-absent",
                 "cloud provider is inventory only: no credentials exist on this device and none are invented (admission §2 rule 6)"));
 
-        // Default selection (recorded decision, SP-046 record.md §2.3): the only provider
+        // Default selection (recorded decision, the packet record §2.3): the only provider
         // whose endpoint class the placeholder policy admits. Selection ≠ availability.
         Pipeline.SelectProvider(AiProviderId.LocalOllama);
 
@@ -121,6 +121,6 @@ public sealed class CompanionParticipant : IBackgroundParticipant
 
     public Task StopAsync() => _memory.StopAsync();
 
-    /// <summary>Teardown flush (SP-005 contract §11) — wired into the host's reserved pre-drain slot by the composition root.</summary>
+    /// <summary>Teardown flush (the persistence contract §11) — wired into the host's reserved pre-drain slot by the composition root.</summary>
     public Task FlushAsync(TimeSpan boundedWait) => _memory.FlushAsync(boundedWait);
 }

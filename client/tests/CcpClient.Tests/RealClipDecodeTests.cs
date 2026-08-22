@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-140 — the first REAL COMPRESSED CLIP this port has ever decoded.
+/// The first REAL COMPRESSED CLIP this port has ever decoded.
 ///
 /// <para><b>What every video fact before this one ran against.</b> An uncompressed 32bpp
 /// <c>BI_RGB</c> AVI that <see cref="TestAvi"/> writes in pure managed code. Media Foundation opens
@@ -20,7 +20,7 @@ namespace CcpClient.Tests;
 /// Foundation's own sink writer would prove close to nothing here — the encoder and the decoder
 /// would be the same stack, and a container it cannot handle is exactly what it would never
 /// produce. This fixture is not that. It is
-/// <c>client/spikes/CcpSpike.VideoHandoff/fixtures/clip.mp4</c>, committed by SP-018 at
+/// <c>client/spikes/CcpSpike.VideoHandoff/fixtures/clip.mp4</c>, committed at
 /// <c>f21a7c011</c>, 122 commits before this packet existed: <b>ffmpeg</b> (gyan.dev full build
 /// 2025-06-04) encoding <c>lavfi</c>'s synthetic <c>testsrc2</c> pattern through <b>x264</b>, 96x96
 /// at 10 fps for 2 s, H.264 + AAC, <c>+faststart</c>. Its SHA-256 and its recipe are recorded in
@@ -32,7 +32,7 @@ namespace CcpClient.Tests;
 /// <para><b>WHAT THIS DOES NOT CLOSE, stated here so it cannot be read as closed.</b> Survivor
 /// <b>M-w</b> — the openable format set against real files (D124) — is <b>NOT</b> closed and no
 /// single committed fixture can close it: one file bounds one format. The board's acceptance ("ONE
-/// compressed fixture closes both survivors") is wrong on that half, and SP-140's <c>record.md</c>
+/// compressed fixture closes both survivors") is wrong on that half, and the <c>record.md</c>
 /// records it as a spec-versus-reality discrepancy. What bounds M-w is a MEASUREMENT over a real
 /// library, which is evidence for the record and deliberately not a test: it depends on a directory
 /// that exists on one machine, and a test that skipped when that directory was absent would be the
@@ -304,7 +304,7 @@ public class RealClipDecodeTests
         }
 
         throw new InvalidOperationException(
-            $"SP-140: repo root not found walking up from {AppContext.BaseDirectory} " +
+            $"repo root not found walking up from {AppContext.BaseDirectory} " +
             "(anchor client/CcpClient.sln) — these facts refuse to skip.");
     }
 }

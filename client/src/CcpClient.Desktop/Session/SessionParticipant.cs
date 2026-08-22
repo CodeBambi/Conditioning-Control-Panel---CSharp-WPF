@@ -15,7 +15,7 @@ namespace CcpClient.Desktop.Session;
 /// asset selection, and stops. WPF's engine runs only when the user presses START
 /// (<c>MainWindow/MainWindow.StartStop.cs:34,105</c>); an app that began conditioning you
 /// because it launched would be a different product. Construction starts nothing at all
-/// (SP-003 contract §4.4).</para>
+/// (contract §4.4).</para>
 ///
 /// <para><b>Teardown.</b> The participant's stop ends any running session before the store
 /// stops, so the reverse-order participant stop can never leave a schedule pointing at a
@@ -98,7 +98,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, SessionPresetDocument.FileName),
             SessionPresetDocument.CurrentSchemaVersion);
 
-        // SP-101: the Subliminals module's own document. One per module rather than more members on
+        // The Subliminals module's own document. One per module rather than more members on
         // the shared preset — see SubliminalPresetDocument for why, and for the File Scope fact that
         // is the other half of the reason.
         _subliminalPreset = new PersistenceStore<SubliminalPresetDocument>(
@@ -106,25 +106,25 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, SubliminalPresetDocument.FileName),
             SubliminalPresetDocument.CurrentSchemaVersion);
 
-        // SP-105: the Pink Filter module's own document, on the same per-module precedent (D71).
+        // The Pink Filter module's own document, on the same per-module precedent (D71).
         _pinkFilterPreset = new PersistenceStore<PinkFilterPresetDocument>(
             infra.OwnerFor("PinkFilterPreset"), infra.Log,
             Path.Combine(dataDirectory, PinkFilterPresetDocument.FileName),
             PinkFilterPresetDocument.CurrentSchemaVersion);
 
-        // SP-106: the moving module's own document, on the same per-module precedent (D71/D80).
+        // The moving module's own document, on the same per-module precedent (D71/D80).
         _spiralPreset = new PersistenceStore<SpiralPresetDocument>(
             infra.OwnerFor("SpiralPreset"), infra.Log,
             Path.Combine(dataDirectory, SpiralPresetDocument.FileName),
             SpiralPresetDocument.CurrentSchemaVersion);
 
-        // SP-108: the non-drawing module's own document, same precedent again.
+        // The non-drawing module's own document, same precedent again.
         _rampPreset = new PersistenceStore<IntensityRampPresetDocument>(
             infra.OwnerFor("IntensityRampPreset"), infra.Log,
             Path.Combine(dataDirectory, IntensityRampPresetDocument.FileName),
             IntensityRampPresetDocument.CurrentSchemaVersion);
 
-        // SP-109: the two AUDIO modules' own documents, same precedent again. Two documents rather
+        // The two AUDIO modules' own documents, same precedent again. Two documents rather
         // than one shared "audio" file for the same blast-radius reason: one hand-broken value must
         // not take both modules' dials to defaults, and these two rows are not equals — one is a
         // whole row and the other is deliberately half of one.
@@ -138,7 +138,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, BrainDrainPresetDocument.FileName),
             BrainDrainPresetDocument.CurrentSchemaVersion);
 
-        // SP-110: the first module that ASKS the user something, and its own document on the same
+        // The first module that ASKS the user something, and its own document on the same
         // precedent. It carries a phrase POOL as well as dials, which no earlier module's document
         // does — and that is the whole reason it must not be merged into a shared file: a hand-broken
         // phrase list would otherwise take five other modules' dials to defaults with it.
@@ -152,19 +152,19 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, MandatoryVideoPresetDocument.FileName),
             MandatoryVideoPresetDocument.CurrentSchemaVersion);
 
-        // SP-112: the second consumer's own document, same per-module precedent again (D71/D80).
+        // The second consumer's own document, same per-module precedent again (D71/D80).
         _bubbleCountPreset = new PersistenceStore<BubbleCountPresetDocument>(
             infra.OwnerFor("BubbleCountPreset"), infra.Log,
             Path.Combine(dataDirectory, BubbleCountPresetDocument.FileName),
             BubbleCountPresetDocument.CurrentSchemaVersion);
 
-        // SP-113: the pointer module's own document, same per-module precedent again.
+        // The pointer module's own document, same per-module precedent again.
         _bubblePopPreset = new PersistenceStore<BubblePopPresetDocument>(
             infra.OwnerFor("BubblePopPreset"), infra.Log,
             Path.Combine(dataDirectory, BubblePopPresetDocument.FileName),
             BubblePopPresetDocument.CurrentSchemaVersion);
 
-        // SP-115. Its own document, on SP-101's precedent: the store's Degraded load path takes the
+        // Its own document, on the per-module precedent: the store's Degraded load path takes the
         // WHOLE document to defaults, so a shared file would let one broken value reset every other
         // module's dials.
         _bouncingTextPreset = new PersistenceStore<BouncingTextPresetDocument>(
@@ -172,11 +172,11 @@ public sealed class SessionParticipant : IBackgroundParticipant
             Path.Combine(dataDirectory, BouncingTextPresetDocument.FileName),
             BouncingTextPresetDocument.CurrentSchemaVersion);
 
-        // SP-117: the Visuals row's document — the Flash Images module's three DRAW dials. Same
+        // The Visuals row's document — the Flash Images module's three DRAW dials. Same
         // per-module precedent again (D71), and the same reason it is a document at all rather than
         // three more members on the shared session preset: SessionPresetDocument's own remarks said
         // these values "arrive with the surface that honours them", and the surface arrived at
-        // SP-100.
+        // the packet that made flashes draw.
         _visualsPreset = new PersistenceStore<VisualsPresetDocument>(
             infra.OwnerFor("VisualsPreset"), infra.Log,
             Path.Combine(dataDirectory, VisualsPresetDocument.FileName),
@@ -187,7 +187,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // is an owner of three dials and nothing more. See VisualsDials.
         Visuals = new VisualsDials(_visualsPreset);
 
-        // A THIRD read-only reader of the shared deselection document (SP-055 named two: the
+        // A THIRD read-only reader of the shared deselection document (two were already named: the
         // DTRH host and the intake host). It is opened here rather than skipped so the flash
         // pool cannot become the one consumer that ignores an uncheck — the exact
         // two-scans-disagree defect that document was written to prevent. No writer is added.
@@ -197,12 +197,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
             AssetSelectionDocument.CurrentSchemaVersion);
 
         // The real clock reports a faulting scheduled callback to the host log instead of letting
-        // it kill the process from a pool thread (SP-101 — see SystemSessionClock).
+        // it kill the process from a pool thread (see SystemSessionClock).
         var sessionClock = clock ?? new SystemSessionClock(ex => infra.Log.Log(
             $"session-clock: a scheduled module callback faulted and was contained — "
             + $"{ex.GetType().Name}: {ex.Message}"));
 
-        // SP-101: every module's Changed goes through ONE signal, so the marshalling is the
+        // Every module's Changed goes through ONE signal, so the marshalling is the
         // producer's duty and not fifteen consumers'. See EffectSignal. The thread test is a
         // parameter because the pure-logic test project has no Avalonia runtime to ask.
         var signal = new EffectSignal(infra.UiDispatch, onSignalThread);
@@ -217,7 +217,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             }
         }
 
-        // SP-100: where a flash goes. The presenter is built here rather than in the composition
+        // Where a flash goes. The presenter is built here rather than in the composition
         // root because it needs the SAME clock the effect paces on (the stagger, the per-surface
         // lifetime and WPF's topmost cadence all ride it, so a test drives every one of them with
         // no wall-clock wait) and the SAME dispatch boundary the effect projects through (a native
@@ -225,10 +225,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // draws: the factory inside it runs on the first surface, so a session that never flashes
         // — and every headless or unit run, where the boundary is unbound and the projection is
         // skipped — creates no window at all.
-        // SP-117: the presenter now PULLS the Visuals row's three dials at the moment a flash is
+        // The presenter now PULLS the Visuals row's three dials at the moment a flash is
         // shown, instead of drawing with three constants. A build with no document draws with
         // FlashDraw.Defaults, which are the same three numbers it used before.
-        // SP-126: the haptic limb reaches FIVE statements in this composition and no others — the
+        // The haptic limb reaches FIVE statements in this composition and no others — the
         // census's five port trigger points (client/docs/haptic-limb-census.md §3.1). It is OWNED by
         // the app-scoped HapticParticipant, beside the sink it drives, and threaded here rather than
         // constructed here: a session that built its own would be a SECOND sink the day a provider
@@ -239,18 +239,18 @@ public sealed class SessionParticipant : IBackgroundParticipant
             sessionClock, Dispatch, draw: Visuals.Draw, haptics: haptics);
         _subliminalSurface = subliminalSurface ?? SubliminalSurfacePresenter.Product(sessionClock, Dispatch);
 
-        // SP-105: the continuous module's surface. It takes the same clock as the other two, and
+        // The continuous module's surface. It takes the same clock as the other two, and
         // for one reason only — the topmost cadence WPF spends on a layer that is up for a whole
         // session (OverlayService.cs:666-671). The module itself has no clock at all.
         _pinkFilterSurface = pinkFilterSurface ?? PinkFilterSurfacePresenter.Product(sessionClock, Dispatch);
 
-        // SP-106: the moving module's surface. It takes the same clock for TWO cadences — the
+        // The moving module's surface. It takes the same clock for TWO cadences — the
         // topmost kick every continuous layer needs, and the GIF's own frame advance — and the
         // module itself still has no clock at all. That split is this packet's whole finding: see
         // SpiralSurfacePresenter's remarks.
         _spiralSurface = spiralSurface ?? SpiralSurfacePresenter.Product(sessionClock, Dispatch);
 
-        // SP-111: the video surface. It takes the same clock as the other presenters, and for the
+        // The video surface. It takes the same clock as the other presenters, and for the
         // same kind of reason — a cadence that keeps a SURFACE correct is the surface's — but this
         // is the first module in the port that needs BOTH clocks: the FRAME advance lives here and
         // the FIRING interval lives on the module. It owns its own hwnd rather than drawing through
@@ -259,15 +259,15 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // (its display enumeration) and never edited.
         _videoSurface = videoSurface ?? VideoSurfacePresenter.Product(sessionClock, Dispatch);
 
-        // SP-113: the pointer surface. It takes the same clock as the other presenters and carries
+        // The pointer surface. It takes the same clock as the other presenters and carries
         // BOTH of its module's cadences — the spawn interval and the 30 ms animation step — because
         // both keep a SURFACE correct rather than deciding when a module is due, so the module takes
-        // no clock at all (SP-106's rule, fourth application). It is a NEW capability rather than a
+        // no clock at all (the established rule, fourth application). It is a NEW capability rather than a
         // second consumer of Input/**: that presence handles no mouse message, owns one window and
-        // places it once (SP-112 §1, re-verified in SP-113's plan §1).
+        // places it once (the earlier census §1, re-verified in this packet's plan §1).
         _bubblePopSurface = bubblePopSurface ?? BubblePopSurfacePresenter.ForProduct(sessionClock, Dispatch);
 
-        // SP-115: the per-pixel-alpha surface. Its cadence lives in the presenter for SP-106's
+        // The per-pixel-alpha surface. Its cadence lives in the presenter for the established
         // reason - a cadence that keeps a SURFACE correct is the surface's - and the module itself
         // takes no clock at all.
         _bouncingTextSurface = bouncingTextSurface ?? BouncingTextSurfacePresenter.Product(sessionClock, Dispatch, haptics);
@@ -283,7 +283,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             random: null,
             surface: _surface);
 
-        // SP-111: the first module that plays a FILE. It sits between Flash Images and Subliminals
+        // The first module that plays a FILE. It sits between Flash Images and Subliminals
         // because both orders that matter agree — WPF's rack is Flash Images, Mandatory Video,
         // Subliminals (StudioTabView.xaml.cs:483-488) and StartEngine starts the flash service
         // (MainWindow.StartStop.cs:180-181), then the video service (:183-184), then subliminals
@@ -328,19 +328,19 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _pinkFilterPreset,
             _pinkFilterSurface);
 
-        // SP-108: the first ported module that draws nothing. It takes NO surface and no presenter —
+        // The first ported module that draws nothing. It takes NO surface and no presenter —
         // there is nothing to present — and it takes the same session clock the other modules' work
         // rides, because its 2 s progress sample is its own (WPF's _rampTimer,
         // MainWindow/MainWindow.StartStop.cs:426-431) and there is no surface to keep it in.
         //
         // Its dials are the three the port really has. WPF links five (AppSettings.cs:2589-2621);
-        // SP-117 closed the flash-opacity one by giving flash opacity a dial on a ported panel,
+        // the flash-opacity one was closed by giving flash opacity a dial on a ported panel,
         // which is exactly the condition D93 named. Master volume and subliminal volume have no
         // dial on any ported panel, so they are still absent rather than present-and-inert. The
         // list is built HERE because the composition root is the only thing that knows which
         // modules exist — the ramp itself knows nothing about spirals or tints, which is what lets
         // it be exercised with no surface anywhere.
-        // SP-109: the AUDIO capability. Built HERE, once, and SHARED by both audio modules — a
+        // The AUDIO capability. Built HERE, once, and SHARED by both audio modules — a
         // second presence would be a second device open on the same endpoint, and each module's
         // stop-replace already has its own slot inside the one presence (keyed by module id), which
         // is what upstream gets from having two separate services with one player field each.
@@ -351,7 +351,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // (runtime-capability-contract §2 rule 2; Audio/AudioPresenceFactory.cs).
         _audio = audio ?? AudioPresenceFactory.Create(message => infra.Log.Log(message));
 
-        // SP-110: the INPUT capability. Built HERE, once, for the same reason the audio presence is:
+        // The INPUT capability. Built HERE, once, for the same reason the audio presence is:
         // it owns a native window, and a second presence would be a second window competing for the
         // one foreground the OS lends. Selection is by platform and selection is NEVER availability
         // — on Linux the factory hands back a typed refusal naming the manual gate, and on Windows
@@ -373,7 +373,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             [
                 new SpiralOpacityDial(_spiralPreset, Spiral),
                 new PinkFilterOpacityDial(_pinkFilterPreset, PinkFilter),
-                // SP-117: WPF's FIRST link (MainWindow.StartStop.cs:506-510), and the comment above
+                // WPF's FIRST link (MainWindow.StartStop.cs:506-510), and the comment above
                 // named the exact condition for it — "no dial on any ported panel". The Visuals row
                 // is that panel. Master volume and subliminal volume are still absent because their
                 // dials still are, so this list is three of WPF's five and says which three.
@@ -384,7 +384,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             // half is synchronous so a restore survives a teardown whose dispatcher is already down.
             Dispatch);
 
-        // SP-109: the first two modules whose output is not on the screen at all. They take the ONE
+        // The first two modules whose output is not on the screen at all. They take the ONE
         // shared audio presence and their own clip folder under the same user-media root every other
         // pool reads from. Neither takes a surface: there is nothing to draw.
         MindWipe = new MindWipeEffect(
@@ -411,7 +411,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _brainDrainPreset,
             brainDrainRandom);
 
-        // SP-110: the first module that asks the user something. It takes the ONE shared input
+        // The first module that asks the user something. It takes the ONE shared input
         // presence and its own phrase pool, and no surface: what it puts on screen is the capability's
         // window, not a drawing surface, and the distinction is why it consumes IInputPresence rather
         // than IOverlayPresence — one of those exists to let clicks THROUGH and the other to catch
@@ -429,9 +429,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
             lockCardRandom,
             lockCardPlacement);
 
-        // SP-112: THE SECOND CONSUMER, and the wiring is the whole point of the packet. It takes the
+        // THE SECOND CONSUMER, and the wiring is the whole point of the packet. It takes the
         // SAME video surface Mandatory Video plays on and the SAME input presence the Lock Card asks
-        // through — one instance of each, shared, which is the arrangement SP-109 established for the
+        // through — one instance of each, shared, which is the arrangement already established for the
         // audio presence and for the same reason: a second video surface would be a second window
         // contesting the same rectangle, and a second input presence would be a second window
         // contesting the one foreground the OS lends. Sharing is also what makes the two video-class
@@ -453,14 +453,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
             bubbleCountRandom,
             bubbleCountPlacement);
 
-        // SP-113: the eleventh module, and the first the user is expected to ACT on. It goes FIRST
+        // The eleventh module, and the first the user is expected to ACT on. It goes FIRST
         // in GAMES & CARDS because that is where the rack puts it — Bubble Pop, Bubble Count, Lock
         // Card, Bouncing Text (StudioTabView.xaml.cs:499-505) — and upstream's StartEngine offers no
         // competing order for it: the ambient game is started by the dashboard card's own toggle and
         // by SessionEngine (Services/SessionEngine.cs:444), not from StartEngine's effect sequence.
         // So there is no D90-style disagreement here and the rack's order stands unopposed. Its surface is
         // its OWN — no other row places a clickable target — and that is not the single-tenancy
-        // shortcut SP-112 §2.3 F5 warned about: the capability is keyed from birth, every operation
+        // shortcut an earlier review's §2.3 F5 warned about: the capability is keyed from birth, every operation
         // names a target, so a second consumer inherits ownership rather than having to guard for it.
         BubblePop = new BubblePopEffect(
             infra.OwnerFor("BubblePop"),
@@ -468,7 +468,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _bubblePopPreset,
             _bubblePopSurface);
 
-        // SP-115. The module blocked since wave 46, on a capability whose transparent pixels are
+        // The module blocked since wave 46, on a capability whose transparent pixels are
         // measured on the composited desktop rather than assumed.
         BouncingText = new BouncingTextEffect(
             infra.OwnerFor("BouncingText"),
@@ -489,24 +489,24 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // the ground that the rack is the order the user has learned and the two are independent
         // full-screen layers whose start order nothing observable depends on. Recorded as D90.
         //
-        // SP-108 adds the fifth, and it goes LAST for two reasons that agree: WPF's rack puts the
+        // Adds the fifth, and it goes LAST for two reasons that agree: WPF's rack puts the
         // TIMING group after EFFECTS, GAMES & CARDS and IMMERSION (StudioTabView.xaml.cs:482-541),
         // and StartEngine starts the ramp timer after every effect service (:265-269). Arming it last
         // also means that at STOP the dials it gives back belong to modules that have already been
         // disarmed, so the restore is a settings write with nothing live behind it.
         //
-        // SP-109 inserts the two IMMERSION rows BETWEEN the effects and the ramp, which is where both
+        // Inserts the two IMMERSION rows BETWEEN the effects and the ramp, which is where both
         // orders that matter put them, and they agree: upstream's rack puts IMMERSION after EFFECTS
         // and GAMES & CARDS and before TIMING (StudioTabView.xaml.cs:482-541), and StartEngine starts
         // Mind Wipe (:229-230) and Brain Drain (:241-244) after every effect service and before the
         // ramp timer (:265-269). Mind Wipe first, Brain Drain second, upstream's own order in both.
         //
-        // SP-110 inserts Lock Card BETWEEN the effects and the IMMERSION pair, which is where both
+        // Inserts Lock Card BETWEEN the effects and the IMMERSION pair, which is where both
         // orders that matter put it and they agree: upstream's rack puts GAMES & CARDS after EFFECTS
         // and before IMMERSION (StudioTabView.xaml.cs:483/498/508/530), and StartEngine starts the
         // lock card (:206-209) after the overlay service and before Mind Wipe (:229-230). It is the
         // port's first GAMES & CARDS row, so the group opens with it.
-        // SP-111 inserts Mandatory Video BETWEEN Flash Images and Subliminals, which is where both
+        // Inserts Mandatory Video BETWEEN Flash Images and Subliminals, which is where both
         // orders that matter put it and they agree: WPF's rack is Flash Images, Mandatory Video,
         // Subliminals, Spiral Overlay (StudioTabView.xaml.cs:483-491) and StartEngine starts the
         // flash service (:180-181), the video service (:183-184) and subliminals (:186-187) in that
@@ -535,37 +535,37 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>Flash Images (public so the Studio module panel and the tests reach the real object).</summary>
     public FlashImagesEffect Flash { get; }
 
-    /// <summary>Subliminals, the second ported module (SP-101). Public for the same reason.</summary>
+    /// <summary>Subliminals, the second ported module. Public for the same reason.</summary>
     public SubliminalsEffect Subliminals { get; }
 
-    /// <summary>Pink Filter, the first CONTINUOUS module (SP-105). Public for the same reason.</summary>
+    /// <summary>Pink Filter, the first CONTINUOUS module. Public for the same reason.</summary>
     public PinkFilterEffect PinkFilter { get; }
 
-    /// <summary>Spiral Overlay, the first MOVING module (SP-106). Public for the same reason.</summary>
+    /// <summary>Spiral Overlay, the first MOVING module. Public for the same reason.</summary>
     public SpiralOverlayEffect Spiral { get; }
 
-    /// <summary>Bouncing Text, the module per-pixel alpha unblocked (SP-115). Public for the same
+    /// <summary>Bouncing Text, the module per-pixel alpha unblocked. Public for the same
     /// reason.</summary>
     public BouncingTextEffect BouncingText { get; }
 
-    /// <summary>Intensity Ramp, the first module that draws NOTHING (SP-108). Public for the same
+    /// <summary>Intensity Ramp, the first module that draws NOTHING. Public for the same
     /// reason, and it has no surface property beside it because it has no surface.</summary>
     public IntensityRampEffect Ramp { get; }
 
-    /// <summary>Mind Wipe, the first module the user HEARS rather than sees (SP-109).</summary>
+    /// <summary>Mind Wipe, the first module the user HEARS rather than sees.</summary>
     public MindWipeEffect MindWipe { get; }
 
-    /// <summary>Brain Drain's AUDIO half — half a row, permanently, and it says so (SP-109).</summary>
+    /// <summary>Brain Drain's AUDIO half — half a row, permanently, and it says so.</summary>
     public BrainDrainEffect BrainDrain { get; }
 
-    /// <summary>Lock Card, the first module that ASKS the user something (SP-110).</summary>
+    /// <summary>Lock Card, the first module that ASKS the user something.</summary>
     public LockCardEffect LockCard { get; }
 
     /// <summary>Bubble Count, the first module that consumes capabilities it did not shape — the
-    /// video surface AND the input presence, in one firing (SP-112).</summary>
+    /// video surface AND the input presence, in one firing.</summary>
     public BubbleCountEffect BubbleCount { get; }
 
-    /// <summary>Bubble Pop, the first module the user ACTS on rather than watches (SP-113).</summary>
+    /// <summary>Bubble Pop, the first module the user ACTS on rather than watches.</summary>
     public BubblePopEffect BubblePop { get; }
 
     /// <summary>
@@ -577,7 +577,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     public IBubblePopSurface BubblePopSurface => _bubblePopSurface;
 
     /// <summary>Mandatory Video's VIDEO half — the first module that plays a FILE, and half a row
-    /// permanently because the clip's sound is not ported (SP-111).</summary>
+    /// permanently because the clip's sound is not ported.</summary>
     public MandatoryVideoEffect MandatoryVideo { get; }
 
     /// <summary>
@@ -635,7 +635,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     public PersistenceStore<BouncingTextPresetDocument> BouncingTextPreset => _bouncingTextPreset;
 
     /// <summary>
-    /// The <b>Visuals</b> row: the Flash Images module's three DRAW dials (SP-117).
+    /// The <b>Visuals</b> row: the Flash Images module's three DRAW dials.
     ///
     /// <para>It is NOT on <see cref="SessionEngine.Effects"/> and never will be — there is no
     /// module here to arm. Upstream's Visuals is a settings page with no service, no master toggle
@@ -645,7 +645,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     public VisualsDials Visuals { get; }
 
     /// <summary>
-    /// SP-126: the haptic limb this session's five trigger points command, or null when none was
+    /// The haptic limb this session's five trigger points command, or null when none was
     /// supplied.
     ///
     /// <para><b>It is NOT owned here.</b> The limb belongs to the app-scoped
@@ -707,9 +707,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _bubbleCountPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _bubblePopPreset.StartAsync(cancellationToken).ConfigureAwait(false);
 
-        // SP-117 found _bouncingTextPreset missing from all four of these lists. A store that is
+        // Found _bouncingTextPreset missing from all four of these lists. A store that is
         // never started is never LOADED — PersistenceStore.Load runs only from StartAsync — so
-        // SP-115's dials silently reverted to defaults on every launch and were never written back.
+        // the Bouncing Text dials silently reverted to defaults on every launch and were never written back.
         // It is added here, and to the Degraded report, the stop and the flush below, because the
         // defect is data loss the user sees and because leaving one store out of four lists is
         // exactly how the next one gets missed.

@@ -28,7 +28,7 @@ public readonly record struct TrayNativeHandles(nint OwnerWindow, uint IconId, u
 /// <c>TrayIcon(ITrayIconImpl)</c> constructor is non-public so the impl is unreachable; and
 /// with NO windowing platform registered at all, <c>new TrayIcon()</c> constructs, accepts
 /// <c>IsVisible = true</c>, reads it back <c>true</c>, and disposes cleanly while no icon exists
-/// anywhere (measured against the 12.1.1 assemblies — SP-093 record.md Step 2). A capability
+/// anywhere (measured against the 12.1.1 assemblies — record.md Step 2). A capability
 /// built on that could not tell a placed icon from a missing one, which is the entire failure
 /// this class exists to make impossible. So the backend owns the same call Avalonia's own
 /// Win32 impl makes and checks its result.</para>

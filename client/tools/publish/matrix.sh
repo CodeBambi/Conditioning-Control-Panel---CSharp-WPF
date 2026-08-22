@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # CCP greenfield artifact evidence matrix — Linux/WSL2 (release-publish-gates.md §3).
 # Mirrors matrix.ps1 gate-for-gate. Run from a native ext4 dir (never /mnt/e —
-# SP-005/007/008/009 pattern). Requires: python3 + libX11 (wmclose.py/xgetimage.py
-# mechanism, SP-008 proven), WSLg session for headed gates.
+# a repeatedly proven failure). Requires: python3 + libX11 (wmclose.py/xgetimage.py
+# mechanism, proven on WSLg), WSLg session for headed gates.
 # Gates: 1 startup+graceful-shutdown exit 0 (WM_DELETE_WINDOW ClientMessage — kill is
 # never the success path; negative control proves the message caused the exit),
 # 2 --verify-assets, 3 --version derivation, 4 fresh-profile, 5 corrupt-settings

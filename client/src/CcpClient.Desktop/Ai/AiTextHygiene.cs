@@ -3,11 +3,11 @@ using System.Text.RegularExpressions;
 namespace CcpClient.Desktop.Ai;
 
 /// <summary>
-/// SP-069: companion reply hygiene — the subtractive half of WPF's reply-text hygiene layer
+/// Companion reply hygiene — the subtractive half of WPF's reply-text hygiene layer
 /// (WPF `AiTextHygiene`, `ConditioningControlPanel/Services/AIService/AiTextHygiene.cs`; leak
 /// predicate from `AiResponseParser.cs:53`; shipped user-visible fix `932d829a`, 2026-08-07).
 /// Between `IAiProvider.CompleteAsync` returning and the text reaching the bubble, memory, or
-/// disk, these three rules are all that touch it besides output moderation and SP-068's link
+/// disk, these three rules are all that touch it besides output moderation and the privacy filters' link
 /// strip. Every rule here only ever REMOVES text: nothing is observed, persisted, logged, or
 /// transmitted that was not before.
 ///

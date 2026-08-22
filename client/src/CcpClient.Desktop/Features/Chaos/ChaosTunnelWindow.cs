@@ -80,7 +80,7 @@ public sealed class ChaosTunnelWindow : Window
     public event Action<bool>? NavigationFinished;
 
     /// <summary>Create the embedded WebView2 surface and navigate (Windows embedded path
-    /// only — the service calls this ONLY after the capability probes Available; SP-023
+    /// only — the service calls this ONLY after the capability probes Available; recorded
     /// surprise #6: never let a webview materialize on an unadmitted path).</summary>
     public void AttachEmbeddedSurface(Uri startUrl)
     {
@@ -95,7 +95,7 @@ public sealed class ChaosTunnelWindow : Window
         }
         catch (Exception ex) when (DtrhProfileLock.IsStaleProfileLock(ex) && !_profileRetryUsed)
         {
-            // The 0x800700AA stale-profile-lock class (SP-027 b5): any second WebView2 host
+            // The 0x800700AA stale-profile-lock class (slice b5): any second WebView2 host
             // inherits it. Recover honestly (kill the stale children holding OUR profile —
             // the generic msedgewebview2 machinery is reused across features) and retry ONCE;
             // a second failure stands typed (never a crash loop).
@@ -108,7 +108,7 @@ public sealed class ChaosTunnelWindow : Window
 
     /// <summary>Host→page: synthetic MessageEvent dispatch on window.chrome.webview (the
     /// landed DtrhHostWindow.axaml.cs:1257 shape — WPF PostWebMessageAsJson parity). Caller
-    /// is on the UI thread (ExecuteScriptAsync is apartment-bound, SP-023 surprise #4).</summary>
+    /// is on the UI thread (ExecuteScriptAsync is apartment-bound, recorded surprise #4).</summary>
     public void SendToPage(string json)
     {
         if (_web is null)

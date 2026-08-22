@@ -117,9 +117,9 @@ public sealed record InputStationObservation(
 /// own statement of where the next keystroke goes.
 /// <c>GetGUIThreadInfo(<i>ourThreadId</i>).hwndFocus</c> is a different question with a different
 /// answer: it is the focus inside our own thread's input queue, and it is set for a window nobody
-/// can type into. Measured (SP-110 plan.md §0, run 1): with the foreground held by another
+/// can type into. Measured (the packet plan.md §0, run 1): with the foreground held by another
 /// application and every injected keystroke going elsewhere, the thread-local read still answered
-/// "our window". A capability built on that read would be the inverse-SP-099 fake — an OS API,
+/// "our window". A capability built on that read would be the same fake in reverse — an OS API,
 /// correctly called, certifying nothing.</para>
 /// </summary>
 /// <param name="Asked">The read-back was attempted at all.</param>
@@ -189,7 +189,7 @@ public sealed record InputCaptureObservation(
 /// keyboard and answers — and, the part that makes it a capability rather than a wrapper, its
 /// ability to ASK THE OPERATING SYSTEM whether that really happened.
 ///
-/// <para><b>This is the exact inverse of SP-099, and the same standard applies.</b> That packet
+/// <para><b>This is the exact inverse of the overlay capability, and the same standard applies.</b> That packet
 /// proved a surface is click-THROUGH and its review recorded that "input passes through" is the
 /// property most easily faked, because a window that does not exist satisfies it too. The mirror
 /// hazard is sharper: <b>a test asserting that <c>WS_EX_TRANSPARENT</c> was not set is not evidence

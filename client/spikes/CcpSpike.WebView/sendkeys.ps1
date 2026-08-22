@@ -1,8 +1,8 @@
-# SP-011 real-input sender (SP-007 pattern): keybd_event SendInput-grade keystrokes at the
+# Real-input sender (shared headed-capture pattern): keybd_event SendInput-grade keystrokes at the
 # focused spike window. Modes: -Key <vk> tap; -EscHoldMs <ms> hold Escape (page's exit path);
 # -Click x,y relative to window client area (spike-pointer probe).
 param(
-  [string]$TitleLike = "SP-011 WebView spike",
+  [string]$TitleLike = "WebView spike",
   [int]$Key = -1,
   [int]$EscHoldMs = -1,
   [int]$ClickX = -1,

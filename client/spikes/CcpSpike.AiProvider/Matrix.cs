@@ -4,7 +4,7 @@ namespace CcpSpike.AiProvider;
 
 /// <summary>
 /// Step-4 provider-behavior matrix against the loopback lab. Every row names the typed
-/// outcome the SP-016 contract requires and asserts the falsifiable side (lab hit counts,
+/// outcome the AI-operation contract requires and asserts the falsifiable side (lab hit counts,
 /// partial-body bytes, send-attempt counters, elapsed bounds). Rows:
 ///   cancellation (mid-stream, generation invalidated, no late result applied),
 ///   timeout (typed, bounded, token-NOT-cancelled disambiguation),

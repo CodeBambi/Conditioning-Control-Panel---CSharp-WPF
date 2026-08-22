@@ -45,13 +45,13 @@ The tolerance stack, in order:
 2. The write path carries explicit **failure-injection points** (constructor-injected delegates for the temp-write and the rename) so tests simulate I/O failure and mid-rename crash without touching real corruption.
 3. Directory fsync after rename is **not** guaranteed — .NET exposes no portable directory-sync API; the consequence (a power-loss window where the rename itself may be lost) is accepted and recorded, with the §5 recovery path as the mitigation. Revisit if a feature row requires power-loss durability beyond file-level flush.
 
-## 4. Single serialized writer (SP-004 primitive)
+## 4. Single serialized writer (the owned-operation primitive)
 
-1. The persistence store is an SP-003 **background participant** registered first in the composition root, so its load (§5) completes in phase 3 before any consumer participant starts. Construction starts nothing (SP-003 §4.4).
-2. Every write is an **owned operation** on the store's `AsyncOperationOwner` (SP-004 §1): one owner, generation, owned completion task, typed terminal outcome. Detached or fire-and-forget writes do not exist.
+1. The persistence store is a **background participant** registered first in the composition root, so its load (§5) completes in phase 3 before any consumer participant starts. Construction starts nothing (startup contract §4.4).
+2. Every write is an **owned operation** on the store's `AsyncOperationOwner` (async-lifecycle contract §1): one owner, generation, owned completion task, typed terminal outcome. Detached or fire-and-forget writes do not exist.
 3. Writes are **serialized by chaining**: each save chains onto the previous write's completion under a lock. There is no queue-consumer loop and no channel. Concurrent saves from any thread produce no interleaved or partial file.
 4. The write body serializes the **latest `Current` at execution time**, not a snapshot captured at enqueue. A flush therefore captures every mutation visible when it runs.
-5. `Save()` enqueues a write and returns the owned completion (callers may observe the typed outcome; fire-and-forget of a required save is banned per SP-004 §7). `SaveImmediate()` enqueues and **awaits quiescence** (the chained tail), so when it returns, every previously enqueued write has finished.
+5. `Save()` enqueues a write and returns the owned completion (callers may observe the typed outcome; fire-and-forget of a required save is banned per the async-lifecycle contract §7). `SaveImmediate()` enqueues and **awaits quiescence** (the chained tail), so when it returns, every previously enqueued write has finished.
 6. The generation token is **not** passed into the file I/O: a cancellation arriving after a write's I/O has begun must not abort the rename. The token is observed before the I/O starts.
 7. Writes are **disabled** when the load ended in the newer-than-app state (§5 rule 6): an older build must never clobber a newer document. A disabled write terminates with a typed `Failed(Degraded, "writes disabled: document schema is newer than this build")` outcome.
 
@@ -69,7 +69,7 @@ Rules:
 1. **Crash recovery:** at load, if `<file>.tmp` exists and the main file does not, the temp is adopted as the main file before parsing (interrupted-save recovery). If the adopted temp turns out partial, it fails parse and is quarantined like any corrupt file — never silently defaulted over. A stale temp alongside a valid main file is deleted.
 2. **Defaults are never auto-saved because they exist.** The dirty flag is set only by explicit mutation (`Mutate`/`Replace`), never by loading with defaults. A run that loads `Missing`/`Quarantined`/`NewerSchema` defaults and changes nothing writes nothing — the quarantine state is not masked on next launch.
 3. Quarantine moves (not copies) so the next save writes a clean file, and records the backup path in the typed outcome for later import/UI surfacing.
-4. Load failure kinds reuse the shared vocabulary: `Quarantined`/`NewerSchema` surface as `Degraded`; an unexpected I/O exception escaping load is trapped once at the participant-start boundary per SP-003/SP-004 (typed `Failed`, classified by the owner).
+4. Load failure kinds reuse the shared vocabulary: `Quarantined`/`NewerSchema` surface as `Degraded`; an unexpected I/O exception escaping load is trapped once at the participant-start boundary per the startup and async-lifecycle contracts (typed `Failed`, classified by the owner).
 
 ## 6. Unknown-member policy: preserve, never strip
 
@@ -87,11 +87,11 @@ Rules:
 ## 8. Replacement notification
 
 1. `Replace(newModel)` performs whole-object replacement of `Current` (import/restore shape), marks the store dirty, and raises `SettingsReplaced` **before** persisting — listeners re-bind to the new instance and anything they seed is captured by the subsequent save (WPF `RestoreFrom`/`CurrentReplaced` outcome, `SettingsService.cs:436-450`).
-2. Delivery context, documented per SP-004 §5.4:
+2. Delivery context, documented per the async-lifecycle contract §5.4:
 
    | Stream | Producer context | Delivery context | Stale handling |
    |---|---|---|---|
-   | `SettingsReplaced` → listeners | Caller of `Replace` (any thread; serialized under the store's mutation lock) | **Synchronously on the caller's context**, inside the store lock, before the save is enqueued | Listeners must be re-entrant-safe and must not touch UI directly; UI projection goes through `IUiDispatch.Post` with a generation check inside the delegate (SP-004 §5.5) |
+   | `SettingsReplaced` → listeners | Caller of `Replace` (any thread; serialized under the store's mutation lock) | **Synchronously on the caller's context**, inside the store lock, before the save is enqueued | Listeners must be re-entrant-safe and must not touch UI directly; UI projection goes through `IUiDispatch.Post` with a generation check inside the delegate (async-lifecycle contract §5.5) |
 
    Handlers that throw are isolated per-handler (logged via `ILogSink`), so one listener cannot break replacement for the others; the event never faults the store.
 3. UI consumers never subscribe to the model object directly across a replacement: they subscribe to `SettingsReplaced` and re-read `Current`.
@@ -106,10 +106,10 @@ Rules:
 1. **Import** flows through the same load/validate/quarantine path as startup load: the imported document is parsed at DOM level, migrated, bound, and on success installed via `Replace` (§8); on failure the import is rejected with a typed outcome and the current document is untouched. A blind copy-over never happens.
 2. **Backup** is an explicit file copy of the current good document, taken only after a successful save (local-first ordering; WPF race fix `03d91c86`). Backup scheduling and cloud sync are later rows' consumers — this contract defines only the ordering boundary: backup consumes the persisted document, never precedes it.
 
-## 11. Teardown flush (SP-003 reserved slot — ACTIVATED)
+## 11. Teardown flush (startup-contract reserved slot — ACTIVATED)
 
 1. The store's flush is wired at the **reserved position at the head of `ApplicationHost.ShutdownAsync`**, before `Registry.CancelAndDrainAsync` cancels generations and before reverse-order participant stop (`startup-shutdown-contract.md` §6 rule 5 — the reservation this task activates; WPF outcome `App.xaml.cs:3207-3209`: settings flush FIRST).
-2. Flush semantics: `FlushAsync(boundedWait)` is a no-op when the store never loaded or is not dirty (§5 rule 2); otherwise it enqueues a final write and awaits quiescence with a **bounded wait** (backstop only — the chained writer is the mechanism). A flush that exceeds the bound is logged and teardown continues; teardown never throws (SP-003 invariant).
+2. Flush semantics: `FlushAsync(boundedWait)` is a no-op when the store never loaded or is not dirty (§5 rule 2); otherwise it enqueues a final write and awaits quiescence with a **bounded wait** (backstop only — the chained writer is the mechanism). A flush that exceeds the bound is logged and teardown continues; teardown never throws (a startup-contract invariant).
 3. Because flush runs before generation cancel, the final write is an ordinary live operation — no special-cased uncancellable path.
 4. **Panic-path flush policy: ATTEMPT on every path, including panic.** The single guarded entry point is the only teardown, so close, startup-failure, and panic all reach the same flush. Serialization failure produces a typed failure that skips the write; atomic replacement prevents partial corruption; the bounded wait prevents a wedged writer from hanging shutdown. Deliberate no-flush on panic is rejected: user-data preservation outweighs the residual risk of persisting a semantically odd but serializable state (WPF flushed on all paths; the first attempt lost exit flush once already, `e9501ce8`).
 5. Saves enqueued after teardown begins are **not guaranteed** — stated explicitly. `Save`/`SaveImmediate` called after `ShutdownAsync` has begun terminate with a typed `Cancelled` outcome (generation already cancelled at registration) rather than faulting or silently succeeding.
@@ -132,6 +132,6 @@ The store lands in `client/src/CcpClient.Desktop/Persistence/` — **no `CcpClie
 - Demonstrator migration is idempotent: run twice → same document, exactly one journal entry.
 - Concurrent writes from multiple threads are serialized: no interleaved or partial file; final content is the latest state.
 - `Replace` raises `SettingsReplaced` before persisting, on the documented caller context; a throwing handler is isolated.
-- Dirty-at-shutdown is flushed before reverse-order participant stop executes; flush is a no-op when clean/never-loaded; repeated shutdown remains a no-op (SP-003 invariants intact; all SP-003/SP-004 tests pass).
+- Dirty-at-shutdown is flushed before reverse-order participant stop executes; flush is a no-op when clean/never-loaded; repeated shutdown remains a no-op (startup invariants intact; all startup and async-lifecycle tests pass).
 - Load outcomes are typed: `Loaded` / `Missing` / `Quarantined` / `NewerSchema` (writes disabled); defaults are never auto-saved.
 - Contract testCommand passes on Windows and WSL2 Linux (rename/flush semantics exercised on both).

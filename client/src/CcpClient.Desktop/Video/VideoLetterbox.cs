@@ -31,7 +31,7 @@ public static class VideoLetterbox
     /// point is a pixel in a bar the painter FILLS and never draws picture into, and without a floor
     /// a clip whose aspect exactly matches the surface would have no bar at all — so the control
     /// point would land inside the picture and the check that proves the fill happened would be
-    /// reading the film. SP-110 made the same call for the same reason (its cards' bands are floored
+    /// reading the film. The Lock Card made the same call for the same reason (its cards' bands are floored
     /// at <c>ControlMargin = 3</c>) after a mutation showed an ink check that was structurally
     /// blind.</para>
     /// </summary>
@@ -143,7 +143,7 @@ public static class VideoLetterbox
     /// The points a read-back samples inside the picture, in surface client coordinates: nine
     /// fractions of the picture box, spread rather than on a lattice.
     ///
-    /// <para><b>Their asymmetry is NOT load-bearing and the sweep proved it</b> (SP-111 record §4,
+    /// <para><b>Their asymmetry is NOT load-bearing and the sweep proved it</b> (the packet record §4,
     /// M-au): the read-back's fold is order-dependent, so a mirrored picture differs even from a
     /// mirror-invariant point set, and a mutation making the set exactly mirror-invariant survived.
     /// The claim is corrected here rather than defended. What the points ARE for is coverage — nine

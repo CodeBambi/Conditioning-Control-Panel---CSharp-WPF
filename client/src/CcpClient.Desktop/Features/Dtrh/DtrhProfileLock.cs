@@ -4,20 +4,20 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// SP-027 slice b5: the `0x800700AA`-class stale-profile-lock recovery (routed from
-/// SP-023 record surprise #7: back-to-back runs where a prior process was killed leave
+/// Slice b5: the `0x800700AA`-class stale-profile-lock recovery (routed from
+/// recorded surprise #7: back-to-back runs where a prior process was killed leave
 /// the WebView2 profile locked briefly → init failure; recovery = kill the stale
 /// msedgewebview2 children holding OUR UserDataFolder). 0x800700AA = HRESULT from
 /// ERROR_BUSY (170, "The resource is in use") — WebView2's environment creation fails
 /// with it when a zombie browser process still holds the profile directory.
 ///
 /// This is the deterministic case on the RELAUNCH path (consult (b)2): the watchdog
-/// relaunch after a renderer kill is exactly SP-023's back-to-back shape, so the
+/// relaunch after a renderer kill is exactly that back-to-back shape, so the
 /// coordinator runs <see cref="TryRecover"/> before recreating the window.
 ///
 /// Honesty: every outcome is typed + logged by the caller — never silent, never a crash
 /// loop (the window retries navigation once, then the failure stands typed). The process
-/// enumeration runs through PowerShell CIM (the SP-011 kill-renderer.ps1 technique —
+/// enumeration runs through PowerShell CIM (the spike's kill-renderer.ps1 technique —
 /// the only package-free command-line source on Windows; System.Management is NOT
 /// admitted). Windows-only; Linux returns a typed unsupported outcome.
 /// </summary>
@@ -36,7 +36,7 @@ public static class DtrhProfileLock
     /// parity — a dedicated profile per surface).</summary>
     public static string WebView2ProfileDir() => Path.Combine(DtrhDataRoot(), "wv2-profile");
 
-    /// <summary>SP-049: a NAMED per-surface profile (WPF parity: the game uses
+    /// <summary>A NAMED per-surface profile (WPF parity: the game uses
     /// browser_data_dtrh, the studio window browser_data_loom — LoomHostService.cs:64
     /// "Own browser profile: the game's WebView2 state stays untouched"). Two surfaces on
     /// ONE profile would also re-arm the b5 stale-profile-lock class.</summary>
@@ -79,7 +79,7 @@ public static class DtrhProfileLock
     }
 
     /// <summary>Kill every msedgewebview2 process whose command line carries our
-    /// UserDataFolder (the SP-011 kill-renderer.ps1 selector, run in-product). Never
+    /// UserDataFolder (the spike's kill-renderer.ps1 selector, run in-product). Never
     /// throws; the outcome says exactly what happened.</summary>
     public static DtrhProfileRecovery TryRecover(string userDataFolder)
     {

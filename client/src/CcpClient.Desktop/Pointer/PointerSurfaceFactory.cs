@@ -86,7 +86,7 @@ public static class PointerSurfaceFactory
     /// <summary>
     /// The backend for a named platform. Both branches are reachable from either OS, so the refusal
     /// path is testable on a Windows box and the Windows path is testable nowhere else — the honest
-    /// asymmetry, stated rather than hidden (the SP-093 precedent).
+    /// asymmetry, stated rather than hidden (an established precedent).
     /// </summary>
     public static IPointerSurface CreateFor(PointerHostPlatform platform) => platform switch
     {

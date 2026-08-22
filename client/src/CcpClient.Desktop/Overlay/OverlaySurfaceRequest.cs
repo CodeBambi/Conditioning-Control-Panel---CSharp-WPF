@@ -10,7 +10,7 @@ namespace CcpClient.Desktop.Overlay;
 /// (<c>Services/Flash/FlashService.cs:2211-2223</c>, and it keeps the scale on
 /// <c>MonitorInfo.DpiScale</c> at <c>:4141</c> precisely because the conversion has to be undone
 /// later). There is nothing here to convert for: DPI becomes a real concern the moment content is
-/// drawn, and nothing is drawn (SP-099 divergence D55).</para>
+/// drawn, and nothing is drawn (divergence D55).</para>
 /// </summary>
 /// <param name="X">Left edge, in the virtual-screen coordinate space (may be negative on a
 /// multi-monitor desktop where a display sits left of or above the primary).</param>

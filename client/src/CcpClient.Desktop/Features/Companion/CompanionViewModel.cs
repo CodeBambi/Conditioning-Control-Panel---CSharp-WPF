@@ -19,16 +19,16 @@ namespace CcpClient.Desktop.Features.Companion;
 ///   bubble lands immediately and the box clears; a thinking bubble shows in-flight
 ///   (:705-707) and is REMOVED WHOLE on resolve — nothing partial edits into final state.
 /// - Badge truth: bubbles badge from the typed reply BY TYPE only (CompanionBubbleModel).
-/// - Status truth: reads the SP-006 capability state, never a registration/selection fact.
+/// - Status truth: reads the probed capability state, never a registration/selection fact.
 /// - Panic-quiet: Stop → pipeline.PanicAsync (typed Cancelled, nothing partial surfaces),
 ///   then SelectProvider(current) RE-ARMS the generation — without re-arm the owner stays
 ///   cancelled and every later send would terminate Cancelled (pre-approach consult #7).
 ///   The calm state is a WORKING state (a post-panic send succeeds — tested).
 /// - Memory clear: in-window confirm (default NO, Esc = No, re-entrancy-guarded — WPF
 ///   default-No shape, Patreon.cs:920-927); Clear runs off the UI thread (it blocks on
-///   the write chain, SP-040 consult); success also clears the on-screen chat log
+///   the write chain, per consult); success also clears the on-screen chat log
 ///   (WPF Patreon.cs:933-936); failure/degraded surface honest typed text (a privacy
-///   operation must not lie — SP-040 pre-completion consult B).
+///   operation must not lie — pre-completion consult B).
 /// - Consents/cooldowns: session-scoped typed states (owner-pending placeholders; never
 ///   persisted). Cooldown edits apply to the NEXT extension; a live cooldown is never
 ///   shortened (registry extend-not-shrink, tested).
@@ -119,7 +119,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Status line — from the SP-006 capability state ONLY (never a registration/selection fact).</summary>
+    /// <summary>Status line — from the probed capability state ONLY (never a registration/selection fact).</summary>
     public string StatusText
     {
         get => _statusText;
@@ -311,7 +311,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
         Clearing = true;
         _ = Task.Run(() =>
         {
-            // Clear() blocks on the store's write chain (SP-040 consult) — never on the UI thread.
+            // Clear() blocks on the store's write chain (per consult) — never on the UI thread.
             _participant.Memory.Clear();
             var outcome = _participant.Memory.LastClearOutcome;
             _ui.Post(() =>
@@ -333,7 +333,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
                         break;
                     default:
                         // The honest failure path (WPF warning box, Patreon.cs:947-955): a
-                        // privacy operation must not lie (SP-040 pre-completion consult B).
+                        // privacy operation must not lie (pre-completion consult B).
                         ClearOutcomeText = "Memory clear failed: the saved file could not be deleted. Try again.";
                         break;
                 }

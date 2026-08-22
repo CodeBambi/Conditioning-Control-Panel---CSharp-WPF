@@ -9,7 +9,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-106 — the first module in the port that has to keep changing while it is on.
+/// The first module in the port that has to keep changing while it is on.
 ///
 /// <para><b>What is really under test.</b> Not a spiral. Every fact below is about whether a module
 /// whose work is PER-FRAME can live under the same spine as two paced modules and one static one —
@@ -220,7 +220,7 @@ public class SpiralOverlayEffectTests
 
         var refusal = Assert.IsType<CapabilityState.Unavailable>(lab.Effect.Arm());
 
-        // SP-105's finding, unchanged for a fourth module: it is a property of DRAWING at arm time,
+        // The static module's finding, unchanged for a fourth module: it is a property of DRAWING at arm time,
         // not of being static. A paced module schedules on a clock and its draw is a later posted
         // projection that skip-until-bound silently drops (contract 5.3); here "skipped" is the
         // whole outcome and has to be sayable.
@@ -332,7 +332,7 @@ public class SpiralOverlayEffectTests
         var stopped = lab.Effect.Completion!;
         lab.Effect.Disarm();
 
-        // SP-116. THE DISARM ABOVE IS NOT FINISHED WHEN IT RETURNS, and this is the only fact in
+        // THE DISARM ABOVE IS NOT FINISHED WHEN IT RETURNS, and this is the only fact in
         // the project that can see it, because it is the only one that puts something back on the
         // surface behind the module's back. The parked operation's tail calls ReleaseWork a third
         // time from a thread-pool continuation (OwnedSessionEffect.cs:345,357 — the TCS carries
@@ -423,7 +423,7 @@ public class SpiralOverlayEffectTests
     [Fact]
     public void TheMovingModulesConstructorAndBaseClass_CarryNoClockAndNoPacedBase()
     {
-        // SP-105 wrote this shape for the STATIC module and named what it is worth: reflection over
+        // This shape was written for the STATIC module, and what it is worth was named there: reflection over
         // constructors and base types is defeated by a clock built in a field in one line, so the
         // guard really lives in the behavioural facts (MovingEffectSpineTests' PendingCount facts,
         // and SpiralSurfacePresenterTests' two-cadence facts). It earns its keep by failing at the

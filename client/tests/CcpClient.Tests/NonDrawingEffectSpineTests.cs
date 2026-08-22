@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-108 — FIVE modules under one spine, and the fifth one draws nothing.
+/// FIVE modules under one spine, and the fifth one draws nothing.
 ///
 /// <para><b>The claim under test.</b> Every seam the port had proven — <c>OwnedSessionEffect</c>,
 /// <c>OverlaySurfaceSet</c>, the dot's three states, a presenter owning the cadence — had only ever
@@ -199,7 +199,7 @@ public class NonDrawingEffectSpineTests
     [Fact]
     public async Task TheRampsTHIRDDialIsFlashOpacity_AndItIsHeldDrivenAndGivenBackLikeTheOtherTwo()
     {
-        // SP-117. D93 said flash opacity's link was absent because it had "no dial on any ported
+        // D93 said flash opacity's link was absent because it had "no dial on any ported
         // panel"; the Visuals row is that panel, so this is the condition being discharged rather
         // than waived. The dial's Reapply is a NO-OP (D174 — a live flash keeps the alpha it was
         // placed with), so the whole of custody has to rest on Write, and that is what this checks.
@@ -615,7 +615,7 @@ public class NonDrawingEffectSpineTests
         }
     }
 
-    /// <summary>The manual clock, SP-098's shape. Zero wall-clock.</summary>
+    /// <summary>The manual clock, in the shape every module test shares. Zero wall-clock.</summary>
     private sealed class ManualSessionClock : ISessionClock
     {
         private readonly List<Entry> _timers = [];

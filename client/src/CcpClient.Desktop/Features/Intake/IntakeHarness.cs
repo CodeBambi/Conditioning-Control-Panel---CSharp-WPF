@@ -3,10 +3,10 @@ using System.Text.Json;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054 HARNESS-ONLY drive vocabulary (--intake-drive; the dtrh fx-drive precedent).
+/// HARNESS-ONLY drive vocabulary (--intake-drive; the dtrh fx-drive precedent).
 /// Every step is RAW page JSON fed through the REAL parse+dispatch path — the message
 /// shapes and the host machinery under test are real; only the origin is harnessed
-/// (headed evidence without input automation, the SP-008 named-limit class).
+/// (headed evidence without input automation, the named-limit class).
 /// </summary>
 public static class IntakeHarness
 {
@@ -17,7 +17,7 @@ public static class IntakeHarness
         // QuizRunResult (scoreable A2/A3 records at heat ≥2, two affirmed mantras,
         // a revealed archetype route for the #614 naming path).
         "quiz-result" => QuizResultJson,
-        // SP-058: the top-marks BOUNDARY run — totalScore 9 / maxScore 10 = exactly 90.0%
+        // The top-marks BOUNDARY run — totalScore 9 / maxScore 10 = exactly 90.0%
         // (IntakeHostService.cs:45-53 bar; pct >= 90.0 -> perfect). The drive transcript's
         // graded-verdict line is the end-to-end boundary proof; the below-bar and zero-max
         // cases are unit-pinned (IntakeGradedTests).
@@ -67,7 +67,7 @@ public static class IntakeHarness
         }}
         """;
 
-    /// <summary>SP-058: the boundary run — 9/10 = exactly the 90.0 top-marks bar
+    /// <summary>The boundary run — 9/10 = exactly the 90.0 top-marks bar
     /// (kept minimal; the verdict math is what this step evidences).</summary>
     private const string TopMarksQuizResultJson = """
         {"type":"quiz-result","result":{

@@ -4,7 +4,7 @@ using CcpClient.Desktop.Features.Dtrh;
 namespace CcpClient.Desktop.Features.Goon;
 
 /// <summary>
-/// SP-130: protocol v1 of the Goon page↔host bridge, for the PRACTICE unit
+/// Protocol v1 of the Goon page↔host bridge, for the PRACTICE unit
 /// (goon-game-census.md §7.1). The frame catalogue is <c>GoonHostService.cs:29-54</c> and every
 /// type below maps to a line in it or to a page send/handler site — nothing is invented.
 ///

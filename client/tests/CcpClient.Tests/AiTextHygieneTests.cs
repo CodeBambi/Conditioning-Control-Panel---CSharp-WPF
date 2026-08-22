@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-069 pure-layer facts for the three reply-hygiene rules (WPF
+/// Pure-layer facts for the three reply-hygiene rules (WPF
 /// `ConditioningControlPanel/Services/AIService/AiTextHygiene.cs` — `Clean` :25/:30/:287,
 /// `StripMetadataTags` :36/:40/:44/:53/:61 + collapse/trim :79-80; leak predicate from
 /// `AiResponseParser.LooksLikeEnvelopeLeak` :53). Every layer carries a NEGATIVE CONTROL —

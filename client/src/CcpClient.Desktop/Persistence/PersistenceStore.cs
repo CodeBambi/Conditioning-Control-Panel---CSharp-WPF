@@ -74,9 +74,9 @@ public sealed class AtomicWriteHooks
 
 /// <summary>
 /// The single persistence authority (persistence-migration-contract): schema-versioned
-/// document, atomic temp+rename+flush writes, one serialized writer as SP-004 owned
+/// document, atomic temp+rename+flush writes, one serialized writer as owned
 /// operations, corruption quarantine with typed Degraded, unknown-member preservation,
-/// migration journal, and whole-object replacement notification. An SP-003 background
+/// migration journal, and whole-object replacement notification. A background
 /// participant: load runs in <see cref="StartAsync"/> (phase 3) before consumer
 /// participants start; construction starts nothing.
 /// </summary>
@@ -149,7 +149,7 @@ public sealed class PersistenceStore<TModel> : IBackgroundParticipant where TMod
     /// <summary>
     /// Raised on whole-object replacement BEFORE persisting (contract §8): synchronously on
     /// the caller's context, inside the store lock. Handlers must not touch UI directly —
-    /// UI projection goes through IUiDispatch.Post with a generation check (SP-004 §5.5).
+    /// UI projection goes through IUiDispatch.Post with a generation check (<c>async-lifecycle-fault-contract.md</c> §5.5).
     /// Throwing handlers are isolated per-handler.
     /// </summary>
     public event Action? SettingsReplaced;
@@ -170,11 +170,11 @@ public sealed class PersistenceStore<TModel> : IBackgroundParticipant where TMod
     /// disk I/O, so a UI-thread caller loads on the UI thread. That is not fixable with a
     /// caller-side bound; it would require moving the I/O off the caller, which would turn
     /// every one of those call sites into a genuine sync-over-async block and would reorder
-    /// the load against DtrhHostWindow's SP-055 asset-selection-first ordering. Do not
+    /// the load against DtrhHostWindow's asset-selection-first ordering. Do not
     /// "fix" this by making <see cref="Load"/> asynchronous or wrapping it in
     /// <c>Task.Run</c> without reaching the callers. Pinned by
-    /// <c>PersistenceStoreTests</c> (SP-087); this note is the sentence whose absence let
-    /// the SP-071 census be read as describing unbounded waits.
+    /// <c>PersistenceStoreTests</c>; this note is the sentence whose absence let
+    /// the earlier census be read as describing unbounded waits.
     /// </remarks>
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -190,7 +190,7 @@ public sealed class PersistenceStore<TModel> : IBackgroundParticipant where TMod
         return Task.CompletedTask;
     }
 
-    /// <summary>Idempotent stop: cancels the operation generation (SP-003 §5.3).</summary>
+    /// <summary>Idempotent stop: cancels the operation generation (<c>startup-shutdown-contract.md</c> §5.3).</summary>
     /// <remarks>
     /// COMPLETES SYNCHRONOUSLY ON THE CALLING THREAD and touches no file at all: it flips
     /// <see cref="Running"/> and cancels the generation token source under a short lock
@@ -202,7 +202,7 @@ public sealed class PersistenceStore<TModel> : IBackgroundParticipant where TMod
     /// This is NOT a flush. A dirty store is not persisted here; callers that need the
     /// final write call <see cref="FlushAsync"/> BEFORE this (contract §11), which is why
     /// IntakeHostContext.cs:212-214 does and DtrhSaveSlots.DeleteSlot deliberately does not
-    /// (it is erasing the file). Pinned by <c>PersistenceStoreTests</c> (SP-087).
+    /// (it is erasing the file). Pinned by <c>PersistenceStoreTests</c>.
     /// </remarks>
     public Task StopAsync()
     {
@@ -521,7 +521,7 @@ public sealed class PersistenceStore<TModel> : IBackgroundParticipant where TMod
         return document.ToJsonString(JsonOptions);
     }
 
-    /// <summary>Write faults: I/O-style failures are Recoverable (store alive, in-memory state intact); anything else stays Fatal (SP-004 §4).</summary>
+    /// <summary>Write faults: I/O-style failures are Recoverable (store alive, in-memory state intact); anything else stays Fatal (<c>async-lifecycle-fault-contract.md</c> §4).</summary>
     private static InitFailureKind ClassifyWriteFault(Exception ex) =>
         ex is IOException or UnauthorizedAccessException ? InitFailureKind.Recoverable : InitFailureKind.Fatal;
 }

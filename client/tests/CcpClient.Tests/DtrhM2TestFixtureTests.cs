@@ -5,9 +5,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-057: the m2test declared-fixture discipline. The committed fixture round-trips,
+/// The m2test declared-fixture discipline. The committed fixture round-trips,
 /// carries its sentinel values (instantly recognizable as fixture-origin in any log or
-/// screenshot — the SP-052 Run B class), malformed fixture JSON fails typed, and the
+/// screenshot — the headed Run B class), malformed fixture JSON fails typed, and the
 /// meta engine's test mode sources the fixture — NEVER the live slot document.
 /// </summary>
 public class DtrhM2TestFixtureTests
@@ -116,7 +116,7 @@ public class DtrhM2TestFixtureTests
     [Fact]
     public async Task M2TestOpSequence_OffFixture_AppliesExactlyTheModeledEighteen()
     {
-        // SP-057 pre-completion consult pin 1: the engine-side invariant behind the
+        // Pre-completion consult pin 1: the engine-side invariant behind the
         // headed m2test 7/8 explanation. Off the committed fixture, the engine applies
         // EXACTLY the 18 ops the payload's expectation model counts (m2test.js:97-100) —
         // the headed run's 19th rev bump is page-originated narrative traffic (record.md

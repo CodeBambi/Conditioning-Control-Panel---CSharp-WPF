@@ -4,34 +4,34 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-115 trap 1: <b>FIVE surfaces now share one desktop</b>, and the four that landed first have to
+/// Trap 1: <b>FIVE surfaces now share one desktop</b>, and the four that landed first have to
 /// survive the fifth.
 ///
-/// <para>The click-through overlay (SP-099/SP-100, five modules draw on it), the Lock Card (SP-110,
-/// which TAKES the foreground and the keyboard), the video surface (SP-111), the pointer targets
-/// (SP-113, which CATCH clicks), and now a layered window composited with per-pixel alpha.
+/// <para>The click-through overlay (five modules draw on it), the Lock Card
+/// (which TAKES the foreground and the keyboard), the video surface, the pointer targets
+/// (which CATCH clicks), and now a layered window composited with per-pixel alpha.
 /// <c>Overlay/**</c>, <c>Input/**</c>, <c>Audio/**</c>, <c>Video/**</c> and <c>Pointer/**</c> are
 /// byte-identical to base after this packet: they are CONSUMED here, and every reading of them is
 /// taken through their OWN instruments — <see cref="OverlayWindowProbe"/>,
 /// <see cref="InputWindowProbe"/> and <see cref="PointerWindowProbe"/>, unmodified — rather than
 /// through the capability under test.</para>
 ///
-/// <para><b>THE COEXISTENCE POSITION, stated rather than implied.</b> SP-113's final review recorded
+/// <para><b>THE COEXISTENCE POSITION, stated rather than implied.</b> An earlier final review recorded
 /// that the coexistence evidence does not scale past four disjoint rectangles: its strength was that
 /// no surface could occlude another's hit-test point, and a fifth breaks that. This file does not
 /// pretend otherwise and does not extend that file by copying a pair.</para>
 ///
 /// <list type="number">
-/// <item><b>What is still proven by disjointness.</b> The four landed rectangles keep SP-113's own
+/// <item><b>What is still proven by disjointness.</b> The four landed rectangles keep their own
 /// positions and the glyph surface takes a fifth that intersects none of them — asserted, not
 /// assumed (<see cref="TheFifthRectangleIsDisjointFromAllFour_AssertedRatherThanAssumed"/>). So this
-/// run is a strict extension of the arrangement SP-113 proved.</item>
+/// run is a strict extension of the arrangement already proved.</item>
 /// <item><b>What disjointness could NOT have proven, and where it moved to.</b> This capability's
 /// own evidence REQUIRES an overlap — proving a transparent pixel shows the background behind it
 /// means putting the surface over a known background — so it cannot live here. It lives in
 /// <see cref="GlyphAlphaDifferentialTests"/>, where ownership of every sampled point is DECIDED from
 /// the OS's own z-order and the intervening windows' rectangles rather than assumed from geometry.
-/// That is the occlusion-aware arbitration SP-113's review named, and it is what scales past
+/// That is the occlusion-aware arbitration that review named, and it is what scales past
 /// four.</item>
 /// <item><b>What neither proves, plainly.</b> Five surfaces under CONTENTION. Every reading here is
 /// taken at a quiet moment of this run's own making, and a foreign topmost window can still own any
@@ -62,7 +62,7 @@ public class GlyphCoexistenceTests
     [Fact]
     public void TheFifthRectangleIsDisjointFromAllFour_AssertedRatherThanAssumed()
     {
-        // SP-113's argument, kept where it still holds and MEASURED rather than asserted in a
+        // The disjointness argument, kept where it still holds and MEASURED rather than asserted in a
         // comment. Where it stops holding is stated on the class.
         Assert.True(GlyphSurfaceObservations.Coexistence.GlyphSurfaceSharesNoRectangle);
     }
@@ -90,7 +90,7 @@ public class GlyphCoexistenceTests
     [Fact]
     public void THEOVERLAYKEEPSITSUNIFORMALPHA_WhichIsTheONEThingThisCapabilityCouldHaveDestroYED()
     {
-        // THE TRAP-1 FACT FOR THIS PACKET SPECIFICALLY. SP-099 measured that toggling
+        // THE TRAP-1 FACT FOR THIS PACKET SPECIFICALLY. The overlay measured that toggling
         // WS_EX_LAYERED and then calling UpdateLayeredWindow converts a window to per-pixel mode
         // and DELETES its uniform alpha permanently - which is the reading the overlay's own ghost
         // check depends on. If anything in Glyph/** ever reached the overlay's handle, this number

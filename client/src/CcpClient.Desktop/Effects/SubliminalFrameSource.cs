@@ -39,7 +39,7 @@ public interface ISubliminalFrameSource
 ///
 /// <para><b>No per-pixel alpha.</b> The frame is B,G,R,X over an opaque background and the card is
 /// composited at the surface's one uniform <c>LWA_ALPHA</c>, which is the opacity dial
-/// (<c>AppSettings.cs:1256</c>). That is the same constraint SP-100 recorded for flashes (D57) and
+/// (<c>AppSettings.cs:1256</c>). That is the same constraint recorded for flashes (D57) and
 /// it costs the same thing: the text is not individually translucent, the whole card is.</para>
 /// </summary>
 public sealed class GdiPlusSubliminalFrameSource : ISubliminalFrameSource

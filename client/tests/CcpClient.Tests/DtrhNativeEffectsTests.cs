@@ -6,11 +6,11 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-025 slice b3: native effects core — SFX pool bounds/drop-on-overflow, resolution
+/// Slice b3: native effects core — SFX pool bounds/drop-on-overflow, resolution
 /// chains, VN mix gate, voice stop-replace + generation token, freeze idempotency +
 /// run-boundary/teardown unwedge invariants, fire-payload video/whisper outcomes. All
 /// against RECORDING FAKES — never the real SoundFlow/libvlc backends (packet Step 3).
-/// WPF parity cites per test (SP-025 record Step 1 archaeology).
+/// WPF parity cites per test (record Step 1 archaeology).
 /// </summary>
 public sealed class DtrhNativeEffectsTests : IDisposable
 {
@@ -37,10 +37,10 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     {
         var audio = new FakeAudio();
         var video = new FakeVideo();
-        // SP-043: every test in this class drives the segment-cap timer through an
+        // Every test in this class drives the segment-cap timer through an
         // injected ManualClock — no real System.Threading.Timer is ever armed here
         // (deterministic under parallel load; the 0.05s-cap + wall-clock-poll flake
-        // class, SP-041 run-4 red, is closed structurally, never by wider windows).
+        // class, a historical run-4 red, is closed structurally, never by wider windows).
         clock ??= new ManualClock();
         var fx = new DtrhNativeEffects(audio, video, new DtrhNativeEffectsOptions
         {
@@ -92,7 +92,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     [Fact]
     public void Sfx_AuditedChains_ResolvePerChain_AndGenericResolution()
     {
-        // SP-051: boon_reveal chains resolve per the WPF chain (ChaosSfx.cs:25-30) — the
+        // The boon_reveal chains resolve per the WPF chain (ChaosSfx.cs:25-30) — the
         // dedicated drops (dling/thud) live in the WPF sound library, so the chain lands
         // on the fallback members that ARE in the payload pool, at the WPF fixed scales.
         var chime = TouchSfx("chime1.mp3");
@@ -116,7 +116,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     [Fact]
     public void Sfx_FixedChainGaps_TypedAndRecorded()
     {
-        // SP-051: wave_clear/ripple_cast chains (ChaosSfx.cs:22, :41) have NO member in the
+        // The wave_clear/ripple_cast chains (ChaosSfx.cs:22, :41) have NO member in the
         // payload pool — typed named content gaps with the WPF chain cited, never an
         // off-chain substitution. ticktock's page path rides the generic chain
         // (DtrhHostService.cs:262 → ChaosSfx.cs:47); also absent from the pool.
@@ -135,7 +135,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
             && l.Contains("chaos/ticktock.mp3") && l.Contains("ChaosSfx.cs:47"));
     }
 
-    /// <summary>SP-051: every page-sent cue riding the generic chain (record.md Tier B —
+    /// <summary>Every page-sent cue riding the generic chain (record.md Tier B —
     /// grep of sfx('&lt;name&gt;') over the dtrh page JS + warren.js:246's unlock_card default)
     /// is a named content gap while the WPF chaos sound library is unported. detonate_thud
     /// and dive are silent in WPF too (absent from the WPF library) — the gap is still
@@ -191,7 +191,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     [Fact]
     public void Sfx_ChainFallback_ResolvesWhenDedicatedAbsent()
     {
-        // SP-051: when a chain's fallback member IS in the pool, the chain resolves to it.
+        // When a chain's fallback member IS in the pool, the chain resolves to it.
         var lvup = TouchSfx("lvup.mp3");
         var chime = TouchSfx("chime1.mp3");
         var (fx, audio, _) = Make();
@@ -208,7 +208,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     [Fact]
     public void Sfx_ResolveSfxCue_TypedOutcomes()
     {
-        // SP-051: the resolution entry point future sfx consumers use — typed Resolved vs
+        // The resolution entry point future sfx consumers use — typed Resolved vs
         // NamedGap, boon_reveal tokens included (table rows, no page wire today).
         TouchSfx("Pop2.mp3");
         var (fx, _, _) = Make();
@@ -237,7 +237,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     [Fact]
     public void Sfx_BoonPick_ChainFallsBackToChime2_KeepingPageScale()
     {
-        // SP-049: the studio's save-success cue (loomStudio.js:209, scale 0.4). WPF's chain
+        // The studio's save-success cue (loomStudio.js:209, scale 0.4). WPF's chain
         // (ChaosSfx.cs:33) is chaos/boon_pick.mp3 → chime2.mp3; the dedicated drop is not
         // in the DTRH payload pool, so the chain lands on chime2 — and unlike the other
         // chains the page-supplied scale passes through (WPF ChaosSfx.Play(name, scale)).
@@ -264,7 +264,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     [Fact]
     public void Sfx_BoonReveal_DedicatedFile_WinsOverFallback()
     {
-        // SP-051: a dedicated drop always wins its chain (ChaosSfx.cs:62-79 first-exists order).
+        // A dedicated drop always wins its chain (ChaosSfx.cs:62-79 first-exists order).
         var dling = TouchSfx("dling.mp3");
         TouchSfx("chime1.mp3");
         var thud = TouchSfx("thud.mp3");
@@ -486,7 +486,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
 
     // ---------- fakes ----------
 
-    /// <summary>Manual <see cref="ISoundClock"/> (SP-043; the SoundArbitrationTests.cs:551
+    /// <summary>Manual <see cref="ISoundClock"/> (the SoundArbitrationTests.cs:551
     /// pattern): Schedule captures due+fire, Advance fires due timers in due order,
     /// Dispose cancels (the ISoundClock contract). Zero wall-clock.</summary>
     private sealed class ManualClock : ISoundClock
@@ -535,12 +535,12 @@ public sealed class DtrhNativeEffectsTests : IDisposable
         }
     }
 
-    // ---------- b4 media-logging gate (SP-026) ----------
+    // ---------- b4 media-logging gate ----------
 
     [Fact]
     public void ActivePool_DeselectedUserVideo_NeverPlays_WhitelistOff_Plays()
     {
-        // SP-055 (VideoService.cs:6640-6663 parity): the fire-payload video pool routes
+        // VideoService.cs:6640-6663 parity: the fire-payload video pool routes
         // through the ONE active-pool definition — a deselected user video is silently
         // out of the pool (the harness no-op line), payload files are unaffected.
         var userRoot = Path.Combine(_root, "usermedia");
@@ -584,7 +584,7 @@ public sealed class DtrhNativeEffectsTests : IDisposable
     [Fact]
     public void MediaLogging_UserMediaRoot_PresenceShapeOnly_PayloadKeepsNames()
     {
-        // Packet framing c (SP-018 V5 class): files under a PresenceOnlyRoots root log
+        // Packet framing c (V5 class): files under a PresenceOnlyRoots root log
         // bytes + extension class, NEVER a filename; payload/staged files keep names.
         var userDir = Path.Combine(_root, "usermedia", "videos");
         Directory.CreateDirectory(userDir);

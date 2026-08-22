@@ -8,11 +8,11 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Companion surface logic tests (SP-046 slice c7). The view-model runs against the REAL
+/// Companion surface logic tests (slice c7). The view-model runs against the REAL
 /// pipeline/participant composition with a controllable fake provider at the provider
 /// seam (the established test discipline — no mocks in the machinery). Proves: badge
 /// truth from provenance BY TYPE (incl. the falsifiable identical-text pair), status
-/// from the SP-006 capability state only, refusal bubble class discipline, the
+/// from the capability state only, refusal bubble class discipline, the
 /// memory-clear flow (default-No confirm, re-entrancy, file-content proof, honest
 /// failure path), consent/cooldown typed-state driving, and panic-quiet (typed
 /// Cancelled, thinking bubble removed, nothing partial, re-armed surface works).
@@ -108,7 +108,7 @@ public class CompanionViewModelTests
         }
 
         /// <summary>Waits (bounded) for a dispatch post to arrive, then pumps it. Class 2
-        /// (SP-059): a real running participant posts asynchronously — the tolerant window
+        /// waits: a real running participant posts asynchronously — the tolerant window
         /// with the loud classifier via the single approved helper (sync variant: the pump
         /// itself must stay on this thread).</summary>
         public void PumpEventually()
@@ -257,7 +257,7 @@ public class CompanionViewModelTests
 
         h.Vm.InputText = "long operation";
         h.Vm.SendCommand.Execute(null);
-        // Class 2 (SP-059): the send dispatches asynchronously through the ViewModel —
+        // Class 2: the send dispatches asynchronously through the ViewModel —
         // the tolerant window with the loud classifier; the in-flight condition is unchanged.
         TestWait.UntilSync(() => h.Provider.Calls > 0, "the long operation genuinely in flight (provider called)", () => $"calls={h.Provider.Calls}");
 

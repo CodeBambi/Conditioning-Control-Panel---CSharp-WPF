@@ -2,7 +2,7 @@ using CcpClient.Desktop.Capabilities;
 
 namespace CcpClient.Desktop.Entitlement;
 
-// SP-092: the typed entitlement outcome.
+// The typed entitlement outcome.
 //
 // THE ONE RULE THIS FILE EXISTS TO ENFORCE: "you are not a patron" and "I could not tell"
 // are different answers and must never collapse into each other. WPF's own store already

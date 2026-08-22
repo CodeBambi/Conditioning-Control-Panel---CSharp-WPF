@@ -63,7 +63,7 @@ public class DtrhInboxTests
         var inbox = new Inbox();
         var poll = inbox.PollAsync(0, TimeSpan.FromSeconds(5), CancellationToken.None);
         Assert.False(poll.IsCompleted);
-        // No pre-enqueue settle (SP-059): PollAsync registers the waiter SYNCHRONOUSLY on the
+        // No pre-enqueue settle: PollAsync registers the waiter SYNCHRONOUSLY on the
         // caller's thread before its first incomplete await (Inbox.cs: the lock block captures
         // _signal.Task before awaiting), so the enqueue below always wakes THIS poll.
         inbox.Enqueue("{\"type\":\"init\"}");
@@ -88,7 +88,7 @@ public class DtrhInboxTests
     {
         var inbox = new Inbox();
         var poll = inbox.PollAsync(0, TimeSpan.FromSeconds(30), CancellationToken.None);
-        // No pre-release settle (SP-059): same synchronous-registration proof as above.
+        // No pre-release settle: same synchronous-registration proof as above.
         inbox.ReleaseAll();
         var messages = await poll.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken); // wallclock-allow: terminal hang tripwire on a must-arrive result — expiry means ReleaseAll never reached the poller (product failure)
         Assert.Empty(messages);

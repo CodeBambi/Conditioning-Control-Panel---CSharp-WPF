@@ -57,13 +57,13 @@ public sealed class SoundFlowHarness : HarnessBase
             DeviceInfo? info = null;
             if (deviceId != null)
             {
-                // SP-017 FINDING (observed 2x, 2026-07-21): an unvalidated DeviceInfo.Id reaches
+                // SPIKE FINDING (observed 2x, 2026-07-21): an unvalidated DeviceInfo.Id reaches
                 // ma_device_init as a wild native pointer -> uncatchable access violation
                 // (0xC0000005, process-fatal). Pre-completion-consult-sharpened discipline:
                 // RE-ENUMERATE immediately before init and pass the FRESH snapshot's DeviceInfo
                 // struct — never a stored one (Ids are process-lifetime POINTERS; persist the
                 // NAME, WPF FriendlyName parity, AudioService.cs:219-296). Residual TOCTOU
-                // (device vanishing mid-init) stays open by design until the SP-006-deferred
+                // (device vanishing mid-init) stays open by design until the deferred
                 // re-probe row owns hot-plug semantics.
                 _engine!.UpdateAudioDevicesInfo();
                 var found = _engine.PlaybackDevices.Any(d => d.Id.ToString() == deviceId);

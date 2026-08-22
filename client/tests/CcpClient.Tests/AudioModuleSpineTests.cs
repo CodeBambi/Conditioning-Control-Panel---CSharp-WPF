@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-109 — SEVEN modules under one spine, and two of them cannot be seen at all.
+/// SEVEN modules under one spine, and two of them cannot be seen at all.
 ///
 /// <para><b>What is under test here, and what is deliberately NOT.</b> These facts drive the two
 /// audio modules through a RECORDING presence, so the pacing, the probability, the clamps, the
@@ -39,19 +39,19 @@ public class AudioModuleSpineTests
         await using var rig = await Rig.StartAsync();
 
         // WPF's group order is EFFECTS, GAMES & CARDS, IMMERSION, TIMING
-        // (StudioTabView.xaml.cs:482-541). SP-110 opened GAMES & CARDS with Lock Card, so it sits
+        // (StudioTabView.xaml.cs:482-541). Lock Card opened GAMES & CARDS, so it sits
         // between the effects and the two IMMERSION rows — which is also StartEngine's own order
         // (the lock card at :206-209, then Mind Wipe :229-230 and Brain Drain :241-244, then the
         // ramp timer :265-269).
         //
-        // SP-112 adds Bubble Count to that group and puts it FIRST in it, which is where the RACK
+        // Bubble Count was later added to that group and put FIRST in it, which is where the RACK
         // puts it (Bubble Pop, Bubble Count, Lock Card, Bouncing Text — :499-505) and NOT where
         // StartEngine does (the lock card at :206-209, then the bubble count at :212-215). The two
         // upstream orders disagree here, exactly as they do for Spiral Overlay and Pink Filter, and
         // D90 already settled which one this port takes: the rack's, because the rack is the order
         // the user has learned.
         //
-        // SP-113 adds Bubble Pop and it goes FIRST in that group, which is where the rack puts it
+        // Bubble Pop was added later and goes FIRST in that group, which is where the rack puts it
         // (Add("bubbles", ...) at StudioTabView.xaml.cs:499, before bubblecount at :501 and lockcard
         // at :503). Nothing in StartEngine competes for its position: the ambient game is started
         // from the dashboard card and from SessionEngine.cs:444, not from StartEngine's effect
@@ -118,7 +118,7 @@ public class AudioModuleSpineTests
         rig.Engine.Start();
 
         // The schedule really IS on the clock — the paced half of the dot is true — and the dot is
-        // still Armed, because nothing this module plays can reach anybody. This is SP-105's rule
+        // still Armed, because nothing this module plays can reach anybody. This is the spine rule
         // (a module whose whole output channel is gone is not running) applied to a channel nobody
         // can check by looking, and it is upstream's own gate: "endpoint down — stay quiet, don't
         // spin" (MindWipeService.cs:771, BrainDrainService.cs:211).
@@ -180,7 +180,7 @@ public class AudioModuleSpineTests
         rig.Engine.Start();
         rig.Clock.Advance(BrainDrainSchedule.NormalWindow);
 
-        // THE FIFTH DOT MEANING'S SUBSET RULE. Two landed rules disagree here — SP-105's says a
+        // THE FIFTH DOT MEANING'S SUBSET RULE. Two landed rules disagree here — the spine rule says a
         // module that cannot draw is Armed, the Subliminals rule says a module whose schedule is
         // really on the clock is Live — and this packet decides Live, on the ground that the dot is
         // scoped to what the ROW is. Everything this row claims to be is running and audible.
@@ -813,7 +813,7 @@ public class AudioModuleSpineTests
         }
     }
 
-    /// <summary>The manual clock, SP-098's shape. Zero wall-clock.</summary>
+    /// <summary>The manual clock, in the established shape. Zero wall-clock.</summary>
     private sealed class ManualSessionClock : ISessionClock
     {
         private readonly List<Entry> _timers = [];

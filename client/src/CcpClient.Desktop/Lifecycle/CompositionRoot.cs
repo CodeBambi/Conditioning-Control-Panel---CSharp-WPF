@@ -37,9 +37,9 @@ public sealed record ParticipantInfrastructure(OperationRegistry Registry, UiDis
     public AsyncOperationOwner OwnerFor(string participantName) => Registry.OwnerFor(participantName);
 }
 
-/// <summary>SP-057: a data-root override value that cannot be honored (relative or
+/// <summary>A data-root override value that cannot be honored (relative or
 /// drive-relative path, uncreatable/unusable directory). Typed + loud at startup — a bad
-/// override NEVER degrades silently into the real user profile (the SP-052 hazard class:
+/// override NEVER degrades silently into the real user profile (a known hazard class:
 /// APPDATA= does not move GetFolderPath(ApplicationData), so an unhonored "sandbox" writes
 /// the owner's live data).</summary>
 public sealed class DataRootOverrideException(string message, Exception? inner = null)
@@ -50,11 +50,11 @@ public sealed class CompositionRoot
     /// <summary>Flush bounded wait for teardown (persistence contract §11 rule 2): backstop only — the chained writer is the mechanism.</summary>
     public static readonly TimeSpan DefaultFlushTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>SP-119: the registered name of the haptic sink's capability. A constant so the
+    /// <summary>The registered name of the haptic sink's capability. A constant so the
     /// System page's row and the registration cannot be spelled two different ways.</summary>
     public const string HapticCapabilityName = "haptic-sink";
 
-    /// <summary>SP-057 HARNESS-ONLY isolation seam: when this environment variable names an
+    /// <summary>HARNESS-ONLY isolation seam: when this environment variable names an
     /// absolute directory, it replaces the per-user data root (%APPDATA%\CcpClient /
     /// $XDG_CONFIG_HOME/CcpClient) for EVERY consumer — honored inside
     /// <see cref="DefaultSettingsPath"/>, the single choke point the whole product funnels
@@ -65,12 +65,12 @@ public sealed class CompositionRoot
     /// <summary>Factory seam so tests can deliberately blank a registration (contract §4 test).</summary>
     public Func<ILogSink?> LogSinkFactory { get; init; } = () => new DebugLogSink();
 
-    /// <summary>SP-027 b5 HARNESS-ONLY: a loopback route prefix that answers 403
+    /// <summary>Slice b5 HARNESS-ONLY: a loopback route prefix that answers 403
     /// (blocked-route failure injection, W18 class). Null in product runs.</summary>
     public string? DtrhBlockedRoutePrefixHarness { get; init; }
 
     /// <summary>
-    /// SP-046 c7 product config seam: overrides the Ollama host for the companion's
+    /// C7 product config seam: overrides the Ollama host for the companion's
     /// loopback provider (the host is already a LoopbackOllamaProviderOptions field).
     /// This can NEVER widen the network boundary: a non-loopback host classifies
     /// RemoteHostOllama and is rejected pre-socket by the admission policy AND the
@@ -92,7 +92,7 @@ public sealed class CompositionRoot
     public Func<ParticipantInfrastructure, IReadOnlyList<IBackgroundParticipant>?> ParticipantsFactory { get; init; }
 
     /// <summary>
-    /// SP-094: the entitlement capability seam. Product default is
+    /// The entitlement capability seam. Product default is
     /// <see cref="Entitlement.HostLoginEntitlement.ForCurrentPlatform"/> — the real DPAPI read of
     /// the shipping app's login, over this build's real (unconfigured) authority. Tests inject
     /// their own reader/authority doubles here so no test ever touches the developer's real
@@ -102,7 +102,7 @@ public sealed class CompositionRoot
     public Func<ILogSink, Entitlement.HostLoginEntitlement>? EntitlementFactory { get; init; }
 
     /// <summary>
-    /// SP-098: the conditioning session's clock seam. Product default is the real
+    /// The conditioning session's clock seam. Product default is the real
     /// <see cref="Session.SystemSessionClock"/>; a headless test substitutes a manual clock so
     /// it can drive the REAL shell — press the real START button, advance, and watch the real
     /// effect fire — without a wall-clock wait anywhere in it. It is a TIMER source only: it can
@@ -111,14 +111,14 @@ public sealed class CompositionRoot
     public Func<Session.ISessionClock>? SessionClockFactory { get; init; }
 
     /// <summary>
-    /// SP-098: the Flash Images pool seam. Product default reads the user's own
+    /// The Flash Images pool seam. Product default reads the user's own
     /// <c>&lt;dataDir&gt;/assets/images</c>. Tests substitute an in-memory pool so the session
     /// spine's proofs never depend on a filesystem.
     /// </summary>
     public Func<Effects.IFlashImagePool>? FlashImagePoolFactory { get; init; }
 
     /// <summary>
-    /// SP-118: the SCHEDULER's clock seam, and it is a different clock from
+    /// The SCHEDULER's clock seam, and it is a different clock from
     /// <see cref="SessionClockFactory"/> on purpose — <see cref="Scheduling.IScheduleClock"/> reads
     /// LOCAL time (the user typed a wall-clock window) where <see cref="Session.ISessionClock"/>
     /// reads UTC (a paced effect must not fire twice at 02:00 on a daylight-saving night). Product
@@ -131,7 +131,7 @@ public sealed class CompositionRoot
     /// </summary>
     public Func<Scheduling.IScheduleClock>? ScheduleClockFactory { get; init; }
 
-    // SP-119 deliberately adds NO sink-factory seam here. The haptic sink is already injectable
+    // Deliberately adds NO sink-factory seam here. The haptic sink is already injectable
     // through ParticipantsFactory — which is how the ownership, teardown-ordering and
     // entitlement-transition facts drive a recording sink — and a second seam that no test and no
     // product path ever set would be a configuration point nothing configures. Anything compiled
@@ -151,8 +151,8 @@ public sealed class CompositionRoot
     /// <summary>
     /// Per-user settings path: %APPDATA%\\CcpClient on Windows; $XDG_CONFIG_HOME/CcpClient when
     /// set, else ~/.config/CcpClient on Linux (.NET's Unix ApplicationData mapping — verified
-    /// SP-010: the quarantine lands under XDG_CONFIG_HOME when it is set).
-    /// SP-057: when the <see cref="DataRootOverrideVariable"/> environment variable is set,
+    /// that the quarantine lands under XDG_CONFIG_HOME when it is set).
+    /// When the <see cref="DataRootOverrideVariable"/> environment variable is set,
     /// it IS the data root (harness isolation) — validated per call by
     /// <see cref="ResolveDataRoot"/>; an unhonorable value throws typed, never falls back.
     /// Read per call, never cached: a cached static would freeze on whichever test/run
@@ -221,8 +221,8 @@ public sealed class CompositionRoot
         var store = new PersistenceStore<DemoSettings>(
             infra.OwnerFor("Persistence"), infra.Log, SettingsPathFactory(),
             DemoSettings.CurrentSchemaVersion, [new DemoMigrationV0ToV1()]);
-        // SP-126: the haptic participant is CONSTRUCTED here, above the session, because the session
-        // is constructed AGAINST its limb — and construction starts nothing (SP-003 contract §4.4),
+        // The haptic participant is CONSTRUCTED here, above the session, because the session
+        // is constructed AGAINST its limb — and construction starts nothing (contract §4.4),
         // so hoisting it changes no behaviour at all. It is still REGISTERED last, below, which is
         // what actually decides start and teardown order.
         //
@@ -233,7 +233,7 @@ public sealed class CompositionRoot
             infra, Path.GetDirectoryName(SettingsPathFactory())!,
             sink: null,
             _entitlementForParticipants is { } entitlement ? entitlement.ResolveAsync : null);
-        // SP-118: built into a local first because the scheduler below is constructed AGAINST this
+        // Built into a local first because the scheduler below is constructed AGAINST this
         // exact engine. A second SessionParticipant here would give the rack row and the scheduler
         // two different sessions, which is the shell-local-copy failure MainWindow already refuses.
         var session = new Session.SessionParticipant(
@@ -244,24 +244,24 @@ public sealed class CompositionRoot
         [
             store,
             new HeartbeatParticipant(infra.OwnerFor("Heartbeat"), infra.UiDispatch),
-            // demo.status-ticker (SP-007): registered AFTER the store — phase-3 start order
+            // demo.status-ticker: registered AFTER the store — phase-3 start order
             // IS the restore-then-start ordering (its start reads the restored flag).
             new Features.StatusTickerParticipant(infra.OwnerFor("StatusTicker"), infra.UiDispatch, store),
-            // SP-015 AvatarTube demonstrator: construction starts nothing; the tube opens
+            // AvatarTube demonstrator: construction starts nothing; the tube opens
             // on the user path (phase 4) via --avatartube-demo.
             new Features.AvatarTube.AvatarTubeParticipant(infra.OwnerFor("AvatarTubeDemo"), infra.UiDispatch, infra.Log),
-            // SP-024 DTRH host slice b2: the three local save slots (SP-005 machinery per
+            // DTRH host slice b2: the three local save slots (machinery per
             // slot + DTRH-owned active-slot index), started after the demo store.
             new Features.Dtrh.DtrhSaveSlots(infra, Path.GetDirectoryName(SettingsPathFactory())!),
-            // SP-023 DTRH host slice b1: owns the §4 loopback origins + §3.3 inbox + bridge
+            // DTRH host slice b1: owns the §4 loopback origins + §3.3 inbox + bridge
             // token; the web surface itself is phase-4, selected by probed capability states.
-            // SP-026 b4: the data directory threads through for the Loom store + user media.
-            // SP-027 b5: the HARNESS-ONLY blocked-route prefix threads through (Program
+            // B4: the data directory threads through for the Loom store + user media.
+            // B5: the HARNESS-ONLY blocked-route prefix threads through (Program
             // wiring amendment — failure-injection evidence).
             new Features.Dtrh.DtrhParticipant(infra.OwnerFor("DtrhHost"), infra.Log,
                 Path.GetDirectoryName(SettingsPathFactory())!,
                 DtrhBlockedRoutePrefixHarness is { Length: > 0 } blocked ? [blocked] : null),
-            // SP-046 AI companion slice c7: the product composition of the full AI chain
+            // AI companion slice c7: the product composition of the full AI chain
             // (pipeline + provider seam + moderation boundary + memory store + awareness
             // service + executor). Registered LAST: its memory store loads in phase-3
             // order; its provider probes register into the shared registry for the
@@ -270,11 +270,11 @@ public sealed class CompositionRoot
                 infra, _capabilitiesForParticipants ?? new CapabilityRegistry(),
                 Path.GetDirectoryName(SettingsPathFactory())!,
                 AiOllamaHostOverride),
-            // SP-098 the conditioning session: the preset store, the effect rack and the
+            // The conditioning session: the preset store, the effect rack and the
             // engine START drives. It starts NO session: WPF's engine runs only when the user
             // presses START (MainWindow/MainWindow.StartStop.cs:34,105).
             session,
-            // SP-118 the SCHEDULER, and it is the first participant here that can start a session
+            // The SCHEDULER, and it is the first participant here that can start a session
             // by itself. Registered AFTER the session for two reasons that both matter:
             // registration order is phase-3 START order, so the session's preset load completes
             // before the scheduler can evaluate anything; and participant stop is REVERSE order,
@@ -286,7 +286,7 @@ public sealed class CompositionRoot
             new Scheduling.SchedulerParticipant(
                 infra, Path.GetDirectoryName(SettingsPathFactory())!, session.Engine,
                 ScheduleClockFactory?.Invoke()),
-            // SP-119 the HAPTIC SINK, and it is the second participant here that belongs to the app
+            // The HAPTIC SINK, and it is the second participant here that belongs to the app
             // rather than to a session — upstream's is a static built at startup and never engine
             // started (App.xaml.cs:533, :2060; zero hits for App.Haptics in
             // MainWindow/MainWindow.StartStop.cs). Registered LAST for the same reason the scheduler
@@ -302,7 +302,7 @@ public sealed class CompositionRoot
             // admitted: upstream guards its own auto-connect the same way and says why
             // (App.xaml.cs:2098-2105).
             //
-            // SP-126: it is CONSTRUCTED above the session (which takes its limb) and REGISTERED here,
+            // It is CONSTRUCTED above the session (which takes its limb) and REGISTERED here,
             // last. Registration order is what decides phase-3 start and reverse-order teardown, so
             // the limb and its sink are still released before anything that could drive them.
             haptics,
@@ -341,13 +341,13 @@ public sealed class CompositionRoot
         var log = LogSinkFactory() ?? throw new InvalidOperationException("Validate must run before Build.");
         var infra = new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), log);
         // Capability contract §3: the registry exists BEFORE participants so feature
-        // participants (SP-046 companion AI chain) can register their probes at
+        // participants (companion AI chain) can register their probes at
         // construction; probes still execute only in the CapabilityProbes phase.
         var capabilities = new CapabilityRegistry();
         _capabilitiesForParticipants = capabilities;
-        // SP-119: the entitlement capability is CONSTRUCTED here, before the participants factory
+        // The entitlement capability is CONSTRUCTED here, before the participants factory
         // runs, because the haptic participant is gated on it and a participant cannot be handed an
-        // object that does not exist yet. Its capability REGISTRATION stays where SP-094 put it,
+        // object that does not exist yet. Its capability REGISTRATION stays where it was put,
         // below, so the registry's name order is unchanged. Validate() leaves this field null and no
         // DPAPI read happens there.
         var entitlement = EntitlementFactory is { } entitlementFactory
@@ -360,19 +360,19 @@ public sealed class CompositionRoot
         // Persistence contract §11: the store's flush is wired into the host's reserved
         // pre-drain slot. A custom participants factory without a store gets no flush.
         var store = participants.OfType<PersistenceStore<DemoSettings>>().FirstOrDefault();
-        // SP-024: the DTRH slot stores flush in the same reserved pre-drain slot.
+        // The DTRH slot stores flush in the same reserved pre-drain slot.
         var slotStores = participants.OfType<Features.Dtrh.DtrhSaveSlots>().FirstOrDefault();
-        // SP-046: the companion's memory store flushes in the same slot (SP-005 contract §11).
+        // The companion's memory store flushes in the same slot (contract §11).
         var companion = participants.OfType<Features.Companion.CompanionParticipant>().FirstOrDefault();
-        // SP-098: the session preset flushes in the same slot. A dial the user moved on the way
+        // The session preset flushes in the same slot. A dial the user moved on the way
         // out is a persisted setting like any other, and teardown's head slot is the ONE place
         // the port guarantees it reaches disk.
         var session = participants.OfType<Session.SessionParticipant>().FirstOrDefault();
-        // SP-118: the scheduler's ten settings flush in the same slot. A day box a user unticked
+        // The scheduler's ten settings flush in the same slot. A day box a user unticked
         // on the way out decides whether a session appears tomorrow, so it is the LAST setting the
         // port may lose (persistence contract §11).
         var scheduler = participants.OfType<Scheduling.SchedulerParticipant>().FirstOrDefault();
-        // SP-119: the haptic sink's ALL-STOP takes the HEAD of the same slot, ahead of every flush.
+        // The haptic sink's ALL-STOP takes the HEAD of the same slot, ahead of every flush.
         // Upstream's ordering, and upstream's reason: "Haptics FIRST and synchronously (bounded ~2s):
         // a Lovense level has no server-side watchdog, so a toy we don't countermand keeps running
         // after the app is gone. This cannot be left to Haptics.Dispose() further down"
@@ -388,21 +388,21 @@ public sealed class CompositionRoot
             Task.FromResult(SessionProbe.Probe(new RuntimeSessionEnvironment())));
         capabilities.Register("atomic-filesystem", token =>
             Task.Run(() => AtomicFileSystemProbe.Probe(dataDirectory, new ProcMountsTable()), token));
-        // SP-023: the DTRH host's two admitted surfaces (admission §5), probed by
+        // The DTRH host's two admitted surfaces (admission §5), probed by
         // exercising the exact dependency loads the WebView package performs (12.0.1
         // binary-verified); rendering is claimed only by headed evidence, never here.
         capabilities.Register(Features.Dtrh.DtrhCapabilityProbes.EmbeddedCapability, _ =>
             Task.FromResult(Features.Dtrh.DtrhCapabilityProbes.ProbeEmbedded()));
         capabilities.Register(Features.Dtrh.DtrhCapabilityProbes.DialogCapability, _ =>
             Task.FromResult(Features.Dtrh.DtrhCapabilityProbes.ProbeDialog()));
-        // SP-061: the tunnel backdrop's single admitted surface (Windows embedded WebView2).
+        // The tunnel backdrop's single admitted surface (Windows embedded WebView2).
         // Linux = typed Unavailable with the tunnel's OWN reasons (no page-side bridge
         // transport, no keep-below control — never a green dialog row for an unadmitted
         // surface, consult ruling 3b). Windows delegates to the DTRH embedded probe (the
         // dependency is literally the same engine load).
         capabilities.Register(Features.Chaos.ChaosTunnelCapabilityProbes.EmbeddedCapability, _ =>
             Task.FromResult(Features.Chaos.ChaosTunnelCapabilityProbes.ProbeEmbedded()));
-        // SP-094 registers SP-092's entitlement capability, and registers it HERE rather than
+        // Registers the entitlement capability, and registers it HERE rather than
         // letting the shell build its own, for a reason bigger than tidiness. Today this build
         // has no entitlement authority, so the honest answer for every user is
         // Unavailable(tier-authority-absent) and the DTRH door refuses everyone. A capability
@@ -413,7 +413,7 @@ public sealed class CompositionRoot
         // shipping app's login at all) and never claims a tier: a readable login with no
         // authority behind it is Degraded, never Available (HostLoginEntitlement.ProbeAsync).
         capabilities.Register(Entitlement.HostLoginEntitlement.CapabilityName, entitlement.ProbeAsync);
-        // SP-119 registers the haptic sink for the same reason SP-094 registered the entitlement
+        // Registers the haptic sink for the same reason as the entitlement
         // capability: this build refuses every user, and a capability that refuses everyone while
         // staying invisible in the ONE place the port reports what it cannot do is exactly the shape
         // the truthful-capability contract exists to prevent. The probe asks the sink and classifies

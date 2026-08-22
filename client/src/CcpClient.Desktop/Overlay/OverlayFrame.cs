@@ -19,7 +19,7 @@ namespace CcpClient.Desktop.Overlay;
 /// image filling it (<c>Services/Flash/FlashService.cs:1245</c>, <c>:1274-1281</c>). Per-pixel alpha
 /// would mean <c>UpdateLayeredWindow</c>, which is mutually exclusive with
 /// <c>SetLayeredWindowAttributes</c> and would therefore delete the alpha read-back that
-/// <see cref="OverlayReasonCodes.OverlayNotComposited"/> depends on (SP-100 record §1).</para>
+/// <see cref="OverlayReasonCodes.OverlayNotComposited"/> depends on (the packet record §1).</para>
 /// </summary>
 public sealed class OverlayFrame
 {

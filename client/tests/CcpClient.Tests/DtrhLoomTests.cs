@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-026 slice b4: THE LOOM (save/delete/list/result + GIF validation + §4 serving) and
+/// Slice b4: THE LOOM (save/delete/list/result + GIF validation + §4 serving) and
 /// user-media serving (manifest enumeration + /umedia/ route). Loom semantics ported from
 /// DtrhLoomStore.cs; serving stays inside the §4 loopback contract (GET-only, MIME
 /// allowlist deny-by-default, traversal refusal, localhost, CORS-on-errors). Media
@@ -153,7 +153,7 @@ public sealed class DtrhLoomTests : IDisposable
             Server = new LoopbackServer(payload, payload, media, new Inbox(), "tok", Log,
                 TimeSpan.FromMilliseconds(100), spiralsRoot: spiralsRoot, userMediaRoot: userMediaRoot);
             Server.Start();
-            LoopbackListenerRegistry.RegisterLoopbackServer(nameof(ServerHarness), Server); // SP-059 T-15 self-check coverage
+            LoopbackListenerRegistry.RegisterLoopbackServer(nameof(ServerHarness), Server); // T-15 self-check coverage
         }
 
         public void Dispose()

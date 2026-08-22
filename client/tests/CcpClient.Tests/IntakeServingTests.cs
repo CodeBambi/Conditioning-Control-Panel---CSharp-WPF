@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-054: the serving contract — the intake tree served under the page origin through
+/// The serving contract — the intake tree served under the page origin through
 /// the SAME §4 LoopbackServer class as DTRH (GET-only, overlay-first, MIME allowlist +
 /// 415, traversal refusal), with the intake tree as overlayRoot and the dtrh tree as
 /// payloadRoot so the OVERLAY-FIRST BORROW is proven: the page's own files shadow, and
@@ -45,7 +45,7 @@ public sealed class IntakeServingTests : IDisposable
         _server = new LoopbackServer(_dtrhTree, _intakeTree, Path.Combine(_dtrhTree, "assets"),
             new Inbox(), "tok", new CollectingLog(), TimeSpan.FromMilliseconds(100));
         _server.Start();
-        // SP-059: registered in the T-15 leaked-listener self-check (the registry gap the row
+        // Registered in the T-15 leaked-listener self-check (the registry gap the row
         // names — this fixture pre-dates the registry and was never covered).
         LoopbackListenerRegistry.RegisterLoopbackServer(nameof(IntakeServingTests), _server);
     }
@@ -105,7 +105,7 @@ public sealed class IntakeServingTests : IDisposable
     [Fact]
     public async Task The_V67_Accents_Module_Serves_From_The_Intake_Tree()
     {
-        // SP-058: the v6.7.x delta's new payload file resolves through the §4 contract —
+        // The v6.7.x delta's new payload file resolves through the §4 contract —
         // a real 200 with the overlay tree's bytes (and the 404 discipline on an absent
         // path is pinned in Section4_Discipline_Holds_On_The_Intake_Server).
         var (status, body) = await Get("/dtrh/core/accents.js");

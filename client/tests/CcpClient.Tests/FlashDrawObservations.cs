@@ -19,7 +19,7 @@ namespace CcpClient.Tests;
 /// what a locked workstation, an RDP session and a machine with no compositor produce. So the probe
 /// first builds its OWN painted layered window with its own P/Invokes and asks whether a desktop
 /// capture can see THAT. Every composited-pixel expectation is then compared against that measured
-/// machine property rather than against a guess, which is the same discipline SP-099's hit-test and
+/// machine property rather than against a guess, which is the same discipline the overlay's hit-test and
 /// alpha oracles already carry.</para>
 ///
 /// <para>The whole thing runs ONCE per suite execution and is cached: it puts real windows on the
@@ -68,7 +68,7 @@ internal static class FlashDrawObservations
 
     /// <summary>
     /// Where the subject goes: below and right of centre on the primary display, measured by the
-    /// PROBE, and deliberately not the rectangle SP-099's own lifecycle uses — the two suites run in
+    /// PROBE, and deliberately not the rectangle the overlay's own lifecycle uses — the two suites run in
     /// one process and must not fight over the same point.
     /// </summary>
     internal static OverlayBounds SubjectBounds
@@ -105,11 +105,11 @@ internal static class FlashDrawObservations
     /// workstation, on a session with no compositor, and anywhere a screen read is not a screen.
     /// </param>
     /// <param name="CompositorFenceHeld">
-    /// SP-116. Whether the screen reads in this run were really ordered behind the compositor
+    /// Whether the screen reads in this run were really ordered behind the compositor
     /// (<see cref="FlashPixelProbe.CompositorFenceHeld"/>). False means either the fence has been
     /// removed from <see cref="FlashPixelProbe.CaptureDesktop"/> or DWM refused it, and in both
     /// cases every composited number below was taken with no happens-before edge against the thing
-    /// that publishes pixels — measured at 34 misses in 1200 reads (SP-116).
+    /// that publishes pixels — measured at 34 misses in 1200 reads.
     /// </param>
     /// <param name="ControlWindowRendersItsColour">The control's content read back by
     /// <c>PrintWindow</c> — the instrument saying it can read a window at all.</param>
@@ -130,7 +130,7 @@ internal static class FlashDrawObservations
     /// the GDI content route (divergence D57) is that it does not cost this answer.
     /// </param>
     /// <param name="RePresentAfterPaintClaimedAvailable">A full placement still earns Available on a
-    /// painted surface — every SP-099 confirmation, alpha read-back included, still holds.</param>
+    /// painted surface — every earlier confirmation, alpha read-back included, still holds.</param>
     /// <param name="RenderedPixelsMatchingFrameAfterRePresent">And re-placing does not blank it.</param>
     /// <param name="PaintAfterWithdrawCode">Painting a withdrawn surface must refuse.</param>
     /// <param name="PaintAfterWithdrawClaimedAvailable">…and must never claim.</param>
@@ -189,7 +189,7 @@ internal static class FlashDrawObservations
 
         // What the COMPOSITED DESKTOP holds where the surface is. No wait of any kind: measured
         // before this was written, a CAPTUREBLT screen read immediately after the blit already
-        // carries the painted pixel (SP-100 record §1).
+        // carries the painted pixel (record §1).
         var desktop = FlashPixelProbe.CaptureDesktop(bounds.X, bounds.Y, bounds.Width, bounds.Height);
         var (desktopTop, desktopBottom) = SampleHalves(desktop, bounds);
         if (desktop.Length > 0)
@@ -206,7 +206,7 @@ internal static class FlashDrawObservations
                 SurfaceWidth, SurfaceHeight, rendered);
         }
 
-        // THE GHOST CHECK, ON THE FAR SIDE OF THE DRAW. SP-099 reads the alpha immediately after
+        // THE GHOST CHECK, ON THE FAR SIDE OF THE DRAW. The overlay reads the alpha immediately after
         // Present, before any content exists; nothing asked it again once a frame had been put on
         // the surface. That is the hole a future alpha ramp would walk into: UpdateLayeredWindow is
         // the obvious tool for one, it is mutually exclusive with SetLayeredWindowAttributes, and
@@ -361,7 +361,7 @@ internal static class FlashDrawObservations
         PaintSolid(window, bounds.Width, bounds.Height, ControlColour);
 
         // The topmost band is contested on this machine — the shipping WPF product sits in it and
-        // re-asserts (SP-099 §2(c)). The product's own Present absorbs that with a bounded
+        // re-asserts (overlay record §2(c)). The product's own Present absorbs that with a bounded
         // re-raise loop; the control must do the same or it measures "a buried window is not
         // visible", which is true and useless.
         var (centreX, centreY) = bounds.Centre;

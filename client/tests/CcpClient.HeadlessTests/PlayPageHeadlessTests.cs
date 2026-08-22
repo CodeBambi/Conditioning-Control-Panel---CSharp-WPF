@@ -18,13 +18,13 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-094: the port's flagship route, driven by REAL headless input on the REAL controls from a
+/// The port's flagship route, driven by REAL headless input on the REAL controls from a
 /// cold composition-root boot with NO command-line arguments — rail door <c>Play</c> -> the
 /// DTRH hero card -> <c>FALL IN</c> / <c>Quick Drop</c> -> the Tier-2 gate.
 ///
 /// <para>The gate under test is the REAL <see cref="HostLoginEntitlement"/> composed by the
 /// REAL <see cref="CompositionRoot"/>. What the tests substitute is the capability's own two
-/// seams — the platform read and the entitlement authority — which is how SP-092 designed it to
+/// seams — the platform read and the entitlement authority — which is how the entitlement work designed it to
 /// be exercised. Nothing stubs the OUTCOME, nothing stubs the gate, and no test here touches
 /// the developer's real <c>%LOCALAPPDATA%/ConditioningControlPanel</c> store: the "unknown"
 /// case does not even need a double, because this build's shipped authority
@@ -150,7 +150,7 @@ public class PlayPageHeadlessTests
     [AvaloniaFact]
     public async Task NotEntitled_FallIn_RefusesWithWpfsTierMessage_AndOpensNothing()
     {
-        // An authority explicitly answered "no pledge" — the ONLY input SP-092 allows to
+        // An authority explicitly answered "no pledge" — the ONLY input the entitlement design allows to
         // produce NotEntitled, and the only refusal WPF has (Services/TierGate.cs:128,133).
         var (host, window, dtrh) = await BootAsync(TierLookup.NoEntitlement());
 
@@ -402,7 +402,7 @@ public class PlayPageHeadlessTests
         await host.ShutdownAsync();
     }
 
-    // ---------- SP-097: the failure a user can see, and the fallback nothing had run ----------
+    // ---------- The failure a user can see, and the fallback nothing had run ----------
 
     [AvaloniaFact]
     public async Task WhenTheDescentThrows_TheUserIsTOLD_InWpfsOwnWords_AndTheDetailIsNotDropped()

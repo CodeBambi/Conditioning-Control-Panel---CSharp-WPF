@@ -6,7 +6,7 @@ using CcpClient.Desktop.Video;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-111's one expensive real-desktop run: the operating system's own media stack decodes a
+/// The one expensive real-desktop run: the operating system's own media stack decodes a
 /// synthesised clip, a real <see cref="Win32VideoPresence"/> puts its pictures on a real surface,
 /// and the OS is asked back after every frame — by the product, and independently by two
 /// instruments the product never uses.
@@ -183,7 +183,7 @@ internal static class VideoSurfaceObservations
         VideoDisplayObservation DisplayObservation);
 
     /// <summary>Where the subject surface goes: below and right of centre on the primary display,
-    /// and deliberately not the rectangle SP-099's or SP-100's fixtures use — several suites run in
+    /// and deliberately not the rectangle the overlay or flash fixtures use — several suites run in
     /// one process and must not fight over the same point.</summary>
     internal static VideoBounds SubjectBounds
     {
@@ -301,12 +301,12 @@ internal static class VideoSurfaceObservations
     internal static CoexistenceRun Coexistence => LazyCoexistence.Value;
 
     /// <summary>The overlay's state at one moment, read entirely through
-    /// <see cref="OverlayWindowProbe"/> — SP-099's own instrument, unmodified.</summary>
+    /// <see cref="OverlayWindowProbe"/> — the overlay's own instrument, unmodified.</summary>
     /// <param name="PointPassesThrough">The window manager routes the overlay's own centre to
     /// something that is NOT the overlay.</param>
     /// <param name="AboveEveryOrdinaryWindow">The OS's z-order walk still puts it above every
     /// ordinary window. Not "above every window": a video surface is topmost too and legitimately
-    /// contests the band, which is the same wording and the same reason as SP-099's own fact.</param>
+    /// contests the band, which is the same wording and the same reason as the overlay's own fact.</param>
     /// <param name="Alpha">The layered alpha the OS still holds, or -1 for none.</param>
     /// <param name="TransparentStyleHeld"><c>WS_EX_TRANSPARENT</c> is still set.</param>
     /// <param name="IsForeground">Whether the overlay became the foreground window.</param>
@@ -318,7 +318,7 @@ internal static class VideoSurfaceObservations
         bool IsForeground);
 
     /// <summary>The card's state at one moment, read entirely through
-    /// <see cref="InputWindowProbe"/> — SP-110's own instrument, unmodified.</summary>
+    /// <see cref="InputWindowProbe"/> — the input capability's own instrument, unmodified.</summary>
     /// <param name="Visible">The OS reports the card visible.</param>
     /// <param name="IsForeground"><c>GetForegroundWindow()</c> is the card.</param>
     /// <param name="HoldsSystemKeyboardFocus"><c>GetGUIThreadInfo(0).hwndFocus</c> is the card — the
@@ -404,7 +404,7 @@ internal static class VideoSurfaceObservations
 
         // TAKEN FROM THE PROBE, not from the presence under test's sibling: sourcing "a card really
         // was up" from a capability would let one that lied turn this whole run into a test of
-        // nothing happening. Same rule, and the same wording, as SP-110's own coexistence run.
+        // nothing happening. Same rule, and the same wording, as the input capability's own coexistence run.
         CardReading ReadCard() => new(
             Visible: InputWindowProbe.WindowIsVisible(cardWindow),
             IsForeground: InputWindowProbe.Foreground() == cardWindow,

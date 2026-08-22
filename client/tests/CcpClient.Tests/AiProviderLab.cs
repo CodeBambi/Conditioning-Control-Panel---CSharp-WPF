@@ -4,7 +4,7 @@ using System.Text;
 
 namespace CcpClient.Tests;
 
-/// <summary>Deterministic failure-injection modes for the fake Ollama loopback endpoint (SP-019 shapes, Ollama-native protocol).</summary>
+/// <summary>Deterministic failure-injection modes for the fake Ollama loopback endpoint (spike shapes, Ollama-native protocol).</summary>
 public enum AiLabMode
 {
     /// <summary>200 with a valid native api/chat reply ({message:{role,content}}).</summary>
@@ -47,7 +47,7 @@ public sealed record AiLabRequestRecord(
     string Outcome); // completed | client-gone | released-after-disconnect
 
 /// <summary>
-/// Fake Ollama loopback endpoint (SP-035 slice c2; the SP-019 AiLab SHAPES re-implemented
+/// Fake Ollama loopback endpoint (slice c2; the spike's AiLab SHAPES re-implemented
 /// fresh against the Ollama-native protocol — the spike stays quarantined, no spike code is
 /// imported). POST /api/chat + GET /api/version only, 127.0.0.1, ephemeral port, zero
 /// external network. A mode queue injects timeout/429/500/refusal/malformed/truncated/
@@ -70,7 +70,7 @@ public sealed class AiProviderLab : IDisposable
 
     public AiProviderLab()
     {
-        // SP-023 rule HONORED (T-15 root cause): a FAILED Start() DISPOSES the instance, so
+        // The fresh-listener rule HONORED (T-15 root cause): a FAILED Start() DISPOSES the instance, so
         // every bind attempt uses a FRESH HttpListener. The pre-hardening loop reused one
         // instance; a port collision (zombie test host or ephemeral churn) → HttpListenerException
         // → instance disposed → retry threw ObjectDisposedException, which the HttpListenerException-
@@ -100,7 +100,7 @@ public sealed class AiProviderLab : IDisposable
             }
         }
 
-        // T-15 self-check (generalized SP-059): registered in the suite-wide loopback-listener
+        // T-15 self-check (generalized): registered in the suite-wide loopback-listener
         // registry; a leaked entry at assembly teardown fails the run LOUD.
         LoopbackListenerRegistry.Register(nameof(AiProviderLab), Port, $"http://127.0.0.1:{Port}/");
         _loop = Task.Run(ServeLoop);
@@ -165,10 +165,10 @@ public sealed class AiProviderLab : IDisposable
 
             var path = req.Url!.AbsolutePath;
 
-            // The SP-006 probe endpoint (SP-019 item-8 URL shape).
+            // The capability probe endpoint (named item-8 URL shape).
             if (req.HttpMethod == "GET" && path == "/api/version")
             {
-                // SP-062: record BEFORE the response becomes observable — the old order
+                // Record BEFORE the response becomes observable — the old order
                 // (Write/Close, then Enqueue) let a fast client read HitsFor after the reply
                 // but before the server task's enqueue ran (observed red: Refusal HitsFor 0
                 // after a Refused reply, run01-unit 2026-08-12). The hit exists the moment the

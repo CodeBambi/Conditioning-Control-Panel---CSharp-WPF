@@ -8,7 +8,7 @@ using Avalonia.Themes.Fluent;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// Minimal headless application (SP-008): Fluent theme only. The real <c>App</c> is NOT
+/// Minimal headless application: Fluent theme only. The real <c>App</c> is NOT
 /// reused — it has no parameterless constructor by design (AVLN3001, composition-root
 /// construction) and carries lifetime wiring a test app must not have. Default headless
 /// drawing (fake backend, no pixels): the spike asserts tree/layout/style/binding facts

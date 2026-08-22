@@ -11,7 +11,7 @@ namespace CcpClient.Desktop.Features.Chaos;
 /// <summary>
 /// HARNESS-ONLY demonstrator drive (the --dtrh-demo/--loom-demo class). `--tunnel-demo` shows
 /// the backdrop through the REAL service path (capability check → build → sink → ready →
-/// run-start); `--tunnel-drive "a,b,c"` runs timed steps (the SP-008 no-input-automation
+/// run-start); `--tunnel-drive "a,b,c"` runs timed steps (the no-input-automation
 /// class — honestly labeled timed drive, never an input claim):
 ///
 ///   topmost-show / topmost-hide — the REAL DtrhVideoWindow (Topmost=True,
@@ -27,7 +27,7 @@ namespace CcpClient.Desktop.Features.Chaos;
 /// On a typed-unavailable surface the demo logs the typed line and exits 0 honestly
 /// (consult ruling 3 — never a hang, never an empty window).
 ///
-/// <para><b>WHY THIS SURFACE HAS NO DOOR, corrected at SP-095.</b> This comment used to open
+/// <para><b>WHY THIS SURFACE HAS NO DOOR — a correction.</b> This comment used to open
 /// with "the greenfield dashboard has no Chaos game entry point — typed named limit", which read
 /// as a port gap waiting for a door. It is not one. <b>WPF has no tunnel entry point either.</b>
 /// The tunnel is "the endless three.js 'rabbit hole' tunnel rendered UNDER the whole Chaos game"

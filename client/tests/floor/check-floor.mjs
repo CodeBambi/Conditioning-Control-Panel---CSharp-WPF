@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// SP-065 (board row 49 part 2): mechanical skip/count floor for the client test suite.
-// SP-066 (board row 49 part 1, framing e): the pin is now NAME-ANCHORED — per project
+// Board row 49 part 2: mechanical skip/count floor for the client test suite.
+// Board row 49 part 1, framing e: the pin is NAME-ANCHORED — per project
 // { total, allowedSkips[] }; expected skips are pinned by fully-qualified test NAME,
-// never by count (closes SP-065's counts-not-identity limit; machine-portable).
+// never by count (closes the earlier counts-not-identity limit; machine-portable).
 // Runs BOTH test projects with TRX loggers into a per-run temp dir OUTSIDE the worktree,
 // then post-processes the results against the exact per-project pin (floor.json).
 //
@@ -13,7 +13,7 @@
 // Exit 0 = floor met. Exit 1 = any violation (each prints a loud named reason).
 //
 // Never sets CCP_DATA_ROOT (port-workflow.md:204 — a process-wide override makes the
-// SP-057 pin skip and the floor goes blind). Never writes inside the worktree:
+// data-root pin skip and the floor goes blind). Never writes inside the worktree:
 // --results-directory targets os.tmpdir(); *.trx / TestResults/ are gitignored and the
 // merge-time dirty check tolerates nothing.
 
@@ -63,7 +63,7 @@ function readPin() {
   return pin;
 }
 
-// SP-066: testName matching is exact on the pre-'(' portion (xunit theory rows serialize
+// The testName match is exact on the pre-'(' portion (xunit theory rows serialize
 // with arguments, e.g. Class.Method(x: 1)); a name with no parens matches whole.
 function skipNameAllowed(testName, allowedSkips) {
   if (allowedSkips.includes(testName)) {
@@ -94,7 +94,7 @@ export function discoverTestProjects(slnText, pin) {
   const unpinned = [...discovered.keys()].filter((n) => !pinned.has(n));
   if (unpinned.length > 0) {
     fail(`test project(s) in client/CcpClient.sln with NO floor pin: ${unpinned.join(", ")} — ` +
-      "a suite outside the floor is exactly what SP-065 exists to prevent; pin it in client/tests/floor/floor.json");
+      "a suite outside the floor is exactly what this floor exists to prevent; pin it in client/tests/floor/floor.json");
   }
   const missing = [...pinned].filter((n) => !discovered.has(n));
   if (missing.length > 0) {
@@ -181,7 +181,7 @@ export function verifyProjectResults(projectName, resultsDir, pinEntry, runStart
   // (Assert.SkipWhen) yields a UnitTestResult with outcome="NotExecuted" while
   // Counters/@notExecuted stays 0 and @executed excludes it — the Counters arithmetic does
   // NOT close over skips (executed + notExecuted = 897 != total 898 with one skip). So the
-  // skip count, the skip NAMES (SP-066 name-anchored pin), and all consistency checks
+  // skip count, the skip NAMES (the name-anchored pin), and all consistency checks
   // anchor on the result list, never on Counters arithmetic.
   const outcomes = {};
   const skippedNames = [];
@@ -222,7 +222,7 @@ export function verifyProjectResults(projectName, resultsDir, pinEntry, runStart
   if (resultCount !== pinEntry.total) {
     fail(
       `${projectName}: FLOOR VIOLATION — total drift: ${resultCount} result(s) (pin total ${pinEntry.total}). ` +
-      `A count drift in EITHER direction fails the contract (SP-065/SP-066). If this change ` +
+      `A count drift in EITHER direction fails the contract. If this change ` +
       `is intentional, bump client/tests/floor/floor.json in the SAME commit and state the ` +
       `reason in the message.`
     );
@@ -231,9 +231,9 @@ export function verifyProjectResults(projectName, resultsDir, pinEntry, runStart
     if (!skipNameAllowed(name, pinEntry.allowedSkips)) {
       fail(
         `${projectName}: FLOOR VIOLATION — unexpected skip: ${name} is NotExecuted but NOT in ` +
-        `allowedSkips. An unexpected skip fails the contract (SP-066 framing e/f). Either fix ` +
+        `allowedSkips. An unexpected skip fails the contract (framing e/f). Either fix ` +
         `the precondition so the test runs, or — only under the admission rule in floor.json ` +
-        `(machine/OS property, never a quarantine; the SP-057 pin and the named privacy flake ` +
+        `(machine/OS property, never a quarantine; the data-root pin and the named privacy flake ` +
         `are permanently banned) — pin the name in allowedSkips in the SAME commit, naming the ` +
         `machine class where it executes.`
       );
@@ -288,15 +288,15 @@ function assertBuildIsFresh(project) {
   }
 }
 
-// SP-107: NAME the failures on red, from the TRX rather than from a six-line stdout tail.
-// The tail is where a red goes to die: SP-106's run 7 had SIX failing tests and the tail could
+// NAME the failures on red, from the TRX rather than from a six-line stdout tail.
+// The tail is where a red goes to die: an earlier investigation's run 7 had SIX failing tests and the tail could
 // only carry a couple of lines of them, so the flake had to be reconstructed by hand from the
 // preserved results directory. A gate that says WHICH fact failed and WHY is the difference
 // between "the floor is flaky" and "two runs contended for the same point on the desktop".
 //
 // THIS IS THE ONLY THING THIS FUNCTION MAY EVER DO. It reports; it never re-runs anything, and
 // check-floor.mjs must never gain a retry: re-running until green is how an intermittent gets
-// laundered into a pass, which is the exact failure SP-107 exists to end.
+// laundered into a pass, which is the exact failure this reporting exists to end.
 function namedFailures(resultsDir) {
   let xml;
   try {
@@ -346,7 +346,7 @@ export function main() {
     projects = discoverTestProjects(fs.readFileSync(SLN_PATH, "utf8"), pin);
   } catch (err) {
     if (err instanceof FloorError) {
-      console.error(`FLOOR CHECK FAILED (SP-065):\n  ${err.message}`);
+      console.error(`FLOOR CHECK FAILED:\n  ${err.message}`);
       return 1;
     }
     throw err;
@@ -387,7 +387,7 @@ export function main() {
   }
 
   if (failures.length > 0) {
-    console.error("FLOOR CHECK FAILED (SP-065):");
+    console.error("FLOOR CHECK FAILED:");
     for (const f of failures) console.error(`  ${f}`);
     console.error(`results directory (preserved for evidence): ${runDir}`);
     return 1;

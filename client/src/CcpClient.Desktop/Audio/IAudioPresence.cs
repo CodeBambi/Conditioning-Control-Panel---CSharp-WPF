@@ -57,7 +57,7 @@ public sealed record AudioCue(string Slot, string Path, float Volume);
 /// whether that is really happening.
 ///
 /// <para><b>The contract, and the reason this interface exists at all.</b> Every method returns a
-/// typed <see cref="CapabilityState"/> (SP-006, <c>runtime-capability-contract.md</c> §1), and
+/// typed <see cref="CapabilityState"/> (<c>runtime-capability-contract.md</c> §1), and
 /// <see cref="CapabilityState.Available"/> is returned ONLY after the platform confirmed the effect
 /// — the same discipline <see cref="Tray.ITrayPresence"/> holds with its <c>NIM_MODIFY</c> round
 /// trip and <see cref="Overlay.IOverlayPresence"/> with its eight. <b>A backend must never return
@@ -86,7 +86,7 @@ public sealed record AudioCue(string Slot, string Path, float Volume);
 /// <para><b>Thread affinity.</b> None required. The native backend beneath this has no UI-thread
 /// affinity (WPF says so of NAudio in both services' stop paths, e.g.
 /// <c>MindWipeService.cs:245-251</c>) and neither does this. Player construction is bounded and
-/// always happens off any synchronization context (SP-025/SP-072, see
+/// always happens off any synchronization context (see
 /// <see cref="OrphanSafePlayerFactory{TPlayer}"/>), so a caller on the UI thread cannot be wedged by
 /// a slow device.</para>
 /// </summary>

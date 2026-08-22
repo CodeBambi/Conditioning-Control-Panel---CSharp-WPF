@@ -64,7 +64,7 @@ public sealed class OperationRegistry
     /// <summary>
     /// Teardown steps 1–3 of contract §6: cancel every generation, await every owned
     /// completion (bounded wait is a backstop only — cancellation terminates well-behaved
-    /// operations), then record whatever did not finish. Never throws (SP-003 teardown
+    /// operations), then record whatever did not finish. Never throws (teardown
     /// invariant); the zero-unobserved guarantee is asserted by tests reading
     /// <see cref="UnobservedOperations"/>.
     /// </summary>
@@ -145,7 +145,7 @@ public sealed class AsyncOperationOwner
     /// the counter. Called by the participant's start path (phase 3); every later
     /// completion captured under an older generation is stale.
     ///
-    /// <para><b>The retired generation is cancelled OUTSIDE <c>_gate</c> (SP-142), and that is a
+    /// <para><b>The retired generation is cancelled OUTSIDE <c>_gate</c>, and that is a
     /// correctness rule rather than a style choice.</b> <c>CancellationTokenSource.Cancel()</c> runs
     /// its registrations SYNCHRONOUSLY on the calling thread, so cancelling under the lock ran
     /// FOREIGN callbacks with this owner's lock held: any lock such a callback took was taken
@@ -153,7 +153,7 @@ public sealed class AsyncOperationOwner
     /// caller's own lock (<c>Session/OwnedSessionEffect.cs:153-162</c> holds the effect gate across
     /// it). <b>No deadlock was ever observed</b> — the only thing preventing one was an unenforced
     /// convention that every cancellation callback stay lock-free, restated in three doc sites and
-    /// binding thirteen <c>OwnedSessionEffect</c> subclasses — and SP-106 was reverted for exactly
+    /// binding thirteen <c>OwnedSessionEffect</c> subclasses — and an earlier attempt was reverted for exactly
     /// that inversion. The state transition below is still ONE critical section, so no caller can
     /// observe a generation that was never installed.</para>
     ///

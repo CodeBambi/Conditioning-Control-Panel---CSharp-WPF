@@ -1,6 +1,6 @@
 # Trainer Card — census against the shipping WPF source
 
-**SP-127.** Evidence scope: the shipping WPF source, re-derived from the committed tree on
+Evidence scope: the shipping WPF source, re-derived from the committed tree on
 2026-08-21. Method: the repeatable inventory rules and source citations stated in this document.
 
 **Verdict: BUILDABLE-IN-PART, and the residue is the headline.** One unit is genuinely buildable and
@@ -61,10 +61,10 @@ git diff --diff-filter=A --name-only 42286638c^1 42286638c -- ConditioningContro
 |---|---|---|
 | `Companion/` | **87** | The AI companion surface — hero card, room preview, memory diary, workshop accordion, awareness privacy, engine-room drawer. **A different board row.** |
 | `AppSettings/` | **16** | Eight settings sections (Account, Audio, Data, Devices, General, Notifications, Performance, Updates). A different surface. |
-| `Studio/` | **6** | `BrainDrainFeatureControl`, `RampRackPanel`, `SchedulerRackPanel` — **rack panels for three modules this port has ALREADY SHIPPED** (SP-109 Brain Drain, SP-108 Intensity Ramp, SP-118 Scheduler). |
+| `Studio/` | **6** | `BrainDrainFeatureControl`, `RampRackPanel`, `SchedulerRackPanel` — **rack panels for three modules this port has ALREADY SHIPPED** (Brain Drain, Intensity Ramp, Scheduler). |
 | root | **4** | `AdornedAvatar.xaml(.cs)`, `ProfilePrivacyPanel.xaml(.cs)` — **the only Trainer Card files in the number.** |
 
-**4 of 113 = 3.5%.** This is SP-125's `Services/Fyp/Online/` finding at more than double the
+**4 of 113 = 3.5%.** This is the FYP census's `Services/Fyp/Online/` finding at more than double the
 severity — that one was 42% foreign, this one is **96.5% foreign** (109 of the 113 added; 109 of 114 = 95.6% of the directory today, §9.5). A packet authored against "port
 `Views/Controls/`" would port the AI companion surface, the settings pages, and three rack panels
 the port already has.
@@ -170,7 +170,7 @@ kind is not an anchor.
 | B5 | 12 preset blank-subject avatars (3 per mod) | `Resources/cosmetics/avatars/` = 12 PNG, the 12 files the registry does NOT reference (§1.4); `Services/Profile/CosmeticsCatalog.cs` (406) | Offer twelve fixed portraits and remember which one is chosen | `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs:83` — a generic typed store with typed load outcomes, already shipped | **PARTIAL on persistence** — missing member: no profile document type exists to hold the choice; the store itself is generic and ready | Windows: unproven — gate: headed capture of the picker. Linux: unproven |
 | B6 | a leaderboard **privacy dialog** deciding exactly what is shared | `Dialogs/ProfilePrivacyDialog.xaml(.cs)` (119 lines) hosting `Views/Controls/ProfilePrivacyPanel.xaml.cs` — **11 sharing toggles** at `:43-74` (`ChkDiscordRichPresence`, `ChkShowLevelInPresence`, `ChkShowOnlineStatus`, `ChkShareAchievements`, `ChkShareLevelUps`, `ChkAllowDiscordDm`, `ChkShareProfilePicture`, `ChkPublicShareRealAvatar`, `ChkGoonShareAvatar`, `ChkGoonShareDiscordDm`, `ChkGoonRichPresence`) | Decide, per channel, what of the user's identity and progress other people can see | `none`, **and it may not get one from a lane** | **OWNER-GATED** (§5) — it expands both the network boundary and what is shown to others; `client/docs/capability-inventory.md:70` requires *"a consent-contract revision and owner review"* | Windows: unproven. Linux: unproven. **Neither cell is dischargeable by engineering** |
 | B7 | the "Quiz" section renamed **"Graded runs"**, source-agnostic `OnQuizCompleted` | `Services/GamificationBridge.cs:88` (*"Graded runs (patron: top_of_the_class, teachers_pet, honor_roll, held_back)"*), `:91` subscribe, `:193` unsubscribe, `:578-611` the handler; *"source-agnostic on purpose"* (`:566-567`) | One handler that reads a grade and a category and does not care which surface produced them | `client/src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs:132-159` (`IntakeGraded`) — the grade and category are **computed** | **PARTIAL on the shipped intake seam** — missing member: **nothing subscribes and nothing is raised** (§4) | Windows: unproven. Linux: unproven — pure logic; a unit test covers both equally, which is why no gate is claimed |
-| B8 | `top_of_the_class` at the 90% bar | `Services/GamificationBridge.cs:571`, `:599-600`; bar `Services/Quiz/IntakeHostService.cs:55` `TopMarksPercent = 90.0`, guard `:434` `run.MaxScore > 0 && pct >= TopMarksPercent` | Award once when a run grades at or above 90% of max | `client/src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs:139` `TopMarksPercent = 90.0`, `:147-148` `IsTopMarks` | **PARTIAL on the shipped intake seam** — the predicate is ported verbatim including the `MaxScore > 0` guard; missing member: the award | Windows: unproven. Linux: unproven — pure arithmetic, already unit-pinned by SP-058 |
+| B8 | `top_of_the_class` at the 90% bar | `Services/GamificationBridge.cs:571`, `:599-600`; bar `Services/Quiz/IntakeHostService.cs:55` `TopMarksPercent = 90.0`, guard `:434` `run.MaxScore > 0 && pct >= TopMarksPercent` | Award once when a run grades at or above 90% of max | `client/src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs:139` `TopMarksPercent = 90.0`, `:147-148` `IsTopMarks` | **PARTIAL on the shipped intake seam** — the predicate is ported verbatim including the `MaxScore > 0` guard; missing member: the award | Windows: unproven. Linux: unproven — pure arithmetic, already unit-pinned by the shipped intake port |
 | B9 | `honor_roll` over **DISTINCT** categories | `Services/GamificationBridge.cs:40` `HonorRollCategories = 3`, `:601-606` the add-and-count | Count distinct perfected categories and award at three | `client/src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs:153-154` `Category(...)` — normalisation only | **PARTIAL on the shipped intake seam** — missing members: the distinct SET, its comparer, and the threshold. **§5.2 is the finding** | Windows: unproven. Linux: unproven |
 | B10 | `held_back` deliberately fail-streak-only | `Services/GamificationBridge.cs:42` `HeldBackFailStreak = 3`, `:592-595`; the deliberateness at `:574-576` (*"An intake has no fail state, so this can only ever come from the classic quiz. Left as-is deliberately (product decision)"*) and again at `Services/Quiz/IntakeHostService.cs:418-420` | Count consecutive failures and award at three — from the classic quiz only | `none` — no fail streak exists in the port | **GAP: a persisted fail-streak counter** — (a) primitive: an integer that survives restart and resets on a pass; (b) WPF keeps it on `ProgressionData.QuizFailStreak`; (c) trivial to build, **but it is dead in this port** because the only ported source can never fail | Windows: unproven. Linux: unproven |
 
@@ -208,13 +208,13 @@ persisted, nothing that awards.
 | C15 | `Ach.TryUnlockExclusive(id)` | `GamificationBridge.cs:589,595,600,605` | — | **ABSENT** |
 | C16 | `Ach.MarkDirty()` | `GamificationBridge.cs:608` | — | **ABSENT** |
 
-**The board row's claim that SP-058 "computes and logs … but raises nothing" is VERIFIED.** The
+**The board row's claim that the shipped intake port "computes and logs … but raises nothing" is VERIFIED.** The
 exact seam a next packet attaches to is `client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs:541-543`,
 where the four computed values are written to a diagnostic line and discarded.
 
 ### 4.1 A citation defect inside the port's own product code
 
-SP-058's shipped source comments cite upstream lines that do not say what they claim, checked
+The shipped intake port's source comments cite upstream lines that do not say what they claim, checked
 against its own stated baseline `0c9947a6` (v6.7.4) as well as today's tree:
 
 | Port comment | Claims | At `0c9947a6` that line is | Verdict |
@@ -386,7 +386,7 @@ where the score submission happens is a question this census did not answer and 
 The owner-flagged conclusion is unchanged: an identifier plus headers going to a remote endpoint is
 outbound identity, whatever the verb.
 
-Unlike SP-125's finding this is a **first-party** endpoint, not an unofficial third-party API, so
+Unlike the FYP census's finding this is a **first-party** endpoint, not an unofficial third-party API, so
 the question is narrower — but it is still the port's first outbound identity-sharing surface, and
 `client/docs/capability-inventory.md:70` puts *"networking"* and *"telemetry"* under
 *"a consent-contract revision and owner review"*.

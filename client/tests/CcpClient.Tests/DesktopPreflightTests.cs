@@ -3,7 +3,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-134. The pre-flight's VERDICT, pinned against synthetic observations so every branch is
+/// The pre-flight's VERDICT, pinned against synthetic observations so every branch is
 /// exercised without a desktop and without contending for one.
 ///
 /// <para><b>Why the verdict is separable at all.</b> <see cref="DesktopPreflight.Observe"/> is
@@ -247,7 +247,7 @@ public class DesktopPreflightVerdictTests
 }
 
 /// <summary>
-/// SP-134's broken-detector control, and the one fact here that must run inside the collection.
+/// The broken-detector control, and the one fact here that must run inside the collection.
 ///
 /// <para><b>What it is for.</b> Every other fact in this file judges the verdict against
 /// observations written by hand. This one judges the OBSERVATION, taken by the real sampler, on the

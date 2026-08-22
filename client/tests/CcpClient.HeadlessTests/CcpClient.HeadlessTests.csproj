@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- SP-008 admission spike: pinned to the exact 12.1.1 baseline (packet decision; this
+    <!-- Admission spike: pinned to the exact 12.1.1 baseline (packet decision; this
          row owns the admission). Separate project because [assembly: AvaloniaTestApplication]
          is assembly-wide — the 85 landed CcpClient.Tests stay unpolluted. -->
     <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.1" />
@@ -28,7 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- SP-059: the single approved wait helper, shared source (one helper or the timing
+    <!-- The single approved wait helper, shared source (one helper or the timing
          guard has nothing to bless). -->
     <Compile Include="..\CcpClient.Tests\TestWait.cs" Link="TestWait.cs" />
   </ItemGroup>

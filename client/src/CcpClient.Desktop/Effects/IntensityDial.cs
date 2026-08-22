@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Effects;
 /// One dial the Intensity Ramp is allowed to drive: a percentage belonging to ANOTHER module, which
 /// the ramp borrows for the length of a session and gives back when it stops.
 ///
-/// <para><b>Why the ramp does not simply call the modules (SP-108).</b> Upstream's ramp writes five
+/// <para><b>Why the ramp does not simply call the modules.</b> Upstream's ramp writes five
 /// named settings by hand inside its tick (<c>MainWindow/MainWindow.StartStop.cs:504-540</c>), which
 /// is why upstream's ramp cannot be tested without an <c>AppSettings</c>, a dispatcher and a window.
 /// Here the ramp knows nothing about spirals or tints: it holds a list of these, and the composition
@@ -125,7 +125,7 @@ public sealed class SpiralOpacityDial : IIntensityDial
 /// (<c>MainWindow/MainWindow.StartStop.cs:506-510</c>, <c>settings.FlashOpacity = newVal</c> capped
 /// at 100).
 ///
-/// <para><b>Why this dial arrives at SP-117 and not at SP-108.</b> The ramp's own composition
+/// <para><b>Why this dial arrives with the Visuals row and not with the ramp.</b> The ramp's own composition
 /// comment named the condition exactly — "flash opacity, master volume and subliminal volume have
 /// no dial on any ported panel, so they are absent rather than present-and-inert (D93)"
 /// (<c>Session/SessionParticipant.cs</c>). The Visuals row IS that panel, so the condition is

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// census.mjs — SP-121. Which SHIPPED types have ZERO executed lines?
+// census.mjs — which SHIPPED types have ZERO executed lines?
 //
 // WHY THIS EXISTS (client/docs/task-board.md:33)
 // The floor counts test results. The warning gate counts warnings. Neither can see a type whose
 // only coverage is a reference or a property read. That blind spot produced a real defect twice:
-// SP-101 (the first honest test killed the test host) and SP-118's SystemScheduleClock (default
+// once when the first honest test killed the test host, and once in SystemScheduleClock (default
 // clock on every product path, doc comment asserting fault containment, executed by no test — and
 // closing it found D188). This tool answers the question mechanically.
 //
@@ -23,14 +23,14 @@
 //   node client/tools/coverage/census.mjs --metadata-json  print this file's OWN reading of the
 //                                                          shipped assembly's metadata as JSON and
 //                                                          stop: no coverage run, no test host, no
-//                                                          document. SP-124's cross-validation
+//                                                          document. The cross-validation guard
 //                                                          calls this and compares every name,
 //                                                          kind and verdict against ordinary .NET
 //                                                          reflection over the identical file.
 //   node client/tools/coverage/census.mjs --check-stale    recompute the three metadata scalars
 //                                                          from the built assembly and diff them
 //                                                          against the committed census. Exit 1
-//                                                          and name every drifted row. SP-124's
+//                                                          and name every drifted row. This is the
 //                                                          land-time drift check; it always prints
 //                                                          what it did NOT check.
 //     --dll <path>     which assembly --metadata-json / --check-stale read (default: the Debug build)
@@ -142,7 +142,7 @@ const decode = (s) => s.replace(/&(?:lt|gt|amp|quot|apos);/g, (m) => XML_ENTITY[
 // class of async methods driven by more than twenty tests, and it appears in no <class> entry of
 // its own. Discarding those lines would give the census two failure modes it exists to prevent —
 // a type whose async body ran reading as ZERO, and a type whose async body never ran being MISSED
-// entirely, which is the SP-118 shape exactly.
+// entirely, which is the SystemScheduleClock shape exactly.
 //
 // So a compiler-generated entry's lines are ATTRIBUTED BACK to the type that declares it, which is
 // the type whose source file those lines came from. This is attribution, never a widened
@@ -420,7 +420,7 @@ function metadataView(rule, metadata) {
 }
 
 /**
- * SP-124. The reader's own answer, in machine-readable form, for cross-validation against a
+ * The reader's own answer, in machine-readable form, for cross-validation against a
  * SECOND independent mechanism (ordinary .NET reflection over the identical file) at RUNTIME.
  *
  * WHY THIS MODE EXISTS. The census used to be cross-validated by pinning two of its scalars in
@@ -455,7 +455,7 @@ function metadataJson(rule, dllPath) {
 }
 
 /**
- * SP-124. Does the COMMITTED census still describe the tree?
+ * Does the COMMITTED census still describe the tree?
  *
  * This is the drift check that used to live in the test suite as a pinned scalar. It is here, and
  * not there, because a per-lane fact comparing a live count to a stored one is a chokepoint: every
@@ -573,7 +573,7 @@ function render(rule, tally, types, runs, metadata) {
 
   // The metadata's simple names are classified by the SAME clauses as the report's names, so the
   // denominator and the census cannot drift apart. metadataView is shared with --metadata-json and
-  // --check-stale (SP-124), so what a test cross-validates is what this document prints.
+  // --check-stale, so what a test cross-validates is what this document prints.
   const { authored, invisible } = metadataView(rule, metadata);
   const invisibleBy = (kind) => invisible.filter((t) => t.kind === kind).length;
   const universeCount = shipped.length - flagged.length;
@@ -621,7 +621,7 @@ function render(rule, tally, types, runs, metadata) {
   w("SOURCE LINES go with it. Those entries are excluded by C2, so their lines are **attributed back");
   w("to the type that declares them** rather than discarded. Without this, a type whose async body");
   w("ran would read as ZERO, and a type whose async body never ran would be MISSED entirely — the");
-  w("SP-118 shape exactly.");
+  w("exact shape of the defect this census exists to prevent.");
   w();
   w("| | |");
   w("|---|---|");
@@ -897,7 +897,7 @@ function main() {
   const rule = loadRule();
   const dll = value("--dll") ?? PRODUCT_DLL;
 
-  // SP-124's two non-generating modes, handled FIRST and deliberately ahead of selfCheck: both
+  // The two non-generating modes, handled FIRST and deliberately ahead of selfCheck: both
   // must be usable on a tree with no coverage run behind them, and --metadata-json's stdout is
   // parsed as JSON by a test, so nothing else may write to it.
   if (flag("--metadata-json")) {

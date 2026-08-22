@@ -6,10 +6,10 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-024 slice b2: the three local DTRH save slots on SP-005 machinery. Lifecycle
+/// Slice b2: the three local DTRH save slots on the persistence machinery. Lifecycle
 /// (create/select/persist across store reloads), corruption → quarantine + flagged
 /// defaults (never silent), ordering stability, empty-slot semantics, stitch-lock,
-/// unknown-member preservation. WPF parity cites in SP-024 record Step 1.
+/// unknown-member preservation. WPF parity cites in record Step 1.
 /// </summary>
 public class DtrhSaveSlotsTests
 {
@@ -26,7 +26,7 @@ public class DtrhSaveSlotsTests
         Assert.All(summaries, s => Assert.Null(s.LastPlayedUtc));
         Assert.Equal(1, slots.ActiveSlot);
 
-        // Empty slots stay file-less (WPF Exists=false; SP-005 Missing is not dirty) —
+        // Empty slots stay file-less (WPF Exists=false; persistence-contract Missing is not dirty) —
         // even a teardown flush must not create them.
         await slots.FlushAsync(TimeSpan.FromSeconds(5));
         Assert.False(File.Exists(slots.SlotFilePath(1)));

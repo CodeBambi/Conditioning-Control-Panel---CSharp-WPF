@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- SP-023 / dtrh-admission.md §1 integration consequence (SP-011 empirical): Avalonia's
+<!-- dtrh-admission.md §1 integration consequence (WebView spike empirical): Avalonia's
      Win32 NativeControlHost requires supportedOS entries to create child windows
      (InvalidOperationException "Unable to create child window" without them). The embedded
      WebView2 surface needs this manifest. -->

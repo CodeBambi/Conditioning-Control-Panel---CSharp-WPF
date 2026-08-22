@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-058: the graded-run verdict (#870) — TopMarksPercent pinned WITH its comparison
+/// The graded-run verdict (#870) — TopMarksPercent pinned WITH its comparison
 /// (PROMPT framing c: a test that only asserts the constant is not evidence the verdict
 /// matches). Upstream: IntakeHostService.cs:45-53 (the 90.0 bar + why-not-100 comment),
 /// :414-422 (pct + perfect + category), :435-441 (mantra credit cap).

@@ -10,7 +10,7 @@ namespace CcpClient.Tests;
 /// Mechanics tests for the AI operation contract slice (client/docs/ai-operation-contract.md).
 /// DEFINE-ONLY: no providers, no network. Tests prove envelope reject-by-default, whole-envelope
 /// atomic rejection, per-command results, diagnostic content-freedom (schema proof),
-/// generation-invalidation reuse against the real SP-004 registry, and serialization round-trips.
+/// generation-invalidation reuse against the real operation registry, and serialization round-trips.
 /// </summary>
 public class AiOperationContractTests
 {
@@ -348,13 +348,13 @@ public class AiOperationContractTests
         Assert.Equal(JsonValueKind.Number, parsed.RootElement.GetProperty("Outcome").ValueKind);
     }
 
-    // ---- generation invalidation reuse (contract §2/§3, SP-004 machinery) ----
+    // ---- generation invalidation reuse (contract §2/§3, operation machinery) ----
 
     [Fact]
     public async Task ProviderSwitch_CancelsInFlightGeneration_AndDiscardsStaleCompletion()
     {
         // A provider switch IS an owner restart (contract §3 rule 2): generation invalidation
-        // → token cancellation → stale-application discard, all SP-004 machinery, no new code.
+        // → token cancellation → stale-application discard, all existing operation machinery, no new code.
         var registry = new OperationRegistry();
         var owner = registry.OwnerFor("ai-provider");
 
@@ -411,7 +411,7 @@ public class AiOperationContractTests
         RoundTrip<AiAdmission>(new AiAdmission.Suppressed(AiSuppressionKind.Cooldown));
         RoundTrip(new AiMemoryTurn(AiMemoryRole.User, "hi"));
 
-        // SP-066 framing (c): the loop's helper calls carry the assertions — pin the
+        // Loop framing (c): the loop's helper calls carry the assertions — pin the
         // source non-empty so an emptied sample set can never silence them invisibly.
         Assert.NotEmpty(VerdictSamples());
         foreach (var verdict in VerdictSamples())
@@ -470,7 +470,7 @@ public class AiOperationContractTests
             new AiCommandData.Media("videos/a.mp4", false),
             new AiCommandData.GetBackToMe("tok", 60, true, "later"),
         ];
-        // SP-066 framing (c): the loop's helper calls carry the assertions — pin the
+        // Loop framing (c): the loop's helper calls carry the assertions — pin the
         // source non-empty so an emptied sample set can never silence them invisibly.
         Assert.NotEmpty(samples);
         foreach (var data in samples)

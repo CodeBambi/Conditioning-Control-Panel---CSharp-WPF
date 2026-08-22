@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-126 — the C+ evaluator and its scheduler: what reaches the sink, at what level, at what
+/// The C+ evaluator and its scheduler: what reaches the sink, at what level, at what
 /// moment, and what deliberately never reaches it at all.
 ///
 /// <para><b>Not one wall-clock wait, and not one poll.</b> Every timing here is driven through the
@@ -21,13 +21,13 @@ namespace CcpClient.Tests;
 public class HapticLimbTests
 {
     // =====================================================================================
-    //  THE DOUBLE ITSELF — SP-108's hazard, refused in advance
+    //  THE DOUBLE ITSELF — a recorded hazard, refused in advance
     // =====================================================================================
 
     [Fact]
     public async Task TheRecordingSinkRecordsRAWAndTransformsNOTHING()
     {
-        // SP-108: a double whose Write clamped laundered the very clamp its fact existed to test.
+        // A double whose Write clamped laundered the very clamp its fact existed to test.
         // This fact exists so that a future "tidy" of RecordingHapticSink — a clamp, a rounding, a
         // defensive copy, a de-duplication — reds HERE instead of silently making every level
         // assertion in this file vacuous.
@@ -516,7 +516,7 @@ public class HapticLimbTests
     }
 
     /// <summary>
-    /// The manual clock, same shape as SP-098's: due timers fire in due order inside
+    /// The manual clock, in the established shape: due timers fire in due order inside
     /// <see cref="Advance"/>, and a timer a callback schedules fires in the same pass when it is
     /// already due. Zero wall-clock.
     /// </summary>

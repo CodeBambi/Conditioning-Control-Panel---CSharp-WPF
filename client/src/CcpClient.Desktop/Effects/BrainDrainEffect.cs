@@ -37,13 +37,13 @@ namespace CcpClient.Desktop.Effects;
 /// when something else broke would be exactly the silently-missing half this is guarding against.</para>
 ///
 /// <para><b>The dot is <see cref="EffectDotState.Live"/> while the audio half runs, and that is a
-/// decision rather than an oversight.</b> Two landed rules disagree here — SP-105's says a module
+/// decision rather than an oversight.</b> Two landed rules disagree here — the continuous-module rule says a module
 /// that cannot draw is <c>Armed</c>, the Subliminals rule says a module whose schedule is really on
 /// the clock is <c>Live</c> — and neither settles it, because neither was written for a row that is a
 /// PROPER SUBSET of its upstream. The rule this packet adds: <b>the dot is scoped to what the row IS,
 /// and a row that is a subset must say so where the user reads it.</b> Everything this row claims to
 /// be is running and audible, so <c>Live</c> is true of it; <c>Armed</c> would be the opposite lie
-/// from the one SP-105 prevented — an under-claim about a module that is really working. SP-105's
+/// from the one that rule prevented — an under-claim about a module that is really working. That
 /// rule still bites in its own case and is implemented: with no confirmed render session this module
 /// reads <c>Armed</c>, because then nothing reaches anybody at all
 /// (<see cref="AudioCueEffect.WorkIsRunning"/>).</para>
@@ -133,7 +133,7 @@ public sealed class BrainDrainEffect : AudioCueEffect
     }
 
     /// <summary>The AUDIO half's intensity dial (<c>BrainDrainService.cs:46-50</c>). Writes and
-    /// re-evaluates, the port's convention since SP-105.</summary>
+    /// re-evaluates, the port's settled convention.</summary>
     public void SetIntensityPercent(int percent)
     {
         var clamped = Math.Clamp(percent, BrainDrainSchedule.MinIntensity, BrainDrainSchedule.MaxIntensity);

@@ -7,11 +7,11 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Coverage-honesty tests (SP-038 slice c3; admission §8 c3): the boundary-coverage tests
+/// Coverage-honesty tests (slice c3; admission §8 c3): the boundary-coverage tests
 /// ENUMERATE the §3 surface/command-field inventory. Every Wired row has an executable
 /// assertion through the real pipeline/validator (input side AND output side where the
 /// surface exists); every Reserved row asserts the seam is named and typed, NEVER a
-/// coverage claim. Completeness tripwires (SP-009-sweep-class): a new pipeline entry
+/// coverage claim. Completeness tripwires (asset-manifest sweep class): a new pipeline entry
 /// point, a new string-carrying command-data variant, or a new Wired inventory row
 /// without an assertion FAILS this suite. Also: session-scoped escalation state behavior,
 /// offline zero-network re-verified, content-free diagnostics maintained.
@@ -69,7 +69,7 @@ public class AiModerationCoverageTests
         var h = new Harness(Policy);
         await h.AdmitProviderAsync();
 
-        // SP-066 framing (c): the loop carries the only assertions — pin the registry
+        // Loop framing (c): the loop carries the only assertions — pin the registry
         // non-empty so a future edit emptying it turns the coverage test RED, not vacuous.
         Assert.NotEmpty(AiModerationSurfaces.All);
         foreach (var surface in AiModerationSurfaces.All)
@@ -117,9 +117,9 @@ public class AiModerationCoverageTests
                 }
                 case "awareness-context-fields":
                 {
-                    // c5 packaging (SP-042): EVERY field through EvaluateInput on this
+                    // c5 packaging: EVERY field through EvaluateInput on this
                     // surface pre-assembly; a blocking verdict on any field means nothing
-                    // transmittable exists. The Wired flip landed in c6 (SP-044).
+                    // transmittable exists. The Wired flip landed in c6.
                     var blocked = AiAwarenessContextPackaging.TryPackage(
                         new AiAwarenessContext("cat", Forbidden, "title", "5s"),
                         h.Boundary, out var blockedRequest, out var refusal);
@@ -238,7 +238,7 @@ public class AiModerationCoverageTests
         // both reply outputs, command free-text), 5 reserved (memory persist, reply speech,
         // prompt templates, community prompts, quiz templates). A registry edit without a
         // record/table update trips here. (awareness-context-fields flipped Reserved→Wired
-        // in c6/SP-044 after c5 landed the packaging wiring.)
+        // in c6 after c5 landed the packaging wiring.)
         Assert.Equal(6, AiModerationSurfaces.All.Count(s => s.Disposition == AiModerationSurfaceDisposition.Wired));
         Assert.Equal(5, AiModerationSurfaces.All.Count(s => s.Disposition == AiModerationSurfaceDisposition.Reserved));
     }
@@ -295,7 +295,7 @@ public class AiModerationCoverageTests
     {
         // Structural proof: the boundary mechanism (policy, escalation, boundary) holds no
         // network-capable dependency — only documents, counters, and clocks.
-        // SP-066 framing (c): the loops carry the only assertions — pin the source
+        // Loop framing (c): the loops carry the only assertions — pin the source
         // non-empty first (per-ctor parameter emptiness is inherent to the subject: a
         // parameterless ctor is legitimate and simply has nothing to check).
         var boundaryTypes = new[] { typeof(AiModerationBoundary), typeof(AiModerationEscalation), typeof(AiModerationPolicy) };

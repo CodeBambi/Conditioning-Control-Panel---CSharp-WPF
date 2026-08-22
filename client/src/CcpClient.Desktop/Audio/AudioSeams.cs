@@ -12,7 +12,7 @@ public enum AudioPlayerState
 
 /// <summary>
 /// One audio player on a channel. Real = SoundFlow <c>SoundPlayer</c> on the playback
-/// device's MasterMixer; tests = recording fake. Backend behavior facts (SP-017):
+/// device's MasterMixer; tests = recording fake. Backend behavior facts:
 /// SoundFlow fires ZERO end events on explicit Stop (A2) — interruption stays
 /// distinguishable from completion — but the generation-token filter in
 /// <see cref="SoundArbitration"/> is still REQUIRED because other backends fire on stop
@@ -28,7 +28,7 @@ public interface IAudioPlayer : IDisposable
     /// <summary>Decoder-reported position in seconds (evidence: freeze/position checks).</summary>
     double PositionSec { get; }
 
-    /// <summary>Per-player gain 0..1 (volume = mechanism-only, SP-017 A7).</summary>
+    /// <summary>Per-player gain 0..1 (volume = mechanism-only, spike fact A7).</summary>
     float Volume { get; set; }
 
     void Play();
@@ -40,19 +40,19 @@ public interface IAudioPlayer : IDisposable
 
 /// <summary>
 /// The audio backend seam: device init with the F1 discipline + player construction.
-/// Real = <see cref="SoundFlowAudioBackend"/> (SoundFlow 1.4.1, SP-017 selection);
+/// Real = <see cref="SoundFlowAudioBackend"/> (SoundFlow 1.4.1, the spike's selection);
 /// tests = recording fake.
 /// </summary>
 public interface IAudioBackend : IDisposable
 {
     /// <summary>
-    /// Fresh render-endpoint NAMEs (session facts — SP-017 A6 shape: "RDP Sink" class on
+    /// Fresh render-endpoint NAMEs (session facts — spike fact A6 shape: "RDP Sink" class on
     /// WSLg; device names are hardware endpoints, never user data).
     /// </summary>
     IReadOnlyList<string> EnumerateDevices();
 
     /// <summary>
-    /// Initialise the playback device. F1 discipline (SP-017, process-fatal crash class,
+    /// Initialise the playback device. F1 discipline (process-fatal crash class,
     /// observed 2× 2026-07-21): RE-ENUMERATE immediately before init, match the requested
     /// device by NAME, pass only a FRESH enumeration snapshot's DeviceInfo — never a stored
     /// one; callers persist the NAME, never the Id. null/unknown name → default device.
@@ -63,7 +63,7 @@ public interface IAudioBackend : IDisposable
     /// Create (not yet playing) a player for a local audio file at gain 0..1. Implementations
     /// MUST construct off-sync-context (<see cref="OffSyncContext"/>): SoundFlow 1.4.1's
     /// AssetDataProvider ctor is sync-over-async and deadlocks any thread carrying a
-    /// SynchronizationContext (SP-025, dump-proven). SP-072: implementations MUST also bound
+    /// SynchronizationContext (dump-proven). Implementations MUST also bound
     /// the caller's wait and keep the orphan invariant (see <see cref="OrphanSafePlayerFactory{TPlayer}"/>):
     /// an abandoned construction never reaches the mixer, never plays, and is disposed exactly
     /// once, ordered against device teardown. Budget expiry throws
@@ -126,7 +126,7 @@ public interface ISoundClock
 /// <summary>
 /// The real clock on <see cref="System.Threading.Timer"/>.
 ///
-/// <para><b>A faulting callback must not take the process with it (SP-101, and this clock is the
+/// <para><b>A faulting callback must not take the process with it (and this clock is the
 /// THIRD instance of the shape).</b> A timer callback runs on a thread-pool thread with no caller
 /// above it, so an exception escaping it is an UNHANDLED exception and .NET terminates the process.
 /// Measured, not theorised: the first fact ever written against
@@ -178,13 +178,13 @@ public sealed class SystemSoundClock(Action<Exception>? onCallbackFault = null) 
 }
 
 /// <summary>
-/// SP-072 typed no-player outcome. TWO refusals now carry it, distinguished by MESSAGE, not by
+/// Typed no-player outcome. TWO refusals now carry it, distinguished by MESSAGE, not by
 /// type (every one of the five call sites catches Exception broadly and embeds the message, so a
 /// second type would buy no caller behaviour and cost every caller a second concept):
 ///   (a) the caller's wait on a player construction EXPIRED (or the lifecycle lock stayed
 ///       unavailable within the budget because a wedged native teardown holds it), so the
 ///       construction was ABANDONED; and
-///   (b) SP-083: the factory REFUSED at its outstanding-abandoned cap — no construction was
+///   (b) the factory REFUSED at its outstanding-abandoned cap — no construction was
 ///       started at all, so no pool thread was taken.
 /// The abandoned player never reaches the mixer, never plays, and is disposed exactly once by
 /// <see cref="OrphanSafePlayerFactory{TPlayer}"/>. Callers map this to their existing refusal
@@ -197,7 +197,7 @@ public sealed class PlayerConstructionTimeoutException : Exception
 }
 
 /// <summary>
-/// SP-072 orphan-safe bounded player construction. The real SoundFlow backends
+/// Orphan-safe bounded player construction. The real SoundFlow backends
 /// (<see cref="SoundFlowAudioBackend"/>, SoundFlowDtrhAudio) have zero headless coverage (real
 /// engine + device), so the MECHANISM lives here with injected delegates — headless facts bind
 /// the abandonment decision, the exactly-once latch, the teardown ordering, and the typed
@@ -215,15 +215,15 @@ public sealed class PlayerConstructionTimeoutException : Exception
 ///      <see cref="Teardown"/> delegate both run under <see cref="_lifecycle"/>, strictly
 ///      serialized. Only pool threads ever wait on that lock unbounded (that wait IS the
 ///      ordering); every CALLER-side acquisition is bounded (Monitor.TryEnter) so a wedged
-///      native teardown can never block a caller — the SP-071 class, pre-approach consult.
+///      native teardown can never block a caller — the wedged-teardown class, pre-approach consult.
 ///   5. The ordinary path is observably unchanged — same object, same volume, attach before
 ///      return, same unwrapped exception surface, zero new log lines.
-///   6. SP-083: the OUTSTANDING abandoned constructions are BOUNDED. An abandoned construction
+///   6. The OUTSTANDING abandoned constructions are BOUNDED. An abandoned construction
 ///      keeps an OS pool thread that nothing in .NET can interrupt (no token cancels a blocked
 ///      native ctor), so the count of abandoned-and-still-running constructions is itself the
 ///      resource. At the cap this factory refuses a further construction with the same typed
 ///      no-player outcome BEFORE any thread is taken — never by making the caller wait again
-///      (that is SP-072 reverted) and never by skipping the orphan's disposal (that trades a
+///      (that is the bounded-wait rule reverted) and never by skipping the orphan's disposal (that trades a
 ///      bounded residue for an unbounded leak). The count is released the instant the native
 ///      call RETURNS, whatever the outcome — never at disposal, or one faulted construction
 ///      would refuse for the rest of the session. Only ABANDONED constructions are counted: an
@@ -231,21 +231,21 @@ public sealed class PlayerConstructionTimeoutException : Exception
 ///      cues would silence a working device. The bound is PER FACTORY INSTANCE (these are
 ///      per-window-open, not singletons), which is a named limit, not a session bound.
 ///
-/// SP-025 (dump-proven): construction ALWAYS runs on a Task.Run pool thread, which never
+/// Dump-proven: construction ALWAYS runs on a Task.Run pool thread, which never
 /// carries a SynchronizationContext — the AssetDataProvider sync-over-async ctor would
 /// deadlock one. <see cref="_lifecycle"/> is a LEAF lock: nothing under it takes any other
 /// managed lock, so no lock cycle is possible (SoundArbitration._gate → TryEnter is bounded;
-/// SP-071's teardown thread takes _initLock, releases it, then reaches _lifecycle; SP-073 adds
+/// the backgrounded teardown thread takes _initLock, releases it, then reaches _lifecycle; the handoff adds
 /// a second teardown thread spawned by the post-release drain, which reaches _lifecycle
 /// without ever taking _initLock — never nested on either path).
 /// </summary>
 public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
 {
-    /// <summary>Default caller-wait budget: 2 s, the SP-071 TeardownBudget precedent (the local bounded-wait shape, DtrhHostWindow.axaml.cs:257-260). Healthy construction is milliseconds; this only bounds the wedged-endpoint case.</summary>
+    /// <summary>Default caller-wait budget: 2 s, the TeardownBudget precedent (the local bounded-wait shape, DtrhHostWindow.axaml.cs:257-260). Healthy construction is milliseconds; this only bounds the wedged-endpoint case.</summary>
     public static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// SP-083 default cap on outstanding ABANDONED constructions per factory instance. Chosen
+    /// Default cap on outstanding ABANDONED constructions per factory instance. Chosen
     /// literal, not a proof: the healthy path never counts at all, so any non-zero count already
     /// means constructions are blowing the 2 s budget — reaching 4 on one factory costs at least
     /// 8 caller-seconds of blown budgets, which no working endpoint produces. Deliberately &gt; 1,
@@ -257,7 +257,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
     private const int Attached = 1;
     private const int Disposed = 2;
 
-    // SP-083 accounting states — a SECOND, independent latch on the slot. Deliberately not
+    // Accounting states — a SECOND, independent latch on the slot. Deliberately not
     // overloaded onto State: the pool THREAD is released when _construct returns, the PLAYER is
     // disposed later (possibly much later, behind _lifecycle) — two lifetimes that end at
     // different moments must not share one latch.
@@ -269,7 +269,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
     {
         public volatile bool Abandoned;
         public int State; // Pending / Attached / Disposed — orphan-disposal transitions by CAS (the latch)
-        public int Accounting; // Uncounted / Counted / Settled — SP-083, exactly-once on BOTH sides
+        public int Accounting; // Uncounted / Counted / Settled — exactly-once on BOTH sides
     }
 
     private readonly object _lifecycle = new();
@@ -303,7 +303,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
     }
 
     /// <summary>
-    /// SP-083: abandoned constructions whose native call has NOT returned — ONE parked pool
+    /// Abandoned constructions whose native call has NOT returned — ONE parked pool
     /// thread each. Rises only at abandonment and falls the instant the native call returns
     /// (success or fault). Zero on the ordinary path, always.
     /// </summary>
@@ -321,7 +321,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
             throw new InvalidOperationException($"{_tag}: backend torn down — player construction refused");
         }
 
-        // SP-083 C1: refuse at the cap BEFORE any Task.Run — the refusal must not take the very
+        // C1: refuse at the cap BEFORE any Task.Run — the refusal must not take the very
         // resource it exists to bound. Read-compare-throw only: no wait, no lock, no token. The
         // cap is SOFT by construction (K callers concurrently past the read can all construct),
         // so the real bound is cap + concurrently-in-flight callers per factory — still a bound,
@@ -335,7 +335,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         }
 
         var slot = new ConstructionSlot();
-        // SP-025: pool thread — never a SynchronizationContext. SP-083: the finally is where the
+        // Pool thread — never a SynchronizationContext. The finally is where the
         // parked thread is RELEASED, so the count falls at the native return, whatever the outcome.
         var task = Task.Run(() =>
         {
@@ -364,7 +364,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         }
         catch (AggregateException)
         {
-            // Preserve the pre-SP-072 exception surface (OffSyncContext.Run's
+            // Preserve the original exception surface (OffSyncContext.Run's
             // GetAwaiter().GetResult() — callers see the INNER exception, unwrapped).
             task.GetAwaiter().GetResult(); // always throws
             throw new System.Diagnostics.UnreachableException();
@@ -373,7 +373,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         if (completed)
         {
             var player = task.GetAwaiter().GetResult();
-            // BOUNDED: a wedged native device teardown (SP-071's backgrounded
+            // BOUNDED: a wedged native device teardown (the backgrounded
             // _backend.Dispose → Teardown) can hold _lifecycle — a caller must never wait on
             // it unbounded (pre-approach consult finding).
             if (Monitor.TryEnter(_lifecycle, _budget))
@@ -406,17 +406,17 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         // completion after it is seen by P4 (Abandoned visible via the volatile + task
         // completion barriers). If both fire, the latch decides.
         slot.Abandoned = true;
-        // SP-083 C2: this construction is now abandoned-and-still-running — one parked pool
+        // C2: this construction is now abandoned-and-still-running — one parked pool
         // thread. Counted HERE, at the abandonment, and never for an ordinary construction.
         // Placed between the volatile write and the log so the LOAD-BEARING order below is
         // unmoved relative to the completed-check.
         CountAbandoned(slot);
-        // LOAD-BEARING ORDER (pre-completion consult, SP-072): the log line must precede the
+        // LOAD-BEARING ORDER (pre-completion consult): the log line must precede the
         // completed-check below. This is the only window in which BOTH orphan disposers can
         // be armed for one slot (P4 fires at completion, P3 at the check) —
         // Construction_CompletionRacesAbandonment_DisposedExactlyOnce rendezvous on this
         // line to force that race. Moving the log after the check makes that pin pass
-        // without ever exercising the latch (the SP-067/SP-070 vacuous class).
+        // without ever exercising the latch (the vacuous-pin class).
         _log($"{_tag}: player construction abandoned after {(int)_budget.TotalMilliseconds}ms — orphan disposed, never attached");
         if (task.IsCompletedSuccessfully)
         {
@@ -461,7 +461,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
     }
 
     /// <summary>
-    /// SP-083: claim the slot for the outstanding count, exactly once. Runs on the CALLER thread
+    /// Claim the slot for the outstanding count, exactly once. Runs on the CALLER thread
     /// at the abandonment decision. The CAS loses to a construction that already returned and
     /// settled (Settled), which is correct: nothing is parked, so nothing is counted.
     /// </summary>
@@ -474,7 +474,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
     }
 
     /// <summary>
-    /// SP-083: the native call returned, so the pool thread is released — release its count too,
+    /// The native call returned, so the pool thread is released — release its count too,
     /// exactly once, and only if this slot was ever counted. Runs on the CONSTRUCTION thread, in
     /// the Task.Run finally, so it fires on success AND on fault. Takes no lock: it must never be
     /// able to block behind a wedged teardown holding <see cref="_lifecycle"/>.
@@ -510,17 +510,17 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
     private void SafeDispose(TPlayer player)
     {
         try { _dispose(player); }
-        catch { /* best-effort — the backends' pre-SP-072 disposal discipline */ }
+        catch { /* best-effort — the backends' original disposal discipline */ }
     }
 }
 
 /// <summary>
-/// Off-sync-context construction marshal (SP-025, dump-proven 2026-07-22): SoundFlow
+/// Off-sync-context construction marshal (dump-proven 2026-07-22): SoundFlow
 /// 1.4.1's AssetDataProvider ctor is SYNC-OVER-ASYNC (GetResult on an async metadata
 /// read); on any thread carrying a SynchronizationContext (the Avalonia UI thread) the
-/// continuation can never run and the dispatcher wedges silently. The SP-017 console
+/// continuation can never run and the dispatcher wedges silently. The console
 /// spike never saw it (no sync context). Rule (port-lessons 2026-07-22, binding): any
-/// SoundFlow player/provider construction runs off-sync-context — SP-072: PLAYER
+/// SoundFlow player/provider construction runs off-sync-context — PLAYER
 /// construction now runs through <see cref="OrphanSafePlayerFactory{TPlayer}"/> (always on a
 /// pool thread, plus the orphan invariant); this marshal remains for any other
 /// context-carrying SoundFlow call and keeps its own regression pins

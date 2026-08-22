@@ -6,10 +6,10 @@ namespace CcpClient.Desktop.Effects;
 /// reason: it is the whole behaviour-visible part of the schedule, and a formula in a pure
 /// function can be pinned exactly, at its boundaries, without a clock or a session.
 ///
-/// <para><b>SP-101.</b> The ARITHMETIC now lives in <see cref="EffectSchedule"/>, because
+/// <para><b>The shared body.</b> The ARITHMETIC now lives in <see cref="EffectSchedule"/>, because
 /// Subliminals runs the identical five lines with different numbers and thirteen more modules
 /// follow. What stays here is what is actually Flash Images': the three numbers, each with its own
-/// citation, and the public surface every caller and every SP-098 fact already uses. This file is
+/// citation, and the public surface every caller and every earlier fact already uses. This file is
 /// deliberately still a NAMED law rather than a call site passing a tuple around — a module's pacing
 /// constants are its behaviour, and they are entitled to a place with a citation on them.</para>
 /// </summary>

@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-061: the tunnel loopback origin's §4-discipline contract — GET-only (405), both
+/// The tunnel loopback origin's §4-discipline contract — GET-only (405), both
 /// payload routes (200 + correct MIME), 415 deny-by-default (negative control), traversal
 /// refusal (403), route/missing-file 404s, nosniff, and the tightened route-class logging
 /// (one segment — never a filename, never a query string). Plus the consult's pins: the
@@ -149,7 +149,7 @@ public sealed class ChaosTunnelLoopbackTests : IDisposable
     [Fact]
     public async Task RouteClassLine_IsAlreadyInTheSink_WhenTheResponseBecomesObservable()
     {
-        // SP-085, the behavioural half. The historical red above was a MISSING route class:
+        // The behavioural half. The historical red above was a MISSING route class:
         // the server appended the line only AFTER writing the body, so a client could observe
         // a whole response before the sink mentioned it. Under a saturated pool that gap is
         // where the flake lived (reproduced: 1 red in 382 natural round trips, failing on
@@ -181,7 +181,7 @@ public sealed class ChaosTunnelLoopbackTests : IDisposable
     [Fact]
     public void EveryResponseEmittingPath_RecordsItsRouteClassBeforeItWrites()
     {
-        // SP-085, the structural half, and the honest reason it exists: the behavioural fact
+        // The structural half, and the honest reason it exists: the behavioural fact
         // above can only pin a path whose body is big enough to block a write, and /health is
         // a two-byte "ok" that never can be. The only alternative for /health is a product
         // seam the packet forbids, so this guard carries the invariant across every
@@ -234,14 +234,14 @@ public sealed class ChaosTunnelLoopbackTests : IDisposable
         Assert.True(unpinned.Count == 0,
             "a response is emitted by a path this guard does not check, so its route-class ordering "
             + "is unpinned. Every response-emitting path must record its route class before it writes "
-            + "(SP-085); anchor the new path here rather than leaving it unchecked:"
+            + "— anchor the new path here rather than leaving it unchecked:"
             + Environment.NewLine + string.Join(Environment.NewLine, unpinned));
     }
 
     [Fact]
     public void ThePrivacySink_NeverReceivesAnExceptionMessage()
     {
-        // SP-085 Step 3. The handler-fault line interpolated ex.Message verbatim into the SAME
+        // The handler-fault line interpolated ex.Message verbatim into the SAME
         // sink the route-class discipline governs — a sink forbidden even a bare filename.
         // Verified rather than recalled: UnauthorizedAccessException is NOT an IOException
         // (chain: UnauthorizedAccessException -> SystemException -> Exception), so the
@@ -287,7 +287,7 @@ public sealed class ChaosTunnelLoopbackTests : IDisposable
         return (logLine, writeLine,
             $"{source}:{writeLine} — the {path} path writes its response at :{writeLine} but only "
             + $"records the route class at :{logLine}. Every route-class line must be emitted "
-            + "before any byte of the corresponding response can leave the process (SP-085); "
+            + "before any byte of the corresponding response can leave the process; "
             + "Refuse is the reference shape.");
     }
 
@@ -451,7 +451,7 @@ public sealed class ChaosTunnelLoopbackTests : IDisposable
     {
         // Forward: every manifest tunnel/vendor entry maps to a REAL upstream file.
         // Sweep: every upstream file has a manifest entry. (The output-side direction is
-        // --verify-assets' copied sweep — SP-009's two-direction rule.)
+        // --verify-assets' copied sweep — the manifest's two-direction rule.)
         var repoRoot = FindRepoRoot();
         var manifestPath = Path.Combine(repoRoot, "client", "src", "CcpClient.Desktop", "Assets", "assets.manifest.json");
         Assert.True(AssetManifest.TryParse(File.ReadAllText(manifestPath), out var entries, out var errors),

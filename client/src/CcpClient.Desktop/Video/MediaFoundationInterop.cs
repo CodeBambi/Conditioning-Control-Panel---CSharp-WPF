@@ -9,7 +9,7 @@ namespace CcpClient.Desktop.Video;
 /// <c>Input/Win32InputInterop.cs</c> and <c>Audio/WasapiRenderReadback.cs</c> already follow.
 ///
 /// <para><b>Every GUID and every vtable SLOT ORDER below was read out of the Windows SDK headers on
-/// the machine this was written on (10.0.26100.0), not recalled.</b> The same discipline SP-109
+/// the machine this was written on (10.0.26100.0), not recalled.</b> The same discipline the audio capability
 /// applied to the eight WASAPI GUIDs, and for the same reason: a wrong slot is a call into an
 /// unrelated method that may still return S_OK. The header and line for each are on the member.</para>
 ///

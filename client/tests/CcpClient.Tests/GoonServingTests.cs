@@ -8,9 +8,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-132 — RUNG 1: <b>the origin SERVES</b>.
+/// RUNG 1: <b>the origin SERVES</b>.
 ///
-/// <para>SP-130 proved the payload SHIPS: 184 files land in the build output, byte-identical to the
+/// <para>An earlier packet proved the payload SHIPS: 184 files land in the build output, byte-identical to the
 /// upstream tree. It never asked the origin for one of them. Its own record names the gap
 /// (§7.4 item 2, "No test issues an HTTP request against the running goon <c>LoopbackServer</c>"),
 /// and the board row filed at the wave-65 land repeats it. <b>These facts close it: a real socket,
@@ -47,14 +47,14 @@ public sealed class GoonServingTests : IDisposable
     public GoonServingTests()
     {
         // An explicit data directory: never CompositionRoot.DefaultSettingsPath(), so this fixture
-        // cannot touch the real profile (SP-057 discipline) — the shared user-media root the
+        // cannot touch the real profile (data-root discipline) — the shared user-media root the
         // participant derives from it is <dataDir>/assets and is empty here by construction.
         _dataDirectory = Path.Combine(Path.GetTempPath(), "ccp-sp132-goon-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_dataDirectory);
         _participant = new GoonParticipant(new SilentLog(), _dataDirectory);
         var probe = _participant.Start();
         Assert.Equal(GoonServingRoots.GoonPayloadState.Present, probe.State);
-        // SP-059 T-15: both origins registered while bound, unregistered only after a clean dispose.
+        // T-15: both origins registered while bound, unregistered only after a clean dispose.
         LoopbackListenerRegistry.RegisterLoopbackServer(nameof(GoonServingTests), _participant.Server);
     }
 
@@ -375,7 +375,7 @@ public sealed class GoonServingTests : IDisposable
 
     /// <summary>
     /// <b>THE BORROW, proved at the wire — and it exists because a real page load found it broken
-    /// (D266).</b> SP-130 served the goon tree as BOTH roots so that nothing else was reachable on
+    /// (D266).</b> The practice host served the goon tree as BOTH roots so that nothing else was reachable on
     /// this origin. The first run that ever loaded the page found the cost: the page hotlinks
     /// twelve assets out of the DTRH tree by absolute <c>/dtrh/</c> path, which upstream is a
     /// sibling folder under the same WebView2 virtual host, and all twelve answered 404. The page
@@ -415,13 +415,13 @@ public sealed class GoonServingTests : IDisposable
     /// <summary>
     /// <b>THE SIZE OF WHAT THE BORROW GAVE UP, MEASURED (D266).</b>
     ///
-    /// <para>SP-130 served the goon tree as BOTH roots so that "nothing else is reachable on this
+    /// <para>The practice host served the goon tree as BOTH roots so that "nothing else is reachable on this
     /// origin". D266 gives that property up to fix twelve 404s, and the honest way to record a
     /// trade is at its real size rather than at the size of its justification: the fallback admits
     /// <b>the WHOLE DTRH payload tree</b>, not the twelve files that motivated it.</para>
     ///
     /// <para>Saying "this is not a new admission surface, the intake origin has borrowed these same
-    /// files since SP-054" is true about the MECHANISM and reads far narrower than the fact. So the
+    /// files since the glue bundle landed" is true about the MECHANISM and reads far narrower than the fact. So the
     /// number is pinned here, and a change to it must be re-approved rather than absorbed: <b>this
     /// guard is deliberately brittle, because the thing it counts is a security surface.</b></para>
     ///
@@ -623,7 +623,7 @@ public sealed class GoonServingTests : IDisposable
     //
     // These are NOT the headed evidence. The evidence is a real capture of the running host on a
     // real Windows desktop, checked by CcpVerify. A headless assembly cannot photograph anything
-    // and no fact here claims to. What these pin is the shape SP-122 established: a check that
+    // and no fact here claims to. What these pin is the shape an earlier packet established: a check that
     // cannot be captured, a check demoted out of its evidence class, a tolerance widened past the
     // colour it exists to reject, or a pixel read that no longer waits for the state.
 

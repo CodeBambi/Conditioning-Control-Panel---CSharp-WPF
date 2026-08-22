@@ -12,7 +12,7 @@ namespace CcpClient.Tests;
 /// foreground or reads the focus. This packet has to prove the opposite — a window that takes a
 /// click and takes NOTHING — so reusing it would mean the instrument for the negative claim shares
 /// state with the machinery that makes the positive one true. It is also byte-identical to base
-/// after this packet, which is the point: SP-110's landed instrument is not modified here.</para>
+/// after this packet, which is the point: that landed instrument is not modified here.</para>
 ///
 /// <para><b>The injection is the harness's and never the product's.</b> A capability that clicked
 /// the mouse to check it could receive clicks would be clicking whatever the user really had under

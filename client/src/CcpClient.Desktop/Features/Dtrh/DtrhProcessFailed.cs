@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// SP-027 slice b5: the native ProcessFailed signal — the immediate detection route when
+/// Slice b5: the native ProcessFailed signal — the immediate detection route when
 /// AdapterDestroyed cannot observe a renderer kill. Native ProcessFailed via
 /// TryGetPlatformHandle is the supported Windows signal. WPF parity:
 /// DtrhHostService.cs:123 wires CoreWebView2.ProcessFailed → Recover.
@@ -18,7 +18,7 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// ICoreWebView2ProcessFailedEventHandler 79e0aea4-990b-42d9-aa1d-0fcc2e5bc7f1 (Invoke
 /// at slot 3); ICoreWebView2ProcessFailedEventArgs get_ProcessFailedKind at slot 3.
 ///
-/// Capability honesty (SP-006): where the platform cannot deliver this signal (the
+/// Capability honesty: where the platform cannot deliver this signal (the
 /// Linux WebKitGTK dialog path) the outcome is typed Unavailable and the heartbeat
 /// watchdog is the only net — a named limit, never faked.
 /// </summary>
@@ -39,7 +39,7 @@ public static class DtrhProcessFailed
 
     /// <summary>Subscribe to CoreWebView2.ProcessFailed on a raw pointer. MUST be called
     /// on the thread that owns the WebView2 (UI thread — COM apartment binding, the same
-    /// class as SP-023 surprise #4). The callback then arrives on that thread.</summary>
+    /// class as recorded surprise #4). The callback then arrives on that thread.</summary>
     public static AttachOutcome TryAttach(IntPtr coreWebView2, Action<int> onProcessFailed)
     {
         if (!OperatingSystem.IsWindows())

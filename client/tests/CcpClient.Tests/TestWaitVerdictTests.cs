@@ -4,7 +4,7 @@ using Xunit.Sdk;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-116 — <b>the two timing verdicts, pinned against each other. Before this file neither of them
+/// <b>The two timing verdicts, pinned against each other. Before this file neither of them
 /// was pinned anywhere</b>, and that is how the defect below survived across roughly ten call sites
 /// in two projects.
 ///
@@ -17,11 +17,11 @@ namespace CcpClient.Tests;
 /// expired signal wait in the suite emitted the verdict that tells the reader to re-run it.</b></para>
 ///
 /// <para><b>Why that is worse than a wrong word.</b> The token survives into the TRX failure text
-/// (the SP-058 land lesson, which is why it leads the message at all). SP-116's own falsification
+/// (an earlier land lesson, which is why it leads the message at all). This packet's own falsification
 /// control is a signal wait: if the mechanism it forces ever genuinely breaks, the next engineer
-/// would have been told, in the failure itself, to re-run — the exact instruction SP-107 and SP-116
-/// exist to refuse. A packet whose thesis is "do not make it green, make it understood" cannot ship
-/// a control that asks for a re-run.</para>
+/// would have been told, in the failure itself, to re-run — the exact instruction the named-failure
+/// reporting and this file exist to refuse. A packet whose thesis is "do not make it green, make it
+/// understood" cannot ship a control that asks for a re-run.</para>
 ///
 /// <para><b>What is pinned.</b> Both directions, because a selector that answered one verdict
 /// always would pass a one-sided test: an expired signal wait reads CONDITION-NEVER-TRUE, a starved

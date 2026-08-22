@@ -1,32 +1,32 @@
-# CCP greenfield verification harness — tier 2 Windows capture (SP-008).
+# CCP greenfield verification harness — tier 2 Windows capture.
 # Captures ONE named surface+state to a PNG for the CcpVerify named-check tool and K3 review.
-# Formalizes the SP-007 headed-smoke patterns: SetWindowPos(HWND_TOPMOST) raise (the app
+# Formalizes the headed-smoke patterns: SetWindowPos(HWND_TOPMOST) raise (the app
 # opens unactivated and pixels belong to the occluder), UIA text reads, layout-probe door
 # rect (Avalonia exposes no UIA peers for Border/Grid/StackPanel), real-input state driving.
 # System.Drawing appears ONLY as capture transport (CopyFromScreen -> PNG file); this script
 # never reads a pixel — all pixel logic lives in CcpVerify.
-# SP-091 re-anchor: the demonstrator card this harness used to drive is retired, and the
+# Re-anchored: the demonstrator card this harness used to drive is retired, and the
 # navigation shell replaced it. Same three techniques, new anchors — surface dashboard-card ->
 # rail-door, state lit -> selected; 'dashboard' still means the whole window. The state is still
 # driven through REAL input (a left-click on a rail door), and the drive is still confirmed by a
 # UIA read before any pixel is captured.
 #
-# SP-122 — THE RACK, and two things this script was missing before it could be trusted with one.
+# THE RACK, and two things this script was missing before it could be trusted with one.
 #
 # 1. IT NOW TAKES THE MACHINE-WIDE REAL-DESKTOP LEASE. This script puts a top-most window on the
 #    interactive desktop and reads that desktop back, which is exactly what the test suite's
 #    RealDesktopCollection serialises through %TEMP%/ccp-real-desktop.lease — and this script ran
-#    outside that, so a capture could race a floor run. SP-107 measured what that costs: a failure
+#    outside that, so a capture could race a floor run. What that costs was measured: a failure
 #    that read "Expected 0, Actual 676161", one whole FOREIGN run's flash counted as this one's.
 # 2. IT NOW FENCES THE SCREEN READ. CopyFromScreen was called with no happens-before edge against
-#    the compositor. SP-116 measured 34 misses in 1200 unfenced reads and 0 in 1500 fenced;
+#    the compositor. Measured: 34 misses in 1200 unfenced reads and 0 in 1500 fenced;
 #    DwmFlush alone was the whole effect. An unfenced screen read is a defect, not a flake.
 #
 # The rack surfaces need NO product probe, and that is a finding rather than a convenience: every
 # rack row is a RadioButton, so Avalonia gives it a real UIA peer carrying an AutomationId, a
 # screen BoundingRectangle and SelectionItemPattern.IsSelected. The layout probe this script reads
-# for rail doors exists because SP-007's anchor was a demonstrator CARD — a Border/Grid, which has
-# no peer — and SP-091 re-anchored onto RadioButtons without revisiting it. Both channels are read
+# for rail doors exists because the original anchor was a demonstrator CARD — a Border/Grid, which
+# has no peer — and the re-anchor onto RadioButtons never revisited it. Both channels are read
 # here and they agree exactly (probe 174.9x44.0 DIP @ scale 1.75 == UIA 306x77 at the same origin).
 # A rack probe was authorised and REFUSED: fifteen probe lines in the bottom-docked footer add
 # 15 x 23.4 = 351 px to a rack viewport measured at 965 px, which pushes five of the fifteen rows
@@ -38,7 +38,7 @@
 #        pwsh client/tools/verify/capture.ps1 -Surface rack-row-dot -State armed
 #        pwsh client/tools/verify/capture.ps1 -Surface goon-page -State first-run
 #
-# SP-132 -- THE GOON PAGE, and the one way this surface differs from every other one here.
+# THE GOON PAGE, and the one way this surface differs from every other one here.
 #
 # Every surface above is Avalonia painting into a window this script launched. `goon-page` is a
 # REAL EMBEDDED BROWSER rendering a payload page inside one, and that changes what "confirm the
@@ -69,7 +69,7 @@ $verifyDir = $PSScriptRoot
 $shots = Join-Path $verifyDir 'artifacts'
 New-Item -ItemType Directory -Force -Path $shots | Out-Null
 $exe = Join-Path $verifyDir '..\..\src\CcpClient.Desktop\bin\Debug\net10.0\CcpClient.Desktop.exe'
-# The deterministic-start set. It was ONE file, and that had been incomplete since SP-098: the rack
+# The deterministic-start set. It was ONE file, and that had long been incomplete: the rack
 # rows' module dials do not live in settings.json, they live in session_preset.json in the same data
 # directory (SessionPresetDocument.FileName, SessionParticipant.cs:96). Measured rather than
 # reasoned — a `-State off` capture right-clicked Flash Images off, and the NEXT run's `-State
@@ -78,7 +78,7 @@ $stateFiles = @(
     (Join-Path $env:APPDATA 'CcpClient\settings.json'),
     (Join-Path $env:APPDATA 'CcpClient\session_preset.json')
 )
-# SP-132 -- AND THE PAGE'S OWN PREFS. Hygiene, and NOT what makes this deterministic.
+# AND THE PAGE'S OWN PREFS. Hygiene, and NOT what makes this deterministic.
 #
 # The goon PAGE keeps preferences in WebView2 localStorage, and one of them decides what is on
 # screen: the title screen auto-opens its "how it works" explainer once, on a first visit, and
@@ -128,7 +128,7 @@ public class VerifyNative {
     // compositor's NEXT PRESENT has consumed the outstanding surface updates, so it is an edge on
     // the producer's completion rather than a wait this harness chose a deadline for.
     [DllImport("dwmapi.dll")] public static extern int DwmFlush();
-    // SP-132: the goon host is a SECOND top-level window, and Process.MainWindowHandle does not
+    // The goon host is a SECOND top-level window, and Process.MainWindowHandle does not
     // say which of the two it names. WM_CLOSE is posted to the handle UIA gave us for the window
     // this script actually found, so the close targets the window it means.
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
@@ -142,7 +142,7 @@ public class VerifyNative {
 Add-Type -TypeDefinition $native
 
 # ---------------------------------------------------------------------------------------------
-# SP-122 — the machine-wide real-desktop lease.
+# The machine-wide real-desktop lease.
 #
 # Byte-for-byte the contract CcpClient.Tests' RealDesktopLease.TryTake uses
 # (RealDesktopCollection.cs:110-118): FileMode.Create / FileAccess.Write / FileShare.Read, with
@@ -264,8 +264,8 @@ function Click-Rect($rect) {
 }
 
 # The rack's SECOND gesture (StudioPage.axaml.cs:449-453 -> :559-569). The rack tells the user
-# about it in its own hint text — "Right-click a row to flip that effect on or off" — and until
-# SP-122 no run on a real desktop had ever performed it.
+# about it in its own hint text — "Right-click a row to flip that effect on or off" — and no run
+# on a real desktop had ever performed it before this harness did.
 function RightClick-Rect($rect) {
     $cx = [int]($rect.X + $rect.W / 2); $cy = [int]($rect.Y + $rect.H / 2)
     [VerifyNative]::SetCursorPos($cx, $cy) | Out-Null
@@ -276,13 +276,13 @@ function RightClick-Rect($rect) {
 }
 
 # ---------------------------------------------------------------------------------------------
-# SP-122 — UIA element reads. THE RACK NEEDS NO PROBE.
+# UIA element reads. THE RACK NEEDS NO PROBE.
 #
 # Every rack row is a RadioButton and Avalonia gives it a real automation peer: an AutomationId
 # taken from x:Name, a screen BoundingRectangle, and SelectionItemPattern.IsSelected. So the three
 # things a probe would have had to publish — where the row is, which row it is, and whether it is
 # open — are already published, by the control itself, on the channel this script already reads
-# (it has enumerated RadioButton peers since the SP-094 audit).
+# (it has enumerated RadioButton peers since the 2026-08-18 audit).
 # ---------------------------------------------------------------------------------------------
 function Get-Element($window, [string]$automationId) {
     $cond = New-Object System.Windows.Automation.PropertyCondition(
@@ -329,7 +329,7 @@ function Assert-Inside($inner, $outer, [string]$what, [string]$container) {
 }
 
 # ---------------------------------------------------------------------------------------------
-# SP-132 -- the goon host window.
+# The goon host window.
 #
 # Get-Window above finds a window by PROCESS ID ALONE, which is unambiguous only while a process
 # has one top-level window. The moment PRACTICE is pressed this process has two, and which one
@@ -380,7 +380,7 @@ function Assert-Route($window, [string]$route) {
 # contend with another run's windows, so the lease has to cover the launch and not just the read.
 Take-Lease
 
-# Deterministic start: remove the demo stores. This is what makes the SP-122 captures
+# Deterministic start: remove the demo stores. This is what makes the rack captures
 # order-independent — the rack's right-click quick-toggle persists the module's enabled flag, and
 # without the preset file in this set an 'off' capture leaks into the NEXT run's 'armed' capture.
 foreach ($stateFile in $stateFiles) {
@@ -435,9 +435,9 @@ Start-Sleep -Milliseconds 500
 $all = (Get-Texts $window) -join "`n"
 if ($all -notlike '*route: studio*') { Fail "missing 'route: studio'" }
 
-# DERIVE THE DOOR SET, NEVER HARD-CODE IT (SP-094 audit, 2026-08-18).
-# This was a literal list of three door needles, written at SP-091 when three was the whole
-# rail. SP-094 added a fourth door and did not widen it, so the harness stopped checking the
+# DERIVE THE DOOR SET, NEVER HARD-CODE IT (audit, 2026-08-18).
+# This was a literal list of three door needles, written when three was the whole
+# rail. A later wave added a fourth door and did not widen it, so the harness stopped checking the
 # only door that wave added -- while still printing "every rail door published a layout probe".
 # A hard-coded list turns "every" into "the ones someone remembered", and it fails silently in
 # the one direction that matters: a NEW door can go missing and this still passes.
@@ -469,7 +469,7 @@ $script:goonHwnd = [IntPtr]::Zero
 
 if ($Surface -eq 'goon-page') {
     # =========================================================================================
-    # SP-132 -- THE GOON PAGE. The first capture in this harness of something the PRODUCT did not
+    # THE GOON PAGE. The first capture in this harness of something the PRODUCT did not
     # paint: a payload page inside a real WebView2.
     #
     # Two hops of real input, because that is the user path and because the port gives no surface
@@ -483,7 +483,7 @@ if ($Surface -eq 'goon-page') {
 
     # The Play page is a plain StackPanel in an unscrolled ContentControl, so a card low on the
     # page can sit BELOW the window on a short screen. UIA reports unclipped bounds either way
-    # (the SP-122 finding), so clicking without this check would click the wallpaper.
+    # (a finding from the rack work), so clicking without this check would click the wallpaper.
     $practice = Get-Element $window 'GoonPracticeButton'
     $practiceRect = Get-Rect $practice
     Assert-Inside $practiceRect $windowRect 'the PRACTICE button' 'the shell window'
@@ -600,7 +600,7 @@ if ($Surface -eq 'goon-page') {
     'for this run; it must not be reported as having passed')
     }
 
-    # THE RECT, from the window's own probe. Avalonia gives Panel no UIA peer (SP-007 surprise #1),
+    # THE RECT, from the window's own probe. Avalonia gives Panel no UIA peer,
     # which is exactly why the probe publishes one.
     if ($probe -notmatch 'page-rect (?<w>[\d.]+)x(?<h>[\d.]+) DIP @ scale (?<s>[\d.]+) @ screen (?<x>-?\d+),(?<y>-?\d+)') {
         Fail "the goon probe carries no readable page rect: $probe"
@@ -620,7 +620,7 @@ if ($Surface -eq 'goon-page') {
 }
 elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     # =========================================================================================
-    # SP-122 — THE RACK. The shell opens on Studio (ShellRoutes.Default), so the rack is already
+    # THE RACK. The shell opens on Studio (ShellRoutes.Default), so the rack is already
     # in front of us and no navigation is needed; navigating anywhere else would unmount the page
     # and take its peers with it.
     #
@@ -636,7 +636,7 @@ elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     Write-Output ("rack: viewport $($viewport.X),$($viewport.Y) $($viewport.W)x$($viewport.H); " +
     "row RowFlashImages $($rowRect.X),$($rowRect.Y) $($rowRect.W)x$($rowRect.H) @ scale $scale (UIA, no probe)")
 
-    # The rack SCROLLS (SP-112), and UIA reports unclipped bounds with IsOffscreen=False for rows
+    # The rack SCROLLS, and UIA reports unclipped bounds with IsOffscreen=False for rows
     # that are scrolled out of it. Both containments, or nothing is captured.
     Assert-Inside $rowRect $viewport 'rack row RowFlashImages' 'the rack viewport (RackScroll)'
     Assert-Inside $rowRect $windowRect 'rack row RowFlashImages' 'the shell window'
@@ -669,7 +669,7 @@ elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
         # persisted preset leaked between runs — which one did, because the deterministic-start set
         # was missing session_preset.json. So the state is now READ, toggled only if it disagrees,
         # and read again. The rack's own second gesture (StudioPage.axaml.cs:449-453 -> :559-569) is
-        # what does the toggling, on a real desktop, which no run had ever performed before SP-122.
+        # what does the toggling, on a real desktop, which no run had ever performed before.
         $expectedHead = if ($State -eq 'armed') { 'Armed.' } else { 'Switched off.' }
         $live = (Get-Element $window 'FlashLiveState').Current.Name
         if (-not $live.StartsWith($expectedHead)) {
@@ -716,7 +716,7 @@ elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     }
 }
 else {
-    # The startup trace and the typed capability states live on the System page now (SP-091), so
+    # The startup trace and the typed capability states live on the System page now, so
     # reaching them is itself a real navigation. Drive it, then read them.
     Click-Rect (Get-DoorRect $window 'system')
     Assert-Route $window 'system'
@@ -758,7 +758,7 @@ Start-Sleep -Milliseconds 400
 
 $bmp = New-Object System.Drawing.Bitmap $capW, $capH
 $g = [System.Drawing.Graphics]::FromImage($bmp)
-# FENCE THE READ (SP-116). Between "the app painted" and "this process read the screen" there is
+# FENCE THE READ. Between "the app painted" and "this process read the screen" there is
 # otherwise no happens-before edge of any kind, and the read can return what was behind the window:
 # 34 misses in 1200 unfenced reads, 0 in 1500 fenced. A DWM that refuses is REPORTED and fails the
 # capture rather than being swallowed — an unfenced read is a coin flip, and a PNG that might be of
@@ -771,7 +771,7 @@ Write-Output 'screen read fenced through DwmFlush (HRESULT 0)'
 $bmp.Save($outFile, [System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose(); $bmp.Dispose()
 
-# SP-132 -- CLOSE THE GOON WINDOW FIRST, BY ITS OWN HANDLE.
+# CLOSE THE GOON WINDOW FIRST, BY ITS OWN HANDLE.
 #
 # Two reasons, and both are defects if skipped. (1) Process.MainWindowHandle does not say which of
 # two top-level windows it names, so CloseMainWindow could send WM_CLOSE to either; the goon window
@@ -811,5 +811,5 @@ Write-Output 'CAPTURE PASS'
 # command's code. self-test.ps1 guards each capture with `if ($LASTEXITCODE -ne 0)`, so those
 # guards were reading whatever ran before — vacuously green when the predecessor was a build, and
 # a false FAILURE the moment the predecessor was CcpVerify reporting a seeded regression with
-# exit 2. Found by that exact false failure while adding the rack phase (SP-122).
+# exit 2. Found by that exact false failure while adding the rack phase.
 exit 0

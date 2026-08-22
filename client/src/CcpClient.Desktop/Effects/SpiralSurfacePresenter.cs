@@ -14,7 +14,7 @@ public interface ISpiralSurface
     CapabilityState Engage(string spiralPath, SpiralPresentation presentation);
 
     /// <summary>Take the spiral off the screen now, and stop advancing it. WPF's
-    /// <c>StopSpiral</c> (<c>Services/Notifications/OverlayService.cs:398-409</c>).</summary>
+    /// <c>StopSpiral</c> (<c>Services/Notifications/OverlayService.cs:430-441</c>).</summary>
     void Withdraw();
 
     /// <summary>True while a surface this presenter placed is up.</summary>
@@ -55,11 +55,11 @@ public interface ISpiralSurface
 /// it there. This places one full-screen rectangle, leaves it there, <b>and repaints it twenty times
 /// a second for the length of the session</b>. Exactly one thing had to be added to the shared set
 /// for it — <see cref="OverlaySurfaceSet.Repaint"/>, a paint with no present — and that is the same
-/// grade of addition SP-105 made for the nullable lifetime.</para>
+/// grade of addition made for the nullable lifetime.</para>
 ///
-/// <para><b>Where the cadence lives, and why that is the answer to SP-106's question.</b> The
+/// <para><b>Where the cadence lives, and why that is the answer to this packet's question.</b> The
 /// frame advance is a timer, and it is on the injected <see cref="ISessionClock"/> — but it is
-/// <b>here</b>, in the presenter, and not in the module. SP-105 set that precedent for exactly the
+/// <b>here</b>, in the presenter, and not in the module. Pink Filter set that precedent for exactly the
 /// same reason and a reader can check it in one line: <see cref="PinkFilterSurfacePresenter"/> takes
 /// a clock for the topmost cadence and <see cref="PinkFilterEffect"/> takes none
 /// (<c>Session/SessionParticipant.cs:116-119</c>). The distinction is not stylistic. An
@@ -250,7 +250,7 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
             return _surfaces.RecordNoDisplay();
         }
 
-        // No lifetime: the spiral is up until the session takes it down (SP-105's nullable lifetime).
+        // No lifetime: the spiral is up until the session takes it down (the nullable lifetime).
         // Its frames change; its presence does not expire.
         var placed = _surfaces.Place(_slot, request, frame, lifetime: null);
         _lastFrameHeld = placed;
@@ -314,7 +314,7 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
         }
 
         // Re-armed only while something is still up, so a stopped session leaves no timer behind —
-        // the property SP-098's stop facts are built on, and the same rule OverlaySurfaceSet's own
+        // the property the stop facts are built on, and the same rule OverlaySurfaceSet's own
         // topmost cadence follows.
         if (Showing)
         {

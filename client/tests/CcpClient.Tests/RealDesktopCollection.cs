@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-107. <b>The interactive desktop is a SINGLETON, and until this existed the suite addressed
+/// <b>The interactive desktop is a SINGLETON, and until this existed the suite addressed
 /// it by constant.</b>
 ///
 /// <para>Every fact in this project that talks to the real window manager reaches shared,
@@ -16,7 +16,7 @@ namespace CcpClient.Tests;
 /// colour in the same place, and contested the same points. The port's own gate wrapper permits
 /// exactly that: <c>client/tools/gate/with-slot.mjs --slots 3</c>.</para>
 ///
-/// <para><b>Measured, not supposed</b> (SP-107 record §2): 20 floor runs one-at-a-time gave 0 red;
+/// <para><b>Measured, not supposed</b> (record §2): 20 floor runs one-at-a-time gave 0 red;
 /// 12 floor runs in waves of 3 gave 8 red, and the failure text named the collision every time —
 /// <c>IOException ... 'ccp-sp100-flash-draws\desktop-with-a-real-flash.bmp' because it is being
 /// used by another process</c>, and <c>Assert.Equal() Expected 0, Actual 676161</c> where 676161
@@ -26,7 +26,7 @@ namespace CcpClient.Tests;
 /// (1) IN-PROCESS: co-location. Every real-desktop class joins this collection, and xunit's
 /// intra-collection sequentiality serializes them — the same mechanism, and the same honesty
 /// about <c>DisableParallelization</c> being a non-relied-upon hint, as
-/// <see cref="ProcessEnvCollection"/> (SP-062/SP-086, <c>DataRootOverrideTests.cs:116-122</c>).
+/// <see cref="ProcessEnvCollection"/> (<c>DataRootOverrideTests.cs:116-122</c>).
 /// Membership is mechanical: <see cref="RealDesktopCollectionGuardTests"/> fails when a class
 /// that touches the desktop does not carry the attribute.
 /// (2) CROSS-PROCESS: <see cref="RealDesktopLease"/>, an exclusive machine-wide lease held for
@@ -39,7 +39,7 @@ namespace CcpClient.Tests;
 /// records none. That is not the same as identifying the live holder: the file keeps the last
 /// writer's pid after a <c>Dispose</c>, and a refusal that is an ACL rather than a peer says so
 /// instead of naming anyone. No assertion anywhere was
-/// weakened to obtain it — the OS-level facts are byte-for-byte the ones SP-099 and SP-100
+/// weakened to obtain it — the OS-level facts are byte-for-byte the ones the overlay packets
 /// earned.</para>
 ///
 /// <para><b>What it does NOT cover.</b> A FOREIGN topmost window — the shipping WPF product
@@ -48,7 +48,7 @@ namespace CcpClient.Tests;
 /// and no in-process mechanism can EXCLUDE one. That residue is named in
 /// <c>client/docs/verification-harness.md</c> as a gap the floor admits rather than hides.</para>
 ///
-/// <para><b>SP-134: the gap still cannot be excluded, and it is no longer silent.</b> Excluding a
+/// <para><b>The gap still cannot be excluded, and it is no longer silent.</b> Excluding a
 /// foreign window and DETECTING one are different problems, and only the first is impossible.
 /// <see cref="DesktopPreflight"/> runs in <see cref="RealDesktopLease"/>'s constructor, after the
 /// lease is held and before this collection's first fact, and refuses by name when a window this
@@ -88,7 +88,7 @@ public sealed class RealDesktopLease : IDisposable
 
     /// <summary>
     /// Takes the lease, or fails loudly reporting exactly why it could not — and then, holding it,
-    /// runs the SP-134 pre-flight and fails loudly again if something else owns the desktop.
+    /// runs the pre-flight and fails loudly again if something else owns the desktop.
     ///
     /// <para><b>The order is load-bearing.</b> The lease comes FIRST so that every peer
     /// <c>CcpClient.Tests</c> process and every <c>capture.ps1</c> run is already excluded
@@ -229,12 +229,12 @@ public sealed class RealDesktopLease : IDisposable
 
         return $"this process is {Environment.ProcessId}; {who}. Refusal: {_lastRefusal ?? "none recorded"}. "
             + "A contended desktop is not a flake and must NOT be retried away: the desktop is a singleton, and "
-            + "SP-107 measured what happens when two runs share it (8 red in 12 concurrent runs).";
+            + "what happens when two runs share it was measured (8 red in 12 concurrent runs).";
     }
 }
 
 /// <summary>
-/// SP-134. <b>The pre-flight: a contended desktop says so, at the fixture, naming the window.</b>
+/// <b>The pre-flight: a contended desktop says so, at the fixture, naming the window.</b>
 ///
 /// <para><b>The problem this exists for.</b> The wave-66 land burned NINE full floor runs to learn
 /// why it could not certify a green tree. Three green, six red; every failure a
@@ -282,8 +282,8 @@ public sealed class RealDesktopLease : IDisposable
 /// top-most windows: measured here at z-order rank 6, under three <c>ConditioningControlPanel</c>
 /// windows, the taskbar and <c>Click to Do</c>, with both windows reporting <c>GetWindowBand</c> = 1,
 /// so it is the foreground restriction and not a band. The suite's own probes get above that by
-/// attaching to the foreground thread's input queue (<c>InputWindowProbe.cs:295-318</c>, SP-110's
-/// ladder), and this pre-flight uses the SAME lift minus <c>SetForegroundWindow</c> and
+/// attaching to the foreground thread's input queue (<c>InputWindowProbe.cs:295-318</c>, the
+/// attach ladder), and this pre-flight uses the SAME lift minus <c>SetForegroundWindow</c> and
 /// <c>BringWindowToTop</c>: measured to reach rank 1 and own the point while leaving the foreground
 /// window UNCHANGED, so a floor run never steals the keyboard from whoever is at the machine. With
 /// the product parked and idle it then held all three points for 250 of 250 readings.</para>
@@ -301,7 +301,7 @@ public sealed class RealDesktopLease : IDisposable
 /// (this is a PRE-flight and says so); anything outside the three probed points at the vertical
 /// centre, INCLUDING A SECOND MONITOR, since the geometry comes from
 /// <c>GetSystemMetrics(SM_CXSCREEN/SM_CYSCREEN)</c> — the PRIMARY display, the same number the
-/// probes use; and a foreground-only thief that never raises a top-most window, because SP-110's
+/// probes use; and a foreground-only thief that never raises a top-most window, because the
 /// attach ladder (<c>Win32InputPresence.cs:525-579</c>) beats a passive foreground holder, which is
 /// why the foreground is REPORTED in every refusal and never refused on by itself.
 /// FALSE-POSITIVE DIRECTION, and it is the one this design must keep naming: a TRANSIENT ONE-SHOT
@@ -568,7 +568,7 @@ public static class DesktopPreflight
                         samples++;
                         return TestWait.MonotonicNow() - started >= ObservationSpanMs;
                     },
-                    $"the SP-134 desktop pre-flight's {ObservationSpanMs} ms observation span to elapse",
+                    $"the desktop pre-flight's {ObservationSpanMs} ms observation span to elapse",
                     () => $"rounds so far={samples}, readings owned={owned}, readings lost={lost}",
                     TestWait.InjectedBudget);
 
@@ -607,7 +607,7 @@ public static class DesktopPreflight
     {
         var readings = observation.OwnedReadings + observation.LostReadings;
         var text = new System.Text.StringBuilder();
-        text.Append("DESKTOP-CONTENDED — the SP-134 pre-flight refused before any real-desktop fact ran. ");
+        text.Append("DESKTOP-CONTENDED — the pre-flight refused before any real-desktop fact ran. ");
         text.Append("A window this process does not own took a contended point away from a top-most sentinel ");
         text.Append($"held there for {observation.SpanMs} ms: {observation.LostReadings} of {readings} readings ");
         text.Append($"lost across {observation.Samples} rounds over {observation.Points} point(s).");
@@ -670,7 +670,7 @@ public static class DesktopPreflight
     }
 
     private static string Blind(Observation observation) =>
-        "PREFLIGHT-BLIND — the SP-134 desktop pre-flight could not observe the desktop, so it reports that it "
+        "PREFLIGHT-BLIND — the desktop pre-flight could not observe the desktop, so it reports that it "
         + "established NOTHING rather than reporting a clean one. "
         + $"rig failure: {observation.RigFailure ?? "none"}; rounds={observation.Samples}; "
         + $"span={observation.SpanMs} ms; points={observation.Points}; readings owned={observation.OwnedReadings}; "
@@ -679,7 +679,7 @@ public static class DesktopPreflight
         + "whatever red follows, which is worse than no light at all. This is a failure, never a skip.";
 
     /// <summary>
-    /// The z-order lift, and the reason the pre-flight can work at all. SP-110's ladder
+    /// The z-order lift, and the reason the pre-flight can work at all. The attach ladder
     /// (<c>InputWindowProbe.cs:295-318</c>) minus <c>SetForegroundWindow</c> and
     /// <c>BringWindowToTop</c>: attaching to the foreground thread's input queue is what lets
     /// <c>SetWindowPos(HWND_TOPMOST)</c> reach the TOP of the top-most band instead of the bottom

@@ -6,7 +6,7 @@ using Avalonia.Media;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// The pre-descent save picker (SP-024 slice b2). Ports the WPF interaction OUTCOMES
+/// The pre-descent save picker (slice b2). Ports the WPF interaction OUTCOMES
 /// (ChaosSlotPickerWindow.xaml.cs, File.cs:line cites per block): three fixed-order
 /// cards; empty = "New Journey"; populated = rank / descents / ✦ sparks / 🪙 gold /
 /// best / last played; slots 2/3 stitched shut until any save owns the doll craft;

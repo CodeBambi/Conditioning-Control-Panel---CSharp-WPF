@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-053: the reduced-motion inheritance probe SEAM (DtrhMotionPreference). These tests
+/// The reduced-motion inheritance probe SEAM (DtrhMotionPreference). These tests
 /// pin the measurement PATH — the verdict mapping and the exact query literal the page's
 /// own probe uses (payload shared/capability.js:35) — NEVER the OS inheritance itself
 /// (that is the headed probe run's evidence, not a unit fact).

@@ -9,7 +9,7 @@ namespace CcpClient.Desktop.Pointer;
 ///
 /// <para><b>The three declarations that make this file different from its two siblings.</b>
 /// <c>Input/Win32InputInterop.cs:54-58</c> declares five message constants and NO mouse message at
-/// all — SP-112's census, verified again here — and <c>Overlay/Win32OverlayInterop.cs</c> declares
+/// all — the earlier census, verified again here — and <c>Overlay/Win32OverlayInterop.cs</c> declares
 /// none either, because a click-through surface's whole job is never to see one. This file declares
 /// <see cref="WmLbuttondown"/>, <see cref="WmLbuttonup"/> and <see cref="WmMouseactivate"/>, and
 /// those three are the capability.</para>

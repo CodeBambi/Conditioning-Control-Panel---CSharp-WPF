@@ -25,12 +25,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _ticker = host.Participants.OfType<StatusTickerParticipant>().First();
         _store = host.Participants.OfType<PersistenceStore<DemoSettings>>().First();
-        // A-004/SP-014: the ONE dispatch entry — stable card ID → the toggle operation.
+        // A-004: the ONE dispatch entry — stable card ID → the toggle operation.
         // Neutral cards (Visuals/System parity) would simply have no entry (no fake cards).
         _quickToggle = new QuickToggleDispatch(
             new Dictionary<string, Action> { [CardId] = Toggle });
         ToggleCommand = new ToggleFeatureCommand(this);
-        // SP-004 pattern: the reporter is invoked only on the UI thread, inside a boundary post.
+        // Owned-operation pattern: the reporter is invoked only on the UI thread, inside a boundary post.
         _ticker.TickReporter = text => TickText = text;
     }
 
@@ -91,7 +91,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// Toggle order (pre-approach consult): the operation first, so the ring responds from
-    /// the owner immediately; then the flag mutation; then the serialized save — an SP-004
+    /// the owner immediately; then the flag mutation; then the serialized save — an
     /// owned completion, never awaited on the UI thread.
     /// </summary>
     internal void Toggle()

@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# CCP greenfield verification harness — tier 2 WSLg (Linux/X11) capture (SP-008).
+# CCP greenfield verification harness — tier 2 WSLg (Linux/X11) capture.
 # Usage: ./capture-wslg.sh <dashboard|rail-door> <unselected|selected> [scale-factor]
-# Runs against a native-dir build (never /mnt/e — SP-005/007 pattern). WSLg RAIL windows
-# are invisible to Windows-side capture; XGetImage reads the real X window (SP-007).
+# Runs against a native-dir build (never /mnt/e, a repeatedly proven failure). WSLg RAIL windows
+# are invisible to Windows-side capture; XGetImage reads the real X window.
 #
-# SP-091 re-anchor: the demonstrator card this script used to drive is retired and the
+# Re-anchored: the demonstrator card this script used to drive is retired and the
 # navigation shell replaced it, so the surface/state tokens follow checks.json —
 # dashboard-card -> rail-door, unlit|lit -> unselected|selected.
 #
 # State drive: NONE, and it needs none. On cold start the shell opens on its default door
 # (Studio), so the Studio door is already :checked and the Companion door is not. Each state
 # is therefore capturable with ZERO input, which is exactly what WSLg's no-input-automation
-# limit (no xdotool — SP-007/SP-008 named gate) allows. The two states are read off two
+# limit (no xdotool — a named gate) allows. The two states are read off two
 # DIFFERENT doors of the same style rather than one door before and after a click; the
 # Windows leg (capture.ps1) drives the click and is where that half of the evidence lives.
 # Recorded, not hidden.

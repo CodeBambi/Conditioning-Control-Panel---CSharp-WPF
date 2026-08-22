@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-054: the drafting sink's deterministic core (QuizSessionGenerator port, scoped per
+/// The drafting sink's deterministic core (QuizSessionGenerator port, scoped per
 /// record.md's named limit): difficulty bands, the A5 inverse gate, XP (computed, never
 /// granted), naming incl. the #614 archetype suffix, the mantra merge, Lean/Nudge/
 /// EnsureRising over the named knobs, tier baselines, and the never-runnable marker.

@@ -59,7 +59,7 @@ public sealed record DtrhHarnessOptions(
 /// into the tray when the hole opens and restores it on close
 /// (<c>Services/Chaos/DtrhHostService.cs:156</c> -> <c>MainWindow/MainWindow.RemoteControl.cs:1517</c>
 /// -> <c>Services/Notifications/TrayIconService.cs:145-148</c>; restore at
-/// <c>DtrhHostService.cs:998</c>). <b>SP-096 gives the port the tray icon and the four-entry menu
+/// <c>DtrhHostService.cs:998</c>). <b>The port has the tray icon and the four-entry menu
 /// WPF has, on the same interval, and still does not hide the window</b> — for a measured reason
 /// that has nothing to do with the menu: Avalonia 12.1.1's <c>Window.Hide()</c> hides every window
 /// OWNED by the hidden one, and this coordinator owns the descent
@@ -70,7 +70,7 @@ public sealed record DtrhHarnessOptions(
 ///
 /// <para><b>AND WHEN IT BREAKS, THE USER IS TOLD.</b> WPF wraps the entire handler and shows a
 /// warning dialog reading "Couldn't start Down the Rabbit Hole:" plus the message
-/// (<c>MainWindow/MainWindow.Lab.cs:266-271</c>). Until SP-097 the port caught only around
+/// (<c>MainWindow/MainWindow.Lab.cs:266-271</c>). Earlier the port caught only around
 /// <c>ResolveAsync</c> and the page fired the launch as a discarded task, so a throw from the
 /// descent became an UNOBSERVED task exception — collected by the panic hook at some later GC
 /// (<c>Program.cs:313</c>) and invisible on screen. <see cref="Faulted"/> is the fix, and it is
@@ -134,7 +134,7 @@ public sealed class DtrhLaunch
     public event Action<DtrhGateDecision>? Decided;
 
     /// <summary>
-    /// SP-097: raised when the launch flow THREW. WPF wraps its whole handler and shows the user
+    /// Raised when the launch flow THREW. WPF wraps its whole handler and shows the user
     /// a warning dialog (<c>MainWindow/MainWindow.Lab.cs:266-271</c>); the port raises this, and
     /// <see cref="Views.Pages.PlayPage"/> renders the fault plate from it. The exception is passed
     /// WHOLE rather than pre-rendered: the surface decides what a user reads, and a subscriber
@@ -197,7 +197,7 @@ public sealed class DtrhLaunch
             var decision = DtrhGate.Decide(outcome);
             LastDecision = decision;
             // Outcome CLASS plus reason CODE, never the detail and never anything token-derived
-            // (the SP-092 logging discipline; EntitlementOutcome.Describe is that rendering).
+            // (the entitlement-logging discipline; EntitlementOutcome.Describe is that rendering).
             _host.LogDiagnostic($"dtrh: gate on {entry} — entitlement {outcome.Describe()} -> {Classify(decision)}");
             Decided?.Invoke(decision);
 

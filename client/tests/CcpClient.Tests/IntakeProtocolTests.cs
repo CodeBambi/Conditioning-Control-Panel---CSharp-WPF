@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-054: the bridge vocabulary — parse/classify/tolerance matrix (b2 discipline), the
+/// The bridge vocabulary — parse/classify/tolerance matrix (b2 discipline), the
 /// ping/payload-state authoring-obligation pins (typed, PageAttestedNeverEmitted —
 /// archaeology refuted every C# emit site), the out-of-vocabulary pins for DTRH/studio
 /// loom types (intake sends loom-save ONLY), the 6-out builder shapes, and the SHARED

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Persistence;
 
 /// <summary>
-/// SP-098: the persisted preset a conditioning session reads when the user presses START —
+/// The persisted preset a conditioning session reads when the user presses START —
 /// the port's counterpart of the dials WPF's <c>StartEngine</c> reads out of
 /// <c>App.Settings.Current</c> (<c>MainWindow/MainWindow.StartStop.cs:163,181,200,...</c>).
 ///

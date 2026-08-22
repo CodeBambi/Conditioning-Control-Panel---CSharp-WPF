@@ -33,13 +33,13 @@ public static class DtrhCapabilityProbes
     {
         if (!OperatingSystem.IsWindows())
         {
-            // Verified-absent evidence, not an OS guess: SP-011 L4 (embedded loads but
+            // Verified-absent evidence, not an OS guess: spike L4 (embedded loads but
             // never presents on WSLg/X11; adapter declares NativeDialog-only scenarios)
             // + admission §2 (WPE unpackaged on Ubuntu 26.04).
             return new CapabilityState.Unavailable(new CapabilityReason(
                 "unsupported-platform",
                 "embedded WebView is the Windows (WebView2) shape per admission §5; on Linux the embedded "
-                + "adapter never presents on X11/WSLg (SP-011 L4) and WPE is unpackaged (admission §2)"));
+                + "adapter never presents on X11/WSLg (spike L4) and WPE is unpackaged (admission §2)"));
         }
 
         try
@@ -165,7 +165,7 @@ public static class DtrhCapabilityProbes
                 }
 
                 // The evergreen runtime's install roots (Microsoft-documented): machine-wide
-                // under ProgramFilesX86; per-user under LocalAppData (SP-011 observed a
+                // under ProgramFilesX86; per-user under LocalAppData (the spike observed a
                 // user-level install, WebView2 150.0.4078.83).
                 foreach (var root in new[]
                 {

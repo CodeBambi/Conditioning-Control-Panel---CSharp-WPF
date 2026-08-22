@@ -5,7 +5,7 @@ using CcpClient.Desktop.Session;
 namespace CcpClient.Desktop.Views.Pages;
 
 /// <summary>
-/// The Bubble Count panel's sentences (SP-112), in their own file for the same reason
+/// The Bubble Count panel's sentences, in their own file for the same reason
 /// <see cref="InputPanelNotices"/>, <see cref="VideoPanelNotices"/> and
 /// <see cref="AudioPanelNotices"/> are in theirs.
 ///
@@ -13,7 +13,7 @@ namespace CcpClient.Desktop.Views.Pages;
 /// either can be missing on its own.</b> Every other row on this page reports one channel. A game
 /// that can show its clip and cannot ask its question is not the same failure as one that can ask a
 /// question it has nothing to ask about, and a single sentence covering both would be false for one
-/// of them — the panel defect SP-105, SP-109 and SP-110 each shipped exactly once.</para>
+/// of them — the panel defect three earlier rows each shipped exactly once.</para>
 /// </summary>
 public static class BubbleCountPanelNotices
 {
@@ -42,7 +42,7 @@ public static class BubbleCountPanelNotices
 
     /// <summary>
     /// The live-state line, off the row's own dot plus its counters. The Armed arms are separate
-    /// sentences for the reason SP-105 established and every module since has kept: "armed because no
+    /// sentences for the reason the first such panel established and every module since has kept: "armed because no
     /// session is running" and "armed DURING a session because a channel is gone" are different
     /// situations, and telling the second to start a session they already started is the exact
     /// message that had to be split apart.
@@ -90,14 +90,14 @@ public static class BubbleCountPanelNotices
 
         if (dot == EffectDotState.Armed && playing)
         {
-            // THE MOTION HALF OF THE DOT (SP-111's seventh meaning), reached through this row.
+            // THE MOTION HALF OF THE DOT (the dot's seventh meaning), reached through this row.
             return "A clip is on screen and the operating system's own copy of it has STOPPED changing, so "
                 + "there is nothing to count. The game ends and the next one comes round on the clock.";
         }
 
         if (dot == EffectDotState.Armed && asking)
         {
-            // THE DEMAND HALF (SP-110's sixth meaning), reached through this row.
+            // THE DEMAND HALF (the dot's sixth meaning), reached through this row.
             return "The question is on screen and the operating system has given the keyboard to another "
                 + "window, so nothing you type reaches it. Click the question to give it the keyboard back.";
         }

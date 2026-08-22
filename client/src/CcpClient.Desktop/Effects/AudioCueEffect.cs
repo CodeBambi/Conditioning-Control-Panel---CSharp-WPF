@@ -23,7 +23,7 @@ public sealed record AudioCueFiring(AudioCueEvent Event, string Path, float Volu
 /// The body every ROLLED audio module has, written once — and the first module body in this port
 /// whose <c>Live</c> depends on something outside the process.
 ///
-/// <para><b>Why a shared body and not two copies (the SP-101 lesson, applied before the copies
+/// <para><b>Why a shared body and not two copies (the shared-body lesson, applied before the copies
 /// existed).</b> Mind Wipe and Brain Drain are the same machine with different numbers: a fixed
 /// window on the clock, a probability rolled every window, one clip drawn from a folder, one player
 /// at a time replaced by the next. Everything that differs between them —
@@ -35,13 +35,13 @@ public sealed record AudioCueFiring(AudioCueEvent Event, string Path, float Volu
 /// they tick on a fixed window and roll a probability
 /// (<c>Services/LockCard/MindWipeService.cs:741-742</c>,
 /// <c>Services/LockCard/BrainDrainService.cs:185-188</c>). <see cref="PacedSessionEffect{TFiring}"/>
-/// fits anyway, and fits WITHOUT modification, because the roll lands exactly on the hook SP-101
+/// fits anyway, and fits WITHOUT modification, because the roll lands exactly on the hook the shared body
 /// built for Subliminals: <b><see cref="PacedSessionEffect{TFiring}.Compose"/> may return
 /// null</b>, meaning "this firing came due and produced nothing; count nothing, deliver nothing, and
 /// re-schedule regardless". A lost roll IS that. The schedule stays a claim about the clock; the
 /// roll is a claim about this window.</para>
 ///
-/// <para><b>THE DOT, and the fifth thing it has meant (SP-109).</b>
+/// <para><b>THE DOT, and the fifth thing it has meant.</b>
 /// <see cref="OwnedSessionEffect.WorkIsRunning"/> here has two clauses and neither is redundant:</para>
 /// <code>
 /// Live  =  a firing is on the clock  &amp;&amp;  the OS reports an active render session for this process

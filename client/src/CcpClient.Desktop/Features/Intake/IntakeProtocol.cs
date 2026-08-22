@@ -3,8 +3,8 @@ using System.Text.Json;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: protocol v1 of the Graded Intake page↔host bridge — the FULL typed vocabulary,
-/// C#-pinned per SP-050's obligation table (web-core host surface: MSGS + WIN/STORES).
+/// Protocol v1 of the Graded Intake page↔host bridge — the FULL typed vocabulary,
+/// C#-pinned per the audit's obligation table (web-core host surface: MSGS + WIN/STORES).
 /// Every type maps to a payload send/handler site (web-shim.js, boot.js, ui/fullscreen.js)
 /// or a WPF host site (IntakeHostService.cs) — nothing invented.
 ///

@@ -35,7 +35,7 @@ public static class DtrhRanks
 /// <summary>
 /// The meta-progression engine (b4; dtrh-admission.md §7) — the greenfield port of WPF
 /// DtrhMetaBridge + the payout/request-run halves of DtrhHostService, riding the b2 slot
-/// documents on SP-005 machinery (NO parallel save file, NO schema bump — packet honesty
+/// documents on persistence machinery (NO parallel save file, NO schema bump — packet honesty
 /// framing a). The page holds a read snapshot (rev-numbered) and sends COMMANDS; every op
 /// is shape-validated here, applied through the slot store (atomic, journaled,
 /// quarantine-honest), debounce-saved, and answered with a fresh snapshot.
@@ -44,8 +44,8 @@ public static class DtrhRanks
 /// logged + ignored, economy ops can't drive a balance negative, seen-flags are one-way.
 /// Test mode (--dtrh-m2test) operates on a state held in memory — WPF persists the
 /// clone to chaos_meta.test.json but NOTHING ever reads it back (DtrhMetaBridge.cs:427-444),
-/// so the greenfield keeps the clone memory-only (recorded in SP-026 record Step 1).
-/// SP-057: the in-memory state starts from the DECLARED fixture
+/// so the greenfield keeps the clone memory-only (recorded in the packet record Step 1).
+/// The in-memory state starts from the DECLARED fixture
 /// (<see cref="DtrhM2TestFixture"/>) — never a clone of the live slot document.
 /// </summary>
 public sealed class DtrhMeta
@@ -215,10 +215,10 @@ public sealed class DtrhMeta
         _testMode = testMode;
         if (testMode)
         {
-            // SP-057: the test clone starts from the DECLARED fixture (the committed
+            // The test clone starts from the DECLARED fixture (the committed
             // sentinel document, or an explicit test-supplied document) — NEVER the live
             // slot store. The old deep-clone of slotStore.Current let evidence inherit
-            // the owner's real profile (SP-052 Run B's confidently-wrong dealt 7200/True).
+            // the owner's real profile (Run B's confidently-wrong dealt 7200/True).
             // Memory-only: WPF's test file is write-only. A malformed committed fixture
             // throws typed (DtrhM2TestFixtureException) — no live-doc fallback exists.
             _testState = testFixture ?? DtrhM2TestFixture.Load();
@@ -982,7 +982,7 @@ public sealed class DtrhMeta
 
         try
         {
-            _ = _slotStore.Save(); // SP-005 serialized enqueue — never blocks the dispatcher
+            _ = _slotStore.Save(); // serialized enqueue — never blocks the dispatcher
         }
         catch (Exception ex)
         {

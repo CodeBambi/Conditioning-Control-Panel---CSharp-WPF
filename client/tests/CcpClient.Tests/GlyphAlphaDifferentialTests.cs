@@ -3,7 +3,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-115's central evidence: <b>the composited desktop, read back over a KNOWN background</b>.
+/// This capability's central evidence: <b>the composited desktop, read back over a KNOWN background</b>.
 ///
 /// <para><b>Why a window read-back is not enough, stated as the reason this file exists.</b>
 /// <see cref="GlyphCapabilityTests"/> proves the operating system's own copy of the surface carries
@@ -16,11 +16,11 @@ namespace CcpClient.Tests;
 /// <para><b>So the distinction is made where it exists: on the screen.</b> A known opaque background
 /// goes up (the LANDED overlay capability, consumed unmodified, holding one colour its own
 /// read-back confirms), the glyph surface is composited over it, and the COMPOSITED DESKTOP is read
-/// through SP-100's <see cref="FlashPixelProbe"/>. Five points, twice — once with the surface up and
+/// through the <see cref="FlashPixelProbe"/>. Five points, twice — once with the surface up and
 /// once with it hidden — and the pair is the fact.</para>
 ///
 /// <para><b>The occlusion arbitration is why any of these pixels can be attributed at all.</b>
-/// SP-113's review recorded that the four-disjoint-rectangles argument does not scale past four
+/// An earlier review recorded that the four-disjoint-rectangles argument does not scale past four
 /// surfaces; this capability's evidence cannot use disjointness AT ALL, because the overlap IS the
 /// evidence. So ownership is measured, not assumed: every visible window strictly between the two in
 /// the OS's own z-order is fetched and tested for intersection with the sampled area, and the pair
@@ -41,7 +41,7 @@ public class GlyphAlphaDifferentialTests
     [Fact]
     public void BOTHSURFACESREALLYREACHEDTHEDESKTOP_OrEveryPixelBelowIsAReadingOfSomethingElse()
     {
-        // The positive control, and the same role SP-099's middle leg plays: without it, "the
+        // The positive control, and the same role the overlay's middle leg plays: without it, "the
         // background shows through the transparent quadrant" is equally true of a run in which
         // neither window ever appeared.
         var run = GlyphSurfaceObservations.Differential;
@@ -62,7 +62,7 @@ public class GlyphAlphaDifferentialTests
             "a foreign window owns part of the sampled area after "
             + $"{GlyphSurfaceObservations.ArbitrationAttempts} bounded re-raises, so the pixels this run reads "
             + $"belong to it rather than to the two surfaces this run put there. {run.Why}. This is NOT a flake "
-            + "to be retried away: it is the residue the port has recorded since SP-099, and on this machine "
+            + "to be retried away: it is the residue the port has recorded since the overlay landed, and on this machine "
             + "the intruder is usually the shipping WPF product re-asserting HWND_TOPMOST on a cadence "
             + "(Services/Flash/FlashService.cs:206-243)");
     }

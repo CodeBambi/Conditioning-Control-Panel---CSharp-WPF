@@ -204,3 +204,7 @@ package-lock.json
 # describes explicit screenshots; topics.json describes unannounced features. Media is large
 # and some of it is suggestive. Nothing in here belongs on GitHub.
 marketing/
+
+# Agent session transcript dumps. Two 4,328-line ones were committed to the repo root by an
+# unrelated feature commit and lived there unnoticed; they are working residue, never product.
+pi-session-*.html

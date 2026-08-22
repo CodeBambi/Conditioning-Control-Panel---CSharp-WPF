@@ -134,7 +134,7 @@
           </Border>
         </Border>
 
-        <!-- SP-097 — THE FAILURE SURFACE, and it is deliberately NOT the band above.
+        <!-- THE FAILURE SURFACE, and it is deliberately NOT the band above.
 
              WPF wraps the whole DTRH handler and shows a blocking MessageBox titled "Down the
              Rabbit Hole" reading "Couldn't start Down the Rabbit Hole:" plus the exception message,
@@ -190,7 +190,7 @@
       </Panel>
     </Border>
 
-    <!-- SP-130 - THE GOON DOOR. Upstream's Goon card sits on this same tab
+    <!-- THE GOON DOOR. Upstream's Goon card sits on this same tab
          (Views/Tabs/PlayTabView.xaml:550, opened by BtnStartGoon_Click at
          MainWindow/MainWindow.Lab.cs:198) and carries NO lock band, because joining is free by
          design: ":547-549" says the two paid rungs are named in a sub-line, "never a padlock

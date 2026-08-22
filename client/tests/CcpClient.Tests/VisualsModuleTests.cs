@@ -10,12 +10,12 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-117 — the <b>Visuals</b> row: WPF's sixth EFFECTS entry
+/// The <b>Visuals</b> row: WPF's sixth EFFECTS entry
 /// (<c>Views/Tabs/StudioTabView.xaml.cs:496</c>) and the only row in the rack that is not a module.
 ///
 /// <para><b>What these facts are actually about.</b> Not "a new module runs" — there is no module.
 /// They are about three numbers that were <c>const</c> inside <see cref="FlashSurfacePresenter"/>
-/// from SP-100 to SP-117 becoming the user's, reaching the operating system's own placement request,
+/// until this row landed and are now the user's, reaching the operating system's own placement request,
 /// and doing it on upstream's schedule: once per flash, applied to every surface of that flash.</para>
 ///
 /// <para><b>Nothing here claims a human saw a flash at any size or opacity.</b> Every measurement is
@@ -469,7 +469,7 @@ public class VisualsModuleTests
             StringComparison.Ordinal);
 
         // A refusal is quoted VERBATIM, reason detail and all, exactly as every other module panel
-        // quotes its own surface — the rule SP-100 set after this page asserted a platform instead.
+        // quotes its own surface — the rule set after this page asserted a platform instead.
         var refused = VisualsPanelNotices.DescribeSurface(
             new CapabilityState.Unavailable(
                 new CapabilityReason("overlay-unavailable", "no overlay backend on this build")));
@@ -516,7 +516,7 @@ public class VisualsModuleTests
     [Fact]
     public async Task THEBOUNCINGTEXTDIALSSurviveARestartToo_AndBeforeSp117TheyDidNot()
     {
-        // NOT this packet's module, and that is why it is here. SP-115 built
+        // NOT this packet's module, and that is why it is here. A later wave built
         // _bouncingTextPreset and left it out of ALL FOUR of SessionParticipant's store lists —
         // StartAsync, LogIfDegraded, StopAsync and FlushAsync. PersistenceStore.Load runs only from
         // StartAsync, so the document was never read from disk and never written to it: every dial
@@ -550,7 +550,7 @@ public class VisualsModuleTests
     [Fact]
     public async Task THECOMPOSITIONROOTReallyHandsTheDialsToTheProductPresenter()
     {
-        // SP-117's sweep survivor M-at, closed, and it was the most load-bearing hole in the packet:
+        // Sweep survivor M-at, closed, and it was the most load-bearing hole in the packet:
         // every other fact drives a presenter this test built, so dropping `draw: Visuals.Draw` from
         // SessionParticipant left every dial correct in isolation and inert in the product.
         //
@@ -701,7 +701,7 @@ public class VisualsModuleTests
         public List<OverlaySurfaceRequest> AllRequests { get; } = [];
 
         /// <summary>The reading this rig hands out, or null to leave the presenter on its
-        /// defaults — the pre-SP-117 composition.</summary>
+        /// defaults — the composition before this row.</summary>
         public FlashDraw? Draw { get; set; }
 
         /// <summary>An explicit supplier, for the facts that drive a REAL VisualsDials.</summary>
@@ -827,7 +827,7 @@ public class VisualsModuleTests
         }
     }
 
-    /// <summary>The manual clock, SP-098's shape. Zero wall-clock.</summary>
+    /// <summary>The manual clock, the session spine's shape. Zero wall-clock.</summary>
     private sealed class ManualSessionClock : ISessionClock
     {
         private readonly List<Entry> _timers = [];

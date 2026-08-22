@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// Pipeline wiring tests for the moderation boundary (SP-038 slice c3; contract §7;
+/// Pipeline wiring tests for the moderation boundary (slice c3; contract §7;
 /// admission §3). Proves the boundary is LIVE in the real pipeline: input at admission
 /// (post provider-admission, pre-send — zero network on blocked paths), output inside the
 /// owned operation before application, typed refusal surfacing per operation class

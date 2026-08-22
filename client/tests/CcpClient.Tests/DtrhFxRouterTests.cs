@@ -6,9 +6,9 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-025 slice b3: the protocol upgrade — every b3-owned message dispatches to the REAL
+/// Slice b3: the protocol upgrade — every b3-owned message dispatches to the REAL
 /// effect seam (recording fakes, never the real backends); ordering + idempotency; bark +
-/// b5 deferrals unchanged. SP-026 slice b4: the b4 messages are now Handled; the
+/// b5 deferrals unchanged. Slice b4: the b4 messages are now Handled; the
 /// run-boundary hygiene rides the SAME router entry, invoked FIRST inside the real
 /// run-started/run-ended handlers (WPF :513/:259 order).
 /// </summary>
@@ -32,7 +32,7 @@ public sealed class DtrhFxRouterTests : IDisposable
     {
         var audio = new FakeAudio();
         var video = new FakeVideo();
-        // SP-045 (the SP-043 class-wide pattern, closing the SP-043 §7 item 4 discovery):
+        // The class-wide manual-clock pattern, closing the §7 item 4 discovery:
         // inject a ManualClock so no test in this file arms a real System.Threading.Timer —
         // the fire-payload 15s segment-cap timer is captured, never run on a pool thread.
         var clock = new ManualClock();
@@ -60,18 +60,18 @@ public sealed class DtrhFxRouterTests : IDisposable
     [Fact]
     public void Bark_NowHandled_B4AndB5AlsoHandled()
     {
-        // SP-032 q2: the bark message upgraded Deferred → Handled (content pipeline on q1's
+        // Q2: the bark message upgraded Deferred → Handled (content pipeline on q1's
         // arbitration owns it; routed in the host window).
         Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
             DtrhProtocol.Classify(Parse("{\"type\":\"bark\",\"event\":\"wave-cleared\"}")));
-        // SP-026: the b4 messages upgraded Deferred → Handled (real meta/payout/loom effects).
+        // The b4 messages upgraded Deferred → Handled (real meta/payout/loom effects).
         Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
             DtrhProtocol.Classify(Parse("{\"type\":\"run-started\",\"difficulty\":\"Gentle\"}")));
         Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
             DtrhProtocol.Classify(Parse("{\"type\":\"meta-command\",\"op\":\"add-gold\"}")));
         Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
             DtrhProtocol.Classify(Parse("{\"type\":\"run-ended\",\"score\":1,\"durationSec\":1}")));
-        // SP-027: the b5 messages upgraded Deferred → Handled (exit flow + watchdog).
+        // The b5 messages upgraded Deferred → Handled (exit flow + watchdog).
         Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
             DtrhProtocol.Classify(Parse("{\"type\":\"pong\",\"t\":1}")));
         Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(
@@ -118,7 +118,7 @@ public sealed class DtrhFxRouterTests : IDisposable
         Assert.False(fx.WorldFrozen);
         Assert.False(fx.VnSpeaking);
         Assert.Equal([true, false], video.PauseCalls);
-        // …and b4 (SP-026) the message itself is Handled — the SAME hygiene entry now
+        // …and in b4 the message itself is Handled — the SAME hygiene entry now
         // runs FIRST inside the real run-started/run-ended handlers (WPF :513/:259 order).
         Assert.IsType<DtrhProtocol.DtrhDispatchClass.Handled>(DtrhProtocol.Classify(msg));
 
@@ -141,8 +141,8 @@ public sealed class DtrhFxRouterTests : IDisposable
 
     // ---------- fakes (minimal — the effects-core suite covers the deep semantics) ----------
 
-    /// <summary>Manual <see cref="ISoundClock"/> (SP-043; the SoundArbitrationTests.cs:551
-    /// pattern, copied file-local per the SP-043 convention): Schedule captures due+fire,
+    /// <summary>Manual <see cref="ISoundClock"/> (the SoundArbitrationTests.cs:551
+    /// pattern, copied file-local per convention): Schedule captures due+fire,
     /// Advance fires due timers in due order, Dispose cancels. Zero wall-clock.</summary>
     private sealed class ManualClock : ISoundClock
     {

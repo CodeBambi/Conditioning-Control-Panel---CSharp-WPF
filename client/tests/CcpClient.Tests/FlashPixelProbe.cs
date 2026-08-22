@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-100's independent PIXEL instrument. <see cref="OverlayWindowProbe"/> asks the window manager
+/// The independent PIXEL instrument. <see cref="OverlayWindowProbe"/> asks the window manager
 /// about a surface's STATE; this one asks the operating system what the surface, and the desktop,
 /// actually contain.
 ///
@@ -18,7 +18,7 @@ namespace CcpClient.Tests;
 /// <para><b>The DPI trap, measured.</b> The test host is DPI-UNAWARE, so USER32 virtualises window
 /// coordinates (this machine: 1646x1029) while the screen device context is physical (2880x1800).
 /// Reading the desktop at a window's own coordinates therefore samples the WRONG POINT and reports
-/// whatever is behind the surface — which, while SP-100 was being written, made a perfectly visible
+/// whatever is behind the surface — which, while this instrument was being written, made a perfectly visible
 /// surface look invisible for four measurement rounds. The ratio is derived from the OS itself
 /// (<c>DESKTOPHORZRES / HORZRES</c>) and the derivation is asserted, never assumed.</para>
 ///
@@ -90,7 +90,7 @@ internal static class FlashPixelProbe
     /// a measurement rather than a preference: <c>PW_RENDERFULLCONTENT</c> goes through DWM
     /// asynchronously and returned an all-black bitmap on the FIRST call after a show while the
     /// legacy path returned the painted content every time, at three different layered alphas
-    /// (SP-100 record §1). A read-back that needs a wall-clock wait to be right is not usable in
+    /// (record §1). A read-back that needs a wall-clock wait to be right is not usable in
     /// this suite at all.</para>
     /// </summary>
     /// <returns>A width*height array of <c>COLORREF</c> values, or an empty array when the OS
@@ -119,7 +119,7 @@ internal static class FlashPixelProbe
     }
 
     /// <summary>
-    /// SP-116. The result of the last compositor fence this probe took, as an <c>HRESULT</c>:
+    /// The result of the last compositor fence this probe took, as an <c>HRESULT</c>:
     /// <c>0</c> is <c>S_OK</c>, <see cref="FenceNotTaken"/> means no read has happened yet or the
     /// fence has been REMOVED from <see cref="CaptureDesktop"/>, and anything else is DWM refusing
     /// (<c>DWM_E_COMPOSITIONDISABLED</c> on a session with no compositor).
@@ -147,7 +147,7 @@ internal static class FlashPixelProbe
     /// The composited desktop, at a rectangle given in the CALLER's (possibly virtualised) window
     /// coordinate space, mapped to the screen device context's own space through the OS's ratio.
     ///
-    /// <para><b>SP-116 — THE ORDERING EDGE, AND THE WHOLE OF SP-107's §4 RESIDUE.</b> Between "this
+    /// <para><b>THE ORDERING EDGE, AND THE WHOLE OF THE EARLIER §4 RESIDUE.</b> Between "this
     /// process showed and painted a layered top-most window" and "this process read the screen"
     /// there was no happens-before edge of any kind. The window can be visible, top-most, owner of
     /// its own centre point by <c>WindowFromPoint</c>, and holding the painted bits in its own
@@ -168,7 +168,7 @@ internal static class FlashPixelProbe
     /// edge on the producer's own completion, the pixel-world twin of awaiting a task, and it
     /// carries no deadline this suite chose. Nothing is re-read, nothing is re-asserted, and no
     /// assertion moved: every fact downstream still gets exactly one screen read and must be
-    /// exactly right about it. SP-100 §1 measured that an immediate <c>CAPTUREBLT</c> already
+    /// exactly right about it. An earlier §1 measured that an immediate <c>CAPTUREBLT</c> already
     /// carries the painted pixel; that measurement was taken on an IDLE machine and the numbers
     /// above are what it costs under load, which is the state a floor run is always in.</para>
     /// </summary>
@@ -436,7 +436,7 @@ internal static class FlashPixelProbe
     [DllImport("gdi32.dll")]
     private static extern int GetDeviceCaps(nint dc, int index);
 
-    /// <summary>SP-116. "Issues a flush call that blocks the caller until the next present, when
+    /// <summary>"Issues a flush call that blocks the caller until the next present, when
     /// all of the DirectX surface updates that are currently outstanding have been made."</summary>
     [DllImport("dwmapi.dll")]
     private static extern int DwmFlush();

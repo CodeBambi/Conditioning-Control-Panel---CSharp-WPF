@@ -10,8 +10,8 @@ namespace CcpClient.Desktop.Effects;
 /// (<c>Views/Tabs/StudioTabView.xaml.cs:493-494</c>), and <b>the first CONTINUOUS module in the
 /// port</b>.
 ///
-/// <para><b>Why this module exists (SP-105), and what it was built to find out.</b> The session
-/// spine had two implementations and both of them were TIMED. SP-101's own template verdict named
+/// <para><b>Why this module exists, and what it was built to find out.</b> The session
+/// spine had two implementations and both of them were TIMED. The shared body's own template verdict named
 /// the untested axis: a continuous effect is what shows whether <see cref="ISessionEffect"/> is
 /// genuinely a spine or whether the spine had quietly been assumed to be a scheduler. WPF drives
 /// this module and Spiral Overlay with <b>no timer at all</b> — the quick-toggle is

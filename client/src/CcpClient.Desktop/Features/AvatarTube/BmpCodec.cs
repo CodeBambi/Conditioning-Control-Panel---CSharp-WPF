@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Features.AvatarTube;
 /// <summary>
 /// Minimal 32/24-bpp BMP codec — pure C#, no platform, no packages. BMP is the
 /// cross-platform capture/asset format in this project's evidence flow (XGetImage on
-/// WSLg emits BMP, CopyFromScreen saves BMP; SP-013 precedent). Keeping the pack sheets
+/// WSLg emits BMP, CopyFromScreen saves BMP; demonstrator precedent). Keeping the pack sheets
 /// as BMP means the generator, the pack loader, and the evidence strip-decode all share
 /// one dependency-free codec, and unit tests never need a Skia platform.
 /// </summary>

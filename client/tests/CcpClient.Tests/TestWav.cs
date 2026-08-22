@@ -2,7 +2,7 @@ namespace CcpClient.Tests;
 
 /// <summary>
 /// A real, decodable WAV on disk, generated rather than committed — the audio counterpart of
-/// <see cref="TestPng"/>. Deliberately NOT silence: the whole point of SP-109's evidence chain is
+/// <see cref="TestPng"/>. Deliberately NOT silence: the whole point of the audio evidence chain is
 /// that the OS's own peak meter reads back a non-zero sample level, and a silent asset would make
 /// that fact pass vacuously (peak 0 == peak 0).
 /// </summary>

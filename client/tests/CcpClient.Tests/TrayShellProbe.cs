@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-093's independent effect instrument: it asks the Windows SHELL whether a notification-area
+/// An independent effect instrument: it asks the Windows SHELL whether a notification-area
 /// icon exists, without asking the product.
 ///
 /// <para><b>Why it re-declares every P/Invoke instead of using the product's interop.</b> This is
@@ -70,7 +70,7 @@ internal static class TrayShellProbe
 
     internal static bool WindowStillExists(nint window) => WindowsHost && window != 0 && IsWindow(window);
 
-    // ---------- SP-096: the menu oracle ----------
+    // ---------- The menu oracle ----------
 
     /// <summary>
     /// What USER32 says a popup menu contains, read through this file's OWN declarations — a second

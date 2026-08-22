@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// SP-054: the QuizRunResult the intake page emits on `quiz-result` (the whole point of the
+/// The QuizRunResult the intake page emits on `quiz-result` (the whole point of the
 /// bridge — web-shim.js:188-190, contracts.js emptyResult :655-674). JSON member names match
 /// the payload's camelCase exactly. Ported from the READ-ONLY WPF evidence
 /// (Models/QuizRunResult.cs:18-53) as plain deserialization models.
@@ -121,23 +121,23 @@ public sealed class IntakeQuizAnswer
 }
 
 /// <summary>
-/// SP-058: the graded-run verdict (#870) — the v6.7.x delta's host obligation, ported as a
+/// The graded-run verdict (#870) — the v6.7.x delta's host obligation, ported as a
 /// COMPUTED verdict. Upstream emits <c>QuizService.RaiseQuizCompleted(
 /// (int)Round(TotalScore), passed: true, perfect: MaxScore > 0 && pct >= TopMarksPercent,
 /// category: niche)</c> to the GamificationBridge (IntakeHostService.cs:431-435) and loops
 /// <c>App.Quests?.TrackMantraCompleted()</c> min(affirmed, 5) times (:451-453).
 ///
-/// <para>SP-128: the achievement half is NO LONGER A SEAM — <see cref="Record"/> feeds the
+/// <para>The achievement half is NO LONGER A SEAM — <see cref="Record"/> feeds the
 /// verdict to <see cref="Progression.GradedRunAwards"/>, which awards <c>top_of_the_class</c>
 /// and <c>honor_roll</c> at upstream's thresholds (GamificationBridge.cs:598-609). The QUEST
 /// half is still a typed seam (no quest verifier in this port), and held_back is deliberately
 /// unwired upstream too (an intake has no fail state; passed is always true — :433).</para>
 ///
-/// <para><b>CITATIONS REPAIRED AT SP-128.</b> Every bare <c>:NNN</c> below resolves against
+/// <para><b>CITATIONS REPAIRED.</b> Every bare <c>:NNN</c> below resolves against
 /// <c>Services/Quiz/IntakeHostService.cs</c>, and all seven were wrong: four were wrong the day
 /// they were written (D223 recorded two of them) and three drifted when <c>f7b4c317c</c>
 /// (<i>"feat(media): remote media app-wide"</i>) added 106 lines to that file — the ONLY commit
-/// to touch it since SP-058's stated baseline <c>0c9947a6</c>. The worst was the category
+/// to touch it since the stated baseline <c>0c9947a6</c>. The worst was the category
 /// citation, which pointed at the <c>held_back</c> comment, i.e. the semantic opposite of what
 /// it claimed. Re-derived against the bytes at <c>71ab1bac2</c>; see D232.</para>
 /// </summary>
@@ -174,7 +174,7 @@ public static class IntakeGraded
         Math.Min(run.AffirmedMantras?.Count ?? 0, 5);
 
     /// <summary>
-    /// SP-128: hand this run's verdict to the award consumer — the port's stand-in for
+    /// Hand this run's verdict to the award consumer — the port's stand-in for
     /// <c>QuizService.RaiseQuizCompleted</c> (:431-435) reaching
     /// <c>GamificationBridge.OnQuizCompleted</c> (GamificationBridge.cs:578).
     ///

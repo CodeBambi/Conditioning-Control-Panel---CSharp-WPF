@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-061: the tunnel backdrop window's declared policy (unit level, where the API allows —
+/// The tunnel backdrop window's declared policy (unit level, where the API allows —
 /// the headed run owns pixels, z-order, and activation proofs): opaque black, borderless,
 /// non-topmost, non-activating, non-focusable, no taskbar, no resize. The webview surface is
 /// never attached here (that is the headed evidence's job).

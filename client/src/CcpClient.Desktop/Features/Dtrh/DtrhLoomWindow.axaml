@@ -5,7 +5,7 @@
         Width="1200" Height="800"
         Background="#0b0b16">
   <!--
-    SP-049 THE LOOM studio shell (WPF LoomHostService parity — a plain titled window,
+    THE LOOM studio shell (WPF LoomHostService parity — a plain titled window,
     "the user closes it with X, not a page exit protocol", LoomHostService.cs:78-83).
     1200x800: below 980px wide loom.html stacks the studio-split into one column — the
     two-pane grid + rack filmstrip need the width (pre-approach consult binding 5d).
@@ -22,7 +22,7 @@
                    Text="The Loom: honest unsupported" />
         <TextBlock x:Name="UnsupportedDetail" Foreground="#c8c8dd" TextWrapping="Wrap" />
       </StackPanel>
-      <!-- NativeWebView is created PROGRAMMATICALLY on the embedded path only (SP-011 L4 —
+      <!-- NativeWebView is created PROGRAMMATICALLY on the embedded path only (spike L4 —
            in the tree it starts its adapter whenever the window shows). -->
       <Panel x:Name="WebHost" />
     </Panel>

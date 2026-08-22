@@ -5,7 +5,7 @@ using CcpClient.Desktop.Lifecycle;
 namespace CcpClient.Desktop.Features.Chaos;
 
 /// <summary>
-/// The tunnel payload's §4-discipline loopback origin (SP-023 record Step 1 design item 5,
+/// The tunnel payload's §4-discipline loopback origin (the packet record Step 1 design item 5,
 /// approved-by-decree contract class — the DTRH `LoopbackServer` is NOT reused: its
 /// /dtrh/+/media/+/bridge/ route table and inbox are DTRH-shaped, and the intake-style
 /// overlay borrow would expose the whole payload/ parent; pre-approach consult ruling 1).
@@ -56,7 +56,7 @@ public sealed class ChaosTunnelLoopback : IDisposable
     public void Start()
     {
         // §4.1 ephemeral-port retry loop (LoopbackServer.cs:123-148): a FAILED
-        // HttpListener.Start() DISPOSES the instance (SP-023 surprise #1) — every attempt
+        // HttpListener.Start() DISPOSES the instance (recorded surprise #1) — every attempt
         // uses a FRESH listener; the 49152–65535 range IS the OS dynamic client range, so
         // collisions are real and the retry loop must actually work.
         Exception? first = null;
@@ -102,7 +102,7 @@ public sealed class ChaosTunnelLoopback : IDisposable
                 {
                     // Client went away mid-response (renderer stall/teardown race) — never a fault.
                 }
-                // SP-085 Step 3: TYPE ONLY, never ex.Message. This is the SAME sink the
+                // TYPE ONLY, never ex.Message. This is the SAME sink the
                 // route-class discipline governs, and exception messages carry filesystem
                 // paths. Verified, not recalled: UnauthorizedAccessException is NOT an
                 // IOException (chain: UnauthorizedAccessException -> SystemException ->
@@ -128,7 +128,7 @@ public sealed class ChaosTunnelLoopback : IDisposable
 
         if (path == "/health")
         {
-            // SP-085 ordering invariant (see the payload path below for the full reasoning):
+            // The ordering invariant (see the payload path below for the full reasoning):
             // the route-class line is emitted BEFORE any byte of the response can leave the
             // process, exactly as Refuse has always done.
             _log("chaos-tunnel-loopback: GET /health -> 200");
@@ -180,7 +180,7 @@ public sealed class ChaosTunnelLoopback : IDisposable
         res.ContentType = contentType;
         res.Headers["X-Content-Type-Options"] = "nosniff";
         res.ContentLength64 = bytes.Length;
-        // SP-085 ORDERING INVARIANT: every route-class line is emitted before any byte of the
+        // ORDERING INVARIANT: every route-class line is emitted before any byte of the
         // corresponding response can leave the process. Logging AFTER the write made the line
         // observable strictly later than the response itself, so a client that had already read
         // a body could snapshot a sink the line had not reached yet — reproduced at 1 red in
@@ -190,7 +190,7 @@ public sealed class ChaosTunnelLoopback : IDisposable
         //
         // The line stays an AUDIT RECORD OF WHAT THE SERVER DECIDED TO SERVE, which is what
         // Refuse already treats it as and what a privacy boundary wants: record the decision,
-        // then act. Two consequences are ACCEPTED here, not denied (SP-085 record §2, §6, §9):
+        // then act. Two consequences are ACCEPTED here, not denied (the packet record §2, §6, §9):
         //   1. A write that faults afterwards because the CLIENT WENT AWAY is swallowed in
         //      silence — the client-went-away filter at the top of the accept loop has an
         //      empty body and emits no line — so this line can stand alone for a response
@@ -256,7 +256,7 @@ public sealed class ChaosTunnelLoopback : IDisposable
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _stopped, 1) != 0) return; // idempotent teardown (SP-003 discipline)
+        if (Interlocked.Exchange(ref _stopped, 1) != 0) return; // idempotent teardown (lifecycle discipline)
         _cts.Cancel();
         try { _listener?.Stop(); } catch { /* best effort */ }
         try { _listener?.Close(); } catch { /* best effort */ }

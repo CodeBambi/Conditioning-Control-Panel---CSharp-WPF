@@ -5,7 +5,7 @@ namespace CcpClient.Desktop.Companion;
 
 /// <summary>
 /// The companion state document (schema v1) — disabled/muted phrase ids, persisted
-/// one-shot latches, and per-rule variant rotation. Persisted ONLY through the SP-005
+/// one-shot latches, and per-rule variant rotation. Persisted ONLY through the persistence
 /// machinery (<see cref="CcpClient.Desktop.Persistence.PersistenceStore{TModel}"/>):
 /// schema-versioned, atomic writes, corruption quarantine with typed Degraded — never a
 /// parallel settings file (packet framing c). WPF parity: AppSettings.DisabledPhraseIds

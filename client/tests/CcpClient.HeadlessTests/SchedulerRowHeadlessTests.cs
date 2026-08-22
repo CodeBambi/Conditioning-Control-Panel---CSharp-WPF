@@ -17,7 +17,7 @@ using Xunit;
 namespace CcpClient.HeadlessTests;
 
 /// <summary>
-/// SP-118 — the Scheduler rack row, driven by REAL headless input on the REAL controls, from a
+/// The Scheduler rack row, driven by REAL headless input on the REAL controls, from a
 /// cold composition-root boot with no command-line arguments.
 ///
 /// <para><b>The user story under test is the one the port did not have: the app starts a session by
@@ -371,7 +371,7 @@ public class SchedulerRowHeadlessTests
     [AvaloniaFact]
     public async Task PressingTheShellsSTOPButtonInsideTheWindow_StopsItComingBack()
     {
-        // THE HARM TEST, through the real button. SP-110 shipped a card the user could not dismiss
+        // THE HARM TEST, through the real button. An earlier wave shipped a card the user could not dismiss
         // and a reviewer caught it; the same class here is larger — a session the user stops that
         // restarts itself thirty seconds later, for six hours. The latch is written by the shell's
         // click handler (Views/MainWindow.axaml.cs), which is WPF's own order at

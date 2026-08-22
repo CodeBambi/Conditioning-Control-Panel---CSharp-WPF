@@ -7,7 +7,7 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// What the DTRH door decided. Three cases, and the two refusals are DIFFERENT TYPES rather
 /// than one refusal carrying a flag — because a flag is the thing a caller forgets to read.
 ///
-/// <para>SP-092 landed the typed <see cref="EntitlementOutcome"/> precisely so "you are not a
+/// <para>The typed <see cref="EntitlementOutcome"/> exists precisely so "you are not a
 /// patron" and "I could not tell" could not collapse into each other. The UI is where that
 /// distinction dies, because both look like "no" on a card. This type carries the distinction
 /// all the way to the surface that renders it.</para>
@@ -137,7 +137,7 @@ public static class DtrhGate
             // account, so it is the same refusal WPF gives a tier-1 patron — never "unknown".
             // An UNDEFINED tier is neither: `>=` on a raw enum would open the door for
             // (EntitlementTier)99, so the comparison never runs on a value this build does not
-            // define. HostLoginEntitlement closes the same hole at the source (SP-094); this is
+            // define. HostLoginEntitlement closes the same hole at the source; this is
             // the second guard, on the only direction where a mistake hands out paid content.
             tier => !Enum.IsDefined(tier)
                 ? new DtrhGateDecision.RefusedUnverified(

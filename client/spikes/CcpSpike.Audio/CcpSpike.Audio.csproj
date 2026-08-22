@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    SP-017 quarantined audio-backend spike host. NOT referenced by client/CcpClient.sln.
+    Quarantined audio-backend spike host. NOT referenced by client/CcpClient.sln.
     Inherits client/Directory.Build.props (single <Version> authority) — nothing else.
     Console host: acceptance is backend-event-verified probe evidence, not a test project.
     Package admission verified on 2026-07-21: SoundFlow primary, Silk.NET.OpenAL secondary,

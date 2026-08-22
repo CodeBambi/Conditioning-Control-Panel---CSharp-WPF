@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-120 — the pin under <c>client/docs/haptic-limb-census.md</c>.
+/// The pin under <c>client/docs/haptic-limb-census.md</c>.
 ///
 /// <para><b>Why this exists.</b> The enumeration of upstream haptic command sites has been corrected
 /// three times (8 → 13 → 14 → 18) and every correction came from WIDENING THE SEARCH, never from
@@ -551,18 +551,12 @@ public sealed class HapticSiteCensusTests
         var violations = new List<string>();
         var service = Path.Combine(wpfRoot, "Services", "Haptics", "HapticService.cs");
         var patterns = Path.Combine(wpfRoot, "Services", "Haptics", "Core", "HapticPatterns.cs");
-        Require(service, 817, "~2s", violations);
-        Require(service, 838, "i < 8", violations);
-        Require(service, 840, "Math.Pow(0.7, i)", violations);
-        Require(service, 842, "250", violations);
-        Require(service, 843, "i * 450", violations);
-        Require(patterns, 36, "MinFeltOnMs = 130", violations);
-        Require(patterns, 40, "MinFeltDurationMs = 200", violations);
+        foreach (var pin in LadderPins) Require(service, pin.Line, pin.Needle, violations);
+        foreach (var pin in PatternsPins.Take(2)) Require(patterns, pin.Line, pin.Needle, violations);
         // The ENVELOPE arithmetic, not only the loop's constants. RenderedRungMs below reproduces
         // Render's Constant arm, and D205's 3503 ms is that reproduction; without these two the
         // arm could change and leave the number wrong with the fact still green.
-        Require(patterns, 126, "Math.Clamp(durationMs / 6, 10, 60)", violations);
-        Require(patterns, 127, "Math.Clamp(durationMs / 4, 30, 150)", violations);
+        foreach (var pin in PatternsPins.Skip(2)) Require(patterns, pin.Line, pin.Needle, violations);
         return violations;
     }
 
@@ -774,9 +768,9 @@ public sealed class HapticSiteCensusTests
         repo.Write("ConditioningControlPanel/Services/Subliminal/SubliminalService.cs",
             "// nor here" + Environment.NewLine);
         repo.Write("ConditioningControlPanel/Services/Haptics/HapticService.cs", string.Join(Environment.NewLine,
-            Enumerable.Range(1, 845).Select(LadderFixtureLine)));
+            Enumerable.Range(1, LadderPins.Max(p => p.Line) + 2).Select(LadderFixtureLine)));
         repo.Write("ConditioningControlPanel/Services/Haptics/Core/HapticPatterns.cs", string.Join(Environment.NewLine,
-            Enumerable.Range(1, 130).Select(PatternsFixtureLine)));
+            Enumerable.Range(1, PatternsPins.Max(p => p.Line) + 2).Select(PatternsFixtureLine)));
         repo.Write("client/src/CcpClient.Desktop/Effects/FlashSurfacePresenter.cs", string.Join(Environment.NewLine, new string[]
         {
             "class FlashSurfacePresenter",
@@ -816,22 +810,28 @@ public sealed class HapticSiteCensusTests
         }));
     }
 
-    private static string LadderFixtureLine(int number) => number switch
-    {
-        817 => "        /// <summary>Vibe that decays over ~2s. The slider sets the starting intensity;",
-        838 => "            for (int i = 0; i < 8; i++)",
-        840 => "                var intensity = Math.Max(start * Math.Pow(0.7, i), MinPerceptibleIntensity);",
-        842 => "                    HapticPatterns.Render(rule.Mode, intensity, 250, priority: 1, target: rule.Target),",
-        843 => "                    offsetMs: i * 450);",
-        _ => "        // filler",
-    };
+    /// <summary>The pinned lines, and the ONLY place they are written. The self-test fixture and
+    /// the file-length bound both derive from this table, so an upstream shift is one edit rather
+    /// than eleven numbers across three sites. Require matches by ordinal Contains, so the fixture
+    /// only has to carry the needle — Services/Haptics is not in FamilyDirectories, so nothing
+    /// reads these lines as C#.</summary>
+    private static readonly (int Line, string Needle)[] LadderPins =
+        [(817, "~2s"), (838, "i < 8"), (840, "Math.Pow(0.7, i)"), (842, "250"), (843, "i * 450")];
 
-    private static string PatternsFixtureLine(int number) => number switch
+    private static readonly (int Line, string Needle)[] PatternsPins =
+        [(36, "MinFeltOnMs = 130"), (40, "MinFeltDurationMs = 200"),
+         (126, "Math.Clamp(durationMs / 6, 10, 60)"), (127, "Math.Clamp(durationMs / 4, 30, 150)")];
+
+    private static string FixtureLine((int Line, string Needle)[] pins, int number)
     {
-        36 => "        public const int MinFeltOnMs = 130;",
-        40 => "        public const int MinFeltDurationMs = 200;",
-        126 => "                    var attack = Math.Clamp(durationMs / 6, 10, 60);",
-        127 => "                    var decay = Math.Clamp(durationMs / 4, 30, 150);",
-        _ => "        // filler",
-    };
+        foreach (var pin in pins)
+        {
+            if (pin.Line == number) return "        " + pin.Needle;
+        }
+
+        return "        // filler";
+    }
+
+    private static string LadderFixtureLine(int number) => FixtureLine(LadderPins, number);
+    private static string PatternsFixtureLine(int number) => FixtureLine(PatternsPins, number);
 }

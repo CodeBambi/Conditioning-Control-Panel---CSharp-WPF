@@ -45,7 +45,7 @@ public sealed record LabRequestRecord(
     string Outcome);         // completed | client-gone | released-after-disconnect
 
 /// <summary>
-/// Fake OpenAI-compatible loopback endpoint (SP-018 Lab pattern): POST /v1/chat/completions
+/// Fake OpenAI-compatible loopback endpoint (video-handoff spike Lab pattern): POST /v1/chat/completions
 /// only, 127.0.0.1, ephemeral port. A deterministic failure-injection control surface
 /// (in-proc mode queue) injects timeout/429/500/refusal/malformed/truncated/mid-stream-hang
 /// ON DEMAND — shapes a live model cannot produce on cue. Request bodies and auth values

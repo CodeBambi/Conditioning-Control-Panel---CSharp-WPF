@@ -9,20 +9,20 @@ namespace CcpClient.Desktop.Navigation;
 /// You / Library / The Spiral are ABSENT rather than dead. WPF's own doctrine for a door that is
 /// not open is collapse, not lock (<c>MainWindow/MainWindow.PlayTab.cs:117-125</c>).
 ///
-/// <para>SP-094 opened the Play door. SP-091 declared it absent for one reason only — DTRH is
+/// <para>The Play door is open. It was declared absent for one reason only — DTRH is
 /// Tier-2 gated in WPF (<c>MainWindow.Lab.cs:228,313</c>) and the port had no entitlement
-/// service, so the door would have handed out paid content. SP-092 landed the capability and
+/// service, so the door would have handed out paid content. The entitlement capability landed and
 /// the door now opens onto a page whose launcher is gated by it. The DTRH surface itself is
 /// still NOT a door: WPF reaches it in two hops, rail door then hero card, and the port
 /// reproduces that (<c>NavigationRouteTableTests</c> keeps "dtrh"/"rabbit" out of every door's
 /// id, label and tooltip mechanically).</para>
 ///
-/// <para>SP-095 opened the Graded Intake door — the first port door whose WPF counterpart is a
+/// <para>The Graded Intake door is open — the first port door whose WPF counterpart is a
 /// rail SUB-entry rather than a top-level medallion (<c>BtnNavGradedIntake</c>,
 /// <c>MainWindow/MainWindow.xaml:811-812</c>, tooltip <c>tab_gradedintake</c> = "Graded Intake",
 /// handler <c>MainWindow.TabNavigation.cs:947</c> = <c>ShowTab("gradedintake")</c>). The port's
 /// rail has no sub-entries, so the entry becomes a door; divergence §11 D25. The two surfaces
-/// SP-095 investigated and REFUSED a door are recorded there too: the Chaos tunnel is a backdrop
+/// that were investigated and REFUSED a door are recorded there too: the Chaos tunnel is a backdrop
 /// WPF renders under a running descent and navigates to from nowhere
 /// (<c>Chaos/ChaosTunnelService.cs:20,34</c>), and the AvatarTube demonstrator is not the ported
 /// companion surface — the Companion door already answers that question.</para>
@@ -45,7 +45,7 @@ public static class ShellRoutes
     /// <c>Views/Tabs/GradedIntakeTabView.xaml:152</c> -> <c>MainWindow.Lab.cs:108-167</c>).</summary>
     public const string Intake = "intake";
 
-    /// <summary>System: the startup trace and typed capability states (SP-003/SP-006 proofs).</summary>
+    /// <summary>System: the startup trace and typed capability states.</summary>
     public const string System = "system";
 
     /// <summary>The rail, in rail order — Play sits after Companion because that is WPF's own

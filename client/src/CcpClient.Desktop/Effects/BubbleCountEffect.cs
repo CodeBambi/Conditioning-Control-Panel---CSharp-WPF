@@ -58,11 +58,11 @@ public enum BubbleCountResolution
 /// <c>MainWindow/MainWindow.StartStop.cs:212-215</c> and stopped at <c>:340</c> with its windows
 /// force-closed at <c>:368-369</c>.
 ///
-/// <para><b>WHY THIS MODULE EXISTS IN THE PORT (SP-112): it is the first module that consumes a
+/// <para><b>WHY THIS MODULE EXISTS IN THE PORT: it is the first module that consumes a
 /// capability it did not shape — two of them.</b> Nine modules run; three capabilities landed in the
 /// three waves before this one, and each had exactly one consumer, the module that introduced it. A
 /// capability with one consumer is a capability shaped around one caller. This row plays a clip
-/// through SP-111's video capability and asks its question through SP-110's input capability, and
+/// through the shared video capability and asks its question through the shared input capability, and
 /// its compatibility is established by the capability contracts and focused tests rather than by a
 /// successful compile.</para>
 ///
@@ -292,7 +292,7 @@ public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
         RaiseChanged();
     }
 
-    /// <summary>The frequency dial. Writes and RE-PACES, the port's convention since SP-105 and
+    /// <summary>The frequency dial. Writes and RE-PACES, the port's settled convention and
     /// upstream's own <c>RefreshSchedule</c> (<c>Services/BubbleCountService.cs:735-739</c>).</summary>
     public void SetPerHour(int perHour)
     {
@@ -335,7 +335,7 @@ public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
     /// <para><b>The finding this expresses.</b> The seven meanings the dot has carried — clock,
     /// screen, change, custody, reach, demand, motion — are properties of the CAPABILITIES, not of
     /// the modules. This module consumes two capabilities and therefore inherits two meanings:
-    /// MOTION (SP-111) while its clip plays, DEMAND (SP-110) while its question is up. The third and
+    /// MOTION while its clip plays, DEMAND while its question is up. The third and
     /// fourth clauses are a phase switch between two existing facts, not a new fact about the world,
     /// so no eighth meaning is owed.</para>
     ///
@@ -494,7 +494,7 @@ public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
     /// <summary>
     /// Narrow the arm result to what this row can honestly claim. It has TWO channels and either can
     /// be missing, so it has two Unavailable outcomes with two different codes — and where both are
-    /// gone, BOTH travel, the rule SP-111 set after SP-109 shipped its opposite once.
+    /// gone, BOTH travel, the rule set after an earlier module shipped its opposite once.
     /// </summary>
     protected override CapabilityState Ready(CapabilityState scheduled)
     {
@@ -675,7 +675,7 @@ public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
 
         if (outcome is not CapabilityState.Available)
         {
-            // SP-110's load-bearing dismiss: an Unavailable outcome has already hidden the window
+            // The Lock Card's load-bearing dismiss: an Unavailable outcome has already hidden the window
             // inside the presence, but a DEGRADED one has not — the OS gave the card the keyboard
             // and only the ink read-back said no, so without this the card stays up, blank, holding
             // the user's input, with its keystroke identity already cleared.

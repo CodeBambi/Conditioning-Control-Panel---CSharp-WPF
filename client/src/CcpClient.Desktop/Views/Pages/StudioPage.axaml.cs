@@ -23,7 +23,7 @@ namespace CcpClient.Desktop.Views.Pages;
 /// existing entry, never launch"); only the button on the destination page launches, which is
 /// WPF's one-entry rule (<c>MainWindow.Presets.cs:1007</c>).</para>
 ///
-/// <para><b>SP-098 — the second gesture arrives.</b> The <c>Flash Images</c> row carries the
+/// <para><b>The second gesture arrives.</b> The <c>Flash Images</c> row carries the
 /// rack grammar in full for the first time in the port: left-click opens its panel,
 /// right-click quick-toggles the effect, and the dot reports what is really happening
 /// (§8.3, and §9 D5/D6, which recorded both as gaps "because the port has nothing to wire
@@ -32,8 +32,8 @@ namespace CcpClient.Desktop.Views.Pages;
 /// checkbox cannot drift into two behaviours (the A-004 one-command-path rule the retired
 /// demonstrator card established).</para>
 ///
-/// <para><b>SP-105 — the grammar generalises, and one of the rows is continuous.</b> Two more
-/// rows land: <c>Subliminals</c>, whose module shipped in SP-101 with no way to switch it on at
+/// <para><b>The grammar generalises, and one of the rows is continuous.</b> Two more
+/// rows land: <c>Subliminals</c>, whose module shipped with no way to switch it on at
 /// all (D72), and <c>Pink Filter</c>, the port's first module with no schedule. Both go through
 /// the same one dispatch entry, and neither needed a new gesture: the RACK grammar turns out to
 /// be indifferent to whether a module is paced. Its <b>dot</b> is not — a continuous module's
@@ -41,7 +41,7 @@ namespace CcpClient.Desktop.Views.Pages;
 /// that is decided inside the effect (see <see cref="OwnedSessionEffect.WorkIsRunning"/>) and
 /// this page reads the same three states off the same property for all three modules.</para>
 ///
-/// <para><b>SP-108 — the rack gets a SECOND GROUP, and the module in it draws nothing.</b> WPF's
+/// <para><b>The rack gets a SECOND GROUP, and the module in it draws nothing.</b> WPF's
 /// rack has four groups (§8.3); this port had rows in one because every module it had ported was an
 /// EFFECT that painted an overlay. <c>Intensity Ramp</c> is from TIMING, has no surface, and its
 /// whole visible output is the opacity numbers on the Spiral Overlay and Pink Filter panels next to
@@ -50,7 +50,7 @@ namespace CcpClient.Desktop.Views.Pages;
 /// first on this page with no surface line at all</b>, because a sentence about where its pixels
 /// went would be a sentence about a capability it deliberately never acquires.</para>
 ///
-/// <para><b>SP-109 — a THIRD group, and the first two rows nobody can see.</b> <c>Mind Wipe</c> and
+/// <para><b>A THIRD group, and the first two rows nobody can see.</b> <c>Mind Wipe</c> and
 /// <c>Brain Drain (audio half)</c> are from IMMERSION and their output is sound. The rack grammar
 /// again needed nothing new. Two things about them are new to this page. First, their closing notice
 /// is not a claim this page makes: it renders the AUDIO CAPABILITY's own typed outcome, so what a
@@ -84,7 +84,7 @@ public partial class StudioPage : UserControl
     /// <param name="loom">The one Loom launch path.</param>
     /// <param name="session">The one conditioning session.</param>
     /// <param name="scheduler">
-    /// SP-118 — the one SCHEDULER, and it arrives as its own argument rather than off
+    /// The one SCHEDULER, and it arrives as its own argument rather than off
     /// <paramref name="session"/> because it is not part of one: it is owned at APP lifetime by
     /// <c>Scheduling/SchedulerParticipant</c> and it drives the session from outside
     /// (<c>MainWindow/MainWindow.StartStop.cs:601-639</c>). Threading it through the session would
@@ -92,7 +92,7 @@ public partial class StudioPage : UserControl
     /// ownership confusion the rack comment on this page warned about for nine waves.
     /// </param>
     /// <param name="haptics">
-    /// SP-119 — the one HAPTIC sink's owner, and it arrives as its own argument for the same reason
+    /// The one HAPTIC sink's owner, and it arrives as its own argument for the same reason
     /// <paramref name="scheduler"/> does: it is not part of a session. Upstream's is a static built
     /// at startup and torn down at exit (<c>App.xaml.cs:533</c>, <c>:2060</c>, <c>:4406</c>) that
     /// the engine never touches. It is reached here rather than rebuilt, so the switch this panel
@@ -123,7 +123,7 @@ public partial class StudioPage : UserControl
         _bubbleCount = session.BubbleCount;
         _bubblePop = session.BubblePop;
 
-        // SP-117. NOT an effect, and never taken from session.Engine.Effects: the Visuals row is
+        // NOT an effect, and never taken from session.Engine.Effects: the Visuals row is
         // the Flash Images module's DRAW dials, so this is the only field on this page that is not
         // an ISessionEffect. Everything the row does not have below — an enable, a dot, a quick
         // toggle, an arm result — is absent for that one reason.
@@ -173,7 +173,7 @@ public partial class StudioPage : UserControl
         // its panel carries no master box). WPF's rack lets exactly such rows fall through
         // unhandled (:659).
 
-        // SP-118 — the Scheduler row DOES take the gesture, and it is the one row whose toggle
+        // The Scheduler row DOES take the gesture, and it is the one row whose toggle
         // does not go through SessionEngine.QuickToggle: it has no ISessionEffect behind it, so
         // there is no module id to dispatch on. Upstream's entry does the same thing for the same
         // reason — its toggle is `() => FlipMasterCheckBox(PanelScheduler?.Inner.ChkEnabled)`
@@ -184,7 +184,7 @@ public partial class StudioPage : UserControl
             (_, e) => OnSchedulerRowPointerReleased(e),
             RoutingStrategies.Tunnel);
 
-        // SP-119 — the Haptics row takes the gesture too, and it is the ONE row on this page whose
+        // The Haptics row takes the gesture too, and it is the ONE row on this page whose
         // quick-toggle can be REFUSED. Upstream's entry flips the panel's own master box precisely
         // so the refusal runs: "Flip the page's own master box so MainWindow.ChkHapticsEnabled_Changed
         // runs - including the premium gate that reverts the box for a free account"
@@ -301,7 +301,7 @@ public partial class StudioPage : UserControl
         OnSliderMoved(VisualsDurationSlider, OnVisualsDurationMoved);
 
         _session.Engine.Changed += OnSessionChanged;
-        // SP-118: the scheduler's state moves on a pool thread, 30 seconds at a time, with nobody
+        // The scheduler's state moves on a pool thread, 30 seconds at a time, with nobody
         // touching the app. It raises through the same EffectSignal every module uses, so this
         // handler may touch controls directly.
         _scheduler.Changed += OnSessionChanged;
@@ -335,32 +335,32 @@ public partial class StudioPage : UserControl
     /// (public so a test reads the RENDERED claim rather than the model it came from).</summary>
     public EffectDotState RenderedFlashDot { get; private set; } = EffectDotState.Off;
 
-    /// <summary>The Subliminals row's dot, same reason (SP-105).</summary>
+    /// <summary>The Subliminals row's dot, same reason.</summary>
     public EffectDotState RenderedSubliminalDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>The Pink Filter row's dot, same reason. This is the one that had to be earned:
-    /// a continuous module is <c>Live</c> only while its surface is really up (SP-105).</summary>
+    /// a continuous module is <c>Live</c> only while its surface is really up.</summary>
     public EffectDotState RenderedPinkFilterDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>The Spiral Overlay row's dot, same reason — and the one with the strictest rule
     /// behind it: a MOVING module is <c>Live</c> only while its surface is up AND still changing
-    /// (SP-106, <see cref="SpiralSurfacePresenter.Running"/>).</summary>
+    /// (see <see cref="SpiralSurfacePresenter.Running"/>).</summary>
     public EffectDotState RenderedSpiralDot { get; private set; } = EffectDotState.Off;
 
-    /// <summary>The Bouncing Text row's dot (SP-115), and the one with the NEWEST rule: Live means
+    /// <summary>The Bouncing Text row's dot, and the one with the NEWEST rule: Live means
     /// the operating system's own copy of the surface still carries the frame's opaque ink
     /// (<see cref="BouncingTextSurfacePresenter.Running"/>).</summary>
     public EffectDotState RenderedBouncingTextDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>The Intensity Ramp row's dot, same reason — and the one whose <c>Live</c> is a claim
     /// about neither a clock nor a screen but about CUSTODY: the module is running exactly while it
-    /// holds dials belonging to other modules and owes them back (SP-108,
+    /// holds dials belonging to other modules and owes them back (see
     /// <see cref="IntensityRampEffect"/>).</summary>
     public EffectDotState RenderedRampDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>The Mind Wipe row's dot, same reason — and the first on this page whose <c>Live</c>
     /// depends on a fact from OUTSIDE this process: a firing on the clock AND an audio render session
-    /// the operating system confirms belongs to us (SP-109, <see cref="AudioCueEffect"/>).</summary>
+    /// the operating system confirms belongs to us (see <see cref="AudioCueEffect"/>).</summary>
     public EffectDotState RenderedMindWipeDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>The Brain Drain row's dot. Same rule as Mind Wipe's, and it is deliberately
@@ -371,14 +371,14 @@ public partial class StudioPage : UserControl
     /// <summary>The Lock Card row's dot — the sixth meaning, and the first that is a claim on the
     /// USER rather than on anything this process owns: a firing on the clock, a desktop this process
     /// can put a window on, AND, while a card is up, the operating system's own confirmation that the
-    /// card holds the foreground and the keyboard focus (SP-110,
+    /// card holds the foreground and the keyboard focus (see
     /// <see cref="LockCardEffect"/>).</summary>
     public EffectDotState RenderedLockCardDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>The Mandatory Video row's dot — the SEVENTH meaning, MOTION: a firing on the clock, a
     /// display the operating system confirms, AND, while a clip is up, the operating system's own
     /// copy of the surface having CHANGED when a different picture was handed over. The first of the
-    /// seven that can be false while every call this process made succeeded (SP-111,
+    /// seven that can be false while every call this process made succeeded (see
     /// <see cref="MandatoryVideoEffect.WorkIsRunning"/>).</summary>
     public EffectDotState RenderedMandatoryVideoDot { get; private set; } = EffectDotState.Off;
 
@@ -387,19 +387,19 @@ public partial class StudioPage : UserControl
     /// <see cref="BubbleCountEffect.WorkIsRunning"/>).</summary>
     public EffectDotState RenderedBubbleCountDot { get; private set; } = EffectDotState.Off;
 
-    /// <summary>The Bubble Pop row's dot (SP-113). <c>Live</c> means the field is running AND
+    /// <summary>The Bubble Pop row's dot. <c>Live</c> means the field is running AND
     /// either nothing of its own is on screen yet or the operating system says it routes a click
-    /// at one of its bubbles TO this app — SP-110's DEMAND with the hit test in place of the
+    /// at one of its bubbles TO this app — the Lock Card row's DEMAND with the hit test in place of the
     /// foreground (<see cref="BubblePopSurfacePresenter.Running"/>).</summary>
     public EffectDotState RenderedBubblePopDot { get; private set; } = EffectDotState.Off;
 
-    /// <summary>The Scheduler row's dot (SP-118) — the first on this page that is not a claim about
+    /// <summary>The Scheduler row's dot — the first on this page that is not a claim about
     /// a module at all. <c>Live</c> means the enable is on, a tick is REALLY on the clock, and the
     /// LOCAL clock is inside the user's window right now; <c>Off</c> covers both "switched off" and
     /// "cannot act yet" (see <see cref="SessionScheduler.Dot"/>).</summary>
     public EffectDotState RenderedSchedulerDot { get; private set; } = EffectDotState.Off;
 
-    /// <summary>The Haptics row's dot (SP-119). Two reachable values, never three:
+    /// <summary>The Haptics row's dot. Two reachable values, never three:
     /// <see cref="EffectDotState.Live"/> would claim something is being sent and nothing is
     /// (<see cref="Haptics.HapticParticipant.Dot"/>).</summary>
     public EffectDotState RenderedHapticsDot { get; private set; } = EffectDotState.Off;
@@ -860,7 +860,7 @@ public partial class StudioPage : UserControl
 
     /// <summary>
     /// Mind Wipe's frequency dial. Writes through the module, which re-evaluates at once — the port's
-    /// convention for every module's dial since SP-105, and it matters more here than usual: this dial
+    /// standing convention for every module's dial, and it matters more here than usual: this dial
     /// changes the ODDS of the next ten-second window rather than the spacing of a schedule, so a user
     /// who turns it up expects the very next window to be likelier.
     /// </summary>
@@ -994,7 +994,7 @@ public partial class StudioPage : UserControl
     /// <summary>
     /// The session's state can move on a thread that is not this one — teardown stops the engine
     /// from the shutdown path. This handler nonetheless touches controls directly, because since
-    /// SP-101 the marshalling is the PRODUCER's: every module raises <c>Changed</c> through
+    /// the marshalling landed on the PRODUCER: every module raises <c>Changed</c> through
     /// <see cref="EffectSignal"/>, which delivers on the UI thread whenever one exists. This page
     /// used to carry its own <c>CheckAccess</c>-or-<c>Post</c> copy, and so did the shell; two
     /// copies agreed and the fifteenth module's panel would not have.
@@ -1083,14 +1083,14 @@ public partial class StudioPage : UserControl
             BubblePopSizeSlider.Value = bubblePop.SizePercent;
             BubblePopSpeedSlider.Value = bubblePop.SpeedBoostPercent;
 
-            // SP-117. No enable box to load: the Visuals row has none, upstream has none, and this
+            // No enable box to load: the Visuals row has none, upstream has none, and this
             // is the only block here with three slider lines and no checkbox line.
             var visuals = _session.VisualsPreset.Current;
             VisualsScaleSlider.Value = visuals.ImageScalePercent;
             VisualsOpacitySlider.Value = visuals.FlashOpacityPercent;
             VisualsDurationSlider.Value = visuals.FlashDurationSeconds;
 
-            // SP-118. Nine controls, and the two TEXT ones are loaded back VERBATIM — the raw
+            // Nine controls, and the two TEXT ones are loaded back VERBATIM — the raw
             // string the document holds, not the parsed value — because the parse is lossy in both
             // directions here: "8" would come back as "8.00:00:00" and "25:00" would come back as
             // "16:00", and a box that silently rewrites what the user typed is a box that hides
@@ -1107,7 +1107,7 @@ public partial class StudioPage : UserControl
             SchedulerDaySat.IsChecked = scheduler.Saturday;
             SchedulerDaySun.IsChecked = scheduler.Sunday;
 
-            // SP-119. ONE control, loaded from the DOCUMENT rather than from whatever the user just
+            // ONE control, loaded from the DOCUMENT rather than from whatever the user just
             // clicked — which is what makes a refused tick visible: the gate wrote nothing, so this
             // puts the box back where the setting really is.
             HapticsEnableToggle.IsChecked = _haptics.Enabled;
@@ -1135,7 +1135,7 @@ public partial class StudioPage : UserControl
         FlashPoolState.Text = DescribePool(_flash.Last);
         FlashSurfaceState.Text = DescribeSurface(_session.Surface.LastPlacement);
 
-        // SP-117 — the Visuals row. NO PaintDot CALL, and that is the row's whole shape: it has no
+        // The Visuals row. NO PaintDot CALL, and that is the row's whole shape: it has no
         // Ellipse in the visual tree to paint, because upstream gives it no dot
         // (StudioTabView.xaml.cs:494-496). Its three numbers come from the same reading the
         // presenter will use for the next flash, so the panel and the screen cannot disagree.
@@ -1148,7 +1148,7 @@ public partial class StudioPage : UserControl
         VisualsAbsenceState.Text = VisualsPanelNotices.DescribeAbsences();
         VisualsSurfaceState.Text = VisualsPanelNotices.DescribeSurface(_session.Surface.LastPlacement);
 
-        // SP-118 — the Scheduler row. Its dot is NOT PaintDot's: that overload takes an
+        // The Scheduler row. Its dot is NOT PaintDot's: that overload takes an
         // ISessionEffect and this row has none, which is the structural half of "it drives the
         // engine rather than living in it". The three states are the module's own derived state
         // (SessionScheduler.Dot) and are painted with the same two classes every other dot uses.
@@ -1162,7 +1162,7 @@ public partial class StudioPage : UserControl
         SchedulerLastTickState.Text = SchedulerPanelNotices.DescribeLastTick(_scheduler.Last);
         SchedulerAbsenceState.Text = SchedulerPanelNotices.DescribeAbsences();
 
-        // SP-119 — the Haptics row. Its dot goes through the same non-effect overload the scheduler
+        // The Haptics row. Its dot goes through the same non-effect overload the scheduler
         // uses, for the same structural reason: this row is not on SessionEngine.Effects and never
         // will be, because it is APP-scoped (App.xaml.cs:533, :2060) and the engine never touches it.
         // The sink line is the sink's OWN last answer, so the panel and the capability the System
@@ -1340,7 +1340,7 @@ public partial class StudioPage : UserControl
 
     /// <summary>
     /// The bubbles-per-minute slider writes the dial and re-times the live spawn timer — the port's
-    /// standing convention since SP-105, and upstream's own <c>RefreshFrequency()</c> on the same
+    /// standing convention, and upstream's own <c>RefreshFrequency()</c> on the same
     /// gesture (<c>Features/BubblePopFeatureControl.xaml.cs:116</c>).
     /// </summary>
     private void OnBubblePopFrequencyMoved()
@@ -1447,7 +1447,7 @@ public partial class StudioPage : UserControl
 
     /// <summary>
     /// The games-per-hour slider writes the dial and re-paces the live schedule, the port's standing
-    /// convention since SP-105 and upstream's own <c>RefreshSchedule</c>
+    /// convention, and upstream's own <c>RefreshSchedule</c>
     /// (<c>Services/BubbleCountService.cs:735-739</c>).
     /// </summary>
     private void OnBubbleCountFrequencyMoved()
@@ -1484,7 +1484,7 @@ public partial class StudioPage : UserControl
     /// The cards-per-hour slider writes the dial and re-paces the live schedule — the same order the
     /// flash frequency slider uses, and upstream writes then saves
     /// (<c>Features/LockCardFeatureControl.xaml.cs:97-106</c>). The re-pace is this port's standing
-    /// convention since SP-105, so a raised frequency takes effect now rather than after the old
+    /// convention, so a raised frequency takes effect now rather than after the old
     /// interval expires.
     /// </summary>
     private void OnLockCardFrequencyMoved()
@@ -1566,7 +1566,7 @@ public partial class StudioPage : UserControl
 
     /// <summary>
     /// The same two classes, from a state that did not come from an <see cref="ISessionEffect"/>.
-    /// SP-118's row is the only one on this page with no module behind it AND a dot in front of it,
+    /// The Scheduler row is the only one on this page with no module behind it AND a dot in front of it,
     /// so this overload exists rather than a fake effect wrapper: an <c>ISessionEffect</c> the
     /// engine never arms would be a lie in the type system to save four lines here.
     /// </summary>
@@ -1580,7 +1580,7 @@ public partial class StudioPage : UserControl
     /// <summary>
     /// Where the images went, according to the SURFACE.
     ///
-    /// <para>This line used to be a fixed sentence saying the drawing half was not ported. SP-100
+    /// <para>This line used to be a fixed sentence saying the drawing half was not ported. The overlay
     /// made that false on Windows and left it true on Linux, and no fixed sentence can be both. The
     /// replacement asserts nothing about the platform — it reports the presenter's own last typed
     /// outcome, so a build where the overlay refuses shows the refusal's own reason and manual gate,
@@ -1699,12 +1699,12 @@ public partial class StudioPage : UserControl
     /// returns <c>Armed</c> for anything that is not <c>Off</c> and not really running — and for
     /// this module "really running" is the SCREEN.</para>
     ///
-    /// <para><b>Why they are four sentences and not one (SP-105 final review).</b> This method used
+    /// <para><b>Why they are four sentences and not one (a final review caught it).</b> This method used
     /// to answer every <c>Armed</c> with "Nothing is drawn until the session starts." On Linux the
     /// overlay refuses by design (see <see cref="PinkFilterEffect"/>), so a running session with the
     /// dial on lands in that arm — and every Linux user would have read, for the whole of every
     /// session, an instruction to start a session they had already started. A message that
-    /// misdescribes state is the exact failure SP-101 was sent to fix one string earlier, and one
+    /// misdescribes state is the exact failure an earlier packet was sent to fix one string earlier, and one
     /// arm of a switch is all it takes to reintroduce it. Each situation now names its own cause,
     /// and the running-but-not-drawn one names the SURFACE rather than the session.</para>
     ///
@@ -1852,7 +1852,7 @@ public partial class StudioPage : UserControl
     /// perfectly healthy, because WPF starts no frame timer for one either
     /// (<c>OverlayService.cs:1370</c>). Three outcomes that a boolean cannot carry.</para>
     ///
-    /// <para><b>No arm may tell a running session to start a session.</b> That was SP-105's
+    /// <para><b>No arm may tell a running session to start a session.</b> That was a
     /// final-review blocker one module earlier (its record §9.1), and it is prevented here the same
     /// way: every arm branches on <paramref name="sessionRunning"/>, read from the engine and never
     /// inferred from the dot.</para>

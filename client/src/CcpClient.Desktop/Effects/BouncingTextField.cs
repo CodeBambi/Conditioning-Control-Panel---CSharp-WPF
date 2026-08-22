@@ -98,7 +98,7 @@ public sealed class BouncingTextField
     /// <param name="measure">How wide and tall a word renders. Injected so the motion can be proven
     /// with no rasteriser at all.</param>
     /// <param name="random">Injected, so a trajectory can be pinned exactly.</param>
-    /// <param name="haptics">SP-126: the haptic limb, told once per wall bounce. Null is ABSENT
+    /// <param name="haptics">The haptic limb, told once per wall bounce. Null is ABSENT
     /// rather than silent — this field has no limb at all in a build that wires none.</param>
     public BouncingTextField(
         BouncingTextPresentation presentation,
@@ -229,7 +229,7 @@ public sealed class BouncingTextField
 
         Bounces++;
 
-        // SP-126, census site 18. WPF fires BouncingTextBounceAsync() at
+        // Haptic census site 18. WPF fires BouncingTextBounceAsync() at
         // Services/Subliminal/BouncingTextService.cs:516, between the bounce bookkeeping and the
         // 10 % text re-roll at :519 — and this call sits in exactly that place in exactly that
         // sequence, above the re-roll below. One 60 ms request at priority 0, which the on-time

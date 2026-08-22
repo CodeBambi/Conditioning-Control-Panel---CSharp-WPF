@@ -4,15 +4,15 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-114: the guards behind the build-warning gate (<c>client/tests/floor/check-warnings.mjs</c>).
+/// The guards behind the build-warning gate (<c>client/tests/floor/check-warnings.mjs</c>).
 ///
 /// <para>WHY THE GATE EXISTS. Every landed wave of this port reported "0 warnings / 0 errors" and
-/// not one of those claims was mechanically checked. SP-113 discovered its own reading filter,
+/// not one of those claims was mechanically checked. An earlier wave discovered its own reading filter,
 /// <c>grep -E "error|warning CS|Build succ"</c>, is structurally incapable of matching
 /// <c>warning xUnit2013</c>; it had reported clean four times off that stream. This suite pins the
 /// correction so it cannot rot back.</para>
 ///
-/// <para>WHY THE GATE FORCES A NON-INCREMENTAL BUILD. Measured on the base tree at SP-114, with a
+/// <para>WHY THE GATE FORCES A NON-INCREMENTAL BUILD. Measured on the base tree, with a
 /// real <c>CS0219</c> sitting in a source file: the project's own mandated build command reported
 /// <c>1 Warning(s)</c> on the compile that produced it and <c>0 Warning(s)</c> on the very next
 /// run, because MSBuild skipped <c>CoreCompile</c> for an up-to-date project. A warning is a
@@ -22,7 +22,7 @@ namespace CcpClient.Tests;
 /// <para>THE CENTRAL TRAP THIS SUITE ALSO PINS. <c>check-floor.mjs</c> runs
 /// <c>dotnet test --no-build</c> deliberately (<c>client/docs/port-lessons.md:204</c>) and its
 /// <c>assertBuildIsFresh</c> stale-build guard exists because it once measured the previous wave's
-/// assemblies and called them a regression. SP-114 did NOT make the floor build, and
+/// assemblies and called them a regression. This gate did NOT make the floor build, and
 /// <see cref="TheTestFloorStillRunsNoBuild_AndKeepsItsStaleBuildGuard"/> is the pin that stops a
 /// later lane doing it while citing this packet as precedent.</para>
 ///
@@ -37,12 +37,12 @@ public partial class WarningGateGuardTests
     private static readonly string[] FloorParts = ["client", "tests", "floor", "check-floor.mjs"];
     private static readonly string[] SolutionParts = ["client", "CcpClient.sln"];
 
-    /// <summary>The diagnostic line SP-113's filter could not match, verbatim.</summary>
+    /// <summary>The diagnostic line the retired filter could not match, verbatim.</summary>
     private const string XunitWarningLine =
         @"C:\repo\client\tests\CcpClient.Tests\Probe.cs(42,9): warning xUnit2013: " +
         @"Do not use Assert.Equal() to check for collection size. [C:\repo\p.csproj]";
 
-    /// <summary>SP-113's retired reading filter, kept executable rather than narrated.</summary>
+    /// <summary>The retired reading filter, kept executable rather than narrated.</summary>
     private const string RetiredFilterPattern = "error|warning CS|Build succ";
 
     [GeneratedRegex(@"""dotnet""\s*,\s*\[\s*""(\w+)""")]
@@ -51,7 +51,7 @@ public partial class WarningGateGuardTests
     /// <summary>Every <c>"dotnet"</c> token in the file, with whatever follows the comma. Needed
     /// because <see cref="DotnetInvocation"/> only binds the LITERAL argument-array shape: a build
     /// smuggled in as <c>execFileSync("dotnet", buildArgs)</c> leaves the literal verb set
-    /// <c>[test]</c> intact and would pass the verb check. Found at the SP-114 code review.</summary>
+    /// <c>[test]</c> intact and would pass the verb check. Found at this gate's code review.</summary>
     [GeneratedRegex(@"""dotnet""\s*,\s*(\S)")]
     private static partial Regex DotnetArgumentHead();
 
@@ -70,7 +70,7 @@ public partial class WarningGateGuardTests
     [Fact]
     public void TheTestFloorStillRunsNoBuild_AndKeepsItsStaleBuildGuard()
     {
-        // The trap SP-114 was written not to fall into. A warning gate needs a build; the tempting
+        // The trap this gate was written not to fall into. A warning gate needs a build; the tempting
         // shortcut is to teach the floor to build and read its output. That would delete the very
         // signal `assertBuildIsFresh` exists to raise (client/docs/port-lessons.md:204, and the
         // wave-30 observation of 1022 counted against a source tree containing 1018).
@@ -82,7 +82,7 @@ public partial class WarningGateGuardTests
             + "the guard that keeps the floor from becoming a builder refuses to go blind on it");
         Assert.True(verbs is ["test"],
             $"check-floor.mjs invokes dotnet with verb(s) [{string.Join(", ", verbs)}] — the test floor must "
-            + "only ever run `dotnet test`. SP-114 added a SEPARATE warning gate precisely so the floor "
+            + "only ever run `dotnet test`. The warning gate is SEPARATE precisely so the floor "
             + "would not become a builder: making it build deletes the signal assertBuildIsFresh exists "
             + "to raise (client/docs/port-lessons.md:204).");
         // The verb check alone binds only the literal `"dotnet", ["verb"` shape, so a build passed
@@ -189,7 +189,7 @@ public partial class WarningGateGuardTests
         // THE EXHIBIT. The retired filter cannot see this line; the shipped pattern can, and names
         // its code. Four "0 warnings" reports were made off a stream filtered the retired way.
         Assert.False(retired.IsMatch(XunitWarningLine),
-            "SP-113's retired filter is recorded as unable to match the xUnit2013 diagnostic line, but it "
+            "the retired filter is recorded as unable to match the xUnit2013 diagnostic line, but it "
             + "matched it here — the exhibit is wrong and every record built on it must be re-checked");
         var matched = shipped.Match(XunitWarningLine);
         Assert.True(matched.Success, $"the shipped warning pattern did not match {XunitWarningLine}");

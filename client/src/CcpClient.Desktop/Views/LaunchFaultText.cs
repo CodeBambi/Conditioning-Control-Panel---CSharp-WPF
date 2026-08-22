@@ -1,7 +1,7 @@
 namespace CcpClient.Desktop.Views;
 
 /// <summary>
-/// SP-097. What a page says when a launch THREW past the entitlement gate — the port's
+/// What a page says when a launch THREW past the entitlement gate — the port's
 /// counterpart of WPF's <c>MessageBox.Show("Couldn't start …:\n\n" + ex.Message, …,
 /// MessageBoxImage.Warning)</c> (<c>MainWindow/MainWindow.Lab.cs:164-165</c> for Graded Intake,
 /// <c>:269-270</c> and <c>:336-337</c> for Down the Rabbit Hole).

@@ -7,7 +7,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-101 — the parts of Subliminals that are pure enough to pin exactly: the pacing law, the
+/// The parts of Subliminals that are pure enough to pin exactly: the pacing law, the
 /// persisted dials and their clamps, the phrase pool, and the card's duration arithmetic.
 ///
 /// <para>Every number here is a place a COPIED template would have been silently wrong, which is

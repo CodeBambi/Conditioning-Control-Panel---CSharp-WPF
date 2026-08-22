@@ -28,7 +28,7 @@ public interface ISessionClock
 /// <summary>
 /// The real clock, on <see cref="System.Threading.Timer"/>.
 ///
-/// <para><b>A faulting callback must not take the process with it (SP-101).</b> A timer callback
+/// <para><b>A faulting callback must not take the process with it.</b> A timer callback
 /// runs on a thread-pool thread with no caller above it, so an exception escaping it is an
 /// UNHANDLED exception and .NET terminates the process — from a module's scheduler, with no
 /// diagnostic and no stack anyone sees. Measured, not theorised: the first fact written against

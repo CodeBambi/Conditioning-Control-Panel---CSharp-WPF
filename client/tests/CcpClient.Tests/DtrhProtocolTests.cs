@@ -5,8 +5,8 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-024 slice b2: protocol v1 full vocabulary. Every page→host literal below is copied
-/// from the READ-ONLY payload's send sites / the WPF host's reads (SP-024 record Step 1
+/// Slice b2: protocol v1 full vocabulary. Every page→host literal below is copied
+/// from the READ-ONLY payload's send sites / the WPF host's reads (record Step 1
 /// tables); every host→page builder is asserted against the payload's handler field reads
 /// (boot.js:132-181). Tolerance: unknown/forward-version/malformed are typed outcomes —
 /// no crash, no silent drop.
@@ -30,7 +30,7 @@ public class DtrhProtocolTests
         yield return ["{\"type\":\"sfx\",\"name\":\"wave_clear\",\"scale\":0.8}", typeof(DtrhProtocol.DtrhPageMessage.Sfx), null];
         yield return ["{\"type\":\"fire-payload\",\"kind\":\"video\",\"strength\":60,\"durationMult\":1.5}", typeof(DtrhProtocol.DtrhPageMessage.FirePayload), null];
         yield return ["{\"type\":\"freeze-state\",\"on\":true}", typeof(DtrhProtocol.DtrhPageMessage.FreezeState), null];
-        // SP-032 q2: bark upgraded Deferred → Handled (the quips/sound-arbitration row's
+        // Q2: bark upgraded Deferred → Handled (the quips/sound-arbitration row's
         // content pipeline now owns it — routed in the host window through BarkPipeline).
         yield return ["{\"type\":\"bark\",\"event\":\"wave-cleared\",\"wave\":3}", typeof(DtrhProtocol.DtrhPageMessage.Bark), null];
         yield return ["{\"type\":\"meta-command\",\"op\":\"add-gold\",\"amount\":50}", typeof(DtrhProtocol.DtrhPageMessage.MetaCommand), null];
@@ -40,7 +40,7 @@ public class DtrhProtocolTests
         yield return ["{\"type\":\"asset-stats\",\"deltas\":{\"img1.png\":{\"watch\":3.5}}}", typeof(DtrhProtocol.DtrhPageMessage.AssetStats), null];
         yield return ["{\"type\":\"loom-save\",\"name\":\"dream\",\"gifBase64\":\"R0lG\",\"params\":{\"rings\":4},\"overwrite\":false}", typeof(DtrhProtocol.DtrhPageMessage.LoomSave), null];
         yield return ["{\"type\":\"loom-delete\",\"slug\":\"dream\"}", typeof(DtrhProtocol.DtrhPageMessage.LoomDelete), null];
-        // SP-049: the v6.6.3 studio rack's 📂 (loomStudio.js:749 — emitted from BOTH homes).
+        // The v6.6.3 studio rack's 📂 (loomStudio.js:749 — emitted from BOTH homes).
         yield return ["{\"type\":\"loom-reveal\",\"slug\":\"dream\"}", typeof(DtrhProtocol.DtrhPageMessage.LoomReveal), null];
         yield return ["{\"type\":\"report-bug\"}", typeof(DtrhProtocol.DtrhPageMessage.ReportBug), "unassigned/host-ui"];
     }

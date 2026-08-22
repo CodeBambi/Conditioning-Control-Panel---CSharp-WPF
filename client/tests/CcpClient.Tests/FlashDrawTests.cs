@@ -6,7 +6,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-100 — the draw path: pixels reaching a real surface, and the operating system asked what it
+/// The draw path: pixels reaching a real surface, and the operating system asked what it
 /// holds afterwards.
 ///
 /// <para><b>The shape of every effect fact here.</b> Compare a MACHINE property, measured by
@@ -21,7 +21,7 @@ namespace CcpClient.Tests;
 /// still not the headed capture <c>verification-harness.md</c> requires: it cannot see a Magnifier,
 /// a mirror driver, an exclusive-fullscreen swap chain, colour management, or a monitor that is
 /// physically off. <c>presentation-verified</c> is the orchestrator's capture and is not claimed
-/// here. Nor do they prove anything at all on Linux, where the overlay refuses by design (SP-099
+/// here. Nor do they prove anything at all on Linux, where the overlay refuses by design (overlay
 /// D56) and the facts below assert that the refusal is complete.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
@@ -54,7 +54,7 @@ public class FlashDrawTests
     [Fact]
     public void EveryCompositedReadIsOrderedBehindTheCompositor_OrEveryNumberBelowIsACoinFlip()
     {
-        // SP-116. THE RESIDUE SP-107 §4 LEFT OPEN, AND ITS PIN.
+        // THE RESIDUE THE EARLIER §4 LEFT OPEN, AND ITS PIN.
         //
         // Between "this process showed and painted a layered top-most window" and "this process
         // read the screen" there was no happens-before edge. Measured with a rig that replicates
@@ -79,7 +79,7 @@ public class FlashDrawTests
             + $"{FlashPixelProbe.FenceNotTaken:X8} means no fence was taken at all, "
             + $"{FlashPixelProbe.FenceUnavailable:X8} means dwmapi was not there to ask, anything else is DWM "
             + "refusing). Every composited number in this file was then read with no ordering against the "
-            + "thing that publishes pixels, which SP-116 measured as 34 misses in 1200 reads. This is not a "
+            + "thing that publishes pixels, measured as 34 misses in 1200 reads. This is not a "
             + "flake to be re-run: either the fence was removed from FlashPixelProbe.CaptureDesktop, or this "
             + "session has no compositor and cannot make composited claims at all");
     }
@@ -87,7 +87,7 @@ public class FlashDrawTests
     [Fact]
     public void TheDesktopReadIsMappedThroughTheOperatingSystemsOwnDpiRatio_NotAssumedToBeOne()
     {
-        // The trap that cost SP-100 four measurement rounds: this test host is DPI-unaware, so
+        // The trap that cost four measurement rounds: this test host is DPI-unaware, so
         // USER32 virtualises window coordinates while the screen device context stays physical.
         // Reading the desktop at a window's own coordinates samples the wrong point and reports
         // whatever is behind the surface — a perfectly visible flash looks invisible.
@@ -133,7 +133,7 @@ public class FlashDrawTests
         // The closest a process can get to "a human sees it": the desktop, captured with CAPTUREBLT
         // (the only screen read that includes layered windows), at the surface's own rectangle,
         // with no wall-clock wait anywhere: the read is ordered behind DWM's own next present
-        // (SP-116, FlashPixelProbe.CaptureDesktop), which is an edge on the producer rather than a
+        // (FlashPixelProbe.CaptureDesktop), which is an edge on the producer rather than a
         // deadline this suite chose, and nothing is re-read. Both halves are checked, so a flash
         // that composited upside down or in the wrong place fails.
         var run = FlashDrawObservations.Run;
@@ -179,7 +179,7 @@ public class FlashDrawTests
         // (CCP.Avalonia.Desktop.Windows/WindowsOverlaySurface.cs:26-45: WS_EX_LAYERED set, attributes
         // never given, the OS calls it visible and composites nothing).
         //
-        // SP-099 asks the alpha immediately after Present, BEFORE any content exists. Nothing asked
+        // The overlay asks the alpha immediately after Present, BEFORE any content exists. Nothing asked
         // it again on the far side of a draw. That is the hole the next packet walks into: D60 names
         // an alpha ramp as the natural next job, UpdateLayeredWindow is the obvious tool for one,
         // and without this fact the whole suite would stay green while the discriminator went quiet.
@@ -212,7 +212,7 @@ public class FlashDrawTests
     public void AFrameThatIsNotTheSurfacesSize_IsRefusedRatherThanStretched()
     {
         // This capability scales nothing: a stretched frame would silently decide the port's DPI
-        // policy on a surface whose coordinates are physical pixels (SP-099 D55), and a stale frame
+        // policy on a surface whose coordinates are physical pixels (D55), and a stale frame
         // of the wrong size would appear as a plausible picture rather than as a bug.
         var run = FlashDrawObservations.Run;
 
@@ -291,7 +291,7 @@ public class FlashDrawTests
             + $"and while the flash was up the composited desktop carried {run.DesktopPixelsDuring} pixels of the "
             + $"image's colour against an expected area of at least {expectedArea / 2}. Those two must agree: "
             + "where the screen can be read, the user's own image must really be on it. "
-            + $"The screen read RETURNED {run.DesktopPixelsSampledDuring} pixels (SP-107), of which "
+            + $"The screen read RETURNED {run.DesktopPixelsSampledDuring} pixels, of which "
             + $"{run.DesktopUniformPixelsDuring} were the same colour as the first one "
             + $"(0x{run.DesktopFirstPixelDuring:X6}). The display metrics were {run.PlacementScreen.Width}x"
             + $"{run.PlacementScreen.Height} virtual / H{run.PlacementHorizontal} V{run.PlacementVertical} when "
@@ -303,7 +303,7 @@ public class FlashDrawTests
             + "capture mapped the rectangle through the wrong ratio and sampled somewhere the flash never was "
             + "(the pixel count cannot show this, being physical and so scale-invariant); and only a real "
             + "desktop read at unchanged metrics means the flash was genuinely not composited where a user "
-            + $"would see it. SP-116 adds the fifth and it is the one that used to fire: the compositor fence "
+            + $"would see it. The fifth is the one that used to fire: the compositor fence "
             + $"was held = {run.CompositorFenceHeldDuring} — a read taken WITHOUT that edge saw a layered "
             + "top-most window this process had just shown and painted 34 times in 1200, with the window "
             + "owning its own centre point every time");

@@ -5,7 +5,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-013 Step 2: one-at-a-time manager transitions + focus-restoration seam
+/// One-at-a-time manager transitions + focus-restoration seam
 /// (W-04, MainWindow.Presets.cs:846-873 parity). Window-free via the IPopup seam.
 /// </summary>
 public class FeaturePopupManagerTests

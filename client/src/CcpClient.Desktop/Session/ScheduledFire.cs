@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Session;
 /// <summary>
 /// One scheduled firing, as an IDENTITY rather than a bare timer handle.
 ///
-/// <para><b>Why this exists (SP-101, hazard 3 from SP-098's review).</b> Before this, a paced effect
+/// <para><b>Why this exists (hazard 3 from the first module's review).</b> Before this, a paced effect
 /// kept the raw handle in a <c>_pending</c> field and the callback opened with
 /// <c>Interlocked.Exchange(ref _pending, null)</c> — clear the slot, whatever is in it. That is
 /// wrong whenever the slot no longer holds the timer that is firing, which the product really can

@@ -9,7 +9,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-108 — the Intensity Ramp module on its own, with fake dials and a manual clock.
+/// The Intensity Ramp module on its own, with fake dials and a manual clock.
 ///
 /// <para><b>What makes these facts different from the four modules before it.</b> Not one of them
 /// needs a surface, a presence, a display or a dispatcher, because the module under test draws
@@ -288,8 +288,8 @@ public class IntensityRampEffectTests
     public void ADialIsWrittenOnlyWhenItsIntegerReallyMoves_WhichIsWhatKeepsAReTintOffTheHotPath()
     {
         // D96. Upstream writes and reconciles every 2 s; here a re-apply reaches OverlaySurfaceSet.Place
-        // -> Present, which walks the OS z-order and toggles click-through in both polarities
-        // (SP-106). Over an hour that is 1800 of them for a number that changed about twenty times.
+        // -> Present, which walks the OS z-order and toggles click-through in both polarities.
+        // Over an hour that is 1800 of them for a number that changed about twenty times.
         var rig = Rig.Create();
         rig.Enable();
         rig.Link(rig.Spiral);
@@ -392,7 +392,7 @@ public class IntensityRampEffectTests
 
         // The dial goes off and the module re-evaluates. OwnedSessionEffect's shared gate releases
         // the work, and for THIS module releasing the work means handing the dial back — the same
-        // shape SP-105 found for the tint, in a currency with no pixels in it.
+        // shape found for the tint, in a currency with no pixels in it.
         rig.Ramp.SetEnabled(false);
         rig.Ramp.Refresh();
 
@@ -563,7 +563,7 @@ public class IntensityRampEffectTests
     [Fact]
     public void TheNonDrawingModuleTakesNOSurface_AndIsNotAPacedEffect()
     {
-        // What reflection is worth here is SP-105's and SP-106's wording, kept: the real guard is the
+        // What reflection is worth here is the earlier modules' wording, kept: the real guard is the
         // counting facts above, and this one earns its keep by failing at the line a future author is
         // editing. Two claims, and the FIRST is the packet's second trap — a module that needs no
         // surface must not acquire one for symmetry.
@@ -724,8 +724,8 @@ public class IntensityRampEffectTests
         }
     }
 
-    /// <summary>The manual clock, SP-098's shape, with a fired counter so a fact can tell "sampled
-    /// often" from "wrote often". Zero wall-clock.</summary>
+    /// <summary>The manual clock, in the shape every module test shares, with a fired counter so
+    /// a fact can tell "sampled often" from "wrote often". Zero wall-clock.</summary>
     private sealed class ManualSessionClock : ISessionClock
     {
         private readonly List<Entry> _timers = [];

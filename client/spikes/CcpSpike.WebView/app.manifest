@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- SP-011: Avalonia's Win32 NativeControlHost requires supportedOS entries to create
+<!-- Avalonia's Win32 NativeControlHost requires supportedOS entries to create
      child windows (empirical: InvalidOperationException "Unable to create child window
      for native control host" without this). Integration consequence for the admit row:
      the product head will need the same manifest when a WebView lands. -->

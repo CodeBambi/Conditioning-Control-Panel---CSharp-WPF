@@ -4,7 +4,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-106 — the spiral decoder, against a REAL animated GIF built byte by byte in this file.
+/// The spiral decoder, against a REAL animated GIF built byte by byte in this file.
 ///
 /// <para><b>Why the GIF is hand-built rather than checked in.</b> This port bundles no art (D86) and
 /// the legacy tree's bytes stay owned by the legacy tree. A twelve-line GIF89a whose two frames are

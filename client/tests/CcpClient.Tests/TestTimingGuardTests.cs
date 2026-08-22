@@ -3,8 +3,8 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-059 timing-discipline guard (T-15/T-16/third-occurrence encoding; SP-056/SP-057
-/// guard lineage): a hard-coded wall-clock wait may appear in test code ONLY inside the
+/// The timing-discipline guard (T-15/T-16/third-occurrence encoding; earlier guards set the
+/// lineage): a hard-coded wall-clock wait may appear in test code ONLY inside the
 /// approved helper (<c>TestWait.cs</c>). Every other occurrence must carry an inline
 /// <c>// wallclock-allow: &lt;reason&gt;</c> marker naming why it is class 3 (elapsed-time
 /// subject / terminal hang tripwire / never-elapses instrument / negative-observation
@@ -34,7 +34,7 @@ public class TestTimingGuardTests
         ".WaitAsync(TimeSpan",
         ".Wait(TimeSpan",
         ".WaitOne(TimeSpan",
-        // SP-063: an injected deadline BUDGET via option assignment (RequestTimeout =,
+        // An injected deadline BUDGET via option assignment (RequestTimeout =,
         // ProbeTimeout =, any future *Timeout = TimeSpan. initializer). Budgets that must not
         // decide an outcome use TestWait.InjectedBudget; budgets whose elapsing IS the subject
         // keep a short literal with a // wallclock-allow: marker and a pin below.
@@ -72,7 +72,7 @@ public class TestTimingGuardTests
         ("CcpClient.HeadlessTests/AvatarTubeHeadlessTests.cs", "await Task.Delay(10); // let posted UI projections land", 1),
         ("CcpClient.HeadlessTests/AvatarTubeHeadlessTests.cs", "await Task.Delay(100);", 1),
         ("CcpClient.HeadlessTests/AvatarTubeHeadlessTests.cs", "var outcome = await participant.Completion!.WaitAsync(TimeSpan.FromSeconds(5));", 1),
-        // SP-063 population 2: the budget's elapsing IS the subject (timeout classification).
+        // Population 2: the budget's elapsing IS the subject (timeout classification).
         ("CcpClient.Tests/LoopbackOllamaProviderTests.cs", "RequestTimeout = TimeSpan.FromMilliseconds(800),", 1),
         ("CcpClient.Tests/AiProviderLabIntegrationTests.cs", "options = options with { RequestTimeout = TimeSpan.FromMilliseconds(800) };", 1),
     ];
@@ -107,7 +107,7 @@ public class TestTimingGuardTests
                 if (markerAt < 0)
                 {
                     violations.Add($"{relative}:{i + 1}: unmarked wall-clock construct — use TestWait.Until/UntilSync or " +
-                        "record the class-3 reason in a // wallclock-allow: marker AND pin it in TestTimingGuardTests (SP-059)");
+                        "record the class-3 reason in a // wallclock-allow: marker AND pin it in TestTimingGuardTests");
                     continue;
                 }
 

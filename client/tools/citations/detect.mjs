@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// detect.mjs — upstream citation drift detector (SP-088, board row "Tier-1 citation
+// detect.mjs — upstream citation drift detector (board row "Tier-1 citation
 // review for the v6.8.0 sync" / the citation-drift row).
 //
 // WHY THIS EXISTS
@@ -88,7 +88,7 @@
 //   shell string. Every path is normalized to forward slashes before comparison. There
 //   is no wall-clock wait, no retry loop and no sleep anywhere in this file.
 //
-// THE NEEDLE MODE (SP-131) — THE SECOND MODE, AND THE LINE-LEVEL HALF
+// THE NEEDLE MODE — THE SECOND MODE, AND THE LINE-LEVEL HALF
 //   The default mode answers a FILE-level question: did an upstream file the port cites
 //   change? The rot is LINE-level: does the cited line still say what the citation claims?
 //   A file can be untouched in a sync window and still have every citation into it shifted
@@ -153,8 +153,8 @@
 //     proved it the hard way. CITATION_WITH_LINE matches only `.cs` and `.xaml`, and the corpus
 //     is client/src/** plus client/docs/** and nothing else. So a citation into client/tools/**,
 //     and ANY citation into a .mjs file, is invisible to all six default classes and to all four
-//     needle classes. SP-131's own citations INTO THIS FILE rotted inside it: six of them, all
-//     correct at e3aee3e21 and all invalidated by SP-131's own commit a70371e21, which inserted
+//     needle classes. The needle mode's own citations INTO THIS FILE rotted inside it: six of
+//     them, correct at e3aee3e21 and all invalidated by commit a70371e21, which inserted
 //     this header without re-deriving them. A human reviewer caught them; the tool could not,
 //     because the tool cannot see itself.
 //     THE SAME FACT, SEEN FROM THE OTHER SIDE, AND IT IS ONE PROPERTY AND NOT TWO: it is exactly
@@ -747,7 +747,7 @@ export function runDetector({ repoRoot, since, until, inventoryPath } = {}) {
   };
 }
 
-// ------------------------------------------------------- SP-131 the needle review
+// -------------------------------------------------------------- the needle review
 
 /** The needle mode's row classes. A typed vocabulary, like CLASS above, and for the same
  *  reason: a fact must be able to assert the SPECIFIC check that tripped. */
@@ -1067,7 +1067,7 @@ export function formatNeedleCoverage(coverage) {
     "  also not checked: a citation that was wrong the day it was written (no needle knows what a",
     "  citation intended); an entry's citedBy, which no class re-derives once the entry exists; and",
     "  any citation into client/tools/** or into a .mjs file, which is outside the corpus entirely —",
-    "  SP-131's own citations into detect.mjs rotted inside it, unseen by this tool.",
+    "  the needle mode's own citations into detect.mjs rotted inside it, unseen by this tool.",
   ].join("\n");
 }
 
@@ -1110,7 +1110,7 @@ export function formatNeedleReport(outcome) {
 
 // -------------------------------------------------------------------- reporting
 
-/** `needleCoverage` is the SP-131 coverage block, optional so the fourteen facts that call
+/** `needleCoverage` is the needle mode's coverage block, optional so the fourteen facts that call
  *  this with one argument keep working. When present it is emitted BEFORE the closing line,
  *  because a coverage gap printed after "this is a review list, not a failure" reads as an
  *  appendix rather than as part of the finding. */

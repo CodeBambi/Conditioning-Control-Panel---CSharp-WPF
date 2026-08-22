@@ -5,7 +5,7 @@ using CcpClient.Desktop.Effects;
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
-/// SP-109: the Brain Drain module's persisted dials — <b>the AUDIO half's dials only</b>.
+/// The Brain Drain module's persisted dials — <b>the AUDIO half's dials only</b>.
 ///
 /// <para><b>Upstream's one flag drives two mechanisms, and this document is deliberately half of
 /// it.</b> <c>BrainDrainEnabled</c> starts the paced audio service

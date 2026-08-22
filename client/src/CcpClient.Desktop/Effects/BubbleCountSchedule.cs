@@ -32,7 +32,7 @@ public enum BubbleCountDifficulty
 /// <para><b>The two jitter forms are arithmetically identical and are still ported separately.</b>
 /// <c>b + (r*0.4b - 0.2b) == b*(0.8 + 0.4r)</c>, so this class could have called the video one. It
 /// does not, because they are two upstream sites with two dials and two clamps, and a shared helper
-/// would make a later change to one silently change the other — the same reason SP-109's two audio
+/// would make a later change to one silently change the other — the same reason the two audio
 /// modules kept two schedules over one shape.</para>
 /// </summary>
 public static class BubbleCountSchedule

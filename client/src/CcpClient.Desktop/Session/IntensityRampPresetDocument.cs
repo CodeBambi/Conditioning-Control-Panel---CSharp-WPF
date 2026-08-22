@@ -5,10 +5,10 @@ using CcpClient.Desktop.Effects;
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
-/// SP-108: the Intensity Ramp module's persisted dials — the port's counterpart of the ramp half of
+/// The Intensity Ramp module's persisted dials — the port's counterpart of the ramp half of
 /// WPF's <c>#region Scheduler</c> block (<c>CCP.Core/Models/AppSettings.cs:2574-2640</c>).
 ///
-/// <para><b>One document per module</b>, on the precedent SP-101 set and SP-105/SP-106 applied
+/// <para><b>One document per module</b>, on the per-module precedent two earlier modules already applied
 /// (divergences D71/D80): the store's Degraded load path takes the WHOLE document to defaults, so
 /// one hand-broken value in a shared file would reset every other module's dials. The clamps are
 /// WPF's, in the setters, exactly as WPF clamps them.</para>
@@ -116,7 +116,7 @@ public sealed class IntensityRampPresetDocument
     /// <summary>
     /// WPF's <c>RampLinkFlashOpacity</c> (<c>CCP.Core/Models/AppSettings.cs:2589-2594</c>), default
     /// false. Drives <see cref="VisualsPresetDocument.FlashOpacityPercent"/> — the FIRST of WPF's
-    /// five links and, until SP-117 landed the Visuals row, the one this port had to leave absent
+    /// five links and, until the Visuals row landed, the one this port had to leave absent
     /// (D93). The remaining two, master volume and subliminal volume, still have no dial on any
     /// ported panel and are still absent.
     /// </summary>

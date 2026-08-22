@@ -8,7 +8,7 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-046 c7 composition-wiring proof: the PRODUCT CompositionRoot constructs the full
+/// The c7 composition-wiring proof: the PRODUCT CompositionRoot constructs the full
 /// AI chain (before this slice, no product composition constructed the pipeline — the
 /// packet's core wiring requirement). Boot phases 1-3 through the real
 /// CompositionRoot/StartupPhaseRunner against a temp data root; assert the participant
@@ -61,7 +61,7 @@ public class CompanionCompositionTests
         // The provider probe ran in the CapabilityProbes phase — a REAL loopback probe,
         // honestly read either way: Available when an Ollama-shaped service answers
         // api/version on this box (a real Ollama may be present), Unavailable otherwise.
-        // NEVER a registration/selection-derived claim (SP-006; contract §11 rule 2).
+        // NEVER a registration/selection-derived claim (contract §11 rule 2).
         var provider = capabilities.GetState(AiOperationPipeline.CapabilityName(AiProviderId.LocalOllama));
         Assert.True(provider is CapabilityState.Available or CapabilityState.Unavailable,
             $"unexpected provider state: {provider}");

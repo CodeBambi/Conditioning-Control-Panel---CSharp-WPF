@@ -3,8 +3,8 @@ using System.Text.Json;
 namespace CcpClient.Desktop.Features.Dtrh;
 
 /// <summary>
-/// SP-049: the loom bridge subset (loom-save / loom-delete / loom-reveal in, loom-result /
-/// loom-list out) shared by BOTH web hosts — the game host window (SP-026 b4) and the
+/// The loom bridge subset (loom-save / loom-delete / loom-reveal in, loom-result /
+/// loom-list out) shared by BOTH web hosts — the game host window (slice b4) and the
 /// standalone studio window (the WPF LoomHostService sibling shape). One write path so the
 /// two hosts never drift (pre-approach consult binding 1a). All file authority stays in
 /// <see cref="DtrhLoom"/>; presence+shape logging only (the slug is a user-authored
@@ -40,7 +40,7 @@ public sealed class DtrhLoomDispatch
                 // loom-save {name, gifBase64, params, overwrite} (loomStudio.js:251-259) →
                 // store validates + writes, page gets the verdict + a fresh list
                 // (DtrhHostService.cs:285-293). The write path is the SHARED HandleSave
-                // overload (SP-054 one-write-path binding — the DTRH host adds PostList;
+                // overload (the one-write-path binding — the DTRH host adds PostList;
                 // the intake host's 6-out table has NO loom-list, so the overload never posts).
                 var saveResult = HandleSave(loomSave.Name, loomSave.Overwrite, loomSave.Raw);
                 if (saveResult.Ok) PostList();
@@ -63,8 +63,8 @@ public sealed class DtrhLoomDispatch
         }
     }
 
-    /// <summary>SP-054: the shared loom-SAVE write path (one write path for EVERY web
-    /// host — the SP-049 consult binding extended to the intake host, consult 7b). Sends
+    /// <summary>The shared loom-SAVE write path (one write path for EVERY web
+    /// host — the consult binding extended to the intake host, consult 7b). Sends
     /// loom-result {op:"save"} and returns the store verdict; the CALLER owns any list
     /// posting (the intake 6-out table has no loom-list, so this method never posts one).
     /// </summary>

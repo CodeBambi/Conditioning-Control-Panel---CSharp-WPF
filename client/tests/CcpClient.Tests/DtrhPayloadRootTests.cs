@@ -5,8 +5,8 @@ using Xunit;
 namespace CcpClient.Tests;
 
 /// <summary>
-/// SP-048 (b1 land condition — published-artifact payload location DECIDED: beside the exe
-/// via the linked glob, served read-only through AppContext.BaseDirectory). Covers the
+/// B1 land condition — published-artifact payload location DECIDED: beside the exe
+/// via the linked glob, served read-only through AppContext.BaseDirectory. Covers the
 /// non-fatal payload-presence probe (Missing/Incomplete/Present), the one-path root
 /// resolution shape that makes Debug/Release/published identical, and the participant's
 /// startup diagnostic naming the resolved root (falsifiability: a boot transcript proves
@@ -66,7 +66,7 @@ public sealed class DtrhPayloadRootTests : IDisposable
         // The decided location is one code path for Debug/Release/published: the payload
         // sits BESIDE the binary (AppContext.BaseDirectory), the overlay is its sibling,
         // and media lives under the payload — the shape the linked glob lays down in all
-        // three modes (empirically verified on the published win-x64 artifact, SP-048 record).
+        // three modes (empirically verified on the published win-x64 artifact, per the packet record).
         var baseDir = AppContext.BaseDirectory;
         Assert.Equal(Path.Combine(baseDir, "payload", "dtrh"), DtrhParticipant.PayloadRoot);
         Assert.Equal(Path.Combine(baseDir, "payload-overlay"), DtrhParticipant.OverlayRoot);
