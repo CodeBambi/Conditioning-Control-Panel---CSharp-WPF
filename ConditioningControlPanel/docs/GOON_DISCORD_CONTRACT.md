@@ -1,8 +1,8 @@
 # Goon Game — Discord Sharing Contract (v1)
 
-This contract is implementation-neutral. Field names, verb names, enum strings and ordering
-rules below are frozen. If an implementation detail forces a deviation, record the decision
-instead of renaming protocol values.
+Fable-authored. Agents EXTEND-ONLY: field names, verb names, enum strings and ordering
+rules below are frozen. If an implementation detail forces a deviation, stop and report
+it in your final answer instead of renaming things.
 
 Scope: opt-in Discord sharing inside the Goon Game — (1) avatar shown to the opponent
 (VS splash + small HUD bubble), (2) "allow Discord DMs" (opponent gets a Message button),
@@ -93,7 +93,7 @@ recent opponent is ever stored.
 - `SetGoonActivity(string s)` with s ∈ lobby|live|recap → fixed strings, e.g.
   Details "Goon Game" / State "In the lobby" | "In a duel" | "Match over".
 - Assets: `LargeImageKey = "https://cclabs.app/img/goon-game.png"` (DiscordRPC 1.6 accepts
-  https URLs), `LargeImageText = "Goon Game"`. The deployment publishes the image; if Discord rejects
+  https URLs), `LargeImageText = "Goon Game"`. Fable deploys the image; if Discord rejects
   the URL the presence simply shows no art — acceptable.
 - Connect-on-demand: if global `DiscordRichPresenceEnabled` is off but `GoonRichPresence`
   is on, connect for the GG session and ClearPresence+Disconnect on `rp-state off`.

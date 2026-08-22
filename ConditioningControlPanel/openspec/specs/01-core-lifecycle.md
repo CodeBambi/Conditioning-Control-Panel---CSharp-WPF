@@ -7,7 +7,7 @@ handoff, settings persistence, auto-update, OS integration (tray, global hooks/h
 title-bar chrome), in-app notifications, the hang watchdog, performance tiering, and security/log
 utilities.
 
-Source LOC verified via `wc -l`. Generated and untracked copies were ignored.
+Source LOC verified via `wc -l`. Worktree copies under `.claude/worktrees/` were ignored.
 
 ---
 

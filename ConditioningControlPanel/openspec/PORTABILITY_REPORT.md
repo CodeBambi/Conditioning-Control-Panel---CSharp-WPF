@@ -1,10 +1,10 @@
 # CCP Portability Report
 
-Generated 2026-06-15. Method: 8 parallel research passes produced OpenSpec capability specs
+Generated 2026-06-15. Method: 8 parallel recon agents produced OpenSpec capability specs
 (`openspec/specs/01..08`) classifying every subsystem **Portable / Mixed / OS-Specific**
 against the rubric in `PORTABILITY_RUBRIC.md`.
 
-## Codebase size (real — excludes generated and untracked copies)
+## Codebase size (real — excludes the 3 `.claude/worktrees/` repo copies)
 
 | Layer | LOC |
 |---|---|

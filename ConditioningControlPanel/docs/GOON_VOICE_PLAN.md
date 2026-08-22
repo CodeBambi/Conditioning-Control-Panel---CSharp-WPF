@@ -1,7 +1,9 @@
 # Goon Game — Voice Notes (P2P audio messages)
 
-This document is the contract. Names, verbs, preference keys, caps and limits below are pinned;
-internals remain an implementation choice within those constraints.
+Branch `feat/goon-voice` off `f66878cb` (round-5 beta hardening). Worktree
+`C:\Projects\ccp-wt-goon-voice`. This doc is the CONTRACT — Fable-authored, agents
+extend-only. Names, verbs, prefs keys, caps and limits below are pinned; internals are
+the implementing agent's call.
 
 ## Product
 
@@ -120,7 +122,7 @@ Emote association map lives in prefs: `voiceEmoteMap` = `{ [emoteKey]: noteId }`
   on for this match"). No toggle in the lobby — the toggle lives in the Voice Notes
   screen only.
 - Strings: ALL voice strings live in `strings.js` under `S.voice.*` (added in
-  Wave 1; Wave 2 workstreams are READ-ONLY on strings.js).
+  wave 1 by Agent A; wave-2 agents are READ-ONLY on strings.js).
 
 ## Service seam (pinned API, `ui/voice/voiceService.js`, built wave 1)
 
@@ -137,18 +139,18 @@ createVoiceService({ match, audio, prefs, noteStore|null, logger }) => {
 Constructed in `boot.js` (wave 1) and threaded into `mountHud` deps (unused until
 wave 2) and screen ctx.
 
-## Waves / file ownership (no two workstreams edit the same file in the same wave)
+## Waves / file ownership (no two agents edit the same file in the same wave)
 
-- **Wave 1 — Workstream A (foundation)**: core/contracts.js, core/wire.js, core/caps.js,
+- **Wave 1 — Agent A (foundation)**: core/contracts.js, core/wire.js, core/caps.js,
   core/match.js, ui/voice/voiceService.js, ui/audio.js, ui/prefs.js, ui/options.js,
   ui/strings.js (full S.voice block — enumerate every string waves 2 needs),
   boot.js wiring (service + hud dep threading + caps advertise),
   C# GoonContracts.cs consent mirror, test/selftest-voice.js (new suite) +
   additive checks in selftest-core.
-- **Wave 2 — Workstream B (mic + recorder + C#)**: ui/voice/recorder.js,
+- **Wave 2 — Agent B (mic + recorder + C#)**: ui/voice/recorder.js,
   ui/voice/micHud.js, ui/hud.js (mount hook), ui/hud.css,
   Services/GoonGame/GoonHostService.cs (PermissionRequested), selftest-hud additions.
-- **Wave 2 — Workstream C (screen + library + emote assoc)**: ui/voice/noteStore.js
+- **Wave 2 — Agent C (screen + library + emote assoc)**: ui/voice/noteStore.js
   (IndexedDB), ui/screens/voice.js, ui/screens/title.js (menu item),
   ui/screens/lobby.js (optional indicator), ui/emotes.js (hook), ui/screens.css,
   boot.js (screen registration + actions.goVoice), selftest additions (own file

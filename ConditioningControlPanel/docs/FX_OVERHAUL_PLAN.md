@@ -1,6 +1,6 @@
 # CCP FX Overhaul — Vision & Execution Plan
 
-*Drafted 2026-07-30 from four parallel research passes (UI surface inventory, Skia/compositor
+*Drafted 2026-07-30 from a 4-agent recon pass (UI surface inventory, Skia/compositor
 infrastructure, mod theming, big-client design research) plus screenshots of all 12
 reachable tab surfaces at v6.5.2.*
 
@@ -74,7 +74,7 @@ with cap-bloom).
 - ~142 literal `FF69B4` in 20+ XAML files never re-tint. Clean up
   opportunistically wherever the FX pass touches a file.
 
-### Perf & safety rails (non-negotiable for every implementation)
+### Perf & safety rails (non-negotiable for every build agent)
 - `PerformanceProfile` (3 tiers) already has `AllowGlow(tier)` /
   `MaxGlowBlurRadius(tier)` — declared but barely consulted. The overhaul adds
   `AllowAmbientMotion(tier)` / particle budgets and actually consults them.
@@ -196,18 +196,19 @@ All colors via FxTheme; all skipped under Reduced/Off.
 
 ---
 
-## 5. Execution — workstream breakdown
+## 5. Execution — PR/agent breakdown
 
-Each workstream ends green (`dotnet build` + 559 tests) and gets headed before/after
-screenshots. Scope windows by name (`"Conditioning Control Panel"`), never `main`, because
-the compositor host shadows it.
+All build agents = **Opus**, per standing rule. Each PR ends green
+(`dotnet build` + 559 tests) and gets a capture-harness before/after screenshot
+set (`.claude/skills/x-drafts/scripts/capture.ps1` — scope windows by name
+`"Conditioning Control Panel"`, never `main`, the compositor host shadows it).
 
-| Workstream | Content | Parallel roles |
+| PR | Content | Agents |
 |---|---|---|
 | PR-0 | FxTheme + ModFxPalette + AmbientFxCanvas + PerformanceProfile additions + motion library + reduced-motion setting + retrofit existing loops | 2 (infra, then review) |
 | PR-1 | Chrome: tab choreography, nav, START, XP bar, banner/marquee | 1–2 |
 | PR-2 | Dashboard flagship pass | 1–2 |
-| PR-3 | Tab batch A: Presets, Quests, Achievements, Leaderboard, Enhancements | 2 (parallel by tab, isolated workspaces) |
+| PR-3 | Tab batch A: Presets, Quests, Achievements, Leaderboard, Enhancements | 2 (parallel by tab, worktree isolation) |
 | PR-4 | Tab batch B: Companion, Deeper, Assets, Profile, Subjects, Lab, Takeover orb, shared gate control | 2 (parallel) |
 | PR-5 | Event one-shots + polish + full play-test + hang-hunt + perf soak (idle CPU before/after on each tab) | 1 + owner play-test |
 
