@@ -1,7 +1,7 @@
 {
   "projects": {
     "CcpClient.Tests": {
-      "total": 2613,
+      "total": 2614,
       "allowedSkips": [
         "CcpClient.Tests.ChaosTunnelCapabilityTests.Windows_DelegatesToTheSameEngineLoadAsDtrh",
         "CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps",
@@ -29,5 +29,5 @@
   "skipSemantics": "May-skip, not must-skip: a listed test that runs and passes on a machine where its precondition holds is green. Matching is exact on the pre-'(' portion of the TRX result testName (xunit theory rows serialize with arguments, e.g. Class.Method(x: 1)); a name with no parens matches whole. Anchor is the TRX result list, never Counters arithmetic.",
   "admissionRule": "allowedSkips is not a quarantine list. A test may be listed only when its precondition is a property of the machine or OS that cannot be satisfied by configuration during a contract run, and its change names the machine class where it executes. Two named PERMANENT BANS apply: (1) CcpClient.Tests.DataRootOverrideTests.DefaultSettingsPath_EnvUnset_IsThePlatformDefault must never be allowed to skip because a process-wide CCP_DATA_ROOT override makes the floor vacuous; (2) CcpClient.Tests.ChaosTunnelLoopbackTests.Logging_RouteClassesOnly_NeverFilenameOrQuery must be fixed at the source, never quarantined.",
   "bumpRule": "Bump total only in the same commit as the test change that moves the count, with the reason recorded here. Never widen, disable, or special-case a check to make a step pass. Adding a name to allowedSkips requires the admission rule above and the machine class where it executes.",
-  "lastMovedBy": "Added AudioModuleSpineTests.ArmingBrainDrainRereadsItsClipFolder_AndArmingMindWipeDoesNot. AudioCuePool cached the folder on first read and its Invalidate() was never on IAudioCuePool, so no shipping code could reach it and a clip dropped in mid-session stayed invisible until the process restarted - stopping and restarting the session did not help either. Invalidate is now on the interface and Brain Drain re-scans at arm (opt-in RescanOnArm), matching upstream, which re-scans on every session start for Brain Drain only. Shown failing with the opt-in off. CcpClient.Tests 2612 to 2613, CcpClient.HeadlessTests unchanged at 152."
+  "lastMovedBy": "Added AudioCapabilityTests.AClipThatReachesItsEndReleasesItsSlot_AndALateEndDoesNotEvictItsReplacement. WasapiAudioPresence cleared a slot only on displacement or an explicit Silence, so every clip that simply ran out held its native player for the rest of the session. It now subscribes PlaybackEnded before Play() - the event can only arrive from the device thread, which must take the gate the publish holds, so there is no window - and ownership is the slot: a late end from an already-displaced player does nothing. The StubPlayer fake had PlaybackEnded as a no-op add/remove pair, so no fact could express a natural end at all; it is a real event now. Both halves shown failing independently. CcpClient.Tests 2613 to 2614, CcpClient.HeadlessTests unchanged at 152."
 }

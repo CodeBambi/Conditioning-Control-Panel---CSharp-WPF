@@ -232,6 +232,14 @@ public sealed class WasapiAudioPresence : IAudioPresence
         IAudioPlayer? displaced;
         lock (_gate)
         {
+            // THE NATURAL END IS SUBSCRIBED BEFORE Play(), and the ordering is what makes it
+            // race-free rather than lucky. Play() only QUEUES the device thread (below), so the
+            // event can only ever arrive from that thread — and that thread has to take this gate,
+            // which is held until the slot below is published. So the handler cannot run against a
+            // half-published slot, and there is no window between starting and subscribing in which
+            // an end could be missed.
+            player.PlaybackEnded += OnPlaybackEnded;
+
             // Play() only queues the device thread, so it is cheap enough to hold the gate across —
             // and holding it is what stops a Silence from landing between starting the player and
             // publishing it where a Silence can find it. Upstream's own reasoning, verbatim in
@@ -239,6 +247,32 @@ public sealed class WasapiAudioPresence : IAudioPresence
             player.Play();
             _slots.Remove(cue.Slot, out displaced);
             _slots[cue.Slot] = player;
+        }
+
+        void OnPlaybackEnded(object? sender, EventArgs args)
+        {
+            // OWNERSHIP IS THE SLOT. Whoever takes the player out of the slot disposes it, and
+            // exactly one path can win that under the gate. If this player is no longer the slot's,
+            // it was displaced or silenced and THAT caller already owns the teardown — doing
+            // nothing here is what keeps a displacement from double-disposing and logging a
+            // spurious ObjectDisposedException on every ordinary cue.
+            bool mine;
+            lock (_gate)
+            {
+                mine = _slots.TryGetValue(cue.Slot, out var current) && ReferenceEquals(current, player);
+                if (mine)
+                {
+                    _slots.Remove(cue.Slot);
+                }
+            }
+
+            player.PlaybackEnded -= OnPlaybackEnded;
+            if (mine)
+            {
+                // Stop() on an already-ended player is a no-op the backend tolerates; the Dispose
+                // is the point, and it is the thing that never used to happen.
+                SafeStopAndDispose(player);
+            }
         }
 
         SafeStopAndDispose(displaced);

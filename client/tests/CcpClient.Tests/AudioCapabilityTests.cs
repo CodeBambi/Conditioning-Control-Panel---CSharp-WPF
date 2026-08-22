@@ -459,6 +459,57 @@ public class AudioCapabilityTests
         presence.Dispose();
     }
 
+    /// <summary>
+    /// A clip that reaches its own end releases its slot and is disposed — and a LATE end from an
+    /// already-displaced player does not touch the clip that replaced it.
+    ///
+    /// <para>Nothing used to release a finished player. Slots were cleared only by displacement or
+    /// by an explicit Silence, so every clip that simply ran out sat in its slot holding a native
+    /// player for the rest of the session. It also made "is the slot occupied" useless as a proxy
+    /// for "is it playing", which is why IAudioPresence.IsSounding has to ask the player.</para>
+    ///
+    /// <para>The second half is the race that makes ownership matter: the device thread can report
+    /// player A's end AFTER player B has taken the slot. Ownership is the slot, so A's late event
+    /// must do nothing rather than evict B.</para>
+    /// </summary>
+    [Fact]
+    public void AClipThatReachesItsEndReleasesItsSlot_AndALateEndDoesNotEvictItsReplacement()
+    {
+        var backend = new StubBackend(initialises: true);
+        var presence = new WasapiAudioPresence(
+            backend, _ => { },
+            readback: _ => new AudioRenderObservation(true, "Stub", true, true, true, 0f, 1),
+            endpointCount: () => 1);
+        presence.Open();
+
+        presence.Cue(new AudioCue("braindrain", "a.wav", 1f));
+        var first = backend.Players[0];
+        Assert.True(first.HasEndSubscriber, "the presence never subscribed, so no end could ever be noticed");
+        Assert.True(presence.IsSounding("braindrain"));
+
+        // The clip runs out on its own.
+        first.RaiseEnded();
+
+        Assert.True(first.Disposed, "a finished player must be disposed, not left holding the slot");
+        Assert.False(presence.IsSounding("braindrain"), "the slot still reads as sounding after the clip ended");
+
+        // Silence now has nothing to stop, which is the observable proof the slot was released
+        // rather than merely reporting a stopped player.
+        Assert.IsType<CapabilityState.Unavailable>(presence.Silence("braindrain"));
+
+        // THE RACE. A displaced player reports its end late; the replacement must survive it.
+        presence.Cue(new AudioCue("mindwipe", "b.wav", 1f));
+        var displaced = backend.Players[1];
+        presence.Cue(new AudioCue("mindwipe", "c.wav", 1f));
+        var replacement = backend.Players[2];
+
+        displaced.RaiseEnded();
+
+        Assert.False(replacement.Disposed, "a late end from the displaced player disposed its replacement");
+        Assert.True(presence.IsSounding("mindwipe"), "a late end from the displaced player emptied the slot");
+        presence.Dispose();
+    }
+
     [Fact]
     public void ASecondCueOnOneSlotREPLACESTheFirst_AndTheDisplacedPlayerIsStoppedAndDisposed()
     {
@@ -602,11 +653,16 @@ public class AudioCapabilityTests
 
     private sealed class StubPlayer : IAudioPlayer
     {
-        public event EventHandler? PlaybackEnded
-        {
-            add { }
-            remove { }
-        }
+        /// <summary>A REAL event, not a no-op pair. The stub used to swallow both add and remove,
+        /// so no fact could express a clip reaching its end — which is how a presence that never
+        /// released a finished player stayed green.</summary>
+        public event EventHandler? PlaybackEnded;
+
+        /// <summary>The backend reporting natural completion. Never raised by Stop(), matching the
+        /// seam's own contract.</summary>
+        public void RaiseEnded() => PlaybackEnded?.Invoke(this, EventArgs.Empty);
+
+        public bool HasEndSubscriber => PlaybackEnded is not null;
 
         public AudioPlayerState State { get; private set; } = AudioPlayerState.Stopped;
 
