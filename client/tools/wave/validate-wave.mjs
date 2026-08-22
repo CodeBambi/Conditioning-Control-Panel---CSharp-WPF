@@ -39,13 +39,40 @@
 //   8. No shared SP-<number> in the wave, and no wave number at or below the highest number
 //      already on disk — a reissued ID silently overwrites history.
 //
-// MIRROR note (do not let these two drift): packet enumeration and the testCommand row
-// regex are ports of client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs — packets are
-// spine-tasks/<packet>/PROMPT.md at EXACTLY one level, the directory must parse as
-// SP-<number>-, and the row is matched with the same expression. The grandfather rule is
-// the same one and the ONLY one: packets below SP-065 are not bound by the wrapper check,
-// by explicit ID and never by a suppression list. It is inherited here, not invented here,
-// and it is irrelevant in practice because a wave authors NEW packets.
+// CONVERGENCE note (SP-136 — this REPLACED a MIRROR note, and the replacement is the point):
+// checks 2-5, the packet enumeration and the contract-row parsing are CONSUMED BY
+// client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs, not re-implemented there. That guard
+// runs `--emit-packet-scopes` (below), reads the verdicts out of the JSON, and applies only its
+// own two grandfather IDs and its own message text on top. It holds no coverage predicate, no
+// contract-row regex and no wrapper-token test of its own.
+//
+// This used to be a comment saying "do not let these two drift", sitting between two
+// implementations. They drifted anyway, on check 4: this file asked glob-aware coverage
+// (patternCovers) and FloorWrapperGuardTests.cs:224 asked a literal substring (String.Contains),
+// so `client/tests/floor/**` printed WAVE OK here and RED there. Both wave-60 packets were
+// authored that way and the base was red from the authoring commit onward. A comment cannot
+// enforce anything. There is now nothing to drift because there is only one implementation.
+//
+// The GRANDFATHER RULES are deliberately NOT shared: they are each guard's own binding question,
+// not a shared semantics, and the two are genuinely different. This file binds check 2 from
+// SP-065 (FIRST_BOUND_PACKET_NUMBER, referenced there and nowhere else) and binds checks 3-5 with
+// NO packet-number condition at all; the C# guard binds its floorDelta and shared-pin test from
+// SP-073 and re-applies that AFTER consuming these verdicts. 60 of the 128 packets on disk
+// violate check 4 here and are correctly invisible to the C# guard, which is why the C# side
+// must keep re-applying its own rule and why a fact pins that it still does.
+//
+// Usage of the projection mode, and its EXIT-CODE CONTRACT:
+//   node client/tools/wave/validate-wave.mjs --emit-packet-scopes <spineTasksDir>
+// Exit 0 = a projection was produced and written to stdout as JSON. A corpus full of violations
+//          is still exit 0: violations are reported as DATA, per packet, because the consumer
+//          applies its own binding rule to them. Exit 0 never means "the corpus is clean".
+// Exit 2 = no projection could be produced (no directory named, or it is not a directory). The
+//          consumer must treat any non-zero exit, any abnormal termination and any unparseable
+//          stdout as a hard failure, never as an empty corpus — an oracle that returns nothing
+//          would make every guard consuming it vacuously green.
+// The mode takes an EXPLICIT directory and never guesses a tree, so it is safe to run from a
+// copy of this file anywhere on disk. That is what makes the one-sided-update demonstration in
+// WaveGuardConvergenceTests possible.
 //
 // This script reads. It never writes, never touches git, and never runs a test.
 
@@ -224,6 +251,270 @@ export function patternCovers(pattern, literalPath) {
 }
 
 // ---------------------------------------------------------------------------
+// THE SHARED CHOKEPOINT DECISION — one implementation, consulted by two guards
+// ---------------------------------------------------------------------------
+
+// SP-136. This IS check 4, it IS check 5, and it is ALSO the whole of what
+// FloorWrapperGuardTests asks about the shared floor pin. The C# guard consults it through
+// --emit-packet-scopes and holds no predicate of its own, so the two cannot disagree.
+//
+// WHY GLOB COVERAGE IS THE SURVIVING SEMANTICS, decided against what the rule is FOR. The rule
+// exists so a lane cannot edit client/tests/floor/floor.json — every test-adding packet would
+// otherwise bump one line of one file and collide with every lane-mate (SP-072 amendment: green
+// alone, RED at merge). A packet declaring `client/tests/**` forbids the pin at least as
+// completely as one naming it, so it satisfies the PROPERTY. The literal substring tested the
+// SPELLING instead, and was wrong in BOTH directions, not merely narrower: unanchored to a
+// backticked value, it ACCEPTED a cell declaring `client/tests/floor/floor.json.bak` — a
+// different file the lane may freely edit — while rejecting a glob that genuinely covers the pin.
+//
+// MEASURED over the 128 packets on disk at 766be7ac0 before the choice was made, in both
+// directions: adopting coverage changes the verdict of ZERO bound packets (>= SP-073), while
+// adopting the literal would newly REJECT twelve packets the validator accepts today, every one
+// of which declares `client/tests/**`. Stated plainly because the record must not imply more:
+// on today's corpus this is a FORWARD-LOOKING hardening and not a repair of a live failure —
+// all 16 bound packets that declare `client/tests/floor/**` also carry the literal in the same
+// cell, which is why the tree is green. What it buys is that the next packet declaring only the
+// glob cannot print WAVE OK and red the suite.
+export function declarationCoversChokepoint(declaredValues, chokepointPath) {
+  return declaredValues.some((p) => patternCovers(p, chokepointPath));
+}
+
+// One guard's whole question about one PROMPT.md: is there a fileScopeMustNotChange row at all,
+// and does what it declares cover this chokepoint? Row absence is reported SEPARATELY from
+// non-coverage because the two are different failures with different messages on both sides.
+export function chokepointVerdict(lines, chokepointPath) {
+  const rows = matchContractRows(lines, "fileScopeMustNotChange");
+  const declared = rows.flatMap((r) => r.values);
+  return {
+    rowFound: rows.length > 0,
+    rowLine: rows.length > 0 ? rows[0].line : 0,
+    declared,
+    covered: declarationCoversChokepoint(declared, chokepointPath),
+  };
+}
+
+// THE FIXTURE BOTH SIDES MUST SATISFY. Each case is a synthetic PROMPT.md fragment with the
+// verdict the shared decision must return. The JS refuses a wave when it disagrees with this
+// (see main()); the C# pins the SAME verdicts in its own source — deliberately not read from
+// here, because a fact whose expected and actual both come out of this file would self-certify
+// and a lockstep edit would sail through it.
+//
+// Case `covering-glob-floor-dir` is the one that started this: it is the exact declaration both
+// wave-60 packets carried.
+export const FLOOR_PIN_COVERAGE_CASES = [
+  {
+    id: "literal-only",
+    why: "naming the pin exactly is the declaration the C# guard used to demand, and it still passes",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/src/**` |"],
+    expect: { rowFound: true, covered: true },
+  },
+  {
+    id: "covering-glob-floor-dir",
+    why: "THE CASE THAT STARTED THIS — both wave-60 packets declared exactly this and reddened the base",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `client/tests/floor/**`, `client/src/**` |"],
+    expect: { rowFound: true, covered: true },
+  },
+  {
+    id: "covering-glob-tests-tree",
+    why: "the declaration all twelve pre-SP-073 packets carry; it forbids the pin and more",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `ConditioningControlPanel/**`, `client/tests/**` |"],
+    expect: { rowFound: true, covered: true },
+  },
+  {
+    id: "covering-glob-client-tree",
+    why: "a blanket ban over the whole client tree covers the pin a fortiori",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `client/**` |"],
+    expect: { rowFound: true, covered: true },
+  },
+  {
+    id: "directory-prefix-without-a-glob",
+    why: "a declared directory claims everything beneath it, the same rule patternsIntersect uses",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `client/tests/floor` |"],
+    expect: { rowFound: true, covered: true },
+  },
+  {
+    id: "sibling-file-that-is-not-the-pin",
+    why: "THE LITERAL RULE'S OTHER DEFECT: String.Contains ACCEPTS this cell, because the pin's path is a substring of a DIFFERENT file the lane may freely edit. Coverage refuses it",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `client/tests/floor/floor.json.bak` |"],
+    expect: { rowFound: true, covered: false },
+  },
+  {
+    id: "near-miss-directory",
+    why: "a segment that merely starts the same must not cover — coverage is per segment, not per prefix string",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `client/tests/floorX/**` |"],
+    expect: { rowFound: true, covered: false },
+  },
+  {
+    id: "unrelated-tree",
+    why: "the ordinary refusal: a real declaration that simply does not reach the pin",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `client/docs/**`, `ConditioningControlPanel/**` |"],
+    expect: { rowFound: true, covered: false },
+  },
+  {
+    id: "prose-mention-not-backticked",
+    why: "the path named in prose inside the cell is not a DECLARATION; String.Contains counted it, backtick extraction does not",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | do not edit client/tests/floor/floor.json under any circumstances |"],
+    expect: { rowFound: true, covered: false },
+  },
+  {
+    id: "windows-separators",
+    why: "a packet authored on Windows may carry backslashes; the same file must not read as two",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `client\\tests\\floor\\**` |"],
+    expect: { rowFound: true, covered: true },
+  },
+  {
+    id: "case-only-difference",
+    why: "a case-only difference is the same file on a Windows or macOS checkout, so it must not read as a different one",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| fileScopeMustNotChange | `Client/Tests/Floor/**` |"],
+    expect: { rowFound: true, covered: true },
+  },
+  {
+    id: "second-row-carries-it",
+    why: "the declared set is the UNION across every matching row; one covering value anywhere in it satisfies the rule",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: [
+      "| fileScopeMustNotChange | `client/docs/**` |",
+      "| fileScopeMustNotChange | `client/tests/floor/**` |",
+    ],
+    expect: { rowFound: true, covered: true },
+  },
+  {
+    id: "no-scope-row-at-all",
+    why: "refusal to go blind: an absent row is its own failure on both sides and must never read as covered",
+    chokepoint: "client/tests/floor/floor.json",
+    lines: ["| testCommand | `node client/tests/floor/check-floor.mjs` |"],
+    expect: { rowFound: false, covered: false },
+  },
+];
+
+// The fixture run through the shared decision. Returned as data (never thrown) so the projection
+// can carry it to the C# side and both can judge it.
+export function evaluateCoverageCases() {
+  return FLOOR_PIN_COVERAGE_CASES.map((c) => {
+    const verdict = chokepointVerdict(c.lines, c.chokepoint);
+    return {
+      id: c.id,
+      why: c.why,
+      chokepoint: c.chokepoint,
+      expect: c.expect,
+      actual: { rowFound: verdict.rowFound, covered: verdict.covered },
+      declared: verdict.declared,
+    };
+  });
+}
+
+export function coverageCaseMismatches() {
+  const bad = [];
+  for (const c of evaluateCoverageCases()) {
+    if (c.actual.rowFound !== c.expect.rowFound || c.actual.covered !== c.expect.covered) {
+      bad.push(
+        `[fixture] case '${c.id}': the shared chokepoint decision returned ` +
+        `{rowFound:${c.actual.rowFound}, covered:${c.actual.covered}} but this fixture pins ` +
+        `{rowFound:${c.expect.rowFound}, covered:${c.expect.covered}} — ${c.why}`
+      );
+    }
+  }
+  return bad;
+}
+
+// ---------------------------------------------------------------------------
+// THE SHARED WRAPPER-ROUTING DECISION — the SP-065 rule, decided once
+// ---------------------------------------------------------------------------
+//
+// SP-136 REVIEW FIX. The first cut of this convergence closed the drift on check 4 and OPENED it
+// on check 2: routing the SP-065 verdict through the projection deleted the C# guard's own
+// `DOTNET_TEST.test(command) && !command.includes(WRAPPER_TOKEN)` and replaced it with two
+// booleans that NOTHING pinned. A single substitution below — `routesThroughWrapper: true` —
+// silences check 2 in the wave gate AND
+// PacketsAtOrAboveSp065_RouteDotnetTestThroughTheFloorWrapper at the same moment; before the
+// convergence, that same edit was caught by the C# side. A decision consumed in two places needs a
+// fixture exactly as the coverage decision does. Having built one for coverage only was the same
+// defect class, one check to the left.
+export function wrapperRoutingVerdict(command) {
+  return {
+    invokesDotnetTest: DOTNET_TEST.test(command),
+    routesThroughWrapper: command.includes(WRAPPER_TOKEN),
+  };
+}
+
+// The fixture both sides must satisfy for check 2. Same arrangement as the coverage fixture: the
+// C# pins these verdicts in its OWN source, so a lockstep edit to this file and its fixture still
+// reds there.
+export const WRAPPER_ROUTING_CASES = [
+  {
+    id: "bare-dotnet-test",
+    why: "THE SP-065 HALF-INSTALL FAILURE: a bare invocation lets an unexpected skip read green, and it must be refused",
+    command: "dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug",
+    expect: { invokesDotnetTest: true, routesThroughWrapper: false },
+  },
+  {
+    id: "wrapper-routed",
+    why: "the only accepted shape for a bound packet: the suite runs through the floor wrapper",
+    command: "node client/tests/floor/check-floor.mjs",
+    expect: { invokesDotnetTest: false, routesThroughWrapper: true },
+  },
+  {
+    id: "wrapper-routed-alongside-dotnet-test",
+    why: "a command that does both is accepted — the rule bans an UNWRAPPED invocation, never `dotnet test` itself",
+    command: "node client/tests/floor/check-floor.mjs && dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj",
+    expect: { invokesDotnetTest: true, routesThroughWrapper: true },
+  },
+  {
+    id: "not-a-dotnet-test-command",
+    why: "a packet whose contract runs something else entirely is not bound by the wrapper rule at all",
+    command: "pwsh client/tools/verify/capture.ps1 -Surface rail-door -State selected",
+    expect: { invokesDotnetTest: false, routesThroughWrapper: false },
+  },
+  {
+    id: "dotnet-test-with-extra-whitespace",
+    why: "the token is matched on word boundaries with flexible spacing, so `dotnet  test` is still an invocation",
+    command: "dotnet  test client/tests/CcpClient.Tests/CcpClient.Tests.csproj",
+    expect: { invokesDotnetTest: true, routesThroughWrapper: false },
+  },
+  {
+    id: "dotnet-build-is-not-dotnet-test",
+    why: "a near miss that must NOT read as an invocation, or every build-only packet would be refused",
+    command: "dotnet build client/CcpClient.sln -c Debug",
+    expect: { invokesDotnetTest: false, routesThroughWrapper: false },
+  },
+];
+
+export function evaluateWrapperCases() {
+  return WRAPPER_ROUTING_CASES.map((c) => ({
+    id: c.id,
+    why: c.why,
+    command: c.command,
+    expect: c.expect,
+    actual: wrapperRoutingVerdict(c.command),
+  }));
+}
+
+export function wrapperCaseMismatches() {
+  const bad = [];
+  for (const c of evaluateWrapperCases()) {
+    if (c.actual.invokesDotnetTest !== c.expect.invokesDotnetTest || c.actual.routesThroughWrapper !== c.expect.routesThroughWrapper) {
+      bad.push(
+        `[fixture] wrapper case '${c.id}': the shared routing decision returned ` +
+        `{invokesDotnetTest:${c.actual.invokesDotnetTest}, routesThroughWrapper:${c.actual.routesThroughWrapper}} but this ` +
+        `fixture pins {invokesDotnetTest:${c.expect.invokesDotnetTest}, routesThroughWrapper:${c.expect.routesThroughWrapper}} — ${c.why}`
+      );
+    }
+  }
+  return bad;
+}
+
+// ---------------------------------------------------------------------------
 // Packet enumeration and PROMPT.md contract parsing
 // ---------------------------------------------------------------------------
 
@@ -314,12 +605,202 @@ function readFloorDelta(deltaPath) {
 }
 
 // ---------------------------------------------------------------------------
+// One packet, inspected once — checks 1-5 and the parsed rows they rest on
+// ---------------------------------------------------------------------------
+//
+// validateWave() calls this for each packet the wave names; emitPacketScopes() calls it for
+// every packet on disk so the C# floor guard consumes THESE verdicts instead of computing its
+// own. `waveSize` gates check 5 and nothing else — the task board is a chokepoint only when
+// there IS a lane-mate — so the projection passes 1 and therefore never reports a board
+// violation, which is correct because the C# guard has no board rule to compare against.
+//
+// Returns { violations, packet, record }. `packet` is null on the two check-1 failures (the
+// wave cannot carry a packet it could not identify); `record` is null whenever there is no
+// PROMPT.md to parse.
+export function inspectPacket(name, spineTasksDir, waveSize) {
+  const violations = [];
+  const relPrompt = `spine-tasks/${name}/PROMPT.md`;
+  const dir = path.join(spineTasksDir, name);
+  const promptPath = path.join(dir, "PROMPT.md");
+
+  // check 1
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+    violations.push(`[check 1] ${name}: no such packet directory at spine-tasks/${name} — a wave cannot launch a lane on a packet that is not authored`);
+    return { violations, packet: null, record: null };
+  }
+  const numberMatch = PACKET_NUMBER.exec(name);
+  if (!numberMatch) {
+    violations.push(`[check 1] ${name}: packet directory name does not parse as SP-<number>-... — every ID rule below would silently pass`);
+    return { violations, packet: null, record: null };
+  }
+  const number = Number.parseInt(numberMatch[1], 10);
+  if (!fs.existsSync(promptPath)) {
+    violations.push(`[check 2] ${name}: no PROMPT.md at ${relPrompt} — nothing to validate; the lane would launch uncontracted`);
+    return { violations, packet: { name, number, mustChange: [] }, record: null };
+  }
+  const lines = fs.readFileSync(promptPath, "utf8").split(/\r?\n/);
+
+  // check 2: testCommand row + the SP-065 floor-wrapper routing rule
+  const testCommandRows = [];
+  for (let i = 0; i < lines.length; i++) {
+    const hit = TEST_COMMAND_ROW.exec(lines[i]);
+    if (hit) {
+      testCommandRows.push({
+        line: i + 1,
+        command: hit[1],
+        ...wrapperRoutingVerdict(hit[1]),
+      });
+    }
+  }
+  if (testCommandRows.length === 0) {
+    violations.push(
+      `[check 2] ${relPrompt}:1: no parseable \`| testCommand | \`...\` |\` row — ` +
+      "the wave guard refuses to go blind on a packet it is about to launch (SP-065)"
+    );
+  } else if (testCommandRows.length > 1) {
+    violations.push(
+      `[check 2] ${relPrompt}:${testCommandRows.map((r) => r.line).join(",")}: ${testCommandRows.length} testCommand rows — ` +
+      "an ambiguous contract cannot be gated; leave exactly one"
+    );
+  }
+  for (const row of testCommandRows) {
+    if (number >= FIRST_BOUND_PACKET_NUMBER && row.invokesDotnetTest && !row.routesThroughWrapper) {
+      violations.push(
+        `[check 2] ${relPrompt}:${row.line}: testCommand invokes \`dotnet test\` without routing through ${WRAPPER_TOKEN} — ` +
+        "every packet >= SP-065 must run the suite through the floor wrapper (the SP-065 half-install failure; " +
+        "an unexpected skip must fail the contract, not read green)"
+      );
+    }
+  }
+
+  // check 3: floorDelta row naming THIS packet's own folder
+  const expectedDelta = `spine-tasks/${name}/floor-delta.json`;
+  const floorDeltaRows = matchContractRows(lines, "floorDelta");
+  let deltaPath = null;
+  if (floorDeltaRows.length === 0) {
+    violations.push(
+      `[check 3] ${relPrompt}:1: no \`| floorDelta | \`${expectedDelta}\` |\` row — ` +
+      "a lane with no declared delta file leaves the orchestrator reconciling the shared floor pin by guesswork at land"
+    );
+  } else if (floorDeltaRows.length > 1) {
+    violations.push(
+      `[check 3] ${relPrompt}:${floorDeltaRows.map((r) => r.line).join(",")}: ${floorDeltaRows.length} floorDelta rows — ` +
+      "an ambiguous delta declaration cannot be reconciled; leave exactly one"
+    );
+  } else {
+    const row = floorDeltaRows[0];
+    if (row.values.length !== 1) {
+      violations.push(
+        `[check 3] ${relPrompt}:${row.line}: floorDelta cell must carry exactly one backtick-quoted path, found ${row.values.length} — ` +
+        `expected \`${expectedDelta}\``
+      );
+    } else {
+      const declared = row.values[0].replace(/\\/g, "/").replace(/^\.\//, "");
+      if (declared !== expectedDelta) {
+        violations.push(
+          `[check 3] ${relPrompt}:${row.line}: floorDelta declares '${declared}' but this packet is '${name}' — ` +
+          `it must name ITS OWN folder (\`${expectedDelta}\`); a delta written into another packet's folder cannot be attributed at land`
+        );
+      } else {
+        deltaPath = path.join(spineTasksDir, name, "floor-delta.json");
+      }
+    }
+  }
+
+  // File Scope cells, shared by checks 4, 5 and 6.
+  const mustChangeRows = matchContractRows(lines, "fileScopeMustChange");
+  const mustNotChangeRows = matchContractRows(lines, "fileScopeMustNotChange");
+  const mustChange = mustChangeRows.flatMap((r) => r.values);
+  const floorPin = chokepointVerdict(lines, FLOOR_PIN_PATH);
+  const taskBoard = chokepointVerdict(lines, TASK_BOARD_PATH);
+  if (mustChangeRows.length === 0) {
+    violations.push(
+      `[check 6] ${relPrompt}:1: no \`| fileScopeMustChange | ... |\` row — ` +
+      "disjointness cannot be computed for a lane that declares no scope, and an unknown scope overlaps everything"
+    );
+  } else if (mustChange.length === 0) {
+    violations.push(`[check 6] ${relPrompt}:${mustChangeRows[0].line}: fileScopeMustChange carries no backtick-quoted path`);
+  }
+  if (!floorPin.rowFound) {
+    violations.push(
+      `[check 4] ${relPrompt}:1: no \`| fileScopeMustNotChange | ... |\` row — ` +
+      `the shared chokepoints (${FLOOR_PIN_PATH}, ${TASK_BOARD_PATH}) are then declared by nobody`
+    );
+  } else {
+    // check 4: the shared floor pin
+    if (!floorPin.covered) {
+      violations.push(
+        `[check 4] ${relPrompt}:${floorPin.rowLine}: fileScopeMustNotChange does not cover ${FLOOR_PIN_PATH} — ` +
+        "the shared floor pin is the guaranteed cross-lane collision (SP-072 amendment: every packet that adds a test bumps it in " +
+        `the same commit, so any lane-mate collides there — green alone, RED at merge). Declare the delta in ${`spine-tasks/${name}/floor-delta.json`} instead. ` +
+        `Declared: ${floorPin.declared.length > 0 ? floorPin.declared.join(", ") : "(nothing)"}`
+      );
+    }
+    // check 5: the task board, only when there IS a lane-mate
+    if (waveSize > 1 && !taskBoard.covered) {
+      violations.push(
+        `[check 5] ${relPrompt}:${taskBoard.rowLine}: fileScopeMustNotChange does not cover ${TASK_BOARD_PATH}, and this wave runs ${waveSize} packets — ` +
+        "the board is a shared chokepoint reconciled by the orchestrator at land; two lanes editing it in one wave is the defect. " +
+        `Declared: ${taskBoard.declared.length > 0 ? taskBoard.declared.join(", ") : "(nothing)"}`
+      );
+    }
+  }
+
+  const record = {
+    dir: name,
+    number,
+    promptPath: promptPath.replace(/\\/g, "/"),
+    testCommandRows,
+    floorDeltaRows: floorDeltaRows.map((r) => ({ line: r.line, values: r.values })),
+    mustNotChangeRows: mustNotChangeRows.map((r) => ({ line: r.line, values: r.values })),
+    floorPin,
+    taskBoard,
+    violations,
+  };
+
+  return { violations, packet: { name, number, mustChange, deltaPath }, record };
+}
+
+// ---------------------------------------------------------------------------
+// The read-only projection the C# floor guard consumes
+// ---------------------------------------------------------------------------
+//
+// Every packet-root PROMPT.md under the named directory, with the verdicts above. Per-packet
+// violations are DATA, not an exit code: the consumer binds a different population than this
+// script does (SP-073 upward, versus everything) and must re-apply its own rule to them.
+export function emitPacketScopes(spineTasksDir) {
+  const dirs = enumeratePromptDirs(spineTasksDir);
+  const packets = [];
+  for (const dir of dirs) {
+    if (!PACKET_NUMBER.test(dir)) {
+      continue; // reported separately as strayPromptDirs; it has no packet number to bind
+    }
+    const { record } = inspectPacket(dir, spineTasksDir, 1);
+    if (record) {
+      packets.push(record);
+    }
+  }
+  return {
+    schema: "ccp.wave.packet-scopes.v1",
+    spineTasksDir: spineTasksDir.replace(/\\/g, "/"),
+    waveSize: 1,
+    floorPinPath: FLOOR_PIN_PATH,
+    taskBoardPath: TASK_BOARD_PATH,
+    wrapperToken: WRAPPER_TOKEN,
+    firstBoundPacketNumber: FIRST_BOUND_PACKET_NUMBER,
+    strayPromptDirs: dirs.filter((d) => !PACKET_NUMBER.test(d)),
+    cases: evaluateCoverageCases(),
+    wrapperCases: evaluateWrapperCases(),
+    packets,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The wave check
 // ---------------------------------------------------------------------------
 
 export function validateWave(packetNames, spineTasksDir) {
   const violations = [];
-  const relPrompt = (name) => `spine-tasks/${name}/PROMPT.md`;
 
   // --- check 7: no packet named twice ------------------------------------------------
   // Runs FIRST and on the NORMALIZED names, so `SP-073-a`, `spine-tasks/SP-073-a` and
@@ -348,132 +829,14 @@ export function validateWave(packetNames, spineTasksDir) {
   }
   const onDisk = enumerateOnDiskPackets(spineTasksDir);
 
-  // --- per-packet checks 1-5 ----------------------------------------------------------
+  // --- per-packet checks 1-5, ONE implementation, shared with the projection --------------
   const packets = [];
   for (const name of unique) {
-    const dir = path.join(spineTasksDir, name);
-    const promptPath = path.join(dir, "PROMPT.md");
-
-    // check 1
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
-      violations.push(`[check 1] ${name}: no such packet directory at spine-tasks/${name} — a wave cannot launch a lane on a packet that is not authored`);
-      continue;
+    const result = inspectPacket(name, spineTasksDir, unique.length);
+    violations.push(...result.violations);
+    if (result.packet) {
+      packets.push(result.packet);
     }
-    const numberMatch = PACKET_NUMBER.exec(name);
-    if (!numberMatch) {
-      violations.push(`[check 1] ${name}: packet directory name does not parse as SP-<number>-... — every ID rule below would silently pass`);
-      continue;
-    }
-    const number = Number.parseInt(numberMatch[1], 10);
-    if (!fs.existsSync(promptPath)) {
-      violations.push(`[check 2] ${name}: no PROMPT.md at ${relPrompt(name)} — nothing to validate; the lane would launch uncontracted`);
-      packets.push({ name, number, mustChange: [] });
-      continue;
-    }
-    const lines = fs.readFileSync(promptPath, "utf8").split(/\r?\n/);
-
-    // check 2: testCommand row + the SP-065 floor-wrapper routing rule
-    const testCommandRows = [];
-    for (let i = 0; i < lines.length; i++) {
-      const hit = TEST_COMMAND_ROW.exec(lines[i]);
-      if (hit) {
-        testCommandRows.push({ line: i + 1, command: hit[1] });
-      }
-    }
-    if (testCommandRows.length === 0) {
-      violations.push(
-        `[check 2] ${relPrompt(name)}:1: no parseable \`| testCommand | \`...\` |\` row — ` +
-        "the wave guard refuses to go blind on a packet it is about to launch (SP-065)"
-      );
-    } else if (testCommandRows.length > 1) {
-      violations.push(
-        `[check 2] ${relPrompt(name)}:${testCommandRows.map((r) => r.line).join(",")}: ${testCommandRows.length} testCommand rows — ` +
-        "an ambiguous contract cannot be gated; leave exactly one"
-      );
-    }
-    for (const row of testCommandRows) {
-      if (number >= FIRST_BOUND_PACKET_NUMBER && DOTNET_TEST.test(row.command) && !row.command.includes(WRAPPER_TOKEN)) {
-        violations.push(
-          `[check 2] ${relPrompt(name)}:${row.line}: testCommand invokes \`dotnet test\` without routing through ${WRAPPER_TOKEN} — ` +
-          "every packet >= SP-065 must run the suite through the floor wrapper (the SP-065 half-install failure; " +
-          "an unexpected skip must fail the contract, not read green)"
-        );
-      }
-    }
-
-    // check 3: floorDelta row naming THIS packet's own folder
-    const expectedDelta = `spine-tasks/${name}/floor-delta.json`;
-    const floorDeltaRows = matchContractRows(lines, "floorDelta");
-    let deltaPath = null;
-    if (floorDeltaRows.length === 0) {
-      violations.push(
-        `[check 3] ${relPrompt(name)}:1: no \`| floorDelta | \`${expectedDelta}\` |\` row — ` +
-        "a lane with no declared delta file leaves the orchestrator reconciling the shared floor pin by guesswork at land"
-      );
-    } else if (floorDeltaRows.length > 1) {
-      violations.push(
-        `[check 3] ${relPrompt(name)}:${floorDeltaRows.map((r) => r.line).join(",")}: ${floorDeltaRows.length} floorDelta rows — ` +
-        "an ambiguous delta declaration cannot be reconciled; leave exactly one"
-      );
-    } else {
-      const row = floorDeltaRows[0];
-      if (row.values.length !== 1) {
-        violations.push(
-          `[check 3] ${relPrompt(name)}:${row.line}: floorDelta cell must carry exactly one backtick-quoted path, found ${row.values.length} — ` +
-          `expected \`${expectedDelta}\``
-        );
-      } else {
-        const declared = row.values[0].replace(/\\/g, "/").replace(/^\.\//, "");
-        if (declared !== expectedDelta) {
-          violations.push(
-            `[check 3] ${relPrompt(name)}:${row.line}: floorDelta declares '${declared}' but this packet is '${name}' — ` +
-            `it must name ITS OWN folder (\`${expectedDelta}\`); a delta written into another packet's folder cannot be attributed at land`
-          );
-        } else {
-          deltaPath = path.join(spineTasksDir, name, "floor-delta.json");
-        }
-      }
-    }
-
-    // File Scope cells, shared by checks 4, 5 and 6.
-    const mustChangeRows = matchContractRows(lines, "fileScopeMustChange");
-    const mustNotChangeRows = matchContractRows(lines, "fileScopeMustNotChange");
-    const mustChange = mustChangeRows.flatMap((r) => r.values);
-    const mustNotChange = mustNotChangeRows.flatMap((r) => r.values);
-    if (mustChangeRows.length === 0) {
-      violations.push(
-        `[check 6] ${relPrompt(name)}:1: no \`| fileScopeMustChange | ... |\` row — ` +
-        "disjointness cannot be computed for a lane that declares no scope, and an unknown scope overlaps everything"
-      );
-    } else if (mustChange.length === 0) {
-      violations.push(`[check 6] ${relPrompt(name)}:${mustChangeRows[0].line}: fileScopeMustChange carries no backtick-quoted path`);
-    }
-    if (mustNotChangeRows.length === 0) {
-      violations.push(
-        `[check 4] ${relPrompt(name)}:1: no \`| fileScopeMustNotChange | ... |\` row — ` +
-        `the shared chokepoints (${FLOOR_PIN_PATH}, ${TASK_BOARD_PATH}) are then declared by nobody`
-      );
-    } else {
-      // check 4: the shared floor pin
-      if (!mustNotChange.some((p) => patternCovers(p, FLOOR_PIN_PATH))) {
-        violations.push(
-          `[check 4] ${relPrompt(name)}:${mustNotChangeRows[0].line}: fileScopeMustNotChange does not cover ${FLOOR_PIN_PATH} — ` +
-          "the shared floor pin is the guaranteed cross-lane collision (SP-072 amendment: every packet that adds a test bumps it in " +
-          `the same commit, so any lane-mate collides there — green alone, RED at merge). Declare the delta in ${`spine-tasks/${name}/floor-delta.json`} instead. ` +
-          `Declared: ${mustNotChange.length > 0 ? mustNotChange.join(", ") : "(nothing)"}`
-        );
-      }
-      // check 5: the task board, only when there IS a lane-mate
-      if (unique.length > 1 && !mustNotChange.some((p) => patternCovers(p, TASK_BOARD_PATH))) {
-        violations.push(
-          `[check 5] ${relPrompt(name)}:${mustNotChangeRows[0].line}: fileScopeMustNotChange does not cover ${TASK_BOARD_PATH}, and this wave runs ${unique.length} packets — ` +
-          "the board is a shared chokepoint reconciled by the orchestrator at land; two lanes editing it in one wave is the defect. " +
-          `Declared: ${mustNotChange.length > 0 ? mustNotChange.join(", ") : "(nothing)"}`
-        );
-      }
-    }
-
-    packets.push({ name, number, mustChange, deltaPath });
   }
 
   // --- check 6: File Scope disjointness, every offending PAIR named --------------------
@@ -549,13 +912,47 @@ export function validateWave(packetNames, spineTasksDir) {
 }
 
 export function main(argv) {
+  // The projection mode. It takes an EXPLICIT directory, never guesses a tree, and exits 0 for
+  // any corpus it could read — violations travel as data. Exit 2 means "no projection", which
+  // the consumer must treat as a hard failure and never as an empty corpus.
+  if (argv[0] === "--emit-packet-scopes") {
+    const dir = argv[1];
+    if (!dir) {
+      console.error(
+        "WAVE CHECK FAILED:\n  --emit-packet-scopes requires an explicit spine-tasks directory " +
+        "(usage: node client/tools/wave/validate-wave.mjs --emit-packet-scopes <spineTasksDir>) — " +
+        "it refuses to guess a tree so that a copy of this file can be pointed at a fixture"
+      );
+      return 2;
+    }
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+      console.error(`WAVE CHECK FAILED:\n  --emit-packet-scopes: '${dir}' is not a directory — the projection refuses to report an empty corpus it never read`);
+      return 2;
+    }
+    process.stdout.write(`${JSON.stringify(emitPacketScopes(dir), null, 2)}\n`);
+    return 0;
+  }
+
   const packetNames = argv
     .map((a) => a.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^spine-tasks\//, ""))
     .filter((a) => a.length > 0);
 
+  // The shared decision is checked against its own fixture BEFORE any packet is judged. If this
+  // file disagrees with the cases it pins, every verdict below it — and every verdict the C#
+  // guard consumes from it — is suspect, so no wave may launch on it.
+  const fixtureMismatches = [...coverageCaseMismatches(), ...wrapperCaseMismatches()];
+  if (fixtureMismatches.length > 0) {
+    console.error(`WAVE CHECK FAILED: a shared decision disagrees with its own fixture (${fixtureMismatches.length} case(s))`);
+    for (const m of fixtureMismatches) {
+      console.error(`  ${m}`);
+    }
+    console.error("  NO LANE MAY LAUNCH: this is the SP-136 convergence failing at its own gate, not a packet defect.");
+    return 1;
+  }
+
   try {
     if (packetNames.length === 0) {
-      fail("no packets named.\n  usage: node client/tools/wave/validate-wave.mjs SP-073-slug SP-074-slug [...]");
+      fail("no packets named.\n  usage: node client/tools/wave/validate-wave.mjs SP-073-slug SP-074-slug [...]\n     or: node client/tools/wave/validate-wave.mjs --emit-packet-scopes <spineTasksDir>");
     }
     if (!fs.existsSync(REPO_ANCHOR)) {
       fail(`repo anchor missing at ${REPO_ANCHOR} — this script must run from client/tools/wave/ inside the repo; it refuses to guess a tree`);
