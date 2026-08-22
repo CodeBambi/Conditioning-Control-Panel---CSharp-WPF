@@ -12,7 +12,7 @@ Every cited line read as the packet claimed. Nothing to refute.
 | `OperationRegistry.cs:148-158` — `Begin()` cancels and disposes inside `lock (_gate)` | `_generationCts?.Cancel(); _generationCts?.Dispose(); _generation++; _generationCts = new(...)`, all inside | TRUE |
 | `:161-167` — `Cancel()` cancels inside the same lock | `lock (_gate) { _generationCts?.Cancel(); }` | TRUE |
 | `:177-183` — `IsLive` re-takes `_gate` | it does | TRUE |
-| `OwnedSessionEffect.cs:143-152` — `Dot` evaluates `_owner.IsLive(_generation)` under the effect gate | line 149, inside the `lock (_gate)` opened at 143 | TRUE |
+| `OwnedSessionEffect.cs:143-152` — `Dot` evaluates `_owner.IsLive(_generation)` under the effect gate |  line 149, inside the `lock (_gate)` opened at 143. **Pre-fix anchor, kept deliberately:** this packet's own class-doc edit later moved that block to `:153-162` (D333), and rewriting a premise verified at the base commit to match post-fix lines would falsify it | TRUE |
 | `Cancel()` runs registrations synchronously on the calling thread | .NET behaviour; the registration is `token.Register` at `OwnedSessionEffect.cs:350-354` | TRUE |
 | Thirteen `OwnedSessionEffect` subclasses sit on it | five override `ReleaseWork` directly, the rest inherit `PacedSessionEffect`'s sealed `Interlocked` one | TRUE |
 
@@ -144,7 +144,7 @@ entered a nanosecond ago and has not yet flipped the flag"* from *"Cancel happen
 now"*. Every interleaving the new window adds was already reachable through the pre-existing TOCTOU
 at a coarser grain. Checked at the two real consumers by reading:
 
-- `OwnedSessionEffect.Dot` (`:143-152`) — its `_armed` read is serialised against `Disarm`'s clear by
+- `OwnedSessionEffect.Dot` (`:153-162`, post-fix anchor) — its `_armed` read is serialised against `Disarm`'s clear by
   the EFFECT gate, and `Disarm` clears `_armed` *before* calling `_owner.Cancel()` (`:210-226`). So
   when `Dot` sees `_armed == true`, cancellation has not been requested at all yet.
 - `EngageIfEligible` (`:306-331`) — already called `IsLive` outside its own gate, and the
@@ -201,13 +201,24 @@ blocked on its release — not merely a symptom. The run **terminated cleanly in
 the host**: the `finally` released the callback, the trigger returned, the gate was released, the
 probe unblocked and both threads joined. The other 12 facts in the class stayed green.
 
-**Restored** (fix back in place, rebuilt):
+**Restored** (fix back in place, rebuilt, and **re-run at the revise to produce this transcript
+verbatim** — `dotnet test client/tests/CcpClient.Tests/CcpClient.Tests.csproj -c Debug --nologo
+--no-build --filter "FullyQualifiedName~AsyncLifecycleTests"`):
 
 ```
-Passed!  - Failed: 0, Passed: 16, Skipped: 0, Total: 16, Duration: 1 s
+Passed!  - Failed:     0, Passed:    15, Skipped:     0, Total:    15, Duration: 360 ms - CcpClient.Tests.dll (net10.0)
 ```
 
-One second for the whole class, which is the other half of the design: on the passing path **no wait
+**The first version of this block said `Passed: 16, Total: 16`, and final review caught it.** The
+digit was not typed: it was real output from a DIFFERENT command — that run carried the combined
+filter `FullyQualifiedName~AsyncLifecycleTests|FullyQualifiedName~VacuousShapeGuardTests`, which is
+the 15 facts of this class plus one guard, and it was pasted under a heading naming only the first
+filter. `AsyncLifecycleTests` has exactly 15 `[Fact]` and no `[Theory]`, and the reverted half above
+(3 + 12) was self-consistent at 15 all along. **A mislabelled transcript is the same defect as a
+typed one** — it makes every other quoted block in this record a question — so the correction is
+recorded rather than the digit being edited.
+
+360 ms for the whole class, which is the other half of the design: on the passing path **no wait
 consumes any wall clock at all** — every signal is already set when it is awaited.
 
 ### The named limitation, stated rather than smuggled
@@ -253,7 +264,7 @@ packet cited. All three were corrected under ruling 1; **no code in that file ch
 
 **SP-106's stale-teardown window is still OPEN.** `ReleaseIfStillOurs` is byte-identical to before.
 
-`client/docs/wpf-surface-reachability.md`: new rows **D329-D332**, five unescaped pipes each
+`client/docs/wpf-surface-reachability.md`: new rows **D329-D333** (D333 added at the revise: this packet broke two of its own citations by moving the lines they pointed at), five unescaped pipes each
 (verified by counting delimiters with `awk`, not by reading — every new row totals exactly 5 and no
 cell contains an embedded `|`). D91 at line 907 received a **strictly additive** one-sentence pointer
 under ruling 2, no rewrite and no deletion; its pipe count is still exactly 5.
@@ -271,6 +282,10 @@ under ruling 2, no rewrite and no deletion; its pipe count is still exactly 5.
 - **Failure SET, compared as a set and not as a count.** The reds are the standing real-desktop
   family and nothing else. Final run with the fix: `PointerCoexistenceTests` x3 +
   `BubbleCountCapabilityTests.THEOVERLAY...` (4).
+- **Re-run after the revise edits** (citation corrections in `OperationRegistry.cs` and three doc
+  files): warning gate again 0 W / 0 E, unit again **2625** with the SAME failure set
+  (`PointerCoexistenceTests` x3 + `BubbleCountCapabilityTests.THEOVERLAY...`), headless again
+  **152 / 152** read from the TRX counters.
 - **I verified the family against the BASE rather than assuming it**, because one intermediate run of
   mine showed a name the packet's list did not mention
   (`PointerCapabilityTests.AClickAtAPointTheTargetHasLEFTDoesNotReachIt...`). With my entire change
@@ -307,10 +322,35 @@ under ruling 2, no rewrite and no deletion; its pipe count is still exactly 5.
 - `client/memories/port-status.md:706` — *"Standing trap, do not relearn it: `AsyncOperationOwner`
   runs cancellation callbacks INSIDE its own lock"*. False as of this commit; the durable memory
   should say the fix landed and that the lock-free callback rule survives it for a different reason.
-- **Intra-`client` citation drift (D332).** The fix moved `OperationRegistry.cs` line numbers, so six
-  citations elsewhere now point a few lines off: `Persistence/PersistenceStore.cs:197`,
-  `Ai/AiMemoryStore.cs:253`, `Ai/AiOperationPipeline.cs:446`, `Features/Dtrh/DtrhSaveSlots.cs:208`,
-  `Effects/IntensityDial.cs:48`, `tests/CcpClient.Tests/PersistenceStoreTests.cs:103`. All six are
-  outside File Scope, so they are recorded rather than silently re-anchored. Nothing goes red:
+- **Intra-`client` citation drift (D332), and it is FIVE citations, not six — with two different
+  dispositions.** Four are line drift, remedied by re-anchoring: `Ai/AiMemoryStore.cs:253`,
+  `Ai/AiOperationPipeline.cs:446`, `Features/Dtrh/DtrhSaveSlots.cs:208`,
+  `tests/CcpClient.Tests/PersistenceStoreTests.cs:103`. The fifth is **worse than drifted and must
+  not be filed with them**: `Persistence/PersistenceStore.cs:196-197` says `Cancel` *"cancels the
+  generation token source under a short lock"*, and after this change the lock is taken only to read
+  the field, so the sentence is **behaviourally FALSE**. Its disposition is a **behavioural
+  correction owed, not line drift** — a follow-up that re-anchors `:161-167` to `:196-205` and stops
+  would give a false sentence a fresh-looking citation, which is worse than leaving it obviously
+  stale. All five are outside File Scope and are recorded rather than silently re-anchored (that
+  would be an unreviewed edit to four product files for a comment). Nothing goes red:
   `CitationNeedleTests` resolves UPSTREAM needles at a frozen SHA and never re-derives intra-`client`
   line numbers — which is exactly why this rot stays invisible until someone follows one.
+- **`Effects/IntensityDial.cs:48` was in the first version of this list and does NOT belong there.**
+  It cites `OperationRegistry.cs:122`, the `_gate` field declaration, which is byte-identical before
+  and after (verified against `ee6398b1e`). Removed from the count at the revise.
+- **The INBOUND direction was missed entirely on the first pass, and the fix for it is D333.** This
+  packet's own class-doc edit moved `OwnedSessionEffect`'s `Dot` gate block from `:143-152` to
+  `:153-162`, and two citations written IN this packet still named the old range —
+  `Lifecycle/OperationRegistry.cs:153` and D329 — where `:143-152` is now `get {` plus the `Enabled`
+  early return, code with no lock in it. Both corrected at the revise. The `:143-152` anchors in
+  `plan.md` and in section 1 above are deliberately NOT changed: they are explicitly scoped to the
+  base commit, and rewriting a premise-verification record to match post-fix lines would falsify the
+  thing it verifies.
+- **A THIRD inbound break, found at the revise and deliberately NOT fixed.** `D320` in
+  `wpf-surface-reachability.md:1809` cites `Session/OwnedSessionEffect.cs:128-152` for the
+  dot-derivation region; the same ten-line class-doc edit moved it to `:138-162` (`WorkIsRunning` was
+  at `:128`, is now at `:138`, verified against `ee6398b1e`). D320 is SP-139's row, and this packet's
+  scope on that file is divergences D329+ with exactly one ratified additive clause in D91 —
+  correcting a second older row would be an unratified exception, so it is named here and in D333
+  for the land. **One ten-line doc edit broke three inbound citations**, two of them written in the
+  same commit, which is the measurement worth keeping from this revise.

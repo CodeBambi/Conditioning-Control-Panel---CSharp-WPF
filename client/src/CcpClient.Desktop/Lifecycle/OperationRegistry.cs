@@ -150,7 +150,7 @@ public sealed class AsyncOperationOwner
     /// its registrations SYNCHRONOUSLY on the calling thread, so cancelling under the lock ran
     /// FOREIGN callbacks with this owner's lock held: any lock such a callback took was taken
     /// beneath <c>_gate</c>, while <see cref="IsLive"/> is reached the other way round from under a
-    /// caller's own lock (<c>Session/OwnedSessionEffect.cs:143-152</c> holds the effect gate across
+    /// caller's own lock (<c>Session/OwnedSessionEffect.cs:153-162</c> holds the effect gate across
     /// it). <b>No deadlock was ever observed</b> — the only thing preventing one was an unenforced
     /// convention that every cancellation callback stay lock-free, restated in three doc sites and
     /// binding thirteen <c>OwnedSessionEffect</c> subclasses — and SP-106 was reverted for exactly
