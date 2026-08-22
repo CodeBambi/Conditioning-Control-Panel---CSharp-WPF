@@ -49,11 +49,29 @@ public static class DtrhLoomReveal
         launch ??= OsLaunch;
         try
         {
-            // Windows: select the file in Explorer (WPF verbatim). Elsewhere (Linux):
-            // open the containing folder — no /select equivalent (recorded divergence).
+            // Windows: select the file in Explorer. Elsewhere (Linux): open the containing
+            // folder — no /select equivalent (recorded divergence).
+            //
+            // THE ARGUMENT IS NOT PRE-QUOTED, and that is the fix rather than a style choice.
+            // This used to build `/select,"<path>"` as one already-quoted string and hand it to
+            // the string-Arguments overload. The CRT re-parses those embedded quotes before
+            // explorer ever sees them, and on a mismatch explorer does not report an error — it
+            // SILENTLY OPENS THE DESKTOP instead, so the button looked like it did nothing.
+            // Upstream hit this on media held on a different drive from the app and fixed it the
+            // same way (Helpers/ExplorerLauncher.cs): one pre-tokenized argument, quoted by the
+            // runtime's own Windows rules, so spaces and non-ASCII survive intact.
+            //
+            // A full path, because /select against a relative path resolves off the launching
+            // process's working directory rather than the caller's intent.
+            var full = Path.GetFullPath(path);
             var accepted = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                ? launch("explorer.exe", $"/select,\"{path}\"")
-                : launch("xdg-open", $"\"{Path.GetDirectoryName(path)!}\"");
+                ? launch("explorer.exe", File.Exists(full)
+                    ? $"/select,{full}"
+                    // The file went away between the listing and the click (deleted, drive
+                    // detached). Settling for its folder beats /select on a path that is gone,
+                    // which is the desktop-fallback again by another route.
+                    : Path.GetDirectoryName(full)!)
+                : launch("xdg-open", Path.GetDirectoryName(full)!);
             if (!accepted)
             {
                 log("dtrh-loom: reveal launch refused by the OS seam");
@@ -70,11 +88,15 @@ public static class DtrhLoomReveal
         }
     }
 
+    /// <summary>Starts the program with the argument handed over as ONE pre-tokenized element.
+    /// The string-Arguments overload would re-parse it, which is the defect above.</summary>
     private static bool OsLaunch(string program, string arguments)
     {
         try
         {
-            Process.Start(new ProcessStartInfo(program, arguments) { UseShellExecute = false });
+            var start = new ProcessStartInfo(program) { UseShellExecute = false };
+            start.ArgumentList.Add(arguments);
+            Process.Start(start);
             return true;
         }
         catch

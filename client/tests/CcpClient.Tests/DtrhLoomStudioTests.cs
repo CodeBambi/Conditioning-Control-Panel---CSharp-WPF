@@ -108,12 +108,19 @@ public sealed class DtrhLoomStudioTests : IDisposable
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             Assert.Equal("explorer.exe", program);
-            Assert.Contains(path, args); // /select,"<path>" (WPF verbatim)
+
+            // Contains(path) alone passed against the DEFECT — it is true of the pre-quoted
+            // `/select,"<path>"` shape too, which is why nothing caught this. The argument must be
+            // ONE unquoted token: the runtime quotes it, and a pre-quoted string gets re-parsed by
+            // the CRT and silently opens the desktop instead.
+            Assert.Equal($"/select,{Path.GetFullPath(path)}", args);
+            Assert.DoesNotContain("\"", args);
         }
         else
         {
             Assert.Equal("xdg-open", program);
-            Assert.Contains(_spirals, args); // the containing folder (recorded divergence)
+            Assert.Equal(Path.GetFullPath(_spirals), args); // the containing folder (recorded divergence)
+            Assert.DoesNotContain("\"", args);
         }
     }
 
