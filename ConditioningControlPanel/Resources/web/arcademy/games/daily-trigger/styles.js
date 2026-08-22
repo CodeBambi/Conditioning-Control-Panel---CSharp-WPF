@@ -42,11 +42,14 @@ export const STYLE_TEXT = `
 
 /* ---- ambience (decoration: never a hitbox, never a mark) ----------------- */
 .g-dt-room{position:absolute;inset:0;pointer-events:none;z-index:1}
+/* TONIGHT ONLY (House Rules): casino.js re-tints the room nightly via the
+   --dt-n-* props, seeded from the UTC date alone - the same room for every
+   player on earth, expiring at midnight. The fallbacks are the classic room. */
 .g-dt-neonbleed{position:absolute;left:0;top:6%;width:32%;height:78%;
-  background:radial-gradient(closest-side at 0% 42%, rgba(255,105,180,.28), transparent 74%);
+  background:radial-gradient(closest-side at 0% 42%, var(--dt-n-neon, rgba(255,105,180,.28)), transparent 74%);
   filter:blur(30px);animation:g-dt-neonflicker 7s steps(1) infinite}
 .g-dt-lamp{position:absolute;width:38vw;height:34vh;border-radius:50%;filter:blur(46px);
-  background:radial-gradient(closest-side, rgba(240,194,75,.22), transparent 70%);
+  background:radial-gradient(closest-side, var(--dt-n-lamp, rgba(240,194,75,.22)), transparent 70%);
   animation:g-dt-lamppulse 5s ease-in-out infinite}
 .g-dt-lamp.b{animation-delay:2.4s}
 .g-dt-floor{position:absolute;left:0;right:0;bottom:0;height:30%;
@@ -141,6 +144,66 @@ export const STYLE_TEXT = `
 .g-dt-cell.miss::after{content:"\\2715";color:var(--ink-faint,#8A84A8)}
 .g-dt-cell.wobble{animation:g-dt-wobble .6s ease}
 
+/* ---- CASINO (House Rules, Deck II): the marquee around the slab ---------- */
+/* Bulb-chase frame on the chalkboard's own edge. Dots are gradients, the
+   chase is a background-position crawl - four thin bars, cheap to paint.
+   pointer-events:none is LAW; pace (--g-dt-mqt) and presence (--g-dt-mqa)
+   ride the ladder's heat from casino.js; gold outbids heat for the absorb. */
+.g-dt-mq{position:absolute;inset:-3px;z-index:1;pointer-events:none;
+  opacity:var(--g-dt-mqa,.25);transition:opacity .6s ease}
+.g-dt-mq i{position:absolute;display:block;
+  background-image:radial-gradient(circle, var(--dt-n-mq,var(--pink,#FF69B4)) 2px, transparent 3px)}
+.g-dt-mq .mq-t,.g-dt-mq .mq-b{left:0;right:0;height:7px;
+  background-size:18px 7px;background-repeat:repeat-x}
+.g-dt-mq .mq-l,.g-dt-mq .mq-r{top:0;bottom:0;width:7px;
+  background-size:7px 18px;background-repeat:repeat-y}
+.g-dt-mq .mq-t{top:0;animation:g-dt-mqx var(--g-dt-mqt,2s) linear infinite var(--g-dt-mqp,0s)}
+.g-dt-mq .mq-r{right:0;animation:g-dt-mqy var(--g-dt-mqt,2s) linear infinite var(--g-dt-mqp,0s)}
+.g-dt-mq .mq-b{bottom:0;animation:g-dt-mqxr var(--g-dt-mqt,2s) linear infinite var(--g-dt-mqp,0s)}
+.g-dt-mq .mq-l{left:0;animation:g-dt-mqyr var(--g-dt-mqt,2s) linear infinite var(--g-dt-mqp,0s)}
+@keyframes g-dt-mqx{to{background-position-x:18px}}
+@keyframes g-dt-mqxr{to{background-position-x:-18px}}
+@keyframes g-dt-mqy{to{background-position-y:18px}}
+@keyframes g-dt-mqyr{to{background-position-y:-18px}}
+.g-dt-mq.g-dt-mq-gold{--dt-n-mq:var(--gold,#F0C24B);
+  filter:drop-shadow(0 0 6px rgba(240,194,75,.75))}
+.g-dt-mq.g-dt-mq-flash{animation:g-dt-mqflash .6s ease-out 1}
+@keyframes g-dt-mqflash{
+  0%{opacity:1;filter:brightness(var(--g-dt-mqf,1.4)) drop-shadow(0 0 10px rgba(255,105,180,.9))}
+  100%{opacity:var(--g-dt-mqa,.25);filter:none}}
+.g-dt-mq.g-dt-mq-out{opacity:0;transition:opacity 1.4s ease}
+html.arc-reduced .g-dt-mq{opacity:.16}
+
+/* THE ALMOST: on a one-letter-away row, the solved underline starts to draw,
+   stops at ~62%, and evaporates. The reel stopped one short. Row theatre only
+   - a cell mark is never repainted by an effect. */
+.g-dt-almostline{position:absolute;left:2%;right:2%;bottom:-7px;height:3px;
+  border-radius:2px;pointer-events:none;background:rgba(242,235,221,.85);
+  box-shadow:0 0 8px rgba(242,235,221,.5);transform-origin:left center;
+  animation:g-dt-almost 1.1s ease-out both}
+@keyframes g-dt-almost{0%{transform:scaleX(0);opacity:1}
+  55%{transform:scaleX(.62);opacity:.9}75%{transform:scaleX(.62);opacity:.9}
+  100%{transform:scaleX(.62);opacity:0}}
+
+/* ---- TRICKSTER (Deck III) dressing --------------------------------------- */
+/* STAT FLICKER: the chip wearing a lie gets one beat of chromatic static;
+   index repaints the truth on a deadline. */
+.chip.g-dt-statlie{color:var(--lav,#B8A6E8);
+  text-shadow:-1.5px 0 var(--pink,#FF69B4),1.5px 0 #6EE8E0;
+  animation:g-dt-statlie .45s steps(3) 1}
+@keyframes g-dt-statlie{0%{opacity:1}50%{opacity:.55}100%{opacity:1}}
+/* CHALK WHISPER: a ghost hand writes a lie under the message line. The text
+   lies; the glyphs on the board are the truth (Unreliable Label trains you
+   to stop reading). Fainter and slanted harder than the proctor's chalk. */
+.g-dt-whisper{min-height:16px;margin:0;font-size:12px;font-style:italic;
+  letter-spacing:.09em;text-align:center;position:relative;z-index:5;
+  color:color-mix(in srgb, var(--lav,#B8A6E8), transparent 30%);
+  text-shadow:0 0 12px rgba(0,0,0,.6);transform:rotate(-.6deg);
+  animation:g-dt-whisperin 3.4s ease-in-out both}
+.g-dt-whisper.plain{animation:none;opacity:.6}
+@keyframes g-dt-whisperin{0%{opacity:0;filter:blur(3px)}
+  18%{opacity:.85;filter:blur(0)}78%{opacity:.85}100%{opacity:0;filter:blur(2px)}}
+
 /* ---- message line: chalk handwriting under the slab ----------------------- */
 .g-dt-msg{min-height:20px;font-size:13px;font-style:italic;letter-spacing:.05em;
   color:var(--ink-dim,#B9B3CE);text-align:center;position:relative;z-index:5;
@@ -216,15 +279,20 @@ export const STYLE_TEXT = `
 
 @media (prefers-reduced-motion: reduce){
   .g-dt-cell,.g-dt-key,.g-dt-cer .g-dt-word,.g-dt-row.shake,.g-dt-mote,.g-dt-lamp,
-  .g-dt-neonbleed,.g-dt-row.solved::after,.g-dt-stamp{animation:none !important;
+  .g-dt-neonbleed,.g-dt-row.solved::after,.g-dt-stamp,.g-dt-mq,.g-dt-mq i,
+  .g-dt-almostline,.g-dt-whisper,.chip.g-dt-statlie{animation:none !important;
     transition:none !important}
   .g-dt-row.solved::after{transform:scaleX(1)}
+  .g-dt-almostline{display:none}
 }
 .arc-reduced .g-dt-cell,.arc-reduced .g-dt-key,.arc-reduced .g-dt-cer .g-dt-word,
 .arc-reduced .g-dt-row.shake,.arc-reduced .g-dt-mote,.arc-reduced .g-dt-lamp,
 .arc-reduced .g-dt-neonbleed,.arc-reduced .g-dt-row.solved::after,
-.arc-reduced .g-dt-stamp{animation:none !important;transition:none !important}
+.arc-reduced .g-dt-stamp,.arc-reduced .g-dt-mq,.arc-reduced .g-dt-mq i,
+.arc-reduced .g-dt-almostline,.arc-reduced .g-dt-whisper,
+.arc-reduced .chip.g-dt-statlie{animation:none !important;transition:none !important}
 .arc-reduced .g-dt-row.solved::after{transform:scaleX(1)}
+.arc-reduced .g-dt-almostline{display:none}
 
 /* ---- coarse pointer / narrow: bigger tiles, full-width commit ----------- */
 @media (max-width:560px),(pointer:coarse){

@@ -60,6 +60,11 @@ const SOUNDS = {
   streak:    { arp: [523.25, 659.25], ms: 90,  gain: 0.6 },
   jackpot:   { arp: [523.25, 659.25, 783.99, 1046.5], ms: 110, gain: 0.9 },
   near_miss: { type: 'sawtooth', f0: 180, f1: 760, ms: 520, gain: 0.5, riser: true },
+  /* The Deep End, pass 2: the slide is a short filtered-noise whoosh (level =
+     tiles moved, pitch = depth); the wall is a low sawtooth buzz with a body
+     thunk - a muted loss, never silence. */
+  slide:     { noise: true, hp: 260,  lp: 2600, ms: 150, gain: 0.55, attack: 0.18 },
+  bump:      { type: 'sawtooth', f0: 92,  f1: 46,  ms: 150, gain: 0.85, thunk: true },
 };
 
 const clamp01 = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : 0);

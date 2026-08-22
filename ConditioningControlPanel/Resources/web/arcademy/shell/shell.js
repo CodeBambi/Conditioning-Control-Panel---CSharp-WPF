@@ -43,6 +43,19 @@ import { createKeybinds } from './keybinds.js';
 const FLAVOR_XP_CAP = 15;          // BUILD-CONTRACT §8 - the page clamps too
 const MEATY_MAX_SEC = 300;
 const QUICK_MAX_SEC = 180;
+/** How often the shell's own class clock repaints the time bar. */
+const CLOCK_TICK_MS = 250;
+
+/** Monotonic-if-available clock for the time bar (a wall-clock step must not
+ *  teleport the fill; performance.now cannot be moved by the system clock). */
+function nowMs() {
+  try {
+    if (typeof performance === 'object' && performance && typeof performance.now === 'function') {
+      return performance.now();
+    }
+  } catch (e) { /* noop */ }
+  return Date.now();
+}
 
 /** Palette keys we accept from init.palette, and the CSS token each one drives. */
 const PALETTE_TOKENS = Object.freeze({
@@ -350,6 +363,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       classes: timetable.classes,
       records,
       suspended: suspendedGlobally,
+      // Free Swim is a property of the GAME, not of tonight's board: a room the
+      // timetable never dealt can still be swum, so the map covers every
+      // registered game and campusState keeps the ones that have a room.
+      endless: endlessMap(),
     });
   }
 
@@ -370,6 +387,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       timeBudgetSec: c.timeBudgetSec,
       homeroom: !!c.homeroom,
       tier: tierFor(store.gameMeta(c.gameKey)),
+      endless: endlessFor(c.gameKey),
     }));
   }
 
@@ -477,6 +495,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
             const cls = timetable.classes.find((c) => c.gameKey === gameKey);
             if (cls) startClass(cls);
           },
+          freeSwim: (gameKey) => startFreeSwim(gameKey),
           records: () => showReport(),
           registrar: () => showSettings(),
         },
@@ -557,8 +576,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * old boxed class bar did. The strip ignores the pointer outside its own
    * children, and games keep critical interactives clear of the top ~56px.
    */
-  function classScreenChrome(cls, gradeTier, retake) {
-    const panel = el('div', 'arc-classstage');
+  function classScreenChrome(cls, gradeTier, retake, endless) {
+    const panel = el('div', 'arc-classstage' + (endless ? ' arc-endless' : ''));
+
+    /* THE TIME BAR. The FIRST child of the panel and the only thing above the
+     * proctor strip: a 4px hairline of the class's own budget draining left to
+     * right. The shell owns the clock (see timeBar* below) because a game must
+     * never be able to make the flow of time lie - and it never ENDS a class:
+     * the game's own bell is authoritative, the bar just goes pink and holds.
+     * A FREE SWIM has no budget, so it has no bar (panel carries arc-endless). */
+    let timebar = null;
+    let timefill = null;
+    if (!endless) {
+      timebar = el('div', 'arc-timebar');
+      timefill = el('div', 'arc-timebar-fill');
+      timebar.appendChild(timefill);
+      panel.appendChild(timebar);
+    }
 
     const root = el('div', 'arc-classroot');
     panel.appendChild(root);
@@ -573,11 +607,84 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     bar.appendChild(el('span', 'chip', t('family_' + cls.family, cls.family)));
     if (retake) bar.appendChild(el('span', 'chip', t('retake', 'Retake')));
     bar.appendChild(el('span', 'arc-spacer'));
-    const clock = el('span', 'chip num', cls.timeBudgetSec + 's');
+    // A free swim is untimed, so the clock chip would be a lie. The chip that
+    // replaces it names what this is instead.
+    const clock = endless
+      ? el('span', 'chip', t('free_swim', 'Free Swim'))
+      : el('span', 'chip num', cls.timeBudgetSec + 's');
     bar.appendChild(clock);
     panel.appendChild(bar);
 
-    return { panel, root, clock };
+    return { panel, root, clock, timebar, timefill };
+  }
+
+  /* ---------------------- the class clock (S1) --------------------------
+   * PAUSE-AWARE AND SHELL-OWNED. It starts only once instance.start() has come
+   * back without throwing, banks elapsed ms across every pause (the pause card,
+   * the settings screen, a host suspend - all of them funnel through
+   * pauseClass), and its interval dies in teardownClass with everything else.
+   * Nothing is exposed to games: ctx has no handle on any of this.
+   * -------------------------------------------------------------------- */
+  function timeBarPaint() {
+    if (!active || !active.timebar) return;
+    const budgetMs = Math.max(0, (Number(active.timeBudgetSec) || 0) * 1000);
+    const frac = budgetMs > 0 ? Math.min(1, active.clockElapsedMs / budgetMs) : 0;
+    try { active.timebar.style.setProperty('--arc-t', frac.toFixed(4)); }
+    catch (e) { /* noop */ }
+    const cl = active.timebar.classList;
+    if (!cl) return;
+    // The last tenth is GOLD and flows faster; at (and past) the budget the bar
+    // is PINK and held - the class is over as far as the clock is concerned and
+    // the game decides what that means.
+    try {
+      if (frac >= 1) { cl.remove('warn'); cl.add('over'); }
+      else if (frac >= 0.9) { cl.remove('over'); cl.add('warn'); }
+      else { cl.remove('warn'); cl.remove('over'); }
+    } catch (e) { /* noop */ }
+  }
+
+  function timeBarTick() {
+    if (!active || !active.timebar || !active.clockRunning) return;
+    const at = nowMs();
+    const from = active.clockLastAt;
+    active.clockLastAt = at;
+    if (Number.isFinite(from)) active.clockElapsedMs += Math.max(0, at - from);
+    timeBarPaint();
+    // Held at full: stop burning a timer for a bar that can no longer move.
+    if (!active.clockDone && active.timeBudgetSec > 0
+      && active.clockElapsedMs >= active.timeBudgetSec * 1000) {
+      active.clockDone = true;
+      timeBarStopTimer();
+    }
+  }
+
+  function timeBarStopTimer() {
+    if (!active || !active.clockTimer) return;
+    try { clearInterval(active.clockTimer); } catch (e) { /* noop */ }
+    active.clockTimer = 0;
+  }
+
+  /** @param {boolean} on  true = running, false = paused. Idempotent both ways. */
+  function timeBarSet(on) {
+    if (!active || !active.timebar) return;
+    const run = !!on;
+    // Only a class that reached a clean start() ever arms the clock, so no
+    // resume path (returning from settings, lifting a pause) can start a bar
+    // draining over a class that never began.
+    if (run && !active.clockArmed) return;
+    if (active.clockRunning === run) return;
+    if (run) {
+      active.clockRunning = true;
+      active.clockLastAt = nowMs();
+      if (!active.clockDone && !active.clockTimer && typeof setInterval === 'function') {
+        active.clockTimer = setInterval(timeBarTick, CLOCK_TICK_MS);
+      }
+    } else {
+      timeBarTick();                 // bank the ms up to this instant first
+      active.clockRunning = false;
+      timeBarStopTimer();
+    }
+    timeBarPaint();
   }
 
   /** Re-show the running class's DOM (returning from settings). */
@@ -651,32 +758,46 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     };
   }
 
-  function startClass(cls) {
+  /**
+   * @param {Object} cls   a timetable class (or the synthetic one freeSwimClass
+   *   builds for a room that is not on tonight's board)
+   * @param {{endless?:boolean}=} opts  endless = a FREE SWIM: untimed, ungraded,
+   *   outside the timetable. See startFreeSwim and finishClass.
+   */
+  function startClass(cls, opts) {
     if (suspendedGlobally) { shout(t('class_suspended', 'Class Suspended')); return; }
     if (active) teardownClass();
 
+    const endless = !!(opts && opts.endless);
     const entry = games.byKey[cls.gameKey]
       || { key: cls.gameKey, ok: false, mod: suspendedStub(cls.gameKey, 'not in this build') };
     const mod = entry.mod;
     const manifest = (mod && mod.manifest) || {};
     const gameMeta = store.gameMeta(cls.gameKey);
     const gradeTier = tierFor(gameMeta);
-    const timeBudgetSec = Math.min(
+    // A free swim has NO budget: 0 is the contract the game reads as "no bell".
+    const timeBudgetSec = endless ? 0 : Math.min(
       cls.timeBudgetSec || QUICK_MAX_SEC,
       cls.meaty ? MEATY_MAX_SEC : QUICK_MAX_SEC
     );
-    const seed = utcDateSeed + '|' + cls.gameKey + '|t' + gradeTier;
+    // The timed seed is the DAY's script (same seed on a retake, on purpose).
+    // A free swim is not the day's script, so it counts its own swims instead -
+    // every free swim of a game deals a board nobody has seen.
+    const seed = endless
+      ? utcDateSeed + '|' + cls.gameKey + '|free|' + (Number(gameMeta && gameMeta.swims) || 0)
+      : utcDateSeed + '|' + cls.gameKey + '|t' + gradeTier;
     // RETAKE: this class already has today's row. The seed is unchanged on
     // purpose (the day's script IS the day's script), so a game with an
     // identical-script replay needs nothing from this flag; it is here so a
     // game that wants to dress a replay differently can, and so the chrome can
-    // say what is happening.
-    const retake = !!todaysRecord(cls.gameKey);
+    // say what is happening. A free swim is never a retake: it writes no row.
+    const retake = endless ? false : !!todaysRecord(cls.gameKey);
 
     screen = 'class';
     clearScreen();
     renderTopbar();
-    const chrome = classScreenChrome(Object.assign({}, cls, { timeBudgetSec }), gradeTier, retake);
+    const chrome = classScreenChrome(
+      Object.assign({}, cls, { timeBudgetSec }), gradeTier, retake, endless);
 
     /* --- engine for this class --- */
     let engine;
@@ -772,7 +893,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       endClass: (result) => {
         if (ended) { say('[' + cls.gameKey + '] endClass called twice - ignored'); return; }
         ended = true;
-        finishClass(cls, gradeTier, result, { peek, belowPar });
+        finishClass(cls, gradeTier, result, { peek, belowPar, endless });
       },
     };
 
@@ -788,20 +909,101 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     active = {
       cls, gradeTier, instance, engine, keys, peek, ceremonies: classCeremonies,
       panel: chrome.panel, root: chrome.root, paused: false, pauseEl: null,
-      suspendEl: null, timeBudgetSec,
+      suspendEl: null, timeBudgetSec, endless,
+      // the shell's own class clock (S1) - see timeBar* above
+      timebar: chrome.timebar, timefill: chrome.timefill,
+      clockTimer: 0, clockElapsedMs: 0, clockLastAt: NaN,
+      clockRunning: false, clockDone: false, clockArmed: false,
     };
 
     dom.screen.appendChild(chrome.panel);
     setStage('arc-class-on');
-    bridge.send({ type: 'class-started', gameKey: cls.gameKey, gradeTier });
+    // The host only flips _classActive off this frame and ignores fields it does
+    // not know, so `endless` is free to carry: a free swim opens the same
+    // bracket and closes it with `class-left` from teardownClass (never with
+    // `class-ended`, which is what would credit attendance and pay XP).
+    bridge.send(endless
+      ? { type: 'class-started', gameKey: cls.gameKey, gradeTier, endless: true }
+      : { type: 'class-started', gameKey: cls.gameKey, gradeTier });
 
+    let started = false;
     try {
-      instance.start({ gradeTier, seed, timeBudgetSec, retake });
+      instance.start(endless
+        ? { gradeTier, seed, timeBudgetSec: 0, retake: false, endless: true }
+        : { gradeTier, seed, timeBudgetSec, retake });
+      started = true;
     } catch (e) {
       say('game ' + cls.gameKey + ' start() threw: ' + ((e && e.message) || e));
       showSuspendedOverlay('This class could not start. Your attendance is safe.');
     }
+    // The clock runs only for a class that actually started: a bar draining over
+    // a dead class would be the most confident lie the shell could tell.
+    if (started) { active.clockArmed = true; timeBarSet(true); }
     if (suspendedGlobally) applySuspend(true, 'video');
+  }
+
+  /* ---------------------- free swim (S2) --------------------------------
+   * ENDLESS PLAY LIVES OUTSIDE THE TIMETABLE. A game may declare
+   * `manifest.endless = { label_key, hint_key }`; the campus door card then
+   * carries a second, secondary button that runs the game with no budget, no
+   * grade and no row. A game that declares nothing shows no button, which is
+   * why every reader here is defensive rather than assumed.
+   * -------------------------------------------------------------------- */
+  /**
+   * @returns {?{labelKey:string, hintKey:string}} the game's endless
+   *   declaration, or null. A class that failed to load (entry.ok false, so the
+   *   suspended stub is in its slot) can never offer one.
+   */
+  function endlessFor(gameKey) {
+    const entry = games.byKey[gameKey];
+    if (!entry || !entry.ok) return null;
+    const m = entry.mod && entry.mod.manifest;
+    const e = m && m.endless;
+    if (!e || typeof e !== 'object') return null;
+    return {
+      labelKey: typeof e.label_key === 'string' ? e.label_key : '',
+      hintKey: typeof e.hint_key === 'string' ? e.hint_key : '',
+    };
+  }
+
+  /** gameKey -> endless declaration, for every game that has one. */
+  function endlessMap() {
+    const out = Object.create(null);
+    for (const entry of games.list) {
+      const e = endlessFor(entry.key);
+      if (e) out[entry.key] = e;
+    }
+    return out;
+  }
+
+  /**
+   * The class-shaped object a free swim runs on. A room can be free-swum when it
+   * is NOT on tonight's board, so the timetable cannot always supply one: fall
+   * back to the registry descriptor (the same parachute the suspended stub
+   * flies under).
+   */
+  function freeSwimClass(gameKey) {
+    const onBoard = timetable.classes.find((c) => c.gameKey === gameKey);
+    if (onBoard) return Object.assign({}, onBoard, { timeBudgetSec: 0 });
+    const d = descriptors(games.list).find((x) => x.key === gameKey)
+      || { key: gameKey, family: 'comfort', meaty: false };
+    return {
+      gameKey,
+      family: d.family || 'comfort',
+      meaty: !!d.meaty,
+      homeroom: false,
+      timeLabel: '',
+      timeBudgetSec: 0,
+    };
+  }
+
+  function startFreeSwim(gameKey) {
+    if (suspendedGlobally) { shout(t('class_suspended', 'Class Suspended')); return; }
+    if (!endlessFor(gameKey)) {
+      say('free swim refused: ' + gameKey + ' declares no manifest.endless');
+      return;
+    }
+    startClass(freeSwimClass(gameKey), { endless: true });
   }
 
   /** Fallback per-game settings when the settings page has not been built yet. */
@@ -825,6 +1027,27 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /* ---------------------- end of class ---------------------------------- */
   function finishClass(cls, gradeTier, result, shellState) {
     const r = result || {};
+
+    /* A FREE SWIM IS NOT A CLASS. Untimed comfort play outside the timetable
+     * earns nothing and costs nothing: no grade, no results row, no day row, no
+     * `class-ended` frame (which is what mints attendance and pays XP host-side)
+     * and no promotion. The only thing it writes is its own counter, which is
+     * also the seed's swim number, so the next swim deals a new board.
+     * BOTH sides are consulted on purpose: the shell knows how it launched the
+     * class, so a game that forgets the flag can never accidentally forge a
+     * graded attendance out of a swim. */
+    if (r.endless === true || (shellState && shellState.endless === true)) {
+      try {
+        const meta = store.gameMeta(cls.gameKey) || {};
+        store.mergeGameMeta(cls.gameKey, { swims: (Number(meta.swims) || 0) + 1 });
+      } catch (e) { say('free swim meta write failed (screen unaffected): ' + ((e && e.message) || e)); }
+      say('free swim ended: ' + cls.gameKey + ' - ungraded by design, nothing recorded');
+      // The game already showed its own end card before it called endClass.
+      teardownClass();
+      showBoard();
+      return;
+    }
+
     const assists = Object.assign({}, r.assists || {});
     if (shellState.peek && shellState.peek.used) assists.peek = true;
     if (shellState.belowPar) assists.below_par_board = true;
@@ -922,6 +1145,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function pauseClass(on) {
     if (!active) return;
     active.paused = !!on;
+    // THE ONE FUNNEL every freeze walks through - the pause card, the settings
+    // screen and applySuspend(true) all land here, so the class clock only has
+    // to be hooked once. (applySuspend(false) deliberately leaves the class
+    // paused behind its Resume button, and that button comes back through here.)
+    timeBarSet(!on);
     try { on ? active.instance.pause() : active.instance.resume(); }
     catch (e) { say('game pause/resume threw: ' + ((e && e.message) || e)); }
     if (on) {
@@ -1007,6 +1235,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function teardownClass() {
     if (!active) return;
     const a = active;
+    // NO RAW TIMER OUTLIVES A CLASS. The class clock is the shell's only
+    // interval per class and it dies here, before `active` is dropped - a tick
+    // that fired afterwards would paint a bar that is no longer on the page.
+    if (a.clockTimer) { try { clearInterval(a.clockTimer); } catch (e) { /* noop */ } a.clockTimer = 0; }
+    a.clockRunning = false;
     active = null;
     // TELL THE HOST THE CLASS IS OVER. `class-started` has a closing bracket now:
     // without it the host's `_classActive` stayed true for the rest of the session

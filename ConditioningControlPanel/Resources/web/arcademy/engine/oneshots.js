@@ -236,6 +236,10 @@ export function createOneshots(ctx) {
     const level = ctx.magnitude(base * (0.55 + 0.45 * clamp01(chans.binauralDepth)));
     const duckKind = opts.duck === true ? 'voice' : (opts.duck || null);
     const detail = { name, level, bus: opts.bus || 'fx' };
+    // The pitch ratchet (shell/audio.js clamps 0.5..2): three games send it and
+    // the seam dropped it on the floor until 0822 - every descending chime and
+    // reveal tick played at pitch 1. Pass-through only; audio owns the clamp.
+    if (opts.pitch != null && Number.isFinite(Number(opts.pitch))) detail.pitch = Number(opts.pitch);
     if (duckKind && DUCK[duckKind] != null) {
       // depth of the duck is the player's duckDepth channel against the policy
       const policy = DUCK[duckKind];

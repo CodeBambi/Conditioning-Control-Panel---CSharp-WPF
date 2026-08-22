@@ -40,12 +40,15 @@ const STYLE_ID = 'g-dv-style';
 
 export const STYLE_TEXT = `
 /* ---- the stage: the whole window is the lab ------------------------------ */
+/* casino.js re-dresses the lab per class seed via the --dv-n-* props (glow
+   hue pair, monogram, sweep period, tag tilt); the fallbacks are the classic
+   lab, so a disarmed casino changes nothing. */
 .g-dv-stage{position:absolute;inset:0;overflow:hidden;display:flex;flex-direction:column;
   align-items:center;gap:8px;padding:72px 18px 14px;
   --g-dv-gap:14px;
   background:
-    radial-gradient(1000px 560px at 10% -6%, color-mix(in srgb, var(--lav), transparent 80%), transparent 62%),
-    radial-gradient(1000px 560px at 90% -6%, color-mix(in srgb, var(--lav), transparent 83%), transparent 62%),
+    radial-gradient(1000px 560px at 10% -6%, var(--dv-n-glowa, color-mix(in srgb, var(--lav), transparent 80%)), transparent 62%),
+    radial-gradient(1000px 560px at 90% -6%, var(--dv-n-glowb, color-mix(in srgb, var(--lav), transparent 83%)), transparent 62%),
     radial-gradient(1300px 760px at 50% 118%, color-mix(in srgb, var(--pink), transparent 88%), transparent 64%),
     color-mix(in srgb, var(--ground), black 34%)}
 .g-dv-stage.suspended *{animation-play-state:paused !important}
@@ -58,7 +61,7 @@ export const STYLE_TEXT = `
 .g-dv-sweep{position:absolute;left:0;right:0;top:-2px;height:2px;opacity:.35;
   background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--lav), transparent 20%), transparent);
   box-shadow:0 0 12px color-mix(in srgb, var(--lav), transparent 55%);
-  animation:g-dv-osweep 9s linear infinite}
+  animation:g-dv-osweep var(--dv-n-sweep,9s) linear infinite}
 .g-dv-vig{position:absolute;inset:0;
   background:radial-gradient(120% 100% at 50% 44%, transparent 56%, rgba(0,0,0,.55) 100%)}
 @keyframes g-dv-osweep{from{transform:translateY(0)}to{transform:translateY(100vh)}}
@@ -100,7 +103,7 @@ export const STYLE_TEXT = `
   background:linear-gradient(118deg, rgba(255,255,255,.09) 0%, transparent 26%,
     transparent 72%, rgba(255,255,255,.04) 100%)}
 /* etched monogram back */
-.g-dv-card::after{content:"\\25C8";position:relative;z-index:1;
+.g-dv-card::after{content:var(--dv-n-mono,"\\25C8");position:relative;z-index:1;
   color:color-mix(in srgb, var(--lav), var(--panel) 55%);
   text-shadow:0 1px 0 rgba(0,0,0,.6), 0 0 14px color-mix(in srgb, var(--lav), transparent 78%)}
 .g-dv-card.up::after,.g-dv-card.locked::after,.g-dv-card.ghost::after{content:none}
@@ -143,7 +146,7 @@ export const STYLE_TEXT = `
 .g-dv-wax{position:absolute;right:-6px;top:-6px;min-width:22px;height:22px;border-radius:6px;
   background:var(--pink-deep);color:var(--ground);font-size:11px;line-height:22px;text-align:center;
   box-shadow:0 0 10px color-mix(in srgb, var(--pink-deep), transparent 40%);z-index:3;
-  transform:rotate(8deg)}
+  transform:rotate(var(--dv-n-tilt,8deg))}
 
 /* ---- the preview beam: the machine shows you ----------------------------- */
 .g-dv-grid.scanning::after{content:"";position:absolute;left:-3%;right:-3%;top:0;height:3px;
@@ -201,6 +204,90 @@ export const STYLE_TEXT = `
   box-shadow:0 0 14px rgba(240,194,75,.3)}
 .g-dv-retake{border-color:var(--lav);color:var(--lav)}
 
+/* ---- CASINO (House Rules, Deck II) --------------------------------------- */
+/* THE MARQUEE: a bulb-chase frame around the bench. Dots are gradients, the
+   chase is a background-position crawl - four thin bars, cheap to paint.
+   pointer-events:none is LAW. Pace (--g-dv-mqt) and presence (--g-dv-mqa)
+   ride the class heat from casino.js; the last pair turns it gold. The
+   stage's .suspended rule freezes it with everything else. */
+.g-dv-mq{position:absolute;inset:6px;z-index:0;pointer-events:none;
+  opacity:var(--g-dv-mqa,.26);transition:opacity .6s ease}
+.g-dv-mq i{position:absolute;display:block;
+  background-image:radial-gradient(circle, var(--dv-n-mq,var(--lav)) 2px, transparent 3px)}
+.g-dv-mq .mq-t,.g-dv-mq .mq-b{left:0;right:0;height:7px;
+  background-size:18px 7px;background-repeat:repeat-x}
+.g-dv-mq .mq-l,.g-dv-mq .mq-r{top:0;bottom:0;width:7px;
+  background-size:7px 18px;background-repeat:repeat-y}
+.g-dv-mq .mq-t{top:0;animation:g-dv-mqx var(--g-dv-mqt,2s) linear infinite var(--g-dv-mqp,0s)}
+.g-dv-mq .mq-r{right:0;animation:g-dv-mqy var(--g-dv-mqt,2s) linear infinite var(--g-dv-mqp,0s)}
+.g-dv-mq .mq-b{bottom:0;animation:g-dv-mqxr var(--g-dv-mqt,2s) linear infinite var(--g-dv-mqp,0s)}
+.g-dv-mq .mq-l{left:0;animation:g-dv-mqyr var(--g-dv-mqt,2s) linear infinite var(--g-dv-mqp,0s)}
+@keyframes g-dv-mqx{to{background-position-x:18px}}
+@keyframes g-dv-mqxr{to{background-position-x:-18px}}
+@keyframes g-dv-mqy{to{background-position-y:18px}}
+@keyframes g-dv-mqyr{to{background-position-y:-18px}}
+.g-dv-mq.g-dv-mq-bell{--dv-n-mq:var(--gold);
+  filter:drop-shadow(0 0 6px rgba(240,194,75,.75))}
+.g-dv-mq.g-dv-mq-flash{animation:g-dv-mqflash .6s ease-out 1}
+@keyframes g-dv-mqflash{
+  0%{opacity:1;filter:brightness(var(--g-dv-mqf,1.4)) drop-shadow(0 0 10px rgba(184,166,232,.9))}
+  100%{opacity:var(--g-dv-mqa,.26);filter:none}}
+.g-dv-mq.g-dv-mq-out{opacity:0;transition:opacity 1.4s ease}
+html.arc-reduced .g-dv-mq{opacity:.16}
+
+/* KEN-BURNS: lit plates drift (media only - a glyph face holds still, and the
+   card, its hitbox and its marks never move). casino.js sets --g-dv-kbdur. */
+.g-dv-kb .g-dv-card.up .g-dv-face:not(.g-dv-glyph),
+.g-dv-kb .g-dv-card.locked .g-dv-face:not(.g-dv-glyph){
+  animation:g-dv-kenburns var(--g-dv-kbdur,18s) ease-in-out infinite alternate}
+@keyframes g-dv-kenburns{from{transform:scale(1) translate(0,0)}
+  to{transform:scale(1.07) translate(1.6%,-1.2%)}}
+
+/* THE ALMOST: the face you needed haunts the card you picked. Decoration in
+   the card (overflow clips it), above the face, below the sheen; no clicks. */
+.g-dv-almost{position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;border-radius:10px;
+  animation:g-dv-almost .62s ease-out both}
+.g-dv-almost img{width:100%;height:100%;object-fit:cover}
+.g-dv-almost.glyph{font-size:clamp(30px,7vmin,76px);line-height:1;
+  color:color-mix(in srgb, var(--lav), var(--ink) 40%)}
+@keyframes g-dv-almost{0%{opacity:0;filter:blur(4px)}
+  30%{opacity:.55;filter:blur(0)}70%{opacity:.5}100%{opacity:0;filter:blur(3px)}}
+
+/* ---- TRICKSTER (Deck III) dressing --------------------------------------- */
+/* FAKE SHUFFLE: the feint - lift, reach past halfway, hesitate, home. The
+   holder animates; the card, its hitbox and its pairId go nowhere. */
+.g-dv-cell.g-dv-feint{z-index:4;animation:g-dv-feint .95s cubic-bezier(.3,.7,.3,1) both}
+@keyframes g-dv-feint{
+  0%{transform:translate(0,0) scale(1)}
+  38%{transform:translate(var(--g-dv-fx,0px),var(--g-dv-fy,0px)) scale(1.05) rotate(2deg)}
+  52%{transform:translate(var(--g-dv-fx,0px),var(--g-dv-fy,0px)) scale(1.05) rotate(-1deg)}
+  100%{transform:translate(0,0) scale(1)}}
+
+/* THE LIE: during a re-deal one card wears another pair's face. An overlay -
+   the real face underneath never changes - and deliberately indistinguishable
+   from an honest plate. */
+.g-dv-lie{position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;border-radius:10px;
+  background:var(--panel)}
+.g-dv-lie img{width:100%;height:100%;object-fit:cover}
+.g-dv-lie.glyph{font-size:clamp(30px,7vmin,76px);line-height:1;
+  color:color-mix(in srgb, var(--ground), var(--lav) 34%);
+  background:radial-gradient(80% 80% at 50% 42%,
+    color-mix(in srgb, var(--lav), var(--panel) 68%),
+    color-mix(in srgb, var(--panel), black 6%) 78%)}
+
+/* the re-deal's beam runs BACKWARD: memory rewinding */
+.g-dv-grid.rewind::after{animation-direction:reverse;
+  filter:hue-rotate(40deg)}
+
+/* STAT FLICKER: one beat of chromatic static on the lying chip; index
+   repaints the truth on a deadline. */
+.chip.g-dv-statlie{color:var(--lav);
+  text-shadow:-1.5px 0 var(--pink),1.5px 0 #6EE8E0;
+  animation:g-dv-statlie .45s steps(3) 1}
+@keyframes g-dv-statlie{0%{opacity:1}50%{opacity:.55}100%{opacity:1}}
+
 /* ---- animations --------------------------------------------------------- */
 @keyframes g-dv-toss{from{transform:translateY(-14px) rotate(-4deg);opacity:0}to{transform:none;opacity:1}}
 @keyframes g-dv-judge{50%{transform:scale(1.05);
@@ -232,6 +319,11 @@ html.arc-reduced .g-dv-line-tell{animation:none;opacity:.5}
 html.arc-reduced .g-dv-sweep,
 html.arc-reduced .g-dv-grid.scanning::after{animation:none;opacity:0}
 html.arc-reduced .g-dv-slide{animation:none}
+html.arc-reduced .g-dv-mq i,html.arc-reduced .g-dv-mq,
+html.arc-reduced .g-dv-cell.g-dv-feint,html.arc-reduced .g-dv-almost,
+html.arc-reduced .chip.g-dv-statlie,
+html.arc-reduced .g-dv-kb .g-dv-card.up .g-dv-face:not(.g-dv-glyph),
+html.arc-reduced .g-dv-kb .g-dv-card.locked .g-dv-face:not(.g-dv-glyph){animation:none}
 @media (prefers-reduced-motion: reduce){
   .g-dv-card{transition:opacity .16s ease}
   .g-dv-card.flipping{transform:none;opacity:.45}
@@ -241,6 +333,9 @@ html.arc-reduced .g-dv-slide{animation:none}
   .g-dv-line-tell{animation:none;opacity:.5}
   .g-dv-sweep,.g-dv-grid.scanning::after{animation:none;opacity:0}
   .g-dv-slide{animation:none}
+  .g-dv-mq,.g-dv-mq i,.g-dv-cell.g-dv-feint,.g-dv-almost,.chip.g-dv-statlie,
+  .g-dv-kb .g-dv-card.up .g-dv-face:not(.g-dv-glyph),
+  .g-dv-kb .g-dv-card.locked .g-dv-face:not(.g-dv-glyph){animation:none}
 }
 
 /* ---- narrow / touch: >=64px targets, the rack folds away ----------------- */

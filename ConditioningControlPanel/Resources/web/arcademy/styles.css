@@ -352,6 +352,68 @@ html.arc-class-on body { overflow:hidden; }
   background:var(--ground);
   overflow:hidden;
 }
+/* THE CLASS TIME BAR. The first child of the stage, above the proctor strip and
+   above the class root: a 4px hairline that drains the class's own budget from
+   left to right. shell.js owns the clock (pause-aware, killed in teardown) and
+   writes ONE custom property, --arc-t (0..1); everything else is here.
+   It never ends a class - past the budget it goes pink and holds while the
+   game's own bell decides what happens. A free swim has no budget, so the stage
+   carries .arc-endless and there is no bar at all (shell.js does not build one;
+   the rule below is the belt to that braces). */
+.arc-timebar {
+  position:absolute; top:0; left:0; right:0; z-index:31;
+  height:4px; overflow:hidden; pointer-events:none;
+  background:color-mix(in srgb, var(--line), transparent 55%);
+}
+.arc-timebar-fill {
+  position:absolute; top:0; bottom:0; left:0;
+  width:calc(var(--arc-t, 0) * 100%);
+  background:linear-gradient(90deg,
+    color-mix(in srgb, var(--lav), transparent 35%), var(--lav));
+  box-shadow:0 0 10px color-mix(in srgb, var(--lav), transparent 45%);
+  transition:width .26s linear;
+}
+/* NEVER STILL (Law III): a slanted sheen travels the filled part for as long as
+   the class runs. The tile is 26px wide and the keyframe walks exactly 26px, so
+   the loop is seamless rather than nearly-seamless. */
+.arc-timebar-fill::after {
+  content:''; position:absolute; inset:0;
+  background-image:linear-gradient(115deg,
+    rgba(255,255,255,0) 0 28%, rgba(255,255,255,.34) 50%, rgba(255,255,255,0) 72%);
+  background-size:26px 100%; background-repeat:repeat-x;
+  animation:arc-timeflow 1.5s linear infinite;
+}
+/* The head of the bar breathes, so even a 300s class shows movement at 1px. */
+.arc-timebar-fill::before {
+  content:''; position:absolute; top:0; bottom:0; right:0; width:16px;
+  background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.6));
+  animation:arc-timehead 1.9s ease-in-out infinite;
+}
+@keyframes arc-timeflow { from { background-position:0 0; } to { background-position:26px 0; } }
+@keyframes arc-timehead { 0%, 100% { opacity:.4; } 50% { opacity:1; } }
+/* THE LAST TENTH: gold, and the flow doubles its pace. */
+.arc-timebar.warn .arc-timebar-fill {
+  background:linear-gradient(90deg, color-mix(in srgb, var(--gold), transparent 35%), var(--gold));
+  box-shadow:0 0 12px color-mix(in srgb, var(--gold), transparent 35%);
+}
+.arc-timebar.warn .arc-timebar-fill::after { animation-duration:.7s; }
+/* SPENT: pink and held. The flow stops because time has. */
+.arc-timebar.over .arc-timebar-fill {
+  background:linear-gradient(90deg, var(--pink-deep), var(--pink));
+  box-shadow:0 0 14px color-mix(in srgb, var(--pink), transparent 30%);
+}
+.arc-timebar.over .arc-timebar-fill::after { animation:none; opacity:.25; }
+.arc-timebar.over .arc-timebar-fill::before { animation:none; opacity:.7; }
+/* Reduced motion: a plain fill. The global freeze at the bottom of this file
+   would otherwise run both textures at .001s, which is a strobe, not a stop. */
+html.arc-reduced .arc-timebar-fill::after,
+html.arc-reduced .arc-timebar-fill::before { content:none; }
+@media (prefers-reduced-motion: reduce) {
+  .arc-timebar-fill::after, .arc-timebar-fill::before { content:none; }
+}
+/* A free swim has no clock to draw. */
+.arc-classstage.arc-endless .arc-timebar { display:none; }
+
 /* The proctor strip. Slim, translucent, and it must never eat a click outside
    its own controls: the container (and the flexible spacer) ignore the pointer,
    the real children re-arm it. */
@@ -951,6 +1013,22 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   background:var(--panel2); color:var(--ink-faint); box-shadow:none; cursor:not-allowed;
 }
 .campus-classcard .btnp:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+/* FREE SWIM - the second door. Secondary on purpose: the timetable's Begin is
+   still the loud one, this is the quiet way in that pays nothing and asks
+   nothing. Lavender outline instead of the pink slab. */
+.campus-classcard .btnp.alt {
+  flex:0 1 auto; background:transparent; color:var(--lav);
+  border:1px solid color-mix(in srgb, var(--lav), transparent 45%);
+  box-shadow:none;
+}
+.campus-classcard .btnp.alt:hover:not(:disabled) {
+  background:color-mix(in srgb, var(--lav), transparent 88%);
+  border-color:var(--lav);
+}
+.campus-classcard .cc-althint {
+  margin:8px 21px 0; padding:0;
+  font-family:var(--mono); font-size:10.5px; line-height:1.55; color:var(--ink-faint);
+}
 
 /* ---- entry reveal (one-shot; campus.js drops .enter after it has played,
    so silent repaints never re-run it; the global reduced-motion freeze at the

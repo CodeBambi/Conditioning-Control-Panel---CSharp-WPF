@@ -62,6 +62,21 @@ export const ROOMS = Object.freeze({
     descKey: 'campus_desc_lost_and_found',
     descEn: 'Things went missing in a wall of moving pictures. Find them before they move again.',
   },
+  /* THE POOL - the natatorium on the south lawn, and the one DETACHED class.
+   * The corridor's south wall is full (104 | Entrance Hall | Registrar), so the
+   * Deep End's door is the 20px alley between 104 and the hall and a covered walk
+   * runs down it to the water: `door` is still a corridor x, so doorFor(),
+   * stopAnchor() and routeFor() need no change at all - the numbered stop lands in
+   * the Main Hall like every other class. Because the building sits off the
+   * corridor, `neonY` / `nameY` pin the sign and the label inside it instead of
+   * taking the side-derived defaults (which assume a room bolted to the hall). */
+  the_deep_end: {
+    rect: [302, 738, 336, 114], side: 's', door: 450, rm: '105',
+    neonY: 742, nameY: 822,
+    nameKey: 'campus_room_the_deep_end', nameEn: 'The Pool',
+    descKey: 'campus_desc_the_deep_end',
+    descEn: 'Sink tile into tile. The deeper you go, the harder the board is to read.',
+  },
 });
 
 /* ----------------------------------------------------------------------------
@@ -72,16 +87,26 @@ export const ROOMS = Object.freeze({
  * @param {Array}  o.classes   timetable.classes ({gameKey, timeLabel, ...})
  * @param {Object} o.records   gameKey -> {grade} | null  (today's rows)
  * @param {boolean=} o.suspended  global suspend (mandatory video etc.)
+ * @param {Object=} o.endless  gameKey -> {labelKey, hintKey} for every game that
+ *   declares `manifest.endless`. The shell computes it (the campus never reads a
+ *   manifest); a room without an entry simply shows no Free Swim button.
  * @returns {{rooms:Object, stops:Array<{gameKey:string,n:number}>, allDone:boolean}}
  *   rooms[gameKey] = { scheduled, period (1-based, 0 = not tonight), done,
- *                      grade, mood:'open'|'retake'|'dark', timeLabel }
+ *                      grade, mood:'open'|'retake'|'dark', timeLabel, endless }
  */
-export function campusState({ classes, records, suspended } = {}) {
+export function campusState({ classes, records, suspended, endless } = {}) {
   const list = Array.isArray(classes) ? classes : [];
   const recs = records || {};
+  const ends = (endless && typeof endless === 'object') ? endless : {};
   const rooms = Object.create(null);
   for (const key of Object.keys(ROOMS)) {
-    rooms[key] = { scheduled: false, period: 0, done: false, grade: '', mood: 'dark', timeLabel: '' };
+    rooms[key] = {
+      scheduled: false, period: 0, done: false, grade: '', mood: 'dark', timeLabel: '',
+      // ENDLESS IS A PROPERTY OF THE ROOM, NOT OF TONIGHT. It rides the state
+      // for every room so a class that is not on the board (or is already done)
+      // still offers its free swim.
+      endless: (ends[key] && typeof ends[key] === 'object') ? ends[key] : null,
+    };
   }
   const stops = [];
   let done = 0;
@@ -153,7 +178,9 @@ function el(tag, cls, text) {
  * @param {string=} o.banner      timetable banner (notice-board card copy)
  * @param {Object} o.stats        {streak, perfectDays, tier}
  * @param {boolean=} o.reducedMotion
- * @param {Object} o.on           {begin(gameKey), records(), registrar()}
+ * @param {Object} o.on           {begin(gameKey), freeSwim(gameKey), records(),
+ *   registrar()} - freeSwim is only ever called for a room whose state carries
+ *   an `endless` declaration (the shell reads the manifest, never the campus).
  * @param {Function=} o.log
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
@@ -305,6 +332,21 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       put(svg('rect', { x: 256, y: 666, width: 18, height: 18 }, 'campus-furnf'));
       put(svg('rect', { x: 282, y: 670, width: 14, height: 14 }, 'campus-furnf'));
       put(svg('rect', { x: 300, y: 524, width: 64, height: 11 }, 'campus-furnf'));
+    } else if (key === 'the_deep_end') {
+      // covered walk down the alley between 104 and the hall (x 440..460)
+      put(svg('line', { x1: 443, y1: 512, x2: 443, y2: 738 }, 'campus-furn'));
+      put(svg('line', { x1: 457, y1: 512, x2: 457, y2: 738 }, 'campus-furn'));
+      // basin + waterline
+      put(svg('rect', { x: 330, y: 760, width: 280, height: 44 }, 'campus-furn'));
+      put(svg('rect', { x: 336, y: 766, width: 268, height: 32, 'stroke-dasharray': '3 5' }, 'campus-furn'));
+      // lane lines
+      [771, 782, 793].forEach((y) => put(svg('line', { x1: 340, y1: y, x2: 600, y2: y, 'stroke-dasharray': '9 7' }, 'campus-furn')));
+      // ladder over the north coping
+      [560, 578].forEach((x) => put(svg('line', { x1: x, y1: 752, x2: x, y2: 770 }, 'campus-furn')));
+      [756, 763].forEach((y) => put(svg('line', { x1: 560, y1: y, x2: 578, y2: y }, 'campus-furn')));
+      // diving block on the west deck
+      put(svg('rect', { x: 306, y: 774, width: 20, height: 14 }, 'campus-furnf'));
+      put(svg('line', { x1: 326, y1: 774, x2: 326, y2: 788 }, 'campus-furn'));
     }
   }
 
@@ -318,12 +360,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const midY = y + h / 2 + (spec.side === 'n' ? 0 : 0);
     const ping = svg('circle', { cx: spec.door, cy: midY, r: 12 }, 'campus-ping');
     g.appendChild(ping);
-    const nameY = spec.side === 'n' ? y + 156 : y + 46;
+    // A room bolted to the corridor derives its label row from `side`; a DETACHED
+    // building (the Pool) pins its own, because y + 46 would land in the lawn.
+    const nameY = spec.nameY != null ? spec.nameY : (spec.side === 'n' ? y + 156 : y + 46);
     g.appendChild(svgText(x + w / 2, nameY, 'campus-rname', t(spec.nameKey, spec.nameEn).toUpperCase()));
     g.appendChild(svgText(x + w / 2, nameY + 18, 'campus-rsub',
       (t('campus_rm', 'RM') + ' ' + spec.rm + ' · ' + name(key)).toUpperCase()));
     doorFor(spec).forEach((n) => g.appendChild(n));
-    const neonY = spec.side === 'n' ? 398 : 694;
+    const neonY = spec.neonY != null ? spec.neonY : (spec.side === 'n' ? 398 : 694);
     const neon = svg('g', null, 'campus-neon');
     const neonRect = svg('rect', { x: spec.door - 47, y: neonY, width: 94, height: 16, rx: 3 });
     const neonText = svgText(spec.door, neonY + 11, null, '');
@@ -629,11 +673,23 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const ccGo = el('button', 'btnp', '');
   ccGo.type = 'button';
   ccActions.appendChild(ccGo);
+  /* THE SECOND DOOR. A game that declares `manifest.endless` gets a secondary
+   * button next to Begin/Retake. It is live even when the class is not on
+   * tonight's board and even when it is already graded - a free swim is not the
+   * timetable's business - but never while the host has the class suspended. */
+  const ccAlt = el('button', 'btnp alt', '');
+  ccAlt.type = 'button';
+  ccAlt.hidden = true;
+  ccActions.appendChild(ccAlt);
   card.appendChild(ccActions);
+  const ccAltHint = el('p', 'cc-althint', '');
+  ccAltHint.hidden = true;
+  card.appendChild(ccAltHint);
   scrim.appendChild(card);
   root.appendChild(scrim);
 
   let cardAction = null;
+  let cardAltAction = null;
   scrim.addEventListener('click', (e) => { if (e.target === scrim) closeCard(); });
   ccX.addEventListener('click', () => closeCard());
   ccGo.addEventListener('click', () => {
@@ -641,6 +697,34 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     closeCard();
     if (act) { try { act(); } catch (e) { say('card action threw: ' + ((e && e.message) || e)); } }
   });
+  ccAlt.addEventListener('click', () => {
+    const act = cardAltAction;
+    closeCard();
+    if (act) { try { act(); } catch (e) { say('card alt action threw: ' + ((e && e.message) || e)); } }
+  });
+
+  /** Paint (or retire) the secondary Free Swim button for a room. */
+  function setAltButton(key, room) {
+    const e = room && room.endless;
+    if (!e || st.suspended) {
+      ccAlt.hidden = true;
+      ccAlt.disabled = true;
+      ccAlt.textContent = '';
+      ccAltHint.hidden = true;
+      ccAltHint.textContent = '';
+      cardAltAction = null;
+      return;
+    }
+    ccAlt.hidden = false;
+    ccAlt.disabled = false;
+    ccAlt.textContent = t(e.labelKey || 'free_swim', 'Free Swim').toUpperCase();
+    // The game's own hint if it declared one, else the shell's neutral line -
+    // the button must always say what it costs (nothing) before it is pressed.
+    const hint = t(e.hintKey || 'free_swim_hint', '');
+    ccAltHint.textContent = hint;
+    ccAltHint.hidden = !hint;
+    cardAltAction = () => { if (handlers.freeSwim) handlers.freeSwim(key); };
+  }
 
   function popCard() {
     cardOpen = true;
@@ -691,6 +775,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       ccGo.disabled = true;
       cardAction = null;
     }
+    setAltButton(key, r);
     popCard();
   }
 
@@ -712,6 +797,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       ccGo.disabled = !d.action;
       cardAction = d.action || null;
     }
+    setAltButton(null, null);        // facilities are never swum
     popCard();
   }
 
@@ -782,6 +868,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       r.timeBudgetSec = c.timeBudgetSec;
       r.homeroom = !!c.homeroom;
       r.tier = c.tier;
+      // Only ever ADD what the descriptor knows: campusState already set this
+      // for every room (scheduled or not), and descriptors cover only tonight's.
+      if (c.endless) r.endless = c.endless;
     }
   }
 

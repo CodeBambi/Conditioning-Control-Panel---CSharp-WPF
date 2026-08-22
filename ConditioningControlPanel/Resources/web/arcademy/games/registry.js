@@ -1,11 +1,12 @@
 /* ============================================================================
  * games/registry.js - the guarded registry (BUILD-CONTRACT §11).
  *
- * Imports the four Semester-1 games with Promise.allSettled, exactly like
- * intake/render/captcha/index.js: one broken module NEVER blocks the others and
- * NEVER throws. A failed import logs and leaves a STUB in its slot whose class
- * renders `class_suspended` - the shell must always be able to deal a board,
- * because a blank board is indistinguishable from a dead app.
+ * Imports the five shipped classes with Promise.allSettled, exactly like
+ * intake/render/captcha/index.js (Semester I's four, plus The Deep End - the
+ * first Semester III class brought forward): one broken module NEVER blocks the
+ * others and NEVER throws. A failed import logs and leaves a STUB in its slot
+ * whose class renders `class_suspended` - the shell must always be able to deal a
+ * board, because a blank board is indistinguishable from a dead app.
  *
  * STATIC DESCRIPTORS. The timetable needs {family, meaty, flagship, timeBudgetSec}
  * for a game even when its module failed to load, so they live here as a fallback
@@ -25,6 +26,7 @@ export const GAME_PATHS = Object.freeze({
   lost_and_found: './lost-and-found/index.js',
   deja_vu: './deja-vu/index.js',
   impulse_control: './impulse-control/index.js',
+  the_deep_end: './the-deep-end/index.js',
 });
 
 /** Fallback descriptors (see header). Families per SYNTHESIS #3. */
@@ -37,6 +39,12 @@ export const GAME_META = Object.freeze({
   lost_and_found: { family: 'search', meaty: true, flagship: true, timeBudgetSec: 120 },
   deja_vu: { family: 'memory', meaty: false, flagship: false, timeBudgetSec: 90 },
   impulse_control: { family: 'reflex', meaty: false, flagship: false, timeBudgetSec: 90 },
+  // MEATY, same law as lost_and_found above: this row must equal the module's own
+  // exports, because the timetable reads a SUSPENDED class's descriptor too and a
+  // mismatch would quietly reshape the day on the one day the import fails.
+  // The Deep End is the second meaty class (DECISIONS #3's 300s slot) and the first
+  // Semester III class brought forward - family 'comfort', never a flagship.
+  the_deep_end: { family: 'comfort', meaty: true, flagship: false, timeBudgetSec: 300 },
 });
 
 export const MAX_TIER = 4;

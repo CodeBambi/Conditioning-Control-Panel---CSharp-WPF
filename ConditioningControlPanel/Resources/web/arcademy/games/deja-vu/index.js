@@ -26,6 +26,13 @@
  * ceiling rule - we ask, we never set absolutes). The pure script - layout,
  * swap/drift schedules, the composite - lives in ./script.js so determinism is
  * testable headless; the CSS lives in ./style.js (namespaced .g-dv-*).
+ *
+ * HOUSE RULES DECKS (0821): casino.js = Deck II (seeded lab identity, marquee
+ * chase, the almost, ken-burns on face media); trickster.js = Deck III (fake
+ * shuffle, the deja re-deal + called-it bonus, stat flicker). Both are
+ * presentation-only by the audit in their headers; the re-deal consumes a
+ * settled-board window like the honest mutations do, and its lie is a face
+ * OVERLAY - pairIds and hitboxes never move.
  * ==========================================================================*/
 
 import { injectDejaVuStyle } from './style.js';
@@ -36,6 +43,8 @@ import {
   matchedLoopPolicy, compositeFor, flavorXpFor, createReward,
   BOARD_SIZES, BOARD_PAR,
 } from './script.js';
+import { createDvCasino } from './casino.js';
+import { createDvTrickster, DV_TRICKSTER } from './trickster.js';
 import { makeTaggedRoll } from '../../core/rng.js';
 
 /** Distinct glyphs so a class is fully playable with ZERO media (the floor
@@ -150,6 +159,13 @@ export default {
     let loopPolicy = { play: true, reason: 'auto' };
     let retake = false;
 
+    let casino = null;                  // House Rules Deck II (marquee / almost / ken-burns)
+    let trickster = null;               // House Rules Deck III (shuffle / re-deal / flicker)
+    let redealLie = null;               // {cell, wearPairId} during the re-deal show
+    let lieNode = null;                 // the lie's overlay element
+    let watchLie = -1;                  // cell index: flip the liar NEXT and it pays
+    let calledLies = 0;
+
     let attempts = 0;
     let matched = 0;
     let combo = 0;
@@ -175,7 +191,7 @@ export default {
     let budgetMs = 90000;
 
     /* ---- dom ------------------------------------------------------------ */
-    let stage = null; let grid = null; let well = null; let hint = null;
+    let stage = null; let grid = null; let well = null; let hint = null; let bench = null;
     let meterWrap = null; let swapChip = null; let clockChip = null;
     let peekBtn = null; let cramRow = null; let rack = null;
 
@@ -198,6 +214,11 @@ export default {
       timers.clear();
       deferred.length = 0;
     }
+    /** The deck modules' timer registry: this class's own run()-gated timers. */
+    const deckTimers = {
+      after,
+      cancel: (id) => { clearTimeout(id); timers.delete(id); },
+    };
 
     /* ==================================================================== *
      * ENGINE - one wrapper, three laws enforced in one place.
@@ -220,7 +241,11 @@ export default {
       try { return ctx.engine.sustain(kind, opts || {}) || null; } catch (e) { return null; }
     }
     function stopSafe(kind) { try { ctx.engine.stop(kind); } catch (e) { /* noop */ } }
-    function heat() { try { ctx.engine.setHeat(heatFor(dials, progress())); } catch (e) { /* noop */ } }
+    function heat() {
+      const h = heatFor(dials, progress());
+      try { ctx.engine.setHeat(h); } catch (e) { /* noop */ }
+      if (casino) casino.setHeat(h);           // the marquee rides the same scalar
+    }
     /** A cue that must be heard even when every visual is degraded. */
     function tick(name, level, extra) {
       fireSafe('audio_trigger', Object.assign({ name, level: level == null ? 0.45 : level }, extra || {}));
@@ -284,6 +309,7 @@ export default {
       wrap.appendChild(grid);
       wrap.appendChild(well);
       stage.appendChild(wrap);
+      bench = wrap;                       // the casino's marquee frames the bench
 
       cells = [];
       for (let i = 0; i < dials.cells; i++) cells.push(buildCell(i));
@@ -461,11 +487,16 @@ export default {
     }
 
     function armPlay() {
-      busy = false;
       playStartedMs = elapsedMs;
       setHint('dv_play_hint', 'Find the pairs.');
       openAmbience();
-      settled(true);
+      if (casino) casino.start();          // the lab dresses + the marquee lights
+      if (trickster) trickster.start();
+      const open = () => { busy = false; settled(true); };
+      /* FAKE SHUFFLE (House Rules): the pantomime rides the tail of the
+       * preview - cards feint trades and land home. Nothing moves, no tell
+       * fires, and input stays closed until the theatre leaves the stage. */
+      if (trickster) trickster.shuffle(cells, open); else open();
     }
 
     /* ==================================================================== *
@@ -489,6 +520,18 @@ export default {
         playFace(cell, true);
         faceUp.push(i);
         revealed.push(i);
+        /* CALLED IT: the re-deal lied about one card, and the very next flip
+         * went straight to the liar. Flavour bonus only - never composite. */
+        if (watchLie >= 0) {
+          const called = i === watchLie;
+          watchLie = -1;
+          if (called) {
+            calledLies += 1;
+            setHint('dv_called_it', 'You called the lie.', true);
+            tick('streak', 0.7, { pitch: 1.3 });
+            rewardBeat(true);
+          }
+        }
         while (revealed.length > 24) revealed.shift();
         if (faceUp.length >= 2) judge();
       });
@@ -541,7 +584,9 @@ export default {
       } catch (e) { /* noop */ }
       // pitch ratchet: the shell synthesises the cue, we ride the level up the
       // combo (+1 step per match, capped at the shared 8)
-      tick('streak', Math.min(1, 0.4 + 0.07 * Math.min(8, combo)));
+      tick('streak', Math.min(1, 0.4 + 0.07 * Math.min(8, combo)),
+        { pitch: 1 + 0.05 * Math.min(8, combo) });      // the chime ladder climbs in pitch
+      if (casino) casino.payout(matched);               // a match pays light
       paintMeter();
       paintHud();
 
@@ -580,6 +625,8 @@ export default {
         if (nearMiss) {
           try { ctx.ceremonies.reward('near_miss', { target: cells[b].holder, text: t('dv_near_miss', 'SO CLOSE') }); }
           catch (e) { /* noop */ }
+          // the almost: the face you NEEDED haunts the card you picked
+          if (casino) casino.almost(cells[b], cells[a]);
         }
         tick('stamp_bad', 0.4);
         after(reduced ? TIMING.flipReducedMs : TIMING.flipMs, () => {
@@ -625,7 +672,12 @@ export default {
 
     function mutate() {
       if (dead || ended) return;
-      const enough = unmatchedCells().length > 2;
+      const open = unmatchedCells();
+      const enough = open.length > 2;
+      /* DEJA RE-DEAL (House Rules, the native signature) outranks the smaller
+       * mutations at its one seeded window - it is a settled-board event like
+       * they are, and it consumes the window the same way. */
+      if (trickster && trickster.redealDue(settledWindow, open.length)) { runRedeal(); return; }
       // `<=` not `===`: a window the player raced past is not a spent budget,
       // it simply fires at the next settled board (the budget is per class).
       const swap = swaps.find((s) => !s.done && s.window <= settledWindow);
@@ -634,6 +686,68 @@ export default {
       if (drift && enough) { runDrift(drift); return; }
       garnish();
       busy = false;
+    }
+
+    /* ==================================================================== *
+     * DEJA RE-DEAL - the machine re-shows the board; one card may be a lie
+     * ==================================================================== */
+    /** The lie's wardrobe: a face overlay borrowed from another pair. The
+     *  card's REAL face and pairId never change; only the shown frame lies. */
+    function wearLie(cell, wearPairId) {
+      const url = pairUrls[wearPairId];
+      const glyph = GLYPHS[((wearPairId % GLYPHS.length) + GLYPHS.length) % GLYPHS.length];
+      const node = el('div', 'g-dv-lie');
+      if (url && !isVideoUrl(url)) {
+        const img = el('img');
+        img.setAttribute('alt', '');
+        img.src = url;
+        node.appendChild(img);
+      } else {
+        // a video face lies as its glyph (no 900ms decoder spin-up for a lie)
+        node.textContent = glyph;
+        node.classList.add('glyph');
+      }
+      cell.card.appendChild(node);
+      lieNode = node;
+    }
+    function clearLie() {
+      if (lieNode) { try { lieNode.remove(); } catch (e) { /* noop */ } lieNode = null; }
+      redealLie = null;
+    }
+
+    function runRedeal() {
+      if (trickster) trickster.redealFired();
+      busy = true;
+      redealLie = trickster ? trickster.pickLie(cells) : null;
+      try { ctx.ceremonies.stamp({ text: t('dv_redeal_stamp', 'DEJA VU'), tone: 'pink', target: grid }); }
+      catch (e) { /* noop */ }
+      tick('glitch', 0.5);
+      if (grid) grid.classList.add('scanning', 'rewind');
+      const showing = [];
+      for (const c of cells) {
+        if (c.state !== 'down' || c.pairId < 0) continue;
+        applyMedia(c);
+        if (redealLie && c === redealLie.cell) wearLie(c, redealLie.wearPairId);
+        c.card.classList.add('up');
+        playFace(c, true);
+        showing.push(c);
+      }
+      say('re-deal: showing ' + showing.length + ' cards'
+        + (redealLie ? ' (one is a lie)' : ' (truthful)'));
+      after(trickster ? trickster.redealShowMs : 1500, () => {
+        for (const c of showing) { c.card.classList.add('flipping'); playFace(c, false); }
+        after(reduced ? TIMING.flipReducedMs : TIMING.flipMs, () => {
+          for (const c of showing) c.card.classList.remove('flipping', 'up');
+          if (grid) grid.classList.remove('scanning', 'rewind');
+          const lied = !!redealLie;
+          watchLie = lied ? redealLie.cell.index : -1;
+          clearLie();
+          if (lied) setHint('dv_redeal_hint', 'One of those was a lie.', true);
+          else setHint('dv_redeal_gift', 'The machine blinked.', true);
+          busy = false;
+          endgameCheck();
+        });
+      });
     }
 
     /** The plain-share ramp: most settled windows stay quiet, so a mutation lands. */
@@ -825,6 +939,7 @@ export default {
         drumrolled = true;
         tick('near_miss', 0.45);
         setHint('dv_endgame', 'Last pair.', true);
+        if (casino) casino.bell(true);       // the frame goes gold for the last pair
       }
     }
 
@@ -850,6 +965,7 @@ export default {
     function win() {
       if (ended) return;
       stopAmbience();
+      if (casino) { casino.payout(10); casino.bell(false); }
       setHint('dv_clear', 'Board clear.', true);
       try { ctx.ceremonies.stamp({ text: t('dv_stamp_clear', 'CLEAR'), target: grid }); } catch (e) { /* noop */ }
       tick('stamp', 0.8);
@@ -859,6 +975,7 @@ export default {
     function bell() {
       if (ended) return;
       stopAmbience();
+      if (casino) casino.dimOut();           // the bell is never silence
       setHint('dv_bell', 'The bell. Time is up.', true);
       try { ctx.ceremonies.stamp({ text: t('dv_stamp_bell', 'BELL'), tone: 'pink', target: grid }); } catch (e) { /* noop */ }
       tick('stamp_bad', 0.6);
@@ -870,6 +987,8 @@ export default {
       ended = true;
       stopClock();
       stopAmbience();
+      if (trickster) trickster.stop();
+      if (casino) casino.stop();
       busy = true;
       const elapsedSec = Math.max(0.001, (elapsedMs - playStartedMs) / 1000);
       const scoreIn = {
@@ -884,7 +1003,8 @@ export default {
         timeout: !!timeout,
       };
       const score = compositeFor(scoreIn);
-      const flavorXp = flavorXpFor(tracked);
+      // called lies ride the flavour channel (game-owned; never composite)
+      const flavorXp = flavorXpFor(tracked) + calledLies * DV_TRICKSTER.CALLED_IT_XP;
       /* The dossier's SECOND A-cap: a mismatch hold above 1.25x is a timing
        * assist (longer looking = easier memorizing), so it rides the shared
        * rubric's `tempo_assist` reason. The shell owns the cap itself - a game
@@ -907,7 +1027,7 @@ export default {
           retake,
           grade_inputs: {
             tier: dials.tier, pairs: playablePairs(), matched, attempts,
-            clearTimeSec: Math.round(elapsedSec), maxCombo, tracked,
+            clearTimeSec: Math.round(elapsedSec), maxCombo, tracked, calledLies,
             swapsFired, driftsFired, bubblesPopped, jackpots,
             timeout: !!timeout,
             peekHold: peekHoldMult(),
@@ -918,7 +1038,8 @@ export default {
       try { lastSnapshot = instance.snapshot(); } catch (e) { /* diagnostics only */ }
       say('class over: ' + matched + '/' + playablePairs() + ' pairs, ' + attempts + ' attempts, '
         + Math.round(elapsedSec) + 's (par ' + dials.parSec + 's), combo ' + maxCombo
-        + ', tracked ' + tracked + ', swaps ' + swapsFired + '/' + dials.swapBudget
+        + ', tracked ' + tracked + (calledLies ? ', called ' + calledLies + ' lies' : '')
+        + ', swaps ' + swapsFired + '/' + dials.swapBudget
         + (timeout ? ', BELL' : '') + ' -> composite ' + score.composite.toFixed(3));
       try {
         ctx.endClass(report);
@@ -1101,6 +1222,32 @@ export default {
 
         injectDejaVuStyle();
         buildDom();
+
+        /* The House decks (House Rules floor map: the memory lies + the
+         * lighting rig). Both disarm on a 0-capped bgIntensity; both replay
+         * identically on a retake (same seed, same streams). */
+        const capsOk = !(ctx.caps && Number(ctx.caps.bgIntensity) === 0);
+        casino = createDvCasino({
+          seed, stage, bench, grid,
+          timers: deckTimers,
+          reduced, capsOk,
+          log: say,
+        });
+        trickster = createDvTrickster({
+          seed, tier,
+          timers: deckTimers,
+          reduced, capsOk,
+          isHalted: () => dead || paused || ended,
+          stats: () => ({
+            swaps: swapsFired,
+            budget: dials.swapBudget,
+            secLeft: Math.max(0, Math.ceil((budgetMs - elapsedMs) / 1000)),
+          }),
+          chipEl: (which) => (which === 'swaps' ? swapChip : clockChip),
+          chipText: (which) => (which === 'swaps' ? swapChipText() : clockText()),
+          log: say,
+        });
+
         wireCram();
         claimAssets();
         startClock();
@@ -1143,6 +1290,11 @@ export default {
         stopClock();
         clearTimers();
         stopAmbience();
+        try { if (trickster) trickster.destroy(); } catch (e) { /* noop */ }
+        trickster = null;
+        try { if (casino) casino.destroy(); } catch (e) { /* noop */ }
+        casino = null;
+        clearLie();
         for (const c of cells) playFace(c, false);
         if (pool && typeof pool.release === 'function') { try { pool.release(); } catch (e) { /* noop */ } }
         pool = null;
@@ -1175,6 +1327,9 @@ export default {
           })),
           attempts, matched, combo, maxCombo, mismatchStreak, tracked,
           swapsFired, driftsFired, bubblesPopped, jackpots, settledWindow,
+          calledLies, watchLie,
+          trickster: trickster ? trickster.diagnostics() : null,
+          casino: casino ? casino.diagnostics() : null,
           faceUp: faceUp.slice(),
           revealed: revealed.slice(),
           elapsedMs, budgetMs, ended, busy, paused,

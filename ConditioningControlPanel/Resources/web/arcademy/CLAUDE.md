@@ -66,6 +66,8 @@ games/<key>/index.js  one folder per game; games NEVER import each other
   deja-vu/         the pair memory                      - script (the swap plan)
   impulse-control/ the Drop Tube (pop/withhold)         - lex/schedule/scoring/render/tube3d/tube2d
                    (seeded three.js chute, vendored r185 in ../vendor/; tube2d = no-WebGL ladder)
+  the-deep-end/    2048 with trance-depth tiers (MEATY) - board/schedule/grade/lex/style/casino/trickster
+                   the deepest tile is the heat dial; board/schedule/grade pure, casino+trickster decks
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
@@ -128,13 +130,16 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
    keyframe; re-flip is remove-class → force reflow (`void root.offsetWidth`) → add-class.
    Without the reflow read the browser coalesces it and nothing animates. Repaints that
    are *not* a reveal must pass `animate: false` or the board re-flaps on every meta echo.
-5. **A 4-game pool cannot satisfy no-repeat-3.** 3 rotating games into 2 slots means the
+5. **A small pool cannot satisfy no-repeat-3.** (Written for the 4-game pool; the five-game
+   pool relaxes on every dealt day too.) 3-4 rotating games into 2 slots means the
    generator relaxes on most days. Relaxation order is law (flagship → meaty → family →
    no-repeat) and no-repeat *narrows* (3→2→1→off) instead of dying, so the board still
    refuses yesterday's class. Every constraint is also a seeded weight so the preference
    survives relaxation. `day.relaxed` and `day.noRepeatWindow` report what happened.
-6. **A pool with exactly one meaty game cannot be meaty every day** — no-repeat outranks
-   meaty, so the meaty slot fills ~1 day in 4. Contract-correct; see §7 open questions.
+6. ~~**A pool with exactly one meaty game cannot be meaty every day.**~~ **CLOSED by The Deep
+   End.** no-repeat outranks meaty, so with one meaty game the meaty slot filled ~1 day in 4.
+   With two (`lost_and_found` 120s + `the_deep_end` 300s) a dealt fortnight carries exactly one
+   meaty class on all 14 days. The arithmetic never changed — the pool grew.
 7. **The timetable's history is an epoch walk, not a recursion.** `EPOCH = '2026-08-01'`
    and the generator walks forward to the target date, memoised. That makes it a fixed
    point (day D-1 computed as history === day D-1 computed on its own — tested). **Moving
@@ -319,8 +324,8 @@ A game must not: import another game, touch `bridge.js`, re-expose a global sett
 settings page skips + logs it), grade itself, or call `endClass` twice (the runner ignores
 the second call and logs).
 
-The four `games/*/index.js` are **real games** now (Semester 1) - the placeholder stubs are
-gone. The shell suite therefore keeps a fixture of its own rather than driving a real game's
+The five `games/*/index.js` are **real games** now (Semester 1 plus The Deep End, the first
+Semester III class brought forward) - the placeholder stubs are gone. The shell suite therefore keeps a fixture of its own rather than driving a real game's
 UI: see §6.
 
 ## 6. Verifying changes (no app UI — the owner is remote)
@@ -345,9 +350,9 @@ have to fight a game's UI to assert a meta write. The harness drops
 `arc/games/test-class/` (the union of what the four retired stubs each proved, with knobs:
 `tc_zen`, `tc_fail_gate`, `tc_absorb`) into its COPY of the web root and patches the COPY of
 `games/registry.js` with one opt-in hook - `globalThis.__ARC_TEST_GAMES__ = {key: path}`
-read at `loadGames()` time. The repo's registry stays a frozen four-entry table: the shell
+read at `loadGames()` time. The repo's registry stays a frozen five-entry table: the shell
 must never grow a test seam that ships. Cases opt in through an `overrideCalendar`, so every
-other case still sees the shipping four-game pool and the seeded boards it asserts against.
+other case still sees the shipping five-game pool and the seeded boards it asserts against.
 Remember `clearTimetableCache()` between boots (trap 25).
 
 Last full run: **144 assertions, 0 failures** (timetable 27, grades 23, shell 45,
@@ -397,9 +402,9 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
 - **`init.palette` matches** the host's seven keys (`ground/navy/panel/ink/pink/lavender/
   gold`); `shell.js` `PALETTE_TOKENS` also tolerates `accent`/`accent2`/`line` aliases and
   logs anything unknown.
-- **One-meaty pools** (see trap 6) fill the meaty slot ~25% of days. If the design wants a
-  meaty class every day, either tag a second game meaty-eligible or promote `meaty` above
-  `no-repeat` in the relaxation order — an owner/design call, not a code call.
+- ~~**One-meaty pools** (see trap 6) fill the meaty slot ~25% of days.~~ **CLOSED** — The Deep
+  End is the second meaty class and a 14-day deal now carries one meaty class every day. No code
+  changed: the relaxation order is still flagship → meaty → family → no-repeat.
 - **Tier promotion** is `tier = 1 + floor(promotions/2)`, cap 4, promotion = S or A, stored
   per game in meta. Simple by construction; nothing in the design pinned a curve.
 - **No entry point yet.** `Services/Arcademy/*` and the launch button are the C# agent's;

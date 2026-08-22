@@ -63,6 +63,12 @@ export const DEFAULT_LEXICON = Object.freeze({
   settings: 'Settings',
   back: 'Back',
   begin_class: 'Begin',
+  /* The shell's own name for endless play. A game that declares
+     `manifest.endless` may name its own label_key instead (The Deep End ships
+     de_free_swim); this row is what the campus falls back to, and what the
+     class chrome's chip always says. */
+  free_swim: 'Free Swim',
+  free_swim_hint: 'Untimed practice. No grade, no XP, no attendance.',
   leave_class: 'Leave class',
   replay_board: 'Flip the board again',
   share: 'Copy share card',
@@ -84,10 +90,12 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_room_deja_vu: 'Memory Lab',
   campus_room_impulse_control: 'Discipline Hall',
   campus_room_lost_and_found: 'Lost & Found',
+  campus_room_the_deep_end: 'The Pool',
   campus_desc_daily_trigger: 'One word, six chances. The whole school sits the same word today.',
   campus_desc_deja_vu: 'Pairs that move when you blink. The board settles only when you stop looking.',
   campus_desc_impulse_control: 'Hands on the desk. Move only when told - the room will lie to you.',
   campus_desc_lost_and_found: 'Things went missing in a wall of moving pictures. Find them before they move again.',
+  campus_desc_the_deep_end: 'Sink tile into tile. The deeper you go, the harder the board is to read.',
   campus_records: 'Records',
   campus_desc_records: 'Report card, attendance ledger, grades. Your whole term, in ink.',
   campus_registrar: 'Registrar',

@@ -21,7 +21,10 @@
  * repainted by an effect.
  *
  * Files: bank.js (pools + the daily draw), board.js (marking rules, pure),
- * ladder.js (rung -> engine), styles.js (.g-dt-* stylesheet), words-*.js (bank).
+ * ladder.js (rung -> engine), styles.js (.g-dt-* stylesheet), words-*.js (bank),
+ * casino.js (House Rules Deck II: marquee / tonight-only room / near-miss
+ * staging), trickster.js (Deck III: crooked clock / stat flicker / chalk
+ * whisper - the ladder's upper rungs, presentation-only by law).
  * ==========================================================================*/
 
 import { injectStyles } from './styles.js';
@@ -33,6 +36,8 @@ import {
   layoutRows, autoLayout, cellPlan, HIT,
 } from './board.js';
 import { createLadder, tierStartFor, rungCapFor } from './ladder.js';
+import { createDtCasino } from './casino.js';
+import { createDtTrickster } from './trickster.js';
 import { makeTaggedRoll } from '../../core/rng.js';
 
 /** Six rows, always, at every tier - the share grid must stay comparable. */
@@ -134,6 +139,8 @@ export default {
     let entry = null;               // dailyEntry() - the day's board
     let roll = makeTaggedRoll('dt');
     let ladder = null;
+    let casino = null;              // House Rules Deck II (marquee / tonight-only / almost)
+    let trickster = null;           // House Rules Deck III (crooked clock / flicker / whisper)
     let hardMode = false;
     let typeToGuess = true;
 
@@ -180,6 +187,11 @@ export default {
       return id;
     };
     const clearTimers = () => { for (const id of Array.from(timers)) clearTimeout(id); timers.clear(); };
+    /** The deck modules' timer registry: the game's own timers, adapted. */
+    const deckTimers = {
+      after: later,
+      cancel: (id) => { clearTimeout(id); timers.delete(id); },
+    };
 
     /* Engine calls from this file are guarded the same way ladder.js guards its
      * own: a thrown effect must never kill the class. */
@@ -187,8 +199,11 @@ export default {
       try { return ctx.engine ? ctx.engine.fire(kind, opts || {}) : null; }
       catch (e) { say('fire(' + kind + ') failed: ' + ((e && e.message) || e)); return null; }
     }
-    function tick(name, level) {
-      fx('audio_trigger', { name, level: level == null ? 0.3 : level, bus: 'fx' });
+    function tick(name, level, pitch) {
+      const o = { name, level: level == null ? 0.3 : level, bus: 'fx' };
+      // the chime ladder climbs in PITCH, not tempo (shell/audio.js seam)
+      if (Number.isFinite(pitch)) o.pitch = Math.max(0.5, Math.min(2, pitch));
+      fx('audio_trigger', o);
     }
     function beat(garnish) {
       try { if (ctx.engine && ctx.engine.beat) ctx.engine.beat({ garnish: !!garnish }); }
@@ -475,13 +490,16 @@ export default {
           c.setAttribute('aria-label', t('mark_' + m, m));
           // the pitch ratchet degrades to a level ratchet: the sfx seam carries
           // name/level/bus only (see the build report's shared-layer asks)
-          if (m === HIT) { chain += 1; tick('pop', Math.min(0.75, 0.3 + 0.08 * chain)); }
+          if (m === HIT) { chain += 1; tick('pop', Math.min(0.75, 0.3 + 0.08 * chain), 1 + 0.07 * chain); }
           else { chain = 0; tick('blip', 0.16); }
         });
       });
       later(step * marks.length + (reduced ? 0 : 120), () => {
         revealing = false;
-        if (chain >= 3) tick('streak', 0.4);
+        if (chain >= 3) {
+          tick('streak', 0.4, 1 + 0.06 * chain);
+          if (casino) casino.payout(chain);      // a strong row pays light
+        }
         try { done(); } catch (e) { say('afterReveal: ' + ((e && e.message) || e)); }
       });
     }
@@ -497,6 +515,7 @@ export default {
       cur = new Array(entry.letters).fill('');
       hintIndex = -1; hintLetter = '';
       if (ladder) ladder.miss();
+      if (casino && ladder) casino.setHeat(ladder.heat);   // the marquee climbs with the storm
       beat(tier >= 3);
       paintHud();
 
@@ -508,6 +527,8 @@ export default {
         const off = marks.indexOf('near') >= 0 ? marks.indexOf('near') : marks.indexOf('miss');
         const c = (cells[rowIndex - 1] || [])[off];
         if (c && !reduced) { c.classList.add('wobble'); later(700, () => c.classList.remove('wobble')); }
+        // near-miss staging: the solved underline starts to draw, dies partway
+        if (casino) casino.almost(rowEls[rowIndex - 1]);
       }
 
       /* Taste of the twist from Year 2: ONE telegraphed, gentle pollution flash,
@@ -537,6 +558,7 @@ export default {
       if (solvedRow) solvedRow.classList.add('solved');
 
       if (ladder) ladder.absorbDressing(jackpot ? 'confetti' : 'petals');
+      if (casino) { casino.gold(true); casino.payout(5); }   // the frame goes gold for the absorb
       fx('sub_flash', { text: word, variant: 'centre' });
       tick(jackpot ? 'jackpot' : 'sting', 0.6);
       if (jackpot) {
@@ -571,6 +593,7 @@ export default {
       /* The word is revealed anyway, inverted: instead of you absorbing it, it
        * flashes AT you. Detention is FLAVOUR ONLY - grade C, attendance intact. */
       if (ladder) ladder.detentionDressing();
+      if (casino) casino.dimOut();                 // a loss is never silence: the frame sighs out
       fx('sub_flash', { text: word, variant: 'stamp' });
       later(reduced ? 0 : 520, () => fx('sub_flash', { text: word, variant: 'centre' }));
       later(reduced ? 0 : 1100, () => fx('sub_flash', { text: word, variant: 'scatter' }));
@@ -740,6 +763,7 @@ export default {
       if (finished) return;
       finished = true;
       if (ladder) ladder.stopAll();
+      if (trickster) trickster.stop();
       const flavor = solved
         ? (5 + (jackpot ? 5 : 0) + (entry.goldDay ? 3 : 0))
         : 0;
@@ -815,6 +839,40 @@ export default {
         });
         ladder.open();
 
+        /* The House decks (House Rules floor map: homeroom's three cards +
+         * the lighting rig). Both disarm themselves when bgIntensity is
+         * capped to 0; both replay identically on a retake. */
+        const capsOk = !(ctx.caps && Number(ctx.caps.bgIntensity) === 0);
+        casino = createDtCasino({
+          dateUtc,                       // DATE ONLY: tonight is everyone's night
+          slab, wrap,
+          timers: deckTimers,
+          reduced, capsOk,
+          log: say,
+        });
+        trickster = createDtTrickster({
+          seed: String(spec.seed || ('dt|' + dateUtc)),
+          tier,
+          budgetSec: Number(spec.timeBudgetSec) || 90,
+          timers: deckTimers,
+          reduced, capsOk,
+          getRung: () => (ladder ? ladder.rung : 0),
+          isHalted: blocked,
+          stats: () => ({
+            rung: ladder ? ladder.rung : 0, cap: 5,
+            row: Math.min(rowIndex + 1, ROWS), rows: ROWS,
+          }),
+          paintTruth: paintHud,
+          chipEl: (which) => (which === 'rung' ? rungChip : rowChip),
+          canWhisper: () => !(msgEl && msgEl.textContent),
+          whisperHost: () => zone,
+          t,
+          log: say,
+        });
+        casino.start();
+        trickster.start();
+        casino.setHeat(ladder.heat);
+
         consumeStudyHint();
         paintCurrentRow();
         paintKeys();
@@ -831,8 +889,12 @@ export default {
           if (!paused && !suspended) {
             elapsedSec = Math.max(0, Math.round((Date.now() - startMs) / 1000));
             if (clockChip) {
-              clockChip.textContent = elapsedSec + 's';
               const budget = Number(spec.timeBudgetSec) || 90;
+              // CROOKED CLOCK (House Rules): the FACE may bend from rung 3;
+              // elapsedSec itself - the composite input, the warn state, the
+              // log line - is exact and never routes through the trickster.
+              const face = trickster ? trickster.clockFace(elapsedSec, budget) : elapsedSec;
+              clockChip.textContent = face + 's';
               if (elapsedSec >= budget) clockChip.className = 'chip num warn';
             }
           }
@@ -852,16 +914,19 @@ export default {
       pause() {
         paused = true;
         if (ladder) ladder.pause(true);
+        if (casino) casino.freeze(true);
       },
 
       resume() {
         paused = false;
         if (ladder) ladder.pause(false);
+        if (casino) casino.freeze(false);
       },
 
       suspend(on) {
         suspended = !!on;
         if (ladder) ladder.pause(suspended);
+        if (casino) casino.freeze(suspended);
         // Board state is preserved on purpose: a panic stop or a mandatory video
         // must never cost the player their rows.
         if (wrap) wrap.setAttribute('aria-hidden', suspended ? 'true' : 'false');
@@ -871,6 +936,10 @@ export default {
         finished = true;
         clearTimers();
         if (ladder) ladder.stopAll();
+        try { if (trickster) trickster.destroy(); } catch (e) { /* ignore */ }
+        trickster = null;
+        try { if (casino) casino.destroy(); } catch (e) { /* ignore */ }
+        casino = null;
         try { if (typeof window !== 'undefined') window.removeEventListener('keydown', onKeyDown); }
         catch (e) { /* noop */ }
         try { ctx.root.textContent = ''; } catch (e) { /* noop */ }
