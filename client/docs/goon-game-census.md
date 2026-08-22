@@ -109,7 +109,7 @@ flags, and all four were opened:
 
 | Route | Cited | Reaches |
 |---|---|---|
-| Lab / Play card -> `BtnStartGoon_Click` | `MainWindow/MainWindow.Lab.cs:198`, call at `:202` | `GoonHostService.Launch()` |
+| Lab / Play card -> `BtnStartGoon_Click` | `MainWindow/MainWindow.Lab.cs:197`, call at `:201` | `GoonHostService.Launch()` |
 | `--goon` | `App.xaml.cs:2435`, call at `:2436` | `GoonHostService.Launch()` |
 | `--goon-test` (**developer**) | `App.xaml.cs:2362`, `new GoonTestWindow().Show()` at `:2364` | the dev cockpit -> `GoonGameService` -> the whole C# engine |
 | `--goon-vectors` (**developer**) | `App.xaml.cs:2443`, call at `:2447` | `GoonVectorDumper.Run()` |
@@ -328,7 +328,7 @@ would build one limit where the protocol has three.
 `GoonHostService.cs:911` gates minting a room on `HasLabAccess` (tier 2) while `:896` gates sending on
 `HasPremiumAccess` (tier 1), and `MainWindow/MainWindow.PlayTab.cs:107-108` reads both. The row's
 one-rung version is **exactly what a stale comment in the shipping source says**:
-`MainWindow/MainWindow.Lab.cs:193-194` still reads *"the transfer-your-own-media half is the only
+`MainWindow/MainWindow.Lab.cs:192-193` still reads *"the transfer-your-own-media half is the only
 premium part"*. So the omission is inherited, not invented — which is why it is recorded as D246
 rather than as a row defect alone.
 
@@ -336,7 +336,7 @@ rather than as a row defect alone.
 
 `Views/Tabs/PlayTabView.xaml:604` cites `MainWindow.Lab.cs:182-186` for the Goon card's
 "joining is free" rationale. **Those five lines are the Inspection Bureau's catch block** — a
-different feature — and the rationale it meant is at `:192-194`. The second half of the same
+different feature — and the rationale it meant is at `:191-193`. The second half of the same
 citation, `GoonHostService.cs:882-913`, is correct. Recorded as D247 in the D206 shape: an upstream
 citation that does not say what it claims, noted so a port author following it does not read the
 wrong feature.
@@ -710,7 +710,7 @@ none of them.
 | `Resources/web/goon/` (184 new payload files) | **Exact; 97.8% this surface, 164 served** (§5) |
 | "real-time 1v1 duels: media payload throwing, heat build, sudden death" | Confirmed |
 | "P2P own-media send … 64 MB video cap" | Confirmed; the cap is 64 **MiB**, covers images too, and two further caps go unmentioned (§4.2) |
-| "sending is a supporter perk while every seat receives and duels in full" | **Incomplete: hosting is a second, tier-2 rung** (§4.2), and the row's version matches a stale comment at `MainWindow.Lab.cs:193-194` |
+| "sending is a supporter perk while every seat receives and duels in full" | **Incomplete: hosting is a second, tier-2 rung** (§4.2), and the row's version matches a stale comment at `MainWindow.Lab.cs:192-193` |
 | "10 s voice notes with opt-in consent + push-to-talk (V)" | Confirmed, and the host grants the WebView2 microphone permission unprompted (§6.3) |
 | "share-link invite with no account needed" | Confirmed, and it is **web-client only** upstream (`docs/GOON_GAME_PROTOCOL.md:88-90`) |
 | "Discord rich presence" | Confirmed |
@@ -887,15 +887,15 @@ by 3 and 5 lines. Here a citation that drifts by **one** line reds the suite.
 | voice-ms | docs/GOON_VOICE_PLAN.md | 61 | VN_MAX_MS = 10_000 |
 | voice-bytes | docs/GOON_VOICE_PLAN.md | 62 | VN_MAX_BYTES = 262_144 |
 | goon-build | Resources/web/goon/bridge.js | 43 | r17-20260806 |
-| lab-entry | MainWindow/MainWindow.Lab.cs | 202 | GoonHostService.Launch() |
+| lab-entry | MainWindow/MainWindow.Lab.cs | 201 | GoonHostService.Launch() |
 | cli-goon | App.xaml.cs | 2436 | GoonHostService.Launch() |
 | cli-goon-test | App.xaml.cs | 2364 | new GoonTestWindow() |
 | cli-goon-vectors | App.xaml.cs | 2447 | GoonVectorDumper.Run() |
 | playtab-send-rung | MainWindow/MainWindow.PlayTab.cs | 107 | HasPremiumAccess |
 | playtab-host-rung | MainWindow/MainWindow.PlayTab.cs | 108 | HasLabAccess |
-| stale-single-perk-comment | MainWindow/MainWindow.Lab.cs | 194 | only premium part |
+| stale-single-perk-comment | MainWindow/MainWindow.Lab.cs | 193 | only premium part |
 | wrong-citation-site | Views/Tabs/PlayTabView.xaml | 604 | MainWindow.Lab.cs:182-186 |
-| wrong-citation-target | MainWindow/MainWindow.Lab.cs | 183 | BtnStartBureau_Click failed |
+| wrong-citation-target | MainWindow/MainWindow.Lab.cs | 182 | BtnStartBureau_Click failed |
 | assets-hook | MainWindow/MainWindow.Assets.cs | 1504 | TransferCompressionService.Instance.OnPresetChanged |
 | consent-msg-decl | Services/GoonGame/GoonContracts.cs | 293 | class ConsentSheetMsg |
 | consent-msg-use | Services/GoonGame/GoonHostService.cs | 310 | new ConsentSheetMsg() |

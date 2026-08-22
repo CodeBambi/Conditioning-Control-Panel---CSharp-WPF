@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -22,7 +22,6 @@ using Rectangle = System.Windows.Shapes.Rectangle;
 using NAudio.Wave;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
-using ConditioningControlPanel.Models.Quiz;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Services;
 

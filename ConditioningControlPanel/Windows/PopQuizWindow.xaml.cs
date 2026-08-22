@@ -8,7 +8,6 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using IOPath = System.IO.Path;
 using ConditioningControlPanel.Services;
-using ConditioningControlPanel.Models;
 using NAudio.Wave;
 using ConditioningControlPanel.Localization;
 
@@ -159,7 +158,7 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    App.Progression?.AddXP(25, XPSource.Other);
+                    App.Progression?.AddXP(25, Services.XPSource.Other);
                 }
                 catch (Exception ex)
                 {

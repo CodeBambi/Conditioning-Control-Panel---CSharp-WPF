@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
 {

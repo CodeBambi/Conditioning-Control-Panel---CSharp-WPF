@@ -12,10 +12,7 @@ using System.Windows.Controls;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
-using ConditioningControlPanel.Models.Quiz;
 using ConditioningControlPanel.Services;
-using QuizService = ConditioningControlPanel.Services.QuizService;
-using ConditioningControlPanel.Core.Services.Quiz;
 using NAudio.Wave;
 using ConditioningControlPanel.Localization;
 
@@ -563,7 +560,7 @@ namespace ConditioningControlPanel
                 var scorePercent = result.MaxScore > 0 ? (double)result.TotalScore / result.MaxScore * 100 : 0;
 
                 // Try AI generation
-                ConditioningControlPanel.Models.Quiz.SessionTextContent? textContent = null;
+                SessionTextContent? textContent = null;
                 try
                 {
                     textContent = await _quizService!.GenerateSessionContentAsync();

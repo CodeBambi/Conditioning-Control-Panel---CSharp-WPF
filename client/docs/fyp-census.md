@@ -66,7 +66,7 @@ shipped** (DTRH, Intake).
 That is the haptic-count failure mode exactly: a name-shaped search over a directory nobody
 questioned. The correction did not come from reading `Services/Fyp/` harder.
 
-### 1.4 Consumer closure (M3) — 16 files outside `Services/Fyp/` name its types
+### 1.4 Consumer closure (M3) — 17 files outside `Services/Fyp/` name its types
 
 Enumerated by grepping the whole shipping tree for the nine type names, not by sampling.
 **Compile-time consumers (11):**
@@ -76,19 +76,19 @@ Enumerated by grepping the whole shipping tree for the nine type names, not by s
 | `App.xaml.cs:1665` | `RemoteMediaCache.CleanupStaleTempFiles()` at startup |
 | `App.xaml.cs:2458,2462,2463` | `--fyp` CLI flag -> `TierGate.RequiresPremium` -> `FypHostService.Launch()` |
 | `MainWindow/MainWindow.Assets.cs:2208,2293,2383,2425` | `FypOnlineCoordinator.Catalog`, `ResetAllChannels`, `SanitizeSub` |
-| `MainWindow/MainWindow.Lab.cs:291,293` | premium gate then `FypHostService.Launch()` |
+| `MainWindow/MainWindow.Lab.cs:290,292` | premium gate then `FypHostService.Launch()` |
 | `MainWindow/MainWindow.xaml.cs:1085-1101` | panic ladder: `IsActive`, `IsGhosted`, `ExitGhost`, `RecentlyUnghosted`, `Close` |
 | `Services/AutonomyService.cs:1061` | `FypHostService.IsActive` — stands WebVideo down |
-| `Services/BubbleCountService.cs:158` | `FypHostService.IsActive` — stands down |
+| `Services/BubbleCountService.cs:157` | `FypHostService.IsActive` — stands down |
 | `Services/Chaos/DtrhAssetManifest.cs:383,431` | `FypOnlineCoordinator.For(...)`, `ResolveChannels` |
 | `Services/Flash/FlashService.cs:2896,2940` | `ResolveChannels`, `For(..., FeedMediaKind.GifStill)` |
 | `Services/Quiz/IntakeHostService.cs:928,966` | `For(..., FeedMediaKind.Image)`, `ResolveChannels` |
 | `Services/Video/VideoService.cs:1657,6797,6871,6890` | `IsActive`, `ResolveChannels`, `For(...Video)`, `RemoteMediaFormats.Validate` |
 | `Services/Video/WallpaperService.cs:308,387,407,424,520` | `ResolveChannels`, `For(...Image)`, `Validate`, `MaterializeAsync`, `ReleaseTempFile` |
 
-**Comment-only references (5)**, kept separate because they are not compile-time consumers and a
+**Comment-only references (6)**, kept separate because they are not compile-time consumers and a
 census that conflated them would be overstating: `Chaos/ChaosFlashOverlay.cs:195`,
-`Chaos/ChaosGifCascadeOverlay.cs:357`, `Views/Tabs/AssetsTabView.xaml:99`,
+`Chaos/ChaosGifCascadeOverlay.cs:357`, `Models/AppSettings.cs:3193,3247`, `Views/Tabs/AssetsTabView.xaml:99`,
 `Views/Tabs/PlayTabView.xaml:1095,1126`, `Views/Tabs/PlayTabView.Cards.cs:90`.
 
 **The two `Chaos/` files are the finding that justifies the method.** They reference
@@ -388,6 +388,7 @@ itself) that names one of the surface's nine types. `kind` is `code` for a compi
 | C4 | MainWindow/MainWindow.Assets.cs | code |
 | C5 | MainWindow/MainWindow.Lab.cs | code |
 | C6 | MainWindow/MainWindow.xaml.cs | code |
+| C17 | Models/AppSettings.cs | comment |
 | C7 | Services/AutonomyService.cs | code |
 | C8 | Services/BubbleCountService.cs | code |
 | C9 | Services/Chaos/DtrhAssetManifest.cs | code |

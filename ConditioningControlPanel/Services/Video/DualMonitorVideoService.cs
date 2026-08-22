@@ -332,11 +332,11 @@ namespace ConditioningControlPanel.Services
 
                     if (Directory.Exists(libvlcPath))
                     {
-                        LibVLCSharp.Shared.Core.Initialize(libvlcPath);
+                        Core.Initialize(libvlcPath);
                     }
                     else
                     {
-                        LibVLCSharp.Shared.Core.Initialize();
+                        Core.Initialize();
                     }
 
                     // Don't force --aout: DirectSound silently fails to bind on some Win11 26200

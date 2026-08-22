@@ -203,15 +203,15 @@ persisted, nothing that awards.
 | C5 | mantra credit `min(affirmed, 5)` | `IntakeHostService.cs:451` | `IntakeQuizRun.cs:158-159` | **PRESENT** |
 | C6 | `QuizService.QuizCompleted` static event | `Services/Quiz/QuizService.cs:29` | — | **ABSENT** |
 | C7 | `QuizService.RaiseQuizCompleted(...)` | `Services/Quiz/QuizService.cs:32-35` | — | **ABSENT** — the port logs instead (`IntakeHostWindow.axaml.cs:541-543`) |
-| C8 | `QuizCompletedEventArgs` | `CCP.Core/Models/Quiz/QuizCompletedEventArgs.cs:6` | — | **ABSENT** |
+| C8 | `QuizCompletedEventArgs` | `Services/Quiz/QuizService.cs:133` | — | **ABSENT** |
 | C9 | `OnQuizCompleted` handler | `GamificationBridge.cs:578-611` | — | **ABSENT** |
 | C10 | `TeachersPetPasses = 25` | `GamificationBridge.cs:41` | — | **ABSENT** |
 | C11 | `HonorRollCategories = 3` | `GamificationBridge.cs:40` | — | **ABSENT** |
 | C12 | `HeldBackFailStreak = 3` | `GamificationBridge.cs:42` | — | **ABSENT** |
 | C13 | `ProgressionData.QuizzesPassed` / `QuizFailStreak` | `GamificationBridge.cs:586-593` | — | **ABSENT** |
-| C14 | `AchievementProgress.PerfectedQuizCategories` | `CCP.Core/Models/AchievementProgress.cs:169` | — | **ABSENT** |
+| C14 | `AchievementProgress.PerfectedQuizCategories` | `Models/AchievementProgress.cs:169` | — | **ABSENT** |
 | C15 | `Ach.TryUnlockExclusive(id)` | `GamificationBridge.cs:589,595,600,605` | — | **ABSENT** |
-| C16 | `Ach.MarkDirty()` | `GamificationBridge.cs:609` | — | **ABSENT** |
+| C16 | `Ach.MarkDirty()` | `GamificationBridge.cs:608` | — | **ABSENT** |
 
 **The board row's claim that SP-058 "computes and logs … but raises nothing" is VERIFIED.** The
 exact seam a next packet attaches to is `client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs:541-543`,
@@ -262,14 +262,14 @@ consumer normalises nothing and the set that holds the categories is case-sensit
 
 | Link | What it actually does | Cited |
 |---|---|---|
-| The distinct set | `public HashSet<string> PerfectedQuizCategories { get; set; } = new();` — a **default** `HashSet<string>`, i.e. `EqualityComparer<string>.Default`: **ordinal, case-sensitive, whitespace-sensitive** | `CCP.Core/Models/AchievementProgress.cs:169` |
-| The consumer | `p.PerfectedQuizCategories.Add(e.Category)` — **the raw category, no trim, no case fold** | `Services/GamificationBridge.cs:602` |
+| The distinct set | `public HashSet<string> PerfectedQuizCategories { get; set; } = new();` — a **default** `HashSet<string>`, i.e. `EqualityComparer<string>.Default`: **ordinal, case-sensitive, whitespace-sensitive** | `Models/AchievementProgress.cs:169` |
+| The consumer | `p.PerfectedQuizCategories.Add(e.Category)` — **the raw category, no trim, no case fold** | `Services/GamificationBridge.cs:601` |
 | Source A (intake) | `run.Niche.Trim().ToLowerInvariant()` — **normalised** | `Services/Quiz/IntakeHostService.cs:427-429` |
-| Source B (classic quiz) | `var categoryId = catDef?.Id ?? result.Category.ToString();` — **not normalised** | `Windows/QuizWindow.xaml.cs:540` |
+| Source B (classic quiz) | `var categoryId = catDef?.Id ?? result.Category.ToString();` — **not normalised** | `Windows/QuizWindow.xaml.cs:537` |
 
 **The two sources of one deliberately source-agnostic event disagree about normalisation.** Source
 B's fallback is `QuizCategory.ToString()`, and that enum is PascalCase — `Sissy`, `Bambi`,
-`Obedience`, `Mindlessness`, `Submission` (`CCP.Core/Models/Quiz/QuizCategory.cs:6-13`). The
+`Obedience`, `Mindlessness`, `Submission` (`Services/Quiz/QuizService.cs:20-27`). The
 built-in definitions carry lowercase ids (`QuizService.cs:1122,1135,1148,1161,1174`), so the two
 agree **only by coincidence**; the `??` arm is reachable by construction, since `catDef` comes from
 `_quizService?.CurrentCategoryDefinition` (`QuizWindow.xaml.cs:467`) and both links are nullable.
@@ -404,7 +404,7 @@ one; and what the default is for a user who never opens the dialog.
 
 | # | Question | Answer | Citation |
 |---|---|---|---|
-| Q1 | Changes what is **persisted**? | **YES** — achievement progress including the honor-roll category set, to `%APPDATA%/ConditioningControlPanel/achievements.json` | `Services/Progression/AchievementService.cs:70-74`; `CCP.Core/Models/AchievementProgress.cs:169` |
+| Q1 | Changes what is **persisted**? | **YES** — achievement progress including the honor-roll category set, to `%APPDATA%/ConditioningControlPanel/achievements.json` | `Services/Progression/AchievementService.cs:70-74`; `Models/AchievementProgress.cs:169` |
 | Q2 | Changes what is **shown to others**? | **YES, and it is the point of the surface** — 11 toggles over Discord presence, achievements, level-ups, avatars and DMs | `Views/Controls/ProfilePrivacyPanel.xaml.cs:43-74` |
 | Q3 | Changes what **leaves the machine**? | **YES** — leaderboard traffic to a first-party proxy, with client version and rank identity | `Services/Progression/LeaderboardService.cs:16,64-65,106,174` |
 | Q4 | What **sensor**, under whose consent? | **NONE.** No camera, microphone, or screen capture anywhere in this surface — I searched the whole walk and found none. **This surface differs from For You Feed exactly here** | walk over the surface trees; no webcam/gaze/capture token in any file of §2.1 |
@@ -500,14 +500,14 @@ editing this document can never shrink the search.
 **The LINE NUMBERS the defect chain rests on, re-derived from the bytes on every run.** Added at
 code review. §9.4 originally pinned paths only, and the guard regex-matched the producer expression
 *anywhere in the file* — so the suite was green while three citations in this document were wrong,
-one of them the `:540` in §5.2 and D222. **A pin that cannot see the number it is protecting is not
+one of them the `:537` in §5.2 and D222. **A pin that cannot see the number it is protecting is not
 protecting it**, and this is the coverage gap that let a citation defect ride inside the packet whose
 own §4.1 grades someone else's comments for exactly that.
 
 | Key | Value |
 |---|---|
-| unnormalised-producer-line | 540 |
-| distinct-set-add-line | 602 |
+| unnormalised-producer-line | 537 |
+| distinct-set-add-line | 601 |
 | normalising-producer-line | 429 |
 | unnormalised-producer-expression-occurrences | 4 |
 

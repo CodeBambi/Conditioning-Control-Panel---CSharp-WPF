@@ -7,7 +7,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using ConditioningControlPanel.Services;
-using ConditioningControlPanel.Models.Quiz;
 using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel

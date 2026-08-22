@@ -559,10 +559,10 @@ public class OverlayService : IDisposable
     }
 
     /// <summary>
-    /// Restart all overlays when multi monitor setting changes.
+    /// Restart all overlays when dual monitor setting changes.
     /// Windows need to be recreated to match the new monitor setup.
     /// </summary>
-    public void RefreshForMultiMonitorChange()
+    public void RefreshForDualMonitorChange()
     {
         if (!_isRunning) return;
 

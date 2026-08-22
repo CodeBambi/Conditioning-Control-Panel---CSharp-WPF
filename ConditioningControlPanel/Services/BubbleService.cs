@@ -13,7 +13,6 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NAudio.Wave;
 using ConditioningControlPanel.Helpers;
-using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Chaos;
 
 namespace ConditioningControlPanel.Services;

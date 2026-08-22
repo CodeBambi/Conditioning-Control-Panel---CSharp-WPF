@@ -1,10 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.Haptics
 {
+    public enum HapticProviderType
+    {
+        None,
+        Mock,
+        Lovense,
+        Buttplug
+    }
+
     public interface IHapticProvider
     {
         string Name { get; }

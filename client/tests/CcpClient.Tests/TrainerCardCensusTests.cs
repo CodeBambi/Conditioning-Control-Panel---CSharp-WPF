@@ -210,7 +210,7 @@ public sealed class TrainerCardCensusTests
 
         var intake = ReadShippingFile(reference.Wpf, "Services/Quiz/IntakeHostService.cs");
         var quizWindow = ReadShippingFile(reference.Wpf, "Windows/QuizWindow.xaml.cs");
-        var progress = ReadShippingFile(reference.Wpf, "CCP.Core/Models/AchievementProgress.cs");
+        var progress = ReadShippingFile(reference.Wpf, "Models/AchievementProgress.cs");
         var bridge = ReadShippingFile(reference.Wpf, "Services/GamificationBridge.cs");
 
         // Producer A normalises.

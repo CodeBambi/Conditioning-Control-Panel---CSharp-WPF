@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Linq;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Models;
-using ConditioningControlPanel.Models.Quiz;
 using ConditioningControlPanel.Services.AIService;
 using ConditioningControlPanel.Services.Bark;
 

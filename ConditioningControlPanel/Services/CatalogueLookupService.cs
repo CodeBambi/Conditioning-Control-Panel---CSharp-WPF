@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
 {
@@ -372,6 +371,25 @@ namespace ConditioningControlPanel.Services
         public sealed record NetworkError : LookupResult;
         public sealed record InvalidUrl : LookupResult;
     }
+
+    /// <summary>
+    /// One catalogue entry as returned by /api/enhancements/by-ht-url. All
+    /// fields are server-truth; the client doesn't enrich or transform
+    /// (except for graceful defaults when fields are missing).
+    /// </summary>
+    public record CatalogueEntry(
+        string Id,
+        string Title,
+        string Description,
+        string CreatorName,
+        string? RemixerName,
+        List<string> Tags,
+        string? License,
+        int ViewCount,
+        string HtUrl,
+        string? ThumbnailPath,
+        string FileUrl
+    );
 
     public abstract record DownloadResult
     {

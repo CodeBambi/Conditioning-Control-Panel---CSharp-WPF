@@ -3,7 +3,6 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
-using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
 {
@@ -269,4 +268,17 @@ namespace ConditioningControlPanel.Services
         }
     }
 
+    public class PopQuizQuestion
+    {
+        public string QuestionText { get; }
+        public string[] Answers { get; }
+        public string[] Affirmations { get; }
+
+        public PopQuizQuestion(string questionText, string[] answers, string[] affirmations)
+        {
+            QuestionText = questionText;
+            Answers = answers;
+            Affirmations = affirmations;
+        }
+    }
 }

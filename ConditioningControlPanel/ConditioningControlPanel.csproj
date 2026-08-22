@@ -7,7 +7,6 @@
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <DefaultItemExcludes>$(DefaultItemExcludes);CCP.Core\**;CCP.Avalonia\**;CCP.Avalonia.Desktop\**;CCP.Avalonia.Desktop.Windows\**;CCP.Avalonia.Desktop.Linux\**;CCP.Avalonia.Desktop.macOS\**;CCP.Avalonia.Android\**;CCP.WindowsOnly\**;tests\**</DefaultItemExcludes>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
     <Version>6.8.1</Version>
@@ -48,11 +47,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Cross-platform Core (single source of truth for models and portable services) -->
-    <ProjectReference Include="CCP.Core\CCP.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <!-- UI Framework -->
     <!-- Buttplug 5.x is one package: Core + Client + WebSocket connector (the separate
          Buttplug.Client.Connectors.WebsocketConnector package is 3.x-only and is gone).
@@ -62,9 +56,7 @@
     <PackageReference Include="LibVLCSharp.WPF" Version="3.8.5" />
     <!-- Pin WindowsAppSDK (transitive from LibVLCSharp) and exclude its win10-* runtime assets
          which cause NETSDK1083 on .NET 8.0.400+ SDK with Windows 10 TFM -->
-    <!-- Pin WindowsAppSDK (transitive from LibVLCSharp) and exclude its runtime assets to avoid NETSDK1083. -->
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.1.1" ExcludeAssets="all" PrivateAssets="all" NoWarn="NU1605" />
-
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.1.1" ExcludeAssets="all" PrivateAssets="all" />
     <PackageReference Include="MahApps.Metro" Version="2.4.10" />
     <PackageReference Include="MahApps.Metro.IconPacks" Version="5.0.0" />
     <!-- GPU-friendly 2D renderer for the new Chaos FX particle/glow layer (ChaosSkiaFxOverlay).
@@ -100,6 +92,7 @@
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.3" />
     <PackageReference Include="org.k2fsa.sherpa.onnx.runtime.win-x64" Version="1.13.3" />
     <PackageReference Include="OllamaSharp" Version="5.4.16" />
+    
     <!-- Logging -->
     <PackageReference Include="Serilog" Version="3.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
@@ -119,7 +112,12 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2535.41" />
 
     <!-- AI Service -->
-
+    <PackageReference Include="OpenAI-DotNet" Version="8.6.2" />
+    
+    <!-- SharpDX for Desktop Duplication API (DXGI) -->
+    <PackageReference Include="SharpDX" Version="4.2.0" />
+    <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
+    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.21">
       <IncludeAssets>all</IncludeAssets>
     </PackageReference>

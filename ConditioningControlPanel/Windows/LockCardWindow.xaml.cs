@@ -12,7 +12,6 @@ using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Speech;
 using ConditioningControlPanel.Services.UI;
 using ConditioningControlPanel.Localization;
-using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel
 {

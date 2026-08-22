@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using ConditioningControlPanel.Localization;
-using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
 {

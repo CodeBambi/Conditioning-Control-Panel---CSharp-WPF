@@ -118,7 +118,7 @@ namespace ConditioningControlPanel
                                 {
                                     Dispatcher.Invoke(() =>
                                     {
-                                        pack.PreviewImages = previewImages.Cast<object>().ToList();
+                                        pack.PreviewImages = previewImages;
                                         pack.CurrentPreviewIndex = 0;
                                     });
                                 }
@@ -141,7 +141,7 @@ namespace ConditioningControlPanel
                                 {
                                     Dispatcher.Invoke(() =>
                                     {
-                                        pack.PreviewImages = previewImages.Cast<object>().ToList();
+                                        pack.PreviewImages = previewImages;
                                         pack.CurrentPreviewIndex = 0;
                                     });
                                 }
@@ -290,7 +290,7 @@ namespace ConditioningControlPanel
                         App.ContentPacks?.GetPackPreviewImages(pack.Id, 10, 240, 100));
                     if (previewImages != null && previewImages.Count > 0)
                     {
-                        pack.PreviewImages = previewImages.Cast<object>().ToList();
+                        pack.PreviewImages = previewImages;
                         pack.CurrentPreviewIndex = 0;
                     }
                 }
@@ -749,7 +749,7 @@ namespace ConditioningControlPanel
         private static long _packThumbnailAccessCounter;
         private static readonly SemaphoreSlim _thumbnailSemaphore = new(4); // Limit concurrent loads
 
-        private async Task LoadPackThumbnailAsync(AssetFileItem item, string packId, PackFileEntry file)
+        private async Task LoadPackThumbnailAsync(AssetFileItem item, string packId, Services.PackFileEntry file)
         {
             item.IsLoadingThumbnail = true;
             try

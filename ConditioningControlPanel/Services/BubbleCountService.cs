@@ -11,7 +11,6 @@ using System.Windows.Threading;
 using NAudio.Wave;
 using Screen = System.Windows.Forms.Screen;
 using ConditioningControlPanel.Helpers;
-using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services;
 

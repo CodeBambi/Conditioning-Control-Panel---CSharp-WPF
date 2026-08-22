@@ -7,7 +7,6 @@ using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
-using ConditioningControlPanel.Models.Quiz;
 using ConditioningControlPanel.Services.AIService;
 using ConditioningControlPanel.Services.Moderation;
 using Newtonsoft.Json;
@@ -17,6 +16,127 @@ namespace ConditioningControlPanel.Services
     // TODO(v6 follow-up): make quiz content mod-aware. Quiz prompts, archetype names, and seed
     // questions throughout this file are Bambi-coded. Deferred from the v6 agnostic refactor —
     // a real content authoring pass, not a code change. Track in its own PR.
+
+    public enum QuizCategory
+    {
+        Sissy,
+        Bambi,
+        Obedience,
+        Mindlessness,
+        Submission
+    }
+
+    public class QuizArchetypeDefinition
+    {
+        public string Name { get; set; } = string.Empty;
+        public int MinPercentage { get; set; }
+        public int MaxPercentage { get; set; }
+        public string Description { get; set; } = string.Empty;
+    }
+
+    public class QuizCategoryDefinition
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string SystemPromptTemplate { get; set; } = string.Empty;
+        public string Color { get; set; } = "#FF69B4";
+        public bool IsBuiltIn { get; set; }
+        public List<QuizArchetypeDefinition> Archetypes { get; set; } = new();
+
+        /// <summary>Maps to QuizCategory enum for built-in categories, or null for custom.</summary>
+        [JsonIgnore]
+        public QuizCategory? EnumCategory { get; set; }
+
+        public string GetArchetypeName(double percentage)
+        {
+            // Archetypes are sorted by MinPercentage ascending
+            for (int i = Archetypes.Count - 1; i >= 0; i--)
+            {
+                if (percentage >= Archetypes[i].MinPercentage)
+                    return Archetypes[i].Name;
+            }
+            return Archetypes.Count > 0 ? Archetypes[0].Name : "Unknown";
+        }
+
+        public string GetFallbackProfile(int totalScore, int maxScore)
+        {
+            var pct = maxScore > 0 ? (double)totalScore / maxScore * 100 : 0;
+            var archetype = GetArchetypeName(pct);
+            var archetypeDef = Archetypes.FirstOrDefault(a => a.Name == archetype);
+            var desc = archetypeDef?.Description ?? "Your answers reveal a unique personality.";
+            return $"You are a {archetype}. {desc}";
+        }
+    }
+
+    public class QuizQuestion
+    {
+        public int Number { get; set; }
+        public string QuestionText { get; set; } = string.Empty;
+        public string[] Answers { get; set; } = new string[4];
+        public int[] Points { get; set; } = new int[4];
+    }
+
+    public class QuizResult
+    {
+        public int TotalScore { get; set; }
+        public int MaxScore { get; set; }
+        public string ProfileText { get; set; } = string.Empty;
+        public QuizCategory Category { get; set; }
+    }
+
+    public class QuizAnswerRecord
+    {
+        public int QuestionNumber { get; set; }
+        public string QuestionText { get; set; } = string.Empty;
+        public string[] AllAnswers { get; set; } = new string[4];
+        public int[] AllPoints { get; set; } = new int[4];
+        public int ChosenIndex { get; set; }
+        public int PointsEarned { get; set; }
+    }
+
+    public class QuizHistoryEntry
+    {
+        public DateTime TakenAt { get; set; }
+        public QuizCategory Category { get; set; }
+        public int TotalScore { get; set; }
+        public int MaxScore { get; set; }
+        public string ProfileText { get; set; } = string.Empty;
+        public List<QuizAnswerRecord> Answers { get; set; } = new();
+
+        /// <summary>String category ID for custom categories. Falls back to Category enum name for built-in.</summary>
+        public string CategoryId { get; set; } = string.Empty;
+
+        /// <summary>Display name for the category (useful for custom categories where enum doesn't apply).</summary>
+        public string CategoryName { get; set; } = string.Empty;
+    }
+
+    public enum TrendDirection
+    {
+        Up,
+        Down,
+        Flat,
+        FirstQuiz
+    }
+
+    public class QuizScoreTrend
+    {
+        public int LatestPercent { get; set; }
+        public int PreviousPercent { get; set; }
+        public int AveragePercent { get; set; }
+        public int QuizCount { get; set; }
+        public TrendDirection Direction { get; set; }
+        public int DeltaPercent { get; set; }
+    }
+
+    /// <summary>Payload for <see cref="QuizService.QuizCompleted"/>.</summary>
+    public class QuizCompletedEventArgs : EventArgs
+    {
+        public int Score { get; init; }
+        public bool Passed { get; init; }
+        public bool Perfect { get; init; }
+        public string Category { get; init; } = "";
+    }
 
     public class QuizService : IDisposable
     {

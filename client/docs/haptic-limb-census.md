@@ -141,7 +141,7 @@ cited line; the pin checks both sides.
 | 15 | `Services/Subliminal/SubliminalService.cs:588` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | collapsed | `Effects/SubliminalsEffect.cs:210` | `_surface?.Show(firing.Card)` | fail: intensity + anticipation | Same moment, upstream's silent branch, inside the helper `TriggerSubliminalWithHapticPattern` (`:577`). The port has no whisper audio, so the two branches are one path here. **What the collapse loses is the ANTICIPATION**: upstream fires the haptic first and delays the visual by `SubliminalAnticipationMs` (250 ms, or 1300 ms on Buttplug — `Services/Haptics/HapticService.cs:88`), and the port shows the card immediately. |
 | 16 | `Services/Subliminal/SubliminalService.cs:297` | `App.Haptics?.TriggerSubliminalPatternAsync(text)` | absent-by-decision | — | — | — | The "Bambi Freeze" trigger phrase is shown. |
 | 17 | `Services/Subliminal/SubliminalService.cs:387` | `App.Haptics?.TriggerSubliminalPatternAsync(resetText)` | absent-by-decision | — | — | — | The "Bambi Reset" follow-up is shown. |
-| 18 | `Services/Subliminal/BouncingTextService.cs:516` | `App.Haptics?.BouncingTextBounceAsync()` | present | `Effects/BouncingTextField.cs:230` | `Bounces++` | fail: intensity | A bouncing word hits a screen edge. **In a module this port shipped** (SP-115), and in no prior count. The port's statement even sits at the same place in the sequence: upstream fires between the bounce bookkeeping and the 10 % text re-roll (`:516` against `:519`), and `:230` sits between `Bounces++` and the same re-roll at `Effects/BouncingTextField.cs:251`. |
+| 18 | `Services/Subliminal/BouncingTextService.cs:515` | `App.Haptics?.BouncingTextBounceAsync()` | present | `Effects/BouncingTextField.cs:230` | `Bounces++` | fail: intensity | A bouncing word hits a screen edge. **In a module this port shipped** (SP-115), and in no prior count. The port's statement even sits at the same place in the sequence: upstream fires between the bounce bookkeeping and the 10 % text re-roll (`:515` against `:518`), and `:230` sits between `Bounces++` and the same re-roll at `Effects/BouncingTextField.cs:251`. |
 <!-- /census:sites -->
 
 ### 3.1 The five port trigger points, gathered
@@ -254,7 +254,7 @@ phrase is shown by this port.
 | `Services/Video/VideoService.cs:6581` | `funscript` | noise | prose introducing site 13, and the claim D203 refutes |
 | `Services/Video/VideoService.cs:6585` | `funscript` | adjacent | the catch and log of site 13's own try |
 | `Services/Video/VideoService.cs:6708` | `funscript` | noise | prose in the browser-parity checklist |
-| `Services/Subliminal/BouncingTextService.cs:515` | `haptic` | noise | prose introducing site 18 |
+| `Services/Subliminal/BouncingTextService.cs:514` | `haptic` | noise | prose introducing site 18 |
 | `Services/Subliminal/SubliminalService.cs:227` | `haptic` | noise | prose introducing site 14 |
 | `Services/Subliminal/SubliminalService.cs:246` | `haptic` | adjacent | a call path into the helper that holds site 15. **A distinct moment — FlashSubliminal's silent branch — and a site under the struck helper clause (§2.1)** |
 | `Services/Subliminal/SubliminalService.cs:258` | `suppressHaptic` | adjacent | the opt-out on FlashSubliminalCustom |
@@ -283,7 +283,7 @@ phrase is shown by this port.
 |---|---|---|
 | **8 sites in three modules**, citing `Services/SubliminalService.cs:230` | SP-119 plan §5, three source comments, D202's first draft | **wrong twice**: the path has no `Subliminal/` directory segment and the file drives four sites, not one |
 | **13 sites**, three files | `client/docs/wpf-surface-reachability.md` D202, `Haptics/IHapticSink.cs:210-215` | **correct for the three files it names, under a rule that excluded FunScript.** Misses three files' worth of sites |
-| **14 sites**, adding `VideoService.Browser.cs:452` | this packet's brief | **correct as far as it goes.** Still misses `BouncingTextService.cs:516` and `VideoService.Browser.cs:453` |
+| **14 sites**, adding `VideoService.Browser.cs:452` | this packet's brief | **correct as far as it goes.** Still misses `BouncingTextService.cs:515` and `VideoService.Browser.cs:453` |
 | **18 sites** | this census | derived from the bytes by §2 |
 | **21 sites** | **this packet's own committed plan**, `plan.md:140-141` | what the census's helper clause would yield if the plan's opposite clause governed instead. It does not, and §2.1 says why and lists the five lines that move |
 
@@ -293,7 +293,7 @@ Line by line, from 13 to 18:
 |---|---|---|
 | +1 | `VideoService.Browser.cs:452` | the file was outside the searched set |
 | +2 | `VideoService.Browser.cs:453` | the same file, and it is a FunScript site as well |
-| +3 | `Subliminal/BouncingTextService.cs:516` | the file was outside the searched set. **The module is ported** (SP-115) |
+| +3 | `Subliminal/BouncingTextService.cs:515` | the file was outside the searched set. **The module is ported** (SP-115) |
 | +4 | `VideoService.cs:2584` | counted as ADJACENT under the older rule because the port has no script player |
 | +5 | `VideoService.cs:6584` | the same |
 
@@ -343,7 +343,7 @@ Three residuals, named because the method provably cannot reach them:
    (`WallpaperService.cs:51`, `:155`, `:261`, `:530-532`), prose about the toy-button path
    (`AttentionTargets.cs:34`, `:66`, `:480`, `VideoService.cs:2583`, `:4463`, `:4557`, `:4647`,
    `:4669`, `:4677`, `:7553`), and the bouncing-text breathing comment
-   (`BouncingTextService.cs:534`). Not one contains a haptic reference. They are not pinned, for the
+   (`BouncingTextService.cs:533`). Not one contains a haptic reference. They are not pinned, for the
    reason in §2.
 2. **The reverse coupling.** `Services/Haptics/FunScriptService.cs:220-222` subscribes to
    `App.Video.PrimaryPlaybackTimeMsChanged`, so the video module drives haptics from a raise site that

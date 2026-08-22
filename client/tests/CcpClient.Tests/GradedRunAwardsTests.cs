@@ -463,7 +463,7 @@ public sealed class GradedRunAwardsTests : IDisposable
         Assert.Equal("p.PerfectedQuizCategories.Add(e.Category)", clause);
         Assert.Contains("PerfectedQuizCategories.Count >= HonorRollCategories", bridge, StringComparison.Ordinal);
         Assert.Contains("public HashSet<string> PerfectedQuizCategories { get; set; } = new();",
-            ReadRepoFile("ConditioningControlPanel/CCP.Core/Models/AchievementProgress.cs"), StringComparison.Ordinal);
+            ReadRepoFile("ConditioningControlPanel/Models/AchievementProgress.cs"), StringComparison.Ordinal);
     }
 
     // ---------- helpers: they FAIL, never skip, and they own the existence checks ----------
