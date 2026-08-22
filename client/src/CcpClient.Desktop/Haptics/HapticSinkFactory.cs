@@ -131,11 +131,23 @@ public static class HapticSinkFactory
     public static IHapticSink CreateFrom(IReadOnlyList<HapticProviderRoute> admittedRoutes)
     {
         ArgumentNullException.ThrowIfNull(admittedRoutes);
-        return admittedRoutes.Count == 0
-            ? new UnadmittedHapticSink(HapticReasonCodes.HapticNoAdmittedProvider, AdmissionGap)
-            : throw new InvalidOperationException(
-                "a haptic provider route is admitted and no sink is constructed for it — admit the route AND "
-                + $"its client together ({string.Join(", ", admittedRoutes)})");
+        if (admittedRoutes.Count == 0)
+        {
+            return new UnadmittedHapticSink(HapticReasonCodes.HapticNoAdmittedProvider, AdmissionGap);
+        }
+
+        // The throw below is still reachable, and keeping it reachable is the point: it fires for a
+        // route that is admitted with no client behind it, which is the fake-available shape the
+        // truthful-capability contract bans. Lovense stops reaching it because Lovense now HAS a
+        // client, not because the check was relaxed.
+        if (admittedRoutes.Contains(HapticProviderRoute.Lovense))
+        {
+            return new LovenseHapticSink(_ => { });
+        }
+
+        throw new InvalidOperationException(
+            "a haptic provider route is admitted and no sink is constructed for it — admit the route AND "
+            + $"its client together ({string.Join(", ", admittedRoutes)})");
     }
 
     /// <summary>

@@ -78,5 +78,16 @@ public static class HapticReasonCodes
     public const string HapticNotEntitled = "haptic-not-entitled";
 
     /// <summary>The sink was disposed; it holds nothing and will never drive anything again.</summary>
+    /// <summary>The server answered and REFUSED the command. Distinct from
+    /// <see cref="HapticServerUnreachable"/> on purpose: "nobody is listening" and "the program
+    /// listening said no" have different repairs, and reporting the second as the first sends a user
+    /// to restart an application that is already running.</summary>
+    public const string HapticCommandRefused = "haptic-command-refused";
+
+    /// <summary>A stop did not reach every device it was owed to. The loudest code here, because it
+    /// is the only one that means A TOY MAY STILL BE RUNNING — it is never folded into a generic
+    /// unreachable, and never reported as a success with a caveat.</summary>
+    public const string HapticStopIncomplete = "haptic-stop-incomplete";
+
     public const string HapticSinkDisposed = "haptic-sink-disposed";
 }
