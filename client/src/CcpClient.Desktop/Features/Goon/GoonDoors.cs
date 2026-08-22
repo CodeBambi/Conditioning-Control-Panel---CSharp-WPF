@@ -104,8 +104,14 @@ public static class GoonDoors
             + "it unprompted; this host does not) — a TIGHTENING over upstream, not a guarantee. "
             + "The residual is WebView2's own prompt: the voice screen is reachable from the title "
             + "menu and its recorder asks the browser for the microphone directly "
-            + "(ui/voice/recorder.js:591), so the browser can still ask you. Closing that needs a "
-            + "PermissionRequested-deny hook (D250).",
+            + "(ui/voice/recorder.js:591). ON WINDOWS this host now answers that request itself and "
+            + "answers it DENY, so the browser does not ask you (D289) — and on a run where that hook "
+            + "cannot be installed it says so in the diagnostic log instead of going quiet (D307). ON "
+            + "LINUX there is no "
+            + "permission hook to install at all, so the browser still owns the question and can still "
+            + "ask you. On neither has a real browser prompt ever been refused here: the deny is proved "
+            + "against a test double, and the run that would show it is a headed one nobody has made "
+            + "(D250).",
             "goon-game-census.md §6.3 / wpf-surface-reachability.md D244. capability-inventory.md:69 "
             + "ends \"Audio capture is never opened.\" — a PROHIBITION, not an open question; what is "
             + "undecided is only its scope, because it sits inside 'Webcam, face, and gaze tracking' "
