@@ -18,8 +18,8 @@ ConditioningControlPanel/` is **1180 files**.
   `.tools/.store/`.
 - **~25 are real WPF source** the `CCP.Core` model extraction edited, and **39 are docs**.
 
-Your outcome: **`ConditioningControlPanel/` matches `main` byte for byte, and the two guards that
-notice are re-anchored rather than silenced.**
+Your outcome: **`ConditioningControlPanel/` matches `main` byte for byte, and every guard that notices is
+re-anchored rather than silenced.**
 
 ## This was measured before it was asked for. Reproduce it, do not re-litigate it
 
@@ -35,9 +35,12 @@ Restoring the tree to `main`:
 **Verify each of those yourself.** If any disagrees with this packet, stop and report — a premise that
 has gone stale is worth more than the task.
 
-## THE COST, AND IT IS THE WHOLE PACKET
+## THE COST — SUPERSEDED BY THE AMENDMENT BELOW, KEPT SO THE CORRECTION IS VISIBLE
 
-Exactly **two** guards go red beyond the standing environmental family:
+**This section said "exactly two" and it was WRONG. Read the AMENDMENT for the real set of five.**
+It is kept rather than rewritten because a packet that quietly edits its own false premise teaches nothing.
+
+The two the original author expected:
 
 - `FypCensusTests.TheConsumerSetIsRederivedFromTheShippingBytes_SoTheSurfacesReachCannotDriftUnnoticed`
 - `GoonGameCensusTests.EveryPinnedCitation_IsOnTheExactLineItClaims`
@@ -46,10 +49,11 @@ Both READ the WPF tree and check that each pinned citation is on the **exact lin
 red because **the port's citations are anchored to this branch's diverged copy rather than to the
 shipping bytes** — which is the same defect the track-main rule exists to prevent, stated sharply.
 
-**FIX THE DOCUMENTS, NEVER THE TESTS.** Re-derive the line numbers in `client/docs/fyp-census.md` and
-`client/docs/goon-game-census.md` against `main`'s tree. `client/tests/**` is **must-not-change**:
-these two guards are the only mechanism that noticed, and weakening either to get green would destroy
-the evidence that this cleanup was safe. If a citation's referent no longer exists on `main` at all,
+**FIX THE DOCUMENTS WHEREVER A DOCUMENT CAN REACH IT.** That principle stands and is why the amendment
+allows exactly THREE test tokens and no more: three of the five reds have the wrong value or path baked
+into the test and no document can reach them. **Every other guard stays byte-identical** — they are the
+only mechanism that noticed this divergence, and weakening one to get green would destroy the evidence
+that the cleanup was safe. If a citation's referent no longer exists on `main` at all,
 that is a FINDING — report it, do not invent a nearby line.
 
 ## The other traps
@@ -80,8 +84,46 @@ escape `|` inside code spans as `\|`, and **verify by counting delimiters, not b
 
 | | |
 |---|---|
-| May change | `ConditioningControlPanel/**` (restore to `main` ONLY), `client/docs/fyp-census.md`, `client/docs/goon-game-census.md`, `client/docs/wpf-surface-reachability.md` (divergences ONLY, D326 onward), and `spine-tasks/SP-141-restore-wpf-tree/**` |
-| Must not change | everything else, and specifically **`client/tests/**` in its entirety** (both census guards included), `client/src/**`, `client/tools/**`, `client/tests/floor/floor.json`, `client/docs/task-board.md`, `client/docs/capability-inventory.md`, `client/docs/execution-census.md`, `docs/constitution.md`, `.spine/**`, `.claude/**` |
+| May change | `ConditioningControlPanel/**` (restore to `main` ONLY), `client/docs/fyp-census.md`, `client/docs/goon-game-census.md`, `client/docs/haptic-limb-census.md`, `client/docs/trainer-card-census.md`, `client/docs/wpf-surface-reachability.md` (divergences ONLY, D326 onward), **and THREE TOKENS ONLY in `client/tests/`** (AMENDMENT 2026-08-22, see below), and `spine-tasks/SP-141-restore-wpf-tree/**` |
+| Must not change | everything else, and specifically `client/tests/**` APART FROM the three amended tokens, `client/src/**`, `client/tools/**`, `client/tests/floor/floor.json`, `client/docs/task-board.md`, `client/docs/capability-inventory.md`, `client/docs/execution-census.md`, `docs/constitution.md`, `.spine/**`, `.claude/**` |
+
+
+## AMENDMENT 2026-08-22 — the "exactly two guards" premise was WRONG, and the lane proved it
+
+The lane re-derived every guard against a scratch export of `main` and found **five facts across five
+classes**, not two. Three cannot be reached from any document because the wrong value is baked into
+the test. **The original File Scope made the task impossible, so it is widened here rather than
+worked around.**
+
+**THREE TOKENS in `client/tests/`, and NOTHING ELSE THERE.** Each is a re-derivation against the
+shipping bytes, not a weakening:
+
+| file | token | change |
+|---|---|---|
+| `FypCensusTests.cs:71` | `ExpectedConsumerFiles` | `16` -> `17` |
+| `TrainerCardCensusTests.cs:213` | the read path | `CCP.Core/Models/AchievementProgress.cs` -> `Models/AchievementProgress.cs` |
+| `GradedRunAwardsTests.cs:466` | the read path | same substitution |
+
+The seventeenth consumer is real: `Models/AppSettings.cs` returns to the shipping project and carries
+`FypGhostOverlay` and `FypOnlineCoordinator`. **Add the `C17` row to `fyp-census.md` as well** — the
+count and the row must move together, which is what boxed the original scope.
+
+**Two more census documents are now in scope**, `client/docs/haptic-limb-census.md` and
+`client/docs/trainer-card-census.md`, because `BouncingTextService.cs` loses a line and four haptic
+keys shift by one.
+
+**NO OTHER ASSERTION MAY MOVE.** Every other clause in those classes was verified to hold byte-for-byte
+on `main`. If any needs changing, that is a finding to report, not a token to adjust.
+
+## THE UNPRICED COST, now named and DEFERRED rather than hidden
+
+The restore also shifts **490 citation occurrences across 18 files** and orphans **149 citations into
+`CCP.*` across 46 files**, 37 of them under `client/src/**` which stays closed. **Those orphans are
+not yours to fix and they will rot by construction.** `detect.mjs` gates nothing, so nothing will go
+red.
+
+**Report both counts exactly, before and after.** They become a follow-up row. Do not fix them, do not
+soften them, and do not let the record imply the tree is citation-clean when it is not.
 
 ## Contract
 
@@ -90,7 +132,7 @@ escape `|` inside code spans as `\|`, and **verify by counting delimiters, not b
 | testCommand | `node client/tests/floor/check-floor.mjs` |
 | floorDelta | `spine-tasks/SP-141-restore-wpf-tree/floor-delta.json` |
 | fileScopeMustChange | `client/docs/goon-game-census.md` |
-| fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/tests/CcpClient.Tests/FypCensusTests.cs`, `client/tests/CcpClient.Tests/GoonGameCensusTests.cs`, `client/src/**`, `client/tools/**`, `client/docs/task-board.md`, `client/docs/capability-inventory.md`, `client/docs/execution-census.md`, `docs/constitution.md`, `.spine/**`, `.claude/**` |
+| fileScopeMustNotChange | `client/tests/floor/floor.json`, `client/tests/CcpClient.Tests/GoonGameCensusTests.cs`, `client/src/**`, `client/tools/**`, `client/docs/task-board.md`, `client/docs/capability-inventory.md`, `client/docs/execution-census.md`, `docs/constitution.md`, `.spine/**`, `.claude/**` |
 | artifactsMustExist | `spine-tasks/SP-141-restore-wpf-tree/record.md`, `spine-tasks/SP-141-restore-wpf-tree/plan.md`, `spine-tasks/SP-141-restore-wpf-tree/floor-delta.json` |
 
 **Pin: 2622 unit / 152 headless.** Expect a floor delta of **0** — you are deleting and re-anchoring,
