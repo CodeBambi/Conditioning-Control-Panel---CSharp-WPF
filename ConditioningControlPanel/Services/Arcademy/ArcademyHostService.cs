@@ -1070,6 +1070,20 @@ internal static class ArcademyHostService
         ["de_free_swim"] = "Free Swim",
         ["de_free_swim_hint"] = "No bell, no grade - swim until you surface.",
         ["de_surface"] = "Surface",
+        // ---- Impulse Control - House Rules wave (casino words + class-rules sheet)
+        ["ic_almost"] = "ALMOST",
+        ["ic_howto_drift"] = "A bubble you miss just drifts off the dish. Nothing is taken from you.",
+        ["ic_howto_go"] = "Start the drop",
+        ["ic_howto_pop"] = "A bubble lands in the dish. Pop it at once. The faster you are, the more it pays.",
+        ["ic_howto_title"] = "Class rules",
+        ["ic_howto_x"] = "A bubble wearing an X is a trap. Touch nothing until its ring runs out.",
+        ["ic_jackpot"] = "JACKPOT",
+        ["ic_just"] = "JUST",
+        ["ic_perfect_class"] = "Perfect class",
+        ["ic_record_ping"] = "record",
+        ["ic_royal"] = "ROYAL",
+        ["ic_streak_n"] = "chain {n}",
+        ["ic_tonight"] = "tonight only",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via
