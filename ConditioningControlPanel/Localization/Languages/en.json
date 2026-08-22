@@ -3490,6 +3490,7 @@
   "msg_login_required_remote": "You need to log in and sync your profile before using Remote Control.\n\nLog in via Patreon or Discord in the Settings tab.",
   "title_connection_error": "Connection Error",
   "msg_remote_connection_error": "Could not start remote control session. The server may be temporarily unavailable.\n\nPlease check your internet connection and try again.",
+  "msg_remote_auth_error": "Could not start remote control session because the server rejected your login session.\n\nPlease sign out and sign back in with Patreon or Discord, then try again.",
 
   "msg_failed_to_start_session": "Failed to start session:\n{0}",
 

@@ -3191,6 +3191,7 @@
   "msg_login_required_remote": "使用远程控制前需要先登录并同步你的资料。\n\n在设置标签页通过 Patreon 或 Discord 登录。",
   "title_connection_error": "连接错误",
   "msg_remote_connection_error": "无法启动远程控制会话。服务器可能暂时不可用。\n\n请检查你的网络连接并重试。",
+  "msg_remote_auth_error": "无法启动远程控制会话，因为服务器拒绝了你的登录会话。\n\n请退出登录，然后使用 Patreon 或 Discord 重新登录并重试。",
   "msg_failed_to_start_session": "启动会话失败：\n{0}",
   "title_add_note": "添加笔记（可选）",
   "msg_add_note_prompt": "为此步骤添加个人笔记：",

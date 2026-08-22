@@ -2495,6 +2495,7 @@
   "msg_login_required_remote": "Du musst angemeldet sein und dein Profil synchronisiert haben, bevor du die Fernsteuerung nutzen kannst.\n\nMelde dich über Patreon oder Discord im Einstellungen-Tab an.",
   "title_connection_error": "Verbindungsfehler",
   "msg_remote_connection_error": "Fernsteuerungssitzung konnte nicht gestartet werden. Der Server ist möglicherweise vorübergehend nicht verfügbar.\n\nBitte prüfe deine Internetverbindung und versuche es erneut.",
+  "msg_remote_auth_error": "Fernsteuerungssitzung konnte nicht gestartet werden, weil der Server deine Anmeldesitzung abgelehnt hat.\n\nBitte melde dich ab und dann erneut mit Patreon oder Discord an, und versuche es noch einmal.",
 
   "msg_failed_to_start_session": "Sitzung konnte nicht gestartet werden:\n{0}",
 

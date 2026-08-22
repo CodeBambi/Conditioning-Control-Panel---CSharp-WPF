@@ -1665,7 +1665,9 @@ namespace ConditioningControlPanel
                     App.Patreon?.Logout();
                     App.Discord?.Logout();
 
-                    ClearAccountData();
+                    // Account DELETION really deletes: unlike a logout, the local quest file
+                    // must not outlive the account it belonged to.
+                    ClearAccountData(wipeQuestProgress: true);
 
                     MessageBox.Show(
                         Loc.Get("msg_profile_deleted"),

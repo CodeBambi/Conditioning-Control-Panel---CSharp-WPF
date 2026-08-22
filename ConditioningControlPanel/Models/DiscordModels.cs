@@ -126,6 +126,19 @@ namespace ConditioningControlPanel.Models
         public string? Error { get; set; }
 
         /// <summary>
+        /// The unified account id the server resolved for this Discord user via its
+        /// discord_index. This is the record any <see cref="AuthToken"/> in the same
+        /// response was minted FOR — the client must compare it against its own
+        /// persisted UnifiedId before adopting the token (see DiscordService), or a
+        /// duplicate-identity account (two records, one per provider) ends up holding
+        /// a token for one record while sending the other record's id in request
+        /// bodies, and every authed route 401s until the accounts are merged.
+        /// </summary>
+        [JsonProperty("unified_id")]
+        [JsonPropertyName("unified_id")]
+        public string? UnifiedId { get; set; }
+
+        /// <summary>
         /// A re-issued CCP auth token, present only when the server healed a
         /// divergent/mismatched token during this validate (BUG-7DCJHDP3JZ).
         /// When non-empty the client stores it; it is not cached.

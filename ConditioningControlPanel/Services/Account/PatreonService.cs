@@ -572,11 +572,34 @@ namespace ConditioningControlPanel.Services
                 // Server healed a divergent auth token — store it immediately so
                 // subsequent authed requests stop 401ing. Only present on mismatch;
                 // never cached, so a stale replay can't re-break auth (BUG-7DCJHDP3JZ).
+                //
+                // BUT only when the server resolved this Patreon account to the SAME unified
+                // record this client is operating as. On a duplicate-identity account (one
+                // record per provider, never merged) the heal is keyed to the patreon_index
+                // record — a DIFFERENT record than Settings.UnifiedId — and adopting its
+                // token breaks every request that sends our unified_id in the body until the
+                // OTHER provider's validate mints it back, flip-flopping forever. See the
+                // twin guard in DiscordService.ValidateAndRefreshUserAsync for the full
+                // mechanism; such an account pair needs a server-side merge.
                 if (!string.IsNullOrEmpty(subscription.AuthToken) && App.Settings?.Current != null)
                 {
-                    App.Settings.Current.AuthToken = subscription.AuthToken;
-                    App.Settings.Save();
-                    App.Logger?.Information("[Auth] Stored re-issued auth token from Patreon validate (token recovery)");
+                    var localUnifiedId = App.Settings.Current.UnifiedId;
+                    if (!string.IsNullOrEmpty(localUnifiedId) &&
+                        !string.IsNullOrEmpty(subscription.UnifiedId) &&
+                        !string.Equals(subscription.UnifiedId, localUnifiedId, StringComparison.Ordinal))
+                    {
+                        App.Logger?.Warning(
+                            "[Auth] Patreon validate resolved to unified account {ServerId} but this session is {LocalId} — " +
+                            "REFUSING the re-issued auth token (it belongs to the other record). " +
+                            "This account pair likely needs a server-side merge.",
+                            subscription.UnifiedId, localUnifiedId);
+                    }
+                    else
+                    {
+                        App.Settings.Current.AuthToken = subscription.AuthToken;
+                        App.Settings.Save();
+                        App.Logger?.Information("[Auth] Stored re-issued auth token from Patreon validate (token recovery)");
+                    }
                 }
 
                 // Get whitelist status from server response
