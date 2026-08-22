@@ -1259,7 +1259,7 @@ was needed. That is the wave-63 lesson working.
 stale-header failure `client/port.txt` warns about. Repaired to SP-136 from the body, per the rule
 to trust the body and never reissue a used ID.
 
-### Wave 68 (**RAN 2026-08-22** — two lanes, BOTH REPORTED, both PASS at final review, lock cleared. NOT LANDED: a fresh
+### Wave 68 (**LANDED 2026-08-22** at owner instruction "land it" — the running context landed what it ran, overriding `port.txt:16-17`, which is the owner's call and is recorded as such. Floor 2599 -> **2616** / 152. Originally **RAN 2026-08-22** — two lanes, BOTH REPORTED, both PASS at final review, lock cleared. NOT LANDED: a fresh
 session certifies it, because the context that ran the work must never certify it.)
 
 | Packet | Branch | Head | Declared delta |
@@ -1298,3 +1298,25 @@ that went false because the fix moved the artifact it described. And the sharpes
 RENDER** — a literal `||` inside a code span split each row into six cells, so GFM dropped D304's entire retraction. The
 notation naming the additive shadow destroyed the description of it, and this is the wave-64 defect at repository scale
 (27,859 characters across 17 board rows). The enforcement half is now recorded: count the delimiters, never read them.
+
+**WAVE 68 LAND, and the verification status is NOT clean — stated here because a land that hides this is worthless.**
+Observed **2616 total = pin 2599 + declared 17**, exactly, and the headless half is **152/152 green**. But **three
+`PointerCoexistenceTests` facts were RED on all three land runs**, including the non-vacuity guard whose failure means
+the four surfaces never reached the desktop at all.
+
+**It is environmental and that was PROVED, not assumed.** The pre-merge base `b72830b48`, run in a scratch worktree at
+the same moment under identical conditions, failed those same three **plus `VideoCapabilityTests` and
+`PointerCapabilityTests` — ten-plus failures at base against three on the merged tree.** The merged tree is strictly
+better than the base right now. The three also pass 6/6 filtered, and the full suite with every SP-136 test filtered
+OUT fails the identical three, so neither the merge content nor the new node-spawning facts are the cause. The load
+hypothesis was tested and REFUTED rather than assumed.
+
+**Cause identified positively: the foreground window was `claude` (pid 70944)** — the desktop app the owner was using
+to instruct this land. `ConditioningControlPanel` was NOT running, so this is a different cause from board row 336.
+I did not close the owner's application to buy a green run, and quarantined nothing.
+
+**THE FINDING, filed as a new P2 row: SP-134's pre-flight reported CLEAN through all of it.** No `DESKTOP-CONTENDED`
+refusal appeared, so its sentinels owned every probed point across the full 2500 ms span while the suite failed anyway.
+The pre-flight measures whether OUR window can take and hold a contended POINT against a topmost re-asserter; an
+ordinary interactive app owning the FOREGROUND is a different property and it passes. **That is SP-134's own trap 4
+arriving from an angle it did not model — a green light in front of the same red.**

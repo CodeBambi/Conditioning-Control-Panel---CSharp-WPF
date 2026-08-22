@@ -12,7 +12,7 @@ The decisive reason was mechanical, not preference: every lane worker and review
 
 What is retained, deliberately:
 
-- **The packet path.** Packets stay at `spine-tasks/SP-NNN-slug/PROMPT.md`. `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs:42-100` asserts the directory exists, enumerates `PROMPT.md` at exactly one level, requires the directory to parse as `SP-<n>-`, and requires a `| testCommand | ... |` row for every packet at or above SP-065, failing closed on each. A new packet root would silently drop new packets out of the only mechanical guard binding packet contracts.
+- **The packet path.** Packets stay at `spine-tasks/SP-NNN-slug/PROMPT.md`. `client/tests/CcpClient.Tests/FloorWrapperGuardTests.cs:99-131` (the packet walk) and `:180-241` (the SP-065 rule) asserts the directory exists, enumerates `PROMPT.md` at exactly one level, requires the directory to parse as `SP-<n>-`, and requires a `| testCommand | ... |` row for every packet at or above SP-065, failing closed on each. A new packet root would silently drop new packets out of the only mechanical guard binding packet contracts.
 - **The review levels** 0-3 and their verdict vocabulary.
 - **Every land lesson** below. They were paid for and none of them was about the engine.
 

@@ -1,5 +1,21 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## Wave 68 LANDED 2026-08-22 — floor 2599 -> 2616 / 152
+
+- Landed at owner instruction **"land it"**, by the context that ran it, overriding `port.txt:16-17`. Owner's call,
+  recorded rather than glossed. `.port/STOP` cleared; no `WAVE-LOCK`.
+- **SP-136** closes board row 32 (P0): `validate-wave.mjs` is the single owner of the chokepoint-coverage AND SP-065
+  wrapper-routing decisions; the C# guard holds no coverage predicate. Review caught it REOPENING the drift on check 2
+  while closing check 4.
+- **SP-137** closes row 337 (P1): the Goon VoiceNotes refusal and the Haptics absence line were both false and are now
+  true, with three claim-to-code bindings. The guard detects DRIFT, never deliberate rewriting, and says so.
+- **VERIFICATION IS NOT CLEAN AND THE COMMIT SAYS SO.** 2616 total = pin + 17 exactly; headless 152/152 green; three
+  `PointerCoexistenceTests` red on all three runs. **Proved environmental:** base `b72830b48` under identical
+  conditions failed those three PLUS `VideoCapability` and `PointerCapability` (10+ vs 3). Foreground was `claude`
+  pid 70944. New P2 row filed: SP-134's pre-flight detects topmost POINT ownership, not FOREGROUND ownership, so it
+  reported clean throughout.
+- **Next unblocked capability work is still board row 202** (the entitlement bridge). No owner answer needed on Windows.
+
 ## Wave 68 RAN 2026-08-22, NOT LANDED — a fresh session certifies it
 
 - **SP-136** `worktree-agent-ae859c22c33d424fe` @ `78724f3d1`, unit **+12** / headless +0. Closes board row 32 (P0):

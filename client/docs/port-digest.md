@@ -298,3 +298,25 @@ Format:
 - **The other two.** "Subliminals keeps its own settings file" is **not a decision** and I should not have listed it beside blocking ones. It is a choice already made and defended, it blocks nothing, and it can be reversed whenever you want. And the phrase "the login token" was doing double duty for two different things: an engineering job (Linux has nowhere secure to keep a token) and a real question for you (may the port send that token to the server). Only the second is yours.
 - **What is actually waiting on you now is written down properly**, in `client/docs/owner-decisions.md`, derived from the board rather than from my own earlier summaries, with the board winning if the two ever disagree. Five items: whether the port may **transmit** the borrowed token and read a second file to check your tier (a narrower question than the one I had been asking, and saying no still leaves the feature working); the haptic driver, where **Lovense needs no package at all** and only Buttplug does; For You Feed, which uses the webcam and sends dwell-weighted requests to a third party, and whose consent unlocks remote media in five other places; the six Goon Game network questions, where a direct connection means each player learns the other's IP address; and whether to reproduce the leaderboard, which sends an identifier and a name rather than a score.
 - **Why it happened, since it is the same fault this port keeps finding in itself.** A claim that lives only in prose cannot be checked by anything. The board has statuses that tools read; my closing paragraph had a list that only I read, and it drifted until it was telling you that you owed an answer you had already given. It is filed as a defect with the fix being that the summary stops carrying the list and cites the register instead.
+
+## 2026-08-22 — wave 68 landed: the guard that could bless a broken packet, and two sentences that had gone false
+
+- **WHAT LANDED.** Floor **2599 -> 2616**, headless 152 unchanged. **SP-136** closed a P0 that had been open since the
+  wave-60 authoring: the pre-launch validator and the suite guard asked DIFFERENT questions about the same rule, so a
+  packet could pass `WAVE OK` and then red the suite. The validator now owns that decision alone and the suite guard
+  consumes its answer, so there is no second implementation to drift from. **SP-137** corrected two sentences the app
+  SHOWS YOU that had quietly become false: the Goon voice-notes refusal still said the browser could ask for your
+  microphone after last wave's deny hook stopped it on Windows, and the Haptics panel still said no effect sends
+  anything to haptics when six live call sites had been doing exactly that since SP-126.
+- **WHAT IT DOES NOT PROVE, and the verification was NOT clean.** Nothing renders, composites, focuses or plays audio
+  here; no headed gate was discharged. **Three real-desktop tests were RED on all three land runs.** That is
+  environmental and it was proved rather than assumed: the pre-merge base, run at the same moment, failed those three
+  PLUS two more classes — ten-plus failures at base against three on the merged tree — and the foreground was the
+  Claude app you were typing into. I did not close your application to buy a green run. **SP-134's brand-new desktop
+  pre-flight reported CLEAN through all of it**, because it detects a topmost window taking a POINT, not an ordinary
+  app owning the FOREGROUND. Filed as a P2; it is that packet's own predicted trap arriving from an angle it did not
+  model.
+- **WHAT IT ASKS OF YOU.** Nothing new — and that is the point worth repeating. **Board row 202, the entitlement
+  bridge, is still the first capability gap closable with no answer from you**, and it is what stops DTRH and Graded
+  Intake refusing everybody including you. The five genuinely open decisions are in `client/docs/owner-decisions.md`;
+  the haptic driver remains the cheapest, since Lovense needs zero new packages.
