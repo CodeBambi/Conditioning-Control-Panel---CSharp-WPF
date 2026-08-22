@@ -1,5 +1,0 @@
-sound: 1 render endpoint(s): Fake Endpoint
-RED: Dispose did NOT return within 3s while TryInit was parked — the UI thread is wedged on _initLock (SoundArbitration.Dispose)
-sound: playback device up (requested default)
-sound: panic-reset — stopped 0 player(s), cleared 0 queued line(s), ducks force-released
-probe exit=1

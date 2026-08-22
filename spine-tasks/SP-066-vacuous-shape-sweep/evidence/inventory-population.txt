@@ -1,3 +1,0 @@
-fact/theory attribute count (detector regex, raw text incl. doc comments + this temp fact): 729
-files containing facts: 78
-site count: 94

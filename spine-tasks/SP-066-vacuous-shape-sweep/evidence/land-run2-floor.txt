@@ -1,3 +1,0 @@
-floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-5oHapN
-FLOOR OK: CcpClient.Tests: 900/900 total, 2 skipped [CcpClient.Tests.ChaosTunnelCapabilityTests.Linux_UnavailableNamesTheTunnelsOwnTwoGaps, CcpClient.Tests.SecretStoreTests.LinuxProbe_TypedOutcome_NeverFaked]; CcpClient.HeadlessTests: 35/35 total, 0 skipped
-results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-5oHapN

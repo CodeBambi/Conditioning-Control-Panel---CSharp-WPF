@@ -1,7 +1,0 @@
-M-as  SURVIVED  [unit]  an authority's exception MESSAGE is carried instead of its type name  ||  Passed!  - Failed:     0, Passed:   350, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
-M-av  CAUGHT  [unit]  SinkState ignores what the server actually said  ||  Failed!  - Failed:     1, Passed:   349, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
-M-ax  CAUGHT  [unit]  the haptic setting never flushes at teardown  ||  Failed!  - Failed:     1, Passed:   349, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
-M-ba  CAUGHT  [unit]  the participant is not registered at all  ||  Failed!  - Failed:     4, Passed:   346, Skipped:     1, Total:   351, Duration: 10 s - CcpClient.Tests.dll (net10.0)
-
-round 2: 3 caught, 1 survived, 0 not patched, 0 not compiled (4 attempted)
-tree restored byte-identically: YES

@@ -1,6 +1,0 @@
-# SP-067 GREEN — fixed product code (post-loop return now typed, async contract §2)
-# command: dotnet run probe.cs 500 (heartbeat interval 1ms, start -> immediate stop)
-iterations=500
-Completed: none
-Cancelled: count=500 zeroTick=494 ticked=6 minTicks=0 maxTicks=1
-other=0 timeouts=0

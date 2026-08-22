@@ -1,8 +1,0 @@
-M-au  CAUGHT  [unit]  phase 3 arms the POLL, skipping the grace  ||  Failed!  - Failed:     2, Passed:    75, Skipped:     0, Total:    77, Duration: 854 ms - CcpClient.Tests.dll (net10.0)
-M-ay  CAUGHT  [unit]  stop leaves the pending one-shot alive  ||  Failed!  - Failed:     3, Passed:    74, Skipped:     0, Total:    77, Duration: 585 ms - CcpClient.Tests.dll (net10.0)
-M-ba  CAUGHT  [unit]  every tick re-runs the start-up check  ||  Failed!  - Failed:    10, Passed:    67, Skipped:     0, Total:    77, Duration: 589 ms - CcpClient.Tests.dll (net10.0)
-M-bb  CAUGHT  [unit]  the settings store is never started, so it never LOADS  ||  Failed!  - Failed:    33, Passed:    44, Skipped:     0, Total:    77, Duration: 388 ms - CcpClient.Tests.dll (net10.0)
-M-bc  CAUGHT  [unit]  the participant is never marked running  ||  Failed!  - Failed:    26, Passed:    51, Skipped:     0, Total:    77, Duration: 604 ms - CcpClient.Tests.dll (net10.0)
-
-round 6: 5 caught, 0 survived, 0 not patched, 0 not compiled (5 attempted)
-tree restored byte-identically: YES

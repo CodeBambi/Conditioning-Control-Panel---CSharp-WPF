@@ -1,6 +1,0 @@
-# media copies (owner media dir + payload spiral) — staged, never committed
-*.jpg
-*.png
-*.mp4
-*.gif
-databackup-*/

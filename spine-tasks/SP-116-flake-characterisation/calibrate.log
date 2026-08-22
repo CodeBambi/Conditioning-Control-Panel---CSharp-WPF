@@ -1,3 +1,0 @@
-SP-116 CALIBRATE: 1 run(s) of CcpClient.Tests, started 2026-08-20T01:24:05.759Z
-CALIBRATE r1  GREEN  55.7s  Passed!  - Failed:     0, Passed:  2060, Skipped:     2, Total:  2062, Duration: 45 s - CcpClient.Tests.dll (net10.0)
-CALIBRATE TOTAL: 1 runs, 0 red, ended 2026-08-20T01:25:01.463Z

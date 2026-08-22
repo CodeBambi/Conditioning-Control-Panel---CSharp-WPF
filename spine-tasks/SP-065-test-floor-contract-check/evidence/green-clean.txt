@@ -1,4 +1,0 @@
-floor run results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-qBVvBG
-FLOOR OK: CcpClient.Tests: 897/897 passed, 0/0 skipped; CcpClient.HeadlessTests: 35/35 passed, 0/0 skipped
-results directory: C:\Users\Micha\AppData\Local\Temp\ccp-floor-qBVvBG
-WRAPPER-EXIT=0

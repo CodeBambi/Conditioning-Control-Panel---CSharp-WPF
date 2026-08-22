@@ -1,5 +1,0 @@
-M-aa  SURVIVED  [unit]  a refused start is still marked auto-started  ||  Passed!  - Failed:     0, Passed:    74, Skipped:     0, Total:    74, Duration: 587 ms - CcpClient.Tests.dll (net10.0)
-M-av  CAUGHT  [unit]  the due callback drops its liveness re-check  ||  Failed!  - Failed:     1, Passed:    73, Skipped:     0, Total:    74, Duration: 573 ms - CcpClient.Tests.dll (net10.0)
-
-round 5: 1 caught, 1 survived, 0 not patched, 0 not compiled (2 attempted)
-tree restored byte-identically: YES
