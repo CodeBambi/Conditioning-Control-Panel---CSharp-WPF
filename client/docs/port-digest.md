@@ -398,3 +398,23 @@ Format:
 - **WHAT THIS DOES NOT PROVE.** The restored WPF app was **built, not run**. A 332-warning compile result says
   nothing about whether it starts, and the restored OpenAI and SharpDX package references were never exercised
   beyond compiling. Nothing here was seen on a screen.
+
+## 2026-08-22 - a deadlock that never happened, and why that is the point
+
+- **WHAT LANDED.** Floor 2622 -> **2625**. The shared plumbing under thirteen of your fifteen rack modules
+  could in principle have frozen the app: the part that cancels a running effect held a lock while running
+  other code, and the part that draws the little status dot took those same two locks in the opposite order.
+- **IT HAD NEVER ACTUALLY HAPPENED, and nothing was broken for you.** Nothing hung because every author so
+  far happened to follow an unwritten rule. **That is the real defect** - the app was one ordinary edit away
+  from a freeze and nothing would have warned anyone.
+- **THE OBVIOUS FIX INTRODUCES A NEW BUG.** The lane found that before writing any code and closed it by
+  DELETING a line rather than adding a safety net. Your shipping WPF app has the same race and quietly
+  swallows the error, which is how we know the risk was real rather than theoretical.
+- **THE TESTS WERE PROVEN TO CATCH IT.** The fix was deliberately undone and the new tests failed; restored,
+  they pass in milliseconds. A test that cannot fail proves nothing.
+- **WHAT IT DOES NOT PROVE.** Nothing here was seen on a screen, and no freeze was ever reproduced before or
+  after. It pins one specific ordering, not the absence of every such bug.
+- **HONEST NOTE ON MY OWN WORK.** The change broke three internal cross-references, two of them inside the
+  very commit that filed the note warning about that exact problem. All three were caught in review and are
+  recorded rather than quietly fixed. The underlying gap - **nothing in this project checks a reference from
+  one new-client file to another, in either direction** - is now its own task.
