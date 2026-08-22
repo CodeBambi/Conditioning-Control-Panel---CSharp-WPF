@@ -108,18 +108,25 @@ sentence: the same anchored sweep over `.cs`/`.xaml` only is 42, and including t
 it for `fyp` itself**; it was caught by opening the matches rather than counting them. Anchored
 pattern of record: `(^|[^A-Za-z])fyp`, case-insensitive.
 
-### 1.6 The settings live in a tree the constitution calls failure evidence
+### 1.6 The settings are in the shipping project, and the tension this section used to describe was never real
 
 All 15 FYP settings properties, and the consent union, are defined in
-`ConditioningControlPanel/CCP.Core/Models/AppSettings.cs` — the first-attempt port tree. That is not a
-mistake in the shipping app: `ConditioningControlPanel.csproj:52` carries
-`<ProjectReference Include="CCP.Core\CCP.Core.csproj" />`, so **`CCP.Core` is a compile dependency of
-the shipping WPF product**, while `:10` excludes its sources from direct compilation.
+`ConditioningControlPanel/Models/AppSettings.cs` — the shipping WPF project's own tree.
 
-This is a real tension with `docs/constitution.md:32`, which classes `CCP.*` as "lessons/failure
-evidence only". **Resolution used here:** the file is read as *behavioural evidence of the shipping
-product*, because the shipping product links it; nothing of its topology is imported, and no status
-claim from it is admitted. Flagged rather than resolved unilaterally — see §7 D209.
+**CORRECTED 2026-08-22 (SP-141). What this section said before was false, and it is worth stating why
+rather than just deleting it.** It read: *the settings live in a tree the constitution calls failure
+evidence*, and argued that `ConditioningControlPanel.csproj:52` carried
+`<ProjectReference Include="CCP.Core..." />` so `CCP.Core` was **a compile dependency of the shipping
+WPF product**. **`main` has never had that `ProjectReference`, and has never contained a `CCP.*`
+directory at all.** Both the reference and the relocated `Models/` tree were artifacts of this port
+branch's own undeclared divergence — 1180 files of it, deleted at SP-141 (D326).
+
+**So the "real tension with `docs/constitution.md:32`" that §7 D209 was written to resolve did not exist
+in the shipping product.** It was manufactured by the branch the census was measured on, and then
+reasoned about as if it were a property of the product. D209's resolution is left standing as history
+because the reasoning was sound given the tree it was taken against; the PREMISE is what failed. This
+is the sharpest single instance of why `ConditioningControlPanel/**` must track `main` exactly, and
+why that rule having no enforcement is filed as its own board row.
 
 ---
 
@@ -168,7 +175,7 @@ seven noun phrases the owner wrote at `client/docs/task-board.md:97`, not re-der
 | B1 | endless conditioning-clip feed | `Services/Fyp/FypHostService.cs:16-18` — feed "rendered in a WebView2 window at `Resources/web/fyp/index.html`" | Render a local HTML/JS page in an embedded browser and exchange messages with it | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhCapabilityProbes.cs:21` — "Embedded WebView surface (Windows = WebView2 NativeWebView, §5)" | **COVERED by video/webview** (DTRH ships it) | Windows: proven (DTRH). **Linux: unproven** — gate: run the feed page in the Avalonia WebView on a real X11/Wayland box; no WSL distro exists here (`client/memories/port-status.md:89-96`) |
 | B2 | ghost mode = see-through AND click-through | `Services/Fyp/FypGhostOverlay.cs:9-42` (technique), `:285` (`WS_EX_LAYERED\|WS_EX_TRANSPARENT\|WS_EX_NOACTIVATE\|WS_EX_TOOLWINDOW`), `:379-423` (DWM P/Invokes) | A live translucent mirror of another window's pixels, click-through, composited by the OS | `client/src/CcpClient.Desktop/Overlay/Win32OverlayPresence.cs:18-40` gives layered + click-through + topmost, **but mirrors nothing** | **GAP: live window-thumbnail mirroring** — (a) primitive: DWM thumbnail of another HWND; (b) WPF uses `DwmRegisterThumbnail`/`DwmUpdateThumbnailProperties` + `SetLayeredWindowAttributes(LWA_COLORKEY)` on a **GDI/WinForms** surface; (c) the port would need a DWM-thumbnail host on Windows and an entirely different mechanism on Linux | Windows: **unproven** (nothing in `client/src` registers a DWM thumbnail). **Linux: unproven and unmapped** — X11/Wayland have no `DwmRegisterThumbnail` analogue; Wayland forbids reading other surfaces' pixels without a portal |
 | B3 | webcam gaze scrolling | `Services/Fyp/FypHostService.cs:903-1045`; consent `:944`, dialog `:946`, `StartAsync` `:958`, ownership `:964`, conditional stop `:1023`, gaze subscribe `:1045` | Camera capture + face/iris inference + calibrated gaze mapped to a screen point | `none` — webcam is **not** among the port's seven landed capabilities | **OWNER-GATED** (see §5) — `client/docs/capability-inventory.md:70` requires "a consent-contract revision and owner review"; `:78` "a stub that says running is a failure" | Windows: **unproven**. **Linux: unproven** — `capability-inventory.md:78` additionally requires XDG Camera portal/PipeWire proof |
-| B4 | opacity control | `CCP.Core/Models/AppSettings.cs:3190-3199` — `FypWindowOpacity`, clamp `Math.Clamp(value, 0.01, 1.0)`, "the DWM thumbnail opacity of the see-through mirror, **never the real window's alpha**" | A 0.01-1.0 translucency applied to the mirror | inherits B2 — there is no mirror to apply it to | **GAP: consequent of B2** (the clamp itself is trivial; its subject does not exist) | Windows: unproven. Linux: unproven |
+| B4 | opacity control | `Models/AppSettings.cs:3190-3199` — `FypWindowOpacity`, clamp `Math.Clamp(value, 0.01, 1.0)`, "the DWM thumbnail opacity of the see-through mirror, **never the real window's alpha**" | A 0.01-1.0 translucency applied to the mirror | inherits B2 — there is no mirror to apply it to | **GAP: consequent of B2** (the clamp itself is trivial; its subject does not exist) | Windows: unproven. Linux: unproven |
 | B5 | any monitor | `Services/Fyp/FypGhostOverlay.cs:75` `_screen = WF.Screen.FromHandle(sourceHwnd)`; `:91` `_form.Bounds = _screen.Bounds` | Resolve the monitor a window is on and fill exactly that monitor in physical px | `client/src/CcpClient.Desktop/Overlay/OverlayDisplays.cs` (per-display overlay placement already lands) | **PARTIAL on overlay** — missing member: "which display does this *foreign* window occupy", i.e. an HWND-to-display resolve | Windows: partial. **Linux: unproven** — mixed-DPI multi-monitor is a headed gate the port has never discharged |
 | B6 | survives Show Desktop | `Services/Fyp/FypHostService.cs:711-722` veto of `SC_MINIMIZE` (`handled = true` is `:722`); `:585-593` severs the owner link (`SuspendMainWindowGlue(true)` is `:593`); `:784` heals a minimize that lands anyway | Refuse/heal an OS-initiated minimise of a window the user cannot see | `none` — no `client/src` window subclasses a WndProc to veto a system command | **GAP: system-command veto on a foreign message pump** — (a) primitive: intercept `WM_SYSCOMMAND`/`SC_MINIMIZE`; (b) WPF uses `HwndSource.AddHook`; (c) the port would need a Win32 hook seam, and on Linux there is no equivalent because there is no equivalent of Show Desktop's owner-cascade | Windows: unproven. **Linux: not applicable in this form** — the behaviour would have to be re-derived, not ported |
 | B7 | undecodable clips notice-and-swap | `Services/Fyp/FypHostService.cs:213-225` (`media-error`, codes 2/3/4, `RecordFailure` for library ids only); `Services/Fyp/FypMetaStore.cs:29-30` `FailStrikeLimit = 2` | Count decode failures per asset, stop serving after 2 strikes, page past the bad tile | `none` in the port, **but the logic is pure and page-side** | **PARTIAL on video** — missing member: a per-asset failure ledger; the swap itself lives in `main.js`, which the port would serve unmodified | Windows: unproven. Linux: unproven |
@@ -246,7 +253,7 @@ critical path; and whether the port reproduces the existing consent model or imp
 
 ### 5.2 Consent granted in the feed unlocks remote media across five other surfaces
 
-`CCP.Core/Models/AppSettings.cs:3327`, opened:
+`Models/AppSettings.cs:3327`, opened:
 
 ```csharp
 public bool HasRemoteMediaConsent => _remoteMediaConsented || _fypOnlineConsented;

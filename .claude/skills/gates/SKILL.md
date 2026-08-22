@@ -1,6 +1,6 @@
 ---
 name: gates
-description: Run the correct build and test gate for whichever of the three code trees the current changes touch (legacy WPF, CCP.* Avalonia attempt, or the greenfield client). Use before committing, or when asked to verify or validate a change.
+description: Run the correct build and test gate for whichever of the two code trees the current changes touch (legacy WPF, or the greenfield client). Use before committing, or when asked to verify or validate a change.
 disable-model-invocation: true
 argument-hint: "[--fast]"
 allowed-tools: Bash, Read, Grep
@@ -31,19 +31,13 @@ dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.
 
 Narrow to one class while iterating with `--filter "FullyQualifiedName~TheTestClass"`.
 
-### Tree 2: CCP.* Avalonia attempt (`ConditioningControlPanel/CCP.*/**`)
+### Tree 2: greenfield client (`client/**`)
 
-One script covers all four gates (slnf build, WPF solution build, `CCP.Core.Tests` against a floor of 550 passing, and the Windows head 44-tab smoke run):
+> **The CCP.\* Avalonia attempt was DELETED at SP-141 (2026-08-22).** It used to be Tree 2 here, gated by
+> `./ConditioningControlPanel/tools/run-gates.sh`. **That script and the whole tree are gone** - do not look
+> for them, and do not treat their absence as a broken checkout. Nothing in the repo now builds
+> `ConditioningControlPanel.sln` automatically; that gap is an open P0 on the task board.
 
-```bash
-./ConditioningControlPanel/tools/run-gates.sh
-```
-
-Pass `--fast` to skip the smoke gate while iterating. The full run is required before a commit. A fifth gate fires automatically when the diff touches `CCP.Avalonia/AvatarTube/**` or `TubeGeometry*`.
-
-The script prints `>>> ALL GATES PASSED <<<` on success. On a smoke failure it distinguishes the known `SerializeChanges` cross-thread flake (re-run once) from a real finding (stop and file a blocker). Report which one happened; never re-run more than once to get green.
-
-### Tree 3: greenfield client (`client/**`)
 
 Tier 1, always:
 

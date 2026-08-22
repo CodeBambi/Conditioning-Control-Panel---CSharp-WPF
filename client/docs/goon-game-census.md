@@ -219,7 +219,7 @@ Outside `Services/GoonGame/`, in C#: `App.xaml.cs` (2 compile-time, 3 comment),
 `MainWindow/MainWindow.Lab.cs` (2 compile-time, 2 comment), `MainWindow/MainWindow.PlayTab.cs`
 (comment only), `Views/Tabs/PlayTabView.xaml` (comment only), `GoonTestPanel.cs` /
 `GoonTestSimRoundDriver.cs` / `GoonTestWindow.xaml.cs` (compile-time — the dev cockpit, itself part
-of this surface), `CCP.Core/Models/AppSettings.cs` (the settings, per D209's resolution),
+of this surface), `Models/AppSettings.cs` (the settings; **D209's resolution is moot - see `fyp-census.md` §1.6**),
 `Services/Chaos/DtrhAssetManifest.cs:227` (comment), `Services/Media/Transfer/TransferCacheStore.cs:75`
 (comment).
 

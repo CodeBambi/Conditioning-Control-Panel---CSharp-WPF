@@ -29,7 +29,7 @@ Empirical evidence can prove a document stale; fix the smallest authoritative do
 
 ## Hard rules
 
-- **Read-only zones:** `ConditioningControlPanel/` (legacy WPF = behavioral evidence; first Avalonia attempt `CCP.*` = lessons/failure evidence only — never import its classes, interfaces, timers, DI topology, or status claims). Never modify `.pi/`, `.spine/`, the existing `spine-tasks/SP-*/` packets, or `CLAUDE.md`. The retired engine's trees stay as history and evidence.
+- **Read-only zones:** `ConditioningControlPanel/` (legacy WPF = behavioral evidence). **It must track `main` EXACTLY; verify with `git rev-parse main:ConditioningControlPanel` against `HEAD:ConditioningControlPanel`, not with an empty `git diff`.** The first Avalonia attempt `CCP.*` was **DELETED at SP-141 (2026-08-22)** and is no longer a zone - it survives only as git history, and the rule against importing its classes, interfaces, timers, DI topology or status claims stands for anyone reading that history. Never modify `.pi/`, `.spine/`, the existing `spine-tasks/SP-*/` packets, or `CLAUDE.md`. The retired engine's trees stay as history and evidence.
 - **Write zones:** new product code, tests, assets, build scripts under `client/` only. Durable port docs under `client/docs/` when the packet allows it. Task state under the task's own `spine-tasks/SP-*/` folder.
 - **Avalonia v12 facts** come only from current official sources via the `avalonia-research` skill. No guessed APIs, no v11 assumptions, no MCP-generated authority.
 - **WPF parity** claims need narrow behavioral evidence via `wpf-parity`. Port the outcome, not the class.
