@@ -1,4 +1,4 @@
-# SP-139 — plan checkpoint (Review Level 3, BEFORE any product edit)
+# SP-139 — DEFERRED ON HARDWARE (design complete and approved; NOT pending work — see §9)
 
 Branch `feat/crossplatform` in worktree `.claude/worktrees/agent-a765c43b5ebde2a96`, base `2508b39c4`.
 Nothing under `client/src/**` or `client/tests/**` has been edited at the time this file was written.
@@ -291,3 +291,64 @@ should have the choice before I spend it.
   not evidence for or against anything in §1, but a lane that later takes D315 will meet it.
 - **No product file and no test file has been edited.** `plan.md` is the only artefact written, and
   it is committed (`b5d5f2cbb`) so the worktree is not empty at the checkpoint.
+
+---
+
+## 9. VERDICT — DEFERRED ON HARDWARE. Design complete and APPROVED. Archaeology landed.
+
+**This plan is NOT pending work. Do not resume it as written; resume it from the evidence.**
+
+Owner decision, 2026-08-22: **a second monitor is not available. Do not implement.** The plan was
+reviewed and approved first — all three upstream claims survived adversarial checking, and the Spiral
+recommendation in §3 was independently confirmed sound (`Effects/SpiralFrameSource.cs:30-36`
+guarantees the frame buffer is valid until the next `Render` and that `Paint` copies into the DIB
+before returning, so one `Render(i)` painted to every same-size surface is legal). The deferral is
+about **evidence, not design**.
+
+**Nothing under `client/src/**` was changed and no test was added.** The floor moved by zero
+(`floor-delta.json` declares `0` / `0`). The archaeology this plan produced is now durable in
+`client/docs/wpf-surface-reachability.md` as **D311–D322**, and `record.md` carries the verdict, the
+baseline and the deviations. Those two documents, not this section, are what a later lane reads.
+
+### The reason the work must wait rather than land unverified
+
+Not "the fixture would be synthetic" — that alone is survivable. The decisive reason is that **the
+hardware limitation reaches the guards themselves**:
+
+- The display seam must grow **additively** (§3, D319), because twelve existing test call sites
+  construct the four overlay presenters with a single-display `Func<OverlayBounds?>` and none was in
+  File Scope. So an every-display source defaults to the single-display fallback — and **a
+  `Product()` factory that forgot to pass it would leave ALL ELEVEN guards in §4 green. On a
+  one-monitor machine no test can tell the difference.** The packet could ship completely wired to
+  nothing and be undetectable here.
+- **Guard 1 could not have been watched red at all.** An `OverlayDisplays.AllBounds()` helper is a
+  static over USER32 with no seam, and with one attached display it is byte-identical to
+  `[PrimaryBounds()]` (`Effects/PrimaryDisplayPlacement.cs:35-54`), so the revert it was written to
+  catch would have PASSED. The other ten route through the injected seam and would have reddened.
+
+### Two findings the review sharpened, which supersede §1's wording
+
+- **Lock Card (§1 row 8) is a LIVE PARITY DEFECT, not a neutral difference.** Upstream has no
+  `DualMonitorEnabled` gate there at all, so place-on-every **is** parity: a user of the shipping app
+  today gets every monitor covered and this port covers one. §1 called it "correctly do not change";
+  that is right about **scope** and understates the finding. The scope fact does not soften the
+  defect. Authoritative wording is **D313**.
+- **Mandatory Video (§1 row 9) would be a DIVERGENCE, not a regression fix.** The `#389` rationale
+  behind upstream's 3-plus-monitor primary-only default exists because each secondary is its own full
+  decode pass; **this port's one-decoder fan-out removes that cost**, and the gate is LibVLC-path
+  only — the MediaElement fallback has none (`VideoService.cs:2514-2521`). So all-monitors video is a
+  deliberate divergence the owner has not confirmed (board line 250), not a repair. Authoritative
+  wording is **D318**.
+
+### §7's open question is answered and moot
+
+Spiral would have been **in**, for exactly the reason §7 gave. Nothing was spent on it.
+
+### Preconditions for a future lane to resume
+
+1. A second physical display attached and enumerated (`client/port.txt:134` names `DISPLAY3`).
+2. A File Scope that either says "the four overlay consumers only" or deliberately carries `Video/`,
+   `Input/`, `Pointer/` and `Glyph/` (D319).
+3. The twelve existing presenter test call sites inside scope, **or** the additive seam plus a guard
+   that can detect an unwired `Product()` — which needs the second display to exist (D322).
+4. Board line 250 answered by the owner before video is touched at all (D318).
