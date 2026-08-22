@@ -113,6 +113,52 @@ internal sealed class LatestFrameSlot<T> where T : class, IDisposable
 /// </summary>
 internal sealed class BrainDrainCapturePump
 {
+    // ================================================================================
+    //  #960 / #975 - THE ALPHA BYTE. Read this before touching the wrap below.
+    // ================================================================================
+    //
+    // The staging surface is a 32bpp BI_RGB DIB section and the capture is a GDI StretchBlt off
+    // the desktop DC. GDI defines the fourth byte of a 32bpp BI_RGB pixel as UNUSED: it is under
+    // no obligation to write anything into it, and what a device-to-DIB blt actually leaves there
+    // is up to the display driver and the blit path. Most machines leave 0xFF (the DWM's own
+    // surface carries it) and every dev box we own is one of them. Some machines leave 0x00.
+    //
+    // This code used to wrap those bits as Bgra8888 + SKAlphaType.Opaque and assume Skia would
+    // force the alpha to 1 because the type says the image is opaque. IT DOES NOT (verified
+    // against SkiaSharp 2.88.8): a Bgra8888 buffer whose alpha bytes are 0 draws as FULLY
+    // TRANSPARENT no matter what the declared alpha type says. On a machine whose driver leaves
+    // the byte at 0 the whole feature therefore rendered NOTHING while every single check passed
+    // - StretchBlt returned true, frames published, FramesPublished went up, both first-frame
+    // watchdogs stayed quiet, the audio half ran normally. That is #960/#975 exactly: "the audio
+    // plays but there is no visual", machine-dependent, no GPU-vendor pattern, nothing in the log.
+    //
+    // THE FIX: stop reading that byte at all. Rgb888x is Skia's "32bpp, fourth byte is padding,
+    // the image is opaque BY CONSTRUCTION" type, so the driver's leftovers cannot reach the
+    // output. Rgb888x is R,G,B,X in memory while GDI wrote B,G,R,X, so <see cref="SwapRedBlue"/>
+    // puts the channels back - it rides on the draw paint, which costs one extra pipeline stage
+    // and no extra offscreen. A channel swap is per-pixel and linear, so it commutes with both
+    // the gaussian and the displacement resample: applying it after the filter chain is exactly
+    // equivalent to applying it to the source.
+    //
+    // The legacy per-screen-window route never had this bug: it blts into a DDB via
+    // CreateCompatibleBitmap and hands it to CreateBitmapSourceFromHBitmap, which produces a
+    // Bgr32 BitmapSource - no alpha channel to get wrong. Only the compositor route reads the
+    // byte, which is why "turn the unified overlay renderer off" was a working workaround.
+
+    /// <summary>Colour type the capture is wrapped as. NOT Bgra8888 - see the block above.</summary>
+    internal const SKColorType CaptureColorType = SKColorType.Rgb888x;
+
+    /// <summary>Undoes the R/B transposition that reading GDI's BGRX bytes as Rgb888x introduces.
+    /// Alpha row is (0,0,0,1,0): untouched, and already 1 because the wrap is opaque. Shared and
+    /// immutable - never disposed by a pump instance.</summary>
+    internal static readonly SKColorFilter SwapRedBlue = SKColorFilter.CreateColorMatrix(new float[]
+    {
+        0, 0, 1, 0, 0,
+        0, 1, 0, 0, 0,
+        1, 0, 0, 0, 0,
+        0, 0, 0, 1, 0,
+    });
+
     /// <summary>How long the UI thread will wait for the hand-off lock before giving up and
     /// redrawing the frame it already has. The critical section is a two-field pointer swap, so
     /// this budget exists only so that "never block the UI thread" is enforced, not hoped for.</summary>
@@ -166,7 +212,7 @@ internal sealed class BrainDrainCapturePump
     public int SlotCount => _slots.Length;
 
     // Pump-thread-only state (the blur/melt chain, lifted verbatim from the old CapturePass).
-    private readonly SKPaint _blurPaint = new();
+    private readonly SKPaint _blurPaint = new() { ColorFilter = SwapRedBlue };
     private SKImageFilter? _blurFilter;
     private float _lastSigma = -1f;
     private SKImage? _meltNoiseTile;
@@ -423,7 +469,7 @@ internal sealed class BrainDrainCapturePump
                     // the warp still applies, it just warps the unblurred capture).
                     meltFilter = SKImageFilter.CreateDisplacementMapEffect(
                         SKColorChannel.R, SKColorChannel.G, amplitude, noiseFilter, _blurFilter);
-                    (_meltPaint ??= new SKPaint()).ImageFilter = meltFilter;
+                    (_meltPaint ??= new SKPaint { ColorFilter = SwapRedBlue }).ImageFilter = meltFilter;
                     // Displacement samples outside the source bleed transparent along the frame
                     // edges. Max |offset| is amplitude/2 (the map is centred on 0.5), +2px slack
                     // for the CTM scale below feeding back into the mapped displacement scale.
@@ -453,9 +499,13 @@ internal sealed class BrainDrainCapturePump
                         continue;
                     GdiFlush();
 
-                    var info = new SKImageInfo(slot.W, slot.H, SKColorType.Bgra8888, SKAlphaType.Opaque);
+                    // Opaque BY CONSTRUCTION (Rgb888x ignores the fourth byte) - see the alpha-byte
+                    // block at the top of this class. Never widen this back to Bgra8888.
+                    var info = new SKImageInfo(slot.W, slot.H, CaptureColorType, SKAlphaType.Opaque);
                     using var raw = SKImage.FromPixels(info, slot.Bits, slot.W * 4); // zero-copy wrap; consumed below
                     if (raw == null) continue;
+
+                    ReportFirstFrame(slot);
 
                     var canvas = slot.Surface.Canvas;
                     canvas.Clear(SKColors.Transparent);
@@ -471,7 +521,10 @@ internal sealed class BrainDrainCapturePump
                     }
                     else
                     {
-                        canvas.DrawImage(raw, 0, 0, _blurFilter != null ? _blurPaint : null);
+                        // ALWAYS through _blurPaint, even at sub-pixel sigma where _blurFilter is
+                        // null: the paint also carries SwapRedBlue, and a null paint here would
+                        // paint the capture with red and blue transposed.
+                        canvas.DrawImage(raw, 0, 0, _blurPaint);
                     }
                     slot.Frame.Publish(slot.Surface.Snapshot());
                     Interlocked.Increment(ref _framesPublished);
@@ -493,6 +546,96 @@ internal sealed class BrainDrainCapturePump
             noiseFilter?.Dispose();
             drift?.Dispose();
         }
+    }
+
+    // ================================================================================
+    //  #960 / #975 - say out loud what the driver actually handed us
+    // ================================================================================
+
+    private bool _firstFrameReported;
+
+    /// <summary>
+    /// One Information line per pump run describing the FIRST captured frame: the raw alpha byte
+    /// the display driver left in the DIB, and the frame's mean luminance. Both numbers were
+    /// unknowable from a bug report before, and between them they separate the three ways a
+    /// "started, frames publishing, nothing on screen" run can happen:
+    ///
+    /// <list type="bullet">
+    /// <item>rawAlpha ~0  - the #960 class. Harmless now (the wrap ignores that byte), but the
+    ///   line proves this machine is one of them and that the fix is what is carrying it.</item>
+    /// <item>luma ~0 with rawAlpha 255 - the capture came back BLACK: the desktop content is on a
+    ///   hardware overlay plane (MPO / HDR / a protected surface) and never reaches the GDI
+    ///   read-back. A blur of black IS drawn, it just looks like a dark scrim, not the effect.</item>
+    /// <item>both healthy - the pixels are fine and the problem is downstream (host window
+    ///   placement, z-order, capture affinity on an indirect display).</item>
+    /// </list>
+    ///
+    /// <para>Sampled on a sparse grid (at most <see cref="SampleGrid"/> squared points), once per
+    /// run, on the capture thread - it costs microseconds and never repeats.</para>
+    /// </summary>
+    private void ReportFirstFrame(Slot slot)
+    {
+        if (_firstFrameReported) return;
+        _firstFrameReported = true;
+        try
+        {
+            var (meanAlpha, meanLuma, minAlpha, maxAlpha) = SampleFrame(slot.Bits, slot.W, slot.H, slot.W * 4);
+            App.Logger?.Information(
+                "Brain Drain capture: first frame {W}x{H} (downscale {Downscale}, monitor {Bounds}) - " +
+                "raw GDI alpha byte mean {MeanAlpha:F1} (min {MinAlpha}, max {MaxAlpha}), mean luma {MeanLuma:F1}",
+                slot.W, slot.H, _downscale, slot.Bounds, meanAlpha, minAlpha, maxAlpha, meanLuma);
+
+            if (maxAlpha == 0)
+            {
+                App.Logger?.Warning(
+                    "Brain Drain capture: this display driver leaves the 32bpp DIB's unused byte at 0 (#960/#975). " +
+                    "Harmless now - the capture is read as Rgb888x so the byte is ignored - but a build before " +
+                    "this fix rendered NOTHING on this machine while reporting success everywhere.");
+            }
+            if (meanLuma < 1.0)
+            {
+                App.Logger?.Warning(
+                    "Brain Drain capture: the desktop read back BLACK (mean luma {MeanLuma:F2}). The screen content " +
+                    "is bypassing the GDI-visible surface (hardware overlay plane / HDR / protected content), so the " +
+                    "blur has nothing to blur and will look like a dark tint rather than the effect.", meanLuma);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("BrainDrain first-frame sample failed: {E}", ex.Message);
+        }
+    }
+
+    /// <summary>Points per axis in the first-frame sample grid.</summary>
+    private const int SampleGrid = 48;
+
+    /// <summary>
+    /// Sparse statistics over a 32bpp BGRX capture buffer: the mean/min/max of the fourth (alpha)
+    /// byte AS THE DRIVER LEFT IT, and the mean luminance of the BGR channels. Internal so the
+    /// tests can pin the numbers on synthetic buffers - production calls it once per pump run.
+    /// </summary>
+    internal static (double MeanAlpha, double MeanLuma, int MinAlpha, int MaxAlpha) SampleFrame(
+        IntPtr bits, int w, int h, int stride)
+    {
+        if (bits == IntPtr.Zero || w <= 0 || h <= 0) return (0, 0, 0, 0);
+
+        int stepX = Math.Max(1, w / SampleGrid), stepY = Math.Max(1, h / SampleGrid);
+        double sumA = 0, sumL = 0;
+        int n = 0, min = 255, max = 0;
+        for (int y = 0; y < h; y += stepY)
+        {
+            for (int x = 0; x < w; x += stepX)
+            {
+                int px = Marshal.ReadInt32(bits, y * stride + x * 4);
+                int b = px & 0xFF, g = (px >> 8) & 0xFF, r = (px >> 16) & 0xFF, a = (px >> 24) & 0xFF;
+                sumA += a;
+                sumL += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                if (a < min) min = a;
+                if (a > max) max = a;
+                n++;
+            }
+        }
+        return n == 0 ? (0, 0, 0, 0) : (sumA / n, sumL / n, min, max);
     }
 
     /// <summary>A tick that took this long on the UI thread WAS the #777 freeze. Here it is a
@@ -573,11 +716,13 @@ internal sealed class BrainDrainCapturePump
         catch { }
         try
         {
+            // ColorFilter is the SHARED static SwapRedBlue: drop the reference, never dispose it.
             _blurPaint.ImageFilter = null;
+            _blurPaint.ColorFilter = null;
             _blurFilter?.Dispose();
             _blurFilter = null;
             _blurPaint.Dispose();
-            if (_meltPaint != null) { _meltPaint.ImageFilter = null; _meltPaint.Dispose(); _meltPaint = null; }
+            if (_meltPaint != null) { _meltPaint.ImageFilter = null; _meltPaint.ColorFilter = null; _meltPaint.Dispose(); _meltPaint = null; }
             if (_meltNoisePaint != null) { _meltNoisePaint.Shader = null; _meltNoisePaint.Dispose(); _meltNoisePaint = null; }
             _meltNoiseTile?.Dispose();
             _meltNoiseTile = null;

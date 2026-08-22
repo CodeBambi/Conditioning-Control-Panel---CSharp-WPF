@@ -71,8 +71,7 @@ internal sealed class LayeredCompositorHost : ICompositorHost
         DpiScale = CompositorHostWindow.GetDpiScaleForScreen(screen);
 
         _hwnd = CreateHostWindow(ScreenBoundsPx);
-        if (_hwnd != IntPtr.Zero && excludeFromCapture)
-            SetWindowDisplayAffinity(_hwnd, WDA_EXCLUDEFROMCAPTURE);
+        ApplyCaptureAffinity();
 
         _presentThread = new Thread(PresentLoop)
         {
@@ -112,6 +111,14 @@ internal sealed class LayeredCompositorHost : ICompositorHost
         SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
         ShowWindow(_hwnd, SW_SHOWNA);
         IsVisible = true;
+    }
+
+    /// <inheritdoc/>
+    public void ApplyCaptureAffinity()
+    {
+        // Excluded (brain-drain) surface only; the main surface is never capture-excluded.
+        if (!IsExcludedSurface || _hwnd == IntPtr.Zero) return;
+        OverlayCaptureAffinity.Apply(_hwnd);
     }
 
     public void Hide()
@@ -315,7 +322,6 @@ internal sealed class LayeredCompositorHost : ICompositorHost
     private const uint SWP_NOACTIVATE = 0x0010;
     private const int SW_HIDE = 0;
     private const int SW_SHOWNA = 8;
-    private const uint WDA_EXCLUDEFROMCAPTURE = 0x0011;
     private const int ERROR_CLASS_ALREADY_EXISTS = 1410;
     private const uint BI_RGB = 0;
     private const uint DIB_RGB_COLORS = 0;
@@ -386,9 +392,6 @@ internal sealed class LayeredCompositorHost : ICompositorHost
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-
-    [DllImport("user32.dll")]
-    private static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst, ref POINT pptDst, ref SIZE psize,

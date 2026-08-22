@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -74,6 +74,9 @@ namespace ConditioningControlPanel
         private SplashScreen? _splash;
         private static Thread? _showSignalThread;
         private readonly TaskCompletionSource _patreonInitDone = new();
+        // Serializes the startup auth-token upgrade (see EnsureAuthTokenAsync). Patreon and Discord
+        // init run as parallel background tasks and both used to mint a token unconditionally.
+        private readonly SemaphoreSlim _authUpgradeGate = new(1, 1);
 
         // "Open with CCP" handoff: --play / --edit args parsed at startup.
         // First instance routes directly after MainWindow loads; second instance
@@ -617,6 +620,19 @@ namespace ConditioningControlPanel
         /// HasCloudIdentity covers email login (has UnifiedId) and restored sessions.
         /// </summary>
         public static bool IsLoggedIn => (Patreon?.IsAuthenticated == true) || (Discord?.IsAuthenticated == true) || (SubscribeStar?.IsAuthenticated == true) || HasCloudIdentity;
+
+        /// <summary>
+        /// The gate for every "you just got a perk payout" announcement - the lucky 10x/20x XP
+        /// toasts and their chimes, the Pink Rush popup and the quest-complete popup and sound.
+        /// True means announce nothing; the payouts themselves are never gated on it (see
+        /// <see cref="Models.AppSettings.SuppressPerkNotifications"/> for the full contract).
+        ///
+        /// Null-safe and read at raise time, not cached: the raise sites live in services that
+        /// run before and after Settings exists, and no settings must read as "announce" so a
+        /// startup-order accident can never silently mute the app.
+        /// </summary>
+        public static bool PerkNotificationsSuppressed
+            => Settings?.Current?.SuppressPerkNotifications == true;
 
         /// <summary>
         /// Whether a conditioning session is currently running. Set by MainWindow.
@@ -1198,6 +1214,41 @@ namespace ConditioningControlPanel
         }
         private System.Windows.Threading.DispatcherTimer? _hangStressTimer;
 
+        // Hang-watchdog self-test — see the `--test-ui-hang` call site in OnStartup. Blocks the UI
+        // thread outright, which is indistinguishable from a render-thread deadlock as far as the
+        // watchdog's heartbeat is concerned: no posted callback runs, so the silence grows exactly as
+        // it does in a real freeze. Default 30s (the watchdog fires at 10s + a 3s grace re-check, so
+        // this leaves ample room to observe the report landing and to task-kill mid-wedge in order to
+        // exercise the cross-session sentinel).
+        private void StartUiHangSelfTest(string[] args)
+        {
+            int seconds = 30;
+            for (int i = 0; i < args.Length - 1; i++)
+                if (args[i] == "--test-ui-hang" && int.TryParse(args[i + 1], out int parsed) && parsed > 0)
+                    seconds = Math.Min(parsed, 300);
+
+            int wedgeFor = seconds;
+            Logger?.Warning("[HANGTEST] UI-hang self-test armed - the UI thread will block for {Sec}s in 8s", wedgeFor);
+
+            var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Normal)
+            {
+                Interval = TimeSpan.FromSeconds(8)
+            };
+            timer.Tick += (s, _) =>
+            {
+                timer.Stop();
+                // Leave a breadcrumb first so the report has something to show beyond "(none)".
+                Services.HangContext.Enter("hangtest.deliberate-wedge");
+                Services.HangContext.Note("about to block the UI thread for " + wedgeFor + "s");
+                Logger?.Warning("[HANGTEST] blocking the UI thread NOW for {Sec}s", wedgeFor);
+                System.Threading.Thread.Sleep(wedgeFor * 1000);
+                Logger?.Warning("[HANGTEST] UI thread released");
+                Services.HangContext.Leave("hangtest.deliberate-wedge");
+            };
+            timer.Start();
+            _hangStressTimer = timer;   // root it so it isn't collected
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             // Dump-writer mode: spawned by UiHangWatchdog in a WEDGED sibling CCP process
@@ -1460,6 +1511,22 @@ namespace ConditioningControlPanel
             // ships them all (the last 120KB), burying the real failure and polluting triage.
             RotateCrashLogForVersion(logPath);
 
+            // Before a single service starts: prove the bundled natives actually unpacked. A
+            // truncated single-file extraction cache is never repaired by the .NET host on its
+            // own, so it bricks every subsequent launch - and it surfaces as a XamlParseException
+            // blaming AmbientFxCanvas, which sends everyone hunting the wrong bug. This has to run
+            // ahead of the service block below because Skia backs the compositor, flashes,
+            // subliminals and bubbles, not just that one FX canvas. See NativeBundleGuard.
+            if (!Services.NativeBundleGuard.VerifyOrRepair(() =>
+                {
+                    try { _splash?.CloseImmediate(); } catch { }
+                    _splash = null;
+                }))
+            {
+                Shutdown();
+                return;
+            }
+
             // Surface a single-instance takeover (a prior wedged/headless process was killed so
             // this launch could proceed). Recorded here because Logger isn't up during the handshake.
             if (_recoveredFromStaleInstance)
@@ -1484,6 +1551,12 @@ namespace ConditioningControlPanel
             // crash self-documents (with last-known context) in this session's log.
             Services.Chaos.ChaosCrashSentinel.ConsumeAndReport(Logger);
             Services.EngineCrashSentinel.ConsumeAndReport(Logger);
+
+            // Same idea for a UI FREEZE rather than a crash: if the last session wedged and the
+            // user task-killed it (the only way out of a hard freeze), the watchdog's findings are
+            // sitting in a sentinel file that nothing has read yet. Replay them here so the freeze
+            // shows up in THIS session's log tail — which is what the bug reporter attaches.
+            Services.UiHangWatchdog.ConsumeAndReportPreviousHang(Logger);
 
             // React to monitor topology / resolution changes (unplug, res change, DPI): drop the stale
             // screen cache AND pause layered-window spawns briefly so we don't create fresh surfaces
@@ -2355,6 +2428,14 @@ namespace ConditioningControlPanel
             if (e.Args.Contains("--stress"))
                 StartHangStressMode();
 
+            // `--test-ui-hang [seconds]`: deliberately wedge the UI thread so the hang watchdog can be
+            // verified end to end (report file, sentinel, minidump, and - if the process is killed
+            // while wedged - the "PREVIOUS SESSION HUNG" replay on the next launch). There is no other
+            // way to exercise it: a real wedge is a render-thread deadlock we cannot summon on demand.
+            // Dead code in every normal launch.
+            if (e.Args.Contains("--test-ui-hang"))
+                StartUiHangSelfTest(e.Args);
+
             // `--goon-test`: dev play-test cockpit for the Goon Game 1v1 duel — two independent
             // player panels in this one process (each with its OWN GoonGameService, never the
             // App.GoonGame singleton) so a full duel can be run against yourself over the real
@@ -2463,6 +2544,12 @@ namespace ConditioningControlPanel
                 if (fypGate.Allowed) Services.Fyp.FypHostService.Launch();
                 else Logger?.Information("--fyp ignored: {Reason}", fypGate.Reason);
             }
+
+            // The Arcademy, dev shortcut: `--arcademy` opens the mini-game hub straight away,
+            // bypassing the Play strip. Launch() applies the same T2 + AudioOnlySession gates the
+            // card's click does, so this skips the UI and nothing else.
+            if (e.Args.Contains("--arcademy"))
+                Services.Arcademy.ArcademyHostService.Launch();
 
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
@@ -2858,6 +2945,69 @@ namespace ConditioningControlPanel
 
 
         /// <summary>
+        /// Mints a V2 identity + auth token for a provider that is signed in but has no usable
+        /// unified session yet, at most once per launch.
+        ///
+        /// InitializePatreonAndSyncAsync and InitializeDiscordAsync are two parallel background
+        /// tasks, and each used to run its own /v2/auth/&lt;provider&gt; upgrade under the identical
+        /// "no unified id OR no auth token" condition. Both calls mint a token server-side, the
+        /// server keeps the last write and the client keeps whichever response landed second, so
+        /// roughly half the time a dual-linked account ended up holding a token the server no
+        /// longer recognised and every authed request 401'd from then on. The gate serializes the
+        /// two, and the condition is re-checked INSIDE it so the loser sees the freshly minted
+        /// token and no-ops. Still fully async — nothing on the startup path blocks on this.
+        /// </summary>
+        private async Task EnsureAuthTokenAsync(
+            string provider,
+            Func<string?> getAccessToken,
+            Func<V2AuthService, string, Task<V2AuthService.V2AuthResponse>> authenticate)
+        {
+            if (!NeedsAuthTokenUpgrade()) return;
+
+            await _authUpgradeGate.WaitAsync();
+            try
+            {
+                if (!NeedsAuthTokenUpgrade())
+                {
+                    Logger?.Debug("{Provider} auto-upgrade skipped — another provider already minted the auth token", provider);
+                    return;
+                }
+
+                var accessToken = getAccessToken();
+                if (string.IsNullOrEmpty(accessToken)) return;
+
+                Logger?.Information("Auto-upgrading {Provider} user to V2...", provider);
+                var v2Auth = new V2AuthService();
+                var result = await authenticate(v2Auth, accessToken);
+                if (result.Success && result.User != null)
+                {
+                    v2Auth.ApplyUserDataToSettings(result.User, result.AuthToken);
+                    UnifiedUserId = result.User.UnifiedId;
+                    Logger?.Information("Auto-upgrade complete: {Id}", UnifiedUserId);
+                }
+                else if (result.NeedsRegistration)
+                {
+                    Logger?.Information("{Provider} auto-upgrade: needs registration (new user), skipping", provider);
+                }
+                else
+                {
+                    Logger?.Warning("{Provider} auto-upgrade failed: {Error}", provider, result.Error);
+                }
+            }
+            catch (Exception upgradeEx)
+            {
+                Logger?.Warning(upgradeEx, "{Provider} auto-upgrade failed (non-fatal, will retry next launch)", provider);
+            }
+            finally
+            {
+                _authUpgradeGate.Release();
+            }
+
+            static bool NeedsAuthTokenUpgrade() =>
+                string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken);
+        }
+
+        /// <summary>
         /// Initialize Patreon and load cloud profile if authenticated
         /// </summary>
         private async Task InitializePatreonAndSyncAsync()
@@ -2871,37 +3021,8 @@ namespace ConditioningControlPanel
                 if (Patreon.IsAuthenticated)
                 {
                     // Auto-upgrade: if Patreon is authenticated but no V2 identity, migrate via /v2/auth/patreon
-                    if (string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken))
-                    {
-                        try
-                        {
-                            var accessToken = Patreon.GetAccessToken();
-                            if (!string.IsNullOrEmpty(accessToken))
-                            {
-                                Logger?.Information("Auto-upgrading Patreon user to V2...");
-                                var v2Auth = new V2AuthService();
-                                var result = await v2Auth.AuthenticateWithPatreonAsync(accessToken);
-                                if (result.Success && result.User != null)
-                                {
-                                    v2Auth.ApplyUserDataToSettings(result.User, result.AuthToken);
-                                    UnifiedUserId = result.User.UnifiedId;
-                                    Logger?.Information("Auto-upgrade complete: {Id}", UnifiedUserId);
-                                }
-                                else if (result.NeedsRegistration)
-                                {
-                                    Logger?.Information("Patreon auto-upgrade: needs registration (new user), skipping");
-                                }
-                                else
-                                {
-                                    Logger?.Warning("Patreon auto-upgrade failed: {Error}", result.Error);
-                                }
-                            }
-                        }
-                        catch (Exception upgradeEx)
-                        {
-                            Logger?.Warning(upgradeEx, "Patreon auto-upgrade failed (non-fatal, will retry next launch)");
-                        }
-                    }
+                    await EnsureAuthTokenAsync("Patreon", () => Patreon.GetAccessToken(),
+                        (v2Auth, accessToken) => v2Auth.AuthenticateWithPatreonAsync(accessToken));
 
                     Logger?.Information("Patreon authenticated, loading cloud profile...");
                     await ProfileSync.LoadProfileAsync();
@@ -2915,7 +3036,8 @@ namespace ConditioningControlPanel
                 var s = Settings?.Current;
                 if (s != null && s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
                 {
-                    var hasPatreonAccess = Patreon?.HasPremiumAccess == true;
+                    var hasPatreonAccess = Patreon?.HasPremiumAccess == true
+                                           || DailyFree?.IsFreeToday("takeover") == true;
                     if (hasPatreonAccess && Autonomy?.IsEnabled != true)
                     {
                         Autonomy?.Start();
@@ -2966,37 +3088,8 @@ namespace ConditioningControlPanel
                     // Auto-upgrade: if Discord is authenticated but no V2 identity OR no auth token, migrate via /v2/auth/discord
                     // (legacy users created before Feb 2026 may have a UnifiedUserId but no auth_token_hash on the server —
                     // re-running /v2/auth/discord bootstraps a fresh token for them)
-                    if (string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken))
-                    {
-                        try
-                        {
-                            var accessToken = Discord.GetAccessToken();
-                            if (!string.IsNullOrEmpty(accessToken))
-                            {
-                                Logger?.Information("Auto-upgrading Discord user to V2...");
-                                var v2Auth = new V2AuthService();
-                                var result = await v2Auth.AuthenticateWithDiscordAsync(accessToken);
-                                if (result.Success && result.User != null)
-                                {
-                                    v2Auth.ApplyUserDataToSettings(result.User, result.AuthToken);
-                                    UnifiedUserId = result.User.UnifiedId;
-                                    Logger?.Information("Auto-upgrade complete: {Id}", UnifiedUserId);
-                                }
-                                else if (result.NeedsRegistration)
-                                {
-                                    Logger?.Information("Discord auto-upgrade: needs registration (new user), skipping");
-                                }
-                                else
-                                {
-                                    Logger?.Warning("Discord auto-upgrade failed: {Error}", result.Error);
-                                }
-                            }
-                        }
-                        catch (Exception upgradeEx)
-                        {
-                            Logger?.Warning(upgradeEx, "Discord auto-upgrade failed (non-fatal, will retry next launch)");
-                        }
-                    }
+                    await EnsureAuthTokenAsync("Discord", () => Discord.GetAccessToken(),
+                        (v2Auth, accessToken) => v2Auth.AuthenticateWithDiscordAsync(accessToken));
 
                     // Wait for Patreon init to finish (up to 10s) before deciding whether to load profile
                     // This prevents a race where Discord init finishes first and calls LoadProfileAsync
@@ -4397,6 +4490,10 @@ Application State:
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
             try { Services.EngineCrashSentinel.Clear(); } catch { }
             try { Services.CornerGifService.ClearSentinelOnCleanExit(); } catch { }
+            // A shutdown that takes >13s (video teardown, haptics stop, WebView2 dispose) can trip
+            // the watchdog on the way out. That is not the freeze we are hunting — disarm it so the
+            // next launch doesn't cry hang over a clean, if slow, exit.
+            try { Services.UiHangWatchdog.ClearSentinelOnCleanExit(); } catch { }
 
             // Haptics FIRST and synchronously (bounded ~2s): a Lovense level has no server-side
             // watchdog, so a toy we don't countermand keeps running after the app is gone. This
@@ -4408,6 +4505,13 @@ Application State:
 
             // DtRH browser game: dispose the WebView2 window/process if it's up.
             try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }
+
+            // The Arcademy: same reason - a WebView2 process outliving the app is a leak, and its
+            // meta store has a debounced write that must be flushed before we go. ShutdownFlush, NOT
+            // CloseActive: the graceful close waits on a 1200ms DispatcherTimer for the page's
+            // exit-done, and that timer can never tick from inside OnExit - so the flush it guards
+            // never happened and the last class's grades/streak went with the process.
+            try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch { }
 
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it

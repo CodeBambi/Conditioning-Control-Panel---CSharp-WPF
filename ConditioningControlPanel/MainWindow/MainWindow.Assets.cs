@@ -1114,18 +1114,7 @@ namespace ConditioningControlPanel
                 contextMenu.PlacementTarget is Border border &&
                 border.DataContext is AssetFileItem file)
             {
-                try
-                {
-                    var filePath = file.FullPath;
-                    if (System.IO.File.Exists(filePath))
-                    {
-                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\"");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "Failed to open file in Explorer");
-                }
+                Helpers.ExplorerLauncher.RevealInExplorer(file.FullPath);
             }
         }
 

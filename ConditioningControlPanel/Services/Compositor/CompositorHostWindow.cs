@@ -97,13 +97,17 @@ public class CompositorHostWindow : Window, ICompositorHost
         _hwnd = new WindowInteropHelper(this).Handle;
         ApplyNativeState();
 
-        if (_excludeFromCapture && _hwnd != IntPtr.Zero)
-        {
-            // Brain-drain surface only: keep the effect out of screenshots/streams and out of
-            // the app's own capture loops (self-capture feedback). Never apply this to the
-            // main surface - subliminal/flash/spiral visibility in capture is a product decision.
-            SetWindowDisplayAffinity(_hwnd, WDA_EXCLUDEFROMCAPTURE);
-        }
+        ApplyCaptureAffinity();
+    }
+
+    /// <inheritdoc/>
+    public void ApplyCaptureAffinity()
+    {
+        // Brain-drain surface only: keep the effect out of screenshots/streams unless the user
+        // opted in (AppSettings.AllowOverlayCapture). Never touch the main surface -
+        // subliminal/flash/spiral visibility in capture is a product decision.
+        if (!_excludeFromCapture || _hwnd == IntPtr.Zero) return;
+        OverlayCaptureAffinity.Apply(_hwnd);
     }
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
@@ -173,7 +177,6 @@ public class CompositorHostWindow : Window, ICompositorHost
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_FRAMECHANGED = 0x0020;
     private const uint SWP_SHOWWINDOW = 0x0040;
-    private const uint WDA_EXCLUDEFROMCAPTURE = 0x0011;
     private const uint MONITOR_DEFAULTTONEAREST = 2;
     private const int MDT_EFFECTIVE_DPI = 0;
 
@@ -185,9 +188,6 @@ public class CompositorHostWindow : Window, ICompositorHost
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-
-    [DllImport("user32.dll")]
-    private static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
 
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromPoint(System.Drawing.Point pt, uint flags);

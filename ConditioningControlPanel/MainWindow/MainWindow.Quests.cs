@@ -41,8 +41,15 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                // Perk-announcement opt-out (meadow, 2026-08-18). The quest is still completed
+                // and the XP is still paid above us in QuestService - what goes is the ping and
+                // the floating card. The inline QuestCompleteBanner below stays: it lives inside
+                // the Quests tab rather than on top of whatever you were watching, which is the
+                // distinction the whole setting is drawn on.
+                bool announce = !App.PerkNotificationsSuppressed;
+
                 // Play celebration sound from flashes audio
-                App.Flash?.PlayRandomSound();
+                if (announce) App.Flash?.PlayRandomSound();
 
                 // Show floating popup notification
                 try
@@ -50,9 +57,13 @@ namespace ConditioningControlPanel
                     _questCompletePopup?.Close();
                 }
                 catch { }
+                _questCompletePopup = null;
 
-                _questCompletePopup = new QuestCompletePopup(e.QuestDefinition.Name, e.XPAwarded);
-                _questCompletePopup.Show();
+                if (announce)
+                {
+                    _questCompletePopup = new QuestCompletePopup(e.QuestDefinition.Name, e.XPAwarded);
+                    _questCompletePopup.Show();
+                }
 
                 // Also show inline banner if quest tab is visible
                 QuestsTab.QuestCompleteBanner.Visibility = Visibility.Visible;

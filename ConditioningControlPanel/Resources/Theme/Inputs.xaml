@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fx="clr-namespace:ConditioningControlPanel.Resources.Theme">
 
     <!-- ============================================================================
          Velvet Kit — Inputs.xaml (UI polish 2, 2026-08-12)
@@ -328,10 +329,15 @@
                             SnapsToDevicePixels="True">
                         <!-- Effect lives here at Opacity 0 so the focus glow can be
                              animated (the FocusGlowTextBox recipe). Nothing paints
-                             while opacity is 0. -->
+                             while opacity is 0. Opacity is driven through the
+                             fx:InputFx.GlowLevel attached property on the templated
+                             TextBox, NOT a name-targeted storyboard - see InputFx.cs
+                             for why (name scope is empty before ApplyTemplate, and a
+                             pre-layout Focus() then throws out of the caller). -->
                         <Border.Effect>
                             <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="8"
-                                              ShadowDepth="0" Opacity="0"/>
+                                              ShadowDepth="0"
+                                              Opacity="{Binding Path=(fx:InputFx.GlowLevel), RelativeSource={RelativeSource TemplatedParent}, FallbackValue=0}"/>
                         </Border.Effect>
                         <!-- Hidden/Hidden mirrors the stock template: TextBoxBase pushes
                              its own Horizontal/VerticalScrollBarVisibility onto this
@@ -355,8 +361,7 @@
                         <EventTrigger RoutedEvent="GotKeyboardFocus">
                             <BeginStoryboard>
                                 <Storyboard>
-                                    <DoubleAnimation Storyboard.TargetName="Bd"
-                                                     Storyboard.TargetProperty="Effect.Opacity"
+                                    <DoubleAnimation Storyboard.TargetProperty="(fx:InputFx.GlowLevel)"
                                                      To="0.45" Duration="0:0:0.2"/>
                                 </Storyboard>
                             </BeginStoryboard>
@@ -364,8 +369,7 @@
                         <EventTrigger RoutedEvent="LostKeyboardFocus">
                             <BeginStoryboard>
                                 <Storyboard>
-                                    <DoubleAnimation Storyboard.TargetName="Bd"
-                                                     Storyboard.TargetProperty="Effect.Opacity"
+                                    <DoubleAnimation Storyboard.TargetProperty="(fx:InputFx.GlowLevel)"
                                                      To="0" Duration="0:0:0.2"/>
                                 </Storyboard>
                             </BeginStoryboard>

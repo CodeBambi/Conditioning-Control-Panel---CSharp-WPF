@@ -74,38 +74,15 @@ namespace ConditioningControlPanel
         private readonly bool _startWithTutorial;
 
         // ─── Slot Definitions ────────────────────────────────────
-        private static readonly (string Key, string Name)[] AchievementSlots =
-        {
-            ("achievements/lv_10.png", "Plastic Initiation"),
-            ("achievements/Dumb_Bimbo.png", "Dumb Bimbo"),
-            ("achievements/lv_50.png", "Fully Synthetic"),
-            ("achievements/docile_cow.png", "Docile Cow"),
-            ("achievements/perfect_plastic_puppet.png", "Perfect Plastic Puppet"),
-            ("achievements/BrainwashedSlavedoll.png", "Brainwashed Slavedoll"),
-            ("achievements/PlatinumPuppet.png", "Platinum Puppet"),
-            ("achievements/10_hours_pink.png", "Rose-Tinted Reality"),
-            ("achievements/deep_sleep.png", "Deep Sleep Mode"),
-            ("achievements/daily_maintenance.png", "Daily Maintenance"),
-            ("achievements/retinal_burn.png", "Retinal Burn"),
-            ("achievements/morning_glory.png", "Morning Glory"),
-            ("achievements/player_2_disconnected.png", "Player 2 Disconnected"),
-            ("achievements/sofa_decor.png", "Sofa Decor"),
-            ("achievements/look_but_dont_touch.png", "Look But Don't Touch"),
-            ("achievements/spiral_eyes.png", "Spiral Eyes"),
-            ("achievements/Mathematician's_nightmare.png", "Mathematician's Nightmare"),
-            ("achievements/pop_the_Thought.png", "Pop Goes The Thought"),
-            ("achievements/typing_tutor.png", "Typing Tutor"),
-            ("achievements/obedience_reflex.png", "Obedience Reflex"),
-            ("achievements/mercy_beggar.png", "Mercy Beggar"),
-            ("achievements/clean_slate.png", "Clean Slate"),
-            ("achievements/corner_hit.png", "Corner Hit"),
-            ("achievements/Neon_obsession.png", "Neon Obsession"),
-            ("achievements/What_panic_button.png", "Panic Button?"),
-            ("achievements/relapse.png", "Relapse"),
-            ("achievements/total_lockdown.png", "Total Lockdown"),
-            ("achievements/system_overload.png", "System Overload"),
-            ("achievements/how_many.png", "How Many?"),
-        };
+        // Derived from the achievement registry instead of hand-listed. The literal that used
+        // to live here froze at 29 entries while Achievement.All grew to 69, so mod authors
+        // could not supply badge art for two thirds of the Trophy Case, and it still offered a
+        // slot for achievements/how_many.png - an achievement that no longer exists in the
+        // registry, so nothing would ever render the art an author put there.
+        //
+        // Achievement.All is built once and never mutated, so enumerating it yields insertion
+        // order, which keeps the slots in rough progression order the way the old list was.
+        private static readonly (string Key, string Name)[] AchievementSlots = ModAchievementSlots.Build();
 
         private static readonly (string Key, string Name)[] FeatureSlots =
         {
@@ -2722,6 +2699,72 @@ namespace ConditioningControlPanel
                 try { Directory.Delete(_loadedTempDir, recursive: true); } catch { }
                 _loadedTempDir = null;
             }
+        }
+    }
+
+    /// <summary>
+    /// Builds the Mod Creator's achievement art slots from <see cref="Achievement.All"/>.
+    ///
+    /// Split out of <see cref="ModCreatorWindow"/> so the derivation is testable without a
+    /// Dispatcher, and derived rather than hand-listed because the hand-listed version rotted:
+    /// it stopped at 29 of the registry's 69 achievements and still offered a slot for a badge
+    /// (how_many.png) that no achievement claims any more.
+    /// </summary>
+    internal static class ModAchievementSlots
+    {
+        /// <summary>
+        /// One slot per distinct badge file, in registry order.
+        ///
+        /// The key is the packed resource path (<c>achievements/&lt;ImageName&gt;</c>); the name is
+        /// the label printed over the art slot. Two achievements can share one badge file
+        /// (first_week_graduate reuses daily_maintenance.png) and every dictionary in the editor
+        /// is keyed by resource key, so a duplicate would collide and throw. The shared file gets
+        /// a single slot whose label names both achievements it feeds, so an author can see what
+        /// their art will be used for.
+        /// </summary>
+        public static (string Key, string Name)[] Build()
+        {
+            var slots = new List<(string Key, string Name)>();
+            // Ordinal-ignore-case because the key becomes a filename inside the .ccpmod, and two
+            // ImageNames differing only in case would be one file on disk.
+            var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var achievement in Achievement.All.Values)
+            {
+                if (string.IsNullOrWhiteSpace(achievement.ImageName)) continue;
+
+                var key = $"achievements/{achievement.ImageName}";
+                var name = SlotName(achievement);
+
+                if (seen.TryGetValue(key, out var index))
+                {
+                    var existing = slots[index].Name;
+                    if (existing.IndexOf(name, StringComparison.OrdinalIgnoreCase) < 0)
+                        slots[index] = (slots[index].Key, $"{existing} / {name}");
+                    continue;
+                }
+
+                seen[key] = slots.Count;
+                slots.Add((key, name));
+            }
+
+            return slots.ToArray();
+        }
+
+        /// <summary>
+        /// The achievement's localized name, falling back to its built-in English name when the
+        /// localization key is missing - LocalizationManager echoes an unknown key straight back,
+        /// which would print a raw <c>achievement_x_name</c> over the art slot (only 40 of the 69
+        /// achievements currently carry a name key). Same rule the profile title uses in
+        /// MainWindow.ProfileCosmetics.ResolveAchievementTitle. Mod-awareness is applied later by
+        /// BuildImageSlotsSection, exactly as it is for every other slot list.
+        /// </summary>
+        private static string SlotName(Achievement achievement)
+        {
+            var localized = achievement.LocalizedName;
+            return string.IsNullOrWhiteSpace(localized) || localized == $"achievement_{achievement.Id}_name"
+                ? achievement.Name
+                : localized;
         }
     }
 }

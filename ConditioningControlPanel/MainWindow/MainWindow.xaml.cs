@@ -466,6 +466,11 @@ namespace ConditioningControlPanel
                         // cards on the wheel (For You, Remote Control) would otherwise go on
                         // wearing yesterday's answer until the user re-entered the door.
                         RefreshPlayCards();
+                        // #978: and the DOORS themselves. Six feature pages carry their own
+                        // translucent padlock veil, painted only by UpdatePatreonUI, which no
+                        // rotation event ever reached - so a free day lifted every band on the
+                        // rail and the wall and still left the destination page bolted shut.
+                        RefreshEntitlementVeils();
                     }));
             }
 
@@ -726,7 +731,8 @@ namespace ConditioningControlPanel
                 if (s != null && s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven
                     && App.Autonomy?.IsEnabled != true)
                 {
-                    var hasAccess = App.Patreon?.HasPremiumAccess == true;
+                    var hasAccess = App.Patreon?.HasPremiumAccess == true
+                                    || App.DailyFree?.IsFreeToday("takeover") == true;
                     if (hasAccess)
                     {
                         App.Autonomy?.Start();
@@ -1075,6 +1081,20 @@ namespace ConditioningControlPanel
             // those presses can't fall into the "not running" branch and exit the whole app.
             // Reactivates on its own once the game window closes (IsActive flips false).
             if (Services.Chaos.DtrhHostService.IsActive) { VideoDiag.Log("PANIC", "handed off to the DtRH web game window"); return; }
+
+            // The Arcademy (its own WebView2 window) owns the panic key while it's up, same shape as
+            // the DtRH hand-off above and for the same reason: without this rung, two Esc taps with
+            // no session running fell straight through to the "not running" branch below and EXITED
+            // THE WHOLE APP from inside a mini-game. Its own two-rung ladder is press 1 = suspend
+            // (every effect dropped, the class frozen behind a Resume card) and press 2 within 2s =
+            // close the Arcademy and restore the control panel, so the emergency stop still stops
+            // everything and nobody is trapped. Reactivates on its own once the window closes.
+            if (Services.Arcademy.ArcademyHostService.IsActive)
+            {
+                VideoDiag.Log("PANIC", "handed off to the Arcademy window (suspend, then close)");
+                Services.Arcademy.ArcademyHostService.HandlePanicPress();
+                return;
+            }
 
             // For You feed: a two-rung ladder. Press 1 drops ghost mode if the feed is parked as a
             // see-through mirror (otherwise the user is staring at a translucent pane they cannot
@@ -2646,32 +2666,56 @@ namespace ConditioningControlPanel
 
         private void CenterOnPrimaryScreen()
         {
-            // Get the primary screen
-            var primaryScreen = System.Windows.Forms.Screen.PrimaryScreen;
-            if (primaryScreen == null) return;
-            
-            // Get DPI scaling
-            var dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
-            if (dpiScale == 0) dpiScale = 1;
-            
-            // Calculate center position on primary screen
-            var screenWidth = primaryScreen.WorkingArea.Width / dpiScale;
-            var screenHeight = primaryScreen.WorkingArea.Height / dpiScale;
-            var screenLeft = primaryScreen.WorkingArea.Left / dpiScale;
-            var screenTop = primaryScreen.WorkingArea.Top / dpiScale;
+            try
+            {
+                // Get the primary screen. Null (and an empty Screen.AllScreens) is a real state
+                // during display-topology churn — skip the centring, but still run the per-monitor
+                // fit below, which does its own guarding.
+                var primaryScreen = System.Windows.Forms.Screen.PrimaryScreen;
+                if (primaryScreen != null)
+                {
+                    // Get DPI scaling
+                    var dpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+                    if (dpiScale <= 0) dpiScale = 1;
 
-            // Clamp SIZE to the work area before centring. Phase 1 grew the default window to
-            // 1656x943 DIPs, which does not fit a 1080p desktop at 125% scaling (1536x816 logical)
-            // — an unclamped centre put Left at -60 and the title-bar buttons past the right edge.
-            // The root Viewbox (MainWindow.xaml:139) is Stretch="Fill" over a fixed design canvas,
-            // so shrinking the window scales the content instead of clipping it. Width/Height are
-            // still floored by MinWidth/MinHeight; the Max() below keeps the top-left corner
-            // on-screen in that case, so the window is always grabbable.
-            if (screenWidth > 0) Width = Math.Min(Width, screenWidth);
-            if (screenHeight > 0) Height = Math.Min(Height, screenHeight);
+                    // Calculate center position on primary screen
+                    var screenWidth = primaryScreen.WorkingArea.Width / dpiScale;
+                    var screenHeight = primaryScreen.WorkingArea.Height / dpiScale;
+                    var screenLeft = primaryScreen.WorkingArea.Left / dpiScale;
+                    var screenTop = primaryScreen.WorkingArea.Top / dpiScale;
 
-            Left = Math.Max(screenLeft, screenLeft + (screenWidth - Width) / 2);
-            Top = Math.Max(screenTop, screenTop + (screenHeight - Height) / 2);
+                    // Clamp SIZE to the work area before centring. Phase 1 grew the default window
+                    // to 1656x943 DIPs, which does not fit a 1080p desktop at 125% scaling
+                    // (1536x816 logical) — an unclamped centre put Left at -60 and the title-bar
+                    // buttons past the right edge. The root Viewbox (MainWindow.xaml, wrapping
+                    // x:Name="DesignCanvas") is Stretch="Fill" over a fixed design canvas, so
+                    // shrinking the window scales the content instead of clipping it.
+                    //
+                    // The floors have to come down FIRST or the clamp is a no-op: WPF enforces
+                    // MinWidth/MinHeight over whatever we assign, and at 300% scaling the work area
+                    // is smaller than both (see MainWindow.WorkAreaFit.cs). The Max() below still
+                    // keeps the top-left corner on-screen in the residual case, so the window
+                    // stays grabbable.
+                    RelaxSizeFloorsTo(screenWidth, screenHeight);
+
+                    if (SizeToContent != SizeToContent.Manual) SizeToContent = SizeToContent.Manual;
+                    if (screenWidth > 0) Width = Math.Min(Width, screenWidth);
+                    if (screenHeight > 0) Height = Math.Min(Height, screenHeight);
+
+                    Left = Math.Max(screenLeft, screenLeft + (screenWidth - Width) / 2);
+                    Top = Math.Max(screenTop, screenTop + (screenHeight - Height) / 2);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "CenterOnPrimaryScreen failed");
+            }
+
+            // Primary is only a starting guess — the window may well be opening on a second monitor
+            // with a different scale and a different work area. Once there is an HWND, hand off to
+            // the per-monitor fit, which measures the screen we are ACTUALLY on. No-op before the
+            // handle exists (the constructor call), which the SourceInitialized hook then covers.
+            FitToCurrentMonitorWorkArea("center-on-primary");
         }
 
 

@@ -191,6 +191,13 @@ namespace ConditioningControlPanel
         /// race whose winner is whichever call happened to be last.</summary>
         private const string NavDoorLabelHostTag = "navdoorlabel";
 
+        /// <summary>Marks a rail TextBlock that must stay visible while the rail is SHUT (today:
+        /// the search pill's lens glyph, which is the whole pill in the collapsed state).
+        /// <see cref="CacheNavRailParts"/> leaves tagged text out of the global label fade
+        /// entirely - not per-row driven like <see cref="NavDoorLabelHostTag"/>, just never
+        /// touched.</summary>
+        private const string NavRailStaticTextTag = "navrailstatic";
+
         private bool _navRailExpanded;
         private bool _navRailReady;
 
@@ -302,6 +309,18 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// The rail's search pill (MainWindow.xaml, above NavRailScroll). Same call as the Ctrl+K
+        /// InputBinding in MainWindow.xaml.cs - the pill exists to ADVERTISE that shortcut, so the
+        /// two must stay one code path. Toggle, not Show: a second press/click closing the palette
+        /// is the behaviour the keyboard already has.
+        /// </summary>
+        private void BtnNavSearch_Click(object sender, RoutedEventArgs e)
+        {
+            try { SettingsPaletteWindow.Toggle(this); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BtnNavSearch_Click: palette toggle failed"); }
+        }
+
+        /// <summary>
         /// Decode cap for a door medallion. The art is authored at 64px native and the tile never
         /// exceeds 56 DIP, so 128 is 2x headroom for a high-DPI display - and it is the reason
         /// this goes through the DECODED resolver: a mod is free to ship a 2048px door_play.png,
@@ -369,6 +388,9 @@ namespace ConditioningControlPanel
                 // The big door names are driven per row with a stagger (SetNavRailExpanded), so
                 // they must NOT also be in the global label fade - see NavDoorLabelHostTag.
                 if (child is TextBlock door && _navDoorLabelTexts.Contains(door)) continue;
+                // Static rail chrome (the search pill's lens) is the shut rail's face - fading
+                // it with the labels would blank the pill. See NavRailStaticTextTag.
+                if (child is TextBlock st && (st.Tag as string) == NavRailStaticTextTag) continue;
                 if (child is TextBlock tb) _navRailLabels.Add(tb);
                 else if (child is ButtonBase b) _navRailButtons.Add(b);
                 CacheNavRailParts(child);

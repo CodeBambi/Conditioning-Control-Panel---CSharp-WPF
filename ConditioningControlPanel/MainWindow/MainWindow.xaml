@@ -441,11 +441,76 @@
             </Border.Background>
             <Grid Margin="0,10,0,10">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <ScrollViewer x:Name="NavRailScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                <!-- THE SEARCH PILL. The Ctrl+K palette existed for a full release without a
+                     single pixel advertising it; this is that pixel. Clicking it routes through
+                     the exact same Toggle the InputBindings entry in MainWindow.xaml.cs uses, so
+                     the pill and the shortcut can never open two different things.
+
+                     Deliberately NOT a door medallion: no NavDoorMap row, no four-child contract,
+                     and no 40px Grid.Column="0" Viewbox (NavRailFlyoutTests counts those - keep it
+                     that way). It is a plain pill whose parts ride the rail's existing machinery:
+                     - the lens glyph is a TextBlock tagged "navrailstatic", the one tag
+                       CacheNavRailParts (MainWindow.NavRail.cs) exempts from the global label
+                       fade, so it stays visible while the rail is shut;
+                     - the name and the keycap text are ordinary rail TextBlocks, so the same
+                       global fade that reveals every other label reveals them (authored Opacity 0
+                       = the shut state, and what a failed InitializeNavRail leaves on screen);
+                     - the keycap's chrome is a Border, which the fade walk cannot drive, so its
+                       Opacity is BOUND to the name's - one animation, two riders.
+                     Sized for the shut rail: 56 column - 8px margins - 1px borders = a 40x30 pill
+                     with the lens centred in its fixed 38px first column. -->
+                <Button x:Name="BtnNavSearch" Grid.Row="0" Height="30" Margin="8,0,8,10"
+                        Cursor="Hand" Click="BtnNavSearch_Click"
+                        ToolTip="{loc:Str tooltip_nav_search}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="SearchPillBg" CornerRadius="15"
+                                    Background="#14FFFFFF"
+                                    BorderBrush="{DynamicResource PanelAccentBrush}"
+                                    BorderThickness="1">
+                                <ContentPresenter/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="SearchPillBg" Property="Background" Value="#22FF69B4"/>
+                                    <Setter TargetName="SearchPillBg" Property="BorderBrush" Value="#88FF69B4"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="SearchPillBg" Property="Background" Value="#33FF69B4"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="38"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Tag="navrailstatic" Text="🔍" FontSize="13"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtNavSearchLabel" Grid.Column="1" Opacity="0"
+                                   Text="{loc:Str nav_search_label}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextLightBrush}"
+                                   VerticalAlignment="Center" TextWrapping="NoWrap"/>
+                        <Border Grid.Column="2" CornerRadius="6" Margin="0,0,9,0" Padding="6,1"
+                                VerticalAlignment="Center" IsHitTestVisible="False"
+                                Background="#22000000" BorderThickness="1"
+                                BorderBrush="{DynamicResource PanelAccentBrush}"
+                                Opacity="{Binding Opacity, ElementName=TxtNavSearchLabel}">
+                            <TextBlock Text="{loc:Str nav_search_keys}" Opacity="0" FontSize="11"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       TextWrapping="NoWrap"/>
+                        </Border>
+                    </Grid>
+                </Button>
+
+                <ScrollViewer x:Name="NavRailScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <!-- ============ TOP-PACKED DOORS (Velvet Kit, UI polish 2) ============
                          Six Auto door rows with fixed SPACER rows between them, all pooled at
@@ -481,10 +546,10 @@
 
                          Headroom, in fixed canvas units (the whole UI is a Viewbox over a
                          1585x901 canvas, so this NEVER changes with the window size): the
-                         column is ~760px, the six 68px door rows plus five 8px gaps are 448,
-                         and the widest accordion (Play, 8 entries x NavEntryRowHeight 32) is
-                         256 - 704 total. A door would need ~9 entries before the rail
-                         starts scrolling. -->
+                         column is ~760px minus the 40px search pill row above = ~720, the six
+                         68px door rows plus five 8px gaps are 448, and the widest accordion
+                         (Play, 8 entries x NavEntryRowHeight 32) is 256 - 704 total. A door
+                         would need ~9 entries before the rail starts scrolling. -->
                     <Grid MinHeight="{Binding ViewportHeight, ElementName=NavRailScroll}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="0"/>
@@ -1130,7 +1195,7 @@
 
                 <!-- Settings door: pinned to the bottom and visually separated. Phase 1 routes
                      it at the Dashboard; Phase 2 gives it its own view (key "appsettings"). -->
-                <StackPanel Grid.Row="1">
+                <StackPanel Grid.Row="2">
                     <!-- THE SPIRAL RAIL (CONTRACTS-0812-FINISH §9). Collapsed in every shipped
                          build: AppSettings.DescentSpiralRailEnabled is false and has no editor,
                          and even with it set the control stays collapsed until the server ships
@@ -1788,8 +1853,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_8_1_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_8_1_relapse}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_8_3_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_8_3_relapse}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">

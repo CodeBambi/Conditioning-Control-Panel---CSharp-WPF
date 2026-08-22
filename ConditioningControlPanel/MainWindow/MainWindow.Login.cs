@@ -180,7 +180,11 @@ namespace ConditioningControlPanel
         /// Called on login (before sync), logout, and account deletion.
         /// </summary>
         /// <param name="generateQuests">If false, skip quest generation (caller will generate after cloud sync)</param>
-        private void ClearProgressionData(bool generateQuests = true)
+        /// <param name="preserveQuestProgress">If true, keep quests.json intact (logout path,
+        /// BUG-BN8X9B9SZ5: active quest progress is local-only — the server holds aggregates,
+        /// not the 3/3 counters — so a logout-time wipe is unrecoverable on same-account
+        /// re-login; QuestService.EnsureOwnedBy wipes it later if a different account signs in)</param>
+        private void ClearProgressionData(bool generateQuests = true, bool preserveQuestProgress = false)
         {
             if (App.Settings?.Current != null)
             {
@@ -236,8 +240,12 @@ namespace ConditioningControlPanel
                 App.Settings.Save();
             }
 
-            // Reset quest progress (active quests + stats in quests.json)
-            App.Quests?.ResetProgress(generateQuests);
+            // Reset quest progress (active quests + stats in quests.json) — unless this is a
+            // logout preserving it for a possible same-account re-login (see param doc above).
+            if (!preserveQuestProgress)
+            {
+                App.Quests?.ResetProgress(generateQuests);
+            }
 
             // Reset achievement progress (unlocked achievements + stats in achievements.json)
             App.Achievements?.ResetProgress();
@@ -250,7 +258,14 @@ namespace ConditioningControlPanel
         /// Clears all account-specific data from settings, quests, and achievements.
         /// Called on logout and account deletion to prevent stale data bleeding into the next session.
         /// </summary>
-        private void ClearAccountData()
+        /// <param name="wipeQuestProgress">True only for account DELETION. On a plain logout the
+        /// local quest file is preserved and stamped with the departing account's id instead
+        /// (BUG-BN8X9B9SZ5): active quest progress lives only in quests.json, so wiping it here
+        /// destroyed the day's 3/3-style progress on every "log out and back in" — including the
+        /// one we ourselves prescribe as auth-recovery advice. A different account signing in
+        /// later still triggers the wipe via QuestService.EnsureOwnedBy / the login dialog's
+        /// account-switch clear.</param>
+        private void ClearAccountData(bool wipeQuestProgress = false)
         {
             // Tear down SubscribeStar too. It's a third login provider (alongside
             // Patreon/Discord) but the rest of the logout plumbing predates it, so
@@ -258,6 +273,15 @@ namespace ConditioningControlPanel
             // whitelist/tokens would otherwise keep granting premium and re-inject
             // UnifiedUserId on the next launch — premium that survives "Log Out".
             App.SubscribeStar?.Logout();
+
+            // Stamp the quest file with the account that is signing out, BEFORE the identity
+            // fields are nulled below, so EnsureOwnedBy can tell a same-account re-login (keep)
+            // from an account switch (wipe).
+            var departingUnifiedId = App.UnifiedUserId ?? App.Settings?.Current?.UnifiedId;
+            if (!wipeQuestProgress)
+            {
+                App.Quests?.StampOwner(departingUnifiedId);
+            }
 
             // Clear identity
             App.UnifiedUserId = null;
@@ -273,8 +297,8 @@ namespace ConditioningControlPanel
                 App.Settings.Current.HasLinkedPatreon = false;
             }
 
-            // Clear all progression data
-            ClearProgressionData();
+            // Clear all progression data (quest file survives a plain logout — see param doc)
+            ClearProgressionData(preserveQuestProgress: !wipeQuestProgress);
 
             // ClearProgressionData just zeroed streaks/XP locally. Re-arm the sync service's
             // defaults guard so a re-login in this same app session READS the server profile

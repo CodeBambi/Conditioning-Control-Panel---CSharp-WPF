@@ -178,21 +178,10 @@ namespace ConditioningControlPanel
 
             try
             {
-                if (File.Exists(path))
-                {
-                    Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
-                    return;
-                }
+                // Selects the file, or falls back to its parent folder if the file is gone (#998).
+                if (Helpers.ExplorerLauncher.RevealInExplorer(path)) return;
 
-                // File missing: try to open the parent folder if it still exists.
-                var parent = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(parent) && Directory.Exists(parent))
-                {
-                    Process.Start(new ProcessStartInfo("explorer.exe", $"\"{parent}\"") { UseShellExecute = true });
-                    App.Logger?.Information("SessionCompleteWindow: file gone, opened parent folder {Parent}", parent);
-                    return;
-                }
-
+                // Neither the file nor its folder survived - say so rather than doing nothing.
                 MessageBox.Show(this,
                     Loc.GetF("msg_file_not_found_with_path", path),
                     Loc.Get("title_error"),

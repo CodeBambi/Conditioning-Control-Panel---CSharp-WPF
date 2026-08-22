@@ -312,22 +312,8 @@ namespace ConditioningControlPanel
 
         private void RevealInExplorer(string path)
         {
-            try
-            {
-                if (File.Exists(path))
-                    Process.Start("explorer.exe", $"/select,\"{path}\"");
-                else
-                {
-                    // File gone - just open the containing folder if it still exists.
-                    var dir = Path.GetDirectoryName(path);
-                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
-                        Process.Start("explorer.exe", $"\"{dir}\"");
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "MediaHistoryWindow: reveal in explorer failed");
-            }
+            // Helper handles the missing-file fallback to the containing folder (#998).
+            Helpers.ExplorerLauncher.RevealInExplorer(path);
         }
 
         // ---- Chrome -------------------------------------------------------

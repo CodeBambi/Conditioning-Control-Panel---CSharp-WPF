@@ -158,6 +158,9 @@ namespace ConditioningControlPanel.Services
             // pools are actually overridden: IsOverridingPhrasePools stays false until
             // RememberPrescribedPools runs below.
             Active = this;
+            // Breadcrumb for the hang report: names the session (and, for a program day, which day
+            // via HangContext's passive program probe) that was live when the UI thread died.
+            HangContext.Enter("session:" + (session?.Name ?? "?"));
             _isPaused = false;
             _pauseCount = 0;
             _pausedElapsedTime = TimeSpan.Zero;
@@ -289,6 +292,7 @@ namespace ConditioningControlPanel.Services
             // (ElapsedTime property returns Zero when not running)
             var finalElapsedTime = ElapsedTime;
 
+            HangContext.Leave("session:" + (_currentSession?.Name ?? "?"));
             _isRunning = false;
             // Hand phrase-pool custody back to the user. Cleared here rather than at the end of
             // StopSession so nothing can read stale prescribed pools while teardown is in flight;
@@ -1553,6 +1557,9 @@ namespace ConditioningControlPanel.Services
             _savedSettings = null;
         }
         
+        /// <summary>Source GIFs beyond this many pixels are logged as a hazard - see ShowCornerGif.</summary>
+        private const long CornerGifOversizeSourcePixels = 4_000_000;   // ~2000x2000
+
         private void ShowCornerGif(SessionSettings settings)
         {
             try
@@ -1560,6 +1567,7 @@ namespace ConditioningControlPanel.Services
                 var gifPath = settings.CornerGifPath;
                 Uri? gifUri = null;
                 System.Drawing.Image? img = null;
+                System.IO.MemoryStream? imgBacking = null;   // must outlive img (see the resource branch)
 
                 if (!string.IsNullOrEmpty(gifPath) && System.IO.File.Exists(gifPath))
                 {
@@ -1593,10 +1601,14 @@ namespace ConditioningControlPanel.Services
                             var resourceInfo = Application.GetResourceStream(gifUri);
                             if (resourceInfo?.Stream != null)
                             {
-                                using (resourceInfo.Stream)
-                                {
-                                    img = System.Drawing.Image.FromStream(resourceInfo.Stream);
-                                }
+                                // GDI+ keeps reading the source stream for the Image's whole
+                                // lifetime, so the resource stream must NOT be disposed while img
+                                // is still alive - copy it into a buffer that outlives it (the same
+                                // correction CornerGifService.ShowOne carries).
+                                imgBacking = new System.IO.MemoryStream();
+                                using (var src = resourceInfo.Stream) src.CopyTo(imgBacking);
+                                imgBacking.Position = 0;
+                                img = System.Drawing.Image.FromStream(imgBacking);
                                 App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
                             }
                         }
@@ -1610,6 +1622,8 @@ namespace ConditioningControlPanel.Services
                 if (img == null || gifUri == null)
                 {
                     App.Logger?.Warning("Could not load corner GIF image - skipping corner GIF display");
+                    img?.Dispose();
+                    imgBacking?.Dispose();
                     return;
                 }
 
@@ -1617,15 +1631,34 @@ namespace ConditioningControlPanel.Services
                 _cornerGifWidth = img.Width;
                 _cornerGifHeight = img.Height;
                 img.Dispose();
+                imgBacking?.Dispose();
 
                 double gifWidth = _cornerGifWidth;
                 double gifHeight = _cornerGifHeight;
+
+                // Bug #625: a decoded-but-degenerate image (0x0) makes the scale below divide by
+                // zero, and assigning the resulting NaN/Infinity to Window.Width/Height throws deep
+                // inside WPF layout. Bail out loudly instead of handing WPF non-finite geometry.
+                if (gifWidth <= 0 || gifHeight <= 0)
+                {
+                    App.Logger?.Warning("Corner GIF has degenerate size {W}x{H} ({Path}) - skipping overlay",
+                        gifWidth, gifHeight, gifUri);
+                    return;
+                }
 
                 // Scale based on user's size setting (default 300)
                 var targetSize = settings.CornerGifSize > 0 ? settings.CornerGifSize : 300;
                 double scale = targetSize / Math.Max(gifWidth, gifHeight);
                 double windowWidth = gifWidth * scale;
                 double windowHeight = gifHeight * scale;
+
+                if (!double.IsFinite(scale) || !double.IsFinite(windowWidth) || !double.IsFinite(windowHeight)
+                    || windowWidth <= 0 || windowHeight <= 0)
+                {
+                    App.Logger?.Warning("Corner GIF computed non-finite overlay geometry (scale={Scale}, {W}x{H}) - skipping overlay",
+                        scale, windowWidth, windowHeight);
+                    return;
+                }
 
                 // Get actual screen bounds using Forms.Screen (more reliable for DPI)
                 var screen = System.Windows.Forms.Screen.PrimaryScreen;
@@ -1689,6 +1722,31 @@ namespace ConditioningControlPanel.Services
                     Stretch = System.Windows.Media.Stretch.Uniform
                 };
 
+                // Per-frame downscale quality (#954/#958/#984). This is the SAME overlay the
+                // standalone CornerGifService draws, and it was left on the default filter when
+                // PR #221 hardened that one - so a session-scoped corner GIF (the only kind the
+                // 28-day programs raise: FW-Override, i.e. Firmware days 12-14) still ran the
+                // expensive path in v6.8.2, which is why the fix "didn't take" for the day-14
+                // reporter. XamlAnimatedGif hands the render thread a WriteableBitmap at the GIF's
+                // NATIVE size and WPF resamples it to the overlay's size on EVERY frame; the
+                // default for a downscale is the costly Fant filter. On a layered window - whose
+                // composition is a full UpdateLayeredWindow blit rather than a GPU surface flip -
+                // that resample saturates the render thread, and a saturated render thread blocks
+                // the UI thread inside WriteableBitmap.Lock (the CWGXBitmapLockState::LockRead
+                // wedge in UiHangWatchdog's dump notes). Bilinear costs a fraction and is
+                // indistinguishable on a spiral at 70-300px.
+                System.Windows.Media.RenderOptions.SetBitmapScalingMode(
+                    imageElement, System.Windows.Media.BitmapScalingMode.LowQuality);
+
+                long sourcePixels = (long)gifWidth * (long)gifHeight;
+                if (sourcePixels > CornerGifOversizeSourcePixels)
+                {
+                    App.Logger?.Warning(
+                        "Corner GIF source is {W}x{H} ({MP:F1}MP) but the overlay draws it at {TW}x{TH} - every frame is resampled at full size, which is the shape of the #954/#958 freeze. Consider a smaller GIF.",
+                        (int)gifWidth, (int)gifHeight, sourcePixels / 1_000_000.0,
+                        (int)windowWidth, (int)windowHeight);
+                }
+
                 // Catch GIF rendering errors gracefully instead of letting them crash the app.
                 // Must be attached BEFORE SetSourceUri: that starts an async load, so a fault
                 // raised in the gap would have no subscriber.
@@ -1710,7 +1768,14 @@ namespace ConditioningControlPanel.Services
                 {
                     MakeWindowClickThrough(_cornerGifWindow);
                 };
-                _cornerGifWindow.Show();
+                // Show() on a layered window realizes its render target synchronously; if the
+                // render thread wedges here the watchdog's report needs to name this call, and
+                // "(idle)" is what the day-14 reports carried. Scope it.
+                using (VideoDiag.UiScope("SessionEngine.ShowCornerGif(layered Show)"))
+                {
+                    _cornerGifWindow.Show();
+                }
+                HangContext.Enter("session.cornerGif");
 
                 App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Width}x{Height}px, opacity: {Opacity}%)",
                     settings.CornerGifPosition, gifUri.ToString(), left, top, (int)windowWidth, (int)windowHeight, settings.CornerGifOpacity);
@@ -1723,11 +1788,29 @@ namespace ConditioningControlPanel.Services
 
         private void CloseCornerGif()
         {
+            // Release the animator BEFORE closing the window. RepeatBehavior.Forever installs a
+            // clock that keeps pushing frames at the render thread and pins the Image (and its
+            // native-size WriteableBitmap) for as long as the source is set - Close() alone does
+            // not tear it down. Every other XamlAnimatedGif site in the app clears the source on
+            // teardown for exactly this reason (BlinkTrainerService, ChaosGifCascadeOverlay,
+            // AvatarTubeWindow, MiniPlayerWindow); the corner GIF was the one that didn't, and it
+            // is rebuilt on every size/path change mid-session (UpdateCornerGifSize/Path), so the
+            // orphaned animators accumulate across a long program day.
+            if (_cornerGifImage != null)
+            {
+                try { AnimationBehavior.SetSourceUri(_cornerGifImage, null); } catch { }
+                try { _cornerGifImage.Source = null; } catch { }
+            }
             if (_cornerGifWindow != null)
             {
-                _cornerGifWindow.Close();
+                try { _cornerGifWindow.Content = null; } catch { }
+                using (VideoDiag.UiScope("SessionEngine.CloseCornerGif(layered Close)"))
+                {
+                    _cornerGifWindow.Close();
+                }
                 _cornerGifWindow = null;
             }
+            HangContext.Leave("session.cornerGif");
             _cornerGifImage = null;
             _cornerGifWidth = 0;
             _cornerGifHeight = 0;

@@ -83,12 +83,44 @@ public class OverlayService : IDisposable
     /// abnormally-ended band (no matching exit) can't leave overlays pinned above later videos.</summary>
     internal void ResetDeeperOverlayBands() => System.Threading.Interlocked.Exchange(ref _deeperOverlayBandDepth, 0);
 
+    /// <summary>The AppSettings instance our PropertyChanged hook is currently attached to. Tracked
+    /// rather than re-read from <c>App.Settings.Current</c>, so the unsubscribe always detaches from
+    /// the object we actually attached to. Same pattern as <c>ModService</c>.</summary>
+    private Models.AppSettings? _hookedSettings;
+
     public OverlayService()
     {
         // Subscribe to settings changes if App.Settings.Current is available
-        if (App.Settings?.Current != null)
+        HookSettings(App.Settings?.Current);
+
+        // ...and FOLLOW the instance. A cloud restore (SettingsService.RestoreFrom) or a
+        // factory-default Reset does not mutate the settings object, it SWAPS it and raises
+        // CurrentReplaced. Without this the service kept listening to the discarded object for the
+        // rest of the run, which killed the ONLY live path that starts the Brain Drain blur (the
+        // BrainDrainEnabled/BlurStrength hook below) - silently, with not one line in the log.
+        // ModService and every rack panel already follow this event; this service never did.
+        if (App.Settings != null) App.Settings.CurrentReplaced += OnSettingsCurrentReplaced;
+    }
+
+    private void HookSettings(Models.AppSettings? settings)
+    {
+        if (_hookedSettings != null) _hookedSettings.PropertyChanged -= CurrentSettings_PropertyChanged;
+        _hookedSettings = settings;
+        if (_hookedSettings != null) _hookedSettings.PropertyChanged += CurrentSettings_PropertyChanged;
+    }
+
+    private void OnSettingsCurrentReplaced()
+    {
+        try
         {
-            App.Settings.Current.PropertyChanged += CurrentSettings_PropertyChanged;
+            HookSettings(App.Settings?.Current);
+            App.Logger?.Information("OverlayService: re-bound to the replaced AppSettings instance");
+            // The restored values may differ from what is on screen right now; reconcile once.
+            DispatcherHelper.RunOnUI(() => { try { RefreshOverlays(); } catch { } });
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "OverlayService: settings rebind failed");
         }
     }
     private readonly List<Window> _spiralWindows = new();
@@ -629,6 +661,19 @@ public class OverlayService : IDisposable
         {
             UpdateSpiralOpacity();
         }
+
+        // #975: Brain Drain was the ONE overlay this 500ms reconciler never touched. Pink and
+        // spiral have always self-healed here - if their windows are gone and the feature is on,
+        // the next tick brings them back. Brain Drain's visual half only ever came up from two
+        // one-shot moments (OverlayService.Start, and the AppSettings PropertyChanged hook), so a
+        // start that was missed or that failed was final for the whole session with nothing in the
+        // log to say so. RefreshBrainDrainState already carries every hold/ramp guard the ad-hoc
+        // owners need, and its start branch is backed off, so this is the same discipline the
+        // other two overlays get - not a new policy.
+        // Skipped entirely when the feature is off and nothing is up: teardown is owned by the
+        // settings hook and the sustained/timed hide paths, and this must not run their work 2x/s.
+        if (settings.BrainDrainEnabled || BrainDrainShowing)
+            RefreshBrainDrainState();
 
         bool needed = ReassertZOrder();
         if (needed)
@@ -1944,27 +1989,81 @@ public class OverlayService : IDisposable
             App.Logger?.Debug("Brain Drain skipped (withheld while the effect is reworked); melt {Melt}", melt);
             return;
         }
-        if (BrainDrainShowing) return;
 
-        _currentBrainDrainIntensity = intensity;
-
+        // The whole decision moved INSIDE the dispatch (#975). It used to read BrainDrainShowing -
+        // which touches WPF Window objects and the compositor layer - from whatever thread called
+        // in, and, far worse, the early-return below was completely silent: a stuck "showing" flag
+        // suppressed every restart for the rest of the run and left NOT ONE line in the log. That
+        // is exactly the shape of the report this change exists for (audio fine, no blur, and no
+        // Brain Drain lines at all in the attached log).
         DispatcherHelper.RunOnUISync(() =>
         {
             try
             {
+                if (BrainDrainShowing)
+                {
+                    if (BrainDrainRenderLooksLive())
+                    {
+                        App.Logger?.Information(
+                            "Brain Drain start skipped - already showing ({State}); requested intensity {Intensity}%, melt {Melt}",
+                            DescribeBrainDrainState(), intensity, melt);
+                        return;
+                    }
+
+                    // "Showing" was a lie: windows in the list with no capture timer feeding them,
+                    // or a compositor layer left Active by a Stop that never reached the UI thread
+                    // (RunOnUISync abandons its work on a wedged dispatcher). Left alone this is
+                    // permanent - every later start hits the early-return above and the blur never
+                    // comes back for the rest of the session.
+                    App.Logger?.Warning(
+                        "Brain Drain reported showing ({State}) but nothing is actually rendering - " +
+                        "clearing the stale state and restarting (#975)", DescribeBrainDrainState());
+                    StopBrainDrainBlur();
+                }
+
+                _currentBrainDrainIntensity = intensity;
+                LogBrainDrainRoute(intensity, melt);
+
                 if (UseCompositor)
                 {
                     // Compositor route: capture + blur render on the shared capture-excluded
                     // host; no per-screen layered windows, no WPF BlurEffect rasterization.
-                    GetBrainDrainLayer().Start(intensity, melt);
-                    App.Logger?.Information("Brain Drain started on compositor layer, intensity {Intensity}%, melt {Melt}", intensity, melt);
+                    var layer = GetBrainDrainLayer();
+                    layer.Start(intensity, melt);
+
+                    // Start used to log success unconditionally and return. It now says what
+                    // actually happened, because "started" and "armed" are not the same claim -
+                    // the layer's own #960 first-frame watchdog then covers "armed but no pixels".
+                    if (layer.IsActive && layer.PumpArmed)
+                    {
+                        App.Logger?.Information(
+                            "Brain Drain started on compositor layer, intensity {Intensity}%, melt {Melt}",
+                            intensity, melt);
+                    }
+                    else
+                    {
+                        App.Logger?.Warning(
+                            "Brain Drain compositor layer did NOT arm (active {Active}, pump {Pump}) - " +
+                            "intensity {Intensity}%, melt {Melt}. Nothing will render.",
+                            layer.IsActive, layer.PumpArmed, intensity, melt);
+                        NotifyBrainDrainNoFrames();
+                    }
                     return;
                 }
 
                 var settings = App.Settings.Current;
-                var screens = settings.DualMonitorEnabled
-                    ? App.GetAllScreensCached()
-                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+                // Screen.PrimaryScreen can be null and AllScreens can come back empty during
+                // display transitions (see CLAUDE.md); the old `PrimaryScreen!` bang turned that
+                // into an NRE swallowed by the catch below, which then logged nothing useful.
+                var screens = ResolveLegacyBrainDrainScreens(settings);
+                if (screens.Length == 0)
+                {
+                    App.Logger?.Warning(
+                        "Brain Drain (legacy route): no screens could be enumerated (dualMonitor {Dual}) - " +
+                        "nothing to blur.", settings.DualMonitorEnabled);
+                    NotifyBrainDrainNoFrames();
+                    return;
+                }
 
                 // Pick the downscale factor for this run from the active performance tier.
                 var tier = PerformanceProfile.CurrentTier;
@@ -1987,6 +2086,10 @@ public class OverlayService : IDisposable
                                    PerformanceProfile.BrainDrainFps(tier));
                 double intervalMs = 1000.0 / fps;
 
+                // A previous run that created no windows leaves its timer behind (the tick only
+                // stops itself once it has run); overwriting the field without stopping it would
+                // strand a live DispatcherTimer per retry.
+                _brainDrainCaptureTimer?.Stop();
                 _brainDrainCaptureTimer = new DispatcherTimer(DispatcherPriority.Render)
                 {
                     Interval = TimeSpan.FromMilliseconds(intervalMs)
@@ -1996,6 +2099,11 @@ public class OverlayService : IDisposable
 
                 App.Logger?.Information("Brain Drain started on {Count} screens at {Fps} FPS, intensity {Intensity}%",
                     _brainDrainBlurWindows.Count, fps, intensity);
+
+                // The line above is a claim, not a check - it prints "started on 0 screens" just
+                // as happily. Arm the legacy twin of the #960 watchdog so a run that paints
+                // nothing reports itself instead of looking successful.
+                ArmLegacyFirstFrameWatchdog(intensity, screens.Length);
             }
             catch (Exception ex)
             {
@@ -2004,12 +2112,202 @@ public class OverlayService : IDisposable
         });
     }
 
+    /// <summary>
+    /// The monitors the legacy per-screen-window route should cover. Mirrors
+    /// <c>BrainDrainLayer.GetTargetScreens</c>: every screen when the user has multi-monitor
+    /// overlays on, else the primary only. Returns EMPTY rather than an array containing null -
+    /// <c>Screen.PrimaryScreen</c> is nullable and <c>AllScreens</c> can be empty mid display
+    /// transition, and the caller reports that as the failure it is.
+    /// </summary>
+    private static System.Windows.Forms.Screen[] ResolveLegacyBrainDrainScreens(Models.AppSettings settings)
+    {
+        try
+        {
+            var all = App.GetAllScreensCached();
+            if (all.Length == 0) return Array.Empty<System.Windows.Forms.Screen>();
+            if (settings.DualMonitorEnabled) return all;
+            foreach (var s in all)
+                if (s.Primary) return new[] { s };
+            return Array.Empty<System.Windows.Forms.Screen>();
+        }
+        catch { return Array.Empty<System.Windows.Forms.Screen>(); }
+    }
+
+    /// <summary>
+    /// One Information line, at the moment Brain Drain starts, naming WHICH of the two render
+    /// paths this machine takes and WHY. The two paths behave nothing alike - the compositor one
+    /// mixes a blurred copy over the live screen at 0.30-0.85 alpha, the legacy one hangs a
+    /// full-opacity blurred screen grab in a layered window per monitor - so "it is invisible for
+    /// me and too strong for him" is answerable from this line alone. Everything printed here is
+    /// something a report used to have to guess at.
+    /// </summary>
+    private static void LogBrainDrainRoute(int intensity, bool melt)
+    {
+        try
+        {
+            bool forced = App.CompositorForced;
+            bool setting = App.Settings?.Current?.UnifiedOverlayHost == true;
+            bool engine = App.Compositor != null;
+            string reason = !engine
+                ? "compositor engine is NULL (construction failed)"
+                : forced ? "forced by launch flag"
+                : setting ? "UnifiedOverlayHost setting is ON"
+                : "UnifiedOverlayHost setting is OFF (user opted out in Settings > System)";
+
+            App.Logger?.Information(
+                "Brain Drain starting - route {Route} ({Reason}; forced={Forced} setting={Setting} engine={Engine}), " +
+                "intensity {Intensity}%, melt {Melt}, dualMonitor {Dual}, tier {Tier}, monitors [{Monitors}]",
+                UseCompositor ? "COMPOSITOR" : "LEGACY-WINDOWS", reason, forced, setting, engine,
+                intensity, melt, App.Settings?.Current?.DualMonitorEnabled == true,
+                PerformanceProfile.CurrentTier, DescribeScreens());
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Brain Drain route log failed: {E}", ex.Message);
+        }
+    }
+
+    private static string DescribeScreens()
+    {
+        try
+        {
+            var all = App.GetAllScreensCached();
+            if (all.Length == 0) return "none enumerated";
+            // DPI is part of the description because the compositor host places itself in DEVICE
+            // pixels while WPF lays out in DIPs: a mixed-DPI arrangement is the one topology where
+            // "the overlay is up but you cannot see it" can be a placement bug rather than a
+            // capture bug, and a report could not tell the two apart without these numbers.
+            return string.Join(" | ", all.Select(s =>
+                $"{s.DeviceName}{(s.Primary ? "*" : "")} {s.Bounds.Width}x{s.Bounds.Height}@{s.Bounds.X},{s.Bounds.Y} " +
+                $"@{Compositor.CompositorHostWindow.GetDpiScaleForScreen(s) * 100:F0}%"));
+        }
+        catch { return "enumeration threw"; }
+    }
+
+    /// <summary>Human-readable dump of what <see cref="BrainDrainShowing"/> is actually made of.
+    /// Used in every line that reports a skip or a stale state, so a report says WHICH half of
+    /// that predicate is holding rather than just "already showing".</summary>
+    private string DescribeBrainDrainState()
+        => $"legacyWindows={_brainDrainBlurWindows.Count}, legacyImages={_brainDrainImages.Count}, " +
+           $"captureTimer={(_brainDrainCaptureTimer?.IsEnabled == true ? "running" : "stopped/null")}, " +
+           $"layerActive={_brainDrainLayer?.IsActive == true}, layerPump={_brainDrainLayer?.PumpArmed == true}, " +
+           $"layerFrames={_brainDrainLayer?.FramesPublished ?? -1}";
+
+    /// <summary>
+    /// Is the thing <see cref="BrainDrainShowing"/> claims is up actually capable of putting
+    /// pixels on screen? UI thread only (it reads WPF windows and the compositor layer).
+    ///
+    /// <para>This exists because <c>BrainDrainShowing</c> can get stuck true and there was no way
+    /// back: <see cref="StopBrainDrainBlur"/> only calls <c>_brainDrainLayer.Stop()</c> through
+    /// <c>DispatcherHelper.RunOnUISync</c>, which ABANDONS its work (silently, by contract) when
+    /// the dispatcher is shutting down or the UI thread misses its 5s budget - leaving the layer
+    /// Active with no pump forever. On the legacy side a capture timer that stopped itself (its
+    /// tick stops the timer whenever <c>_brainDrainImages</c> is empty) leaves windows sitting in
+    /// the list that will never receive another frame. Either way every subsequent start
+    /// early-returned and the blur was gone until the app was restarted.</para>
+    /// </summary>
+    private bool BrainDrainRenderLooksLive()
+    {
+        // Compositor route: Active AND a live capture pump. The layer's own #960 watchdog owns the
+        // "armed but producing nothing" case, so it is deliberately NOT re-judged here - retrying
+        // a pump that is merely failing to grab the desktop would just churn capture threads.
+        if (_brainDrainLayer?.IsActive == true)
+            return _brainDrainLayer.PumpArmed;
+
+        // Legacy route: windows only mean anything while the capture timer is feeding images into
+        // them. A window whose HWND is gone (closed out from under us) counts as dead.
+        if (_brainDrainBlurWindows.Count == 0) return false;
+        if (_brainDrainImages.Count == 0) return false;
+        if (_brainDrainCaptureTimer?.IsEnabled != true) return false;
+        foreach (var w in _brainDrainBlurWindows)
+        {
+            try
+            {
+                if (new System.Windows.Interop.WindowInteropHelper(w).Handle == IntPtr.Zero) return false;
+            }
+            catch { return false; }
+        }
+        return true;
+    }
+
+    // ================================================================================
+    //  #975 / #960 - the legacy route's first-frame watchdog
+    // ================================================================================
+
+    /// <summary>Same grace the compositor layer gives its pump. At 30 FPS the first capture is due
+    /// in ~33ms; three seconds is slow-machine slack, not a real wait.</summary>
+    private static readonly TimeSpan LegacyFirstFrameGrace = TimeSpan.FromSeconds(3);
+    private DispatcherTimer? _brainDrainLegacyWatchdog;
+    private int _brainDrainLegacyFrames;
+
+    /// <summary>
+    /// The legacy twin of <c>BrainDrainLayer.ArmFirstFrameWatchdog</c>. Only the compositor route
+    /// was ever instrumented, so a user whose "Unified overlay renderer" toggle is OFF took a path
+    /// that could create zero windows, or windows that never receive a single capture, and STILL
+    /// logged "Brain Drain started on N screens" at Information with nothing else to read. That is
+    /// half of why #975 could not be triaged from the attached log: one render path reports its
+    /// own failure and the other one does not.
+    ///
+    /// <para>This does not FIX a zero-render legacy run either - it turns one into something a bug
+    /// report can be read against, and tells the user rather than leaving them staring at an
+    /// unchanged screen.</para>
+    /// </summary>
+    private void ArmLegacyFirstFrameWatchdog(int intensity, int screensRequested)
+    {
+        DisarmLegacyFirstFrameWatchdog();
+        _brainDrainLegacyFrames = 0;
+
+        int windows = _brainDrainBlurWindows.Count;
+        var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = LegacyFirstFrameGrace };
+        timer.Tick += (_, _) =>
+        {
+            DisarmLegacyFirstFrameWatchdog();
+            try
+            {
+                // Torn down in the meantime, or switched routes - not a failure.
+                if (_brainDrainCaptureTimer == null && _brainDrainBlurWindows.Count == 0) return;
+                if (_brainDrainLegacyFrames > 0) return;   // it is running; nothing to say
+
+                App.Logger?.Warning(
+                    "Brain Drain (LEGACY route) produced NO frames in {Grace:F0}s (#975) - intensity {Intensity}, " +
+                    "downscale {Downscale}, screens requested {Requested}, windows created {Windows}, " +
+                    "capture timer {Timer}. {Cause}",
+                    LegacyFirstFrameGrace.TotalSeconds, intensity, _brainDrainDownscale,
+                    screensRequested, windows,
+                    _brainDrainCaptureTimer?.IsEnabled == true ? "running" : "stopped/null",
+                    windows == 0
+                        ? "No overlay window could be created at all - CreateBrainDrainWindow failed for every screen (see the error above it)."
+                        : "Windows exist but no capture landed - the GDI desktop StretchBlt in CaptureScreenOptimized is failing.");
+
+                NotifyBrainDrainNoFrames();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BrainDrain legacy first-frame watchdog failed: {E}", ex.Message);
+            }
+        };
+        timer.Start();
+        _brainDrainLegacyWatchdog = timer;
+    }
+
+    private void DisarmLegacyFirstFrameWatchdog()
+    {
+        var timer = _brainDrainLegacyWatchdog;
+        _brainDrainLegacyWatchdog = null;
+        try { timer?.Stop(); } catch { }
+    }
+
     public void StopBrainDrainBlur()
     {
         try
         {
             _rampBrainDrainOpacity = null; // release any Deeper ramp ownership
             _sustainedBrainDrainHeld = false; // overlay is gone (incl. force-stop / panic) — drop any stale sustained hold
+            DisarmLegacyFirstFrameWatchdog();
+            // An explicit stop is not a failed start: let the reconciler retry immediately rather
+            // than sitting out the remainder of a backoff it did not earn.
+            _brainDrainRetryAfterUtc = DateTime.MinValue;
+            _brainDrainRetryDelay = BrainDrainStartRetryMin;
 
             // Layer route (checked by activity, not the flag - mid-run flag flips must not strand it).
             if (_brainDrainLayer?.IsActive == true)
@@ -2059,12 +2357,16 @@ public class OverlayService : IDisposable
             {
                 _brainDrainLayer.SetIntensity(intensity);
             }
+            var drawAlpha = Compositor.BrainDrainLayer.AlphaFor(intensity) / 255.0;
             foreach (var img in _brainDrainImages.Values)
             {
                 if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
                 {
                     blur.Radius = blurRadius;
                 }
+                // Move the alpha with the radius, or a live strength change on the legacy path
+                // would only ever adjust half the effect (see CreateBrainDrainWindow).
+                img.Opacity = drawAlpha;
             }
         });
     }
@@ -2090,6 +2392,10 @@ public class OverlayService : IDisposable
                 if (capture != null)
                 {
                     image.Source = capture;
+                    // What the legacy first-frame watchdog reads. Counted here rather than in the
+                    // watchdog so it measures a frame that actually reached a window, not merely
+                    // that the timer ticked.
+                    _brainDrainLegacyFrames++;
                 }
             }
         }
@@ -2193,6 +2499,12 @@ public class OverlayService : IDisposable
             var image = new System.Windows.Controls.Image
             {
                 Stretch = Stretch.Fill,
+                // Same alpha ramp the compositor path uses (0.30 -> 0.85 across intensity 1..100).
+                // This window is an opaque blurred COPY of the desktop laid over the real one, so
+                // without an alpha it hid the screen completely at every setting and the strength
+                // dial only softened the edges. Sharing the curve makes one slider value mean one
+                // thing on both render paths.
+                Opacity = Compositor.BrainDrainLayer.AlphaFor(intensity) / 255.0,
                 Effect = new System.Windows.Media.Effects.BlurEffect
                 {
                     Radius = blurRadius,
@@ -2230,8 +2542,13 @@ public class OverlayService : IDisposable
                 var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
                 SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
 
-                // Exclude from capture so we don't capture ourselves
-                SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+                // Exclude from capture so we don't capture ourselves - unless the user opted in
+                // via AppSettings.AllowOverlayCapture, in which case this window goes to WDA_NONE
+                // and shows up in screenshots/OBS like everything else. Safe: the capture side of
+                // brain drain grabs the desktop DC with SRCCOPY and no CAPTUREBLT, which already
+                // excludes layered windows, so the affinity was belt-and-braces (see
+                // Services/Compositor/OverlayCaptureAffinity).
+                Compositor.OverlayCaptureAffinity.Apply(hwnd);
 
                 // Use SetWindowPos with physical pixel coordinates for exact positioning
                 // This bypasses WPF's DPI virtualization which causes offset issues on mixed-DPI setups
@@ -2761,12 +3078,6 @@ public class OverlayService : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint dwAffinity);
-
-    private const uint WDA_NONE = 0x0;
-    private const uint WDA_EXCLUDEFROMCAPTURE = 0x11; // Windows 10 2004+
-
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
 
@@ -2912,6 +3223,17 @@ public class OverlayService : IDisposable
                 }
                 RefreshBrainDrainState();
             }
+            else if (e.PropertyName == nameof(App.Settings.Current.AllowOverlayCapture))
+            {
+                // Live apply, both render paths. Compositor hosts are created once and reused for
+                // the whole app lifetime, so re-poking them here is what makes the toggle land
+                // mid-effect instead of "next time you start Brain Drain".
+                App.Logger?.Information("Brain Drain capture visibility toggled: allow={Allow}",
+                    App.Settings.Current.AllowOverlayCapture);
+                try { App.Compositor?.RefreshCaptureAffinity(); }
+                catch (Exception ex) { App.Logger?.Debug("Compositor capture affinity refresh failed: {E}", ex.Message); }
+                RefreshLegacyBrainDrainCaptureAffinity();
+            }
             // Add other property names for PinkFilter, Spiral, etc. here if needed
             // else if (e.PropertyName == nameof(App.Settings.Current.PinkFilterEnabled) ||
             //          e.PropertyName == nameof(App.Settings.Current.PinkFilterOpacity))
@@ -2926,7 +3248,52 @@ public class OverlayService : IDisposable
         });
     }
 
+    /// <summary>
+    /// Re-poke the capture affinity on the LEGACY (pre-compositor) per-screen Brain Drain windows.
+    /// The compositor path has its own equivalent (<c>CompositorEngine.RefreshCaptureAffinity</c>);
+    /// this covers the machines still on the legacy renderer, which build their own WPF windows in
+    /// <c>CreateBrainDrainWindow</c>. UI thread (the caller marshals).
+    /// </summary>
+    private void RefreshLegacyBrainDrainCaptureAffinity()
+    {
+        foreach (var window in _brainDrainImages.Keys.ToList())
+        {
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                Compositor.OverlayCaptureAffinity.Apply(hwnd);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Legacy Brain Drain capture affinity refresh failed: {E}", ex.Message);
+            }
+        }
+    }
+
     // New method to encapsulate Brain Drain specific refresh logic
+    /// <summary>Backoff for the 500ms reconciler's Brain Drain restart, doubling from 5s to a 60s
+    /// ceiling and reset on any explicit stop or on the first tick that finds the blur up. A
+    /// transient failure (display transition, momentary GDI exhaustion) heals within seconds; a
+    /// permanently broken machine costs one attempt a minute instead of two a second, which also
+    /// keeps the failure Warnings and the user-facing notice readable rather than a flood.</summary>
+    private static readonly TimeSpan BrainDrainStartRetryMin = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan BrainDrainStartRetryMax = TimeSpan.FromSeconds(60);
+    private TimeSpan _brainDrainRetryDelay = BrainDrainStartRetryMin;
+    private DateTime _brainDrainRetryAfterUtc = DateTime.MinValue;
+
+    /// <summary>The "could not capture the screen" toast is worth showing once, not once per retry.
+    /// Shared by every OverlayService path that reports a zero-render Brain Drain run.</summary>
+    private static readonly TimeSpan BrainDrainNoFramesNoticeCooldown = TimeSpan.FromMinutes(5);
+    private DateTime _lastBrainDrainNoFramesNoticeUtc = DateTime.MinValue;
+
+    private void NotifyBrainDrainNoFrames()
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastBrainDrainNoFramesNoticeUtc < BrainDrainNoFramesNoticeCooldown) return;
+        _lastBrainDrainNoFramesNoticeUtc = now;
+        Compositor.BrainDrainLayer.NotifyNoFrames();
+    }
+
     private void RefreshBrainDrainState()
     {
         var settings = App.Settings.Current;
@@ -2948,10 +3315,21 @@ public class OverlayService : IDisposable
         {
             if (!BrainDrainShowing)
             {
+                // Backoff, because this method is now also driven by the 500ms reconciler (see
+                // UpdateOverlays). A start that keeps failing must not rebuild windows / capture
+                // threads twice a second; a start that works flips BrainDrainShowing synchronously
+                // and takes the branch below instead.
+                if (DateTime.UtcNow < _brainDrainRetryAfterUtc) return;
+                _brainDrainRetryAfterUtc = DateTime.UtcNow + _brainDrainRetryDelay;
+                _brainDrainRetryDelay = TimeSpan.FromTicks(
+                    Math.Min(_brainDrainRetryDelay.Ticks * 2, BrainDrainStartRetryMax.Ticks));
                 StartBrainDrainBlur(settings.BrainDrainBlurStrength, settings.BrainDrainMeltEnabled);
             }
             else if (!_rampBrainDrainOpacity.HasValue)
             {
+                // It is up: the previous start worked, so a LATER failure starts from the short
+                // backoff again rather than inheriting an escalated one.
+                _brainDrainRetryDelay = BrainDrainStartRetryMin;
                 // Already running, just update strength (a Deeper ramp owns it when active).
                 // NOTE: this cannot flip the melt variant - the pump's melt flag is fixed for
                 // one run; CurrentSettings_PropertyChanged bounces the overlay on a melt toggle.
@@ -2992,11 +3370,11 @@ public class OverlayService : IDisposable
         CleanupCaptureResources();
         try { _brainDrainLayer?.Stop(); } catch { /* shutdown path - GDI freed by OS anyway */ }
 
-        // Unsubscribe from settings changes
-        if (App.Settings?.Current != null)
-        {
-            App.Settings.Current.PropertyChanged -= CurrentSettings_PropertyChanged;
-        }
+        // Unsubscribe from settings changes. Detach from the instance we actually hooked, not from
+        // whatever App.Settings.Current happens to be now - a restore may have swapped it.
+        HookSettings(null);
+        if (App.Settings != null) App.Settings.CurrentReplaced -= OnSettingsCurrentReplaced;
+        DisarmLegacyFirstFrameWatchdog();
 
         // Forcefully close all overlay windows - don't rely on Dispatcher during shutdown
         try

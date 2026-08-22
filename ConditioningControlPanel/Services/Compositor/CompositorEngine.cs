@@ -156,6 +156,23 @@ public class CompositorEngine : IDisposable
         return 0;
     }
 
+    /// <summary>
+    /// Re-poke the capture affinity on every EXCLUDED (brain-drain) host from the current
+    /// <c>AppSettings.AllowOverlayCapture</c> value. Hosts are created once and reused for the app's
+    /// lifetime, so without this a toggle would only take effect after a restart; with it the
+    /// change lands mid-effect. The main surface is untouched - it is never capture-excluded.
+    /// UI thread only (reads the host dictionary).
+    /// </summary>
+    public void RefreshCaptureAffinity()
+    {
+        if (_disposed) return;
+        foreach (var host in _excludedWindows.Values)
+        {
+            try { host.ApplyCaptureAffinity(); }
+            catch (Exception ex) { App.Logger?.Debug("CompositorEngine: ApplyCaptureAffinity failed: {Error}", ex.Message); }
+        }
+    }
+
     /// <summary>Self-heal hook for the 5s z-order reconciler: re-derive the anchor snapshot in case
     /// an edge was missed (e.g. a host whose hwnd was not realized yet when it was published).
     /// UI thread only, like <see cref="GetVisibleHostHandles"/>.</summary>

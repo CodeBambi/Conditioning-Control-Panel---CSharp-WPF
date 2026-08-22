@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -39,6 +40,81 @@ namespace ConditioningControlPanel.Services
         public int AudioFileCount => _audioFiles?.Length ?? 0;
 
         /// <summary>
+        /// THE brain-drain clip folder: <c>&lt;EffectiveAssetsPath&gt;\braindrain</c>, alongside
+        /// <c>images</c> / <c>videos</c> and everything else a user drops in.
+        ///
+        /// <para>It used to be the INSTALL directory instead (see
+        /// <see cref="LegacyAudioFolderPath"/>) and that was the single biggest support cost the
+        /// feature has ever had: five-plus users in two nights could not find it, the community
+        /// moderator included, and an install folder is the one place that does NOT survive a
+        /// reinstall or a portable copy - so people who did find it lost their clips again. The
+        /// assets folder is where users already look, it is backed by
+        /// <c>AppSettings.CustomAssetsPath</c>, and nothing in the installer touches it.</para>
+        ///
+        /// <para>The legacy folder is still SCANNED (see <see cref="LoadAudioFiles"/>); it is just
+        /// no longer where the UI sends people. Nothing migrates, moves or deletes user files.</para>
+        /// </summary>
+        public static string AudioFolderPath
+        {
+            get
+            {
+                try { return Path.Combine(App.EffectiveAssetsPath, "braindrain"); }
+                catch { return LegacyAudioFolderPath; }   // pre-settings startup / test host
+            }
+        }
+
+        /// <summary>
+        /// The ORIGINAL clip folder under the install directory
+        /// (<c>%LOCALAPPDATA%\Programs\Conditioning Control Panel\Resources\sounds\braindrain</c>).
+        /// Still scanned so the users who did find it keep their clips working; never advertised as
+        /// the place to put new ones, never written to, never emptied, and deliberately NOT added to
+        /// installer-content-deletions (that would delete their files on the next update).
+        /// </summary>
+        public static string LegacyAudioFolderPath =>
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "braindrain");
+
+        /// <summary>Supported clip extensions. One list, used by both folder scans.</summary>
+        private static readonly string[] AudioExtensions = { ".mp3", ".wav", ".ogg" };
+
+        /// <summary>Create the primary (assets) clip folder if it does not exist yet and hand back
+        /// its path. Used by the feature card's "Open folder" button so Explorer never opens onto
+        /// nothing, and by the first scan so the folder EXISTS to be found.</summary>
+        public static string EnsureAudioFolder()
+        {
+            var path = AudioFolderPath;
+            try { Directory.CreateDirectory(path); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BrainDrain: could not create the audio folder"); }
+            return path;
+        }
+
+        /// <summary>How many clips live in the LEGACY install folder. The feature card shows a
+        /// "your old clips still work, but new ones go here" note only when this is non-zero, so a
+        /// clean install never sees a line about a folder it has no reason to care about.</summary>
+        public static int LegacyAudioFileCount()
+        {
+            try { return EnumerateClips(LegacyAudioFolderPath).Count(); }
+            catch { return 0; }
+        }
+
+        /// <summary>Clip files directly inside <paramref name="folder"/>, or nothing when the folder
+        /// is absent/unreadable. Never throws - a missing legacy folder is the normal case.</summary>
+        private static IEnumerable<string> EnumerateClips(string folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+                return Array.Empty<string>();
+            try
+            {
+                return Directory.GetFiles(folder, "*.*")
+                    .Where(f => AudioExtensions.Any(ext => f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BrainDrain: could not read clip folder {Path}", folder);
+                return Array.Empty<string>();
+            }
+        }
+
+        /// <summary>
         /// Fires when a brain drain audio effect is triggered
         /// </summary>
         public event EventHandler? BrainDrainTriggered;
@@ -68,35 +144,51 @@ namespace ConditioningControlPanel.Services
             _timer.Interval = interval;
         }
         
+        /// <summary>
+        /// Build the clip pool from BOTH folders: the assets folder (primary, and created here on
+        /// the first scan so users can actually find it) and the legacy install folder.
+        ///
+        /// <para>De-duped by FILE NAME with the assets copy winning, so a user who copied their
+        /// clips out of the install folder into assets - the obvious thing to do once the UI points
+        /// there - gets each track once, not twice. Nothing is moved or deleted either way; the
+        /// legacy folder is read-only as far as this service is concerned.</para>
+        /// </summary>
         private void LoadAudioFiles()
         {
             try
             {
-                var audioFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "braindrain");
-                
-                App.Logger?.Information("BrainDrain: Looking for audio files in {Path}", audioFolderPath);
-                
-                if (!Directory.Exists(audioFolderPath))
+                var assetsFolder = EnsureAudioFolder();
+                var legacyFolder = LegacyAudioFolderPath;
+
+                App.Logger?.Information("BrainDrain: Looking for audio files in {Path} (+ legacy {Legacy})",
+                    assetsFolder, legacyFolder);
+
+                // Assets first so its entries claim their file names; the legacy folder then only
+                // contributes names the assets folder does not already have.
+                var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var file in EnumerateClips(assetsFolder))
+                    byName[Path.GetFileName(file)] = file;
+
+                int legacyAdded = 0;
+                foreach (var file in EnumerateClips(legacyFolder))
                 {
-                    Directory.CreateDirectory(audioFolderPath);
-                    App.Logger?.Warning("BrainDrain: Created empty folder at {Path} - add audio files here!", audioFolderPath);
-                    _audioFiles = Array.Empty<string>();
-                    return;
+                    var name = Path.GetFileName(file);
+                    if (byName.ContainsKey(name)) continue;
+                    byName[name] = file;
+                    legacyAdded++;
                 }
-                
-                _audioFiles = Directory.GetFiles(audioFolderPath, "*.*")
-                    .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
-                               f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
-                               f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-                
+
+                _audioFiles = byName.Values.ToArray();
+
                 if (_audioFiles.Length == 0)
                 {
-                    App.Logger?.Warning("BrainDrain: No .mp3/.wav/.ogg files found in {Path}", audioFolderPath);
+                    App.Logger?.Warning("BrainDrain: No .mp3/.wav/.ogg files found in {Path} or {Legacy}",
+                        assetsFolder, legacyFolder);
                 }
                 else
                 {
-                    App.Logger?.Information("BrainDrain: Loaded {Count} audio files", _audioFiles.Length);
+                    App.Logger?.Information("BrainDrain: Loaded {Count} audio files ({Legacy} from the legacy install folder)",
+                        _audioFiles.Length, legacyAdded);
                 }
             }
             catch (Exception ex)
@@ -126,6 +218,13 @@ namespace ConditioningControlPanel.Services
             }
 
             if (_isRunning) return;
+
+            // Re-scan the clip folder on every session start. The folder is a plain drop target
+            // that lives outside the app (see AudioFolderPath) and NOTHING used to call
+            // ReloadAudioFiles at all, so a clip added after launch only ever worked following a
+            // full restart - several users hit that in one evening. One Directory.GetFiles per
+            // Start is free next to what Start already does.
+            ReloadAudioFiles();
 
             UpdateSettings();
             UpdateTimerInterval();
@@ -191,6 +290,16 @@ namespace ConditioningControlPanel.Services
         private void PlayAudioNow()
         {
             if (_audioFiles == null || _audioFiles.Length == 0) return;
+
+            // #983: a winning roll used to DISPLACE the pair still playing - a long track
+            // audibly "rebooted" partway through, and a single-file folder restarted itself.
+            // A clip now always plays to its end; a roll that lands mid-clip is skipped, not
+            // queued. (Triggers inside the ~0.5s off-thread build window can still displace -
+            // _waveOut is only published after arbitration - which is harmless at clip scale.)
+            lock (_audioLock)
+            {
+                if (_waveOut != null) return;
+            }
 
             try
             {

@@ -90,7 +90,13 @@ namespace ConditioningControlPanel
                     RemoteControlTab.ChkRemoteControlEnabled.IsChecked = false;
                     _isLoading = false;
                     RemoteControlTab.RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
-                    ShowStyledDialog(Loc.Get("title_connection_error"), Loc.Get("msg_remote_connection_error"), Loc.Get("btn_ok"), "");
+                    // BUG-NV4FF6TPA7: an auth rejection is NOT a connectivity problem — telling
+                    // the user to "check your internet connection" on a 401 sent them chasing
+                    // their network when the fix was signing back into Patreon/Discord.
+                    if (App.RemoteControl?.LastStartFailedAuth == true)
+                        ShowStyledDialog(Loc.Get("title_login_required"), Loc.Get("msg_remote_auth_error"), Loc.Get("btn_ok"), "");
+                    else
+                        ShowStyledDialog(Loc.Get("title_connection_error"), Loc.Get("msg_remote_connection_error"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
@@ -489,9 +495,10 @@ namespace ConditioningControlPanel
 
         internal void BtnBecomeASubject_Click(object sender, RoutedEventArgs e)
         {
-            // Premium → take them straight to the Remote Control tab so they
-            // can opt into the directory. Free → open the Patreon page.
-            if (App.Patreon?.HasPremiumAccess == true)
+            // Premium (or the ? box's "remote" free day) → take them straight to the Remote
+            // Control tab so they can opt into the directory. Free → open the Patreon page.
+            if (App.Patreon?.HasPremiumAccess == true
+                || App.DailyFree?.IsFreeToday("remote") == true)
             {
                 ShowTab("remotecontrol");
                 return;
@@ -517,7 +524,8 @@ namespace ConditioningControlPanel
         private void RefreshBecomeASubjectCta()
         {
             if (AvailableSubjectsTab.TxtBecomeASubjectSubtitle == null) return;
-            var hasPremium = App.Patreon?.HasPremiumAccess == true;
+            var hasPremium = App.Patreon?.HasPremiumAccess == true
+                             || App.DailyFree?.IsFreeToday("remote") == true;
             AvailableSubjectsTab.TxtBecomeASubjectSubtitle.Visibility = hasPremium ? Visibility.Collapsed : Visibility.Visible;
         }
 
@@ -1174,7 +1182,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void UpdateRemoteControlUI()
         {
-            RefreshPremiumGate(RemoteControlTab.RemoteControlGate);
+            RefreshPremiumGate(RemoteControlTab.RemoteControlGate, "remote");
             RefreshTierCardHighlight();
             // If a session is already running, refresh the QR code with the current code.
             var code = App.RemoteControl?.SessionCode;

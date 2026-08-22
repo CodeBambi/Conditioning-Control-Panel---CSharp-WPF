@@ -359,6 +359,12 @@ namespace ConditioningControlPanel
             // -> "Not enough quota" crash / render-thread wedge). See DisplayChangeCoordinator.
             Services.UI.DisplayChangeCoordinator.NotifyDisplayChange("dpi-changed");
             base.OnDpiChanged(oldDpi, newDpi);
+
+            // Dragging onto a 300%-scaled TV multiplies the window's pixel size without changing its
+            // DIP size, so a window that fit the old panel can now hang off the new one's bottom
+            // edge (the START bar becomes unreachable). Re-fit against the new monitor + scale.
+            // Deferred by a dispatcher hop - see MainWindow.WorkAreaFit.cs.
+            QueueWorkAreaFitAfterDpiChange(newDpi);
         }
 
         protected override void OnStateChanged(EventArgs e)

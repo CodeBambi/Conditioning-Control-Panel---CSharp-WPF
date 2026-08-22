@@ -300,6 +300,28 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Play → The Arcademy strip. Opens the webview mini-game hub (Resources/web/arcademy) via
+        /// <see cref="Services.Arcademy.ArcademyHostService"/>, the sibling of the DtRH, Intake and
+        /// Goon hosts. Every gate lives in <c>Launch()</c> (T2 through <see cref="TierGate"/>, then
+        /// AudioOnlySession, then idempotency) for the same reason the DtRH card leaves its refusal
+        /// to <c>BtnStartChaos_Click</c>: the card's lockband is decoration, and the one code path
+        /// that actually opens the door has to be the one that can say no.
+        /// </summary>
+        internal void BtnStartArcademy_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.Arcademy.ArcademyHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartArcademy_Click failed");
+                MessageBox.Show("Couldn't open the Arcademy:\n\n" + ex.Message,
+                    Services.Arcademy.ArcademyHostService.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Quick Start: launch a Chaos run with the saved settings, bypassing the modal hub.
         /// Mirrors what BEGIN CHAOS does after SaveToSettings (StartRun reads ChaosRunConfig.FromSettings),
         /// just without the dialog.

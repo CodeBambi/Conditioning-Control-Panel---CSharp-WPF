@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -20,61 +20,53 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.8.1";
+        public const string AppVersion = "6.8.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.8.1 - Relapse
+        public const string CurrentPatchNotes = @"v6.8.3 - Relapse
 
-🩹 NEW IN 6.8.1
-- Corner GIFs stop bricking the app. Turning one on could hard-freeze the window with nothing in the crash log, and it came back every launch because the slot was replayed from your settings. The app now catches it, starts clean and tells you. Animation is also far cheaper on the render thread, and two slots no longer race each other awake.
-- A session can no longer end behind a fullscreen browser. Esc and F11 always get you out, and the end-of-session dialog comes to the front instead of hiding behind a chrome-less window.
-- The nav rail stops disappearing behind the Spiral Room. Full-bleed web pages now yield while the rail is open.
-- Mandatory videos are audible again if you play through anything other than your default audio device.
-- Short haptics can actually be felt. Bounces, bubble pops and video hits were too brief for a motor to spin up, so every pulse now clears a minimum on-time in all six modes.
-- Takeover no longer re-arms itself on launch while its checkbox reads off.
-- Programs: runs the old day clock wrongly lapsed are audited and forgiven once at load. A run you genuinely missed stays missed.
-- Brain Drain now says when it failed to reach the screen instead of silently doing nothing.
-- The Takeaway strip's Export button reads Export session, which is what it actually does, and the remote mix slider is full width again.
+Round two of repairs under the same banner. Everything below comes from your reports since 6.8.2 dropped.
 
-🖼️ MOD ART, FRAMED
-- Mod authors get crop control. Filled UI Art slots grow a Frame button: drag to pan, wheel to zoom, one preview per surface the image feeds, double-click to reset.
-- Mod art no longer inherits crop windows hand-drawn for our art. Un-framed art gets an honest centre crop instead.
-- New manifest fields for authors: artFraming (per resource, per surface) and bubbleScale.
-- Floating bubbles get a Size slider, and mods can set their own bubble scale.
+THE PROGRAM FREEZES, FOUND AND FIXED
+- Switching to the Programs tab could hard-freeze the whole app when a program was running hot. A decorative animation kept retrying at a priority that outranks your mouse and keyboard, forever. It now gives up after 3 tries like a polite guest.
+- The corner GIFs a session spawns never received the freeze fix from two updates ago - only the settings-preview path did. Long program days (Firmware Install day 14) could still lock up because of it. Now both paths share the fix.
+- The lock card's dead-man's switch was disarmed for the FIRST card of a run, which is exactly the card that froze for some of you on program day 2. It now arms from card one.
+- If the app ever does freeze and you task-kill it, it now leaves behind a note saying exactly what it was doing, and reports it on the next launch. Freezes can no longer die anonymously.
 
-🚪 EVERYTHING MOVED: THE NEW LAYOUT
-- The tab strip is gone. Six doors now live on a rail down the left edge, with Settings pinned at the bottom. Hover the rail and it opens.
-- Home is your dashboard. Studio holds the effects rack, presets and haptics. Companion is her room. Play holds the Lab, Deeper, Exclusives, Graded Intake, Lockdown, Blink Trainer and Remote Control. You holds Profile, Quests, Achievements, Skill Tree, Programs and Leaderboard. Library holds Assets, Mods, Catalogue, Phrase Manager and Media Log.
-- Enhancements is now the Skill Tree, behind the You door.
-- Ctrl+K opens a command palette. Type a few letters of any setting and it takes you straight there.
-- Settings is rebuilt into 8 sections. Devices is the one home for webcam, microphone, blink kill switch, gaze restriction, panic key and hotkeys.
-- Lost? The ? button offers a 60-second What moved in 6.8 tour.
+BRAIN DRAIN, VISIBLE ON EVERY MACHINE
+- Found it. On some graphics drivers the screen capture comes back with a blank transparency byte, and the blur drew itself fully invisible. Same app, same settings, nothing on screen. The capture is now read in a way that cannot be transparent, so the blur and melt render on every machine. If Brain Drain never showed anything for you, this was why.
+- Audio clips now also load from a braindrain folder inside your assets folder, where you actually looked for it. The old location still works; the folder card shows you both.
+- New opt-in in Settings: allow Brain Drain to appear in screenshots and recordings. Off by default, streamers stay safe.
 
-🌐 ONLINE MEDIA, EVERYWHERE
-- The For You feed goes endless: an online feed with niche channels, streamed straight from the source, plus a face-up trade peek before you commit a swap
-- Online media joins the whole app, not just the feed: flashes, mandatory videos and subliminals can pull fresh content too
-- Strictly opt-in behind its own consent switch. Local files stay the default.
+WINDOWS THAT BEHAVE
+- At 300 percent display scaling the window taller than your screen dropped its bottom bar below the taskbar. It now clamps itself to the monitor it is actually on.
+- The Audio Layers window crashed in its own constructor and had NEVER successfully opened, for anyone, since the feature shipped. It opens now. It also politely appears on-screen instead of wherever it last imagined itself.
+- Pink Rush, achievement and item popups no longer steal focus from your fullscreen game. They announce, they do not interrupt.
+- Starting the tutorial while minimized to tray no longer plays to an empty room; the main window comes back first.
+- Reveal in Explorer now highlights the actual file instead of dumping you on the Desktop.
 
-🔗 ONE ACCOUNT
-- XP earned on app.cclabs.app and on your phone now lands in your level here through the normal sync, no restart needed
-- Your profile card grew a Share button, and drops get share links. Your real face only rides a public link if you opt in.
-- Just Drop now opens in its own window, signed in as you, wallet live
-- A glass vat has appeared on your Trainer Card, and it fills as you play. A sealed spiral sits on the web dashboard. Neither is explained. Yet.
+MOD CREATOR CATCHES UP
+- The achievement art list showed 29 slots while the app has 69 achievements. All are now offered, and loading an existing mod no longer silently drops half its badges on export.
+- 30 achievements had no translation keys at all, so non-English users always saw English. All 9 languages now cover the full set.
 
-🎛️ SESSIONS, RETHOUGHT
-- The Session door got rebuilt: a compact color-coded rack with sort, filter and search, a preset chip rail, and a takeaway tray
-- Programs got a full repair-and-glow pass: honest day crediting, feasible tasks, graduation badges, and the new Ignition Curve that heats the tab as you commit
+IN CASE YOU MISSED 6.8 ENTIRELY
+The 6.8 line landed fast, three updates inside a week, so if you have not opened CCP since 6.7 here is what is waiting for you:
+- A whole new layout. The tab strip is gone; six doors live on a rail down the left edge with Settings pinned at the bottom. Ctrl+K opens a command palette that jumps you to any setting by name.
+- One account across desktop, web and phone. XP earned on app.cclabs.app or on your phone lands in your level here automatically.
+- Online media everywhere, strictly opt-in. The For You feed goes endless, and flashes, mandatory videos and subliminals can pull fresh content too. Local files stay the default.
+- Just Drop is open to everyone, in its own window, signed in as you, wallet live.
+- One premium feature is FREE every single day: the ? box on your dashboard. No trial, no nag, different feature tomorrow.
+- Sessions rebuilt into a color-coded rack with sort, filter and search. Programs got honest day crediting, feasible tasks and graduation badges.
+- Brain Drain is live on the rack, and mods now repaint the entire app the instant you switch.
+- Plus the 6.8.1 and 6.8.2 hotfix rounds: 50+ community-reported bugs put down, the daily freebie opens at every gate, speech ships with its voice model again, and sign-in can no longer die to a cosmetic glow.
 
-✨ POLISH AND FIXES
-- Mods now repaint the whole app the moment you switch: doors, rack art, vault, plates, palette. Mods can also name their sweeties.
-- Tier livery: gold and diamond borders on tiered features, neon tier badges, and a FREE TODAY stamp on the daily free card. The ? box on the dashboard opens one premium feature, genuinely free, every day.
-- Brain Drain is live. It runs, it drains, it is on the rack.
-- 50+ community-reported bugs fixed across sync, lock cards, remote control, Deeper, haptics, presets and the player. Thank you, reporters.
+Season: Airhead August (The last season!)
 
-Season: Spiral September";
+Something new is coming on September 1. 🌀
+Stay tuned... :3";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
@@ -1119,10 +1111,161 @@ Season: Spiral September";
         }
 
         /// <summary>
-        /// Cleans up stale .NET single-file extraction cache folders.
-        /// When running as a self-contained single-file app, .NET extracts native libraries to
-        /// %TEMP%\.net\ConditioningControlPanel\{hash}=\ (~200MB each). Each new build gets a
-        /// different hash, and old folders are never cleaned up automatically.
+        /// Marks a folder we are in the middle of deleting. Renaming before deleting makes the
+        /// removal all-or-nothing from the point of view of anyone still using the folder: if a
+        /// file inside is locked the rename fails outright and the folder is left completely
+        /// intact, instead of being stripped of everything that happened not to be mapped.
+        /// </summary>
+        private const string ParkedFolderSuffix = ".stale-";
+
+        private static bool IsParkedFolder(string dir) =>
+            Path.GetFileName(dir).Contains(ParkedFolderSuffix, StringComparison.Ordinal);
+
+        /// <summary>
+        /// Returns the <c>&lt;base&gt;\&lt;hash&gt;</c> folder THIS process is running out of, or
+        /// null if it cannot be established (a normal non-bundled build, or an unreadable module
+        /// list). Null means "do not delete anything" — never "probably that one".
+        /// </summary>
+        private static string? ResolveLiveExtractionFolder(string dotnetTempBase)
+        {
+            try
+            {
+                var prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dotnetTempBase))
+                             + Path.DirectorySeparatorChar;
+
+                foreach (ProcessModule module in Process.GetCurrentProcess().Modules)
+                {
+                    string file;
+                    // A module can vanish between enumeration and read; skip it rather than
+                    // abandoning the whole scan.
+                    try { file = module.FileName ?? string.Empty; } catch { continue; }
+
+                    if (file.Length <= prefix.Length ||
+                        !file.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // <base>\<hash>\libSkiaSharp.dll and <base>\<hash>\libvlc\win-x64\libvlc.dll
+                    // both answer the same thing: the first segment after the base.
+                    var rest = file.Substring(prefix.Length);
+                    var sep = rest.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+                    var hash = sep < 0 ? rest : rest.Substring(0, sep);
+                    if (hash.Length == 0) continue;
+
+                    return Path.Combine(Path.TrimEndingDirectorySeparator(prefix), hash);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Cleanup: could not read the module list: {Error}", ex.Message);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// True when another process of this same executable is alive. Fails CLOSED — if we
+        /// cannot tell, we report true and the caller prunes nothing.
+        /// </summary>
+        private static bool OtherInstancesRunning()
+        {
+            try
+            {
+                using var me = Process.GetCurrentProcess();
+                foreach (var other in Process.GetProcessesByName(me.ProcessName))
+                {
+                    using (other)
+                    {
+                        if (other.Id != me.Id) return true;
+                    }
+                }
+                return false;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Park-then-delete one stale folder. Returns true only when the folder is actually gone.
+        /// </summary>
+        private static bool TryRemoveStaleFolder(string dir, out long size)
+        {
+            size = 0;
+            try
+            {
+                size = GetDirectorySize(new DirectoryInfo(dir));
+
+                var parked = Path.Combine(
+                    Path.GetDirectoryName(dir)!,
+                    Path.GetFileName(dir) + ParkedFolderSuffix + Environment.ProcessId);
+
+                // The rename is the safety interlock: it throws (leaving the folder untouched)
+                // if anything in there is still mapped by a live process.
+                Directory.Move(dir, parked);
+                Directory.Delete(parked, true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // Loud, not silent. The empty catch that used to be here is why a half-deleted
+                // live folder went unnoticed until users started reporting a dead app.
+                App.Logger?.Warning("Cleanup: could not remove stale .NET cache folder {Path}: {Error}",
+                    dir, ex.Message);
+                size = 0;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Finishes off folders a previous run parked but could not delete (a crash between the
+        /// rename and the delete, or a file that was still locked at the time).
+        /// </summary>
+        private static void SweepParkedFolders(string dotnetTempBase, ref int deletedCount, ref long freedBytes)
+        {
+            foreach (var dir in Directory.GetDirectories(dotnetTempBase))
+            {
+                if (!IsParkedFolder(dir)) continue;
+                try
+                {
+                    var size = GetDirectorySize(new DirectoryInfo(dir));
+                    Directory.Delete(dir, true);
+                    freedBytes += size;
+                    deletedCount++;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Cleanup: parked folder {Path} still not removable: {Error}", dir, ex.Message);
+                }
+            }
+        }
+        /// <summary>
+        /// Deletes extraction-cache folders left behind by PREVIOUS builds.
+        ///
+        /// <para>A self-contained single-file build unpacks its natives into
+        /// <c>%TEMP%\.net\ConditioningControlPanel\{hash}\</c>, one folder per build, several
+        /// hundred MB each, and the .NET host never removes the old ones. So we do - but only
+        /// ones we can PROVE are not in use.</para>
+        ///
+        /// <para><b>Why the paranoia.</b> This method used to pick the live folder by a
+        /// heuristic: the first folder whose LastWriteTime sat within five minutes of process
+        /// start. On 2026-08-20 a 6.8.2 -> 6.8.3 upgrade put two folders inside that window (the
+        /// outgoing build had been running four minutes earlier), the loop matched the WRONG one
+        /// first and broke, and every other folder - including the one this very process was
+        /// running out of - went through <c>Directory.Delete(dir, true)</c>. That delete removes
+        /// what it can and throws when it reaches a mapped image section, so the live folder was
+        /// stripped down to the only three files a running WPF app has locked
+        /// (D3DCompiler_47_cor3, PresentationNative_cor3, wpfgfx_cor3) and the throw landed in an
+        /// empty catch. libSkiaSharp was gone; three seconds later AmbientFxCanvas asked for an
+        /// SKPaint and the app died in InitializeComponent with a XamlParseException that named a
+        /// decorative FX control and nothing else.</para>
+        ///
+        /// <para>The .NET host cannot save us here: it verifies and re-extracts missing files at
+        /// process START, and this runs on a background thread well after that. Every subsequent
+        /// launch repeated the same delete, so the install stayed broken until the folder was
+        /// removed by hand. Hence the two hard rules below - identify the live folder exactly, and
+        /// when anything is uncertain delete NOTHING. Reclaiming disk is a nicety; bricking the
+        /// app is not a tradeoff worth making for it.</para>
         /// </summary>
         private static void CleanupDotNetTempCache(ref int deletedCount, ref long freedBytes)
         {
@@ -1131,63 +1274,54 @@ Season: Spiral September";
                 var dotnetTempBase = Path.Combine(Path.GetTempPath(), ".net", "ConditioningControlPanel");
                 if (!Directory.Exists(dotnetTempBase)) return;
 
-                // Determine which folder the current process is using by checking
-                // if any loaded assembly resides inside one of these hash folders
-                var currentExePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
-                var currentFolder = "";
+                // Finish any parked folder a previous run could not fully remove (see below).
+                SweepParkedFolders(dotnetTempBase, ref deletedCount, ref freedBytes);
 
-                // For single-file apps, native libs are extracted to the hash folder.
-                // The app's own exe is NOT in the temp folder, but loaded native DLLs are.
-                // We can identify the active folder by checking which one was most recently written
-                // and matches the current process start time.
-                var processStart = Process.GetCurrentProcess().StartTime;
-
-                foreach (var dir in Directory.GetDirectories(dotnetTempBase))
+                // RULE 1: ask the loader which folder is ours, never the clock. Every native we
+                // have mapped out of the bundle lives under the active hash folder, so our own
+                // module list names it exactly. NativeBundleGuard has already loaded Skia by the
+                // time this background task runs, so there is always at least one such module to
+                // find; if there somehow is not, we bail rather than guess.
+                var liveFolder = ResolveLiveExtractionFolder(dotnetTempBase);
+                if (liveFolder == null)
                 {
-                    var dirInfo = new DirectoryInfo(dir);
-                    // The active folder's last write time should be very close to process start
-                    if (Math.Abs((dirInfo.LastWriteTime - processStart).TotalMinutes) < 5)
-                    {
-                        currentFolder = dir;
-                        break;
-                    }
+                    // Not a single-file build, or we simply could not tell. Guessing is what
+                    // caused the incident above.
+                    App.Logger?.Debug("Cleanup: could not identify the live extraction folder — skipping .NET cache prune");
+                    return;
                 }
 
-                // Fallback: if we couldn't identify current folder, keep the newest one
-                if (string.IsNullOrEmpty(currentFolder))
+                // RULE 2: another instance of this exe may be running out of a DIFFERENT hash
+                // folder (mid-update, or a second copy). We cannot see its folder from here, and
+                // half-deleting it would brick that process exactly the way we bricked ourselves.
+                // The prune is pure disk hygiene — skipping it costs nothing but a later retry.
+                if (OtherInstancesRunning())
                 {
-                    currentFolder = Directory.GetDirectories(dotnetTempBase)
-                        .OrderByDescending(d => new DirectoryInfo(d).LastWriteTime)
-                        .FirstOrDefault() ?? "";
+                    App.Logger?.Debug("Cleanup: another instance is running — skipping .NET cache prune");
+                    return;
                 }
 
                 var staleCount = 0;
                 foreach (var dir in Directory.GetDirectories(dotnetTempBase))
                 {
-                    if (string.Equals(dir, currentFolder, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(dir, liveFolder, StringComparison.OrdinalIgnoreCase))
                         continue;
+                    if (IsParkedFolder(dir))
+                        continue; // already handled by the sweep above
 
-                    try
+                    if (TryRemoveStaleFolder(dir, out var size))
                     {
-                        var dirInfo = new DirectoryInfo(dir);
-                        var dirSize = GetDirectorySize(dirInfo);
-                        Directory.Delete(dir, true);
-                        freedBytes += dirSize;
+                        freedBytes += size;
                         deletedCount++;
                         staleCount++;
-                    }
-                    catch
-                    {
-                        // Folder may be in use by another instance — skip silently
                     }
                 }
 
                 if (staleCount > 0)
                 {
-                    App.Logger?.Information("Cleanup: Deleted {Count} stale .NET cache folder(s) from {Path}",
-                        staleCount, dotnetTempBase);
+                    App.Logger?.Information("Cleanup: Deleted {Count} stale .NET cache folder(s) from {Path} (kept live folder {Live})",
+                        staleCount, dotnetTempBase, Path.GetFileName(liveFolder));
                 }
-
                 // Also clean up CCPUpdateHelper cache - this is a temp copy of our exe used during updates.
                 // It extracts to its own .NET cache folder that's never cleaned up.
                 // By the time the main app runs, the update helper has exited, so all folders are safe to delete.
