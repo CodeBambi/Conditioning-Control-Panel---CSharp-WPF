@@ -1,5 +1,21 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## THE NEXT UNBUILT CAPABILITY, derived 2026-08-22 (this replaces "unnamed")
+
+- **It is the ACHIEVEMENT LEDGER, board line `:323`.** Verified against code, not read off the row:
+  `client/src/CcpClient.Desktop/Features/Progression/` contains exactly ONE file (`GradedRunAwards.cs`) and
+  `AwardableIds` at `:165` is still closed to the two intake ids. The catalogue, the gating predicate and the **63
+  achievement-gated wardrobe items** SP-127 counted do not exist.
+- **How it was derived, because the method is the point:** four OPEN capability rows checked against `client/src`.
+  **Three were STALE** - `:202` entitlement (ships, gates DTRH), line `:83` Bouncing Text (closed SP-115), line
+  `:201` tray (closed SP-096). Only `:323` held. **Do not trust an OPEN capability row; check for a CONSUMER.**
+- **The checking is itself error-prone in the stale-confirming direction.** Searching `ITrayIcon` returns only
+  `bin/**` DLLs while `ITrayPresence` ships; searching `IHapticSink` returns nothing while `IHapticLimb` is wired.
+  **A guessed type name produces evidence about the name, not about the tree.** Search by CONSUMER or by directory,
+  then confirm the abstraction's real name.
+- Still owner-gated and unchanged: the haptic driver, For You Feed, the six Goon Game network items, the `:206`
+  transmit question, the leaderboard identifier. See `client/docs/owner-decisions.md`.
+
 ## Wave 69 AUTHORED AND CANCELLED 2026-08-22 — the premise was stale and the lane caught it
 
 - **SP-138 was authored against board LINE 83 and cancelled at its plan checkpoint. No product code was written.**
