@@ -70,7 +70,7 @@ public sealed class FypCensusTests
 
     private const int ExpectedPayloadFiles = 8;
 
-    private const int ExpectedConsumerFiles = 17;
+    private const int ExpectedConsumerFiles = 18;
 
     /// <summary>
     /// The privacy verdicts themselves, pinned. Counting the answers and checking they are non-blank

@@ -367,8 +367,8 @@ each:
 - **The activity readout fires when nothing can vibrate**, because the gate refuses centrally inside
   the mixer and `Announce` runs after `Play` unconditionally. **Do not "fix" it** with a
   connected-check at a call site: that would change user-observable behaviour.
-- **The decay ladder's own comment is wrong about its length.** `HapticService.cs:761` says "~2s";
-  the arithmetic at `:782-787` spans 3503 ms in the default mode and never less than 3308 ms in any
+- **The decay ladder's own comment is wrong about its length.** `HapticService.cs:817` says "~2s";
+  the arithmetic at `:838-843` spans 3503 ms in the default mode and never less than 3308 ms in any
   mode. **Code wins**; a port copies 3503 ms, not the comment.
 
 ---
@@ -389,7 +389,7 @@ Full pricing on seven fixed axes is summarized below.
 **What C's one real loss costs, in numbers rather than adjectives.** Upstream sums transients WITHIN
 a priority group and takes the max ACROSS groups (`Services/Haptics/Core/HapticMixer.cs:476-502`,
 combined with the continuous floor by `Math.Max` at `:506`). The flash decay ladder posts at
-**priority 1** (`HapticService.cs:786`) and the subliminal pulse posts at **priority 1**
+**priority 1** (`HapticService.cs:842`) and the subliminal pulse posts at **priority 1**
 (`:880`) — sites 1-3 and 14-15, all reachable here — so a flash overlapping a subliminal sums
 upstream and would MAX under C. **Worked at the shipped defaults** (master intensity 0.7,
 `Models/HapticSettings.cs:29`; cap 0.70, `HapticMixer.cs:77`): two overlapping 0.5 transients sum to

@@ -6,7 +6,7 @@ Method: the repeatable inventory rules and source citations stated in this docum
 **Verdict: REFUSED, with the inventory below.** Not "too big" — *the wrong shape*. Two of the seven
 behaviours the owner used to define this surface are governed by decisions that are not the port's to
 make, and the surface's own directory is not a feature but a **shared remote-media subsystem with
-eleven compile-time consumers outside itself**, five of which are surfaces the port has already
+twelve compile-time consumers outside itself**, five of which are surfaces the port has already
 shipped or already owes.
 
 ---
@@ -69,7 +69,7 @@ questioned. The correction did not come from reading `Services/Fyp/` harder.
 ### 1.4 Consumer closure (M3) — 17 files outside `Services/Fyp/` name its types
 
 Enumerated by grepping the whole shipping tree for the nine type names, not by sampling.
-**Compile-time consumers (11):**
+**Compile-time consumers (12):**
 
 | File | What it uses |
 |---|---|
@@ -78,6 +78,7 @@ Enumerated by grepping the whole shipping tree for the nine type names, not by s
 | `MainWindow/MainWindow.Assets.cs:2208,2293,2383,2425` | `FypOnlineCoordinator.Catalog`, `ResetAllChannels`, `SanitizeSub` |
 | `MainWindow/MainWindow.Lab.cs:290,292` | premium gate then `FypHostService.Launch()` |
 | `MainWindow/MainWindow.xaml.cs:1085-1101` | panic ladder: `IsActive`, `IsGhosted`, `ExitGhost`, `RecentlyUnghosted`, `Close` |
+| `Services/Arcademy/ArcademyHostService.cs:1513,1594` | `FypOnlineCoordinator.For(..., FeedMediaKind.Any)`, `ResolveChannels` |
 | `Services/AutonomyService.cs:1061` | `FypHostService.IsActive` — stands WebVideo down |
 | `Services/BubbleCountService.cs:157` | `FypHostService.IsActive` — stands down |
 | `Services/Chaos/DtrhAssetManifest.cs:383,431` | `FypOnlineCoordinator.For(...)`, `ResolveChannels` |
@@ -301,7 +302,7 @@ independently blocks pricing the surface.
 volume is unremarkable. The refusal is about **shape**:
 
 1. **The directory is not the feature.** `Services/Fyp/Online/` (1378 of the 3237 lines, 42%) is the
-   app-wide remote-media subsystem, with 11 compile-time consumers outside itself.
+   app-wide remote-media subsystem, with 12 compile-time consumers outside itself.
 2. **The title behaviour has no port mechanism on either OS**, and on Wayland it may have none at all.
 3. **One of the seven phrases needs a capability the port has not landed** and that the owner has
    reserved.
@@ -355,7 +356,7 @@ Written into `client/docs/wpf-surface-reachability.md` per the standing obligati
   installed distributions on this machine (`client/memories/port-status.md:89-96`), so every Linux
   cell is a named gate, never a discharge.
 - **The Wayland claim in B2 is reasoning, not a measurement.** I did not test a Wayland compositor.
-- **The 11 compile-time consumers were derived by grep, not by a compiler.** A consumer reaching these
+- **The 12 compile-time consumers were derived by grep, not by a compiler.** A consumer reaching these
   types through reflection or a generated partial would not appear.
 
 ---
@@ -396,6 +397,7 @@ itself) that names one of the surface's nine types. `kind` is `code` for a compi
 | C5 | MainWindow/MainWindow.Lab.cs | code |
 | C6 | MainWindow/MainWindow.xaml.cs | code |
 | C17 | Models/AppSettings.cs | comment |
+| C18 | Services/Arcademy/ArcademyHostService.cs | code |
 | C7 | Services/AutonomyService.cs | code |
 | C8 | Services/BubbleCountService.cs | code |
 | C9 | Services/Chaos/DtrhAssetManifest.cs | code |

@@ -128,8 +128,8 @@ public sealed class HapticSiteCensusTests
 
     /// <summary>
     /// Confirm-or-refute, arithmetically, the discrepancy the census records in §8:
-    /// <c>Services/Haptics/HapticService.cs:761</c> says the flash decay ladder "decays over ~2s" and
-    /// the arithmetic at <c>:782-787</c> does not agree with its own comment. Eight rungs at 450 ms
+    /// <c>Services/Haptics/HapticService.cs:817</c> says the flash decay ladder "decays over ~2s" and
+    /// the arithmetic at <c>:838-843</c> does not agree with its own comment. Eight rungs at 450 ms
     /// spacing put the last rung's ATTACK at 3150 ms before its envelope has even begun.
     /// <b>Code wins</b>, and a port copies 3503 ms rather than the sentence.
     /// </summary>
@@ -551,11 +551,11 @@ public sealed class HapticSiteCensusTests
         var violations = new List<string>();
         var service = Path.Combine(wpfRoot, "Services", "Haptics", "HapticService.cs");
         var patterns = Path.Combine(wpfRoot, "Services", "Haptics", "Core", "HapticPatterns.cs");
-        Require(service, 761, "~2s", violations);
-        Require(service, 782, "i < 8", violations);
-        Require(service, 784, "Math.Pow(0.7, i)", violations);
-        Require(service, 786, "250", violations);
-        Require(service, 787, "i * 450", violations);
+        Require(service, 817, "~2s", violations);
+        Require(service, 838, "i < 8", violations);
+        Require(service, 840, "Math.Pow(0.7, i)", violations);
+        Require(service, 842, "250", violations);
+        Require(service, 843, "i * 450", violations);
         Require(patterns, 36, "MinFeltOnMs = 130", violations);
         Require(patterns, 40, "MinFeltDurationMs = 200", violations);
         // The ENVELOPE arithmetic, not only the loop's constants. RenderedRungMs below reproduces
@@ -595,7 +595,7 @@ public sealed class HapticSiteCensusTests
 
     /// <summary>
     /// <c>PlayDecayLadder</c> appends eight rendered patterns at <c>i * 450</c> ms
-    /// (<c>HapticService.cs:782-787</c>); the span is the last rung's offset plus its own rendered
+    /// (<c>HapticService.cs:838-843</c>); the span is the last rung's offset plus its own rendered
     /// length, which is what <c>HapticPatterns.TotalMs</c> computes (<c>:137-147</c>).
     /// </summary>
     private static int RenderedLadderSpanMs(LadderMode mode) => (7 * 450) + RenderedRungMs(mode, 250);
@@ -774,7 +774,7 @@ public sealed class HapticSiteCensusTests
         repo.Write("ConditioningControlPanel/Services/Subliminal/SubliminalService.cs",
             "// nor here" + Environment.NewLine);
         repo.Write("ConditioningControlPanel/Services/Haptics/HapticService.cs", string.Join(Environment.NewLine,
-            Enumerable.Range(1, 790).Select(LadderFixtureLine)));
+            Enumerable.Range(1, 845).Select(LadderFixtureLine)));
         repo.Write("ConditioningControlPanel/Services/Haptics/Core/HapticPatterns.cs", string.Join(Environment.NewLine,
             Enumerable.Range(1, 130).Select(PatternsFixtureLine)));
         repo.Write("client/src/CcpClient.Desktop/Effects/FlashSurfacePresenter.cs", string.Join(Environment.NewLine, new string[]
@@ -818,11 +818,11 @@ public sealed class HapticSiteCensusTests
 
     private static string LadderFixtureLine(int number) => number switch
     {
-        761 => "        /// <summary>Vibe that decays over ~2s. The slider sets the starting intensity;",
-        782 => "            for (int i = 0; i < 8; i++)",
-        784 => "                var intensity = Math.Max(start * Math.Pow(0.7, i), MinPerceptibleIntensity);",
-        786 => "                    HapticPatterns.Render(rule.Mode, intensity, 250, priority: 1, target: rule.Target),",
-        787 => "                    offsetMs: i * 450);",
+        817 => "        /// <summary>Vibe that decays over ~2s. The slider sets the starting intensity;",
+        838 => "            for (int i = 0; i < 8; i++)",
+        840 => "                var intensity = Math.Max(start * Math.Pow(0.7, i), MinPerceptibleIntensity);",
+        842 => "                    HapticPatterns.Render(rule.Mode, intensity, 250, priority: 1, target: rule.Target),",
+        843 => "                    offsetMs: i * 450);",
         _ => "        // filler",
     };
 

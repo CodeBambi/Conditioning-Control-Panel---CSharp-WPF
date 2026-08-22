@@ -860,22 +860,22 @@ by 3 and 5 lines. Here a citation that drifts by **one** line reds the suite.
 | voice-bytes | docs/GOON_VOICE_PLAN.md | 62 | VN_MAX_BYTES = 262_144 |
 | goon-build | Resources/web/goon/bridge.js | 43 | r17-20260806 |
 | lab-entry | MainWindow/MainWindow.Lab.cs | 201 | GoonHostService.Launch() |
-| cli-goon | App.xaml.cs | 2436 | GoonHostService.Launch() |
-| cli-goon-test | App.xaml.cs | 2364 | new GoonTestWindow() |
-| cli-goon-vectors | App.xaml.cs | 2447 | GoonVectorDumper.Run() |
-| playtab-send-rung | MainWindow/MainWindow.PlayTab.cs | 107 | HasPremiumAccess |
-| playtab-host-rung | MainWindow/MainWindow.PlayTab.cs | 108 | HasLabAccess |
+| cli-goon | App.xaml.cs | 2517 | GoonHostService.Launch() |
+| cli-goon-test | App.xaml.cs | 2445 | new GoonTestWindow() |
+| cli-goon-vectors | App.xaml.cs | 2528 | GoonVectorDumper.Run() |
+| playtab-send-rung | MainWindow/MainWindow.PlayTab.cs | 112 | HasPremiumAccess |
+| playtab-host-rung | MainWindow/MainWindow.PlayTab.cs | 113 | HasLabAccess |
 | stale-single-perk-comment | MainWindow/MainWindow.Lab.cs | 193 | only premium part |
 | wrong-citation-site | Views/Tabs/PlayTabView.xaml | 604 | MainWindow.Lab.cs:182-186 |
 | wrong-citation-target | MainWindow/MainWindow.Lab.cs | 182 | BtnStartBureau_Click failed |
-| assets-hook | MainWindow/MainWindow.Assets.cs | 1504 | TransferCompressionService.Instance.OnPresetChanged |
+| assets-hook | MainWindow/MainWindow.Assets.cs | 1493 | TransferCompressionService.Instance.OnPresetChanged |
 | consent-msg-decl | Services/GoonGame/GoonContracts.cs | 293 | class ConsentSheetMsg |
 | consent-msg-use | Services/GoonGame/GoonHostService.cs | 310 | new ConsentSheetMsg() |
 | live-duration-default | Services/GoonGame/GoonContracts.cs | 97 | LiveDurationSecDefault = 720 |
 | toy-cap-default | Services/GoonGame/GoonContracts.cs | 297 | ToyCap { get; set; } = 0.7 |
 | payload-gap-default | Services/GoonGame/GoonContracts.cs | 108 | PayloadMinGapMs = 30000 |
 | two-implementations | Services/GoonGame/GoonHostService.cs | 25 | The C# engine under Services/GoonGame stays |
-| assets-hook-comment | MainWindow/MainWindow.Assets.cs | 1502 | The Goon Game transfer cache |
+| assets-hook-comment | MainWindow/MainWindow.Assets.cs | 1491 | The Goon Game transfer cache |
 | artifact-cap-history | Services/GoonGame/TransferInboxStore.cs | 80 | 24→64 MB |
 | auth-token-header | Services/GoonGame/GoonHostService.cs | 810 | X-Auth-Token |
 | client-version-header | Services/GoonGame/GoonHostService.cs | 811 | X-Client-Version |
