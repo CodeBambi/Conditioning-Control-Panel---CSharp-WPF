@@ -1,5 +1,27 @@
 # Port Status (as of 2026-08-15, twentieth export — DESKTOP, unattended overnight run)
 
+## THE OLD-PORT CLEANUP: measured 2026-08-22, NOT performed, and it is bigger than a delete
+
+The owner asked to remove the old Avalonia port so only `client/` remains. **It is removable and it does NOT touch
+the shipping product** - but it has a measured cost that must be paid in the same change.
+
+- **`main` HAS NO `CCP.*` AT ALL.** No directory, and no `CCP.Core` reference in its shipping csproj. The
+  `ProjectReference` at `ConditioningControlPanel.csproj:52` exists ONLY on this branch. **My first reading - that
+  deleting the old port would break the shipping product - was WRONG**, taken from the port branch's csproj without
+  checking main.
+- **Restoring `ConditioningControlPanel/` to `main` was MEASURED end to end:** it removes 1032 `CCP.*` files plus
+  ~90 committed logs/traces/caches, the shipping solution then builds to main's exact result (332W/1E, the 1 being a
+  test-project packaging quirk), `client/` still builds 0/0, and all four linked payload trees survive intact.
+- **THE COST, and it is why this is a task and not a delete:** two guards go red -
+  `FypCensusTests.TheConsumerSetIsRederivedFromTheShippingBytes_...` and
+  `GoonGameCensusTests.EveryPinnedCitation_IsOnTheExactLineItClaims`. The port's citations are pinned against this
+  branch's diverged WPF tree, not against the shipping bytes. **Re-deriving them is the work.**
+- **PROCESS FAILURE OF MINE, recorded so it is not repeated:** I ran the restore intending a scratch worktree; the
+  `git worktree add` failed with *missing but already registered*, `cd` fell through to the repo root, and the
+  destructive commands ran in the MAIN TREE. Nothing was committed, `git checkout HEAD -- ` plus `git reset` and
+  `git clean` restored it exactly, and the tree was re-verified at 2622/152 with 0W/0E. **Chain a worktree
+  creation with `&&` to the `cd`, or verify `pwd` before any `rm -rf`.**
+
 ## REAL MEDIA EXISTS: the owner designated `C:\Code\ccp media` on 2026-08-22
 
 - **This supersedes `Z:\CCP Vids`**, which never existed on this machine and blocked board line 71 for weeks.
