@@ -20,40 +20,32 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.8.3";
+        public const string AppVersion = "6.8.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.8.3 - Relapse
+        public const string CurrentPatchNotes = @"v6.8.4 - Relapse
 
-Round two of repairs under the same banner. Everything below comes from your reports since 6.8.2 dropped.
+Round three under the same banner. This one is about logins that would not stay logged in, and about an update that broke itself on the way in. Everything below comes from your reports.
 
-THE PROGRAM FREEZES, FOUND AND FIXED
-- Switching to the Programs tab could hard-freeze the whole app when a program was running hot. A decorative animation kept retrying at a priority that outranks your mouse and keyboard, forever. It now gives up after 3 tries like a polite guest.
-- The corner GIFs a session spawns never received the freeze fix from two updates ago - only the settings-preview path did. Long program days (Firmware Install day 14) could still lock up because of it. Now both paths share the fix.
-- The lock card's dead-man's switch was disarmed for the FIRST card of a run, which is exactly the card that froze for some of you on program day 2. It now arms from card one.
-- If the app ever does freeze and you task-kill it, it now leaves behind a note saying exactly what it was doing, and reports it on the next launch. Freezes can no longer die anonymously.
+THE UPDATE THAT ATE ITSELF
+- If the app stopped opening after you updated to 6.8.3, that one was our fault, and this fixes it. Our own update cleanup was deleting the folder the running app lives out of. It now identifies the live folder exactly instead of guessing at it, and if a core file ever does go missing the app repairs itself and restarts instead of quietly dying with no window.
 
-BRAIN DRAIN, VISIBLE ON EVERY MACHINE
-- Found it. On some graphics drivers the screen capture comes back with a blank transparency byte, and the blur drew itself fully invisible. Same app, same settings, nothing on screen. The capture is now read in a way that cannot be transparent, so the blur and melt render on every machine. If Brain Drain never showed anything for you, this was why.
-- Audio clips now also load from a braindrain folder inside your assets folder, where you actually looked for it. The old location still works; the folder card shows you both.
-- New opt-in in Settings: allow Brain Drain to appear in screenshots and recordings. Off by default, streamers stay safe.
+LOGINS THAT STAY LOGGED IN
+- Fixed the login loop behind ""Invalid or missing auth token"". If your Discord and your Patreon ended up as two separate accounts, the app kept swapping between their two logins, so Backup, Export, Remote Control and syncing would keep failing, and logging out only fixed it until the next time. It now refuses the mismatched login instead of adopting it.
+- Backup and Export now retry once after the app repairs your session, instead of showing you a failure for a problem that had just been fixed.
+- Remote Control now tells you when it was your login that got rejected, instead of blaming your internet connection.
 
-WINDOWS THAT BEHAVE
-- At 300 percent display scaling the window taller than your screen dropped its bottom bar below the taskbar. It now clamps itself to the monitor it is actually on.
-- The Audio Layers window crashed in its own constructor and had NEVER successfully opened, for anyone, since the feature shipped. It opens now. It also politely appears on-screen instead of wherever it last imagined itself.
-- Pink Rush, achievement and item popups no longer steal focus from your fullscreen game. They announce, they do not interrupt.
-- Starting the tutorial while minimized to tray no longer plays to an empty room; the main window comes back first.
-- Reveal in Explorer now highlights the actual file instead of dumping you on the Desktop.
+QUESTS
+- Your daily and weekly quest progress no longer gets wiped when you log out and back in. Apologies to everyone who lost a day to this, doubly so because logging out is the advice we kept handing out.
 
-MOD CREATOR CATCHES UP
-- The achievement art list showed 29 slots while the app has 69 achievements. All are now offered, and loading an existing mod no longer silently drops half its badges on export.
-- 30 achievements had no translation keys at all, so non-English users always saw English. All 9 languages now cover the full set.
+SMALL THINGS
+- The nav rail now points out the Ctrl+K search palette.
 
 IN CASE YOU MISSED 6.8 ENTIRELY
-The 6.8 line landed fast, three updates inside a week, so if you have not opened CCP since 6.7 here is what is waiting for you:
+The 6.8 line landed fast, four updates inside two weeks, so if you have not opened CCP since 6.7 here is what is waiting for you:
 - A whole new layout. The tab strip is gone; six doors live on a rail down the left edge with Settings pinned at the bottom. Ctrl+K opens a command palette that jumps you to any setting by name.
 - One account across desktop, web and phone. XP earned on app.cclabs.app or on your phone lands in your level here automatically.
 - Online media everywhere, strictly opt-in. The For You feed goes endless, and flashes, mandatory videos and subliminals can pull fresh content too. Local files stay the default.
@@ -61,7 +53,7 @@ The 6.8 line landed fast, three updates inside a week, so if you have not opened
 - One premium feature is FREE every single day: the ? box on your dashboard. No trial, no nag, different feature tomorrow.
 - Sessions rebuilt into a color-coded rack with sort, filter and search. Programs got honest day crediting, feasible tasks and graduation badges.
 - Brain Drain is live on the rack, and mods now repaint the entire app the instant you switch.
-- Plus the 6.8.1 and 6.8.2 hotfix rounds: 50+ community-reported bugs put down, the daily freebie opens at every gate, speech ships with its voice model again, and sign-in can no longer die to a cosmetic glow.
+- Plus the 6.8.1, 6.8.2 and 6.8.3 hotfix rounds: 50+ community-reported bugs put down, the daily freebie opens at every gate, speech ships with its voice model again, sign-in can no longer die to a cosmetic glow, and Brain Drain finally renders on every machine.
 
 Season: Airhead August (The last season!)
 

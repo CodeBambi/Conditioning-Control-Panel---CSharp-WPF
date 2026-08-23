@@ -12,18 +12,39 @@
  * The whole table is exported so the C# NeutralLexicon can mirror it key-for-key
  * (the orchestrator applies the delta reported by the build - this file never
  * touches C#).
+ *
+ * HOUSE RULES WAVE. Two changes, both Deck VI (images over text):
+ *   - `ic_tube_rules` is GONE. The rules are DRAWN now: render.showHowto() draws
+ *     three vignettes and captions them with the ic_howto_* rows below, so the
+ *     150-character paragraph that no mod could ever re-voice (web CLAUDE.md
+ *     trap 26: NeutralLexicon drops a mod string over 96 chars) has no render
+ *     site left. Its C# row stays put; nothing reads it.
+ *   - the casino deck (casino.js) speaks through `t` like everything else, so
+ *     its words live HERE and not in the deck: ic_almost / ic_just / ic_royal /
+ *     ic_jackpot / ic_perfect_class / ic_tonight / ic_streak_n / ic_record_ping.
+ *     The trickster deck renders no text at all and adds no rows.
+ *
+ * EVERY VALUE IS <= 96 CHARACTERS, on purpose (trap 26). Keep it that way: a
+ * longer row is a row a mod can never skin. Split it into two rather than
+ * raising the cap.
  * ==========================================================================*/
 
 export const IC_LEX = Object.freeze({
   /* --- the fiction ------------------------------------------------------- */
   ic_tube_title: 'The Drop Tube',
   ic_subject: 'Subject',
-  ic_tube_rules: 'Pop every bubble the instant it surfaces. NEVER touch the X.',
   // {key} is substituted with the player's bound POP key.
   ic_go_hint: 'Click the bubble or press {key}. An X means hold still.',
   ic_loading: 'Priming the tube - hold still, subject.',
   ic_bubble_n: 'Bubble',
   ic_incoming: 'INCOMING',
+
+  /* --- the class rules sheet (drawn vignettes; these are the captions) ---- */
+  ic_howto_title: 'Class rules',
+  ic_howto_pop: 'A bubble lands in the dish. Pop it at once. The faster you are, the more it pays.',
+  ic_howto_x: 'A bubble wearing an X is a trap. Touch nothing until its ring runs out.',
+  ic_howto_drift: 'A bubble you miss just drifts off the dish. Nothing is taken from you.',
+  ic_howto_go: 'Start the drop',
 
   /* --- per-bubble feedback ---------------------------------------------- */
   ic_pop_perfect: 'PERFECT',
@@ -34,6 +55,17 @@ export const IC_LEX = Object.freeze({
   ic_missed: 'It drifted away',
   ic_new_best: 'NEW BEST',
   ic_streak: 'streak',
+
+  /* --- the casino deck's vocabulary (casino.js renders these through t) ---- */
+  // {n} is substituted with the current pop chain length.
+  ic_streak_n: 'chain {n}',
+  ic_almost: 'ALMOST',
+  ic_just: 'JUST',
+  ic_record_ping: 'record',
+  ic_jackpot: 'JACKPOT',
+  ic_royal: 'ROYAL',
+  ic_perfect_class: 'Perfect class',
+  ic_tonight: 'tonight only',
 
   /* --- HUD --------------------------------------------------------------- */
   ic_score: 'Score',

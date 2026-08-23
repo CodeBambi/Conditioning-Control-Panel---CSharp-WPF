@@ -95,13 +95,33 @@ internal static class ArcademyHostService
     /// already failed on this machine.</summary>
     public static bool BootFailedThisSession { get; private set; }
 
+    // ============================== the gate ==============================
+
+    /// <summary>
+    /// Single source of truth for "is there an Arcademy door". Everything that shows, hides or
+    /// opens the Arcademy asks this - the Play card's visibility in
+    /// <c>MainWindow.RefreshPlayCards</c> and the refusal at the top of <see cref="Launch"/>.
+    ///
+    /// <para><c>false</c> because the Arcademy is BUILT but not launched: Semester 1 landed on
+    /// main (PR #241) ahead of its public reveal, and 6.8.4 is an auth/stability patch that must
+    /// ship those fixes without also shipping an unannounced feature. A HIDE, not a lockband, for
+    /// the same reason Just Drop hides: a lockband advertises something the account could buy,
+    /// and a door we have not opened yet is not for sale.</para>
+    ///
+    /// <para>Flip to <c>true</c> to reveal it - that is the whole reveal. The T2 bar and the
+    /// AudioOnlySession rule below are untouched and still apply underneath it.</para>
+    /// </summary>
+    /// <remarks>static readonly, not const: a const would make the guard in <see cref="Launch"/>
+    /// compile-time unreachable (CS0162), exactly as JustDropService.Withheld documents.</remarks>
+    public static readonly bool DoorAvailable = false;
+
     // ============================ launch / close ============================
 
     /// <summary>
     /// Open the Arcademy window. Idempotency FIRST (a live instance is only ever re-focused, so
     /// a window that is already open can always be brought back - even after AudioOnlySession was
     /// switched on mid-class, which suspends the class rather than closing the window), then the
-    /// gates for a FRESH launch, each failing closed: T2, then AudioOnlySession.
+    /// gates for a FRESH launch, each failing closed: the door, T2, then AudioOnlySession.
     /// </summary>
     public static void Launch()
     {
@@ -110,12 +130,23 @@ internal static class ArcademyHostService
         //    arrives as a `suspend` push - see OnSettingChangedInApp - and the window stays up).
         if (_host != null) { _host.FocusWeb(); return; }
 
-        // 2. The T2 bar. TierGate is the one truth for "may this account open that?" and it
+        // 2. The door itself. The card is collapsed while this is false so nothing in the UI can
+        //    reach here - but the handler is internal and the card is one XAML edit away from
+        //    visible, and the house rule is that the code path which actually opens the door has
+        //    to be the one that can say no (see the BtnStartArcademy_Click docs). Silent: there is
+        //    no announced feature to explain a refusal about yet.
+        if (!DoorAvailable)
+        {
+            App.Logger?.Debug("ArcademyHost.Launch refused: the Arcademy door is not open yet (unreleased)");
+            return;
+        }
+
+        // 3. The T2 bar. TierGate is the one truth for "may this account open that?" and it
         //    fails closed while App.Patreon is null; DemandLab also raises the standard refusal
         //    toast with its "See tiers" action, which is the whole gate UX.
         if (!TierGate.DemandLab(ProductName)) return;
 
-        // 3. AudioOnlySession. Owner ruling: v1 SKIPS the Arcademy on audio-only days rather than
+        // 4. AudioOnlySession. Owner ruling: v1 SKIPS the Arcademy on audio-only days rather than
         //    substituting audio-capable classes; the attendance streak is preserved (frozen, not
         //    broken) because nothing was missed - the day simply had no visual classes in it.
         if (App.Settings?.Current?.AudioOnlySession == true)
@@ -1039,6 +1070,20 @@ internal static class ArcademyHostService
         ["de_free_swim"] = "Free Swim",
         ["de_free_swim_hint"] = "No bell, no grade - swim until you surface.",
         ["de_surface"] = "Surface",
+        // ---- Impulse Control - House Rules wave (casino words + class-rules sheet)
+        ["ic_almost"] = "ALMOST",
+        ["ic_howto_drift"] = "A bubble you miss just drifts off the dish. Nothing is taken from you.",
+        ["ic_howto_go"] = "Start the drop",
+        ["ic_howto_pop"] = "A bubble lands in the dish. Pop it at once. The faster you are, the more it pays.",
+        ["ic_howto_title"] = "Class rules",
+        ["ic_howto_x"] = "A bubble wearing an X is a trap. Touch nothing until its ring runs out.",
+        ["ic_jackpot"] = "JACKPOT",
+        ["ic_just"] = "JUST",
+        ["ic_perfect_class"] = "Perfect class",
+        ["ic_record_ping"] = "record",
+        ["ic_royal"] = "ROYAL",
+        ["ic_streak_n"] = "chain {n}",
+        ["ic_tonight"] = "tonight only",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via

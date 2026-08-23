@@ -64,15 +64,29 @@ games/<key>/index.js  one folder per game; games NEVER import each other
   daily-trigger/   the daily word (homeroom, flagship)  - bank/board/ladder/words-*
   lost-and-found/  the mosaic hunt (MEATY, flagship)    - board/grade/hud/util
   deja-vu/         the pair memory                      - script (the swap plan)
-  impulse-control/ the Drop Tube (pop/withhold)         - lex/schedule/scoring/render/tube3d/tube2d
+  impulse-control/ the Drop Tube (pop/withhold)         - lex/schedule/scoring/render/style/tube3d/tube2d
                    (seeded three.js chute, vendored r185 in ../vendor/; tube2d = no-WebGL ladder)
+                   + the House Rules decks casino (THE FLOOR: bulb-ring marquee, chime ladder,
+                   gate, near-miss staging, jackpot ladder + royal) / pressure (THE SURGE: the
+                   STREAK-driven CCP effects ladder + tube/HUD tremor, never the basin) /
+                   trickster (the Tell, the crooked ring, ghost cursor, stat flicker);
+                   THE LANDING: tube3d projects the middle of its VISIBLE hole into
+                   `--ic-basin-x/-y` on `.g-ic` (render.js onLanding) and the basin /
+                   ring / flourish / stamp hang off those; THE DUSK (`.g-ic-dusk`, z2 over
+                   the tube, render.js) is pressure.js's rung-driven dimmer + FLARE;
+                   render owns the drawn class-rules sheet + the lit HUD + the ticket debrief;
+                   every deck injects its OWN <style id="g-ic-<deck>-style">; render's only
+                   audio node is the grandfathered denied.mp3 sting - every other cue is engine
+                   audio_trigger (pitch = the streak)
   the-deep-end/    2048 with trance-depth tiers (MEATY) - board/schedule/grade/lex/style/casino/trickster/pressure
                    the deepest tile is the heat dial; board/schedule/grade pure, casino+trickster+pressure decks
                    (pressure = the rung-by-rung CCP effects ladder + the Balatro board tremor/HUD juice)
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
-one of them** (200 rows as of Semester 1) or the shell renders raw keys for the settings
+one of them** (200 rows as of Semester 1; `de_*` + the IC House Rules wave since - the count is a
+floor, never a contract: a scratch script diffs every `t('key'` / lexicon table against the C#
+table, see §7) or the shell renders raw keys for the settings
 page's `label_key` / `hint_key`. Impulse Control exports its table as data
 (`impulse-control/lex.js` `IC_LEX`) - copy the values, do not re-word them.
 
@@ -233,8 +247,9 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     it will eat a test suite that boots repeatedly. `clearTimetableCache()` exists for that.
 26. **A `NeutralLexicon` value longer than 96 characters can never be mod-skinned.**
     `MergeModTable` drops any mod string over `Length > 96`, so the long Impulse Control
-    rows (the `ic_slip_*` lines, `ic_tube_rules`) always render English. If a
-    mod must re-voice one, split it into two rows rather than raising the cap.
+    rows (the `ic_slip_*` lines) always render English. If a mod must re-voice one, split
+    it into two rows rather than raising the cap. (`ic_tube_rules` is no longer rendered -
+    the class-rules sheet is drawn - but its C# row stays; the host table is append-only.)
 
 27. **`[hidden]` IS A USER-AGENT RULE, SO ANY AUTHOR `display:` BEATS IT.** `.arc-loader,
     .arc-nope { position:fixed; inset:0; display:flex }` meant `dom.loader.hidden = true` and
@@ -291,6 +306,31 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     that timer can never tick (the dispatcher is already shutting down and OnExit ends in
     TerminateProcess), so the meta flush and the WebView2 disposal it guards never ran.
     `ShutdownFlush` is the synchronous path: flush, dispose, no round trip.
+
+33. **A jackpot's forced garnish KILLED every held spiral wash (engine, fixed 2026-08-22).**
+    `ceremonies.jackpot` forces `drain|spiral`, which re-triggers the ONE wash element per kind
+    with a hold; the hold's deadline used to write `opacity:0` - and took a class's
+    `sustainForever` wheel with it (IC's rung-3 wheel vanished 3.8s after any jackpot; the Deep
+    End's was exposed the same way). `engine/sustained.js startWash` now keeps `forever` +
+    `heldAlpha` per element: a later NON-forever trigger at a HIGHER alpha is a flare that falls
+    back to the held alpha; a LOWER one is the decks' whisper-out step-down and ends the hold.
+    `stop('wash')` clears both. Do not "simplify" the three branches.
+34. **`Vector3.project(camera)` on a camera that has never rendered projects through the
+    identity.** `matrixWorldInverse` is only refreshed by a render or an explicit
+    `camera.updateMatrixWorld(true)`; tube3d's THE LANDING solve ran before the first frame,
+    got garbage, and silently fell back to 50%/50% (the bubble sat on the near coil again). Call
+    `updateMatrixWorld(true)` + `updateProjectionMatrix()` before any build-time projection, and
+    sanity-bound the result (15-85%) with an explicit fallback.
+35. **"The effects play behind the tube" was never z-order - it was alpha.** Three in-app
+    verdicts in a row (owner 2026-08-22). The CDP compositor shot AND a PrintWindow grab both
+    showed the fixed `#arc-fx` layer on top; what the eye saw was the engine's heat-gated
+    bursts (0.15-0.75 alpha, 120-270px) and `mix-blend-mode:screen` washes drowned by a
+    neon WebGL chute, and neon lines bleeding THROUGH a translucent gif read as "behind".
+    The engine's ceilings are law, so the fix is GAME-LOCAL and under the effects: the dusk
+    (rung-driven opacity on an empty div over the tube) plus THE FLARE (snap to 0.84/0.92 under
+    every gif/flash burst for its hold, ease back). Before touching z-index for a "behind"
+    report, inject a solid test box into `.ae-front` and PrintWindow the app - if the box is
+    on top, it is alpha.
 
 ## 5. The game module contract (short version)
 
