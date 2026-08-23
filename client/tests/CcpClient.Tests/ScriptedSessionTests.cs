@@ -570,6 +570,11 @@ public class ScriptedSessionTests
         Assert.Equal(180, ramping.FlashesPerHour);
         Assert.Null(ramping.FlashScalePercent);
 
+        // Two thirds through, 71.666… is 71 and not 72 — the same cast, at a point where rounding
+        // would visibly disagree with it (62.5 above is a midpoint, where .NET's own rounding
+        // happens to agree, so it cannot carry this claim alone).
+        Assert.Equal(71, Ramp(Built("good_girls_dont_cum"), 40).FlashOpacityPercent);
+
         // Distant Doll ramps neither, and sets a scale: 150 % for the WHOLE session, pinned rather
         // than lerped (:596-599). Early and late give the same number, which is the pin.
         var pinned = Built("distant_doll");
@@ -841,8 +846,11 @@ public class ScriptedSessionTests
         Assert.Equal(EffectReasonCodes.PinkFilterTransparent, rig.ArmCode(PinkFilterEffect.EffectId));
 
         // The ticks after it leave the filter alone. Upstream's guard is "the session wants it and
-        // the user's live dial has not got it yet" (:688) — not "toggle it".
+        // the user's live dial has not got it yet" (:688) — not "toggle it". Asserted after EVERY
+        // following tick, not just at the end: a start that toggled would be back on after an even
+        // number of them, which is a hole a single closing assertion cannot see.
         rig.Clock.Advance(TimeSpan.FromMinutes(5));
+        Assert.True(rig.PinkModule.Enabled);
         rig.Clock.Advance(TimeSpan.FromMinutes(5));
         Assert.True(rig.PinkModule.Enabled);
     }
