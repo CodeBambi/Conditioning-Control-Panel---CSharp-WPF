@@ -97,9 +97,22 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    the TIER restricts the alphabet; tones = engine audio_trigger 'pad' x pitch (+1 semitone per
                    link, cap 7); a fail is NOT the class (new sequences until the bell); Encore once, auto
   instant-recall/  the vigil (recall, 120s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
-                   GUARANTEE in the last 15s, layouts rows/mosaic/swirl, density sawtooth, plants, templates
-                   LAST_WORD/EFFECT/STING/TWO + MODE tier 4 <=10%) / montage (the stage + the L&F live-window
-                   discipline + createLedger = the TRUTH tail, aria-hidden) / grade / lex IR_LEX; ir_density
+                   GUARANTEE in the last 15s, density sawtooth, plants, templates LAST_WORD/EFFECT/STING/TWO,
+                   + THE EFFECT POOL: ten CCP effects under CCP's own names, 4/6/8/10 by tier, and ONE seeded
+                   dealer that enforces MIN_SEPARATION_MS 700 between any two starts) / montage (THE WALL: one
+                   full-bleed grid solved from the stage aspect, two faces per tile, seeded dwells, ONE interval
+                   driver + the L&F live-window discipline + createLedger = the TRUTH tail, aria-hidden) /
+                   grade / lex IR_LEX; ir_density
+                   THE MOSAIC REWORK (owner ruling 2026-08-23, "a mosaic like the FYP... the effects should be
+                   those they can recognise"): the rows/mosaic/swirl layouts, the MODE template and the
+                   engine-kind option names (`Wash`, `Scanlines`, `Drift`) are GONE. A LAST_EFFECT option is a
+                   POOL KEY (`ir_fx_flash` "Flash image", `ir_fx_corner_gif` "Corner GIF", `ir_fx_brain_drain`
+                   "Brain Drain" ...), never an engine kind - which is what keeps corner_gif vs fullscreen_gif
+                   (both `gif_burst`) and spiral/pink/brain_drain (all `wash`) four distinct honest answers.
+                   TWO LAWS THE DECKS INHERIT: a tile swap NEVER writes a ledger entry (the wall is the room),
+                   and NO deck may fire a POOL primitive - pressure.js dresses with crt / ambient_field /
+                   glitch_swap only, and casino.js passes `garnish:false` to `ceremony('jackpot')` because the
+                   forced `drain|spiral` garnish would otherwise be a real Spiral the ledger never saw.
   anomaly/         the odd-one-out grid (search, 90s)     - rounds (PURE: kinds/deltas at PERCEPTIBLE floors,
                    relocations cap 2/round, drift) / grade / lex AN_LEX; the odd index lives in CLOSURE ONLY -
                    never a DOM attr/class (suite asserts it); decks get a canMelt(i)/meltCandidates() oracle
@@ -472,6 +485,17 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
       `maxTouchPoints: 10` with a fine pointer and therefore also gets the ceiling. It is
       hardware-protective and cheap; do not "fix" it by dropping the maxTouchPoints probe,
       which is the only signal a webview that answers no media query has.
+
+43. **`fullBleed` IS THE ONE ADDITIVE ENGINE OPTION INSTANT RECALL ADDED (2026-08-23).**
+    `engine/oneshots.js` `fire('flash_burst'|'gif_burst', { fullBleed: true })` forces `count:1`,
+    adds the class `ae-burst-cover` (`inset:0`, `object-fit:cover`, no transform, no radius) and
+    zeroes `--ae-rot`; the handle answers `fullBleed`. It exists because "fullscreen GIF" is one of
+    CCP's OWN named effects and the pool needs it to be visibly different from the corner GIF - which
+    needs no engine change at all, because `count:1` plus `x`/`y` (viewport percentages, the layer is
+    fixed on `#arc-fx`) is already a placement seam. **Opt-in and count-forcing: a caller that never
+    passes the field sees byte-identical behaviour**, which is the bar every engine addition has to
+    clear. Alpha still comes from the clamped channel - `fullBleed` changes the SHAPE of a burst,
+    never its ceiling, so THE CEILING RULE is untouched.
 
 ## 5. The game module contract (short version)
 

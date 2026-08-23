@@ -16,6 +16,14 @@
  *   - words may be EMPTY: sub_flash then falls back to image-only, and with no
  *     image either it skips SILENTLY (never crashes, never invents a word);
  *   - reduced motion / motionLevel 0 -> static, dim, single-node degrades.
+ *
+ * ADDITIVE (2026-08-23): `fullBleed: true` on flash_burst / gif_burst renders
+ * ONE node covering the whole effects layer (`.ae-burst-cover`, object-fit:
+ * cover, no transform) instead of a placed card - CCP's own "fullscreen GIF",
+ * which a width-only burst node could never be. Opt-in and count-forcing: a
+ * caller that never passes it sees byte-identical behaviour, so no existing
+ * class moves. Every other law still applies (the node cap, the decoder budget
+ * through budgetedKind, the alpha ceiling, clickSafe, the timer registry).
  * ==========================================================================*/
 
 import { clamp01 } from '../core/caps.js';
@@ -139,9 +147,15 @@ export function createOneshots(ctx) {
     const cap = kind === 'flash_burst' ? flashCap() : NODE_CAPS.gifBurst;
     const counter = kind === 'flash_burst' ? 'flash' : 'gifBurst';
 
+    /* FULL BLEED (additive, 2026-08-23). One node covering the whole layer -
+     * CCP's "fullscreen GIF", which a width-only burst node cannot be. Opt-in:
+     * without the flag nothing about a burst changes, so no other class moves. */
+    const fullBleed = opts.fullBleed === true;
+
     let count = Number.isFinite(opts.count) ? Math.max(1, opts.count | 0)
       : burstCountForHeat(heat, ctx.rng());
     if (ctx.reduced() || ctx.motion() <= 0) count = 1;
+    if (fullBleed) count = 1;
     count = Math.min(count, Math.max(0, cap - live[counter]));
     if (count <= 0) return null;
 
@@ -177,10 +191,11 @@ export function createOneshots(ctx) {
       // mediaEl: <img>, or a muted looping <video> when the pool handed us a
       // webm/mp4 loop (the only animated shape a remote provider has)
       const node = (url && mediaEl(url)) || document.createElement('div');
-      node.className = 'ae-burst ae-burst-' + variant.name + (clickable ? ' ae-burst-clickable' : '');
+      node.className = 'ae-burst ae-burst-' + variant.name + (clickable ? ' ae-burst-clickable' : '')
+        + (fullBleed ? ' ae-burst-cover' : '');
       node.style.setProperty('--ae-x', (atX == null ? Math.round(rand(ctx.rng, 12, 88)) : atX) + '%');
       node.style.setProperty('--ae-y', (atY == null ? Math.round(rand(ctx.rng, 14, 86)) : atY) + '%');
-      node.style.setProperty('--ae-rot', Math.round(rand(ctx.rng, -8, 8)) + 'deg');
+      node.style.setProperty('--ae-rot', fullBleed ? '0deg' : (Math.round(rand(ctx.rng, -8, 8)) + 'deg'));
       node.style.setProperty('--ae-size', Math.round((opts.sizePx || spec.sizePx) * (0.8 + 0.4 * ctx.rng())) + 'px');
       node.style.setProperty('--ae-dur', (opts.holdMs || spec.holdMs) + 'ms');
       node.style.setProperty('--ae-alpha', String(alpha));
@@ -220,7 +235,7 @@ export function createOneshots(ctx) {
     ctx.fx(kind, variant.name);
     if (opts.sfx !== false) ctx.sfx(opts.sfxName || (kind === 'gif_burst' ? 'burst' : 'flash'), 0.3 + 0.45 * strobe);
     return {
-      kind, variant: variant.name, count, clickSafe, clickable,
+      kind, variant: variant.name, count, clickSafe, clickable, fullBleed,
       get live() { return nodes.length; },
       cancel: () => clearAll('cancel'),
       escape: guard,

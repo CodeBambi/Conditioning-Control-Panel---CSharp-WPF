@@ -1,19 +1,33 @@
 /* ============================================================================
  * games/instant-recall/vigil.js - THE DAY'S VIGIL SCRIPT. PURE.
  *
- * One class = one continuous 120s montage with unpredictable freeze-and-quiz
- * stops. Everything about the SHOW is dealt here, off the class seed, before a
- * single frame renders: when it stops, whether a bell warns you, what the stage
- * is doing, how thick the stream gets, which trigger channels are live and on
- * what cadence, which template each question instantiates from, and where the
- * decoy plants sit. Law V: seed -> plan -> events, never live rng. A retake
- * replays the identical vigil.
+ * One class = one continuous 120s WALL of the player's own media with
+ * unpredictable freeze-and-quiz stops. Everything about the SHOW is dealt here,
+ * off the class seed, before a single frame renders: when it stops, whether a
+ * bell warns you, how thick the stream gets, which CCP EFFECTS are in tonight's
+ * pool and on what cadence, which template each question instantiates from, and
+ * where the decoy plants sit. Law V: seed -> plan -> events, never live rng. A
+ * retake replays the identical vigil.
  *
  * NOTHING HERE TOUCHES THE DOM, THE ENGINE OR THE CLOCK. index.js walks this
- * plan; montage.js renders it; grade.js scores what actually happened. The one
- * thing this file may NOT decide is the ANSWER to a question - that comes from
- * the ledger tail at stop time, because the ledger is the truth (Law I) and a
- * pre-dealt answer would be a lie waiting for a dropped frame.
+ * plan; montage.js renders the wall; grade.js scores what actually happened. The
+ * one thing this file may NOT decide is the ANSWER to a question - that comes
+ * from the ledger tail at stop time, because the ledger is the truth (Law I) and
+ * a pre-dealt answer would be a lie waiting for a dropped frame.
+ *
+ * ---------------------------------------------------------------------------
+ * THE EFFECT POOL (owner ruling 2026-08-23, "the mosaic rework").
+ * A quiz may only ever ask about effects a CCP user already knows BY NAME from
+ * the app's own tabs. Scan lines, row drift, glitch swaps and ambient grain are
+ * NOT triggers - they were furniture wearing a trigger's clothes, and they are
+ * gone from the ledger entirely. What is left is the classics, ten of them, and
+ * the ledger channel IS the pool key (never the engine kind), so two pool
+ * entries that ride the same primitive - the corner GIF and the fullscreen GIF
+ * both ride gif_burst, three washes ride wash - stay distinct answers.
+ *
+ * THE 700ms RULE. Two effects may never START inside `MIN_SEPARATION_MS` of one
+ * another: "what just happened" has to have exactly one honest answer. It is
+ * enforced by the dealer (`nextEmission`), not by hope.
  *
  * ---------------------------------------------------------------------------
  * THE FINAL-STOP GUARANTEE (contract ruling 1, and the class's signature exit)
@@ -25,14 +39,14 @@
  *
  * ---------------------------------------------------------------------------
  * TIER LADDER (dossier; dials first, classic difficulty second)
- *   1  rows only; 2 trigger channels at low dials; 2 stops, 1 question, 6s,
- *      EVERY stop belled.
- *   2  rows + mosaic; 3 channels; wash tints enter; stings enter; 3 stops,
- *      1 question, 6s, exactly ONE unannounced (SYNTHESIS #2 taste of the twist).
- *   3  swirl enters; 4 channels near caps; gif_rain over flash_burst; ALL stops
- *      unannounced; DECOY PLANTS unlock; LAST_TWO enters; 4 stops, 5s.
- *   4  every dial at the global ceiling; crt/chroma dressing; 3-4 stops, 2
- *      questions each, 4s, MODE spice at <= 10% of the class's question weight.
+ *   1  4 effects in the pool at low dials; 2 stops, 1 question, 6s, EVERY stop
+ *      belled.
+ *   2  6 effects (the whisper and the pink filter enter); 3 stops, 1 question,
+ *      6s, exactly ONE unannounced (SYNTHESIS #2 taste of the twist).
+ *   3  8 effects (the corner GIF and the cascade enter); ALL stops unannounced;
+ *      DECOY PLANTS unlock; LAST_TWO enters; 4 stops, 5s.
+ *   4  all 10 (the fullscreen GIF and Brain Drain enter), every dial at the
+ *      global ceiling; 3-4 stops, 2 questions each, 4s.
  * ==========================================================================*/
 
 import { makeTaggedRoll } from '../../core/rng.js';
@@ -76,12 +90,6 @@ export const PLAYTEST = Object.freeze({
   Q_PER_STOP: Object.freeze({ 1: 1, 2: 1, 3: 1, 4: 2 }),
 
   /* --- question templates --------------------------------------------- */
-  /** MODE is tier-4 spice: at most ONE per class, dealt on this chance, and
-   *  down-weighted so its realised share of the class's question weight can
-   *  never exceed the dossier's 10% ceiling (the suite asserts the realised
-   *  share over 300 seeds). */
-  MODE_CHANCE: 0.55,
-  MODE_WEIGHT: 0.5,
   /** Distractors are never drawn from the last N ledger entries of the family:
    *  a distractor that also just happened would make the answer ambiguous. */
   DISTRACTOR_EXCLUDE: 5,
@@ -125,94 +133,107 @@ export const PLAYTEST = Object.freeze({
   CLOCK_TICK_MS: 200,
 });
 
-/** The three stage layouts, in the order they unlock. */
-export const LAYOUTS = Object.freeze(['rows', 'mosaic', 'swirl']);
+/* ============================================================================
+ * THE EFFECT POOL - the ONLY things a question may be about.
+ *
+ * key      the ledger channel AND the `ir_fx_<key>` lexicon row (the CCP name)
+ * kind     the engine primitive it spends
+ * variant  the engine variant, where the primitive has one that matters
+ * tier     the grade tier that unlocks it
+ * held     true when the primitive is a sustain that this class PULSES (a short
+ *          burst with a deadline) rather than holds - the ledger entry is
+ *          written once, at the pulse's start
+ * ==========================================================================*/
+export const EFFECT_POOL = Object.freeze([
+  Object.freeze({ key: 'flash', kind: 'flash_burst', variant: '', tier: 1, held: false }),
+  Object.freeze({ key: 'subliminal', kind: 'sub_flash', variant: '', tier: 1, held: false }),
+  Object.freeze({ key: 'bubbles', kind: 'bubble_field', variant: '', tier: 1, held: true }),
+  Object.freeze({ key: 'spiral', kind: 'wash', variant: 'spiral', tier: 1, held: true }),
+  Object.freeze({ key: 'whisper', kind: 'audio_trigger', variant: '', tier: 2, held: false }),
+  Object.freeze({ key: 'pink', kind: 'wash', variant: 'pink', tier: 2, held: true }),
+  Object.freeze({ key: 'corner_gif', kind: 'gif_burst', variant: '', tier: 3, held: false }),
+  Object.freeze({ key: 'cascade', kind: 'gif_rain', variant: '', tier: 3, held: true }),
+  Object.freeze({ key: 'fullscreen_gif', kind: 'gif_burst', variant: '', tier: 4, held: false }),
+  Object.freeze({ key: 'brain_drain', kind: 'wash', variant: 'drain', tier: 4, held: true }),
+]);
 
-/** Layout pool by tier (reduced motion drops swirl - dossier Portability). */
-export function layoutPool(tier, reduced) {
+/** Every pool key, in unlock order. A LAST_EFFECT option is always one of these. */
+export const POOL_KEYS = Object.freeze(EFFECT_POOL.map((e) => e.key));
+/** key -> the pool row. */
+export const POOL_BY_KEY = Object.freeze(EFFECT_POOL.reduce((m, e) => { m[e.key] = e; return m; }, {}));
+/** How many effects the pool holds at each tier (the 4 / 6 / 8 / 10 ladder). */
+export const POOL_SIZE = Object.freeze({ 1: 4, 2: 6, 3: 8, 4: 10 });
+
+/** The pool at a tier. `audible` false drops the whisper: an option the player
+ *  cannot hear is not a distractor, it is a coin flip. */
+export function poolFor(tier, audible) {
   const k = tierOf(tier);
-  const all = k >= 3 ? ['rows', 'mosaic', 'swirl'] : k >= 2 ? ['rows', 'mosaic'] : ['rows'];
-  return reduced ? all.filter((x) => x !== 'swirl') : all;
+  return EFFECT_POOL
+    .filter((e) => e.tier <= k)
+    .filter((e) => (e.kind === 'audio_trigger' ? audible !== false : true))
+    .map((e) => e.key);
 }
 
-/**
- * TRIGGER CHANNELS - the emission channels ARE the game.
- * These are the channels that write ledger entries a question can be asked
- * about. `DRESSING` is the per-tier atmosphere that also writes (it is a real
- * effect and LAST_EFFECT may name it) but is held rather than pulsed.
- */
-export const TRIGGER_CHANNELS = Object.freeze({
-  1: Object.freeze(['sub_flash', 'bubble_field']),
-  2: Object.freeze(['sub_flash', 'bubble_field', 'glitch_swap']),
-  3: Object.freeze(['sub_flash', 'bubble_field', 'glitch_swap', 'flash_burst']),
-  4: Object.freeze(['sub_flash', 'bubble_field', 'glitch_swap', 'flash_burst', 'gif_burst']),
-});
-/*
- * Tier 4's dressing degrades the montage's legibility on purpose: the wash
- * tints and the rain from tier 3, plus `crt` scanline/chroma. (`crt` was
- * briefly absent from this class's pinned `effectsConsumed` - an owner ruling
- * added it, so the dossier's tier-4 line is honoured as written. The
- * `ambient_field` grain stays a STREAK beat rather than a dressing channel:
- * index.js lays it over the resumed stream at a 2-stop run, so the golden
- * grain means something rather than just being on.)
- */
-export const DRESSING = Object.freeze({
-  1: Object.freeze([]),
-  2: Object.freeze(['wash']),
-  3: Object.freeze(['wash', 'gif_rain']),
-  4: Object.freeze(['wash', 'gif_rain', 'crt']),
-});
 /** Stings (audio_trigger) enter at tier 2 - LAST_STING is gated on them. */
 export const STING_FROM_TIER = 2;
 /** The sting vocabulary: shell/audio.js SOUNDS names with an `ir_sting_*` row. */
 export const STINGS = Object.freeze(['blip', 'sting', 'pop', 'bump', 'glitch']);
 
-/** Every channel LAST_EFFECT may name. Every one of them is in this class's
- *  manifest AND actually reachable at some tier - an option that can never fire
- *  is not a distractor, it is a freebie. (`row_drift` is the rows layout's own;
- *  `ambient_field` is the streak grain; `crt` is tier 4's dressing.) */
-export const EFFECT_VOCAB = Object.freeze([
-  'bubble_field', 'wash', 'glitch_swap', 'gif_rain', 'flash_burst', 'gif_burst',
-  'ambient_field', 'crt', 'row_drift',
-]);
+/**
+ * TWO EFFECTS MAY NEVER START INSIDE THIS WINDOW. The question is always "what
+ * JUST happened", so an overlapping pair would have two honest answers and the
+ * option list only has room for one. The dealer pushes the later one out.
+ */
+export const MIN_SEPARATION_MS = 700;
 
-/** Per-channel cadence band: base (cold) -> min (at full density). */
+/** Per-pool-key cadence band: base (cold) -> min (at full density). */
 export const CADENCE = Object.freeze({
-  sub_flash: Object.freeze({ base: 2600, min: 360 }),
-  bubble_field: Object.freeze({ base: 9000, min: 3200 }),
-  glitch_swap: Object.freeze({ base: 6000, min: 1800 }),
-  flash_burst: Object.freeze({ base: 11000, min: 4200 }),
-  gif_burst: Object.freeze({ base: 13000, min: 5200 }),
-  audio_trigger: Object.freeze({ base: 8000, min: 3000 }),
-  wash: Object.freeze({ base: 12000, min: 5200 }),
-  gif_rain: Object.freeze({ base: 16000, min: 9000 }),
-  ambient_field: Object.freeze({ base: 15000, min: 8000 }),
-  crt: Object.freeze({ base: 18000, min: 11000 }),
+  flash: Object.freeze({ base: 9000, min: 3400 }),
+  subliminal: Object.freeze({ base: 3200, min: 1000 }),
+  bubbles: Object.freeze({ base: 11000, min: 5000 }),
+  spiral: Object.freeze({ base: 13000, min: 6000 }),
+  whisper: Object.freeze({ base: 8000, min: 3000 }),
+  pink: Object.freeze({ base: 12000, min: 5600 }),
+  corner_gif: Object.freeze({ base: 12000, min: 5200 }),
+  cascade: Object.freeze({ base: 16000, min: 8000 }),
+  fullscreen_gif: Object.freeze({ base: 20000, min: 11000 }),
+  brain_drain: Object.freeze({ base: 15000, min: 7000 }),
 });
 
-/** Variant pools per channel (no-repeat-last is the engine's; the ORDER is ours). */
+/** How long a PULSED sustain is held before it is stopped / fades. */
+export const PULSE_MS = Object.freeze({
+  bubbles: 3400,
+  cascade: 3400,
+  spiral: 2400,
+  pink: 2400,
+  brain_drain: 2600,
+  corner_gif: 2000,
+  fullscreen_gif: 1200,
+});
+
+/** Variant pools per pool key (no-repeat-last is the engine's; the ORDER is ours). */
 const VARIANTS = Object.freeze({
-  sub_flash: Object.freeze(['whisper', 'centre', 'scatter', 'stamp']),
-  bubble_field: Object.freeze(['drift', 'rise', 'swarm']),
-  glitch_swap: Object.freeze(['crossfade', 'rgbsplit', 'vhsroll', 'datamosh']),
-  flash_burst: Object.freeze(['single', 'scatter', 'double']),
-  gif_burst: Object.freeze(['single', 'scatter', 'double']),
-  wash: Object.freeze(['pink', 'sublim', 'drain']),
-  gif_rain: Object.freeze(['light', 'steady', 'downpour']),
-  ambient_field: Object.freeze(['motes', 'specks', 'ash', 'glints']),
-  crt: Object.freeze(['scanline', 'chroma', 'bloom']),
-  audio_trigger: STINGS,
+  flash: Object.freeze(['single', 'double', 'scatter']),
+  subliminal: Object.freeze(['whisper', 'centre', 'scatter', 'stamp']),
+  bubbles: Object.freeze(['drift', 'rise', 'swarm']),
+  spiral: Object.freeze(['spiral']),
+  whisper: STINGS,
+  pink: Object.freeze(['pink']),
+  corner_gif: Object.freeze(['tl', 'tr', 'bl', 'br']),
+  cascade: Object.freeze(['light', 'steady', 'downpour']),
+  fullscreen_gif: Object.freeze(['full']),
+  brain_drain: Object.freeze(['drain']),
 });
 
 /** Question templates, by the tier that unlocks them. */
-export const TEMPLATES = Object.freeze(['LAST_WORD', 'LAST_EFFECT', 'LAST_STING', 'LAST_TWO', 'MODE']);
+export const TEMPLATES = Object.freeze(['LAST_WORD', 'LAST_EFFECT', 'LAST_STING', 'LAST_TWO']);
 export const TEMPLATE_FROM_TIER = Object.freeze({
-  LAST_WORD: 1, LAST_EFFECT: 1, LAST_STING: 2, LAST_TWO: 3, MODE: 4,
+  LAST_WORD: 1, LAST_EFFECT: 1, LAST_STING: 2, LAST_TWO: 3,
 });
 /** The fallback walk when the dealt template cannot be instantiated from the
- *  ledger tail (empty word pool, no stings, inaudible audio, single layout).
- *  Fixed ORDER, so a fallback is as deterministic as the deal it replaces. */
-export const FALLBACK_ORDER = Object.freeze(['LAST_WORD', 'LAST_EFFECT', 'LAST_STING', 'LAST_TWO', 'MODE']);
+ *  ledger tail (empty word pool, no stings, inaudible audio). Fixed ORDER, so a
+ *  fallback is as deterministic as the deal it replaces. */
+export const FALLBACK_ORDER = Object.freeze(['LAST_EFFECT', 'LAST_WORD', 'LAST_STING', 'LAST_TWO']);
 
 /* ----------------------------------------------------------------------------
  * SMALL PURE HELPERS
@@ -272,14 +293,47 @@ export function heatFor(p, progress01, streak) {
   return clamp01(Math.min(p.heatCap, h));
 }
 
-/** Heat-scaled cadence for a channel at a density band, with a seeded jitter. */
-export function cadenceMs(kind, band, jitter) {
-  const c = CADENCE[kind];
+/** Heat-scaled cadence for a pool key at a density band, with a seeded jitter. */
+export function cadenceMs(key, band, jitter) {
+  const c = CADENCE[key];
   if (!c) return Infinity;
   const b = clamp01(band);
   const base = lerp(c.base, c.min, b);
   const j = Number.isFinite(jitter) ? jitter : 0;
-  return Math.max(120, Math.round(base * (0.78 + 0.44 * j)));
+  return Math.max(MIN_SEPARATION_MS, Math.round(base * (0.78 + 0.44 * j)));
+}
+
+/**
+ * THE DEALER. PURE. Given every pool key's next due time (class-clock ms), the
+ * moment the LAST emission started and "now", answer which key fires next and
+ * exactly when.
+ *
+ * THE 700ms RULE lives here: the winner is never scheduled inside
+ * MIN_SEPARATION_MS of the previous emission - it is pushed out, never dropped,
+ * so a busy band thins into a queue instead of a pile-up. Ties resolve on the
+ * insertion order of `due`, which is the pool's own order, so the answer is the
+ * same on every replay of the same seed.
+ *
+ * @param {Object} due        {poolKey: dueAtMs}
+ * @param {number} lastEmitAt class-clock ms of the previous emission (or -Infinity)
+ * @param {number} nowMs      the class clock
+ * @returns {{key:string, atMs:number, waitMs:number}|null}
+ */
+export function nextEmission(due, lastEmitAt, nowMs) {
+  if (!due) return null;
+  const now = Number.isFinite(nowMs) ? nowMs : 0;
+  const last = Number.isFinite(lastEmitAt) ? lastEmitAt : -Infinity;
+  let bestKey = null;
+  let bestAt = Infinity;
+  for (const key of Object.keys(due)) {
+    const at = Number(due[key]);
+    if (!Number.isFinite(at)) continue;
+    if (at < bestAt) { bestAt = at; bestKey = key; }
+  }
+  if (bestKey == null) return null;
+  const floor = Math.max(now, last + MIN_SEPARATION_MS);
+  const atMs = Math.max(bestAt, floor);
+  return { key: bestKey, atMs, waitMs: Math.max(0, atMs - now) };
 }
 
 /* ----------------------------------------------------------------------------
@@ -294,13 +348,15 @@ export function cadenceMs(kind, band, jitter) {
  *   gradeTier      1..4
  *   timeBudgetSec  the real budget (120)
  *   density        the `ir_density` setting value
- *   reduced        reduced motion (drops swirl and every plant)
+ *   reduced        reduced motion (drops every plant)
+ *   audible        ctx.audioAudible (false drops the whisper from the pool)
  * @returns {Object} the plan
  */
 export function buildVigil(o = {}) {
   const seed = String(o.seed == null ? 'instant_recall' : o.seed);
   const tier = tierOf(o.gradeTier);
   const reduced = !!o.reduced;
+  const audible = o.audible !== false;
   const budgetMs = Math.max(20000, Math.round((Number(o.timeBudgetSec) || 120) * 1000));
   const roll = makeTaggedRoll(seed + '|ir');
 
@@ -349,14 +405,8 @@ export function buildVigil(o = {}) {
   }
 
   /* ---- template sequence ---------------------------------------------- */
-  const pool = TEMPLATES.filter((k) => TEMPLATE_FROM_TIER[k] <= tier && k !== 'MODE');
+  const pool = TEMPLATES.filter((k) => TEMPLATE_FROM_TIER[k] <= tier);
   const totalQ = count * qPer;
-  const wantMode = tier === 4 && roll('mode') < PLAYTEST.MODE_CHANCE;
-  /* MODE never takes the very last question of the class - the vigil's exit
-   * beat is about what FIRED, not about the furniture. */
-  const modeSlot = wantMode && totalQ > 1
-    ? Math.floor(roll('mode-slot') * (totalQ - 1))
-    : -1;
 
   const stops = [];
   let dealt = 0;
@@ -366,17 +416,11 @@ export function buildVigil(o = {}) {
   for (let n = 0; n < count; n++) {
     const questions = [];
     for (let q = 0; q < qPer; q++) {
-      let template;
-      if (dealt === modeSlot) {
-        template = 'MODE';
-      } else {
-        /* no-repeat-last across the whole class where the pool allows it */
-        const avail = pool.length > 1 ? pool.filter((k) => k !== prevTemplate) : pool.slice();
-        template = pickFrom(avail, roll('tmpl')) || pool[0];
-      }
-      const weight = (6000 / windowMs) * (template === 'MODE' ? PLAYTEST.MODE_WEIGHT : 1);
-      questions.push({ i: dealt, template, weight, windowMs });
-      if (template !== 'MODE') prevTemplate = template;
+      /* no-repeat-last across the whole class where the pool allows it */
+      const avail = pool.length > 1 ? pool.filter((k) => k !== prevTemplate) : pool.slice();
+      const template = pickFrom(avail, roll('tmpl')) || pool[0];
+      questions.push({ i: dealt, template, weight: 6000 / windowMs, windowMs });
+      prevTemplate = template;
       dealt += 1;
     }
 
@@ -389,7 +433,7 @@ export function buildVigil(o = {}) {
     const gate = !reduced && n > 0 && plants < cap && !plantedLast;
     const r = roll('plant');
     if (gate && r < chance) {
-      const channel = (tier >= 4 && roll('plant-ch') < 0.42) ? 'audio_trigger' : 'sub_flash';
+      const channel = (tier >= 4 && audible && roll('plant-ch') < 0.42) ? 'whisper' : 'subliminal';
       const at = Math.round(windowMs * PLAYTEST.PLANT_AT[plants % PLAYTEST.PLANT_AT.length]);
       plant = { channel, atMs: at, stop: n };
       plants += 1;
@@ -409,49 +453,26 @@ export function buildVigil(o = {}) {
     });
   }
 
-  /* ---- layout sequence: one at the open, one at every resume ----------- */
-  const lpool = layoutPool(tier, reduced);
-  const layouts = [];
-  let prevLayout = '';
-  for (let i = 0; i <= count; i++) {
-    let kind;
-    if (i === 0) {
-      kind = 'rows';                      // the vigil always opens on rows
-    } else {
-      const avail = lpool.length > 1 ? lpool.filter((k) => k !== prevLayout) : lpool.slice();
-      kind = pickFrom(avail, roll('layout')) || lpool[0];
-    }
-    layouts.push({ index: i, kind });
-    prevLayout = kind;
-  }
-
-  /* ---- emission schedule: per channel, a seeded jitter + variant ring --- */
+  /* ---- the effect pool + each key's dealt ring ------------------------- */
+  const poolKeys = poolFor(tier, audible);
   const channels = [];
-  const kinds = TRIGGER_CHANNELS[tier].slice();
-  if (tier >= STING_FROM_TIER) kinds.push('audio_trigger');
-  for (const kind of kinds) {
-    channels.push(makeChannel(kind, roll, false));
-  }
-  const dressing = [];
-  for (const kind of DRESSING[tier]) dressing.push(makeChannel(kind, roll, true));
+  for (const key of poolKeys) channels.push(makeChannel(key, roll));
 
   const plan = {
     seed,
     tier,
     reduced,
+    audible,
     budgetMs,
     windowMs,
     qPerStop: qPer,
     stopCount: count,
     segments: count + 1,
     stops,
-    layouts,
-    layoutPool: lpool,
+    pool: poolKeys,
     channels,
-    dressing,
     stings: STINGS.slice(),
-    templates: pool.concat(wantMode ? ['MODE'] : []),
-    modeSlot,
+    templates: pool.slice(),
     plantCount: plants,
     densityMult,
     densityCeil,
@@ -460,24 +481,26 @@ export function buildVigil(o = {}) {
     heatCap: PLAYTEST.HEAT_CAP[tier],
     audioCeil: PLAYTEST.AUDIO_CEIL[tier],
     totalQuestions: totalQ,
+    minSeparationMs: MIN_SEPARATION_MS,
   };
   return plan;
 }
 
-/** One channel's dealt ring: 8 jitters + 8 variants, consumed round-robin. */
-function makeChannel(kind, roll, held) {
+/** One pool key's dealt ring: 8 jitters + 8 variants, consumed round-robin. */
+function makeChannel(key, roll) {
   const jitter = [];
-  for (let i = 0; i < 8; i++) jitter.push(roll('jit-' + kind));
-  const pool = VARIANTS[kind] || [''];
+  for (let i = 0; i < 8; i++) jitter.push(roll('jit-' + key));
+  const pool = VARIANTS[key] || [''];
   const variants = [];
   let prev = '';
   for (let i = 0; i < 8; i++) {
     const avail = pool.length > 1 ? pool.filter((v) => v !== prev) : pool.slice();
-    const v = pickFrom(avail, roll('var-' + kind)) || pool[0];
+    const v = pickFrom(avail, roll('var-' + key)) || pool[0];
     variants.push(v);
     prev = v;
   }
-  return { kind, jitter, variants, held: !!held };
+  const row = POOL_BY_KEY[key];
+  return { key, kind: row ? row.kind : '', held: !!(row && row.held), jitter, variants };
 }
 
 /* ----------------------------------------------------------------------------
@@ -495,10 +518,8 @@ function makeChannel(kind, roll, held) {
  *   stings      distinct stings available as distractors
  *   hasSting    the tail carries at least one sting
  *   audible     ctx.audioAudible
- *   effects     distinct effect names available as distractors
- *   hasEffect   the tail carries at least one effect
- *   layouts     how many layouts this class can name
- *   hasLayout   the stage layout at the freeze is known
+ *   effects     distinct REACHABLE pool keys available as distractors
+ *   hasEffect   the tail carries at least one pool emission
  */
 export function canAsk(template, avail) {
   const a = avail || {};
@@ -507,7 +528,6 @@ export function canAsk(template, avail) {
     case 'LAST_TWO': return !!a.hasTwoWords && (a.words | 0) >= 2;
     case 'LAST_EFFECT': return !!a.hasEffect && (a.effects | 0) >= 3;
     case 'LAST_STING': return !!a.hasSting && !!a.audible && (a.stings | 0) >= 3;
-    case 'MODE': return !!a.hasLayout && (a.layouts | 0) >= 3;
     default: return false;
   }
 }
@@ -573,43 +593,39 @@ export function assertPlan(p) {
   for (const s of planted) {
     if (s.n === 0) bad.push('plant on the first stop');
     if (s.plant.atMs >= s.windowMs) bad.push('plant outside the answer window');
+    if (s.plant.channel !== 'subliminal' && s.plant.channel !== 'whisper') bad.push('plant on a channel that is not a pool key');
+    if (p.pool.indexOf(s.plant.channel) < 0) bad.push('plant on a key outside the tier pool');
   }
   for (let i = 1; i < p.stops.length; i++) {
     if (p.stops[i].plant && p.stops[i - 1].plant) bad.push('plants clumped at ' + i);
   }
 
-  /* templates */
-  let modes = 0;
+  /* templates: every tier must be able to ask at least TWO different things */
+  const asked = new Set();
   for (const s of p.stops) {
     for (const q of s.questions) {
       if (TEMPLATES.indexOf(q.template) < 0) bad.push('unknown template ' + q.template);
       if (TEMPLATE_FROM_TIER[q.template] > tier) bad.push(q.template + ' above tier ' + tier);
-      if (q.template === 'MODE') modes += 1;
+      asked.add(q.template);
     }
   }
-  if (modes > 1) bad.push('more than one MODE question');
-  if (modes && tier !== 4) bad.push('MODE below tier 4');
+  if (p.templates.length < 2) bad.push('tier ' + tier + ' has fewer than 2 templates');
 
-  /* layouts */
-  if (p.layouts.length !== p.stopCount + 1) bad.push('layout count');
-  if (p.layouts[0].kind !== 'rows') bad.push('vigil must open on rows');
-  for (let i = 1; i < p.layouts.length; i++) {
-    if (p.layoutPool.length > 1 && p.layouts[i].kind === p.layouts[i - 1].kind) bad.push('layout repeated at ' + i);
-    if (p.layoutPool.indexOf(p.layouts[i].kind) < 0) bad.push('layout outside the tier pool at ' + i);
+  /* THE POOL: the 4 / 6 / 8 / 10 ladder, minus an inaudible whisper */
+  const wantPool = POOL_SIZE[tier] - ((!p.audible && tier >= STING_FROM_TIER) ? 1 : 0);
+  if (p.pool.length !== wantPool) bad.push('tier ' + tier + ' pool is ' + p.pool.length + ', want ' + wantPool);
+  for (const k of p.pool) {
+    if (POOL_KEYS.indexOf(k) < 0) bad.push('pool key outside the vocabulary: ' + k);
+    if (!CADENCE[k]) bad.push('pool key with no cadence band: ' + k);
+    if (POOL_BY_KEY[k].tier > tier) bad.push(k + ' above tier ' + tier);
   }
-  if (p.reduced && p.layouts.some((l) => l.kind === 'swirl')) bad.push('swirl under reduced motion');
+  if (p.channels.length !== p.pool.length) bad.push('channel ring count');
+  if (!p.audible && p.pool.indexOf('whisper') >= 0) bad.push('inaudible class kept the whisper');
 
   return bad;
 }
 
-/** The realised MODE share of a plan's question weight (the <=10% ruling). */
-export function modeWeightShare(p) {
-  let total = 0;
-  let mode = 0;
-  for (const s of p.stops) {
-    for (const q of s.questions) { total += q.weight; if (q.template === 'MODE') mode += q.weight; }
-  }
-  return total > 0 ? mode / total : 0;
-}
-
-export default { buildVigil, densityAt, heatFor, cadenceMs, resolveTemplate, canAsk, assertPlan, PLAYTEST };
+export default {
+  buildVigil, densityAt, heatFor, cadenceMs, nextEmission, resolveTemplate, canAsk,
+  assertPlan, poolFor, PLAYTEST, EFFECT_POOL, POOL_KEYS, MIN_SEPARATION_MS,
+};

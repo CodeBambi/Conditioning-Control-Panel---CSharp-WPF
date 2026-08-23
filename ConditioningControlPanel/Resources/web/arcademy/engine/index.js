@@ -88,11 +88,17 @@
  *   onPop?: (node) => void; onForceComplete?: (why) => void
  *   hydraGen?: 0..5        pop-splits (default 1, 0 on coarse/low-motion)
  *   sizePx?, holdMs?, alpha?, x?, y?, url?, assetKind?: 'still'|'loop'
+ *   fullBleed?: true       ADDITIVE: ONE node covering the WHOLE layer
+ *                          (object-fit:cover, no transform, no rotation) - CCP's
+ *                          "fullscreen GIF". Forces count 1. Opt-in: omit it and
+ *                          a burst behaves exactly as it always has.
  *   variant?: 'single'|'scatter'|'double'|'hydra'
- * }) -> { kind, variant, count, clickSafe, clickable, live, cancel(), escape } | null
+ * }) -> { kind, variant, count, clickSafe, clickable, fullBleed, live, cancel(), escape } | null
  *
  * fire('gif_burst', { ...same as flash_burst, but never clickable })
  *   node cap 10 (flash_burst is 20, or 3 on a coarse-pointer/low-motion device).
+ *   `x` / `y` place the FIRST node (percent) - with count:1 that is exact
+ *   placement, which is how a class pins a corner GIF without a new primitive.
  *
  * fire('audio_trigger', {
  *   name: string           sfx id (the shell/host owns the audio element)

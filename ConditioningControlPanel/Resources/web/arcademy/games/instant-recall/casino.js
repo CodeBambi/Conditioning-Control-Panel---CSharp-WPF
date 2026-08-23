@@ -574,7 +574,12 @@ export function createIrCasino(o) {
     if (!armed()) return;
     counts.jackpots++;
     jackLog.push(why);
-    ceremony('jackpot', { intensity });
+    /* garnish:false is LOAD-BEARING here (mosaic rework, 2026-08-23). The
+     * engine's jackpot ceremony otherwise FORCES a drain|spiral wash, and both
+     * of those are POOL effects in this class - a wash the ledger never saw
+     * would give the next question a second honest answer. The hall's own
+     * flood + marquee are the payout instead. */
+    ceremony('jackpot', { intensity, garnish: false });
     cue('jackpot', C.JACKPOT_LEVEL, { pitch: +(0.9 + 0.3 * intensity).toFixed(3) });
     flashMarquee(C.MQ_FLASH_MS + 300 * intensity);
     floodHall(intensity, C.FLOOD_MS + 300);
@@ -592,7 +597,7 @@ export function createIrCasino(o) {
     setCls(mq, 'is-gold', true);
     setCls(flood, 'is-royal', true);
     showWord('ir_royal', 'ROYAL', 'gold');
-    ceremony('jackpot', { intensity: C.ROYAL_I });
+    ceremony('jackpot', { intensity: C.ROYAL_I, garnish: false });   // see jackpot()
     cue('jackpot', C.JACKPOT_LEVEL, { pitch: 1.2 });
     after(260, () => cue('jackpot', C.JACKPOT_LEVEL, { pitch: 1.5 }));
     after(520, () => cue('stamp', 0.5, { pitch: 1 }));
@@ -615,11 +620,13 @@ export function createIrCasino(o) {
       heat = clamp01(h);
       if (started) paintHeat(false);
     },
-    /** The reel change: a band of light sweeps the screen. */
+    /** The reel change: a band of light sweeps the screen. CORE calls it with
+     *  'reshuffle' now (the wall turning itself over on a resume); the older
+     *  layout names still answer, so nothing here had to be renamed. */
     layoutChange(kind) {
       if (!armed() || !started) return;
       counts.reels++;
-      cue('slide', 0.14, { pitch: kind === 'swirl' ? 0.8 : kind === 'mosaic' ? 1.1 : 1 });
+      cue('slide', 0.14, { pitch: kind === 'reshuffle' ? 1.15 : kind === 'swirl' ? 0.8 : kind === 'mosaic' ? 1.1 : 1 });
       if (still || !reel) return;
       restart(reel, 'is-on');
       cancel(reelTimer);

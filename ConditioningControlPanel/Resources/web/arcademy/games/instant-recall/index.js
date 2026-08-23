@@ -1,22 +1,36 @@
 /* ============================================================================
  * games/instant-recall/index.js - INSTANT RECALL, "the vigil" (family: recall).
  *
- * One class is ONE continuous 120-second montage. The stage rotates through
- * rows / mosaic / swirl, the Distraction Engine fires trigger channels over it
- * denser and denser - and then, without warning, everything FREEZES and a quiz
- * card asks what just happened. There is nothing to memorise, only a present to
- * inhabit: the stop can land at any moment and it only ever asks about the last
- * thing that happened, so sustained attention is the only strategy.
+ * One class is ONE continuous 120-second WALL. A full-bleed mosaic of the
+ * player's own media fills the stage and every tile keeps changing itself on
+ * its own beat (the FYP look, the Just Drop backdrop); CCP's own classic
+ * effects fire over it denser and denser - and then, without warning,
+ * everything FREEZES and a quiz card asks what just happened. There is nothing
+ * to memorise, only a present to inhabit: the stop can land at any moment and
+ * it only ever asks about the last thing that happened, so sustained attention
+ * is the only strategy.
  *
  * THE VIGIL LOOP:
- *   montage  -> emissions on the density sawtooth, every one of them written to
- *               the LEDGER (the truth tail) with what the engine ACTUALLY did
- *   stop     -> freeze (the class clock keeps running), quiz card, 6s/5s/4s
- *               window by tier, answer by tap or number key
+ *   the wall -> effect emissions on the density sawtooth, every one of them
+ *               written to the LEDGER (the truth tail) with what the engine
+ *               ACTUALLY did. THE WALL'S OWN SWAPS ARE NEVER LEDGER ENTRIES.
+ *   stop     -> the wall freezes MID-SWAP (the class clock keeps running), quiz
+ *               card, 6s/5s/4s window by tier, answer by tap or number key
  *   verdict  -> the truth replay proves it ("it really did flash that"), then
- *   resume   -> a NEW layout, density relaxed ONE band, never back to the floor
+ *   resume   -> the wall RESHUFFLES (every tile turns over inside 1.5s),
+ *               density relaxed ONE band, never back to the floor
  *   FINAL    -> the seeded schedule ALWAYS puts a stop inside the last 15s, so
  *               the class ends on a quiz and never on a fade-out.
+ *
+ * THE EFFECT POOL (owner ruling 2026-08-23). A question may only ever be about
+ * an effect a CCP user knows BY NAME from the app's own tabs - Flash image,
+ * Subliminal, Whisper, Corner GIF, Fullscreen GIF, Cascade, Bubbles, Spiral,
+ * Pink Filter, Brain Drain. Ten of them, four unlocked at Year 1 and all ten by
+ * Year 4 (vigil.js EFFECT_POOL). Scanlines, glitch swaps, row drift and ambient
+ * grain are NOT triggers and can no longer be an option or a ledger entry; the
+ * decks may still wear them as weather. Two emissions never START inside 700ms
+ * of one another (vigil.js MIN_SEPARATION_MS), so "what just happened" always
+ * has exactly one honest answer.
  *
  * ---------------------------------------------------------------------------
  * LAWS THIS FILE KEEPS
@@ -24,16 +38,17 @@
  *        of `ledger`, and every ledger entry is written HERE from the engine's
  *        own return value - never from what we asked for. The decks may lie on
  *        a chip face or an option label; the truth is repainted and the answer
- *        key never comes from a deck. The montage's own seat maintenance (the
- *        frame governor, the density band, a layout rebuild) never writes an
+ *        key never comes from a deck. The wall's own maintenance (a tile swap,
+ *        a reshuffle, the frame governor, the density band) never writes an
  *        entry, so shedding a gif seat under a frame lock cannot change an
  *        answer.
- *   II   INPUT HONEST. The montage is decoration end to end (every burst over
- *        it is welded clickSafe); the only real hitboxes in the class are the
+ *   II   INPUT HONEST. The wall is decoration end to end (every burst over it
+ *        is welded clickSafe); the only real hitboxes in the class are the
  *        option buttons, the how-to GO button, and the audition button inside a
  *        sting option - which never selects.
- *   III  NEVER STILL. The stream runs the whole class; the only still frame is
- *        the freeze, and the freeze IS the mechanic.
+ *   III  NEVER STILL. The wall turns over the whole class - at any moment some
+ *        tile is mid-swap; the only still frame is the freeze, and the freeze
+ *        IS the mechanic.
  *   IV   IMAGES OVER TEXT. The class-rules sheet is drawn (style.js) and
  *        dismissed by GO only, once per grade tier under `ctx.hideTutorial`.
  *   V    SEEDED. vigil.js deals the whole show off the class seed before a
@@ -83,24 +98,37 @@
  * announced)` and only falls back to calling `stop(n, announced)` when the deck
  * exports no `stopBeat` - so a casino should export `stopBeat`.
  *
- * ENGINE TARGETING NOTE: glitch_swap writes its own filter/animation onto its
- * targets and style.js owns `.g-ir-tile`'s transform (the swirl orbit IS a
- * transform), so the engine is always handed the inner `.g-ir-face`, never a
- * tile. The swirl's spiral is `sustain('wash', {variant:'spiral',
- * sustainForever:true})` and is NEVER stopped mid-class (trap 33) - leaving
- * swirl steps it down by re-triggering at a lower alpha.
+ * A NOTE ON THE DECKS AND THE POOL. A deck may never fire a POOL primitive: a
+ * pink wash from pressure.js that the ledger knows nothing about would give the
+ * quiz a second honest answer. pressure.js's ladder was retuned for exactly
+ * that reason (it now spends only crt / ambient_field / glitch_swap on the
+ * CHROME, plus its own CSS tremor) and casino.js asks its jackpot ceremony for
+ * `garnish:false` so the engine's forced wash cannot fire behind CORE's back.
+ *
+ * ENGINE TARGETING NOTE: `.g-ir-face` is the only element the engine may ever
+ * be handed - style.js owns `.g-ir-tile`'s own transform. CORE targets nothing
+ * on the wall today; pressure.js targets the HUD.
  * ==========================================================================*/
 
 import { IR_LEX } from './lex.js';
 import {
-  buildVigil, assertPlan, densityAt, heatFor, cadenceMs, resolveTemplate,
-  densityMultFor, PLAYTEST, EFFECT_VOCAB, STINGS,
+  buildVigil, assertPlan, densityAt, heatFor, cadenceMs, nextEmission, resolveTemplate,
+  densityMultFor, PLAYTEST, POOL_KEYS, POOL_BY_KEY, PULSE_MS, STINGS,
 } from './vigil.js';
 import { createMontage, createLedger, hideTruthNode } from './montage.js';
 import { compositeFor, hardGates, flavorXp } from './grade.js';
 import { makeTaggedRoll } from '../../core/rng.js';
 
 const GAME_KEY = 'instant_recall';
+
+/** Where a Corner GIF pins itself (percent of the stage, the engine's own
+ *  --ae-x / --ae-y placement seam). */
+const CORNERS = Object.freeze({
+  tl: Object.freeze({ x: 13, y: 20 }),
+  tr: Object.freeze({ x: 87, y: 20 }),
+  bl: Object.freeze({ x: 13, y: 80 }),
+  br: Object.freeze({ x: 87, y: 80 }),
+});
 
 /** Keys that belong to the shell (or to a focused button), never to the guard. */
 const CHROME_KEYS = Object.freeze(['Escape', 'Tab', 'Shift', 'Control', 'Alt', 'Meta',
@@ -203,20 +231,23 @@ export default {
   title: 'Instant Recall',
 
   manifest: {
-    /* The emission channels ARE the game: every kind below writes a ledger
-     * entry a question can be asked about (or is the atmosphere those
-     * questions happen inside). flash_burst / gif_burst are declared ONLY as
-     * clickSafe decoration over the montage - fireSafe() welds that on. */
+    /* EXACTLY what the class spends, and nothing else.
+     *   THE POOL (CORE, every one of them a ledger entry and a quiz option):
+     *     flash_burst / sub_flash / bubble_field / wash / audio_trigger /
+     *     gif_burst / gif_rain
+     *   THE WEATHER (pressure.js only, never a ledger entry, never an option):
+     *     ambient_field / crt / glitch_swap (the last one on the HUD, not the wall)
+     * flash_burst / gif_burst are declared ONLY as clickSafe decoration over
+     * the wall - fireSafe() welds that on. `row_drift` is gone with the rows. */
     effectsConsumed: [
-      'sub_flash', 'bubble_field', 'wash', 'glitch_swap', 'row_drift',
-      'gif_rain', 'flash_burst', 'gif_burst', 'audio_trigger', 'ambient_field',
-      /* tier 4's dressing: the scanline/chroma degrade the dossier asks for. */
-      'crt',
+      'flash_burst', 'sub_flash', 'bubble_field', 'wash', 'audio_trigger',
+      'gif_burst', 'gif_rain',
+      'ambient_field', 'crt', 'glitch_swap',
     ],
-    /* 24 loops + 12 stills for the montage wall; everything renders DOM-layer
-     * (img/video tiles, CSS-transform orbits, never canvas), so the provider
-     * may serve remote media here. */
-    assetNeeds: { loops: 24, targets: 0, stills: 12, canvasSafe: false },
+    /* The wall is stills-heavy by law (the decoder budget), so it wants a deep
+     * still pool and a bounded loop pool; everything renders DOM-layer
+     * (img/video tiles, never canvas), so the provider may serve remote media. */
+    assetNeeds: { loops: 24, targets: 0, stills: 24, canvasSafe: false },
     boardSizes: null,
     /* Answers are tap or the number keys 1-4 on a window keydown (the Daily
      * Trigger pattern) - no verb slots, so nothing to declare or rebind. */
@@ -273,7 +304,9 @@ export default {
     let easedNext = false;             // comeback hook: the last stop was missed
     let band = 0;
     let currentHeat = 0;
-    let layout = 'rows';
+    /** The stage has ONE mode now: the wall. Kept as a field because the ledger
+     *  entry carries it and the trickster reads it off `stats()`. */
+    const layout = 'wall';
     let bellArmed = -1;                // which stop has already had its warning
     let stallMs = 0;
     let lastStallFire = 0;
@@ -308,10 +341,15 @@ export default {
     let clockChip = null; let stopsChip = null; let densityChip = null;
     let optEls = [];
 
-    /* channel timers, by kind */
-    const channelTimers = new Map();
-    let driftOn = false;
-    let spiralOn = false;
+    /* THE DEALER. One timer, one queue: every pool key carries its own due time
+     * on the class clock and vigil.js `nextEmission` picks the earliest that is
+     * also at least MIN_SEPARATION_MS after the previous emission. */
+    const due = Object.create(null);
+    const ringAt = Object.create(null);
+    let dealerTimer = 0;
+    let lastEmitAt = -Infinity;
+    /** Live pulses: pool key -> the timer that ends it. */
+    const pulses = new Map();
 
     /* ==================================================================== *
      * TIMERS - every step goes through run(), so a suspend freezes the class
@@ -489,7 +527,7 @@ export default {
       root.textContent = '';
       stage = el('div', 'g-ir-stage');
       stage.setAttribute('data-phase', 'briefing');
-      stage.setAttribute('data-layout', 'rows');
+      stage.setAttribute('data-layout', layout);
       stage.setAttribute('data-tier', String(tier));
       if (reduced) stage.setAttribute('data-reduced', '1');
 
@@ -578,17 +616,26 @@ export default {
       if (ctx.hideTutorial === true && howtoSeenTiers().indexOf(tier) >= 0) { onDone(); return; }
       howtoEl = el('div', 'g-ir-howto');
       howtoEl.appendChild(el('h3', 'g-ir-howto-title', t('ir_howto_title', IR_LEX.ir_howto_title)));
+      /* THREE FIGURES (Law IV, drawn): the wall / the freeze / the pick. The
+       * first one carries three of the POOL'S OWN ICONS - a flash, a spiral, a
+       * bubble - because the whole rework is "the effects should be the ones
+       * they can recognise", and a drawn flash says that faster than a caption. */
       const cards = [
-        ['stream', t('ir_howto_1', IR_LEX.ir_howto_1)],
-        ['freeze', t('ir_howto_2', IR_LEX.ir_howto_2)],
-        ['answer', t('ir_howto_3', IR_LEX.ir_howto_3)],
+        ['wall', t('ir_howto_1', IR_LEX.ir_howto_1), ['flash', 'spiral', 'bubble']],
+        ['freeze', t('ir_howto_2', IR_LEX.ir_howto_2), []],
+        ['answer', t('ir_howto_3', IR_LEX.ir_howto_3), []],
       ];
       const rowEl = el('div', 'g-ir-howto-row');
-      for (const [art, cap] of cards) {
+      for (const [art, cap, icons] of cards) {
         const card = el('div', 'g-ir-howto-card');
         const artEl = el('div', 'g-ir-howto-art');
         artEl.setAttribute('data-art', art);
         artEl.setAttribute('aria-hidden', 'true');
+        for (const ico of icons) {
+          const iconEl = el('i', 'g-ir-howto-ico');
+          iconEl.setAttribute('data-ico', ico);
+          artEl.appendChild(iconEl);
+        }
         card.appendChild(artEl);
         card.appendChild(el('p', 'g-ir-howto-cap', cap));
         rowEl.appendChild(card);
@@ -618,137 +665,159 @@ export default {
     }
 
     /* ==================================================================== *
-     * THE STAGE - layouts, drift, the spiral
+     * THE WALL
      * ==================================================================== */
-    function applyLayout(kind) {
-      layout = String(kind || 'rows');
-      if (stage) stage.setAttribute('data-layout', layout);
-      if (montage) montage.setLayout(layout);
-      /* row_drift belongs to the rows layout and to nothing else. */
-      if (layout === 'rows') armDrift(); else stopDrift();
-      /* THE SPIRAL: swirl holds a spiral wash forever. Never stop('wash')
-       * mid-class (trap 33) - leaving swirl re-triggers it at a LOW alpha,
-       * which is the whisper-out step-down the engine understands. */
-      if (layout === 'swirl' && !reduced) {
-        const h = sustainSafe('wash', { variant: 'spiral', sustainForever: true, alpha: 0.34 });
-        if (h) { spiralOn = true; note('wash', { color: 'spiral' }, 'spiral'); }
-      } else if (spiralOn) {
-        sustainSafe('wash', { variant: 'spiral', alpha: 0.05, holdMs: 700 });
-        spiralOn = false;
-      }
-      note('layout', { layout }, layout);
-      deck('casino', 'layoutChange', layout);
+    /** THE RESHUFFLE: the wall's answer to "a new layout on resume". Every tile
+     *  turns over inside ~1.5s, staggered. It writes NO ledger entry (Law I). */
+    function reshuffleWall() {
+      if (montage) montage.reshuffle();
+      deck('casino', 'layoutChange', 'reshuffle');
       deck('pressure', 'beat', 'layout');
-      return layout;
     }
-    function armDrift() {
-      if (driftOn || reduced || !montage) return;
-      const rows = montage.rows();
-      if (!rows.length) return;
-      const h = sustainSafe('row_drift', {
-        targets: rows, axis: 'x', variant: 'slide', stagger: true,
-      });
-      if (h) { driftOn = true; note('row_drift', {}, 'slide'); }
-    }
-    function stopDrift() { if (driftOn) { stopSafe('row_drift'); driftOn = false; } }
 
     /* ==================================================================== *
-     * THE EMISSION CHANNELS - the game itself.
-     * Each channel re-arms itself on its own heat-scaled cadence with the
-     * seeded jitter ring vigil.js dealt. A stop clears them; a resume re-arms.
+     * THE EFFECT POOL - the game itself.
+     *
+     * ONE dealer, not ten timers. Every pool key carries its own due time on
+     * the class clock; `nextEmission` picks the earliest and pushes it out
+     * when it would land inside 700ms of the previous emission, so two effects
+     * can never start together and "what just happened" always has exactly one
+     * answer. A stop clears the dealer; a resume re-seeds it.
      * ==================================================================== */
-    function armChannel(ch, i) {
-      if (!plan || dead || ended) return;
-      const idx = (i | 0);
-      const ms = cadenceMs(ch.kind, band, ch.jitter[idx % ch.jitter.length]);
-      if (!Number.isFinite(ms)) return;
-      const id = after(ms, () => {
-        channelTimers.delete(ch.kind);
-        if (!halted) emit(ch, idx);
-        armChannel(ch, idx + 1);
-      });
-      channelTimers.set(ch.kind, id);
+    function chanFor(key) {
+      if (!plan) return null;
+      for (const ch of plan.channels) if (ch.key === key) return ch;
+      return null;
     }
-    function armAllChannels() {
-      clearChannels();
+    function nextJitter(key) {
+      const ch = chanFor(key);
+      if (!ch) return 0.5;
+      const i = (ringAt[key] | 0);
+      return ch.jitter[i % ch.jitter.length];
+    }
+    function nextVariant(key) {
+      const ch = chanFor(key);
+      if (!ch) return '';
+      const i = (ringAt[key] | 0);
+      ringAt[key] = i + 1;
+      return ch.variants[i % ch.variants.length];
+    }
+    /** Re-seed every pool key's due time from the current band. */
+    function seedDealer() {
       if (!plan) return;
-      for (const ch of plan.channels) armChannel(ch, 0);
-      for (const ch of plan.dressing) armChannel(ch, 0);
+      for (const key of plan.pool) {
+        if (ringAt[key] == null) ringAt[key] = 0;
+        /* the first due of a segment is a FRACTION of the cadence so the wall
+         * does not go quiet for a full period every time a stop resolves */
+        due[key] = elapsedMs + Math.round(cadenceMs(key, band, nextJitter(key)) * (0.25 + 0.75 * nextJitter(key)));
+      }
+    }
+    function armDealer() {
+      if (!plan || dead || ended) return;
+      if (dealerTimer) { clearTimer(dealerTimer); dealerTimer = 0; }
+      const pick = nextEmission(due, lastEmitAt, elapsedMs);
+      if (!pick) return;
+      dealerTimer = after(Math.max(16, pick.waitMs), () => {
+        dealerTimer = 0;
+        if (!halted) {
+          const fired = emitPool(pick.key);
+          if (fired) lastEmitAt = elapsedMs;
+        }
+        due[pick.key] = elapsedMs + cadenceMs(pick.key, band, nextJitter(pick.key));
+        armDealer();
+      });
     }
     function clearChannels() {
-      for (const id of channelTimers.values()) clearTimer(id);
-      channelTimers.clear();
+      if (dealerTimer) { clearTimer(dealerTimer); dealerTimer = 0; }
+      for (const id of pulses.values()) clearTimer(id);
+      pulses.clear();
     }
 
-    /** ONE emission. Whatever the engine ACTUALLY returned is what the ledger
-     *  records - a refused or capped-to-zero primitive writes nothing at all,
-     *  which is exactly why a question can never desync from the show. */
-    function emit(ch, i) {
-      const variant = ch.variants[i % ch.variants.length];
-      const kind = ch.kind;
+    /** A PULSED sustain: hold it for the pool key's pulse length, then let it
+     *  go. The engine's own fade carries it out - a wash is stepped DOWN by a
+     *  low-alpha re-trigger, never stop('wash') (trap 33). */
+    function pulse(key, endFn) {
+      const ms = PULSE_MS[key] || 2400;
+      const prev = pulses.get(key);
+      if (prev) clearTimer(prev);
+      const id = after(ms, () => { pulses.delete(key); try { endFn(); } catch (e) { /* noop */ } });
+      pulses.set(key, id);
+    }
+
+    /** ONE emission, addressed by POOL KEY. Whatever the engine ACTUALLY
+     *  returned is what the ledger records - a refused or capped-to-zero
+     *  primitive writes nothing at all, which is exactly why a question can
+     *  never desync from the show. */
+    function emitPool(key) {
+      const row = POOL_BY_KEY[key];
+      if (!row) return null;
+      const variant = nextVariant(key);
       let r = null;
-      switch (kind) {
-        case 'sub_flash': {
+      switch (key) {
+        case 'flash': {
+          r = fireSafe('flash_burst', { variant, count: Math.max(1, Math.round(1 + 3 * band)) });
+          if (r) note('flash', {}, r.variant || variant);
+          break;
+        }
+        case 'subliminal': {
           const hasWords = wordPool().length > 0;
           r = fireSafe('sub_flash', { variant, anchor: well, image: hasWords ? false : true });
-          if (r) note('sub_flash', r.text ? { word: String(r.text) } : { assetId: 'card' }, r.variant || variant);
+          if (r) note('subliminal', r.text ? { word: String(r.text) } : { assetId: 'card' }, r.variant || variant);
           break;
         }
-        case 'bubble_field': {
-          r = sustainSafe('bubble_field', { variant, max: Math.round(6 + 10 * band) });
-          if (r) note('bubble_field', {}, variant);
-          break;
-        }
-        case 'glitch_swap': {
-          if (!montage) break;
-          const turned = montage.turn(Math.max(1, Math.round(1 + 3 * band)));
-          const faces = montage.facesOf(turned);
-          if (!faces.length) break;
-          /* trap 22: the content swap has ALREADY happened (montage.turn), so
-           * onSwap is the nicety it is meant to be and a suspend mid-transition
-           * cannot lose the turn. */
-          r = fireSafe('glitch_swap', { targets: faces, variant, seconds: 0.5, sfx: false, onSwap: () => {} });
-          if (r) note('glitch_swap', { assetId: 'tiles:' + faces.length }, r.variant || variant);
-          break;
-        }
-        case 'flash_burst': {
-          r = fireSafe('flash_burst', { variant, count: Math.max(1, Math.round(1 + 3 * band)) });
-          if (r) note('flash_burst', {}, r.variant || variant);
-          break;
-        }
-        case 'gif_burst': {
-          r = fireSafe('gif_burst', { variant, count: Math.max(1, Math.round(1 + 2 * band)) });
-          if (r) note('gif_burst', {}, r.variant || variant);
-          break;
-        }
-        case 'audio_trigger': {
+        case 'whisper': {
           r = tick(variant, 0.3 + 0.18 * band);
-          if (r) note('audio_trigger', { sting: variant }, variant);
+          if (r) note('whisper', { sting: variant }, variant);
           break;
         }
-        case 'wash': {
-          r = sustainSafe('wash', { variant, alpha: 0.10 + 0.22 * band, holdMs: 2200 });
-          if (r) note('wash', { color: variant }, variant);
+        case 'corner_gif': {
+          /* the classic corner GIF: ONE loop pinned to a corner of the stage
+           * for a beat. `count:1` + x/y is the engine's own placement seam -
+           * no new primitive, no game-owned decoder. */
+          const at = CORNERS[variant] || CORNERS.tl;
+          r = fireSafe('gif_burst', {
+            count: 1, variant: 'pop', x: at.x, y: at.y,
+            sizePx: reduced ? 150 : 210, holdMs: PULSE_MS.corner_gif,
+            assetKind: reduced ? 'still' : 'loop',
+          });
+          if (r) note('corner_gif', { assetId: 'corner:' + variant }, variant);
           break;
         }
-        case 'gif_rain': {
-          r = sustainSafe('gif_rain', { variant, durationMs: 3200 });
-          if (r) note('gif_rain', {}, variant);
+        case 'fullscreen_gif': {
+          /* THE WHOLE STAGE, for a beat, then gone. `fullBleed` is the engine's
+           * additive cover option (engine/oneshots.js) - one node, no
+           * transform, object-fit:cover over the layer. */
+          r = fireSafe('gif_burst', {
+            count: 1, fullBleed: true, holdMs: PULSE_MS.fullscreen_gif,
+            assetKind: reduced ? 'still' : 'loop',
+          });
+          if (r) note('fullscreen_gif', { assetId: 'full' }, 'full');
           break;
         }
-        case 'ambient_field': {
-          r = sustainSafe('ambient_field', { kind: variant, density: 0.25 + 0.5 * band });
-          if (r) note('ambient_field', {}, variant);
+        case 'cascade': {
+          r = sustainSafe('gif_rain', { variant, durationMs: PULSE_MS.cascade, restart: true });
+          if (r) note('cascade', {}, variant);
           break;
         }
-        case 'crt': {
-          r = sustainSafe('crt', { variant, level: 0.25 + 0.4 * band });
-          if (r) note('crt', {}, variant);
+        case 'bubbles': {
+          r = sustainSafe('bubble_field', { variant, max: Math.round(6 + 10 * band), restart: true });
+          if (r) {
+            note('bubbles', {}, variant);
+            pulse('bubbles', () => stopSafe('bubble_field'));
+          }
+          break;
+        }
+        case 'spiral':
+        case 'pink':
+        case 'brain_drain': {
+          const washVariant = row.variant;
+          r = sustainSafe('wash', { variant: washVariant, alpha: 0.10 + 0.22 * band, holdMs: PULSE_MS[key] });
+          if (r) note(key, {}, washVariant);
           break;
         }
         default: break;
       }
-      deck('pressure', 'beat', kind);
+      deck('pressure', 'beat', key);
       return r;
     }
 
@@ -825,8 +894,8 @@ export default {
        * filtered out of every truth read, so a false memory can never become
        * the answer key to the question it was planted against. */
       const words = ledger.recent((r) => r.channel !== 'plant' && r.payload && r.payload.word, 24);
-      const stings = ledger.recent((r) => r.channel === 'audio_trigger' && r.payload.sting, 12);
-      const effects = ledger.recent((r) => EFFECT_VOCAB.indexOf(r.channel) >= 0, 12);
+      const stings = ledger.recent((r) => r.channel === 'whisper' && r.payload.sting, 12);
+      const effects = ledger.recent((r) => POOL_KEYS.indexOf(r.channel) >= 0, 12);
       const excl = PLAYTEST.DISTRACTOR_EXCLUDE;
 
       const recentWords = new Set(words.slice(0, excl).map((r) => r.payload.word));
@@ -837,8 +906,12 @@ export default {
       const recentStings = new Set(stings.slice(0, excl).map((r) => r.payload.sting));
       const stingDistractors = STINGS.filter((s) => !recentStings.has(s));
 
+      /* A LAST_EFFECT option must be REACHABLE at this tier: an effect that can
+       * never fire is not a distractor, it is a freebie the player can strike
+       * off by construction. `plan.pool` is exactly tonight's ten (or four). */
       const recentFx = new Set(effects.slice(0, excl).map((r) => r.channel));
-      const fxDistractors = EFFECT_VOCAB.filter((k) => !recentFx.has(k));
+      const reachable = plan ? plan.pool : POOL_KEYS.slice();
+      const fxDistractors = reachable.filter((k) => !recentFx.has(k));
 
       return {
         words: wordDistractors.size,
@@ -855,8 +928,6 @@ export default {
         fxList: fxDistractors,
         fxTail: effects,
         hasEffect: effects.length >= 1,
-        layouts: plan ? plan.layoutPool.length : 1,
-        hasLayout: true,
       };
     }
 
@@ -943,17 +1014,6 @@ export default {
           .concat(ds.map((s) => ({ value: s, label: label(s), sting: s })));
         return mk('ir_q_last_sting', IR_LEX.ir_q_last_sting, opts, truth, { kind: 'sting' });
       }
-      if (template === 'MODE') {
-        const lastLayout = ledger.lastOf('layout');
-        const truth = lastLayout ? lastLayout.payload.layout : layout;
-        const label = (k) => t('ir_layout_' + k, IR_LEX['ir_layout_' + k] || k);
-        /* Exactly three stage layouts exist, so MODE is an mc3: a fourth option
-         * would have to be a layout that does not exist, which a player could
-         * eliminate by construction. Every other template is mc4. */
-        const opts = plan.layoutPool.map((k) => ({ value: k, label: label(k) }));
-        if (opts.length < 3) return null;
-        return mk('ir_q_mode', IR_LEX.ir_q_mode, opts, truth, { kind: 'layout' });
-      }
       return null;
     }
 
@@ -974,11 +1034,10 @@ export default {
         return;
       }
       question.dealtTemplate = dealtQ.template;
-      /* The weight rides the template that was actually ASKED, not the one that
-       * was dealt: a MODE question that fell back to LAST_WORD is a full-weight
-       * trigger question, and a fallback INTO MODE (impossible today, but the
-       * walk allows it at tier 4) is down-weighted like any other MODE. */
-      question.weight = (6000 / stop.windowMs) * (question.template === 'MODE' ? PLAYTEST.MODE_WEIGHT : 1);
+      /* Every template is worth the same now that MODE (the furniture question)
+       * is gone; the WINDOW still weights it, so a 4s question is worth 1.5x a
+       * 6s one and a tier-4 class is not silently easier to ace. */
+      question.weight = 6000 / stop.windowMs;
       question.windowMs = stop.windowMs;
       live.question = question;
       live.askedCount += 1;
@@ -1069,7 +1128,7 @@ export default {
       question.options.forEach((o, i) => { if (i !== question.trueIndex) wrong.push({ o, i }); });
       const kind = question.meta.kind;
       const usable = wrong.filter(({ o }) => (
-        stop.plant.channel === 'audio_trigger' ? !!o.sting : (kind === 'word' || kind === 'pair')
+        stop.plant.channel === 'whisper' ? !!o.sting : (kind === 'word' || kind === 'pair')
       ));
       if (!usable.length) return;
       const pick = usable[Math.floor(qroll('plant') * usable.length)];
@@ -1078,7 +1137,7 @@ export default {
         live.plantTimer = 0;
         let r = null;
         let payload = null;
-        if (stop.plant.channel === 'audio_trigger') {
+        if (stop.plant.channel === 'whisper') {
           r = fireSafe('audio_trigger', { name: pick.o.sting, level: 0.4 });
           payload = { sting: pick.o.sting, plant: true, matched: pick.i };
         } else {
@@ -1184,8 +1243,7 @@ export default {
         const p = rec.payload || {};
         bead.textContent = p.word != null ? p.word
           : p.sting != null ? t('ir_sting_' + p.sting, IR_LEX['ir_sting_' + p.sting] || p.sting)
-            : p.layout != null ? t('ir_layout_' + p.layout, IR_LEX['ir_layout_' + p.layout] || p.layout)
-              : t('ir_fx_' + rec.channel, IR_LEX['ir_fx_' + rec.channel] || rec.channel);
+            : t('ir_fx_' + rec.channel, IR_LEX['ir_fx_' + rec.channel] || rec.channel);
         if (p.plant) bead.classList.add('is-plant');
         if (rec === pin) bead.classList.add('is-pin');
         ribbon.appendChild(bead);
@@ -1206,9 +1264,8 @@ export default {
         const r = tail[i];
         if (r.payload && r.payload.plant) continue;
         if (kind === 'word' || kind === 'pair') { if (r.payload && r.payload.word) return r; }
-        else if (kind === 'sting') { if (r.channel === 'audio_trigger') return r; }
-        else if (kind === 'layout') { if (r.channel === 'layout') return r; }
-        else if (EFFECT_VOCAB.indexOf(r.channel) >= 0) return r;
+        else if (kind === 'sting') { if (r.channel === 'whisper') return r; }
+        else if (POOL_KEYS.indexOf(r.channel) >= 0) return r;
       }
       return null;
     }
@@ -1281,24 +1338,21 @@ export default {
 
     function resumeVigil() {
       if (dead || ended) return;
-      const nextLayout = plan.layouts[Math.min(plan.layouts.length - 1, stopsResolved)];
       segStartMs = elapsedMs;
       if (montage) montage.freeze(false);
-      applyLayout(nextLayout.kind);
+      reshuffleWall();
       recomputeBand();
       recomputeHeat();
       setPhase('vigil');
       msg('ir_resume', IR_LEX.ir_resume);
-      /* THE RUN ADVERTISES ITSELF. At a 2-stop streak the resumed stream takes
-       * a golden grain, so the whole montage wears the run (dossier: combo
-       * feedback). It is a declared kind and it writes to the ledger like any
-       * other emission - a question may name it. */
-      if (streak >= 2) {
-        const g = sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.3 + 0.3 * band });
-        if (g) note('ambient_field', {}, 'goldleaf');
-      }
+      /* THE RUN ADVERTISES ITSELF. At a 2-stop streak the resumed wall takes a
+       * golden grain. It is DRESSING, not an effect: `ambient_field` is not a
+       * pool key, it writes NO ledger entry and it can never be an option -
+       * the owner's ruling is that a quiz only ever names what CCP names. */
+      if (streak >= 2) sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.3 + 0.3 * band });
       halted = false;
-      armAllChannels();
+      seedDealer();
+      armDealer();
     }
 
     /* ---- variable ratio (the shared canon, with a local fallback) -------- */
@@ -1313,9 +1367,11 @@ export default {
         jackpots += 1;
         try { ctx.ceremonies.reward('jackpot', { target: stage, text: t('ir_jackpot', IR_LEX.ir_jackpot) }); }
         catch (e) { /* noop */ }
-        /* "Photographic Memory": the vigil's OWN media rains back down. */
-        const got = deckAssets.next('loop');
-        fireSafe('gif_burst', { count: 4, variant: 'scatter', url: got ? got.url : undefined });
+        /* "Photographic Memory": gold leaf over the hall. It is DELIBERATELY
+         * not a pool primitive - a gif burst here would be a real Corner GIF /
+         * Fullscreen GIF that the ledger never saw, and the very next question
+         * would have two honest answers. Dressing pays the ceremony instead. */
+        sustainSafe('ambient_field', { kind: 'goldleaf', density: 0.55 });
         tick('jackpot', 0.5);
       } else if (outcome.fire) {
         tick('streak', 0.42);
@@ -1420,11 +1476,10 @@ export default {
      * THE END
      * ==================================================================== */
     function stopAmbience() {
-      stopDrift();
       for (const k of ['bubble_field', 'gif_rain', 'ambient_field', 'crt']) stopSafe(k);
-      /* trap 33: a held spiral is stepped DOWN, never stopped, so a ceremony's
-       * forced garnish can never take the wheel with it. */
-      if (spiralOn) { sustainSafe('wash', { variant: 'spiral', alpha: 0.04, holdMs: 500 }); spiralOn = false; }
+      /* trap 33: a wash is stepped DOWN, never stop('wash')'d - that would black
+       * out every wash kind at once, including anything a deck still holds. */
+      for (const v of ['spiral', 'pink', 'drain']) sustainSafe('wash', { variant: v, alpha: 0.01, holdMs: 400 });
     }
 
     function finish(viaBell) {
@@ -1435,7 +1490,7 @@ export default {
       clearChannels();
       stopWindow();
       stopAmbience();
-      if (montage) { montage.stopGovernor(); montage.freeze(true); }
+      if (montage) { montage.stopGovernor(); montage.stop(); montage.freeze(true); }
       deck('trickster', 'stop');
       deck('casino', 'dimOut');
       deck('casino', 'stop');
@@ -1524,13 +1579,13 @@ export default {
     /* ---- assets (never block a draw) ------------------------------------ */
     function claimAssets() {
       Promise.resolve()
-        .then(() => ctx.assets.claim({ loops: 24, targets: 0, stills: 12, canvasSafe: false }))
+        .then(() => ctx.assets.claim({ loops: 24, targets: 0, stills: 24, canvasSafe: false }))
         .then((p) => {
           if (dead || !p || typeof p.next !== 'function') return;
           pool = p;
           run(() => { if (montage) { montage.dress(pool); montage.setBand(band); } });
         })
-        .catch((e) => say('asset claim failed - the stream runs on the placeholder floor: ' + ((e && e.message) || e)));
+        .catch((e) => say('asset claim failed - the wall runs on the placeholder floor: ' + ((e && e.message) || e)));
     }
 
     /* ---- the decks ------------------------------------------------------ */
@@ -1624,6 +1679,9 @@ export default {
         plan = buildVigil({
           seed, gradeTier: tier, timeBudgetSec: budgetMs / 1000,
           density: densityValue, reduced,
+          /* an option the player cannot hear is a coin flip, so an inaudible
+           * class simply never deals the whisper */
+          audible: ctx.audioAudible !== false,
         });
         const broken = assertPlan(plan);
         if (broken.length) say('PLAN INVARIANT BROKEN: ' + broken.join('; '));
@@ -1648,9 +1706,10 @@ export default {
           coarse: !!(ctx.platform && ctx.platform.isTouch),
           lite: !!(ctx.motion && Number(ctx.motion.motionLevel) <= 1),
           density: densityMultFor(densityValue),
+          timeScale,
           log: say,
         });
-        applyLayout(plan.layouts[0].kind);
+        montage.build();
         band = plan.densityFloor;
         montage.setBand(band);
         paintHud();
@@ -1671,8 +1730,11 @@ export default {
           segStartMs = 0;
           elapsedMs = 0;
           halted = false;
-          armAllChannels();
+          lastEmitAt = -Infinity;
+          seedDealer();
+          armDealer();
           startClock();
+          montage.start();
           montage.startGovernor();
           after(reduced ? PLAYTEST.BRIEF_MS_REDUCED : PLAYTEST.BRIEF_MS, () => {
             if (msgEl && !live) msgEl.textContent = '';
@@ -1684,7 +1746,8 @@ export default {
         lastSnapshot = null;
         say('tier ' + tier + ', ' + plan.stopCount + ' stops (' + plan.stops.map((s) => Math.round(s.atMs / 1000) + 's'
           + (s.announced ? '' : '!')).join(' ') + '), ' + plan.windowMs + 'ms windows, '
-          + plan.qPerStop + ' q/stop, density ' + densityValue + ' ceiling ' + plan.densityCeil.toFixed(2)
+          + plan.qPerStop + ' q/stop, pool [' + plan.pool.join(' ') + '], density ' + densityValue
+          + ' ceiling ' + plan.densityCeil.toFixed(2)
           + ', plants ' + plan.plantCount + (reduced ? ', reduced' : '') + (retake ? ', RETAKE' : ''));
       },
 
@@ -1743,11 +1806,12 @@ export default {
         const stop = nextStop();
         if (stop && !live && elapsedMs >= stop.atMs) beginStop();
       },
-      /** Emit one channel as the schedule would (the harness fills the tail). */
-      emitKind(kind, i) {
-        const ch = (plan.channels.concat(plan.dressing)).find((c) => c.kind === kind);
-        return ch ? emit(ch, i || 0) : null;
+      /** Emit one POOL KEY as the dealer would (the harness fills the tail). */
+      emitKind(key) {
+        return plan && plan.pool.indexOf(key) >= 0 ? emitPool(key) : null;
       },
+      /** The dealer's live view: due times + the last emission (the 700ms rule). */
+      dealer() { return { due: Object.assign({}, due), lastEmitAt, armed: !!dealerTimer }; },
       ledger() { return ledger; },
       plan() { return plan; },
       montage() { return montage; },
@@ -1764,9 +1828,8 @@ export default {
           plan: plan ? {
             stopCount: plan.stopCount, windowMs: plan.windowMs, qPerStop: plan.qPerStop,
             stops: plan.stops.map((s) => ({ n: s.n, atMs: s.atMs, announced: s.announced, plant: !!s.plant })),
-            layouts: plan.layouts.map((l) => l.kind),
             densityCeil: plan.densityCeil, densityFloor: plan.densityFloor,
-            channels: plan.channels.map((c) => c.kind), dressing: plan.dressing.map((c) => c.kind),
+            pool: plan.pool.slice(), audible: plan.audible,
             plantCount: plan.plantCount,
           } : null,
           ledger: ledger ? ledger.all() : [],

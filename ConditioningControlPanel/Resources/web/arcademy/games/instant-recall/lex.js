@@ -11,9 +11,17 @@
  * trickster / pressure) may `t()` the same keys; they never mint their own.
  *
  * The question TEXT is a lexicon row; the ANSWER text is data (a word from the
- * day pool, an effect name, a sting name, a layout name) - the effect / sting /
- * layout NAMES are rows too, because they are the only words the option chrome
- * ever shows and a mod must be able to re-voice the whole quiz card.
+ * day pool, an effect name, a sting name) - the effect / sting NAMES are rows
+ * too, because they are the only words the option chrome ever shows and a mod
+ * must be able to re-voice the whole quiz card.
+ *
+ * MOSAIC REWORK (2026-08-23). The `ir_fx_*` rows are no longer engine kinds
+ * ("Wash", "Scanlines", "Drift") - they are the ten CCP EFFECTS the class now
+ * deals, under CCP's own names. The retired rows (`ir_fx_bubble_field`,
+ * `ir_fx_wash`, `ir_fx_glitch_swap`, `ir_fx_gif_rain`, `ir_fx_flash_burst`,
+ * `ir_fx_gif_burst`, `ir_fx_ambient_field`, `ir_fx_crt`, `ir_fx_row_drift`,
+ * `ir_layout_*`, `ir_q_mode`) are gone from HERE but stay in the host's
+ * `NeutralLexicon`, which is append-only.
  * ==========================================================================*/
 
 export const IR_LEX = Object.freeze({
@@ -28,7 +36,7 @@ export const IR_LEX = Object.freeze({
 
   /* ---- the class-rules sheet (Law IV: drawn, GO-only dismissal) -------- */
   ir_howto_title: 'The vigil',
-  ir_howto_1: 'A montage plays. Triggers fire over it.',
+  ir_howto_1: 'A wall of your media keeps changing. Effects fire over it.',
   ir_howto_2: 'Without warning, everything freezes.',
   ir_howto_3: 'Answer what just happened.',
   ir_howto_bell: 'A bell warns you first. For now.',
@@ -52,19 +60,23 @@ export const IR_LEX = Object.freeze({
   ir_q_last_effect: 'What was the last effect?',
   ir_q_last_sting: 'Which sting just played?',
   ir_q_last_two: 'The last two words, in order?',
-  ir_q_mode: 'Which layout were you watching?',
   ir_hear: 'Hear it',
 
-  /* ---- effect names (the LAST_EFFECT options) -------------------------- */
-  ir_fx_bubble_field: 'Bubbles',
-  ir_fx_wash: 'Wash',
-  ir_fx_glitch_swap: 'Glitch',
-  ir_fx_gif_rain: 'Rain',
-  ir_fx_flash_burst: 'Flash',
-  ir_fx_gif_burst: 'Burst',
-  ir_fx_ambient_field: 'Grain',
-  ir_fx_crt: 'Scanlines',
-  ir_fx_row_drift: 'Drift',
+  /* ---- THE EFFECT POOL (the LAST_EFFECT options) -----------------------
+   * These are CCP'S OWN NAMES for its own effects - the ones a player already
+   * knows from the app's tabs. An option the player cannot name is not a
+   * question, it is a guess (owner ruling, 2026-08-23). Do not invent a new
+   * name here: if CCP renames a feature, this row follows it. */
+  ir_fx_flash: 'Flash image',
+  ir_fx_subliminal: 'Subliminal',
+  ir_fx_whisper: 'Whisper',
+  ir_fx_corner_gif: 'Corner GIF',
+  ir_fx_fullscreen_gif: 'Fullscreen GIF',
+  ir_fx_cascade: 'Cascade',
+  ir_fx_bubbles: 'Bubbles',
+  ir_fx_spiral: 'Spiral',
+  ir_fx_pink: 'Pink Filter',
+  ir_fx_brain_drain: 'Brain Drain',
 
   /* ---- sting names (the LAST_STING options) ---------------------------- */
   ir_sting_blip: 'Tick',
@@ -72,11 +84,6 @@ export const IR_LEX = Object.freeze({
   ir_sting_pop: 'Pop',
   ir_sting_bump: 'Thud',
   ir_sting_glitch: 'Static',
-
-  /* ---- stage layouts (the MODE options) -------------------------------- */
-  ir_layout_rows: 'Rows',
-  ir_layout_mosaic: 'Mosaic',
-  ir_layout_swirl: 'Swirl',
 
   /* ---- verdicts + the truth replay ------------------------------------- */
   ir_correct: 'VERIFIED',
