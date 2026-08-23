@@ -57,9 +57,15 @@ shell/ceremonies.js stamp / 10-segment meter / reward beats (engine-delegated)
 shell/exits.js     THE WAY OUT: the campus pill + its confirm, the sticky exit
                    bar, and the casino arrow SIGN. Every back/leave/done in the
                    school is minted here (games borrow it through ctx.exits)
-shell/punchcard.js THE CARD: cardFace() (ten holes, data-game = the crest seam,
-                   punches only FORWARD) + thud() + holesLine(). Shared by the
-                   ceremony and the Records wall so a card is ONE object
+shell/punchcard.js THE CARD: cardFace() = a full-bleed face IMAGE with exactly
+                   three live overlays - the ten stamps, the crest (the REWARD,
+                   hidden until complete) and the text strip (count + a rotating
+                   punchcard_phrase_1..8 line, or MASTERED + the date). Where the
+                   three sit is DATA: loadFaceGeometry() reads art/punchcard/
+                   faces.json once, optionally, and anything missing falls back
+                   to DEFAULT_GEOM + [data-art="off"]'s drawn floor. Plus thud()
+                   + holesLine(). Shared by the ceremony and the Records wall so
+                   a card is ONE object
 shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
                    AND the stamp ceremony (day one = two punches, daily = one,
                    the tenth = the unlock beat)
@@ -182,6 +188,20 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     beats; `boot.js` routes `punchcard-result` to `shell.onPunchCard`. The page's ONLY
     outbound frame about a card is `enrollment-done` - there is deliberately no "punch" verb
     it could send.
+- **`art/punchcard/faces.json` is the card-art seam, and it is also the ART
+  MANIFEST.** `{ "<gameKey>": { slots:[{x,y,w,h} x10 row-major], crest:{x,y,scale,
+  rotation}, text:{x,y,w,h} } }`, every number a fraction of that class's own face
+  image (slots and text are BOXES - top-left plus size; the crest's x/y is its
+  CENTRE, `scale` its width, `rotation` degrees; an optional `aspect` overrides the
+  1.6 default). `shell/punchcard.js` loads it ONCE through `loadFaceGeometry()`
+  (`shell.js` calls it beside the engine/provider `loadOptional`s) and sanitizes it
+  FIELD BY FIELD, so a junk slot list, an unparseable number or a nine-entry grid
+  each fall back on their own rather than taking the card down. **A class listed in
+  that file is a class whose face image shipped** - that is the ONLY signal for
+  `data-art="on"`, which is what drops the drawn grid boxes, the drawn name band
+  and the corner ribbon (all three are baked into a real face). So the json ships
+  WITH the pngs, never before them, or a card loses its floor and gains nothing.
+  No file at all = every class on `DEFAULT_GEOM` and a finished-looking card.
 - **`meta` arrives in TWO shapes** — `{key, value}` (the reply to a meta-command) and
   `{rev, state}` (the snapshot the host pushes after crediting attendance). Handle both; a
   handler that requires `key` silently drops the authoritative streak.
@@ -646,15 +666,17 @@ must never grow a test seam that ships. Cases opt in through an `overrideCalenda
 other case still sees the shipping five-game pool and the seeded boards it asserts against.
 Remember `clearTimetableCache()` between boots (trap 25).
 
-Last full run: **264 assertions, 0 failures** (timetable 27, grades 23, shell 48,
+Last full run: **271 assertions, 0 failures** (timetable 27, grades 23, shell 48,
 bridge+boot 15, **e2e seams 14**, campus 23, **host fixes 20**, time bar + free swim 15,
-rake 44, **punch cards 35**), against the live `engine/` + `provider/` modules (the note line
+rake 44, **punch cards 42**), against the live `engine/` + `provider/` modules (the note line
 in the shell run says which). The four game suites (`games-dt`, `games-lf`, `games-dv`,
 `games-ic`) drive the REAL games and run green alongside it.
 
 `test-punchcard.mjs` (2026-08-23) is the punch-card half: the store's refusal + self-heal,
-the 96-char cap on every one of the 30 flavour rows AND their verbatim presence in the C#
-table, the intro showing once and never again, the ceremony on all three shapes (daily,
+the 96-char cap on every one of the 30 flavour rows AND the 8 rotating card lines AND their
+verbatim presence in the C# table, the face geometry (the uniform fallback, percentage
+placement, the manifest fork, a broken entry sanitized field by field), the live strip
+(N/10 + a seeded line, turning over to MASTERED + the date) and the crest as the reward, the intro showing once and never again, the ceremony on all three shapes (daily,
 enrollment, `justUnlocked`) plus the no-op silence, the door CTA order, and the Records
 Office populated and empty. **A boot with no `punchCards` in `init.meta` now opens with an
 enrollment intro**, so the older suites seed an already-enrolled school in their `fakeInit`
@@ -726,9 +748,13 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
   graphic on a card is a `--pc-*-src` custom property in the PUNCH CARDS section of
   `styles.css` that currently resolves to `none`, and the rules under it draw the whole thing
   out of gradients - so the batch landing is ONE edit to that token block plus ten
-  `.arc-pc[data-game="<key>"] { --pc-crest-src: url(...) }` lines that are already written out
-  as the asset map. **No text may ever be baked into those images** (lexicon law): the class
-  name, the count and every line are rendered live over the top. Files belong in
+  `.arc-pc[data-game="<key>"] { --pc-face-src/--pc-crest-src: url(...) }` pairs that are
+  already written out as the asset map, **plus `art/punchcard/faces.json`** (the seam in §3:
+  no json, no `data-art="on"`, and the card keeps its floor). **No text may ever be baked into
+  the stamp, the crest or the seal** (lexicon law): the count, the flavour line and every label
+  are rendered live over the top. The face image is the ONE owner-locked exception - it bakes
+  the class logo and the Arcademy logo, which is why the drawn name band steps aside under
+  `[data-art="on"]` rather than printing the name twice. Files belong in
   `Resources/web/arcademy/art/punchcard/`.
 - ~~**The server mirror is a separate PR**~~ **CLOSED** - the mirror is live at both ends
   (PUNCHCARD §5; wire contract `proxy/docs/arcademy-cards-api.md`, client

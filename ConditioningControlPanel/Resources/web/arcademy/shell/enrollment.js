@@ -203,7 +203,7 @@ export function createEnrollmentIntro(o) {
    * first time the player has ever heard of a punch card, and the ceremony is
    * about to hand them two holes. */
   const note = el('p', 'arc-enroll-note', String(t('enroll_card_line',
-    'Every class carries a punch card. Ten holes, one a night.')));
+    'Every class carries a stamp card. Ten stamps, one a night.')));
   card.appendChild(note);
 
   const go = el('button', 'btn primary', '');
@@ -351,7 +351,7 @@ export function createPunchCeremony(o) {
   root.appendChild(box);
 
   box.appendChild(el('p', 'arc-kicker',
-    enrollment ? t('enroll_kicker', 'Enrollment') : t('punchcard', 'Punch Card')));
+    enrollment ? t('enroll_kicker', 'Enrollment') : t('punchcard', 'Stamp Card')));
   box.appendChild(el('h2', 'arc-h2', String(s.name || s.gameKey || '')));
 
   const face = cardFace({
@@ -394,9 +394,11 @@ export function createPunchCeremony(o) {
     if (text) setLine(text);
   }
 
-  function unlockBeat() {
+  function unlockBeat(unlockedAt) {
     unlockBox.hidden = false;
-    face.markComplete();
+    // The card's own MASTERED strip carries the date the host closed it on; the
+    // panel below carries the sentence. Neither invents the other's copy.
+    face.markComplete(unlockedAt || card.unlockedAt);
     thud(THUD_PITCH.unlock);
     // The panel carries the unlock line; the dialogue line deliberately does NOT
     // repeat it. Printing the same sentence twice, one above the other, is what
@@ -411,7 +413,7 @@ export function createPunchCeremony(o) {
       /* DAY ONE IS EXACTLY TWO (owner ruling, §3). The first hole is for
        * finishing; the second is on the house and says so. */
       later(() => beat(from + 1, THUD_PITCH.first,
-        t('enroll_tutorial_line', 'One hole for finishing your first class.')), head);
+        t('enroll_tutorial_line', 'One stamp for finishing your first class.')), head);
       later(() => beat(from + 2, THUD_PITCH.house,
         t('enroll_house_line', 'And one on the house. Welcome to the class.')), head + step);
       later(() => {
@@ -425,7 +427,7 @@ export function createPunchCeremony(o) {
         try { if (s.onPunched) s.onPunched(); } catch (e) { say('onPunched threw: ' + ((e && e.message) || e)); }
       }, head);
       if (!s.justUnlocked && to < HOLES) {
-        later(() => setLine(t('punchcard_next_hole', 'Come back tomorrow for the next hole.')),
+        later(() => setLine(t('punchcard_next_hole', 'Come back tomorrow for the next stamp.')),
           head + step);
       }
     }
@@ -450,7 +452,7 @@ export function createPunchCeremony(o) {
       // holes the player is watching land.
       later(() => {
         if (face.punchTo(target, { quiet: true })) thud(THUD_PITCH.daily);
-        if (justUnlocked || next.complete) unlockBeat();
+        if (justUnlocked || next.complete) unlockBeat(next.unlockedAt);
       }, punchedDone ? 0 : (reduced ? BEAT.reduced * 3 : BEAT.first + BEAT.gap + 80));
     },
     destroy() {

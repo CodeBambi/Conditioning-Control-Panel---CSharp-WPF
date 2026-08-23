@@ -147,32 +147,39 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_night_sessions: 'Night Sessions',
   campus_rm: 'RM',
   /* --- the punch card + its ceremony (PUNCHCARD §4) ---------------------- */
-  punchcard: 'Punch Card',
+  punchcard: 'Stamp Card',
   punchcard_holes: '{have} of {need}',
+  /* THE LIVE TEXT ZONE on the card face (shell/punchcard.js). The count is the
+   * card's own tight form ('3/10'); punchcard_holes stays the prose one the
+   * Records docket prints. The eight rotating flavour lines live beside the
+   * enrollment copy, in punchcard.js's PHRASE_LEX - one row each so a mod can
+   * re-voice them one at a time. */
+  punchcard_count: '{have}/{need}',
+  punchcard_mastered: 'Mastered',
   punchcard_stamped: 'Stamped for today.',
-  punchcard_next_hole: 'Come back tomorrow for the next hole.',
+  punchcard_next_hole: 'Come back tomorrow for the next stamp.',
   punchcard_unlocked_chip: 'Unlocked',
   punchcard_unlocked_title: 'Assignment complete',
   punchcard_unlocked_line: 'This room is now open even when the course is not in session.',
   enroll_kicker: 'Enrollment',
   enroll_next: 'Next',
   enroll_begin: 'Begin class',
-  enroll_card_line: 'Every class carries a punch card. Ten holes, one a night.',
-  enroll_tutorial_line: 'One hole for finishing your first class.',
+  enroll_card_line: 'Every class carries a stamp card. Ten stamps, one a night.',
+  enroll_tutorial_line: 'One stamp for finishing your first class.',
   enroll_house_line: 'And one on the house. Welcome to the class.',
   /* --- the Records Office (PUNCHCARD §6) --------------------------------- */
   records_kicker: 'Records Office',
-  records_lede: 'Ten cards, ten holes each. The wall keeps them whether you come back or not.',
+  records_lede: 'Ten cards, ten stamps each. The wall keeps them whether you come back or not.',
   records_enrolled: 'Enrolled',
   records_enrolled_on: 'Enrolled',
   records_unlocked_on: 'Unlocked',
-  records_holes_punched: 'Holes punched',
-  records_holes_left: 'Holes left',
+  records_holes_punched: 'Stamps earned',
+  records_holes_left: 'Stamps left',
   records_stamps: 'Daily stamps',
   records_no_stamps: 'No daily stamps yet.',
   records_not_enrolled: 'Not enrolled - attend the class',
-  records_enroll_hint: 'The first graded finish opens the card and punches two holes.',
-  records_house_note: 'Day one is two holes: one for finishing, one on the house.',
+  records_enroll_hint: 'The first graded finish opens the card and earns two stamps.',
+  records_house_note: 'Day one is two stamps: one for finishing, one on the house.',
   records_flip_hint: 'Pick a card to read its stamps.',
   records_empty_wall: 'Nothing on the wall yet. Attend a class and the first card gets pinned.',
 

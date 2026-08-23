@@ -1498,14 +1498,14 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 }
 
 /* ============================ PUNCH CARDS ================================
-   PUNCHCARD.md 2 / 4 / 6. One class, one card, ten holes; the tenth unlocks
+   PUNCHCARD.md 2 / 4 / 6. One class, one card, ten stamps; the tenth unlocks
    the room for good. Four surfaces share this section, and they share it on
    purpose - the card is ONE object and must not look like two:
 
      .arc-pc          the card face itself (shell/punchcard.js). Sized by
                       --pc-w, so the Records wall shrinks it with ONE variable
                       instead of a second set of rules.
-     .arc-pcstage     the ceremony: the card, full screen, taking its holes.
+     .arc-pcstage     the ceremony: the card, full screen, taking its stamps.
      .arc-enroll      the once-ever flavour cards, over a class that has not
                       started yet.
      .arc-records     the Records Office (the wall + the docket).
@@ -1516,15 +1516,28 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
    rather than a hole in the page. When the nano-banana batch lands, fill the
    token block below and nothing else changes:
 
-     --pc-face-src      cardstock face        art/punchcard/face.png
-     --pc-hole-src      one punched hole      art/punchcard/hole.png
-     --pc-stamp-src     the ink impact        art/punchcard/stamp.png
+     --pc-face-src      the cardstock face, ONE PER CLASS - overridden on
+                        .arc-pc[data-game] exactly the way the crest is
+                                              art/punchcard/face-KEY.png
+     --pc-stamp-src     the ink stamp mark    art/punchcard/stamp.png
      --pc-ribbon-src    the UNLOCKED seal     art/punchcard/ribbon.png
      --pc-desk-src      the office backdrop   art/punchcard/desk.jpg
      --pc-crest-src     per class, one each   art/punchcard/crest-KEY.png
 
-   NO TEXT MAY BE BAKED INTO ANY OF THEM (lexicon law): the class name, the
-   count and every line are rendered live over the top.
+   NO TEXT MAY BE BAKED INTO THE STAMP, THE CREST OR THE SEAL (lexicon law):
+   the count, the flavour line and every label are rendered live over the top.
+   The face image is the one deliberate exception - the owner's locked design
+   bakes the class logo and the Arcademy logo INTO it, which is why the drawn
+   name band steps aside under [data-art="on"] instead of printing the name a
+   second time.
+
+   AND WHERE THE THREE LIVE LAYERS SIT IS THE ART'S BUSINESS, NOT THIS FILE'S.
+   shell/punchcard.js reads art/punchcard/faces.json and writes inline
+   percentages onto the ten slots, the crest and the text strip; the rules below
+   only dress them. A class missing from that file (or the file missing
+   entirely) falls back to DEFAULT_GEOM - a 2x5 grid lower-left, the crest bay
+   right of centre, the strip bottom-right - and to [data-art="off"], which is
+   where the ruled boxes, the name band and the drawn seal come back.
 
    Nothing here writes a bare display: on a node the shell hides with the hidden
    attribute - the ribbon and the unlock panel both ride the reset at the top of
@@ -1533,11 +1546,17 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 :root {
   /* THE ART SLOTS. Swap none for a url() and the CSS floor steps aside. */
   --pc-face-src:none;
-  --pc-hole-src:none;
   --pc-stamp-src:none;
   --pc-ribbon-src:none;
   --pc-desk-src:none;
   --pc-crest-src:none;
+
+  /* WRITTEN PER CARD BY shell/punchcard.js, off art/punchcard/faces.json - they
+     are listed here only so a reader finds them where the other tokens live:
+       --pc-aspect      the face image's w/h  (default 1.6, the §7 template)
+       --pc-crest-rot   the crest bay's tilt  (default -8.79deg, owner-locked)
+     Slot / crest / text POSITIONS are inline percentages on the nodes
+     themselves; there is deliberately no CSS copy of a layout the art owns. */
 
   /* derived from the palette tokens, so init.palette reskins the card free */
   --pc-card:color-mix(in srgb, var(--ink) 12%, var(--panel));
@@ -1547,22 +1566,64 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
   --pc-w:420px;
 }
 
-/* ---- ONE CREST PER CLASS ------------------------------------------------
-   The asset map, in the one place a reader will look for it. Ten rules, ten
-   files, one line each - a class with no crest keeps the embossed gradient the
-   .arc-pc-crest rule draws. */
-.arc-pc[data-game="daily_trigger"]   { --pc-crest-src:none; }  /* crest-daily_trigger.png   quill + bell */
-.arc-pc[data-game="lost_and_found"]  { --pc-crest-src:none; }  /* crest-lost_and_found.png  magnifier */
-.arc-pc[data-game="deja_vu"]         { --pc-crest-src:none; }  /* crest-deja_vu.png         twin masks */
-.arc-pc[data-game="impulse_control"] { --pc-crest-src:none; }  /* crest-impulse_control.png bubble + X */
-.arc-pc[data-game="the_deep_end"]    { --pc-crest-src:none; }  /* crest-the_deep_end.png    wave + tile */
-.arc-pc[data-game="misdirection"]    { --pc-crest-src:none; }  /* crest-misdirection.png    three shells */
-.arc-pc[data-game="echo"]            { --pc-crest-src:none; }  /* crest-echo.png            rings */
-.arc-pc[data-game="instant_recall"]  { --pc-crest-src:none; }  /* crest-instant_recall.png  open eye */
-.arc-pc[data-game="anomaly"]         { --pc-crest-src:none; }  /* crest-anomaly.png         odd dot */
-.arc-pc[data-game="composure"]       { --pc-crest-src:none; }  /* crest-composure.png       four tiles */
+/* ---- ONE CREST AND ONE FACE PER CLASS -----------------------------------
+   The asset map, in the one place a reader will look for it. Ten classes, two
+   files each, one rule apiece - and the face overrides ride the SAME mechanism
+   the crest overrides always used, so there is one pattern here and not two.
+   A class with no art keeps the gradient floor the rules below draw. */
+.arc-pc[data-game="daily_trigger"] {
+  --pc-crest-src:none;  /* crest-daily_trigger.png  quill + bell */
+  --pc-face-src:none;   /* face-daily_trigger.png */
+}
+.arc-pc[data-game="lost_and_found"] {
+  --pc-crest-src:none;  /* crest-lost_and_found.png  magnifier */
+  --pc-face-src:none;   /* face-lost_and_found.png */
+}
+.arc-pc[data-game="deja_vu"] {
+  --pc-crest-src:none;  /* crest-deja_vu.png  twin slides */
+  --pc-face-src:none;   /* face-deja_vu.png */
+}
+.arc-pc[data-game="impulse_control"] {
+  --pc-crest-src:none;  /* crest-impulse_control.png  halted hand */
+  --pc-face-src:none;   /* face-impulse_control.png */
+}
+.arc-pc[data-game="the_deep_end"] {
+  --pc-crest-src:none;  /* crest-the_deep_end.png  sinking tile */
+  --pc-face-src:none;   /* face-the_deep_end.png */
+}
+.arc-pc[data-game="misdirection"] {
+  --pc-crest-src:none;  /* crest-misdirection.png  three cups */
+  --pc-face-src:none;   /* face-misdirection.png */
+}
+.arc-pc[data-game="echo"] {
+  --pc-crest-src:none;  /* crest-echo.png  rings */
+  --pc-face-src:none;   /* face-echo.png */
+}
+.arc-pc[data-game="instant_recall"] {
+  --pc-crest-src:none;  /* crest-instant_recall.png  flashbulb */
+  --pc-face-src:none;   /* face-instant_recall.png */
+}
+.arc-pc[data-game="anomaly"] {
+  --pc-crest-src:none;  /* crest-anomaly.png  odd one out */
+  --pc-face-src:none;   /* face-anomaly.png */
+}
+.arc-pc[data-game="composure"] {
+  --pc-crest-src:none;  /* crest-composure.png  sliding tiles */
+  --pc-face-src:none;   /* face-composure.png */
+}
 
-/* ---- the card face ------------------------------------------------------ */
+/* ---- the card face ------------------------------------------------------
+   THE FACE IS THE ART AND THE SHELL OVERLAYS THREE THINGS (owner-locked): the
+   ten stamps, the crest, the live text strip. Every one of them is placed in
+   PERCENTAGES written by shell/punchcard.js off art/punchcard/faces.json, so
+   the same rules dress a 236px wall card and a full-screen ceremony card, and
+   moving a slot is an art edit rather than a CSS edit.
+
+   `data-art` is the fork, and it is honest: "on" means faces.json listed this
+   class, which means its face image shipped - so the grid squares, the name
+   band and the corner ribbon are all IN the picture and the shell must not
+   draw them twice. "off" is the gradient floor: ruled boxes, a drawn name
+   band, a drawn seal, a finished-looking card with zero art installed. */
 .arc-pc {
   position:relative;
   width:var(--pc-w); max-width:92vw;
@@ -1571,12 +1632,9 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 .arc-pc-small { --pc-w:236px; }
 .arc-pc-face {
   position:relative;
-  display:grid;
-  grid-template-columns:auto 1fr;
-  grid-template-areas:"crest band" "holes holes" "count count";
-  align-items:center;
-  gap:12px 14px;
-  padding:18px 20px 16px;
+  width:100%;
+  aspect-ratio:var(--pc-aspect, 1.6);
+  overflow:hidden;
   /* The image, when it lands, sits OVER the drawn floor - so a 404 or a slow
      decode leaves the gradient card, not an empty rectangle. */
   background-image:var(--pc-face-src),
@@ -1586,6 +1644,7 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
     linear-gradient(166deg, var(--pc-card), var(--pc-card2));
   background-size:cover, auto, auto;
   background-position:center;
+  background-repeat:no-repeat, repeat, no-repeat;
   border:1px solid var(--pc-edge);
   border-radius:10px;
   box-shadow:0 18px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07);
@@ -1598,11 +1657,15 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
     inset 0 1px 0 rgba(255,255,255,.07);
 }
 
-/* the crest well - an emboss until the art lands over it */
+/* ---- 2. THE CREST: the reward, placed by the art ------------------------
+   Hidden until the tenth stamp lands. x/y are its CENTRE and `scale` its width
+   as a fraction of the face, so the translate(-50%,-50%) below is what makes
+   the art's numbers mean what the art tool meant by them. */
 .arc-pc-crest {
-  grid-area:crest;
-  width:52px; height:52px; flex:none;
-  border-radius:8px;
+  position:absolute;
+  aspect-ratio:1;
+  transform:translate(-50%, -50%) rotate(var(--pc-crest-rot, -8.79deg));
+  transform-origin:50% 50%;
   background-image:var(--pc-crest-src),
     radial-gradient(circle at 34% 30%,
       color-mix(in srgb, var(--lav), transparent 55%),
@@ -1611,17 +1674,56 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
   background-size:contain, auto, auto;
   background-repeat:no-repeat;
   background-position:center;
-  border:1px solid color-mix(in srgb, var(--lav), transparent 68%);
-  box-shadow:inset 0 2px 6px rgba(0,0,0,.55);
+  border-radius:8px;
+  border:1px solid color-mix(in srgb, var(--gold), transparent 58%);
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.55),
+    0 0 20px color-mix(in srgb, var(--gold), transparent 66%);
+  pointer-events:none;
 }
-.arc-pc-small .arc-pc-crest { width:34px; height:34px; }
+/* THE EMPTY BAY - the fallback's only. It occupies the crest's exact box so a
+   card with no seal yet does not read as lopsided, and it goes away the moment
+   the crest lands. A real face image has the bay printed on it, so [data-art=
+   "on"] never draws one. */
+.arc-pc-bay {
+  position:absolute;
+  aspect-ratio:1;
+  transform:translate(-50%, -50%) rotate(var(--pc-crest-rot, -8.79deg));
+  transform-origin:50% 50%;
+  border-radius:8px;
+  border:1px dashed color-mix(in srgb, var(--slate), transparent 52%);
+  background:linear-gradient(150deg,
+    color-mix(in srgb, var(--pc-well), transparent 42%),
+    color-mix(in srgb, var(--pc-well), transparent 78%));
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.42);
+  opacity:.75;
+  pointer-events:none;
+}
+.arc-pc[data-art="on"] .arc-pc-bay { display:none; }
 
-/* the name band. LIVE text, never baked art. */
+/* On real art the crest IS the seal - no drawn well underneath it. */
+.arc-pc[data-art="on"] .arc-pc-crest {
+  background-image:var(--pc-crest-src);
+  border:0; border-radius:0; box-shadow:none;
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));
+}
+/* THE REVEAL. Same beat and the same easing as the ribbon's seal below, so the
+   two land as one gesture rather than as two animations that happen to agree. */
+.arc-pc.is-unlocking .arc-pc-crest {
+  animation:arc-pc-crest-in .62s cubic-bezier(.2,1.35,.35,1) both;
+}
+@keyframes arc-pc-crest-in {
+  0%   { opacity:0; transform:translate(-50%,-50%) rotate(calc(var(--pc-crest-rot, -8.79deg) - 26deg)) scale(2.6); filter:brightness(2.4); }
+  60%  { opacity:1; transform:translate(-50%,-50%) rotate(var(--pc-crest-rot, -8.79deg)) scale(.9); }
+  100% { opacity:1; transform:translate(-50%,-50%) rotate(var(--pc-crest-rot, -8.79deg)) scale(1); filter:none; }
+}
+
+/* ---- the drawn name band: THE FALLBACK'S ONLY, the art bakes the logo ---- */
 .arc-pc-band {
-  grid-area:band;
+  position:absolute; left:5%; top:6%; right:32%;
   display:flex; flex-direction:column; align-items:flex-start; gap:3px;
   min-width:0;
 }
+.arc-pc[data-art="on"] .arc-pc-band { display:none; }
 .arc-pc-name {
   font-family:var(--disp); font-size:15px; letter-spacing:.14em;
   text-transform:uppercase; line-height:1.15;
@@ -1632,39 +1734,46 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
   font-family:var(--mono); font-size:9.5px; letter-spacing:.24em;
   text-transform:uppercase; color:var(--ink-faint);
 }
+.arc-pc-small .arc-pc-kind { font-size:8px; letter-spacing:.18em; }
 
-/* the ring of ten */
-.arc-pc-holes {
-  grid-area:holes;
-  display:grid; grid-template-columns:repeat(10, 1fr);
-  gap:7px; width:100%;
-  padding:11px 2px 4px;
-  border-top:1px dashed color-mix(in srgb, var(--gold), transparent 74%);
-}
-.arc-pc-small .arc-pc-holes { gap:4px; padding-top:9px; }
+/* ---- 1. THE TEN SLOTS - two rows of five, placed by the art -------------
+   The wrapper is a POSITIONING PLANE, not a grid: every slot carries its own
+   left/top/width/height in percentages, so nothing here has to know which row
+   a slot landed in and a hand-arranged layout survives verbatim. */
+.arc-pc-holes { position:absolute; inset:0; pointer-events:none; }
 .arc-pc-hole {
-  position:relative;
-  display:block; width:100%; aspect-ratio:1;
-  border-radius:50%;
+  position:absolute;
+  display:block;
+  border-radius:4px;
+}
+/* THE DRAWN GRID - fallback only. With a face image the squares are printed in
+   the picture and a second box over them reads as a rendering bug. */
+.arc-pc[data-art="off"] .arc-pc-hole {
   background:radial-gradient(circle at 50% 42%,
     color-mix(in srgb, var(--pc-card), black 12%),
     color-mix(in srgb, var(--pc-card), black 3%));
   border:1px dashed color-mix(in srgb, var(--slate), transparent 46%);
   box-shadow:inset 0 1px 2px rgba(0,0,0,.32);
 }
-/* A PUNCHED HOLE IS A HOLE, not a filled dot: it reads through to the well
-   under the card, which is what makes the card feel like cardstock. */
+/* A STAMPED SLOT WEARS INK, it does not read through the card: the mark sits ON
+   the stock. The art is outlined in heavy black on purpose so it stays legible
+   whatever colour the class's cardstock is; the gradient under it is the floor
+   for a slot whose art has not decoded yet. */
 .arc-pc-hole.is-punched {
-  background-image:var(--pc-hole-src),
-    radial-gradient(circle at 50% 38%, var(--pc-well), black 78%);
+  background-image:var(--pc-stamp-src),
+    radial-gradient(circle at 50% 46%,
+      color-mix(in srgb, var(--pink), transparent 24%),
+      color-mix(in srgb, var(--pink-deep), transparent 56%) 62%,
+      transparent 74%);
   background-size:contain, auto;
   background-repeat:no-repeat;
   background-position:center;
-  border:1px solid color-mix(in srgb, black, transparent 40%);
-  box-shadow:inset 0 3px 6px rgba(0,0,0,.85),
-    0 1px 0 color-mix(in srgb, var(--ink), transparent 82%);
 }
-/* THE THUD, SEEN. One pop as the hole lands - the sound is shell/audio.js's
+.arc-pc[data-art="off"] .arc-pc-hole.is-punched {
+  border:1px solid color-mix(in srgb, var(--pink), transparent 64%);
+  box-shadow:none;
+}
+/* THE THUD, SEEN. One pop as the stamp lands - the sound is shell/audio.js's
    stamp cue with a pitch, and the two fire on the same beat. */
 .arc-pc-hole.is-fresh { animation:arc-pc-punch .34s cubic-bezier(.2,1.5,.4,1) both; }
 @keyframes arc-pc-punch {
@@ -1673,13 +1782,58 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
   100% { transform:none; filter:none; }
 }
 
-.arc-pc-count {
-  grid-area:count;
-  font-family:var(--mono); font-size:11px; letter-spacing:.2em;
-  color:var(--ink-dim); text-align:right;
+/* ---- 3. THE LIVE TEXT ZONE ----------------------------------------------
+   The free strip under the crest bay. In progress: the count and one rotating
+   line (punchcard_phrase_1..8, picked deterministically off the class key and
+   the count, so the wall never reshuffles itself). Complete: MASTERED and the
+   day the host closed the card. Both states are LIVE lexicon text - nothing
+   here is ever baked into a face image. */
+.arc-pc-text {
+  position:absolute;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:2px;
+  text-align:center;
+  overflow:hidden;
+  pointer-events:none;
 }
+.arc-pc-count {
+  font-family:var(--mono); font-size:17px; letter-spacing:.16em;
+  line-height:1.1;
+  color:var(--ink);
+  text-shadow:0 1px 3px rgba(0,0,0,.6);
+}
+.arc-pc-phrase {
+  font-size:10px; line-height:1.35;
+  color:var(--ink-dim);
+  text-shadow:0 1px 3px rgba(0,0,0,.65);
+  overflow:hidden;
+}
+/* A 236px wall card cannot carry a sentence in an 85px strip - the count is the
+   part that has to survive the shrink, and the wall prints its own line under
+   each card anyway (.arc-records-slotline). */
+.arc-pc-small .arc-pc-count { font-size:12px; letter-spacing:.1em; }
+.arc-pc-small .arc-pc-phrase { display:none; }
+.arc-pc-mastered {
+  font-family:var(--disp); font-size:12px; letter-spacing:.22em;
+  text-transform:uppercase; line-height:1.1;
+  color:var(--gold);
+  text-shadow:0 1px 4px rgba(0,0,0,.7);
+}
+.arc-pc-small .arc-pc-mastered { font-size:9.5px; letter-spacing:.16em; }
+.arc-pc-date {
+  font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+  color:var(--ink-dim);
+  text-shadow:0 1px 3px rgba(0,0,0,.65);
+}
+.arc-pc-small .arc-pc-date { font-size:8.5px; }
+.arc-pc.is-unlocking .arc-pc-mastered,
+.arc-pc.is-unlocking .arc-pc-date {
+  animation:arc-pc-mastered-in .5s ease-out both;
+}
+@keyframes arc-pc-mastered-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 
-/* the seal a full card wears */
+/* the seal a full card wears. The FALLBACK's completion tell - with real art
+   the crest is the seal and a second badge over the picture is clutter. */
 .arc-pc-ribbon {
   position:absolute; top:-9px; right:-9px;
   display:flex; align-items:center;
@@ -1694,6 +1848,7 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
   box-shadow:0 6px 18px color-mix(in srgb, var(--gold), transparent 56%);
   transform:rotate(6deg);
 }
+.arc-pc[data-art="on"] .arc-pc-ribbon { display:none; }
 .arc-pc.is-unlocking .arc-pc-ribbon { animation:arc-pc-seal .5s cubic-bezier(.2,1.4,.4,1) both; }
 @keyframes arc-pc-seal {
   from { transform:rotate(22deg) scale(2.4); opacity:0; }
@@ -1896,8 +2051,11 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 }
 
 @media (max-width:560px) {
+  /* The slots are placed in PERCENTAGES of the face now, so a narrow card
+     re-lays itself out for free - only the card's own width and the wall's
+     column count have anything left to say. */
   .arc-pc { --pc-w:100%; }
-  .arc-pc-holes { gap:5px; }
+  .arc-pc-phrase { font-size:9px; }
   .arc-records-wall { grid-template-columns:1fr; }
 }
 

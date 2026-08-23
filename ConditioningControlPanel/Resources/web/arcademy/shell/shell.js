@@ -44,6 +44,7 @@ import { createKeybinds } from './keybinds.js';
 import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
 import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createRecords } from './records.js';
+import { loadFaceGeometry } from './punchcard.js';
 
 const FLAVOR_XP_CAP = 15;          // BUILD-CONTRACT §8 - the page clamps too
 const MEATY_MAX_SEC = 300;
@@ -363,6 +364,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     + (timetable.relaxed.length ? ' (relaxed: ' + timetable.relaxed.join(',') + ')' : ''));
 
   /* ---------------------- engine + provider ----------------------------- */
+  /* THE CARD FACES. Optional, guarded, once: art/punchcard/faces.json says
+   * where the stamps, the crest and the live text sit on each class's face
+   * image. Missing (it ships with the art batch) leaves every card on the
+   * gradient floor, which is a finished card - so this is awaited for ordering
+   * only and can never fail the boot. */
+  await loadFaceGeometry(say);
+
   const createEngine = await loadOptional('../engine/index.js', 'createEngine', NULL_ENGINE_FACTORY, say);
   const createAssets = await loadOptional('../provider/index.js', 'createAssets', NULL_ASSETS_FACTORY, say);
 

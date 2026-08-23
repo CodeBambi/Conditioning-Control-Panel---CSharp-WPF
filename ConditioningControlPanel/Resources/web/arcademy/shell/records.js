@@ -74,7 +74,7 @@ export function createRecords({ gameName, punchCard, log } = {}) {
     desk.appendChild(el('p', 'arc-kicker', t('records_kicker', 'Records Office')));
     desk.appendChild(el('h1', 'arc-h1', t('campus_records', 'Records')));
     desk.appendChild(el('p', 'arc-lede', t('records_lede',
-      'Ten cards, ten holes each. The wall keeps them whether you come back or not.')));
+      'Ten cards, ten stamps each. The wall keeps them whether you come back or not.')));
 
     /* The tally. Honest arithmetic off the same cards the wall draws - nothing
      * here is a second source of truth. */
@@ -93,7 +93,7 @@ export function createRecords({ gameName, punchCard, log } = {}) {
     tally.appendChild(el('span', 'chip', t('records_enrolled', 'Enrolled') + ' ' + enrolled + '/' + keys.length));
     tally.appendChild(el('span', 'chip' + (unlocked ? ' flame' : ''),
       t('punchcard_unlocked_chip', 'Unlocked') + ' ' + unlocked + '/' + keys.length));
-    tally.appendChild(el('span', 'chip num', t('records_holes_punched', 'Holes punched') + ' ' + stamps));
+    tally.appendChild(el('span', 'chip num', t('records_holes_punched', 'Stamps earned') + ' ' + stamps));
     desk.appendChild(tally);
 
     /* ---------------------------- the wall ------------------------------ */
@@ -147,7 +147,7 @@ export function createRecords({ gameName, punchCard, log } = {}) {
         box.appendChild(el('p', 'arc-records-empty',
           t('records_not_enrolled', 'Not enrolled - attend the class')));
         box.appendChild(el('p', 'arc-note', t('records_enroll_hint',
-          'The first graded finish opens the card and punches two holes.')));
+          'The first graded finish opens the card and earns two stamps.')));
         return;
       }
 
@@ -159,10 +159,10 @@ export function createRecords({ gameName, punchCard, log } = {}) {
         rows.appendChild(r);
       };
       row(t('records_enrolled_on', 'Enrolled'), String(c.enrolledAt || ''));
-      row(t('punchcard', 'Punch Card'), holesLine(c.punches));
+      row(t('punchcard', 'Stamp Card'), holesLine(c.punches));
       if (c.complete) row(t('records_unlocked_on', 'Unlocked'), String(c.unlockedAt || ''));
       else {
-        row(t('records_holes_left', 'Holes left'), String(Math.max(0, HOLES - (c.punches | 0))));
+        row(t('records_holes_left', 'Stamps left'), String(Math.max(0, HOLES - (c.punches | 0))));
       }
       box.appendChild(rows);
 
@@ -180,7 +180,7 @@ export function createRecords({ gameName, punchCard, log } = {}) {
         box.appendChild(list);
       }
       box.appendChild(el('p', 'arc-note', t('records_house_note',
-        'Day one is two holes: one for finishing, one on the house.')));
+        'Day one is two stamps: one for finishing, one on the house.')));
     }
     paintDocket();
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -920,32 +920,45 @@ internal static class ArcademyHostService
         // ---- punch cards: the card + its ceremony (PUNCHCARD.md §4) ---------------------
         // Every value stays under MergeModTable's 96-char cap so a mod can re-voice the
         // whole mechanic (trap 26). A line that needs more room becomes a second card.
-        ["punchcard"] = "Punch Card",
+        ["punchcard"] = "Stamp Card",
         ["punchcard_holes"] = "{have} of {need}",
+        // The card face's LIVE TEXT ZONE: the tight count, the MASTERED label, and the
+        // eight rotating flavour lines (shell/punchcard.js PHRASE_LEX - copy the values,
+        // do not re-word them). One row per line so a mod can re-voice them one at a time.
+        ["punchcard_count"] = "{have}/{need}",
+        ["punchcard_mastered"] = "Mastered",
+        ["punchcard_phrase_1"] = "Attendance is a habit. Habits are the only thing this school grades.",
+        ["punchcard_phrase_2"] = "The card does not ask how well you did. Only that you came.",
+        ["punchcard_phrase_3"] = "Ten stamps and the room is yours. Nine of them are patience.",
+        ["punchcard_phrase_4"] = "Nobody has ever filled a card in one night. You will not be the first.",
+        ["punchcard_phrase_5"] = "The register is already open. Your name has been on it a while.",
+        ["punchcard_phrase_6"] = "One stamp a night. The school is in no hurry whatsoever.",
+        ["punchcard_phrase_7"] = "Progress in here is measured in ink, never in effort.",
+        ["punchcard_phrase_8"] = "You will stop noticing that you collect these. That is the intention.",
         ["punchcard_stamped"] = "Stamped for today.",
-        ["punchcard_next_hole"] = "Come back tomorrow for the next hole.",
+        ["punchcard_next_hole"] = "Come back tomorrow for the next stamp.",
         ["punchcard_unlocked_chip"] = "Unlocked",
         ["punchcard_unlocked_title"] = "Assignment complete",
         ["punchcard_unlocked_line"] = "This room is now open even when the course is not in session.",
         ["enroll_kicker"] = "Enrollment",
         ["enroll_next"] = "Next",
         ["enroll_begin"] = "Begin class",
-        ["enroll_card_line"] = "Every class carries a punch card. Ten holes, one a night.",
-        ["enroll_tutorial_line"] = "One hole for finishing your first class.",
+        ["enroll_card_line"] = "Every class carries a stamp card. Ten stamps, one a night.",
+        ["enroll_tutorial_line"] = "One stamp for finishing your first class.",
         ["enroll_house_line"] = "And one on the house. Welcome to the class.",
         // ---- punch cards: the Records Office (PUNCHCARD.md §6) --------------------------
         ["records_kicker"] = "Records Office",
-        ["records_lede"] = "Ten cards, ten holes each. The wall keeps them whether you come back or not.",
+        ["records_lede"] = "Ten cards, ten stamps each. The wall keeps them whether you come back or not.",
         ["records_enrolled"] = "Enrolled",
         ["records_enrolled_on"] = "Enrolled",
         ["records_unlocked_on"] = "Unlocked",
-        ["records_holes_punched"] = "Holes punched",
-        ["records_holes_left"] = "Holes left",
+        ["records_holes_punched"] = "Stamps earned",
+        ["records_holes_left"] = "Stamps left",
         ["records_stamps"] = "Daily stamps",
         ["records_no_stamps"] = "No daily stamps yet.",
         ["records_not_enrolled"] = "Not enrolled - attend the class",
-        ["records_enroll_hint"] = "The first graded finish opens the card and punches two holes.",
-        ["records_house_note"] = "Day one is two holes: one for finishing, one on the house.",
+        ["records_enroll_hint"] = "The first graded finish opens the card and earns two stamps.",
+        ["records_house_note"] = "Day one is two stamps: one for finishing, one on the house.",
         ["records_flip_hint"] = "Pick a card to read its stamps.",
         ["records_empty_wall"] = "Nothing on the wall yet. Attend a class and the first card gets pinned.",
         // ---- enrollment flavour, per class (PUNCHCARD.md §4) ----------------------------
