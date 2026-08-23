@@ -102,8 +102,8 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -121,10 +121,17 @@ $exe = Join-Path $verifyDir '..\..\src\CcpClient.Desktop\bin\Debug\net10.0\CcpCl
 # (GradedRunAwards.cs:37, read at IntakeLaunch.cs:108-111 out of the SAME data directory as
 # settings.json). Its absence is not a failure — it is the card's `no-runs-yet` state, which is the
 # one state this harness can drive without running a whole graded intake.
+#
+# The FOURTH is the session feature lock's own subject. `studio-dial` photographs the Lock Card
+# panel's Repeats slider, and what makes that capture evidence is that the dial has the SAME VALUE
+# in both states — so a leaked session_lockcard.json from a previous run would move the thumb and
+# the two captures would differ for a reason that has nothing to do with the lock
+# (LockCardPresetDocument.FileName; the same leak session_preset.json above was added for).
 $stateFiles = @(
     (Join-Path $env:APPDATA 'CcpClient\settings.json'),
     (Join-Path $env:APPDATA 'CcpClient\session_preset.json'),
-    (Join-Path $env:APPDATA 'CcpClient\graded_run_awards.json')
+    (Join-Path $env:APPDATA 'CcpClient\graded_run_awards.json'),
+    (Join-Path $env:APPDATA 'CcpClient\session_lockcard.json')
 )
 # AND THE PAGE'S OWN PREFS. Hygiene, and NOT what makes this deterministic.
 #
@@ -174,6 +181,13 @@ $statesFor = @{
     # case that is dropped). So a check that passes on both would be saying the log ignores the
     # rule.
     'session-history' = @('kept', 'not-kept')
+    # THE SESSION FEATURE LOCK, AND IT IS THE STRICTEST INVERSION ON THIS MANIFEST: the two states
+    # are the SAME control, on the SAME panel, at the SAME value, in the same app. `locked` differs
+    # from `live` by one thing only - a scripted session is running - and the captured dial is one
+    # the session never WRITES (LockCardRepeats is absent from ScriptedSessionDials.Apply), so its
+    # thumb sits in the same place in both captures and the only thing a check can be reading is
+    # the disabled livery.
+    'studio-dial' = @('live', 'locked')
 }
 if ($statesFor[$Surface] -notcontains $State) {
     Write-Output "FAIL: surface '$Surface' has no state '$State' (it has: $($statesFor[$Surface] -join ', '))"
@@ -372,6 +386,33 @@ function Get-Element($window, [string]$automationId) {
     $el = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
     if ($null -eq $el) { Fail "no UIA element with AutomationId '$automationId'" }
     return $el
+}
+
+# Get-Element's nullable twin, for the ONE thing this script has to assert the ABSENCE of. An
+# Avalonia control with IsVisible=False has no automation peer at all, so "the session lock banner
+# is not on screen" reads as $null here — and Get-Element would (rightly) fail the run instead.
+function Find-Element($window, [string]$automationId) {
+    $cond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, $automationId)
+    return $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+}
+
+# Wheel a rack row fully inside the rack viewport, one notch at a time, testing after each. Never a
+# fixed count, for the reason the session block records: a rack that grew another row would stop
+# scrolling far enough while UIA still reported a plausible rect with IsOffscreen=False.
+function Scroll-RowIntoView($window, $viewport, [string]$rowId) {
+    $notches = 0
+    while ($true) {
+        $rect = Get-Rect (Get-Element $window $rowId)
+        if (Test-Inside $rect $viewport) { return @{ Rect = $rect; Notches = $notches } }
+        if ($notches -ge 24) {
+            Fail ("the '$rowId' rack row never came fully inside the rack viewport after $notches wheel " +
+    "notches: row $($rect.X),$($rect.Y) $($rect.W)x$($rect.H) vs viewport " +
+    "$($viewport.X),$($viewport.Y) $($viewport.W)x$($viewport.H)")
+        }
+        Wheel-Down $viewport
+        $notches++
+    }
 }
 
 function Get-Rect($element) {
@@ -990,6 +1031,109 @@ elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     else {
         $capX = $rowRect.X; $capY = $rowRect.Y; $capW = $rowRect.W; $capH = $rowRect.H
     }
+}
+elseif ($Surface -eq 'studio-dial') {
+    # =============================================================================================
+    # THE SESSION FEATURE LOCK. The same dial, twice: once as the user's, once on loan.
+    #
+    # WHY THE LOCK CARD PANEL AND WHY THE REPEATS SLIDER. The lock's whole claim is that a dial a
+    # session owns stops responding while the session runs, and the ONLY honest way to photograph
+    # that is a control whose picture cannot differ for any other reason. LockCardRepeats qualifies
+    # twice over: ScriptedSessionDials.Apply never writes it (upstream's block writes only the
+    # enable and the frequency, Services/Session/SessionEngine.cs:1361-1366), so the thumb sits at
+    # the same value in both captures; and its own panel carries LockCardStrictToggle, which is
+    # DELIBERATELY NOT locked (Features/LockCardFeatureControl.xaml:124 is unmarked, and rule 3 at
+    # MainWindow/MainWindow.SessionFeatureLock.cs:39-42 names Strict Lock in the never-lock list).
+    # So one run reads both directions of the classification off the same panel.
+    # =============================================================================================
+    $scale = (Get-DoorRect $window 'studio').Scale
+    $viewport = Get-Rect (Get-Element $window 'RackScroll')
+
+    if ($State -eq 'locked') {
+        # A REAL SESSION, STARTED THE ONLY WAY A USER CAN. There is no flag for this and
+        # deliberately so, which is what makes the drive the same four gestures session-start uses.
+        $sessions = Scroll-RowIntoView $window $viewport 'RowScriptedSession'
+        Click-Rect $sessions.Rect
+        if (-not (Get-Selected (Get-Element $window 'RowScriptedSession'))) {
+            Fail 'the left-click did not open the Scripted Sessions row (state drive failed)'
+        }
+        Click-Rect (Get-Rect (Get-Element $window 'SessionRowMorningDrift'))
+        if (-not (Get-Selected (Get-Element $window 'SessionRowMorningDrift'))) {
+            Fail 'the left-click did not select the Morning Drift session row (state drive failed)'
+        }
+        Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionStartButton'))
+        $promise = (Get-Element $window 'ScriptedSessionConfirmPromise').Current.Name
+        if ($promise -notlike '*restored when the session ends*') {
+            Fail "the confirmation does not carry the settings promise: '$promise'"
+        }
+        $stillIdle = (Get-Element $window 'ScriptedSessionStartButton').Current.Name
+        if ($stillIdle -ne 'Start Session') { Fail "a session started before the confirmation was answered: '$stillIdle'" }
+        Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionConfirmButton'))
+        $caption = (Get-Element $window 'ScriptedSessionStartButton').Current.Name
+        if ($caption -notlike 'STOP SESSION (*') { Fail "the session did not start: the button reads '$caption'" }
+        Write-Output "start gate: promise shown, nothing started until it was answered, button '$caption' ($($sessions.Notches) wheel notch(es))"
+    }
+
+    # THE PANEL, opened the same way in both states so the two captures differ by the session and
+    # by nothing else.
+    $lockCard = Scroll-RowIntoView $window $viewport 'RowLockCard'
+    Click-Rect $lockCard.Rect
+    if (-not (Get-Selected (Get-Element $window 'RowLockCard'))) {
+        Fail 'the left-click did not open the Lock Card rack row (state drive failed)'
+    }
+    Write-Output "state drive: left-click on the Lock Card rack row -> IsSelected=True ($($lockCard.Notches) wheel notch(es))"
+
+    # =========================================================================================
+    # THE UIA GATE, AND IT IS READ BEFORE ANY PIXEL. Three facts, and all three are properties the
+    # operating system's own automation tree publishes about the real controls in the real window.
+    # =========================================================================================
+    $dial = Get-Element $window 'LockCardRepeatsSlider'
+    $strict = Get-Element $window 'LockCardStrictToggle'
+    $banner = Find-Element $window 'SessionLockReason'
+    $dialEnabled = $dial.Current.IsEnabled
+    $strictEnabled = $strict.Current.IsEnabled
+
+    if ($State -eq 'locked') {
+        if ($dialEnabled) { Fail 'the Repeats dial is still enabled while a session runs; the locked capture would be a lie' }
+        if (-not $strictEnabled) {
+            Fail ('the Strict Lock box is disabled while a session runs. Upstream leaves it unmarked and rule 3 ' +
+    'names Strict Lock in the never-lock list, so this is over-locking, not the lock')
+        }
+        if ($null -eq $banner) { Fail 'the session lock banner is not on screen, so the greyed dial has no explanation' }
+        $reason = $banner.Current.Name
+        if ($reason -ne 'Morning Drift is running this. Its features and intensity are locked until the session ends.') {
+            Fail "the banner does not name the running session: '$reason'"
+        }
+        $repeats = (Get-Element $window 'LockCardRepeatsValue').Current.Name
+        Write-Output "lock gate: Repeats IsEnabled=False at '$repeats', Strict Lock IsEnabled=True, banner reads '$reason'"
+    }
+    else {
+        if (-not $dialEnabled) { Fail 'the Repeats dial is disabled with no session running; the live capture would be a lie' }
+        if (-not $strictEnabled) { Fail 'the Strict Lock box is disabled with no session running' }
+        if ($null -ne $banner) {
+            Fail "a session lock banner is on screen with nothing running: '$($banner.Current.Name)'"
+        }
+        # The dial's own value, read off the control, so the two captures can be shown to be of the
+        # same picture rather than of two different slider positions.
+        $repeats = (Get-Element $window 'LockCardRepeatsValue').Current.Name
+        Write-Output "live gate: Repeats IsEnabled=True at '$repeats', Strict Lock IsEnabled=True, no banner"
+    }
+
+    $dialRect = Get-Rect $dial
+    Assert-Inside $dialRect $windowRect 'the Lock Card Repeats slider' 'the shell window'
+
+    # THE BAND checks.json SAMPLES, PROVED AGAINST THE MEASURED CONTROL. y 0.40..0.60 is the
+    # slider's own centre line, where Fluent draws the track; x 0.02..0.10 is inside the FILLED
+    # part of that track for any value above this dial's minimum, which LockCardSchedule's default
+    # of 3 (of 1..10) is. A slider whose geometry changed fails here by name rather than sampling
+    # its own background.
+    if ($dialRect.H -lt [int][math]::Round(12 * $scale)) {
+        Fail "the Repeats slider is only $($dialRect.H) px tall at scale $scale; its centre band would not be the track"
+    }
+    Write-Output ("dial rect $($dialRect.X),$($dialRect.Y) $($dialRect.W)x$($dialRect.H) @ scale $scale; " +
+    'track band y 0.40..0.60, filled band x 0.02..0.10')
+
+    $capX = $dialRect.X; $capY = $dialRect.Y; $capW = $dialRect.W; $capH = $dialRect.H
 }
 elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start' -or $Surface -eq 'session-history') {
     # =============================================================================================

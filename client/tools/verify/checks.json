@@ -337,6 +337,51 @@
       "expectedColor": "#E8E0EE",
       "tolerance": 24,
       "minPixelFraction": 0.05
+    },
+
+    // THE SESSION FEATURE LOCK. The strictest inversion on this manifest, because the two captures
+    // are of the SAME CONTROL AT THE SAME VALUE: the Lock Card panel's Repeats slider, which a
+    // scripted session LOCKS but never WRITES (ScriptedSessionDials.Apply writes only that module's
+    // enable and frequency, upstream Services/Session/SessionEngine.cs:1361-1366). Both captures
+    // measure 653x88 with the dial reading '3x', and the sampled band holds exactly 208 track
+    // pixels in each - so the only thing separating them is the disabled livery.
+    //
+    // MEASURED, NOT CHOSEN. The band x 0.02..0.10, y 0.40..0.60 is 936 px and holds two colours and
+    // no antialiasing at all: the panel ground #1B1622 at 728 px in both states, and the track at
+    // 208 px - Fluent's accent #0078D4 when the dial is the user's, its disabled grey #333333 when
+    // the session owns it. 208/936 = 0.2222, which is why the fraction is 0.20: the wrong capture
+    // scores 0.0000, not a near miss.
+    //
+    // TOLERANCE 8 with 51/69/161 between the two colours. There is no third state to confuse them
+    // with - a slider is enabled or it is not - so the tightening the rack's checks needed against
+    // a hover livery does not apply here, and 8 is dashboard-background's number.
+    //
+    // WHAT THESE TWO CHECKS DO NOT COVER. They are about ONE dial of the thirty the lock owns; the
+    // other twenty-nine are headless facts (SessionFeatureLockHeadlessTests), which is a claim
+    // about IsEnabled and not about pixels. They say nothing about the banner's own rendering, and
+    // nothing about whether a click on the greyed dial is really refused - the capture's UIA gate
+    // reads IsEnabled, and no pixel can.
+    {
+      "name": "studio-dial-live-track",
+      "surface": "studio-dial",
+      "state": "live",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.40, "w": 0.08, "h": 0.20 } },
+      "expectedColor": "#0078D4",
+      "tolerance": 8,
+      "minPixelFraction": 0.20
+    },
+    {
+      "name": "studio-dial-locked-track",
+      "surface": "studio-dial",
+      "state": "locked",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.40, "w": 0.08, "h": 0.20 } },
+      "expectedColor": "#333333",
+      "tolerance": 8,
+      "minPixelFraction": 0.20
     }
   ]
 }
