@@ -143,6 +143,23 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   numbers back from two places: `payout-result` (which carries `streak` /
   `perfectAttendance` / `classesToday` on the same frame) and the whole-blob snapshot.
   The page still owns `days` (the graded view) and `games` (tier + per-game state).
+- **`punchCards` is HOST-owned too** (PUNCHCARD.md §2). `ArcademyPunchCards` is the pure math,
+  `ArcademyMetaStore.StampPunchCard` / `EnrollPunchCard` the mints; the key is refused to the page
+  and every date is LOCAL. One card per game key:
+  `{punches:0..10, dates:["yyyy-MM-dd"], enrolledAt:string|null, house:bool, complete:bool,
+  unlockedAt:string|null}`, with `punches` recomputed on every touch so a bad blob self-heals.
+  - The **daily stamp rides the attendance credit** on `class-ended`, which makes "any graded
+    finish stamps, once a local day" true for free: Esc-leave sends `class-left`, and a Free Swim
+    never sends `class-ended` at all (`shell.js finishClass` returns first).
+  - The page posts **`enrollment-done {gameKey}`** once, after the enrollment ceremony. It mints
+    the two first-run punches and **supersedes that day's daily stamp** (which has already landed,
+    the ceremony running after `class-ended`) - day one is exactly 2, never 3, in either ordering.
+    Repeat frames are no-ops.
+  - The host answers both paths with **`punchcard-result {gameKey, reason:'daily'|'enrollment',
+    minted, justUnlocked, holes, card}`** - same-frame truth for the ceremony, the way
+    `payout-result` carries the streak. The whole-blob `meta` snapshot is pushed as well.
+  - `complete:true` IS the permanent unlock: the shell offers Begin on that room every night
+    through the same door path as `devDoor`. Nothing host-side gates which room may start.
 - **`meta` arrives in TWO shapes** — `{key, value}` (the reply to a meta-command) and
   `{rev, state}` (the snapshot the host pushes after crediting attendance). Handle both; a
   handler that requires `key` silently drops the authoritative streak.

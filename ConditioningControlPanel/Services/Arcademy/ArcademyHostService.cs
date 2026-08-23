@@ -175,6 +175,13 @@ internal static class ArcademyHostService
             _panicSuspended = false;
             _lastPanicPressUtc = DateTime.MinValue;
             _meta = new ArcademyMetaStore(msg => _host?.Post(msg));
+            // Which rooms a full punch card has unlocked (PUNCHCARD §2.3). The page derives the
+            // same list off the `meta` projection; this line is the log the owner reads on a dark
+            // build, where the campus is the only other place it shows.
+            var unlocked = _meta.UnlockedGameKeys();
+            if (unlocked.Count > 0)
+                App.Logger?.Information("ArcademyHost: punch cards unlock {N} room(s): {Keys}",
+                    unlocked.Count, string.Join(", ", unlocked));
 
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
@@ -488,6 +495,9 @@ internal static class ArcademyHostService
                 break;
             case "class-ended":
                 OnClassEnded(o);
+                break;
+            case "enrollment-done":
+                OnEnrollmentDone(o);
                 break;
             case "class-left":
                 // The closing bracket for `class-started`. Leaving a class with Esc ends no class,
@@ -1793,6 +1803,20 @@ internal static class ArcademyHostService
             // player east of UTC) crediting the streak it has earned.
             var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var (streak, perfect, classesToday) = _meta?.RecordAttendance(localDate, gameKey) ?? (0, 0, 0);
+
+            // THE PUNCH CARD RIDES THE ATTENDANCE CREDIT (PUNCHCARD §2.1). Same frame, same local
+            // date, same idempotence - a graded finish is exactly the event that stamps, so there
+            // is nothing here to keep in step with the rule. It is wrapped on its own because the
+            // payout frame below must survive anything the card math could do; the credit above is
+            // the thing we must not lose, and this must not become a second way to lose it.
+            //
+            // Dev-door runs stamp like any other graded class (PUNCHCARD §3): it IS graded play,
+            // the owner wants it for testing, and `--arcademy` never reaches a player build.
+            // Excluding them later is this one condition - `if (!_devDoor)`.
+            ArcademyPunchCards.PunchMint? punch = null;
+            try { punch = _meta?.StampPunchCard(gameKey, localDate); }
+            catch (Exception ex) { App.Logger?.Warning("ArcademyHost punch card: {E}", ex.Message); }
+
             if (_meta != null) _host?.Post(_meta.SnapshotMessage());
 
             _host?.Post(new
@@ -1807,12 +1831,76 @@ internal static class ArcademyHostService
                 // Additive: the report card reads it to explain a 0 XP line. Older pages ignore it.
                 retake = !firstToday,
             });
+            PostPunchCard(gameKey, "daily", punch);
             App.Logger?.Information(
                 "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Retake}, streak {Streak}, {Today}/3 today",
                 gameKey, tier, grade, xp, firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
                 streak, classesToday);
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnClassEnded: {E}", ex.Message); }
+    }
+
+    // ============================ enrollment-done: the first-run punches ============================
+
+    /// <summary>
+    /// <c>enrollment-done {gameKey}</c> -> the two first-run punches (PUNCHCARD §4). The shell
+    /// posts this once, at the end of the enrollment ceremony that follows a class's FIRST graded
+    /// finish; everything the mint needs beyond the key is derived host-side, so the frame carries
+    /// no numbers to forge and a replayed one is a no-op.
+    ///
+    /// <para>It arrives AFTER that run's <c>class-ended</c>, whose daily stamp it supersedes - the
+    /// two punches replace it rather than adding to it, so day one is exactly two either way
+    /// round (<see cref="ArcademyPunchCards.Enroll"/>).</para>
+    /// </summary>
+    private static void OnEnrollmentDone(JObject o)
+    {
+        try
+        {
+            var gameKey = (ReadString(o, "gameKey") ?? "").Trim();
+            if (gameKey.Length > 64) gameKey = gameKey[..64];
+            if (gameKey.Length == 0)
+            {
+                App.Logger?.Debug("ArcademyHost: enrollment-done with no game key - ignored");
+                return;
+            }
+
+            // LOCAL date, like every other daily gate here (#978).
+            var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var mint = _meta?.EnrollPunchCard(gameKey, localDate);
+            if (mint is { Minted: true } && _meta != null) _host?.Post(_meta.SnapshotMessage());
+            PostPunchCard(gameKey, "enrollment", mint);
+        }
+        catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnEnrollmentDone: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// The <c>punchcard-result</c> frame: same-frame truth for the card, on both mint paths. The
+    /// whole-blob <c>meta</c> snapshot carries the same state, but the ceremony needs to know
+    /// whether THIS finish punched anything and whether it was the tenth hole - which a snapshot
+    /// can only answer by diffing. Same reason <c>payout-result</c> carries the streak.
+    ///
+    /// <para>Posted even for a no-op mint (<c>minted:false</c> — a same-day retake, a repeat
+    /// enrollment, a full card), so the shell never has to tell "nothing happened" apart from "the
+    /// host did not answer". A NULL mint is the other thing entirely: there was no card to touch
+    /// (no game key, or no store), and that gets no frame.</para>
+    /// </summary>
+    private static void PostPunchCard(string gameKey, string reason, ArcademyPunchCards.PunchMint? mint)
+    {
+        if (mint is not { } m) return;
+        try
+        {
+            _host?.Post(new
+            {
+                type = "punchcard-result",
+                gameKey,
+                reason,
+                minted = m.Minted,
+                justUnlocked = m.JustUnlocked,
+                holes = ArcademyPunchCards.Holes,
+                card = m.Card,
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostPunchCard: {E}", ex.Message); }
     }
 
     // Field readers that degrade instead of throwing. Newtonsoft's explicit JToken casts throw an
