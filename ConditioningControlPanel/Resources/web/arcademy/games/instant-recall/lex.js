@@ -38,7 +38,7 @@ export const IR_LEX = Object.freeze({
   ir_howto_title: 'The vigil',
   ir_howto_1: 'A wall of your media keeps changing. Effects fire over it.',
   ir_howto_2: 'Without warning, everything freezes.',
-  ir_howto_3: 'Answer what just happened.',
+  ir_howto_3: 'Answer what just happened - a word, an effect, a spiral, a face from the wall.',
   ir_howto_bell: 'A bell warns you first. For now.',
   ir_howto_nobell: 'No bell. It just stops.',
   ir_howto_go: 'GO',
@@ -51,6 +51,7 @@ export const IR_LEX = Object.freeze({
   ir_stop_now: 'FREEZE.',
   ir_answer_hint: 'Tap an answer, or press 1-4.',
   ir_answer_hint3: 'Tap an answer, or press 1-3.',
+  ir_answer_hint2: 'Tap an answer, or press 1-2.',
   ir_resume: 'Resume. Denser now.',
   ir_bell_warn: 'Last stretch.',
   ir_nobell_debrief: 'That one had no bell. From Year 3, none of them do.',
@@ -60,6 +61,19 @@ export const IR_LEX = Object.freeze({
   ir_q_last_effect: 'What was the last effect?',
   ir_q_last_sting: 'Which sting just played?',
   ir_q_last_two: 'The last two words, in order?',
+  /* THE VARIETY REWORK (2026-08-23): six more families. A WALL_* or SPIRAL card
+   * renders MEDIA options, so these rows are the only words on it - which is
+   * exactly why they have to be mod-skinnable like every other question. */
+  ir_q_spiral: 'Which spiral did you see last?',
+  ir_q_wall_pick: 'Which of these was on the wall?',
+  ir_q_wall_twice: 'Which one was on the wall twice?',
+  ir_q_wall_seen: 'Was this on the wall?',
+  ir_q_wall_gone: 'Which of these was NOT on the wall?',
+  ir_q_heard: 'What did you just hear?',
+  ir_yes: 'Yes',
+  ir_no: 'No',
+  /* the accessible name a MEDIA option wears - it has no text of its own */
+  ir_opt: 'Option',
   ir_hear: 'Hear it',
 
   /* ---- THE EFFECT POOL (the LAST_EFFECT options) -----------------------
@@ -95,9 +109,16 @@ export const IR_LEX = Object.freeze({
   ir_royal: 'ROYAL',
   ir_timeout: 'BLANKED',
   ir_truth: 'It really did.',
+  ir_truth_wall: 'It was there. Look again.',
+  ir_truth_wall_gone: 'That one never showed.',
+  ir_truth_spiral: 'That spiral. Exactly that one.',
+  ir_truth_heard: 'That is what it said.',
   ir_near: 'So close. That one flashed, but earlier.',
+  ir_near_spiral: 'So close. That spiral played, but earlier.',
+  ir_near_heard: 'So close. That one was whispered, but earlier.',
   ir_jackpot: 'Photographic Memory',
   ir_gotcha: 'That one flashed while the screen was FROZEN.',
+  ir_gotcha_heard: 'That one was whispered while the screen was FROZEN.',
   ir_voided: 'Stop voided. The vigil goes on.',
   ir_corrected: 'Corrected memory.',
 
@@ -109,6 +130,7 @@ export const IR_LEX = Object.freeze({
   ir_end_streak: 'Best run',
   ir_end_plants: 'Baits dodged',
   ir_end_timeouts: 'Blanked',
+  ir_end_kinds: 'Question kinds',
   ir_end_none: 'None',
   ir_end_line: 'The stream never stopped. Only you did.',
 });

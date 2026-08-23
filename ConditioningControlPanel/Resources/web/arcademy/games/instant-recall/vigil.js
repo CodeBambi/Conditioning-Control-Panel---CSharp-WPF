@@ -61,6 +61,28 @@
  * only lever left would be a shorter window, and the window is the tier's
  * contract.
  *
+ * ---------------------------------------------------------------------------
+ * THE VARIETY REWORK (owner ruling 2026-08-23, *"seems to ask me only about the
+ * subliminals that played"*). TEN question families, dealt as PERMUTATION
+ * ROUNDS rather than a weighted ban: round r is a seeded permutation of the
+ * tier's surviving pool, the stops walk round 0 then round 1..., and a round
+ * whose first entry equals the last one dealt swaps its first two. So every
+ * family lands floor(n/k) or ceil(n/k) times, nothing lands twice in a row, and
+ * a tier that unlocks ten families asks all ten in eleven stops - coverage by
+ * construction instead of by luck.
+ *
+ * The pool is DROPPED at plan time for material the class does not have
+ * (`templateDrops`): no words, no clips, no spiral set, no wall. A family the
+ * plan never deals is honest; a family the plan deals and then falls out of at
+ * every stop is the bug this replaced.
+ *
+ * THE DETERMINISM STATEMENT. The PLAN is seeded (Law V). The WALL's contents
+ * are the provider's and the frame governor's (Math.random, by design), so a
+ * WALL_* question is DOM-TRUTH read from the freeze snapshot, with the CHOICE
+ * among candidates seeded off `|ir-quiz`. A retake replays the same families at
+ * the same stops - not the same faces.
+ *
+ * ---------------------------------------------------------------------------
  * TIER LADDER (dossier; dials first, classic difficulty second)
  *   1  4 effects in the pool at low dials; 9-10 stops, 6s, EVERY stop belled.
  *   2  6 effects (the whisper and the pink filter enter); 9-10 stops, 6s,
@@ -143,16 +165,26 @@ export const PLAYTEST = Object.freeze({
   RESUME_LEAD_MS: Object.freeze([700, 2400]),
 
   /* --- question templates --------------------------------------------- */
-  /** How many recently-dealt templates the next draw refuses, when the tier's
-   *  pool is wide enough to afford it. The ban NARROWS rather than dying
-   *  (the timetable's relaxation ladder, web CLAUDE.md trap 5):
-   *  `min(TEMPLATE_NO_REPEAT, max(1, pool.length - 2))`, so a 2-template tier
-   *  alternates, a 3- or 4-template tier always keeps two live choices, and no
-   *  template can EVER land twice in a row - let alone four times. */
-  TEMPLATE_NO_REPEAT: 2,
-  /** Distractors are never drawn from the last N ledger entries of the family:
-   *  a distractor that also just happened would make the answer ambiguous. */
-  DISTRACTOR_EXCLUDE: 5,
+  /** THE PERMUTATION ROUNDS superseded the weighted-ban draw (THE VARIETY
+   *  REWORK, 2026-08-23). The deal walks seeded permutations of the tier's
+   *  surviving pool, so coverage is structural rather than statistical; the ban
+   *  is 1 purely so nothing can land twice across a round boundary and the
+   *  assertion helpers keep a number to read. */
+  TEMPLATE_NO_REPEAT: 1,
+  /** THE TAIL ALLOWANCE. `DISTRACTOR_EXCLUDE` is gone: every LAST_* question
+   *  asks for the LAST one, which the 700ms rule makes unique, so an option
+   *  that flashed EARLIER is not ambiguous - it is the classic recency-error
+   *  decoy, and `isNearMiss()` already captions it. This is how many of a
+   *  question's three decoys MAY come out of the same tail. */
+  TAIL_DISTRACTORS: Object.freeze({ 1: 0, 2: 1, 3: 1, 4: 2 }),
+  /** THE QUIET. No emission may START inside this much of a stop, per channel,
+   *  so the last ledger entry is always fully PERCEIVED before the freeze (a
+   *  sub word's plateau, a whisper clip's first seconds, a wash's fade-in). */
+  PRE_STOP_QUIET_MS: Object.freeze({ default: 600, whisper: 2600, spiral: 1200 }),
+  /** THE CUE. A dealt family must be LIKELY instantiable at its stop or the
+   *  plan's variety is theatre: the stop's own channel is pulled this far in
+   *  at the resume. The answer is still whatever the engine does (Law I). */
+  CUE_LEAD_MS: 1200,
 
   /* --- decoy plants (tier 3+, SetPiece-gated) -------------------------- */
   /* Caps up, chance down, for the same ~1 plant per 3 stops the 4-stop class
@@ -198,6 +230,50 @@ export const PLAYTEST = Object.freeze({
   /* --- the escape guard (a frozen quiz card is never a trap) ------------ */
   ESCAPE_TAPS: 6,
   ESCAPE_MS: 5000,
+
+  /* --- the sub-fade fix (owner: "the text on the sub is pretty faded") ---
+   * NOT an intensity raise - the ceiling rule forbids that. The engine's
+   * additive `holdMs` stretches the blip's PLATEAU (`ae-sub-blip` holds full
+   * alpha over 22%-70% of the duration), and the plate + outline in style.js
+   * buy the contrast. Absent the engine option, the word simply holds its own
+   * duration, exactly as today. */
+  SUB_HOLD_MS: Object.freeze({ 1: 1100, 2: 1000, 3: 900, 4: 800 }),
+
+  /* --- the spiral, as a QUESTION --------------------------------------- */
+  /** The wash alpha band a quizzed spiral rides (was a flat 0.10 + 0.22*band).
+   *  Still under the engine's own 0.25..0.70 wash ceiling: a spiral a player is
+   *  asked to name has to register. */
+  SPIRAL_ALPHA: Object.freeze([0.24, 0.52]),
+  /** How stale the last spiral may be and still be askable. */
+  SPIRAL_RECENT_MS: 25000,
+  /** ...and how faint. Below this it was weather, not an event. */
+  SPIRAL_MIN_ALPHA: 0.16,
+  /** How many of the class's spiral SET are in the emission ring, by tier.
+   *  The whole set at every tier (lead ruling): a 2-entry ring walked with
+   *  no-repeat-last makes "which one did you just see" always "the other one".
+   *  spirals.js clamps this to the set's own length. */
+  SPIRAL_RING: Object.freeze({ 1: 4, 2: 4, 3: 4, 4: 4 }),
+
+  /* --- the whisper, as a real whisper ---------------------------------- */
+  /** A trigger clip is truncated (with the shell's own fade) at this. */
+  WHISPER_CLIP_MAX_MS: 2400,
+  /** A PLANTED clip is shorter still - it is a lie, not a lesson. */
+  WHISPER_PLANT_MAX_MS: 1600,
+
+  /* --- the wall's planted duplicate (WALL_TWICE) ------------------------ */
+  /** The plant must have LANDED this long before the stop it serves. */
+  DUP_LEAD_MS: 2500,
+  /** ...and the two tiles hold this much past the freeze. */
+  DUP_HOLD_PAD_MS: 2000,
+
+  /* --- question weight -------------------------------------------------- */
+  /** A card with fewer real choices is worth less. WALL_SEEN is a coin flip
+   *  with a preview attached, so it weighs half. */
+  OPTION_WEIGHT: Object.freeze({ 2: 0.5, 3: 0.75, 4: 1 }),
+  /** Extra window a MEDIA card gets (a preview takes longer to read than a
+   *  word). Ships at 0 and is paid for inside `derivedMinGap()`, so raising it
+   *  is legal without touching the gap table by hand. */
+  PREVIEW_WINDOW_BONUS_MS: 0,
 
   /* --- misc ------------------------------------------------------------- */
   STALL_TICK_MS: 1000,
@@ -260,7 +336,10 @@ export const MIN_SEPARATION_MS = 700;
 /** Per-pool-key cadence band: base (cold) -> min (at full density). */
 export const CADENCE = Object.freeze({
   flash: Object.freeze({ base: 9000, min: 3400 }),
-  subliminal: Object.freeze({ base: 3200, min: 1000 }),
+  /* min 1000 -> 1400: a held sub word (SUB_HOLD_MS, up to 1100ms) plus its
+   * release must clear before the next one starts, or two words overlap and
+   * "the LAST word" stops having one answer. assertPlan re-checks the margin. */
+  subliminal: Object.freeze({ base: 3200, min: 1400 }),
   bubbles: Object.freeze({ base: 11000, min: 5000 }),
   spiral: Object.freeze({ base: 13000, min: 6000 }),
   whisper: Object.freeze({ base: 8000, min: 3000 }),
@@ -296,15 +375,53 @@ const VARIANTS = Object.freeze({
   brain_drain: Object.freeze(['drain']),
 });
 
-/** Question templates, by the tier that unlocks them. */
-export const TEMPLATES = Object.freeze(['LAST_WORD', 'LAST_EFFECT', 'LAST_STING', 'LAST_TWO']);
+/**
+ * QUESTION TEMPLATES, by the tier that unlocks them. TEN families as of THE
+ * VARIETY REWORK (owner, 2026-08-23: *"seems to ask me only about the
+ * subliminals that played"*) - the dealt variety was always real, it was the
+ * RESOLUTION that collapsed, because LAST_EFFECT's old recency exclusion left
+ * fewer than three distractors most of the time and every fallback walk landed
+ * on LAST_WORD.
+ *   LAST_WORD / LAST_EFFECT / WALL_PICK / SPIRAL          tier 1
+ *   LAST_STING or HEARD / WALL_SEEN / WALL_TWICE          tier 2
+ *   LAST_TWO / WALL_GONE                                  tier 3
+ */
+export const TEMPLATES = Object.freeze([
+  'LAST_WORD', 'LAST_EFFECT', 'WALL_PICK', 'SPIRAL',
+  'LAST_STING', 'HEARD', 'WALL_SEEN', 'WALL_TWICE',
+  'LAST_TWO', 'WALL_GONE',
+]);
 export const TEMPLATE_FROM_TIER = Object.freeze({
-  LAST_WORD: 1, LAST_EFFECT: 1, LAST_STING: 2, LAST_TWO: 3,
+  LAST_WORD: 1, LAST_EFFECT: 1, WALL_PICK: 1, SPIRAL: 1,
+  LAST_STING: 2, HEARD: 2, WALL_SEEN: 2, WALL_TWICE: 2,
+  LAST_TWO: 3, WALL_GONE: 3,
 });
-/** The fallback walk when the dealt template cannot be instantiated from the
- *  ledger tail (empty word pool, no stings, inaudible audio). Fixed ORDER, so a
- *  fallback is as deterministic as the deal it replaces. */
-export const FALLBACK_ORDER = Object.freeze(['LAST_EFFECT', 'LAST_WORD', 'LAST_STING', 'LAST_TWO']);
+/** The families whose OPTIONS are media previews rather than text. */
+export const MEDIA_TEMPLATES = Object.freeze(['SPIRAL', 'WALL_PICK', 'WALL_TWICE', 'WALL_GONE', 'WALL_SEEN']);
+/** THE CUE. Which pool key a dealt family needs material from, if any. CORE
+ *  hands this to `seedDues` at the resume before that stop. */
+export const CUE_KEY = Object.freeze({
+  LAST_WORD: 'subliminal', LAST_TWO: 'subliminal', SPIRAL: 'spiral',
+  HEARD: 'whisper', LAST_STING: 'whisper',
+});
+/** The fallback walk's TIEBREAK when the dealt template cannot be instantiated
+ *  from the ledger tail. It no longer decides anything by itself - the walk is
+ *  history-aware now (`resolveTemplate`) and this only breaks a tie between two
+ *  families that have been asked the same number of times. */
+export const FALLBACK_ORDER = Object.freeze([
+  'LAST_EFFECT', 'WALL_PICK', 'LAST_WORD', 'SPIRAL', 'HEARD', 'LAST_STING',
+  'WALL_TWICE', 'WALL_GONE', 'LAST_TWO', 'WALL_SEEN',
+]);
+/** How long a channel must be quiet before a stop (THE QUIET). */
+export function quietFor(key) {
+  const v = PLAYTEST.PRE_STOP_QUIET_MS[key];
+  return Number.isFinite(v) ? v : PLAYTEST.PRE_STOP_QUIET_MS.default;
+}
+/** What one question is worth for its option count (2 -> half a question). */
+export function optionWeight(n) {
+  const v = PLAYTEST.OPTION_WEIGHT[Math.max(0, Math.round(Number(n) || 0))];
+  return Number.isFinite(v) ? v : 1;
+}
 
 /* ----------------------------------------------------------------------------
  * SMALL PURE HELPERS
@@ -327,7 +444,10 @@ function pickFrom(list, r) {
  */
 export function derivedMinGap(tier) {
   const k = tierOf(tier);
-  return PLAYTEST.WINDOW_MS[k] + PLAYTEST.VERDICT_MS + PLAYTEST.DEAL_BEAT_MS
+  /* the media families' extra window is paid for HERE, so flipping
+   * PREVIEW_WINDOW_BONUS_MS off zero can never quietly break the fresh floor. */
+  return PLAYTEST.WINDOW_MS[k] + PLAYTEST.PREVIEW_WINDOW_BONUS_MS
+    + PLAYTEST.VERDICT_MS + PLAYTEST.DEAL_BEAT_MS
     + PLAYTEST.FRESH_MS + PLAYTEST.SCHEDULE_SLOP_MS;
 }
 /** The flat table the dealer reads, falling back to the derivation. */
@@ -449,10 +569,18 @@ export function cadenceMs(key, band, jitter) {
  * @param {string[]} keys     the tier's pool, in pool order
  * @param {number} nowMs      the class clock
  * @param {number} band       the density band 0..1
+ * THE CUE (optional 5th argument, THE VARIETY REWORK). When `wantKey` is in
+ * `keys` its due is pulled in to `now + CUE_LEAD_MS` BEFORE the two-earliest
+ * pull, so it normally becomes one of the 700 / 2400 leads and the family the
+ * next stop DEALT has material to be about. It never decides the answer - the
+ * ledger still does (Law I) - it only raises the odds the question can be
+ * asked at all. Omit it and this function is byte-identical to what it was.
+ *
  * @param {function} jitterOf key -> that key's next ring jitter 0..1
+ * @param {string} [wantKey]  the pool key the next stop's family wants
  * @returns {Object} {poolKey: dueAtMs}
  */
-export function seedDues(keys, nowMs, band, jitterOf) {
+export function seedDues(keys, nowMs, band, jitterOf, wantKey) {
   const now = Number.isFinite(nowMs) ? nowMs : 0;
   const due = {};
   const order = [];
@@ -460,6 +588,10 @@ export function seedDues(keys, nowMs, band, jitterOf) {
     const j = jitterOf ? jitterOf(key) : 0.5;
     due[key] = now + Math.round(cadenceMs(key, band, j) * (0.25 + 0.75 * j));
     order.push(key);
+  }
+  if (wantKey != null && due[wantKey] != null) {
+    const cue = now + PLAYTEST.CUE_LEAD_MS;
+    if (due[wantKey] > cue) due[wantKey] = cue;
   }
   order.sort((a, b) => due[a] - due[b]);
   const leads = PLAYTEST.RESUME_LEAD_MS;
@@ -481,15 +613,38 @@ export function seedDues(keys, nowMs, band, jitterOf) {
  * insertion order of `due`, which is the pool's own order, so the answer is the
  * same on every replay of the same seed.
  *
+ * THE QUIET (optional 4th argument, THE VARIETY REWORK). When `stopAtMs` is a
+ * finite number the keys are walked in due order and the FIRST one that can
+ * legally fire at least `quietFor(key)` before the stop wins; a key that
+ * cannot is skipped, not shoved (the next stop's `seedDealer()` re-seeds every
+ * due anyway), and a walk that finds nobody answers null - the wall simply
+ * holds its breath into the freeze. That is what makes "the LAST thing" always
+ * something the player actually PERCEIVED, instead of a 50ms-old ghost.
+ * Omit the argument and this function is byte-identical to what it was.
+ *
  * @param {Object} due        {poolKey: dueAtMs}
  * @param {number} lastEmitAt class-clock ms of the previous emission (or -Infinity)
  * @param {number} nowMs      the class clock
+ * @param {number} [stopAtMs] the next stop's class-clock time
  * @returns {{key:string, atMs:number, waitMs:number}|null}
  */
-export function nextEmission(due, lastEmitAt, nowMs) {
+export function nextEmission(due, lastEmitAt, nowMs, stopAtMs) {
   if (!due) return null;
   const now = Number.isFinite(nowMs) ? nowMs : 0;
   const last = Number.isFinite(lastEmitAt) ? lastEmitAt : -Infinity;
+  const floor = Math.max(now, last + MIN_SEPARATION_MS);
+  if (Number.isFinite(stopAtMs)) {
+    const keys = [];
+    for (const key of Object.keys(due)) if (Number.isFinite(Number(due[key]))) keys.push(key);
+    /* ties resolve on Object.keys order (the pool's own), same as the plain
+     * path: Array#sort is stable, so an equal pair keeps its insertion order. */
+    keys.sort((a, b) => Number(due[a]) - Number(due[b]));
+    for (const key of keys) {
+      const atMs = Math.max(Number(due[key]), floor);
+      if (atMs <= stopAtMs - quietFor(key)) return { key, atMs, waitMs: Math.max(0, atMs - now) };
+    }
+    return null;
+  }
   let bestKey = null;
   let bestAt = Infinity;
   for (const key of Object.keys(due)) {
@@ -498,7 +653,6 @@ export function nextEmission(due, lastEmitAt, nowMs) {
     if (at < bestAt) { bestAt = at; bestKey = key; }
   }
   if (bestKey == null) return null;
-  const floor = Math.max(now, last + MIN_SEPARATION_MS);
   const atMs = Math.max(bestAt, floor);
   return { key: bestKey, atMs, waitMs: Math.max(0, atMs - now) };
 }
@@ -517,6 +671,10 @@ export function nextEmission(due, lastEmitAt, nowMs) {
  *   density        the `ir_density` setting value
  *   reduced        reduced motion (drops every plant)
  *   audible        ctx.audioAudible (false drops the whisper from the pool)
+ *   wordCount      ctx.words.length      (< 4 drops LAST_WORD / LAST_TWO / HEARD)
+ *   clipCount      ctx.triggers with audio (0 drops HEARD; > 0 drops LAST_STING)
+ *   spiralCount    ctx.spiralPool.length (< 4 drops SPIRAL)
+ *   wallOk         montage.snapshot is a function (false drops every WALL_*)
  * @returns {Object} the plan
  */
 export function buildVigil(o = {}) {
@@ -526,6 +684,13 @@ export function buildVigil(o = {}) {
   const audible = o.audible !== false;
   const budgetMs = Math.max(20000, Math.round((Number(o.timeBudgetSec) || 120) * 1000));
   const roll = makeTaggedRoll(seed + '|ir');
+  /* the four material inputs. A caller that names none of them (the pure
+   * harness) gets the conservative read: words are plentiful, there are no
+   * clips and no spiral pool, and the wall is present. */
+  const wordCount = Number.isFinite(Number(o.wordCount)) ? Math.max(0, Math.round(Number(o.wordCount))) : Infinity;
+  const clipCount = Math.max(0, Math.round(Number(o.clipCount) || 0));
+  const spiralCount = Math.max(0, Math.round(Number(o.spiralCount) || 0));
+  const wallOk = o.wallOk !== false;
 
   const windowMs = PLAYTEST.WINDOW_MS[tier];
   const qPer = PLAYTEST.Q_PER_STOP[tier];
@@ -582,35 +747,47 @@ export function buildVigil(o = {}) {
     announced[Math.min(announced.length - 1, idx)] = false;
   }
 
-  /* ---- template sequence ---------------------------------------------- */
-  const pool = TEMPLATES.filter((k) => TEMPLATE_FROM_TIER[k] <= tier);
+  /* ---- template sequence: PLAN-TIME DROPS, then PERMUTATION ROUNDS ------ */
+  const drops = templateDrops(tier, { audible, wordCount, clipCount, spiralCount, wallOk });
+  let pool = TEMPLATES.filter((k) => TEMPLATE_FROM_TIER[k] <= tier && !drops[k]);
+  /* THE DEGENERATE FLOOR. A harness with no words, no spiral pool and no wall
+   * can starve the whole table; the class still has to be able to ask TWO
+   * things, and LAST_WORD's may-be-empty contract already resumes uncounted at
+   * stop time when the tail cannot serve it. */
+  if (pool.length < 2) pool = ['LAST_EFFECT', 'LAST_WORD'];
   const totalQ = count * qPer;
+
+  /* THE ROUNDS. A weighted ban over ten draws out of a four-template pool is a
+   * coin flip wearing a rule; a walk of seeded PERMUTATIONS is coverage by
+   * construction. Every family lands floor(n/k) or ceil(n/k) times, no family
+   * lands twice in a row (a permutation has no internal repeat, and the round
+   * boundary swaps its first two entries when it would), and a tier that deals
+   * ten families in eleven stops asks every single one of them. */
+  const rounds = [];
+  const seq = [];
+  while (seq.length < totalQ) {
+    const perm = pool.slice();
+    for (let i = perm.length - 1; i > 0; i--) {
+      const j = Math.min(i, Math.floor(roll('tmpl') * (i + 1)));
+      const tmp = perm[i]; perm[i] = perm[j]; perm[j] = tmp;
+    }
+    if (seq.length && perm.length >= 2 && perm[0] === seq[seq.length - 1]) {
+      const tmp = perm[0]; perm[0] = perm[1]; perm[1] = tmp;
+    }
+    rounds.push(perm.slice());
+    for (const k of perm) { if (seq.length < totalQ) seq.push(k); }
+  }
 
   const stops = [];
   const ban = templateBan(pool.length);
-  const recent = [];
   let dealt = 0;
   let plants = 0;
   let plantedLast = false;
   for (let n = 0; n < count; n++) {
     const questions = [];
     for (let q = 0; q < qPer; q++) {
-      /* NO-REPEAT, NARROWING. Ten draws out of a 2-4 template pool used to run
-       * on no-repeat-LAST alone, which is fine for four stops and reads as a
-       * coin flip over ten. The ban walks 2 -> 1 -> 0 with the pool's width so
-       * it can never starve, and at every tier at least one template is always
-       * refused: the same question can never land twice in a row. */
-      let avail = [];
-      for (let w = Math.min(ban, recent.length); w >= 0; w--) {
-        const no = recent.slice(0, w);
-        avail = pool.filter((k) => no.indexOf(k) < 0);
-        if (avail.length) break;
-      }
-      if (!avail.length) avail = pool.slice();
-      const template = pickFrom(avail, roll('tmpl')) || pool[0];
+      const template = seq[dealt] || pool[0];
       questions.push({ i: dealt, template, weight: 6000 / windowMs, windowMs });
-      recent.unshift(template);
-      if (recent.length > PLAYTEST.TEMPLATE_NO_REPEAT) recent.pop();
       dealt += 1;
     }
 
@@ -645,8 +822,10 @@ export function buildVigil(o = {}) {
 
   /* ---- the effect pool + each key's dealt ring ------------------------- */
   const poolKeys = poolFor(tier, audible);
+  const spiralRing = PLAYTEST.SPIRAL_RING[tier];
+  const clipRing = Math.max(1, Math.min(8, clipCount));
   const channels = [];
-  for (const key of poolKeys) channels.push(makeChannel(key, roll));
+  for (const key of poolKeys) channels.push(makeChannel(key, roll, { spiralRing, clipRing }));
 
   const plan = {
     seed,
@@ -663,6 +842,13 @@ export function buildVigil(o = {}) {
     channels,
     stings: STINGS.slice(),
     templates: pool.slice(),
+    templateDrops: drops,
+    rounds,
+    wordCount: Number.isFinite(wordCount) ? wordCount : null,
+    clipCount,
+    spiralCount,
+    wallOk,
+    spiralRing,
     templateBan: ban,
     minGapMs: minGap,
     openMs: open,
@@ -680,8 +866,65 @@ export function buildVigil(o = {}) {
   return plan;
 }
 
-/** One pool key's dealt ring: 8 jitters + 8 variants, consumed round-robin. */
-function makeChannel(key, roll) {
+/**
+ * WHICH FAMILIES TONIGHT'S MATERIAL CANNOT SERVE. Pure; the value is the
+ * REASON, so the class log can say why a family never appeared instead of the
+ * player wondering. A family the plan never deals is honest; a family the plan
+ * deals and then always falls back out of is the bug this replaces.
+ */
+export function templateDrops(tier, o = {}) {
+  const drops = {};
+  const audible = o.audible !== false;
+  const words = Number.isFinite(Number(o.wordCount)) ? Number(o.wordCount) : Infinity;
+  const clips = Math.max(0, Math.round(Number(o.clipCount) || 0));
+  const spirals = Math.max(0, Math.round(Number(o.spiralCount) || 0));
+  const wallOk = o.wallOk !== false;
+  if (words < 4) {
+    drops.LAST_WORD = 'words<4';
+    drops.LAST_TWO = 'words<4';
+    drops.HEARD = 'words<4';
+  }
+  if (!audible) {
+    drops.LAST_STING = 'inaudible';
+    drops.HEARD = 'inaudible';
+  } else {
+    /* THE ONE-OF-TWO AUDIO FAMILY. A trigger CLIP is the content, so when the
+     * mix carries clips the class asks what was SAID; with no clips it falls
+     * back to the synthesised stings and asks which one played. Never both. */
+    if (clips > 0) drops.LAST_STING = 'clips>0';
+    else if (!drops.HEARD) drops.HEARD = 'clips=0';
+  }
+  if (spirals < 4) drops.SPIRAL = 'spirals<4';
+  if (!wallOk) {
+    drops.WALL_PICK = 'no wall';
+    drops.WALL_SEEN = 'no wall';
+    drops.WALL_TWICE = 'no wall';
+    drops.WALL_GONE = 'no wall';
+  }
+  return drops;
+}
+
+/** A no-repeat-last walk over 0..size-1, eight long (the channel's own ring). */
+function indexWalk(roll, tag, size) {
+  const n = Math.max(1, Math.round(Number(size) || 1));
+  const out = [];
+  let prev = -1;
+  for (let i = 0; i < 8; i++) {
+    if (n < 2) { out.push(0); continue; }
+    const avail = [];
+    for (let v = 0; v < n; v++) if (v !== prev) avail.push(v);
+    const v = pickFrom(avail, roll(tag));
+    out.push(v);
+    prev = v;
+  }
+  return out;
+}
+
+/** One pool key's dealt ring: 8 jitters + 8 variants, consumed round-robin.
+ *  The spiral and the whisper carry an extra ring - WHICH spiral of the class's
+ *  set, and WHICH trigger clip - because both are now question material and a
+ *  ring the seed does not own could not replay. */
+function makeChannel(key, roll, o) {
   const jitter = [];
   for (let i = 0; i < 8; i++) jitter.push(roll('jit-' + key));
   const pool = VARIANTS[key] || [''];
@@ -694,7 +937,11 @@ function makeChannel(key, roll) {
     prev = v;
   }
   const row = POOL_BY_KEY[key];
-  return { key, kind: row ? row.kind : '', held: !!(row && row.held), jitter, variants };
+  const ch = { key, kind: row ? row.kind : '', held: !!(row && row.held), jitter, variants };
+  const opt = o || {};
+  if (key === 'spiral') ch.spiralIdx = indexWalk(roll, 'spiral-idx', opt.spiralRing);
+  if (key === 'whisper') ch.clipIdx = indexWalk(roll, 'clip-idx', opt.clipRing);
+  return ch;
 }
 
 /* ----------------------------------------------------------------------------
@@ -714,34 +961,84 @@ function makeChannel(key, roll) {
  *   audible     ctx.audioAudible
  *   effects     distinct REACHABLE pool keys available as distractors
  *   hasEffect   the tail carries at least one pool emission
+ *   poolSize    tonight's pool width (LAST_EFFECT needs four names to offer)
+ *   phrases     distinct whispered / trigger phrases available as decoys
+ *   hasPhrase   the tail carries at least one whispered PHRASE (a clip)
+ *   spiralSet   how many spirals the class's own set holds
+ *   hasSpiral   the tail carries a recent, bright enough spiral WITH a url
+ *   painted     wall tiles painted and not mid-swap (the freeze snapshot)
+ *   dups        urls worn by two or more of those tiles
+ *   singles     urls worn by exactly one
+ *   unseen      candidate urls the wall has NOT worn since the last resume
+ *   seenCoin    WALL_SEEN's seeded yes/no (drawn once per availability read)
  */
 export function canAsk(template, avail) {
   const a = avail || {};
   switch (template) {
     case 'LAST_WORD': return !!a.hasWord && (a.words | 0) >= 3;
     case 'LAST_TWO': return !!a.hasTwoWords && (a.words | 0) >= 2;
-    case 'LAST_EFFECT': return !!a.hasEffect && (a.effects | 0) >= 3;
+    /* NO RECENCY EXCLUSION. "The LAST effect" is unique by the 700ms rule, so
+     * an effect that fired EARLIER is the recency-error decoy, not an
+     * ambiguity - and excluding it was what starved this family at tier 1. */
+    case 'LAST_EFFECT': return !!a.hasEffect && (a.poolSize | 0) >= 4;
     case 'LAST_STING': return !!a.hasSting && !!a.audible && (a.stings | 0) >= 3;
+    case 'HEARD': return !!a.hasPhrase && !!a.audible && (a.phrases | 0) >= 3;
+    case 'SPIRAL': return !!a.hasSpiral && (a.spiralSet | 0) >= 4;
+    case 'WALL_PICK': return (a.painted | 0) >= 1 && (a.unseen | 0) >= 3;
+    case 'WALL_SEEN': return (a.painted | 0) >= 1 && (!!a.seenCoin || (a.unseen | 0) >= 1);
+    case 'WALL_TWICE': return (a.dups | 0) === 1 && (a.singles | 0) >= 3;
+    case 'WALL_GONE': return (a.painted | 0) >= 3 && (a.unseen | 0) >= 1;
     default: return false;
   }
 }
 
-/** The dealt template, or the first template down the fixed fallback walk that
- *  the tail can actually answer. Null when the tail can answer nothing at all
- *  (the stop then resumes uncounted - a question is never invented). */
-export function resolveTemplate(want, avail, tier) {
+/**
+ * The dealt template, or - when the tail cannot serve it - the family the class
+ * has asked LEAST. That history awareness is the whole point: the old walk was
+ * a fixed order, so a starved family fell to the same replacement every time
+ * and a class that dealt ten different things asked one of them nine times.
+ *
+ * 1. the dealt family, if its tier allows it and the tail can serve it
+ * 2. else every other askable family this tier unlocks, minus the one the LAST
+ *    question resolved to (re-admitted if that empties the list)
+ * 3. the lowest count in `history`; ties -> asked longest ago (never = -1
+ *    wins); ties -> FALLBACK_ORDER position
+ * 4. nothing askable -> null (the stop resumes uncounted; a question is never
+ *    invented - the may-be-empty contract)
+ *
+ * @param {string[]} [history] the RESOLVED families asked so far, in order
+ */
+export function resolveTemplate(want, avail, tier, history) {
   const k = tierOf(tier);
+  const hist = Array.isArray(history) ? history : [];
   /* the tier gate outranks the deal: a plan can only ever deal a template its
    * tier unlocks, but this function is also the seam a harness and a future
    * caller reach for, and a LAST_TWO at tier 2 must fall through like any other
    * template the tail cannot serve. */
   if (TEMPLATE_FROM_TIER[want] <= k && canAsk(want, avail)) return want;
-  for (const alt of FALLBACK_ORDER) {
-    if (alt === want) continue;
-    if (TEMPLATE_FROM_TIER[alt] > k) continue;
-    if (canAsk(alt, avail)) return alt;
+  const allowed = (avail && Array.isArray(avail.templates)) ? avail.templates : null;
+  const banned = hist.length ? hist[hist.length - 1] : null;
+  const base = TEMPLATES.filter((alt) => alt !== want
+    && TEMPLATE_FROM_TIER[alt] <= k
+    && (!allowed || allowed.indexOf(alt) >= 0)
+    && canAsk(alt, avail));
+  let cands = base.filter((alt) => alt !== banned);
+  if (!cands.length) cands = base;
+  if (!cands.length) return null;
+  const countOf = (key) => hist.reduce((n, h) => (h === key ? n + 1 : n), 0);
+  const lastAt = (key) => hist.lastIndexOf(key);
+  let best = null;
+  for (const alt of cands) {
+    if (!best) { best = alt; continue; }
+    const dc = countOf(alt) - countOf(best);
+    if (dc < 0) { best = alt; continue; }
+    if (dc > 0) continue;
+    const dl = lastAt(alt) - lastAt(best);
+    if (dl < 0) { best = alt; continue; }
+    if (dl > 0) continue;
+    if (FALLBACK_ORDER.indexOf(alt) < FALLBACK_ORDER.indexOf(best)) best = alt;
   }
-  return null;
+  return best;
 }
 
 /* ----------------------------------------------------------------------------
@@ -808,29 +1105,73 @@ export function assertPlan(p) {
     if (p.stops[i].plant && p.stops[i - 1].plant) bad.push('plants clumped at ' + i);
   }
 
-  /* templates: every tier must be able to ask at least TWO different things,
-   * and the draw may never repeat itself back to back (which is also what
-   * makes "four in a row" unreachable by construction). */
+  /* TEMPLATES: the permutation rounds make coverage structural, so the
+   * assertions are about the ROUNDS now, not about a ban window. */
   const asked = new Set();
   const seq = [];
   for (const s of p.stops) {
     for (const q of s.questions) {
       if (TEMPLATES.indexOf(q.template) < 0) bad.push('unknown template ' + q.template);
       if (TEMPLATE_FROM_TIER[q.template] > tier) bad.push(q.template + ' above tier ' + tier);
+      if (p.templates.indexOf(q.template) < 0) bad.push(q.template + ' dealt outside the surviving pool');
       asked.add(q.template);
       seq.push(q.template);
     }
   }
   if (p.templates.length < 2) bad.push('tier ' + tier + ' has fewer than 2 templates');
-  const ban = templateBan(p.templates.length);
   for (let i = 1; i < seq.length; i++) {
-    const back = seq.slice(Math.max(0, i - ban), i);
-    if (back.indexOf(seq[i]) >= 0 && p.templates.length > ban) {
-      bad.push('template ' + seq[i] + ' repeated inside the ban window at ' + i);
+    if (seq[i] === seq[i - 1]) bad.push('template ' + seq[i] + ' dealt twice in a row at ' + i);
+  }
+  /* every family gets floor(n/k) or ceil(n/k) of the class - the rounds' whole
+   * reason for existing. A pool forced to the degenerate floor is exempt from
+   * the count (it is not the tier's pool). */
+  const k2 = p.templates.length;
+  const lo = Math.floor(seq.length / k2);
+  const hi = Math.ceil(seq.length / k2);
+  const counts = {};
+  for (const key of p.templates) counts[key] = 0;
+  for (const key of seq) counts[key] = (counts[key] || 0) + 1;
+  for (const key of p.templates) {
+    if (counts[key] < lo || counts[key] > hi) {
+      bad.push('template ' + key + ' dealt ' + counts[key] + ' times, want ' + lo + '-' + hi);
     }
   }
   if (seq.length >= 6 && asked.size < Math.min(2, p.templates.length)) {
     bad.push('a whole class asked one template');
+  }
+
+  /* THE DROPS ARE HONEST. A family whose material does not exist is never
+   * dealt - it is not "dealt and quietly replaced", which is the bug the
+   * variety rework existed to kill. */
+  const has = (key) => p.templates.indexOf(key) >= 0;
+  if (!p.audible && (has('LAST_STING') || has('HEARD'))) bad.push('an inaudible class kept an audio family');
+  if (p.audible && p.clipCount > 0 && has('LAST_STING')) bad.push('LAST_STING dealt while the mix carries clips');
+  if (p.audible && p.clipCount === 0 && has('HEARD')) bad.push('HEARD dealt with no clip to hear');
+  if ((p.spiralCount | 0) < 4 && has('SPIRAL')) bad.push('SPIRAL dealt with fewer than four spirals');
+  if (!p.wallOk && (has('WALL_PICK') || has('WALL_SEEN') || has('WALL_TWICE') || has('WALL_GONE'))) {
+    bad.push('a WALL family dealt with no wall');
+  }
+  if (p.wordCount != null && p.wordCount < 4
+    && (has('LAST_WORD') || has('LAST_TWO') || has('HEARD'))) {
+    bad.push('a word family dealt on fewer than four words');
+  }
+
+  /* the spiral ring walks without repeating itself, and never off its end */
+  const spiralCh = p.channels.find((c) => c.key === 'spiral');
+  if (spiralCh && Array.isArray(spiralCh.spiralIdx)) {
+    const ring = PLAYTEST.SPIRAL_RING[tier];
+    for (let i = 0; i < spiralCh.spiralIdx.length; i++) {
+      if (!(spiralCh.spiralIdx[i] >= 0 && spiralCh.spiralIdx[i] < ring)) bad.push('spiralIdx off the ring at ' + i);
+      if (i > 0 && ring > 1 && spiralCh.spiralIdx[i] === spiralCh.spiralIdx[i - 1]) {
+        bad.push('spiralIdx repeats itself at ' + i);
+      }
+    }
+  } else if (p.pool.indexOf('spiral') >= 0) {
+    bad.push('the spiral channel deals no ring');
+  }
+  /* and a held sub word always clears before the next one can start */
+  if (CADENCE.subliminal.min < PLAYTEST.SUB_HOLD_MS[4] + 300) {
+    bad.push('the subliminal cadence floor cannot hold a held word');
   }
 
   /* THE POOL: the 4 / 6 / 8 / 10 ladder, minus an inaudible whisper */
@@ -850,5 +1191,7 @@ export function assertPlan(p) {
 export default {
   buildVigil, densityAt, heatFor, cadenceMs, nextEmission, resolveTemplate, canAsk,
   assertPlan, poolFor, derivedMinGap, minGapFor, openFor, maxStopsFor, stopsPerMinute,
-  templateBan, seedDues, PLAYTEST, EFFECT_POOL, POOL_KEYS, MIN_SEPARATION_MS,
+  templateBan, seedDues, quietFor, optionWeight, templateDrops,
+  PLAYTEST, EFFECT_POOL, POOL_KEYS, MIN_SEPARATION_MS,
+  TEMPLATES, TEMPLATE_FROM_TIER, MEDIA_TEMPLATES, CUE_KEY, FALLBACK_ORDER,
 };
