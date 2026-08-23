@@ -29,12 +29,14 @@ namespace CcpClient.Desktop.Features.Companion;
 /// - <see cref="Awareness"/>: the c5 service; consent + cooldown values are the typed
 ///   states the surface drives (session-scoped placeholders — never persisted, §9.2
 ///   #3/#4 owner-pending).
-/// - <see cref="Executor"/>: the c6 executor composed with the none-admitted default
-///   posture (admission §9.2 #5): the pipeline executes only the owner-admitted subset,
-///   default NONE. The c7 surface does NOT dispatch reply commands — no effect backends
-///   exist and the admissible set is owner-pending (the command record §3.1.7: dispatch
-///   timing is an owner-facing behavior decision). The executor is COMPOSED (the wiring
-///   this slice owns), not consumed.
+/// - <see cref="Executor"/>: the c6 executor, composed over <see cref="AiEffectBridge"/> when
+///   this participant is handed the session's rack. The gates it runs behind are
+///   <see cref="Permissions"/>, whose default is still NONE admitted (admission §9.2 #5).
+///   The c7 surface does NOT dispatch reply commands: a model reply never reaches
+///   <see cref="AiEnvelopeValidator"/> at all (<c>AiOperationPipeline.cs:340-346</c> refuses
+///   envelope-shaped replies with <c>MalformedOutput</c>, a decision recorded at
+///   <c>client/src/CcpClient.Desktop/Ai/AiTextHygiene.cs:24-30</c>), so nothing in this build calls
+///   <see cref="AiCommandExecutor.Execute"/>.
 ///
 /// Session-state holders (<see cref="MemoryConsent"/>) are runtime-only: every default
 /// is an owner-pending placeholder, so no persistence schema is decided here (the
@@ -44,12 +46,19 @@ public sealed class CompanionParticipant : IBackgroundParticipant
 {
     private readonly AiMemoryStore _memory;
 
+    /// <param name="effects">The session's effect rack, as <c>SessionEngine.Effects</c> hands it
+    /// out. Omitted (null) composes the executor with NO handlers, which is exactly what this
+    /// participant did before the bridge existed: every admitted kind then answers
+    /// <c>NotExecuted(EffectUnavailable)</c>. It is optional because the composition root builds
+    /// the session and this participant side by side and passing it is one added argument at that
+    /// call site — an edit this slice's file scope did not cover.</param>
     public CompanionParticipant(
         ParticipantInfrastructure infra,
         CapabilityRegistry capabilities,
         string dataDirectory,
         string? ollamaHostOverride = null,
-        IAiProvider? providerOverride = null)
+        IAiProvider? providerOverride = null,
+        IReadOnlyList<Session.ISessionEffect>? effects = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentNullException.ThrowIfNull(capabilities);
@@ -84,7 +93,7 @@ public sealed class CompanionParticipant : IBackgroundParticipant
         Pipeline.SelectProvider(AiProviderId.LocalOllama);
 
         Awareness = new AiAwarenessService(Pipeline, moderation, Diagnostics, capabilities);
-        Executor = new AiCommandExecutor();
+        Executor = new AiCommandExecutor(effects is null ? null : AiEffectBridge.HandlersFor(effects));
     }
 
     public string Name => "Companion";
@@ -100,8 +109,17 @@ public sealed class CompanionParticipant : IBackgroundParticipant
     /// <summary>The c5 awareness service (consent + cooldown typed states).</summary>
     public AiAwarenessService Awareness { get; }
 
-    /// <summary>The c6 command executor (composed; none-admitted default — see class doc).</summary>
+    /// <summary>The c6 command executor, over the bridge to the landed rack (see class doc).</summary>
     public AiCommandExecutor Executor { get; }
+
+    /// <summary>
+    /// What the companion is allowed to do to the user's screen. Session-scoped and default
+    /// <see cref="AiEffectPermissions.NoneAdmitted"/>, beside <see cref="MemoryConsent"/> and
+    /// the awareness consent for the same reason: every one of them is an owner-pending consent
+    /// state, and a persisted value would read as a decision. The permissions grid on the
+    /// companion surface is the ONE place this is read and written.
+    /// </summary>
+    public AiEffectPermissions Permissions { get; set; } = AiEffectPermissions.NoneAdmitted;
 
     /// <summary>The content-free diagnostics sink (contract §12).</summary>
     public CollectingAiDiagnosticsSink Diagnostics { get; }

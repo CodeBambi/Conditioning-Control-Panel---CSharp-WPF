@@ -1,4 +1,4 @@
-# CCP greenfield verification harness — tier 2 Windows capture.
+﻿# CCP greenfield verification harness — tier 2 Windows capture.
 # Captures ONE named surface+state to a PNG for the CcpVerify named-check tool and K3 review.
 # Formalizes the headed-smoke patterns: SetWindowPos(HWND_TOPMOST) raise (the app
 # opens unactivated and pixels belong to the occluder), UIA text reads, layout-probe door
@@ -102,8 +102,8 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -188,6 +188,11 @@ $statesFor = @{
     # thumb sits in the same place in both captures and the only thing a check can be reading is
     # the disabled livery.
     'studio-dial' = @('live', 'locked')
+    # THE TWO PERMISSION STATES ARE ONE GESTURE APART, and the gesture is the whole claim: `closed`
+    # is what a fresh process gives the user (master off, not one per-effect switch on screen) and
+    # `admitted` is what she gets after pressing the master switch once. A check that passed on both
+    # would be saying the default is not a default.
+    'companion-permissions' = @('closed', 'admitted')
 }
 if ($statesFor[$Surface] -notcontains $State) {
     Write-Output "FAIL: surface '$Surface' has no state '$State' (it has: $($statesFor[$Surface] -join ', '))"
@@ -548,6 +553,50 @@ function Wait-NamedWindow([int]$processId, [string]$title, [int]$seconds = 10) {
         }
     }
     Fail "no '$title' window appeared within ${seconds}s (this process has: $($seen -join ', '))"
+}
+
+# The same bounded wait, matched on a PREFIX. The companion window's title carries an em dash
+# ("Companion - CCP Client", with a real U+2014), and this file deliberately keeps no such
+# character in a needle: the session block already records that non-ASCII needles do not survive an
+# encoding round trip here. A prefix match reads the same window without the trap.
+function Wait-WindowLike([int]$processId, [string]$prefix, [int]$seconds = 10) {
+    $deadline = [Diagnostics.Stopwatch]::StartNew()
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $byProcess = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $processId)
+    $isWindow = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Window)
+    $seen = @()
+    while ($deadline.Elapsed.TotalSeconds -lt $seconds) {
+        $seen = @()
+        foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $byProcess)) {
+            $seen += "'$($w.Current.Name)'"
+            if ($w.Current.Name.StartsWith($prefix)) { return $w }
+            # An owned Avalonia window is a UIA DESCENDANT of its owner, not a sibling of it - the
+            # finding the recap path already records, and the companion window is owned the same way.
+            foreach ($o in $w.FindAll([System.Windows.Automation.TreeScope]::Children, $isWindow)) {
+                $seen += "'$($o.Current.Name)' (owned)"
+                if ($o.Current.Name.StartsWith($prefix)) { return $o }
+            }
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    Fail "no window whose title starts with '$prefix' appeared within ${seconds}s (this process has: $($seen -join ', '))"
+}
+
+# A non-failing finder. Get-Element refuses by name when an element is missing, which is right
+# everywhere it is used - but the permissions grid's closed state is defined by an ABSENCE, and an
+# absence has to be readable without being a failure.
+function Find-Element($window, [string]$automationId) {
+    return $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+        (New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::AutomationIdProperty, $automationId)))
+}
+
+function Get-Toggle($element) {
+    $pattern = $element.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+    return $pattern.Current.ToggleState
 }
 
 function Assert-Route($window, [string]$route) {
@@ -1472,6 +1521,124 @@ elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start' -or $Surface
 
         $capX = $buttonRect.X; $capY = $buttonRect.Y; $capW = $buttonRect.W; $capH = $buttonRect.H
     }
+}
+elseif ($Surface -eq 'companion-permissions') {
+    # =============================================================================================
+    # WHAT SHE IS ALLOWED TO DO. Two hops of real input to the companion surface - the Companion
+    # rail door, then the door's own Show companion button - and then ONE gesture is the whole
+    # difference between the two states: `closed` is what a fresh process gives the user, and
+    # `admitted` is the same window after the master switch has been pressed once.
+    #
+    # THE DEFAULT IS THE CLAIM, so it is gated on the UIA tree before any pixel is read: in `closed`
+    # not one of the ten per-effect switches EXISTS in the tree, and in `admitted` all ten exist and
+    # every one of them reads ToggleState Off. A pixel check cannot tell an unticked switch from a
+    # ticked one at this size, and it certainly cannot tell an absent one from an off-screen one.
+    # =============================================================================================
+    $companionDoor = Get-DoorRect $window 'companion'
+    $scale = $companionDoor.Scale
+    Click-Rect $companionDoor
+    Assert-Route $window 'companion'
+    Write-Output "state drive: left-click on the Companion door -> route: companion (probe: $($companionDoor.Raw))"
+
+    # THE DOOR'S OWN SENTENCE, read before the window opens. Upstream's permissions grid lives on
+    # the companion PAGE (Views/Controls/Companion/AiPermissionsGrid.xaml, inside CompanionTabView);
+    # this port's page is a door, so the door has to say where the grid went or a user looking for
+    # it on this page finds nothing and concludes there is nothing.
+    $pointer = (Get-Element $window 'PermissionsPointer').Current.Name
+    if ($pointer -notlike '*allowed to do to your screen*') {
+        Fail "the Companion door does not name the permissions surface: '$pointer'"
+    }
+    if ($pointer -notlike '*Nothing is admitted until you say so*') {
+        Fail "the Companion door does not state the default: '$pointer'"
+    }
+    Write-Output "door gate: '$pointer'"
+
+    Click-Rect (Get-Rect (Get-Element $window 'CompanionButton'))
+    $companion = Wait-WindowLike $script:proc.Id 'Companion'
+    $script:extraWindow = $companion
+    $script:extraHwnd = [IntPtr]$companion.Current.NativeWindowHandle
+    if ($script:extraHwnd -eq [IntPtr]::Zero) { Fail 'the companion window has no native handle; it cannot be raised or captured' }
+
+    # RAISE IT BEFORE TOUCHING IT. The shell is HWND_TOPMOST (the harness's own occluder rule) and
+    # this window is an ordinary owned one, so a press at its own UIA coordinates lands on the SHELL.
+    # The recap path measured that exact failure; the master switch below would silently never move.
+    [VerifyNative]::SetWindowPos($script:extraHwnd, [VerifyNative]::HWND_TOPMOST, 0, 0, 0, 0,
+        [VerifyNative]::SWP_NOMOVE -bor [VerifyNative]::SWP_NOSIZE -bor [VerifyNative]::SWP_SHOWWINDOW) | Out-Null
+    Start-Sleep -Milliseconds 400
+    $companionRect = Get-Rect $companion
+    if ($companionRect.W -le 0 -or $companionRect.H -le 0) { Fail 'the companion window has no rect on this desktop' }
+
+    # THE WINDOW'S OWN HONESTY LINE, which is what stops this panel over-claiming: her replies do
+    # not reach the command executor in this build at all.
+    $notice = (Get-Element $companion 'EffectDispatchNotice').Current.Name
+    if ($notice -notlike 'Nothing dispatches yet*') { Fail "the companion window does not state that nothing dispatches: '$notice'" }
+
+    $rowIds = @('Flash', 'Video', 'Audio', 'Bubbles', 'Subliminal', 'Overlay', 'LockCard', 'Bounce', 'Haptic', 'GetBackToMe')
+    $master = Get-Element $companion 'EffectsMasterToggle'
+    if ((Get-Toggle $master) -ne [System.Windows.Automation.ToggleState]::Off) {
+        Fail 'the master effect switch is ON in a fresh process; the default is not closed'
+    }
+    foreach ($id in $rowIds) {
+        if ($null -ne (Find-Element $companion $id)) {
+            Fail "the '$id' permission switch is on screen while the master switch is off (upstream hides the panel, MainWindow/MainWindow.Patreon.cs:1477)"
+        }
+    }
+    Write-Output "closed gate: master switch Off and none of the $($rowIds.Count) per-effect switches is in the tree"
+
+    if ($State -eq 'admitted') {
+        Click-Rect (Get-Rect $master)
+        if ((Get-Toggle (Get-Element $companion 'EffectsMasterToggle')) -ne [System.Windows.Automation.ToggleState]::On) {
+            Fail 'the master switch did not take the press (state drive failed)'
+        }
+        foreach ($id in $rowIds) {
+            $sw = Find-Element $companion $id
+            if ($null -eq $sw) { Fail "the '$id' permission switch did not appear when the master switch went on" }
+            if ((Get-Toggle $sw) -ne [System.Windows.Automation.ToggleState]::Off) {
+                Fail ("the '$id' permission switch is TICKED the moment the panel opens. The master switch is a " +
+    'door, never a bulk admission, and a pre-ticked switch is a consent decision nobody made')
+            }
+        }
+        Write-Output "admitted gate: all $($rowIds.Count) switches on screen, every one of them still Off"
+
+        # AND THE CHANGE HALF: one press on the Overlay switch, which is the one switch that governs
+        # two command kinds (upstream's AllowAiOverlay covers spiral and pink,
+        # Services/Commands/AiCommandService.cs:193-194).
+        $overlay = Find-Element $companion 'Overlay'
+        Click-Rect (Get-Rect $overlay)
+        if ((Get-Toggle (Find-Element $companion 'Overlay')) -ne [System.Windows.Automation.ToggleState]::On) {
+            Fail 'the Overlay permission switch did not take the press; the user cannot change what she is allowed to do'
+        }
+        Write-Output 'change gate: one real press ticked the Overlay permission'
+    }
+
+    # THE BAND, derived from the master switch's own rect. The panel is a Border and Avalonia gives
+    # Border no automation peer (harness surprise #1), so its rect cannot be read - but the switch
+    # above it is a CheckBox with a real peer, and the panel opens 6 DIP below it (the settings
+    # StackPanel's Spacing) behind a 1 DIP border and 6 DIP of padding. So 8..12 DIP below the
+    # switch is inside that padding in `admitted`, and is the window's own ground in `closed`.
+    $masterRect = Get-Rect (Get-Element $companion 'EffectsMasterToggle')
+    $capX = $companionRect.X + [int][math]::Round(20 * $scale)
+    $capY = $masterRect.Y + $masterRect.H + [int][math]::Round(8 * $scale)
+    $capW = [int][math]::Round(380 * $scale)
+    $capH = [int][math]::Round(4 * $scale)
+
+    if ($State -eq 'admitted') {
+        # THE CROSS-CHECK: the band must be above the FIRST switch's line, or it is sampling a row
+        # of the grid rather than the panel's own padding and a layout change would aim it at glyphs.
+        $firstSwitch = Get-Rect (Find-Element $companion 'Flash')
+        if ($firstSwitch.Y -lt ($capY + $capH)) {
+            Fail ("the sample band ends at $($capY + $capH) and the first permission switch starts at " +
+    "$($firstSwitch.Y); the band is inside the grid's own rows rather than the panel's padding")
+        }
+        Write-Output ("band $capX,$capY ${capW}x${capH} @ scale $scale - between the master switch ending at " +
+    "$($masterRect.Y + $masterRect.H) and the first switch at $($firstSwitch.Y)")
+    }
+    else {
+        Write-Output "band $capX,$capY ${capW}x${capH} @ scale $scale - below the master switch ending at $($masterRect.Y + $masterRect.H), no panel there"
+    }
+
+    Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $companionRect 'the permissions sample band' 'the companion window'
+    $windowRect = $companionRect   # the cursor is parked relative to the window being captured
 }
 else {
     # The startup trace and the typed capability states live on the System page now, so

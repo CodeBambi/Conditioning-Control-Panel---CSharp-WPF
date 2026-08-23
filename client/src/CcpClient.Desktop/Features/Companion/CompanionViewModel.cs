@@ -51,6 +51,14 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
         _participant = participant ?? throw new ArgumentNullException(nameof(participant));
         _ui = uiDispatch ?? throw new ArgumentNullException(nameof(uiDispatch));
         Bubbles = [];
+        EffectPermissions =
+        [
+            .. AiEffectPermissions.Rows.Select(row => new CompanionPermissionRow(
+                row,
+                () => _participant.Permissions,
+                permissions => _participant.Permissions = permissions,
+                _participant.Executor.Handles)),
+        ];
         SendCommand = new CompanionCommand(Send, () => CanSend);
         StopCommand = new CompanionCommand(Stop, () => InFlight);
         RequestClearCommand = new CompanionCommand(RequestClear, () => !Clearing && !ConfirmVisible);
@@ -153,6 +161,35 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
         {
             _participant.Awareness.Consent = value ? AiAwarenessConsent.Given : AiAwarenessConsent.NotGiven;
             Changed(nameof(AwarenessConsentGiven));
+        }
+    }
+
+    /// <summary>
+    /// The ten permission switches, in upstream's grid order
+    /// (<c>Views/Controls/Companion/AiPermissionsGrid.xaml:185-199</c>). The list itself never
+    /// changes; each row reads and writes the participant's typed permission state.
+    /// </summary>
+    public IReadOnlyList<CompanionPermissionRow> EffectPermissions { get; }
+
+    /// <summary>
+    /// The master switch (upstream's <c>AllowAiToControlEffects</c>,
+    /// <c>MainWindow/MainWindow.Patreon.cs:1476</c>). While it is off nothing is admitted whatever
+    /// the ten switches say, and the panel of switches is hidden exactly as upstream hides it
+    /// (<c>:1477</c>) — the ticks are REMEMBERED, not cleared, so turning the master back on
+    /// restores what the user chose rather than silently re-admitting a default set.
+    /// </summary>
+    public bool EffectsMasterEnabled
+    {
+        get => _participant.Permissions.MasterEnabled;
+        set
+        {
+            if (_participant.Permissions.MasterEnabled == value)
+            {
+                return;
+            }
+
+            _participant.Permissions = _participant.Permissions.WithMaster(value);
+            Changed(nameof(EffectsMasterEnabled));
         }
     }
 

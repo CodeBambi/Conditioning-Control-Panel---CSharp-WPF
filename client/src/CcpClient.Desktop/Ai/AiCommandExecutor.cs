@@ -12,15 +12,23 @@ namespace CcpClient.Desktop.Ai;
 // ExecuteCommand top-level catch) — both REJECTED: gates here are typed verdicts, and a
 // faulting handler faults the dispatch call, never a silent swallow.
 //
-// NO effect backends exist in the greenfield client (flash/subliminal/spiral/etc.): the
-// dispatch targets are typed placeholders — an admitted kind with no registered handler is
-// NotExecuted(EffectUnavailable), never a fake effect. Tests inject canary handlers so
-// zero-execution proofs are falsifiable.
+// EFFECT BACKENDS EXIST, and this comment used to say they did not. The rack under
+// Session/SessionParticipant is live and AiEffectBridge maps the kinds this build can honour
+// onto it (spiral, pink, bubbles); the other eight kinds have a NAMED absence there rather
+// than a handler, because a command that half-applies is worse than one that says this build
+// has no such effect. An admitted kind with no registered handler is still
+// NotExecuted(EffectUnavailable), never a fake effect, and tests still inject canary handlers
+// so zero-execution proofs stay falsifiable.
+//
+// WHAT IS STILL NOT WIRED, so nobody reads the above as more than it is: nothing calls
+// Execute. A model reply never reaches AiEnvelopeValidator — AiOperationPipeline.cs:340-346
+// refuses envelope-shaped replies with MalformedOutput and
+// client/src/CcpClient.Desktop/Ai/AiTextHygiene.cs:24-30 records that as a decision — so no
+// companion reply can reach this executor in this build.
 
 /// <summary>
-/// The dispatch target for one admitted effect command (c6). NO product implementations
-/// exist — no effect backends; the seam exists so the executor's dispatch is real and
-/// testable (canaries) and future backends land additively. Implementations must be
+/// The dispatch target for one admitted effect command (c6). Product implementations live in
+/// <see cref="AiEffectBridge"/>, over the landed effect rack. Implementations must be
 /// self-safing: <see cref="AiCommandExecutor"/> deliberately does NOT catch (a fault
 /// propagates — honest, never the WPF/first-attempt swallow-and-log).
 /// </summary>
@@ -84,10 +92,10 @@ public sealed record AiCommandExecution(IReadOnlyList<AiCommandVerdict> Verdicts
 /// (invalid envelopes have NO plan — the executor is unreachable on every rejected class,
 /// type-enforced) and dispatches each command in order:
 /// generation-live → master gate → per-effect gate → handler resolution → dispatch.
-/// SYNCHRONOUS by design: no effect backends exist (async is speculative; a real async
-/// backend lands with a signature change, recorded). Composition into the companion UI is
-/// c7's surface (admission §8) — this slice lands the mechanism, proven against the real
-/// AsyncOperationOwner generation machinery.
+/// SYNCHRONOUS by design, and the landed backends keep it that way: every module the bridge
+/// drives applies its dials and engages synchronously (<c>OwnedSessionEffect.Arm</c>, which
+/// upstream's services do too — <c>OverlayService.cs:394-428</c> puts the layers up before
+/// <c>Start</c> returns). A real async backend lands with a signature change, recorded.
 /// </summary>
 public sealed class AiCommandExecutor
 {
@@ -95,6 +103,13 @@ public sealed class AiCommandExecutor
 
     public AiCommandExecutor(IReadOnlyDictionary<AiCommandKind, IAiEffectHandler>? handlers = null) =>
         _handlers = handlers ?? new Dictionary<AiCommandKind, IAiEffectHandler>();
+
+    /// <summary>
+    /// Whether a registered handler exists for this kind — the answer to "can this build do
+    /// that at all", which is a different question from "is she allowed to". The permissions
+    /// grid reads BOTH so a ticked switch over an absent backend cannot read as a capability.
+    /// </summary>
+    public bool Handles(AiCommandKind kind) => _handlers.ContainsKey(kind);
 
     /// <summary>
     /// Dispatches a plan under the current gates. Per command, in order (first match wins):

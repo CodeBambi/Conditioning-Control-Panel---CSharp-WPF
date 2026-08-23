@@ -72,7 +72,7 @@ public enum AiNotExecutedReason
     /// <summary>The owning generation was invalidated before execution (provider switch / panic — contract §3).</summary>
     SupersededGeneration,
 
-    /// <summary>The command passed every gate but no effect backend exists to dispatch to (c6 execution-level reason — the typed placeholder: no flash/subliminal/spiral/etc. backends exist in the greenfield client yet). Extends contract §9's reason set at EXECUTION level; orchestrator follow-up recorded in the packet record §3.1.4.</summary>
+    /// <summary>The command passed every gate but no effect backend exists to dispatch to. Since the bridge landed this is a NAMED absence rather than a blanket one: <see cref="AiEffectBridge.Absences"/> says which seam this build does not have for that kind. Extends contract §9's reason set at EXECUTION level; orchestrator follow-up recorded in the packet record §3.1.4.</summary>
     EffectUnavailable,
 }
 
