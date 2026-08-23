@@ -341,7 +341,7 @@ public sealed class ArcademyProtocolTests : IDisposable
     // ==================================================================================
 
     [Fact]
-    public void SetSetting_ClampsPersistsAndEchoesThePostClampValue()
+    public async Task SetSetting_ClampsPersistsAndEchoesThePostClampValue()
     {
         var session = NewSession();
         session.Ready();
@@ -369,8 +369,32 @@ public sealed class ArcademyProtocolTests : IDisposable
         Assert.Equal(50, session.Facts.MasterVolume);
         Assert.Equal(50, changed?.MasterVolume);
 
-        // The write is dirty on the store, so the document survives the session.
-        Assert.True(_store.IsDirty);
+        // THE WRITE SURVIVES THE SESSION, asserted as the OUTCOME rather than as a transient flag.
+        //
+        // This used to read `Assert.True(_store.IsDirty)`, and it was RACY BY CONSTRUCTION rather
+        // than merely flaky: SetSetting enqueues its own write on the way out
+        // (ArcademySession.cs:250, upstream's `:1184`), and `WriteOnce` clears the dirty flag the
+        // instant that write lands with no later mutation behind it (PersistenceStore.cs:501-506).
+        // The flag was alive only until a thread-pool write finished, so whether it beat the next
+        // line of this test was a scheduler-and-filesystem race — one it reliably LOST on Linux and
+        // usually won on Windows. That is the shape a flag-shaped assertion hides: the faster the
+        // persistence gets, the sooner the fact reds, and the flag was never the claim anyway.
+        //
+        // `SaveImmediate` is the store's own quiescence signal (contract §4 rule 5: when it
+        // returns, every previously enqueued write has finished) — deterministic, never a clock.
+        // The two neighbouring IsDirty facts are a different shape and stay as they are
+        // (HapticParticipantTests.cs:500, SchedulerModuleTests.cs:866): both are explicitly
+        // "dirty, and NEVER saved: no Save() call anywhere on this path", so nothing can clear the
+        // flag underneath them, and both already assert the file afterwards.
+        await _store.SaveImmediate();
+        var persisted = File.ReadAllText(Path.Combine(_dir, ArcademySettingsDocument.FileName));
+        Assert.Equal(0.0, JsonNode.Parse(persisted)!.AsObject()["capFlashRate"]!.GetValue<double>(), 6);
+
+        // And the app-wide key really did NOT become a second Arcademy copy of itself: nothing
+        // named masterVolume reached this document, as a property or in the per-game bag
+        // (AppSettings.cs:6531-6537 forbids the duplication; ArcademySettingsEcho answers the key
+        // before SetGameSetting can ever see it).
+        Assert.DoesNotContain("masterVolume", persisted, StringComparison.Ordinal);
     }
 
     [Fact]
