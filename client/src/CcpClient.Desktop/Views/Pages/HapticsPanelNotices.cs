@@ -24,7 +24,7 @@ namespace CcpClient.Desktop.Views.Pages;
 /// incrementing <see cref="Haptics.HapticLimb.Moments"/> and posting a real envelope
 /// (<c>HapticLimb.cs:187-227</c>). D210 records that the reason moved one rung out and that
 /// <c>Views/**</c> was not touched: <b>the XML docs were maintained (<c>HapticLimb.cs:139-140</c>,
-/// <c>IHapticSink.cs:223</c>) and the sentence the user reads was not.</b> Misnaming the cause is
+/// <c>IHapticSink.cs:288</c>) and the sentence the user reads was not.</b> Misnaming the cause is
 /// the exact defect the paragraph above cites upstream for.</para>
 /// </summary>
 public static class HapticsPanelNotices
@@ -53,10 +53,10 @@ public static class HapticsPanelNotices
     /// <para><b>The <see cref="EffectDotState.Armed"/> arm is the one this packet made
     /// READABLE, and it was written before anybody could read it.</b> <c>Dot</c> is
     /// <c>Enabled &amp;&amp; LastObservation is { Confirmed: true }</c>
-    /// (<c>HapticParticipant.cs:214-215</c>), <c>Confirmed</c> requires
-    /// <c>ClientAdmitted &amp;&amp; DeviceCount &gt;= 1</c> (<c>IHapticSink.cs:136</c>), and
+    /// (<c>HapticParticipant.cs:257-258</c>), <c>Confirmed</c> requires
+    /// <c>ClientAdmitted &amp;&amp; DeviceCount &gt;= 1</c> (<c>IHapticSink.cs:196</c>), and
     /// <c>LastObservation</c> is assigned only past the <c>Sink.Route == None</c> early return
-    /// (<c>HapticParticipant.cs:259-270</c>). <b>So this arm renders only where a route the user
+    /// (<c>HapticParticipant.cs:306-335</c>). <b>So this arm renders only where a route the user
     /// ticked has been asked and a server has answered with a device</b> — which is why neither
     /// "nothing sends anything to it yet" (the earlier
     /// wording) nor "the sink admits no provider route" (this file's own first attempt) may appear

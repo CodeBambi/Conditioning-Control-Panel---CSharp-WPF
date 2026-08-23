@@ -64,9 +64,9 @@ public enum HapticMoment
 /// <see cref="Moments"/> therefore counts what was asked; <see cref="Sends"/> counts what was
 /// attempted.</para>
 ///
-/// <para><b>NOTHING MOVES.</b> No provider client is admitted, so the sink refuses and there is no
-/// device key to address: on this build <see cref="Sends"/> stays at zero for every session and
-/// <see cref="EvaluationsWithNoDevice"/> is where the truth of that is visible.</para>
+/// <para><b>WHETHER ANYTHING MOVES IS NOT THIS CLASS'S QUESTION.</b> Both routes have a client, so a
+/// ticked route with a running server gives real <see cref="Sends"/>; with none ticked the sink
+/// refuses before a wire and <see cref="EvaluationsWithNoDevice"/> is where that shows.</para>
 /// </summary>
 public sealed class HapticLimb : IHapticLimb, IDisposable
 {

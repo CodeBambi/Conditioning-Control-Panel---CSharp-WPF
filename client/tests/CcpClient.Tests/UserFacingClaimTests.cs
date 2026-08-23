@@ -16,7 +16,7 @@ namespace CcpClient.Tests;
 /// <c>GoonDoors.cs</c> telling the user the browser can still ask; another wired the haptic limb and
 /// left <c>HapticsPanelNotices.cs</c> telling the user no module sends anything. In both cases the
 /// XML docs beside the code were maintained (<c>HapticLimb.cs:139-140</c>,
-/// <c>IHapticSink.cs:223</c>) and the sentence the USER reads was not.</para>
+/// <c>IHapticSink.cs:288</c>) and the sentence the USER reads was not.</para>
 ///
 /// <para><b>What this file is: a claim-to-code BINDING, not a prose matcher.</b> Each entry pairs a
 /// sentence read <b>from the running product</b> with <b>one machine-evaluated fact about this
@@ -309,8 +309,8 @@ public sealed class UserFacingClaimTests
 
     /// <summary>
     /// The Armed arm, which renders in ONE world only: the one where a provider route HAS been
-    /// admitted (<c>HapticParticipant.cs:214-215</c> → <c>IHapticSink.cs:136</c> →
-    /// <c>HapticParticipant.cs:259-270</c>). Bound SEPARATELY from the absence line because a
+    /// admitted (<c>HapticParticipant.cs:257-258</c> → <c>IHapticSink.cs:196</c> →
+    /// <c>HapticParticipant.cs:306-335</c>). Bound SEPARATELY from the absence line because a
     /// needle over the two joined would let the absence line satisfy it while this arm said
     /// anything at all — which is how this packet's own first attempt shipped a sentence that is FALSE
     /// on the only day it renders. Both self-refuting wordings are banned by name.

@@ -97,7 +97,7 @@ public sealed class CompositeHapticSink : IHapticSink
     /// ticked nothing.
     ///
     /// <para><b>The <c>None</c> answer is load-bearing:</b> <c>HapticParticipant</c> returns early on
-    /// it before any connect (<c>HapticParticipant.cs:277</c>), which is where "refuse before
+    /// it before any connect (<c>HapticParticipant.cs:324</c>), which is where "refuse before
     /// touching the wire" actually happens on the product path — the same order upstream keeps, where
     /// the button refuses before the manager is called at all
     /// (<c>MainWindow/MainWindow.Haptics.cs:653-660</c>).</para>

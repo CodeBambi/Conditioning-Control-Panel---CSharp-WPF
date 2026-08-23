@@ -28,13 +28,18 @@ namespace CcpClient.Desktop.Haptics;
 public static class HapticReasonCodes
 {
     /// <summary>
-    /// <b>This build admits no haptic provider client, so nothing was attempted.</b>
+    /// <b>No haptic provider client stands behind that route, so nothing was attempted.</b>
     ///
-    /// <para>This is the port's real answer today and it is a property of the BUILD, not of the
-    /// machine, not of the platform and not of the user's toy box. It is never "no device found":
-    /// a refusal that named a missing device would be false, because there is no client here with
-    /// which to look. The detail names the two upstream routes, what each would need, and the fact
-    /// that both speak to a separate server process rather than to hardware.</para>
+    /// <para>It is a property of the BUILD — not of the machine, not of the platform and not of the
+    /// user's toy box — and it is never "no device found": a refusal that named a missing device
+    /// would be false, because there is nothing there with which to look.</para>
+    ///
+    /// <para><b>NO ROUTE THIS BUILD SHIPS REACHES IT ANY MORE.</b> Both of upstream's real providers
+    /// have a client here (<see cref="HapticSinkFactory.AdmittedRoutes"/>), so this is what
+    /// <see cref="HapticProviderRoute.None"/> gets and what a route added to the enum without a
+    /// client would get. It is kept because it is the thing that stops the next route being admitted
+    /// as a no-op — and it must never be used for the user having ticked nothing, which is
+    /// <see cref="HapticNoProviderEnabled"/> and has a completely different repair.</para>
     /// </summary>
     public const string HapticNoAdmittedProvider = "haptic-no-admitted-provider";
 
