@@ -32,14 +32,16 @@ public sealed class ArcademyProtocolTests : IDisposable
             new SinkAdapter(_log),
             Path.Combine(_dir, ArcademySettingsDocument.FileName),
             ArcademySettingsDocument.CurrentSchemaVersion);
-        _store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
+        // StartAsync loads on the calling thread and hands back an ALREADY-COMPLETE task (its own
+        // remarks, pinned by PersistenceStoreTests), so there is nothing here to wait on.
+        _ = _store.StartAsync(TestContext.Current.CancellationToken);
     }
 
     public void Dispose()
     {
         try
         {
-            _store.StopAsync().GetAwaiter().GetResult(); // wallclock-allow: StopAsync cancels the owner and returns an already-complete task
+            _ = _store.StopAsync();   // cancels the owner; also already complete, and NOT a flush
             Directory.Delete(_dir, recursive: true);
         }
         catch (Exception)

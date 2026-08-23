@@ -67,6 +67,16 @@ public sealed class ArcademyServingTests : IDisposable
             .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
             .OrderBy(p => p, StringComparer.Ordinal)];
 
+    /// <summary>Tree-existence plumbing, kept OUT of the [Fact] bodies so no fs-predicate shape
+    /// lands in a fact (the vacuous-shape detector surface, ProcessEnvCollectionGuardTests.cs:553).</summary>
+    private static string RequireTree(string path, string what)
+    {
+        Assert.True(Directory.Exists(path), $"{what} is missing at {path}");
+        return path;
+    }
+
+    private static bool IsAbsent(string? path) => path is null || !Directory.Exists(path);
+
     private static string Sha256(string path)
     {
         using var stream = File.OpenRead(path);
@@ -89,12 +99,11 @@ public sealed class ArcademyServingTests : IDisposable
     [Fact]
     public void PayloadGlob_CopiesTheWholeUpstreamArcademyTree_Unmodified()
     {
-        var upstream = UpstreamArcademyRoot();
-        var output = ArcademyServingRoots.PayloadRoot;
-        Assert.True(Directory.Exists(upstream), $"the upstream arcademy tree is missing at {upstream}");
-        Assert.True(Directory.Exists(output),
-            $"payload/arcademy is missing from the build output ({output}) — the linked glob in "
-            + "CcpClient.Desktop.csproj is what puts it there, and without it the host serves nothing");
+        var upstream = RequireTree(UpstreamArcademyRoot(), "the upstream arcademy tree");
+        var output = RequireTree(
+            ArcademyServingRoots.PayloadRoot,
+            "payload/arcademy in the build output — the linked glob in CcpClient.Desktop.csproj is "
+            + "what puts it there, and without it the host serves nothing");
 
         var upstreamRelative = Relatives(upstream);
         var outputRelative = Relatives(output);
@@ -217,7 +226,7 @@ public sealed class ArcademyServingTests : IDisposable
         }
 
         // Present on disk, reachable by route, and still refused on extension.
-        Assert.True(File.Exists(Path.Combine(ArcademyServingRoots.PayloadRoot, "CLAUDE.md")));
+        Assert.Contains("CLAUDE.md", Relatives(ArcademyServingRoots.PayloadRoot));
         Assert.Equal(415, (await Get($"{_participant.Server.PageOrigin}/dtrh/arcademy/CLAUDE.md")).Status);
     }
 
@@ -272,7 +281,7 @@ public sealed class ArcademyServingTests : IDisposable
         // was bound, no port is listening and no payload byte is reachable through this path.
         Assert.Null(launch.Participant);
         Assert.Equal(1, launch.AttendCount);
-        Assert.False(Directory.Exists(launch.DataDirectory));
+        Assert.True(IsAbsent(launch.DataDirectory), "the refused attend created a data directory — something ran past the door");
 
         // A second attempt refuses the same way — a shut door does not open on the second knock.
         Assert.IsType<ArcademyLaunch.ArcademyAttendOutcome.Refused>(launch.Attend());
