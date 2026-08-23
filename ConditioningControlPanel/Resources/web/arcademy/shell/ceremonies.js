@@ -27,6 +27,32 @@ function el(tag, cls, text) {
   return n;
 }
 
+/* ----------------------------------------------------------------------------
+ * THE FLOOR HAS A VOICE (W0, 2026-08-24). The delegate below asks the engine
+ * first, but this module also serves the two places that have NO engine to ask:
+ * the shell's own instance (end card, report card - built engine:null, the
+ * engine is per class) and a class whose engine failed to load. Both used to
+ * fall to a CSS-only floor that was completely SILENT - the grade stamp, the
+ * payoff jackpot and the near-miss all landed mute, and silence is where people
+ * stand up. shell/audio.js is still the one audio owner (trap 18): this is a
+ * REQUEST on `document`, never a node - the exact precedent punchcard.js's
+ * thud() set. Levels mirror the engine's own numbers so a beat sounds the same
+ * whichever path served it.
+ * -------------------------------------------------------------------------- */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 /* HOUSE RULES additions (Deck V / Deck VI, shell level so all ten classes get
  * them): `gradeObject({grade,...})` mints the grade as a physical stamp instead
  * of a bare letter string, and `payoff({grade, capped, ...})` guarantees that a
@@ -74,9 +100,19 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
      * card cell); it falls back to the fixed ceremony layer.
      * @returns {HTMLElement|null} the stamp node (already scheduled to fade)
      */
-    stamp({ text, tone, target, hold } = {}) {
-      const opts = { text, tone, target };
+    stamp({ text, tone, target, hold, pitch, quiet } = {}) {
+      // `label` beside `text`: the engine's stamp reads opts.label and was
+      // rendering BLANK on every delegated beat (W0 audit). Both ride so either
+      // reader is served; the engine's own tone names (good/bad/gild) differ
+      // from ours ('pink') on purpose - a wrong tone is a default, never a throw.
+      const opts = { text, label: text, tone, target };
       const engineTook = delegate('stamp', opts);
+      // The engine path plays its own stamp cue; the floor plays the same one.
+      // `pitch` (gradeObject's rank ladder) rides only the floor - the engine's
+      // ceremony sfx takes no pitch, and a doubled cue would be worse.
+      if (!engineTook && !quiet) {
+        sfx(tone === 'bad' ? 'stamp_bad' : 'stamp', 0.55, pitch ? { pitch } : null);
+      }
       const host = target || layer;
       if (!host) return null;
 
@@ -107,7 +143,19 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
      */
     streakMeter({ target, filled, gold } = {}) {
       const lit = Math.max(0, Math.min(SEGMENTS, Math.round(Number(filled) || 0)));
-      delegate('streak_meter', { filled: lit, total: SEGMENTS, target });
+      /* NO DELEGATE, ON PURPOSE (W0, 2026-08-24). The engine's streak_meter
+       * ceremony reads {streak} - this call sent {filled, total}, which parsed
+       * as streak 0, so the CHIME LADDER never once played (the audit's headline
+       * bug) AND the engine quietly mounted its own invisible meter node in the
+       * fx layer on the first call. Fixing the field name would have surfaced
+       * that second meter over this one. The shell draws the ONE meter; the
+       * chime is requested directly: level and pitch climb with the lit count
+       * (a semitone per segment, capped at 7 - the House Book's ladder), hidden
+       * under 2 exactly like the engine's own spec. */
+      if (lit >= 2) {
+        sfx('streak', Math.min(1, 0.25 + 0.05 * lit),
+          { pitch: Math.pow(2, Math.min(lit - 2, 7) / 12) });
+      }
 
       const meter = el('span', 'arc-meter' + (reduced ? '' : ' fill'));
       meter.setAttribute('role', 'img');
@@ -133,10 +181,18 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
       }
       if (delegate(k, opts)) return true;
       const o = opts || {};
+      /* The CSS floor sounds like the engine path would have (W0): the engine
+       * plays jackpot at 0.6+0.4*intensity (default .8 -> .92) and near_miss at
+       * 0.2+0.3*intensity (default .4 -> .32). payoff()'s scaled-down loss beat
+       * (scale .5) scales the LEVEL the same way it scales the spectacle. */
+      const scale = o.scale == null ? 1 : Math.max(0, Math.min(1, Number(o.scale) || 0));
+      sfx(k, (k === 'jackpot' ? 0.92 : 0.32) * scale,
+        k === 'jackpot' ? { duck: { target: 'spotlight', mult: 0.25, ms: 600 } } : null);
       api.stamp({
         text: o.text || (k === 'jackpot' ? 'JACKPOT' : 'SO CLOSE'),
         tone: k === 'jackpot' ? undefined : 'pink',
         target: o.target,
+        quiet: true,               // the reward cue above IS this beat's sound
       });
       return true;
     },
@@ -155,11 +211,16 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
       const g = raw.toLowerCase();
       const text = label != null ? String(label)
         : (g === 'pass' || zen === true ? 'PASS' : raw.toUpperCase());
+      // THE GRADE IS RANK-PITCHED (W0): the House Book's reference beat is the
+      // punch-card thud and this is its ladder verbatim (punchcard.js
+      // 0.78/0.92/1/1.18) - a C lands low, an S rings. PASS sits at 1.
+      const GRADE_PITCH = { c: 0.78, b: 0.92, a: 1, s: 1.18 };
       // 'a' and 'pass' wear the pink seal, everything else the gold one - the
       // stamp primitive's only two tones, unchanged.
       const node = api.stamp({
         text, target, hold,
         tone: (g === 'a' || g === 'pass') ? 'pink' : undefined,
+        pitch: GRADE_PITCH[g] || 1,
       });
       if (!node) return null;
       try {

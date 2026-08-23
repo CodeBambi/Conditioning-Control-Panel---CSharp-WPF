@@ -75,6 +75,10 @@ const GLOBAL_KEYS = new Set([
   SETTING_KEYS.masterIntensity, SETTING_KEYS.effectIntensity,
   SETTING_KEYS.audioMute, SETTING_KEYS.hideTutorial, SETTING_KEYS.keybinds,
   'masterVolume', 'remoteMediaRatio',
+  // WHOLE-OBJECT echoes are globals too (W0, 2026-08-24): the host answers the
+  // mixer as one `{key:'audioLevels', value:{...}}` frame, and the undotted key
+  // used to slip this fence and land the whole object in the per-game flat bag.
+  'audioLevels', 'caps',
 ].concat(Object.keys(SETTING_KEYS.caps).map((k) => SETTING_KEYS.caps[k]))
   .concat(Object.keys(SETTING_KEYS.audio).map((k) => SETTING_KEYS.audio[k])));
 
@@ -137,8 +141,16 @@ function mult(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2) 
  * @param {Object} o.keybinds   createKeybinds() handle
  * @param {Function=} o.onClose
  * @param {Function=} o.log
+ * @param {string=} o.gameKey   THE SPLIT (owner ruling 2026-08-24): set, the
+ *                              page is SCOPED - tiers 1 + 2 unchanged, then
+ *                              exactly ONE game group (the running class),
+ *                              never the other eight. The campus / Registrar
+ *                              keep calling with no key and get the full sheet.
+ *                              An unknown key falls back to the full page (a
+ *                              missing group would hide real knobs; too many is
+ *                              the lesser bug).
  */
-export function createSettingsPage({ init, bridge, games, keybinds, onClose, log } = {}) {
+export function createSettingsPage({ init, bridge, games, keybinds, onClose, log, gameKey } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const src = init || {};
   const root = el('div', 'arc-settings');
@@ -487,17 +499,33 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
   function build() {
     root.textContent = '';
     const close = () => { try { if (onClose) onClose(); } catch (e) { /* noop */ } };
+
+    /* THE SPLIT. A scoped page shows the one game the player is actually in;
+     * the full list stays the campus/Registrar's. Scope resolves ONCE, here:
+     * a gameKey that matches nothing (a retired class, a typo'd caller) falls
+     * back to the full sheet rather than silently hiding every knob. */
+    const list = Array.isArray(games) ? games : [];
+    const scopedEntry = gameKey
+      ? list.find((e) => e && e.key === String(gameKey)) || null
+      : null;
+    if (gameKey && !scopedEntry) say('settings scope "' + gameKey + '" unknown - full page');
+    const shown = scopedEntry ? [scopedEntry] : list;
+
     const head = el('div', 'arc-classbar');
     const back = el('button', 'btn ghost', t('back', 'Back'));
     back.type = 'button';
     back.addEventListener('click', close);
     head.appendChild(back);
-    head.appendChild(el('span', 'arc-title', t('settings', 'Settings')));
+    const title = scopedEntry
+      ? t('game_' + scopedEntry.key, (scopedEntry.mod && scopedEntry.mod.title) || scopedEntry.key)
+        + ' - ' + t('settings', 'Settings')
+      : t('settings', 'Settings');
+    head.appendChild(el('span', 'arc-title', title));
     root.appendChild(head);
 
     root.appendChild(buildCeilings());
     root.appendChild(buildGlobal());
-    for (const entry of (Array.isArray(games) ? games : [])) {
+    for (const entry of shown) {
       if (!entry || !entry.key) continue;
       // Declare the game's slots so the keybind rows (and conflict checks) exist
       // even if the class has not been played yet this session.
@@ -505,6 +533,13 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
         keybinds.declare(entry.key, entry.mod.manifest.keybinds);
       }
       root.appendChild(buildGame(entry));
+    }
+    /* The scoped page is only reachable mid-class, and ctx.settings is a
+     * snapshot taken at startClass - so a knob moved here lands NEXT run.
+     * One honest line beats a silent surprise (owner ruling 2026-08-24). */
+    if (scopedEntry) {
+      root.appendChild(el('p', 'arc-note',
+        t('applies_next_class', 'Class option changes take effect next class.')));
     }
 
     /* THE STICKY WAY OUT. This page is ten classes long - three ceiling rows,
