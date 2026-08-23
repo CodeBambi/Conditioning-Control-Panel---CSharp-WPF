@@ -139,9 +139,12 @@ public class AssetManifestTests
         // 3682 -> 3700 at the tunnel backdrop land: the trees (`payload/tunnel` 9 +
         // `payload/vendor/three` 9 — the import-map resolution closure, derived in
         // the current payload inventory).
+        // 3884 -> 3975 at the Arcademy serving land (row slices 1-2): `payload/arcademy` 91,
+        // the whole upstream tree at v6.8.4 (88 -> 91 at that sync). The tripwire is doing its
+        // job here — the count moves WITH the glob that copies the tree, and with its reason.
         var entries = LoadRealManifest();
         var copied = entries.Where(e => e.Source == AssetSource.Copied).ToArray();
-        Assert.Equal(3884, copied.Length);
+        Assert.Equal(3975, copied.Length);
         Assert.Contains(copied, e => e.Id == "dtrh.payload/bridge.js"
             && e.Path == "payload/dtrh/bridge.js" && e.Required && e.Trust == "full");
         Assert.Contains(copied, e => e.Id == "dtrh.overlay/bridge.js"
@@ -152,6 +155,8 @@ public class AssetManifestTests
             && e.Path == "payload/tunnel/index.html" && e.Required && e.Trust == "full");
         Assert.Contains(copied, e => e.Id == "tunnel.vendor/three/three.module.min.js"
             && e.Path == "payload/vendor/three/three.module.min.js" && e.Required && e.Trust == "full");
+        Assert.Contains(copied, e => e.Id == "arcademy.payload/bridge.js"
+            && e.Path == "payload/arcademy/bridge.js" && e.Required && e.Trust == "full");
         var outputRoot = Path.GetDirectoryName(DesktopAssembly.Location)!;
         var failures = AssetVerifier.VerifyCopied(entries, outputRoot);
         Assert.Empty(failures);

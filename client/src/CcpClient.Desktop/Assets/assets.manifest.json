@@ -58365,6 +58365,1371 @@
       ],
       "overridePolicy": "none",
       "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/CLAUDE.md",
+      "source": "copied",
+      "path": "payload/arcademy/CLAUDE.md",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/boot.js",
+      "source": "copied",
+      "path": "payload/arcademy/boot.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/bridge.js",
+      "source": "copied",
+      "path": "payload/arcademy/bridge.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/core/caps.js",
+      "source": "copied",
+      "path": "payload/arcademy/core/caps.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/core/grades.js",
+      "source": "copied",
+      "path": "payload/arcademy/core/grades.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/core/lexicon.js",
+      "source": "copied",
+      "path": "payload/arcademy/core/lexicon.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/core/rng.js",
+      "source": "copied",
+      "path": "payload/arcademy/core/rng.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/core/store.js",
+      "source": "copied",
+      "path": "payload/arcademy/core/store.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/core/timetable.js",
+      "source": "copied",
+      "path": "payload/arcademy/core/timetable.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/ceremonies.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/ceremonies.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/curves.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/curves.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/escape.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/escape.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/index.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/index.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/oneshots.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/oneshots.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/schedule.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/schedule.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/setpieces.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/setpieces.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/style.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/style.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/sustained.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/sustained.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/util.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/util.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/engine/variants.js",
+      "source": "copied",
+      "path": "payload/arcademy/engine/variants.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/daily-trigger/bank.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/daily-trigger/bank.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/daily-trigger/board.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/daily-trigger/board.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/daily-trigger/casino.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/daily-trigger/casino.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/daily-trigger/index.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/daily-trigger/index.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/daily-trigger/ladder.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/daily-trigger/ladder.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/daily-trigger/styles.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/daily-trigger/styles.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/daily-trigger/trickster.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/daily-trigger/trickster.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/daily-trigger/words-accept.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/daily-trigger/words-accept.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/daily-trigger/words-answers.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/daily-trigger/words-answers.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/deja-vu/casino.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/deja-vu/casino.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/deja-vu/index.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/deja-vu/index.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/deja-vu/script.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/deja-vu/script.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/deja-vu/style.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/deja-vu/style.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/deja-vu/trickster.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/deja-vu/trickster.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/assets/bubble.png",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/assets/bubble.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/assets/denied.mp3",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/assets/denied.mp3",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/assets/flash.png",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/assets/flash.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/assets/spiral.png",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/assets/spiral.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/assets/subliminal.png",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/assets/subliminal.png",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/casino.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/casino.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/index.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/index.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/lex.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/lex.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/pressure.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/pressure.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/render.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/render.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/schedule.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/schedule.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/scoring.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/scoring.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/style.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/style.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/trickster.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/trickster.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/tube2d.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/tube2d.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/impulse-control/tube3d.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/impulse-control/tube3d.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/lost-and-found/board.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/lost-and-found/board.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/lost-and-found/casino.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/lost-and-found/casino.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/lost-and-found/constants.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/lost-and-found/constants.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/lost-and-found/grade.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/lost-and-found/grade.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/lost-and-found/hud.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/lost-and-found/hud.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/lost-and-found/index.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/lost-and-found/index.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/lost-and-found/styles.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/lost-and-found/styles.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/lost-and-found/trickster.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/lost-and-found/trickster.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/lost-and-found/util.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/lost-and-found/util.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/registry.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/registry.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/the-deep-end/board.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/the-deep-end/board.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/the-deep-end/casino.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/the-deep-end/casino.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/the-deep-end/grade.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/the-deep-end/grade.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/the-deep-end/index.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/the-deep-end/index.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/the-deep-end/lex.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/the-deep-end/lex.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/the-deep-end/pressure.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/the-deep-end/pressure.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/the-deep-end/schedule.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/the-deep-end/schedule.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/the-deep-end/style.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/the-deep-end/style.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/games/the-deep-end/trickster.js",
+      "source": "copied",
+      "path": "payload/arcademy/games/the-deep-end/trickster.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/index.html",
+      "source": "copied",
+      "path": "payload/arcademy/index.html",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/provider/assets/ae-ph-1.svg",
+      "source": "copied",
+      "path": "payload/arcademy/provider/assets/ae-ph-1.svg",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/provider/assets/ae-ph-2.svg",
+      "source": "copied",
+      "path": "payload/arcademy/provider/assets/ae-ph-2.svg",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/provider/assets/ae-ph-3.svg",
+      "source": "copied",
+      "path": "payload/arcademy/provider/assets/ae-ph-3.svg",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/provider/assets/ae-ph-4.svg",
+      "source": "copied",
+      "path": "payload/arcademy/provider/assets/ae-ph-4.svg",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/provider/assets/ae-ph-5.svg",
+      "source": "copied",
+      "path": "payload/arcademy/provider/assets/ae-ph-5.svg",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/provider/assets/ae-ph-6.svg",
+      "source": "copied",
+      "path": "payload/arcademy/provider/assets/ae-ph-6.svg",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/provider/index.js",
+      "source": "copied",
+      "path": "payload/arcademy/provider/index.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/provider/inventory.js",
+      "source": "copied",
+      "path": "payload/arcademy/provider/inventory.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/provider/remote.js",
+      "source": "copied",
+      "path": "payload/arcademy/provider/remote.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/shell/audio.js",
+      "source": "copied",
+      "path": "payload/arcademy/shell/audio.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/shell/campus.js",
+      "source": "copied",
+      "path": "payload/arcademy/shell/campus.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/shell/ceremonies.js",
+      "source": "copied",
+      "path": "payload/arcademy/shell/ceremonies.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/shell/keybinds.js",
+      "source": "copied",
+      "path": "payload/arcademy/shell/keybinds.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/shell/peek.js",
+      "source": "copied",
+      "path": "payload/arcademy/shell/peek.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/shell/reportcard.js",
+      "source": "copied",
+      "path": "payload/arcademy/shell/reportcard.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/shell/settings.js",
+      "source": "copied",
+      "path": "payload/arcademy/shell/settings.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/shell/shell.js",
+      "source": "copied",
+      "path": "payload/arcademy/shell/shell.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/shell/splitflap.js",
+      "source": "copied",
+      "path": "payload/arcademy/shell/splitflap.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/styles.css",
+      "source": "copied",
+      "path": "payload/arcademy/styles.css",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/vendor/three.core.min.js",
+      "source": "copied",
+      "path": "payload/arcademy/vendor/three.core.min.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
+    },
+    {
+      "id": "arcademy.payload/vendor/three.module.min.js",
+      "source": "copied",
+      "path": "payload/arcademy/vendor/three.module.min.js",
+      "required": true,
+      "provenance": {
+        "origin": "WPF legacy Arcademy payload tree ConditioningControlPanel/Resources/web/arcademy @ git tree 2e50cbb36e8260b972fd917a656581f934f54a0a (added in main commit aadc4a630 feat(arcademy): V1 foundation - host service, web shell, Distraction Engine, asset provider; last touched cb8c1fde7 feat(arcademy): Impulse Control House Rules wave), copied unmodified at build via linked Content glob",
+        "license": "project-internal"
+      },
+      "heads": [
+        "desktop"
+      ],
+      "overridePolicy": "none",
+      "trust": "full"
     }
   ]
 }

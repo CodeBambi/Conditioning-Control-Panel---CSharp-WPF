@@ -584,8 +584,10 @@ public sealed class GoonPracticeTests
     [Fact]
     public void TheServedTreesDeniedFiles_AreExactlyTheFourNamedOnes()
     {
+        // .svg joined the table with the arcademy serving slice (its six bundled placeholder
+        // tiles); the goon tree carries none, so this tree's denied set is unchanged by it.
         var allowed = new HashSet<string>(
-            [".css", ".gif", ".html", ".js", ".json", ".mp3", ".png", ".webm", ".webp"],
+            [".css", ".gif", ".html", ".js", ".json", ".mp3", ".png", ".svg", ".webm", ".webp"],
             StringComparer.OrdinalIgnoreCase);
 
         var denied = Relatives(OutputGoonRoot())

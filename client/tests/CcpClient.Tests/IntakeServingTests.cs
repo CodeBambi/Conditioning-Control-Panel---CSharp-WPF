@@ -38,7 +38,8 @@ public sealed class IntakeServingTests : IDisposable
         File.WriteAllText(Path.Combine(_intakeTree, "core", "accents.js"), "INTAKE ACCENTS");
         File.WriteAllText(Path.Combine(_intakeTree, "banks", "bambi.json"), "{}");
         File.WriteAllText(Path.Combine(_intakeTree, "assets", "vo", "vo_manifest.json"), "INTAKE VO");
-        File.WriteAllText(Path.Combine(_intakeTree, "styles.svg"), "<svg/>"); // outside the §4.4 allowlist
+        File.WriteAllText(Path.Combine(_intakeTree, "styles.svg"), "<svg/>");   // INSIDE the allowlist since the arcademy sweep
+        File.WriteAllText(Path.Combine(_intakeTree, "notes.md"), "# notes");    // outside the §4.4 allowlist
 
         // The exact construction IntakeParticipant uses: payload fallback = the dtrh tree,
         // overlay-first = the intake tree.
@@ -123,8 +124,13 @@ public sealed class IntakeServingTests : IDisposable
             Assert.Equal(405, (int)response.StatusCode);
         }
 
-        // MIME allowlist deny-by-default: .svg 415s even though the file exists.
-        Assert.Equal(415, (await Get("/dtrh/styles.svg")).Status);
+        // MIME allowlist deny-by-default, over a file that EXISTS and is reachable by route:
+        // .md 415s. (.svg used to stand here; it was added to the PAYLOAD table by the arcademy
+        // serving slice for the six bundled placeholder tiles — arcademy/engine/index.js:184 —
+        // and is deliberately still absent from the user-media table, so a file a user dropped in
+        // their media folder can never be served as a scriptable document type.)
+        Assert.Equal(415, (await Get("/dtrh/notes.md")).Status);
+        Assert.Equal(200, (await Get("/dtrh/styles.svg")).Status);
         // Traversal refusal.
         Assert.Equal(403, (await Get("/dtrh/..%2Fsecret.txt")).Status);
         // Unknown route → 404.
