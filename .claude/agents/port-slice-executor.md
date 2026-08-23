@@ -53,6 +53,8 @@ This is not bookkeeping. A worktree with no changes in it is removed when you go
 
 So: a checkpoint always produces a file. If you genuinely have nothing to write, write the census, the plan, or the reason there is nothing — but never stop with an untouched tree.
 
+**And REMOVE it before you report complete.** The checkpoint file exists to keep your worktree alive across an idle moment; it is scaffolding, not a deliverable. If it is still at your branch tip when the orchestrator merges, it lands at the REPOSITORY root — where `client/docs/task-board.md` is the only live queue, and a stray root-level plan becomes a second one that rots and then misleads. So at the end: `git rm plan.md` (and any `record.md`), commit the removal, and fold anything worth keeping into your report or into the board row's evidence. Two lanes shipped a root `plan.md` to the orchestrator on 2026-08-24 doing exactly what this section told them; the rule was right and its ending was missing.
+
 ## Report contract
 
 Files changed and why; WPF citations used; tests added and the resulting floor numbers; any spec-versus-code discrepancies found with your resolution; anything you could not wire, with the exact reason. State plainly what your work does NOT prove: a compile-only result never verifies interaction, rendering, audio, focus, window behavior, or animation, and a headless frame never discharges a headed gate. If you stopped early, say exactly where.
