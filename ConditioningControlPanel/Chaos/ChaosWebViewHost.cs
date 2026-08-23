@@ -642,14 +642,14 @@ internal sealed class ChaosWebViewHost : IDisposable
                 var tube = App.AvatarWindow?.AttachedHandleOrZero ?? IntPtr.Zero;
                 if (tube != IntPtr.Zero && IsWindowVisible(tube)) insertAfter = tube;
                 SetWindowPos(hwnd, insertAfter, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
                 // ...and that insert is precisely what would revoke a topmost claim: SetWindowPos
                 // clears WS_EX_TOPMOST when it places a window after a NON-topmost one, so every
                 // time main changed state a host-owned fullscreen window would quietly drop back
                 // under the taskbar. Re-assert natively rather than through WPF's Topmost property,
                 // which believes it is already true and would no-op.
                 if (_window != null && _window.Topmost)
-                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
             }
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.ApplyNativeOwner: {E}", _opts.LogTag, ex.Message); }
@@ -1070,6 +1070,10 @@ internal sealed class ChaosWebViewHost : IDisposable
     private const uint SWP_NOZORDER = 0x0004;
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_FRAMECHANGED = 0x0020;
+    // A z-order SetWindowPos on this host (owned by main, insertAfter possibly the avatar-thread
+    // tube) must never let USER32 reposition the OWNER too — that sends WM_WINDOWPOSCHANGING
+    // synchronously into main, one half of the mixed-DPI drag deadlock cycle.
+    private const uint SWP_NOOWNERZORDER = 0x0200;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);

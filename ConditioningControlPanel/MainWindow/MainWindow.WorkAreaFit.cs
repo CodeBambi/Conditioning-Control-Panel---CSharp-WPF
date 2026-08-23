@@ -204,31 +204,93 @@ namespace ConditioningControlPanel
             }
         }
 
+        // Coalescing + drag deferral for the DPI re-fit. A drag across a mixed-DPI seam fires
+        // WM_DPICHANGED once per crossing; the old code queued one Background fit PER crossing, and a
+        // fit that runs mid-drag moves the window under the user's mouse — which can push the window
+        // majority back across the seam and re-trigger WM_DPICHANGED (fit -> move -> DPI change ->
+        // fit, a live ping-pong that presents as a freeze). One pending fit at a time, never during
+        // the modal move loop, and a hard cap on consecutive fits as a loop breaker.
+        private bool _dpiFitQueued;                 // a Background fit is already in the dispatcher queue
+        private DpiScale? _dpiFitLatest;            // most recent DPI handed to OnDpiChanged
+        private bool _dpiFitDeferredByMove;         // a fit was requested mid-drag; run it at WM_EXITSIZEMOVE
+        private int _fitBurst;                      // consecutive fits inside the burst window
+        private long _fitBurstResetTick;            // TickCount64 when the burst window opened
+
         /// <summary>
         /// Re-fit after a DPI change. Dispatched rather than run inline: WM_DPICHANGED hands WPF a
         /// suggested rect that it applies around this callback, so measuring mid-transition reads a
-        /// size that is about to be overwritten.
+        /// size that is about to be overwritten. Coalesced (N crossings queue ONE fit) and deferred
+        /// to WM_EXITSIZEMOVE while the user is still inside the modal move loop.
         /// </summary>
         private void QueueWorkAreaFitAfterDpiChange(DpiScale newDpi)
         {
             try
             {
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                _dpiFitLatest = newDpi;
+                if (Services.UI.DisplayChangeCoordinator.InteractiveMoveActive)
                 {
-                    try
-                    {
-                        if (Dispatcher.HasShutdownStarted || !IsLoaded) return;
-                        FitToCurrentMonitorWorkArea("dpi-changed", newDpi);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Debug("Deferred DPI work-area fit failed: {Error}", ex.Message);
-                    }
-                }));
+                    _dpiFitDeferredByMove = true;
+                    return;
+                }
+                if (_dpiFitQueued) return;
+                _dpiFitQueued = true;
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RunQueuedWorkAreaFit));
             }
             catch (Exception ex)
             {
+                _dpiFitQueued = false;
                 App.Logger?.Debug("Could not queue DPI work-area fit: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>Called from WndProc at WM_EXITSIZEMOVE: run the fit the drag deferred, if any.</summary>
+        internal void RunWorkAreaFitDeferredByMove()
+        {
+            if (!_dpiFitDeferredByMove) return;
+            _dpiFitDeferredByMove = false;
+            if (_dpiFitQueued) return;
+            _dpiFitQueued = true;
+            try { Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(RunQueuedWorkAreaFit)); }
+            catch (Exception ex)
+            {
+                _dpiFitQueued = false;
+                App.Logger?.Debug("Could not queue post-drag work-area fit: {Error}", ex.Message);
+            }
+        }
+
+        private void RunQueuedWorkAreaFit()
+        {
+            _dpiFitQueued = false;
+            try
+            {
+                if (Dispatcher.HasShutdownStarted || !IsLoaded) return;
+                // If the user grabbed the window again before Background priority came up, push the
+                // fit back to the end of the new drag rather than moving the window under the mouse.
+                if (Services.UI.DisplayChangeCoordinator.InteractiveMoveActive)
+                {
+                    _dpiFitDeferredByMove = true;
+                    return;
+                }
+
+                // Loop breaker: a fit whose own SetWindowPos re-crosses the DPI seam queues the next
+                // fit, whose SetWindowPos crosses back... Termination normally comes from the
+                // idempotence early-out in FitToCurrentMonitorWorkArea, but the relaxing/restoring
+                // MinWidth/MinHeight floors can keep the sizes oscillating across a mixed-DPI pair.
+                // Cap the burst — the same 4-iteration circuit breaker ChaosFlashOverlay uses for its
+                // DPI re-stamp loop. The next genuine DPI change opens a fresh window.
+                var now = Environment.TickCount64;
+                if (now - _fitBurstResetTick > 2000) { _fitBurst = 0; _fitBurstResetTick = now; }
+                if (++_fitBurst > 4)
+                {
+                    App.Logger?.Information("MainWindow work-area fit: burst cap hit ({N} fits in 2s) — breaking a DPI ping-pong loop", _fitBurst - 1);
+                    return;
+                }
+
+                FitToCurrentMonitorWorkArea("dpi-changed", _dpiFitLatest);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Deferred DPI work-area fit failed: {Error}", ex.Message);
             }
         }
     }

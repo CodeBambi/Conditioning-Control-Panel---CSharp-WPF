@@ -358,6 +358,10 @@ namespace ConditioningControlPanel
             // beat so we don't pile fresh surfaces onto that rebuild burst (desktop-heap/GPU exhaustion
             // -> "Not enough quota" crash / render-thread wedge). See DisplayChangeCoordinator.
             Services.UI.DisplayChangeCoordinator.NotifyDisplayChange("dpi-changed");
+            // Breadcrumb for the field: a mixed-DPI wedge that still gets through dies inside this
+            // transition, and hang_<ts>.txt should say so (there is no local mixed-DPI repro rig).
+            Services.HangContext.Note($"MainWindow DPI transition {oldDpi.DpiScaleX:0.##}x -> {newDpi.DpiScaleX:0.##}x" +
+                (Services.UI.DisplayChangeCoordinator.InteractiveMoveActive ? " (mid-drag)" : ""));
             base.OnDpiChanged(oldDpi, newDpi);
 
             // Dragging onto a 300%-scaled TV multiplies the window's pixel size without changing its
