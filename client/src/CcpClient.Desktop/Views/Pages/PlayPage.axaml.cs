@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using CcpClient.Desktop.Features.Arcademy;
 using CcpClient.Desktop.Features.Dtrh;
 using CcpClient.Desktop.Features.Goon;
 
@@ -31,11 +32,32 @@ public partial class PlayPage : UserControl
     /// caption for a refusal and must never be reused as one.</summary>
     public const string FaultBandTitleText = LaunchFaultText.DtrhHeadline;
 
-    public PlayPage(DtrhLaunch dtrh, GoonLaunch goon)
+    public PlayPage(DtrhLaunch dtrh, GoonLaunch goon, ArcademyLaunch arcademy)
     {
         ArgumentNullException.ThrowIfNull(dtrh);
         ArgumentNullException.ThrowIfNull(goon);
+        ArgumentNullException.ThrowIfNull(arcademy);
         InitializeComponent();
+
+        // THE ARCADEMY STRIP IS DARK AND IS RE-ASSERTED DARK. Upstream ships the card
+        // Visibility="Collapsed" (Views/Tabs/PlayTabView.xaml:1312) and RefreshPlayCards writes
+        // that visibility from ArcademyHostService.DoorAvailable on EVERY repaint
+        // (MainWindow/MainWindow.PlayTab.cs:106-112) — "flipping DoorAvailable is the whole
+        // reveal". This is the port's repaint: the page is mounted each time the Play door is
+        // chosen, so a hand-edited IsVisible cannot survive a navigation, and nothing else in the
+        // build writes it. Absent, never locked: a lockband would advertise a feature nobody can
+        // buy yet, which is upstream's stated reason for hiding rather than locking (:105-107).
+        ApplyArcademyDoor();
+        AttachedToVisualTree += (_, _) => ApplyArcademyDoor();
+
+        // The one Arcademy entry, and it takes the click rather than being disabled — WPF's
+        // BtnStartArcademy_Click is a try/catch around Launch() and nothing else
+        // (MainWindow/MainWindow.Lab.cs:302-321), because "the code path which actually opens the
+        // door has to be the one that can say no". Fire-and-forget for the reason the two DTRH
+        // buttons are: the tier bar resolves asynchronously and a click handler may not block the
+        // UI thread. Discarding is safe because AttendAsync types its own faults instead of
+        // letting one escape (ArcademyAttendOutcome.Faulted).
+        ArcademyAttendButton.Click += (_, _) => _ = AttendAsync(arcademy);
 
         // The Goon door. Synchronous, because GoonLaunch.Practice is - there is no gate
         // to resolve (upstream's card is ungated, PlayTabView.xaml:547-549) and no async read to
@@ -59,6 +81,31 @@ public partial class PlayPage : UserControl
 
         dtrh.Decided += Render;
         dtrh.Faulted += RenderFault;
+    }
+
+    /// <summary>The door, re-asserted onto the strip. The ONLY writer of this visibility, and it
+    /// reads <see cref="ArcademyDoor.Available"/> — a <c>static readonly false</c> with no
+    /// override seam anywhere in this build.</summary>
+    private void ApplyArcademyDoor() => ArcademyEntry.IsVisible = ArcademyDoor.Available;
+
+    /// <summary>
+    /// One Attend press. The refusal it renders is the TIER bar's; the DOOR's refusal renders
+    /// nothing at all, exactly as upstream's is silent — "there is no announced feature to explain
+    /// a refusal about yet" (<c>ArcademyHostService.cs:139-141</c>) — and it is unreachable from
+    /// here anyway while the strip is dark.
+    /// </summary>
+    private async Task AttendAsync(ArcademyLaunch arcademy)
+    {
+        var outcome = await arcademy.AttendAsync().ConfigureAwait(true);
+        ArcademyGateText.IsVisible = outcome is ArcademyLaunch.ArcademyAttendOutcome.Gated;
+        ArcademyGateText.Text = outcome switch
+        {
+            // The two refusals are different TYPES on the decision precisely so this line cannot
+            // render "I could not tell" as "you are not a patron".
+            ArcademyLaunch.ArcademyAttendOutcome.Gated { Decision: ArcademyGateDecision.RefusedNotEntitled r } => r.Message,
+            ArcademyLaunch.ArcademyAttendOutcome.Gated { Decision: ArcademyGateDecision.RefusedUnverified u } => u.Message,
+            _ => string.Empty,
+        };
     }
 
     private void Render(DtrhGateDecision decision)

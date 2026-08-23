@@ -111,13 +111,14 @@ public sealed class ArcademyProtocolTests : IDisposable
     [Fact]
     public void PageVocabulary_LaterSliceFrames_AreNamedAndNotActedOn()
     {
-        // meta-command (slice 3) and the three class frames (slice 4) have LANDED and are handled
-        // here now — their facts are in ArcademyMetaTests. The two rows still named for a later
-        // slice are resume-request (5) and assets-request (7): acknowledged in the transcript,
-        // never acted on, and never answered with a frame.
+        // meta-command (slice 3), the three class frames (slice 4) and resume-request (slice 6 —
+        // it is the PANIC ladder's frame, because OnResumeRequest refuses every other reason at
+        // :349-352) have LANDED and are handled here now; their facts are in ArcademyMetaTests and
+        // ArcademyPanicTests. The one row still named for a later slice is assets-request (7):
+        // acknowledged in the transcript, never acted on, and never answered with a frame.
         Assert.Equal(ArcademyProtocol.ArcademyHandling.HandledHere, ArcademyProtocol.Classify("meta-command"));
         Assert.Equal(ArcademyProtocol.ArcademyHandling.HandledHere, ArcademyProtocol.Classify("class-ended"));
-        Assert.Equal(ArcademyProtocol.ArcademyHandling.LaterSlice, ArcademyProtocol.Classify("resume-request"));
+        Assert.Equal(ArcademyProtocol.ArcademyHandling.HandledHere, ArcademyProtocol.Classify("resume-request"));
         Assert.Equal(ArcademyProtocol.ArcademyHandling.LaterSlice, ArcademyProtocol.Classify("assets-request"));
         Assert.Equal(ArcademyProtocol.ArcademyHandling.HandledHere, ArcademyProtocol.Classify("set-setting"));
         Assert.Equal(ArcademyProtocol.ArcademyHandling.NotVocabulary, ArcademyProtocol.Classify("net-post"));
@@ -125,12 +126,14 @@ public sealed class ArcademyProtocolTests : IDisposable
         var session = NewSession();
         session.Ready();
         _posted.Clear();
+        // resume-request is HANDLED now (slice 6), and with no panic suspend outstanding the
+        // handling is to ignore it and say so — still not a frame back to the page (:354-357).
         session.Handle("""{"type":"resume-request","reqId":"r1"}""");
         session.Handle("""{"type":"assets-request","kind":"loop","count":8}""");
         session.Handle("""{"type":"not-a-frame-we-know"}""");
         session.Handle("{ this is not json");
         Assert.Empty(_posted);
-        Assert.Contains(_log, l => l.Contains("resume-request") && l.Contains("later slice"));
+        Assert.Contains(_log, l => l.Contains("resume-request") && l.Contains("no panic suspend outstanding"));
         Assert.Contains(_log, l => l.Contains("assets-request") && l.Contains("later slice"));
         Assert.Contains(_log, l => l.Contains("unhandled message 'not-a-frame-we-know'"));
         Assert.Contains(_log, l => l.Contains("malformed"));

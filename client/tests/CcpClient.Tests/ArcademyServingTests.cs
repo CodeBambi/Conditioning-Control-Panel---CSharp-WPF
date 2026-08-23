@@ -264,15 +264,15 @@ public sealed class ArcademyServingTests : IDisposable
     }
 
     [Fact]
-    public void AttendingWithTheDoorShut_RefusesAndOpensNothing()
+    public async Task AttendingWithTheDoorShut_RefusesAndOpensNothing()
     {
         var host = new ApplicationHost(new SinkAdapter(_log), [], new StartupTrace());
-        var launch = new ArcademyLaunch(host)
+        var launch = new ArcademyLaunch(host, ArcademyEntryTests.NeverAsked)
         {
             DataDirectory = Path.Combine(Path.GetTempPath(), "ccp-arcademy-door-" + Guid.NewGuid().ToString("N")),
         };
 
-        var outcome = launch.Attend();
+        var outcome = await launch.AttendAsync(TestContext.Current.CancellationToken);
 
         var refused = Assert.IsType<ArcademyLaunch.ArcademyAttendOutcome.Refused>(outcome);
         Assert.Equal(ArcademyDoor.Refusal.Reason, refused.Refusal.Reason);
@@ -284,8 +284,13 @@ public sealed class ArcademyServingTests : IDisposable
         Assert.True(IsAbsent(launch.DataDirectory), "the refused attend created a data directory — something ran past the door");
 
         // A second attempt refuses the same way — a shut door does not open on the second knock.
-        Assert.IsType<ArcademyLaunch.ArcademyAttendOutcome.Refused>(launch.Attend());
+        Assert.IsType<ArcademyLaunch.ArcademyAttendOutcome.Refused>(
+            await launch.AttendAsync(TestContext.Current.CancellationToken));
         Assert.Null(launch.Participant);
+
+        // And the T2 bar BEHIND the door was never reached: the entitlement function this
+        // launcher was built with throws if it is ever called (:136-141 then :146).
+        Assert.Null(launch.LastDecision);
     }
 
     private sealed class SinkAdapter(List<string> lines) : ILogSink

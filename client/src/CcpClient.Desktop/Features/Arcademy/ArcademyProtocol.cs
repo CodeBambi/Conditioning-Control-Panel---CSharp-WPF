@@ -6,8 +6,9 @@ using CcpClient.Desktop.Motion;
 namespace CcpClient.Desktop.Features.Arcademy;
 
 /// <summary>
-/// Protocol v1 of the Arcademy page↔host bridge — the frames slices 1 to 4 of the board row own
-/// (the boot handshake, the settings projection, the meta store and the class payout), authored to the
+/// Protocol v1 of the Arcademy page↔host bridge — the frames slices 1 to 4 and 6 of the board row own
+/// (the boot handshake, the settings projection, the meta store, the class payout and the panic
+/// ladder's <c>suspend</c>/<c>end-run</c> pair), authored to the
 /// <see cref="Goon.GoonProtocol"/> discipline: every type is either EMITTED here, or classified
 /// as belonging to a later slice, or refused as not-vocabulary. Nothing arriving from the page is
 /// dropped silently.
@@ -247,6 +248,25 @@ public static class ArcademyProtocol
     /// browser Fullscreen API would hijack Esc, which the page's exit ladder needs.</summary>
     public static object BuildFullscreen(bool on) => new { type = "fullscreen", on };
 
+    /// <summary>
+    /// The suspend/resume push (<c>Suspend</c>, <c>:294-303</c>, posted at <c>:300</c>): the engine
+    /// drops every effect NOW and the class pauses. <c>reason</c> is protocol vocabulary —
+    /// <c>"video"</c> | <c>"audio-only"</c> | <c>"panic"</c> (<c>:293</c>) — and only the panic one
+    /// is sent by this build, because the other two are native-state suspension (slice 5).
+    ///
+    /// <para><b>A panic suspend is the one suspend with no natural end</b> (<c>:342-345</c>): a
+    /// video un-suspends when it ends, an audio-only session when it does, and this one only lifts
+    /// on the page's own <c>resume-request</c>, which the host grants.</para>
+    /// </summary>
+    public static object BuildSuspend(bool on, string reason) => new { type = "suspend", on, reason };
+
+    /// <summary>The graceful wind-down ask (<c>CloseActive</c>, <c>:254</c>):
+    /// <c>{type:"end-run", reason:"host"}</c>. The page winds itself down and answers
+    /// <c>exit-done</c>; upstream bounds that wait at 1200ms (<c>ArmExitWatchdog</c>,
+    /// <c>:1988-1993</c>) so a wedged page cannot trap the user behind their own panic press.
+    /// The literal <c>"host"</c> is upstream's, on every close path including the panic one.</summary>
+    public static object BuildEndRun(string reason = "host") => new { type = "end-run", reason };
+
     /// <summary>The settings echo (<c>:1187</c>): <c>{type:"setting", key, value}</c> carrying the
     /// value that is ACTUALLY STORED after clamping. The page's rows stay visibly "pending" until
     /// this lands (<c>arcademy/shell/settings.js:17-21</c>), so a dropped write is visible rather
@@ -308,18 +328,26 @@ public static class ArcademyProtocol
     /// <summary>
     /// Every type upstream's <c>OnPageMessage</c> switch handles (<c>:444-497</c>), classified. A
     /// test pins this table, so widening the bridge fails a fact instead of happening quietly.
-    /// <c>meta-command</c> (<c>:463</c>) moved to <b>handled</b> with slice 3, and
-    /// <c>class-started</c>/<c>class-ended</c>/<c>class-left</c> (<c>:466-480</c>) with slice 4.
-    /// The two rows still named for a later slice are <c>resume-request</c> → 5 (<c>:481</c>) and
-    /// <c>assets-request</c> → 7 (<c>:484</c>).
+    /// <c>meta-command</c> (<c>:463</c>) moved to <b>handled</b> with slice 3,
+    /// <c>class-started</c>/<c>class-ended</c>/<c>class-left</c> (<c>:466-480</c>) with slice 4,
+    /// and <c>resume-request</c> (<c>:481</c>) with slice 6.
+    ///
+    /// <para><b><c>resume-request</c> is the PANIC ladder's frame, not slice 5's</b>, and the
+    /// source says so: <c>OnResumeRequest</c> refuses every reason but <c>"panic"</c> —
+    /// "only panic resumes on request" (<c>:349-352</c>) — because a video suspend lifts when the
+    /// video ends (<c>:1720-1726</c>) and an audio-only one when the session does (<c>:1846</c>).
+    /// The row was classified to 5 while the ladder was unported; slice 6 is where it actually
+    /// belongs, so the one row still named for a later slice is
+    /// <c>assets-request</c> → 7 (<c>:484</c>).</para>
     /// </summary>
     public static ArcademyHandling Classify(string type) => type switch
     {
         "ready" or "log" or "heartbeat" or "pong" or "boot-error" or "fullscreen-request"
             or "set-setting" or "exit" or "exit-done"
             or "meta-command" or "class-started" or "class-ended" or "class-left"
+            or "resume-request"
             => ArcademyHandling.HandledHere,
-        "resume-request" or "assets-request" => ArcademyHandling.LaterSlice,
+        "assets-request" => ArcademyHandling.LaterSlice,
         _ => ArcademyHandling.NotVocabulary,
     };
 
@@ -369,7 +397,17 @@ public static class ArcademyProtocol
         /// with Esc ENDS no class, so nothing is graded, paid or credited.</summary>
         public sealed record ClassLeft(string? GameKey) : ArcademyPageMessage;
 
-        /// <summary>Page-initiated wind-down (<c>:487</c>).</summary>
+        /// <summary>The page asking to come back from a PANIC suspend (<c>:481</c> →
+        /// <c>OnResumeRequest</c>, <c>:346-370</c>). The reason stays raw: the host is the only
+        /// thing that may un-freeze a class, and it refuses every reason but <c>"panic"</c>
+        /// (<c>:349</c>). A missing reason READS AS "panic" upstream (<c>:348</c>,
+        /// <c>(string?)o["reason"] ?? "panic"</c>), so it is null here rather than defaulted —
+        /// the substitution belongs to the handler that owns that rule.</summary>
+        public sealed record ResumeRequest(string? Reason) : ArcademyPageMessage;
+
+        /// <summary>Page-initiated wind-down (<c>:487</c>): the page's own Esc-HOLD ladder, which
+        /// winds itself down and then answers <c>exit-done</c>. Upstream latches <c>_exiting</c>
+        /// and arms the same bounded wait a host-side close arms (<c>:488-490</c>).</summary>
         public sealed record Exit(string? Reason) : ArcademyPageMessage;
 
         /// <summary>The page is finished; the window may go (<c>:492</c>).</summary>
@@ -418,6 +456,7 @@ public static class ArcademyProtocol
             GetString(r, "gameKey"), GetInt(r, "gradeTier") ?? 0),
         ["class-ended"] = r => new ArcademyPageMessage.ClassEnded(r),
         ["class-left"] = r => new ArcademyPageMessage.ClassLeft(GetString(r, "gameKey")),
+        ["resume-request"] = r => new ArcademyPageMessage.ResumeRequest(GetString(r, "reason")),
         ["exit"] = r => new ArcademyPageMessage.Exit(GetString(r, "reason")),
         ["exit-done"] = _ => new ArcademyPageMessage.ExitDone(),
     };

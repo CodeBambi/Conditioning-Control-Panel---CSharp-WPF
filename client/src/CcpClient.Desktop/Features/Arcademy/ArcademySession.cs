@@ -4,8 +4,10 @@ using CcpClient.Desktop.Persistence;
 namespace CcpClient.Desktop.Features.Arcademy;
 
 /// <summary>
-/// The host half of the Arcademy bridge for slices 1 to 4: the BOOT HANDSHAKE, the SET-SETTING
-/// ECHO LOOP, the META COMMAND loop and the CLASS PAYOUT. Upstream keeps them all in
+/// The host half of the Arcademy bridge for slices 1 to 4 and 6: the BOOT HANDSHAKE, the
+/// SET-SETTING ECHO LOOP, the META COMMAND loop, the CLASS PAYOUT and the PANIC LADDER
+/// (<see cref="PanicPress"/>, the rung a modal game window must own so two Esc taps cannot reach
+/// the application). Upstream keeps them all in
 /// <c>ArcademyHostService</c>'s static state (<c>OnPageReady</c> <c>:388-404</c>,
 /// <c>OnPageMessage</c> <c>:444-498</c>, <c>OnSetSetting</c> <c>:1164-1188</c>,
 /// <c>OnClassEnded</c> <c>:1354-1428</c>, <c>OnSettingsCurrentReplaced</c> <c>:1777-1794</c>);
@@ -39,6 +41,9 @@ public sealed class ArcademySession : IDisposable
     private readonly ILogSink _log;
     private bool _initPosted;
     private bool _disposed;
+    private bool _panicSuspended;                                    // :75 — press 1 froze the page
+    private DateTimeOffset _lastPanicPress = DateTimeOffset.MinValue; // :76
+    private bool _exiting;                                            // :63
 
     /// <param name="store">The Arcademy settings document store.</param>
     /// <param name="facts">The app-wide values the projection reads (see <see cref="ArcademyAppFacts"/>).</param>
@@ -92,14 +97,34 @@ public sealed class ArcademySession : IDisposable
     public event Action<ArcademyClassPayout.ArcademyPayout>? PayoutComputed;
 
     /// <summary>
-    /// The clock the PAYOUT reads, re-read at each <c>class-ended</c> — upstream reads
+    /// The clock the PAYOUT and the PANIC LADDER read, re-read at each <c>class-ended</c> and at
+    /// each panic press — upstream reads
     /// <c>DateTime.UtcNow</c> (<c>:1379</c>) and <c>DateTime.Now</c> (<c>:1406</c>) inside the
     /// handler, not at boot. Deliberately NOT <see cref="ArcademyAppFacts.Now"/>, which is the
     /// single boot instant the init projection's two date fields are frozen at (<c>:530</c>): a
     /// class finished after midnight must credit the day it finished on, not the day the window
     /// opened.
+    ///
+    /// <para><b>The panic ladder reads the same clock</b> even though upstream's press path reads
+    /// <c>DateTime.UtcNow</c> (<c>:323</c>) while its payout reads both halves: the ladder only ever
+    /// measures an INTERVAL between two presses (<c>:325</c>), and the difference of two
+    /// <see cref="DateTimeOffset"/> values is absolute, so the offset cannot move a rung. A second
+    /// clock property would be a second thing to keep in step for no observable difference.</para>
     /// </summary>
     public Func<DateTimeOffset> Clock { get; set; } = static () => DateTimeOffset.Now;
+
+    /// <summary>
+    /// <b>Does the app's own native state still own the screen</b> — the rung that HOLDS a panic
+    /// resume (<c>:359-364</c>: <c>App.Video?.IsPlaying == true || AudioOnlySession</c>). Upstream's
+    /// reason is that un-freezing there "would drop a class back on top of a video the user is
+    /// supposed to be watching".
+    ///
+    /// <para>This build has no video service and no audio-only session wired to the Arcademy —
+    /// that is native-state suspension, slice 5 of the board row — so the honest default is
+    /// <c>false</c>: nothing here can own the screen, so nothing can outrank the user's own resume.
+    /// Slice 5 attaches its two predicates here and changes nothing else on this path.</para>
+    /// </summary>
+    public Func<bool> NativeStateOwnsScreen { get; set; } = static () => false;
 
     /// <summary>Between <c>class-started</c> and <c>class-left</c>/<c>class-ended</c>
     /// (<c>_classActive</c>, <c>:73</c>). Upstream's consumer is the heartbeat watchdog's
@@ -211,13 +236,171 @@ public sealed class ArcademySession : IDisposable
                 ClassActive = false;
                 _log.Log($"arcademy: class left ({classLeft.GameKey})");
                 return;
+            case ArcademyProtocol.ArcademyPageMessage.ResumeRequest resumeRequest:
+                ResumeRequest(resumeRequest.Reason);
+                return;
             case ArcademyProtocol.ArcademyPageMessage.Exit exit:
-                _log.Log($"arcademy: page exit ({exit.Reason ?? "no reason"})");
+                // The page's own Esc-HOLD ladder wound itself down (:487-490). Upstream latches
+                // _exiting and arms the bounded exit-done wait; the port latches the same flag —
+                // so a panic press arriving now does not post a SECOND end-run — and asks its
+                // owner for the same bounded wait.
+                _exiting = true;                                                    // :488
+                _log.Log($"arcademy: page exit ({exit.Reason ?? "no reason"})");     // :489
+                RequestClose("page-exit", ArcademyClosePlan.WaitForExitDone);        // :490
                 return;
             case ArcademyProtocol.ArcademyPageMessage.ExitDone:
+                // The page is finished; the window may go NOW (:492-493, DisposeAll).
                 _log.Log("arcademy: exit-done");
+                RequestClose("exit-done", ArcademyClosePlan.Immediate);
                 return;
         }
+    }
+
+    // ============================ the panic ladder (slice 6) ============================
+
+    /// <summary>The app-wide double-press convention (<c>:83-85</c>): two presses inside this
+    /// window are a deliberate double-tap, and anything slower re-arms rung 1.</summary>
+    public static readonly TimeSpan PanicDoublePressWindow = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Raised when this session has decided it is over: <see cref="ArcademyClosePlan.Immediate"/>
+    /// means tear down now, <see cref="ArcademyClosePlan.WaitForExitDone"/> means the page was
+    /// asked to wind down and the owner must bound that wait (upstream 1200ms,
+    /// <c>ArmExitWatchdog</c>, <c>:1988-1993</c>) so a wedged page cannot outlast the user's own
+    /// panic press. The session posts frames; it owns no window and disposes nothing, which is the
+    /// same split <see cref="Chaos.ChaosTunnelCore"/> already uses against its service.
+    /// </summary>
+    public event Action<ArcademyCloseRequest>? CloseRequested;
+
+    /// <summary>
+    /// <b>THE PANIC LADDER (<c>HandlePanicPress</c>, <c>:321-340</c>).</b> While the Arcademy is
+    /// up, the app-wide panic key belongs to it: <c>MainWindow.HandlePanicKeyPress</c> hands the
+    /// press over and RETURNS (<c>MainWindow/MainWindow.xaml.cs:1092-1096</c>), the same hand-off
+    /// the descent and the DtRH window get, "because without this rung, two Esc taps with no
+    /// session running fell straight through to the 'not running' branch below and EXITED THE
+    /// WHOLE APP from inside a mini-game" (<c>:1085-1090</c>; the app ladder's exit is
+    /// <c>:1226-1254</c>). Every press that reaches here is CONSUMED, which is what a caller must
+    /// honour: whatever ladder sits under this one may not advance on a press this one answered.
+    ///
+    /// <para><b>Rung 1</b> freezes everything — <c>suspend</c> drops every effect and pauses the
+    /// class behind a Resume affordance (<c>:336-339</c>). <b>Rung 2</b>, a second press inside
+    /// <see cref="PanicDoublePressWindow"/>, closes the Arcademy gracefully (<c>:328-334</c>). A
+    /// SLOWER second press is a fresh rung 1, which is upstream's forgiving reading: "the
+    /// emergency stop must not become an accidental exit" (<c>:313-317</c>).</para>
+    ///
+    /// <para><b>Attendance is safe on either rung</b> (<c>:318-320</c>): the streak is written on
+    /// <c>class-ended</c>, and a class abandoned mid-panic simply never ended, so nothing is
+    /// graded, paid or credited — the same rule <c>class-left</c> already carries.</para>
+    /// </summary>
+    public ArcademyPanicRung PanicPress()
+    {
+        if (_disposed)
+        {
+            // Upstream's own first line is `if (_host == null) return;` (:322) — with no live
+            // Arcademy there is no rung to take, and the app-wide ladder owns the press.
+            return new ArcademyPanicRung.NotLive();
+        }
+
+        var now = Clock();
+        var doubleTap = _panicSuspended && now - _lastPanicPress <= PanicDoublePressWindow;   // :325
+        // Set on EVERY press, before the branch (:326): a press always re-times the window.
+        _lastPanicPress = now;
+
+        if (doubleTap)
+        {
+            _log.Log("arcademy: panic press 2 — closing the Arcademy");    // :330
+            _panicSuspended = false;                                       // :331
+            return new ArcademyPanicRung.Closing(CloseActive("panic"));    // :332
+        }
+
+        _panicSuspended = true;                                            // :336
+        _log.Log($"arcademy: panic press 1 — suspending{(ClassActive ? " mid-class" : "")} (press again to leave)");
+        _post(ArcademyProtocol.BuildSuspend(true, "panic"));               // :339
+        return new ArcademyPanicRung.Suspended(ClassActive);
+    }
+
+    /// <summary>
+    /// Graceful close (<c>CloseActive</c>, <c>:246-263</c>), also the app-exit and panic path, and
+    /// idempotent. A page that is UP and not already winding down is ASKED to wind down
+    /// (<c>end-run</c>, then its <c>exit-done</c>); anything else — a page that never booted, or a
+    /// second close after one is already in flight — goes immediately, because waiting on an
+    /// <c>exit-done</c> that can never arrive is how a panic press leaves someone stuck.
+    /// </summary>
+    /// <param name="reason">Transcript vocabulary for WHY this session is closing
+    /// (<c>"panic"</c>, <c>"host"</c>). It is not the <c>end-run</c> frame's reason: that is the
+    /// literal <c>"host"</c> on every path upstream (<c>:254</c>).</param>
+    public ArcademyClosePlan CloseActive(string reason)
+    {
+        // `_host.IsReady` upstream (:250) — the page said `ready` and got its init. The port's
+        // one-init-per-boot latch IS that state.
+        if (_initPosted && !_exiting)
+        {
+            _exiting = true;                                               // :252
+            _post(ArcademyProtocol.BuildEndRun());                         // :254
+            return RequestClose(reason, ArcademyClosePlan.WaitForExitDone);
+        }
+
+        return RequestClose(reason, ArcademyClosePlan.Immediate);          // :259
+    }
+
+    /// <summary>
+    /// The page asking to come back from a PANIC suspend (<c>OnResumeRequest</c>,
+    /// <c>:346-370</c>) — a REQUEST rather than a page-side resume, because "the host stays the
+    /// only thing that may un-freeze a class" (<c>:342-345</c>). Three refusals, each silent to
+    /// the page and named in the transcript: a reason that is not <c>"panic"</c> (<c>:349-352</c>),
+    /// no outstanding panic suspend (<c>:354-357</c>), and native state that still owns the screen
+    /// (<c>:359-364</c>, <see cref="NativeStateOwnsScreen"/>).
+    /// </summary>
+    private void ResumeRequest(string? reason)
+    {
+        // A missing reason reads as "panic" (:348) — the page's own default.
+        var asked = (reason ?? "panic").Trim();
+        if (!string.Equals(asked, "panic", StringComparison.Ordinal))
+        {
+            _log.Log($"arcademy: resume-request for '{asked}' refused — only panic resumes on request");   // :351
+            return;
+        }
+
+        if (!_panicSuspended)
+        {
+            _log.Log("arcademy: resume-request with no panic suspend outstanding — ignored");              // :356
+            return;
+        }
+
+        if (NativeStateOwnsScreen())
+        {
+            _log.Log("arcademy: resume-request held — a video / audio-only session still owns the screen"); // :362
+            return;
+        }
+
+        _panicSuspended = false;                                           // :366
+        _lastPanicPress = DateTimeOffset.MinValue;                         // :367 — re-arms at rung 1
+        _log.Log("arcademy: panic resume granted");                        // :368
+        _post(ArcademyProtocol.BuildSuspend(false, "panic"));              // :369
+    }
+
+    private ArcademyClosePlan RequestClose(string reason, ArcademyClosePlan plan)
+    {
+        _log.Log($"arcademy: close requested ({reason}, {(plan == ArcademyClosePlan.Immediate ? "immediate" : "bounded wait for exit-done")})");
+
+        // PER-HANDLER isolation, as the payout seam already does — and here the reason is the
+        // whole point of the slice: this runs on the panic path, so a subscriber that throws must
+        // not throw back through the key press. A press that faulted would be a press the app
+        // ladder underneath is then free to treat as its own.
+        var request = new ArcademyCloseRequest(reason, plan);
+        foreach (Action<ArcademyCloseRequest> handler in CloseRequested?.GetInvocationList() ?? [])
+        {
+            try
+            {
+                handler(request);
+            }
+            catch (Exception ex)
+            {
+                _log.Log($"arcademy: close handler failed, isolated ({ex.GetType().Name})");
+            }
+        }
+
+        return plan;
     }
 
     /// <summary>One settings write: validate, clamp, persist, echo the POST-CLAMP value
@@ -338,4 +521,50 @@ public sealed class ArcademySession : IDisposable
         _disposed = true;
         _store.SettingsReplaced -= RepushProjected;
     }
+}
+
+/// <summary>What the session's owner must do about a close (upstream's two branches of
+/// <c>CloseActive</c>, <c>ArcademyHostService.cs:250-260</c>).</summary>
+public enum ArcademyClosePlan
+{
+    /// <summary>Tear down NOW: the page never booted, or it is already winding down and this is a
+    /// second close on top of the first (<c>:259</c>).</summary>
+    Immediate,
+
+    /// <summary><c>end-run</c> has been posted; close on the page's <c>exit-done</c> or on the
+    /// owner's own bounded wait — upstream's is 1200ms (<c>ArmExitWatchdog</c>,
+    /// <c>:1988-1993</c>), and it exists because a wedged page must not outlast the press that
+    /// asked to leave.</summary>
+    WaitForExitDone,
+}
+
+/// <summary>One close decision, carried to whoever owns the window.</summary>
+/// <param name="Reason">Transcript vocabulary: <c>"panic"</c>, <c>"page-exit"</c>,
+/// <c>"exit-done"</c>, or a host's own word.</param>
+/// <param name="Plan">Immediate teardown, or the bounded wind-down wait.</param>
+public sealed record ArcademyCloseRequest(string Reason, ArcademyClosePlan Plan);
+
+/// <summary>
+/// Which rung of the panic ladder one press took (<c>HandlePanicPress</c>, <c>:321-340</c>).
+/// Upstream returns void and the rung is only visible in its log; the port types it so the press
+/// can be seen to have been ANSWERED — a caller that cannot tell whether the Arcademy took the
+/// press is a caller that will eventually let it fall through to the ladder underneath.
+/// </summary>
+public abstract record ArcademyPanicRung
+{
+    private ArcademyPanicRung() { }
+
+    /// <summary>Rung 1: every effect dropped, the class frozen, and one more press inside
+    /// <see cref="ArcademySession.PanicDoublePressWindow"/> leaves (<c>:336-339</c>).</summary>
+    /// <param name="MidClass">The freeze landed inside a class rather than on the shell
+    /// (<c>:337-338</c>). Attendance is unaffected either way: nothing ended.</param>
+    public sealed record Suspended(bool MidClass) : ArcademyPanicRung;
+
+    /// <summary>Rung 2: the Arcademy is closing (<c>:328-334</c>).</summary>
+    /// <param name="Plan">How the close proceeds — see <see cref="ArcademyClosePlan"/>.</param>
+    public sealed record Closing(ArcademyClosePlan Plan) : ArcademyPanicRung;
+
+    /// <summary>There is no live Arcademy to take the press (<c>:322</c>), so this one is NOT
+    /// consumed and the app-wide ladder owns it.</summary>
+    public sealed record NotLive : ArcademyPanicRung;
 }
