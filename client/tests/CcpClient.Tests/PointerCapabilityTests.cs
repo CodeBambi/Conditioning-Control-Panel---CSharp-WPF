@@ -434,7 +434,15 @@ public class PointerCapabilityTests
         }
 
         Assert.True(open is CapabilityState.Available == PointerWindowProbe.MachineHasInteractiveDesktop);
-        Assert.Equal(PointerReasonCodes.PointerTargetNotPlaced,
+        // KEYED, because the two platforms refuse at DIFFERENT RUNGS and both are honest. On Windows a
+        // target really was placed, so the resize guard is what refuses. Off Windows nothing was ever
+        // placed - Open refused on the absent mechanism and handed back handle 0 - so the surface is
+        // asked to move a target it does not know, and pointer-target-unknown is the truthful answer.
+        // Demanding the Windows code there would be demanding a refusal about a window that never existed.
+        Assert.Equal(
+            PointerWindowProbe.MachineHasInteractiveDesktop
+                ? PointerReasonCodes.PointerTargetNotPlaced
+                : PointerReasonCodes.PointerTargetUnknown,
             Assert.IsType<CapabilityState.Unavailable>(resize).Reason.Code);
         Assert.True(slide is CapabilityState.Available == PointerWindowProbe.MachineHasInteractiveDesktop,
             "a pure move at the same extents was refused, so the resize guard is refusing more than resizes");
@@ -548,7 +556,9 @@ public class PointerCapabilityTests
         Assert.Equal(
             run.MachineHasInteractiveDesktop
                 ? PointerReasonCodes.PointerTargetStyleWrong
-                : PointerReasonCodes.PointerMechanismAbsent,
+                // Same rung difference as the resize fact above: with no desktop nothing was placed, so
+                // the surface is asked about a target it does not know rather than about a mechanism.
+                : PointerReasonCodes.PointerTargetUnknown,
             Assert.IsType<CapabilityState.Unavailable>(run.MoveAfterStyleCleared).Reason.Code);
     }
 

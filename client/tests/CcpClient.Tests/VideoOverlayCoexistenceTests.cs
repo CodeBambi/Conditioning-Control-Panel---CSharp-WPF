@@ -124,6 +124,13 @@ public class VideoOverlayCoexistenceTests
     [Fact]
     public void TheLOCKCARDKeepsTheForegroundAndTheKeyboard_WhileAVideoSurfaceIsUpAndAfterItGoes()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the run puts a REAL card beside a REAL Win32 video surface and asks the window manager which one "
+            + "holds the foreground and the system keyboard focus. Off Windows none of them exists, and the "
+            + "readings do not merely go absent - they go WRONG: every handle is 0, so IsForeground compares "
+            + "0 == 0 and answers YES about a window that was never created. Its three siblings in this class "
+            + "are gated for exactly that reason; this one was missed, and it is the same trap.");
+
         var run = Run;
 
         Assert.True(

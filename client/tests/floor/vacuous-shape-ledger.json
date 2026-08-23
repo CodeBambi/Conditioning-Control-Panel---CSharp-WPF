@@ -1913,6 +1913,19 @@
       "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
     },
     {
+      "key": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs::VideoOverlayCoexistenceTests.TheLOCKCARDKeepsTheForegroundAndTheKeyboard_WhileAVideoSurfaceIsUpAndAfterItGoes",
+      "path": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs",
+      "line": 125,
+      "method": "VideoOverlayCoexistenceTests.TheLOCKCARDKeepsTheForegroundAndTheKeyboard_WhileAVideoSurfaceIsUpAndAfterItGoes",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "gated with its three siblings for the same measured reason: off Windows none of the card, the overlay or the video surface exists, and the readings do not go ABSENT, they go WRONG - every handle is 0, so IsForeground compares 0 == 0 and answers YES about a window that was never created. This one was missed when the siblings were gated and was caught by the first Linux run. Pinned by name in floor.json allowedSkips with its machine class."
+    },
+    {
       "key": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs::VideoOverlayCoexistenceTests.BothOtherCapabilitiesReallyWereUP_WithoutWhichEveryFactBelowTestsNothingHappening",
       "path": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs",
       "line": 30,
