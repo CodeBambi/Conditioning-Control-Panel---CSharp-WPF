@@ -201,6 +201,41 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    manifest.peek TRUE (the shell's hold-to-reveal = A-cap); cp_mode timed|zen (zen ends
                    {zen:true} = 'pass'), cp_zen_grid; skill-floor rescue after 20s (solver hint + sGate false);
                    locks are MARKERS never freezes (a frozen tile can make a board unsolvable)
+emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page.
+             The body is a PNG (art/emi/body.png, 859x869) and the FACE IS TEXT -
+             a kaomoji drawn on a 152px canvas and nearest-neighbour upscaled, so
+             any font becomes pixel art. Owner-locked design; the spec is
+             EMI-DESIGN-LOCK.md, not this file. Two halves, two owners:
+  face.js      createFace(canvas, opts) - the renderer. Locked settings: res 152,
+               95% fit, +2% lift, stroke 5, auto-orientation, kaomoji +10%.
+  chains.js    FACES sets + the CHAINS table (wink blink wake shock sus thinking
+               glance nod say sayNod cry rage reveal glitch love cool dizzy smug ko)
+               + playChain(chain, hooks) + makeSay(line, reactionFace, holdMs).
+               VERBATIM from the lock - re-time a chain there, not here.
+  fx.js        showFx(host, kind) - hearts/sparks/tears/storm/bang as pixel glyphs.
+  emi.css      the SKIN: .emi / .emi-body / .emi-screen (the locked glass rect) /
+               .emi-fx / .emi-bubble + the body moves (.breath .nod .shiver
+               .bounce .thud .droop). Ships the ONE bundled font, fonts/*.woff2.
+  demo.html    standalone renderer tester (no shell), loads the real modules.
+  widget.js    THE FLOATING ELEMENT: mount, drag, pet, hide/dock, persistence.
+               Owns the pointer verbs and the ONE chain runner (so there is
+               exactly one thing to cancel and one place that knows a SAY is
+               mid-line). It NEVER imports the renderer - face/chains/fx are
+               injected through attach(), which is what keeps a broken face out
+               of the shell's boot path. DIALS at the top are the tunables.
+  index.js     mountEmi({layer, store, enabled}) -> the ONE controller
+               {emote, say, idle, hide, show, setEnabled, stats, flush, destroy, el}
+               + getEmi(). Dynamic-imports the three renderer modules OPTIONALLY
+               (shell.js's loadOptional discipline) and replays at most one
+               pending call inside a 2.5s grace window.
+  moments.js   THE TABLE: shell moment -> emote, per the lock's state->moment map
+               (greet classStart stamp win miss fail runLost streakBroken thinking
+               idlePlayer tabAway suspend resume rareDrop firstUnlock reportCard
+               glitch) + fireMoment(name, payload). An unknown name, an unmounted
+               EMI and a dismissed EMI are all silent no-ops, which is why every
+               call site in shell.js is one unguarded line.
+  widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
+               x affordance, the edge dock, and the bubble's `.bubble-left` flip.
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
@@ -315,6 +350,43 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   noise band, stamp thunk - and deliberately NOT the duration, so a pitch ratchet climbs
   instead of speeding up. Anything unusable clamps to 1, so an emitter that never sends the
   field sounds exactly as before.
+- **EMI's state is ONE page-owned key in the C# meta store: `emi`.** There is no
+  `localStorage` anywhere in this bundle (deliberately - the WebView2 profile is not a place
+  to keep player state), so the widget writes through the same `core/store.js` seam `days`
+  and `games` use: `store.set('emi', blob)` -> `meta-command {op:'set'}` ->
+  `ArcademyMetaStore` -> back in `init.meta` next launch. The key is NOT host-owned and needs
+  no C# change: `ArcademyMetaStore.Set` accepts any new top-level key under its 64-key /
+  32KB-per-value caps, and this blob is a few hundred bytes.
+  ```js
+  emi: {
+    x: 0.83, y: 0.71,        // TOP-LEFT anchor as a FRACTION of the viewport, so a
+                             // resize moves her proportionally and then re-clamps
+    hidden: false,           // dismissed to the dock (the x affordance)
+    w: 150,                  // her width in px (clamped 110-220)
+    stats: {                 // LIFETIME telemetry. No UI reads it yet; a later
+      pets: 0,               // Records Office beat will show the player their own
+      petStreaks3: 0,        // numbers back. Counters only, nothing identifying.
+      drags: 0, flings: 0,
+      hides: 0, dockRestores: 0,
+      bubblesSeen: 0,        // say lines that actually landed
+      firstSeenAt: null,     // 'yyyy-mm-dd' LOCAL (trap 8: dates on this page are local)
+      lastSeenAt: null,
+      msVisible: 0           // visible-and-not-docked, rounded to whole seconds
+    }
+  }
+  ```
+  **Writes are batched on the END of an interaction, never per pointermove** (600ms debounce;
+  a hide/show/destroy flushes immediately, and `pagehide` banks the last stretch of
+  `msVisible`). A drag that wrote per frame would post sixty meta-commands a second across
+  the bridge.
+- **The shell's EMI seams are six one-liners and every one of them is `fireMoment(...)`.**
+  `shell.js` mounts once (before the first `showBoard()`, so the opening `greet` has a face to
+  wear) and fires at: the board being ARRIVED at (not repainted), `startClass`, the graded
+  finish in `finishClass`, the punch-card ceremony, `applySuspend` both ways, and `showReport`
+  on a COLD open only. Two suppressions are load-bearing and easy to lose: a
+  `showBoard({silent:true})` repaint is not an arrival, and `onPayout` re-rendering the report
+  is not one either - without the `wasScreen` guards EMI greets you on every meta echo and
+  talks over her own win face.
 - **Protocol** (`bridge.PROTOCOL = 1`) must match the host's `PROTOCOL` int. A mismatch
   fails the boot on purpose — a page mis-reading the projection would mis-clamp settings.
 - **`engine/index.js` `createEngine(opts)` / `provider/index.js` `createAssets(opts)`** are
@@ -741,6 +813,37 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     `card.punches` (already the post-mint total) and `punchTo()` refuses to walk a card
     backwards, so a race between its own schedule and the host's answer can only ever
     add holes.
+
+52. **A MASCOT OVER A PRECISION BOARD IS THE INPUT-TRUST LAW'S HARDEST CASE, AND THE
+    ANSWER IS `#arc-fx`'s.** `#arc-emi` is `position:fixed; inset:0` over the WHOLE
+    viewport, so it would eat every board click if it took pointer events - the exact
+    failure trap 27 cost a whole playtest for. The layer is `pointer-events:none` and
+    exactly two nodes turn it back on: `.emi` and `.emi-dock`. Consequences to keep: a
+    dismissed EMI leaves nothing behind but a 28px button; `preventDefault` is called in
+    ONE place (the `pointerdown` on `.emi`, to kill the browser's native image-drag ghost)
+    and never on a document/window listener; and EMI binds NO key listener at all - she
+    adds no rung to the Esc ladder (trap 29's corollary owns that key). The browser pass
+    asserts it directly: EMI parked over a board row, a click 60px away on the same row
+    still opens the class.
+53. **THE FACE IS A CANVAS, SO THE WIDGET MUST SURVIVE A PLATFORM WITH NO 2D CONTEXT.**
+    The node DOM double has no `getContext`, `matchMedia`, `getBoundingClientRect` or
+    `classList.toggle`. `emi/widget.js` guards every one of them and runs FACELESS rather
+    than throwing - and `emi/index.js` loads `face.js` / `chains.js` / `fx.js` with a
+    DYNAMIC import inside a try/catch (`loadOptional`'s discipline), so the node suites
+    never evaluate a canvas module at all. In practice the shell never gets that far: the
+    DOM double registers no element ids, `document.getElementById('arc-emi')` answers null
+    and `mountEmi` returns null. Verified - the full node run is assertion-for-assertion
+    identical with and without EMI. If you ever make the renderer a STATIC import of
+    `shell.js`, one browser-only line in the renderer becomes a boot failure for the whole
+    school.
+54. **THE BUBBLE HANGS OFF HER RIGHT EAR AND THE VIEWPORT IS NOT INFINITE.** `emi.css` puts
+    `.emi-bubble` at `right:-5%` with `max-width:46%`, i.e. roughly half her width PAST her
+    right edge - and the natural resting place for a dragged mascot is the bottom-right
+    corner, where the line would be cut off by the window. `widget.js` adds `.bubble-left`
+    to the root when `left + w * 1.55 > viewportWidth` (and there is room on the other
+    side) and `widget.css` mirrors the box and its tail. Clamping her further from the edge
+    instead was the wrong fix: it would have made the corner - the place players actually
+    park her - unreachable.
 
 ## 5. The game module contract (short version)
 

@@ -45,6 +45,13 @@ import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js
 import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createRecords } from './records.js';
 import { loadFaceGeometry } from './punchcard.js';
+/* EMI, the mascot. Two of B's own modules: `mountEmi` builds the floating widget
+ * (which dynamic-imports agent A's renderer optionally, so a broken face costs
+ * EMI's expression and never the shell's boot) and `fireMoment` is the ONE verb
+ * every seam below uses. Both are no-ops when there is no `#arc-emi` layer -
+ * which is exactly the case in the node DOM double. */
+import { mountEmi } from '../emi/index.js';
+import { fireMoment } from '../emi/moments.js';
 
 const FLAVOR_XP_CAP = 15;          // BUILD-CONTRACT §8 - the page clamps too
 const MEATY_MAX_SEC = 300;
@@ -319,6 +326,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ---------------------- state ----------------------------------------- */
+  /* THE GRADE EMI SPEAKS ABOUT. Set by finishClass, read once by showReport, so
+   * a report opened cold from the Records Office gets the day's line and a report
+   * opened ON a finish does not have her talk over her own win face. */
+  let lastGraded = null;
+
   const utcDateSeed = String(src.utcDateSeed || '');
   const localDate = String(src.localDate || utcDateSeed);
 
@@ -725,10 +737,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       return;
     }
 
+    const wasScreen = screen;
     screen = 'board';
     teardownClass();
     clearScreen();
     renderTopbar();
+    // EMI SEAM: arriving at the campus, not repainting it.
+    if (wasScreen !== 'board') fireMoment('greet');
     if (!dom || !dom.screen) return;
 
     if (src.audioOnlySession) {
@@ -850,6 +865,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   /* ============================ SCREEN: REPORT ========================== */
   function showReport() {
+    const wasScreen = screen;
     screen = 'report';
     clearScreen();
     renderTopbar();
@@ -873,6 +889,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // last so it stays the topmost thing on the screen it was earned on.
     if (punchStage && punchStage.root) dom.screen.appendChild(punchStage.root);
     setStage('arc-report-on');
+    /* EMI SEAM: the one moment she uses words (the talk rule puts them in the
+     * bubble, never on the face). Two suppressions, both load-bearing:
+     * a REPAINT is not an arrival (onPayout re-renders this very screen the
+     * instant the host pays out - trap 50's neighbour), and a FRESH finish
+     * already got its win/miss reaction in finishClass one screen ago. */
+    if (wasScreen !== 'report') {
+      if (lastGraded && lastGraded.fresh) lastGraded.fresh = false;
+      else fireMoment('reportCard', lastGraded || { grade: null, perfect: allDone() });
+    }
   }
 
   /* ============================ SCREEN: RECORDS =========================
@@ -961,6 +986,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   /** Mount the card, full screen, over the report it was earned on. */
   function runPunchCeremony(o) {
+    // EMI SEAM: the stamp lands. ^_^ + hearts, (≧◡≦) on a 3-day streak, COOL on
+    // the tenth hole - moments.js owns which.
+    try {
+      fireMoment('stamp', {
+        streak: store.streak().count,
+        perfect: !!(o && o.justUnlocked),
+        grade: (o && o.justUnlocked) ? 's' : null,
+      });
+    } catch (e) { /* a mascot may never break a ceremony */ }
     dismissPunchStage();
     if (!dom || !dom.screen) return null;
     const spec = o || {};
@@ -1549,6 +1583,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'class';
     clearScreen();
     renderTopbar();
+    fireMoment('classStart', { gameKey: cls.gameKey, tier: gradeTier });   // EMI SEAM
     const chrome = classScreenChrome(
       Object.assign({}, cls, { timeBudgetSec }), gradeTier, retake, endless);
 
@@ -1928,6 +1963,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       + (graded.capped.length ? ', capped: ' + graded.capped.join(',') : '')
       + (isRetake ? ', RETAKE - the day keeps ' + String(priorRow.grade).toUpperCase() : '') + ')');
 
+    /* EMI SEAM: she reacts to the letter. The report card lands one screen later
+     * and its SAY is suppressed for this finish (see showReport) so the two beats
+     * do not talk over each other. */
+    lastGraded = { grade: graded.grade, perfect: allDone(), fresh: true };
+    fireMoment(/^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'miss',
+      { grade: graded.grade, streak: store.streak().count });
+
     bridge.send({
       type: 'class-ended',
       gameKey: cls.gameKey,
@@ -2088,6 +2130,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function applySuspend(on, reason) {
     suspendedGlobally = !!on;
+    fireMoment(on ? 'suspend' : 'resume', { reason });   // EMI SEAM
     if (active) {
       try { active.engine.suspend(!!on); } catch (e) { say('engine.suspend threw: ' + ((e && e.message) || e)); }
       try { active.peek.forceHide(); } catch (e) { /* noop */ }
@@ -2350,6 +2393,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   };
 
   store.onChange(() => { if (screen === 'board' || screen === 'report') renderTopbar(); });
+
+  /* EMI. Mounted before the first board so the opening `greet` has a face to
+   * wear. The layer is optional on purpose: `dom.emi` if the host passed one,
+   * else `#arc-emi` from the document, else nothing at all (the node DOM double
+   * registers no ids, so every suite runs EMI-less and unchanged). */
+  try {
+    const emiLayer = (dom && dom.emi)
+      || (typeof document !== 'undefined' && document.getElementById
+        ? document.getElementById('arc-emi') : null);
+    if (emiLayer) mountEmi({ layer: emiLayer, store, log: say });
+  } catch (e) { say('EMI failed to mount (the shell is unaffected): ' + ((e && e.message) || e)); }
 
   showBoard();
   return api;

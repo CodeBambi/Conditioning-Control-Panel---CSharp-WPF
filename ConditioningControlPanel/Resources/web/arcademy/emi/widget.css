@@ -1,0 +1,135 @@
+/* emi/widget.css — the FLOATING half of EMI: the layer, the grab cursor, the
+ * dismiss x and the edge dock. Owned by agent B; the skin (body, glass, bubble,
+ * body moves) is emi/emi.css and belongs to agent A. Nothing here restyles a
+ * class from that file.
+ *
+ * INPUT-TRUST LAW (arcademy/CLAUDE.md): `.arc-emi` is `pointer-events:none` over
+ * the WHOLE viewport, and exactly two nodes turn it back on — `.emi` and
+ * `.emi-dock`. A board row under EMI's footprint stays clickable, and a
+ * DISMISSED EMI leaves nothing behind but a 28px button in the corner.
+ *
+ * Trap 27: `[hidden]` is a user-agent rule, so any author `display:` beats it.
+ * `.emi`, `.emi-dock` and `.emi-bubble` are all toggled with the hidden
+ * attribute, so NOTHING in this file writes a bare `display:` on them — the
+ * layout properties below are position/size only, and styles.css's opening
+ * `[hidden]{display:none!important}` does the hiding.
+ *
+ * STACKING (styles.css): #arc-fx 40 · #arc-ceremony 45 · #arc-emi 50 ·
+ * .arc-toast 60 · .arc-esc-hint 65 · .arc-loader/.arc-nope 70. EMI sits ABOVE
+ * the ceremony so her bubble is never washed out by a stamp beat, and BELOW the
+ * toasts and the loader so shell chatter and the boot cover always win.
+ */
+
+.arc-emi {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  overflow: hidden;              /* a fling near the edge never grows a scrollbar */
+}
+
+/* ---- EMI herself -------------------------------------------------------- */
+/* Geometry (width/left/top) is written inline by widget.js; emi.css owns the
+   aspect ratio and everything visual. */
+.arc-emi .emi {
+  pointer-events: auto;
+  touch-action: none;            /* the drag owns the finger, not the scroller */
+  cursor: grab;
+  will-change: left, top;
+}
+.arc-emi .emi.dragging {
+  cursor: grabbing;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .45));
+}
+
+/* ---- the dismiss x ------------------------------------------------------
+ * Visible on hover, on keyboard focus, and after a press-and-hold (widget.js
+ * adds `.armed` at 450 ms) — touch has no hover, so the hold IS the reveal. */
+.arc-emi .emi-x {
+  position: absolute;
+  top: -2%;
+  right: -2%;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid #1A1A2E;
+  border-radius: 50%;
+  background: #F5F0E1;
+  color: #1A1A2E;
+  font: 700 13px/1 var(--mono, 'Cascadia Mono', 'Consolas', monospace);
+  cursor: pointer;
+  z-index: 4;                    /* over .emi-fx (2) and the bubble (3) */
+  opacity: 0;
+  transform: scale(.6);
+  transition: opacity .14s ease, transform .14s cubic-bezier(.2, 1.5, .4, 1);
+  box-shadow: 2px 2px 0 #0E0E1C;
+  pointer-events: none;          /* ...until it is actually offered */
+}
+.arc-emi .emi:hover .emi-x,
+.arc-emi .emi.armed .emi-x,
+.arc-emi .emi-x:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+.arc-emi .emi-x:hover { background: #FF69B4; color: #F5F0E1; }
+.arc-emi .emi-x:focus-visible { outline: 2px solid #FFD700; outline-offset: 2px; }
+
+/* ---- the bubble, on the other ear --------------------------------------
+ * emi.css hangs `.emi-bubble` off EMI's RIGHT side (right:-5%, max-width:46%),
+ * which runs off the window once she is dragged into the right margin. widget.js
+ * adds `.bubble-left` to the root when that is about to happen; this mirrors the
+ * box and its tail. Nothing else about the bubble is touched — the skin stays
+ * agent A's. */
+.arc-emi .emi.bubble-left .emi-bubble {
+  right: auto;
+  left: -5%;
+  text-align: right;
+  transform-origin: 100% 100%;
+}
+.arc-emi .emi.bubble-left .emi-bubble::after {
+  left: auto;
+  right: -3px;
+  border-left: 0;
+  border-right: 3px solid #1A1A2E;
+  transform: translate(6px, 6px) skewX(-30deg);
+}
+
+/* ---- the dock -----------------------------------------------------------
+ * Where a dismissed EMI lives. Semi-transparent so it never competes with the
+ * board, full strength the moment it is aimed at. */
+.arc-emi .emi-dock {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid #FF69B4;
+  border-radius: 6px;
+  background: #252542;
+  color: #FF69B4;
+  font: 700 9px/1 'Noto Sans Mono', var(--mono, 'Cascadia Mono', 'Consolas', monospace);
+  letter-spacing: .04em;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: .35;
+  transition: opacity .16s ease, transform .16s cubic-bezier(.2, 1.5, .4, 1);
+  box-shadow: 2px 2px 0 rgba(14, 14, 28, .6);
+}
+.arc-emi .emi-dock:hover,
+.arc-emi .emi-dock:focus-visible { opacity: 1; transform: translateY(-2px); }
+.arc-emi .emi-dock:focus-visible { outline: 2px solid #FFD700; outline-offset: 2px; }
+.arc-emi .emi-dock:active { transform: translateY(0); }
+
+/* ---- reduced motion -----------------------------------------------------
+ * The chains still change frames (the lock says so); only the LOOPS and the
+ * springy affordance transitions go. */
+@media (prefers-reduced-motion: reduce) {
+  .arc-emi .emi-x,
+  .arc-emi .emi-dock { transition: opacity .14s ease; }
+  .arc-emi .emi-dock:hover,
+  .arc-emi .emi-dock:focus-visible { transform: none; }
+}
+:root.arc-reduced .arc-emi .emi-dock:hover,
+:root.arc-reduced .arc-emi .emi-dock:focus-visible { transform: none; }

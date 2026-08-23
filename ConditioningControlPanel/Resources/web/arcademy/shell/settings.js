@@ -387,6 +387,13 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     }
 
     const gt = group('Lessons');
+    /* TODO (EMI): a "Show EMI" switch would sit here, but it is NOT a one-liner
+     * and it would be a SECOND source of truth. The player already has an on/off
+     * that persists - the x on EMI herself, which docks her (`emi.hidden` in the
+     * meta blob). A row here would need its own protocol key, the host's
+     * unknown-key bag, an echo path AND a wire down to the mounted controller
+     * (`emi/index.js setEnabled`), and the two states would then have to be kept
+     * in step. Wire it only if the owner wants EMI gone including the dock. */
     gt.appendChild(switchRow({
       key: SETTING_KEYS.hideTutorial,
       label: 'Skip class tutorials',

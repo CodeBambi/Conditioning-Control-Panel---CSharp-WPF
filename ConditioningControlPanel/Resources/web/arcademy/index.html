@@ -13,6 +13,11 @@
          over bridge.js. Portable to a phone/web host later: only bridge.js's
          transport changes. -->
     <link rel="stylesheet" href="./styles.css">
+    <!-- EMI, the mascot. Two sheets on purpose: emi.css is the renderer's skin
+         (agent A), widget.css is the floating/drag/dock half (agent B). Both are
+         local files - trap 2, the webview is offline and there is no build step. -->
+    <link rel="stylesheet" href="./emi/emi.css">
+    <link rel="stylesheet" href="./emi/widget.css">
 </head>
 <body>
     <!-- Chrome: title, grade_tier chip, attendance chip, settings gear.
@@ -31,6 +36,12 @@
     <!-- Ceremony layer (stamps, streak meter, reward beats). Above the fx layer
          so a stamp is never washed out by its own celebration. -->
     <div id="arc-ceremony" class="arc-ceremony" aria-hidden="true"></div>
+
+    <!-- EMI's layer. ABOVE the ceremony so her speech bubble is never washed out
+         by a stamp beat, BELOW the toast so shell chatter still wins. Fixed and
+         pointer-events:none; only `.emi` and `.emi-dock` take a click, so a board
+         row under her footprint stays clickable (input-trust law). -->
+    <div id="arc-emi" class="arc-emi" aria-hidden="false"></div>
 
     <!-- Transient shell chatter: Esc-ladder hints, "copied", suspend notices. -->
     <div id="arc-toast" class="arc-toast" role="status" aria-live="polite"></div>
