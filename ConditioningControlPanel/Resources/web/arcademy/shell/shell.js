@@ -2402,7 +2402,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const emiLayer = (dom && dom.emi)
       || (typeof document !== 'undefined' && document.getElementById
         ? document.getElementById('arc-emi') : null);
-    if (emiLayer) mountEmi({ layer: emiLayer, store, log: say });
+    // `shout` is boot.js's toast (#arc-toast). EMI borrows it for exactly one
+    // line - the first time the player ever dismisses her with the x.
+    if (emiLayer) mountEmi({ layer: emiLayer, store, toast: shout, log: say });
   } catch (e) { say('EMI failed to mount (the shell is unaffected): ' + ((e && e.message) || e)); }
 
   showBoard();

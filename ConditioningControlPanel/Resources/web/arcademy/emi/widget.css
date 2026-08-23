@@ -109,8 +109,11 @@
   border-radius: 6px;
   background: #252542;
   color: #FF69B4;
-  font: 700 9px/1 'Noto Sans Mono', var(--mono, 'Cascadia Mono', 'Consolas', monospace);
-  letter-spacing: .04em;
+  /* The same pixel face the bubble uses (emi.css declares it). `0_0` is three 8px
+   * cells = exactly the 24px content box inside the 2px border, so leave the size
+   * and the letter-spacing alone unless the glyph changes. */
+  font: 400 8px/1 'Press Start 2P', 'Noto Sans Mono', var(--mono, 'Cascadia Mono', 'Consolas', monospace);
+  letter-spacing: 0;
   cursor: pointer;
   pointer-events: auto;
   opacity: .35;

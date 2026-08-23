@@ -23,28 +23,44 @@
  *    eats a sentence reads as a bug, not as a mascot).
  * ==========================================================================*/
 
-/* ---------------------- dials (designer-tunable) ------------------------- */
+/* ---------------------- dials (designer-tunable) -------------------------
+ * EVERY tunable EMI has is in this one frozen object, so the owner can retune
+ * her feel by hand without reading the code around it. One line each. */
 export const DIALS = Object.freeze({
-  W_DEFAULT: 150,          // px, EMI's width; the aspect comes from the PNG
-  W_MIN: 110,
-  W_MAX: 220,
-  ASPECT_W: 859,           // mascot-body-blank.png
+  /* --- size ------------------------------------------------------------ */
+  W_DEFAULT: 150,          // px wide on a roomy window (>= W_NARROW_VW); aspect comes from the PNG
+  W_NARROW: 116,           // ...and this much on a narrow one, so she does not own the board
+  W_NARROW_VW: 900,        // px of viewport width below which W_NARROW is the default
+  W_MIN: 110,              // clamp floor for a stored/explicit width
+  W_MAX: 220,              // clamp ceiling for the same
+  ASPECT_W: 859,           // mascot-body-blank.png, natural size
   ASPECT_H: 869,
   MARGIN: 4,               // px kept between EMI and the viewport edge
-  DRAG_PX: 6,              // move this far and it is a DRAG, not a pet
-  DRAG_MS: 250,            // ...or hold this long
-  HOLD_MS: 450,            // press-and-hold arms the x affordance
-  FLING_SPEED: 1.5,        // px/ms
-  FLING_MS: 120,           // ...sustained this long = >.< and a THUD landing
-  SETTLE_MS: 600,          // ^_^ after a release, then idle
-  RAW_HOLD_MS: 1400,       // a raw face string is held this long
-  BLINK_EVERY_MS: 5200,
-  BLINK_HOLD_MS: 110,
-  PET_WINDOW_MS: 4000,     // three pets inside this = the love cycle
-  PET_TARGET: 3,
-  PET_COOLDOWN_MS: 6000,   // ...then only a wink for this long
-  SAVE_DEBOUNCE_MS: 600,
+
+  /* --- pointer verbs --------------------------------------------------- */
+  DRAG_PX: 6,              // move this far from the press point and it is a DRAG, not a pet
+  DRAG_MS: 250,            // ...or hold the button this long while moving at all
+  HOLD_MS: 450,            // press-and-hold this long arms the x affordance (touch has no hover)
+  FLING_SPEED: 1.5,        // px/ms; above this the drag counts as FAST
+  FLING_MS: 120,           // ...sustained this long = >.< in the air and a THUD landing
+  SETTLE_MS: 600,          // ^_^ held this long after a release, then back to idle
+
+  /* --- petting --------------------------------------------------------- */
+  PET_WINDOW_MS: 4000,     // PET_TARGET pets inside this window buys the glee cycle
+  PET_TARGET: 3,           // ...how many that is
+  PET_COOLDOWN_MS: 6000,   // ...after which she only winks, so spam cannot loop the show
+
+  /* --- idling ---------------------------------------------------------- */
+  RAW_HOLD_MS: 1400,       // a raw face string (no chain) is held this long
+  BLINK_EVERY_MS: 5200,    // resting blink cadence
+  BLINK_HOLD_MS: 110,      // ...and how long the eyes stay shut
+
+  /* --- persistence ----------------------------------------------------- */
+  SAVE_DEBOUNCE_MS: 600,   // one write per interaction, never per pointermove
 });
+
+/** The one-shot line the FIRST dismiss ever earns. Shown through the shell's toast. */
+export const HINT_LINE = 'EMI is in the corner.';
 
 const IDLE_FACE = '0_0';
 const BLINK_FACE = '-_-';
@@ -56,8 +72,8 @@ const BODY_CLASSES = ['breath', 'nod', 'shiver', 'bounce', 'thud', 'droop'];
  * keyframe lengths, rounded up: a move that never returns leaves `droop`'s
  * `forwards` fill (or a dead `bounce`) welded onto the root. */
 const BODY_MS = { bounce: 800, thud: 800, shiver: 900, nod: 1900, droop: 800 };
-/* The bubble hangs OFF EMI's right edge (emi.css: right:-5%, max-width:46%), so
- * she needs roughly this multiple of her own width to the right of her left
+/* The bubble hangs OFF EMI's right edge (emi.css: right:-5%, max-width:104px),
+ * so she needs roughly this multiple of her own width to the right of her left
  * edge or the line runs off the viewport - at which point it flips left. */
 const BUBBLE_REACH = 1.55;
 
@@ -101,10 +117,15 @@ function readStats(raw) {
  * @param {Object=} o.chains          chains.js module (FACES/CHAINS/playChain/makeSay)
  * @param {Object=} o.fx              fx.js module | showFx fn
  * @param {Object=} o.store           core/store.js (get/set) - the persistence seam
+ * @param {Function=} o.toast         the SHELL's toast (boot.js -> createShell's `shout`)
  * @param {Function=} o.log
  */
-export function createWidget({ root, face, chains, fx, store, log } = {}) {
+export function createWidget({ root, face, chains, fx, store, toast, log } = {}) {
   const say = typeof log === 'function' ? log : () => {};
+  /* THE SHELL'S TOAST, NOT A SECOND ONE. `#arc-toast` already exists, already
+   * stacks above EMI (z 60 vs 50) and already expires its own nodes; minting a
+   * rival would put two notice systems on one page. */
+  const shout = typeof toast === 'function' ? toast : () => {};
   if (!root || typeof document === 'undefined' || !document.createElement) return null;
 
   /* ---------------------- persisted state ------------------------------- */
@@ -115,12 +136,18 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
   } catch (e) { say('emi: store read failed - ' + ((e && e.message) || e)); }
 
   const stats = readStats(saved.stats);
-  let width = clamp(num(saved.w) || DIALS.W_DEFAULT, DIALS.W_MIN, DIALS.W_MAX);
+  /* WIDTH IS A DEFAULT UNTIL SOMEBODY SETS IT. A stored `w` only exists once a
+   * resize verb has run (`setWidth`; there is no resize UI yet), so out of the
+   * box she follows the window: full size on a roomy one, smaller on a narrow
+   * one. Persisting the auto width would freeze the first window she ever saw. */
+  let userSized = num(saved.w) !== null;
+  let width = userSized ? clamp(num(saved.w), DIALS.W_MIN, DIALS.W_MAX) : autoWidth();
   // Anchor = the TOP-LEFT corner as a fraction of the viewport, so a resize
   // moves EMI proportionally and then re-clamps instead of drifting off-screen.
   let fx0 = num(saved.x);
   let fy0 = num(saved.y);
   let hidden = saved.hidden === true;
+  let hintShown = saved.hintShown === true;
   let enabled = true;
 
   let saveTimer = null;
@@ -143,7 +170,13 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
 
   function blob() {
     const out = Object.assign({}, stats, { msVisible: visibleMs() });
-    return { x: fx0, y: fy0, hidden, w: width, stats: out };
+    const b = { x: fx0, y: fy0, hidden, stats: out };
+    // `w` is written ONLY when it was chosen, never when it was derived from the
+    // window - see `userSized`. An auto width in the blob would out-vote the
+    // viewport rule for ever after the first drag.
+    if (userSized) b.w = width;
+    if (hintShown) b.hintShown = true;
+    return b;
   }
 
   /** Write-through to the C# meta store, DEBOUNCED. Never per pointermove. */
@@ -272,6 +305,18 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
   }
   function sizePx() {
     return { w: width, h: Math.round(width * DIALS.ASPECT_H / DIALS.ASPECT_W) };
+  }
+  /** The default width for THIS window. Owner's rule: 150 on >= 900px, 116 below. */
+  function autoWidth() {
+    return viewport().w >= DIALS.W_NARROW_VW ? DIALS.W_DEFAULT : DIALS.W_NARROW;
+  }
+  /** Re-derive the width after a resize. No-op once the user has sized her. */
+  function refitWidth() {
+    if (userSized) return false;
+    const next = autoWidth();
+    if (next === width) return false;
+    width = next;
+    return true;
   }
   /** Place EMI from the stored fractions, clamped inside the viewport. */
   function place() {
@@ -460,12 +505,43 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
   let lastX = 0, lastY = 0, lastT = 0;
   let fastSince = 0;
   let wasFling = false;
+  /* WHICH FACE THE DRAG IS CURRENTLY WEARING. `onMove` runs on every pointermove
+   * and drawing is a full canvas repaint (measure + stroke + fill), so it must
+   * only fire when the expression actually CHANGES, not for every frame she
+   * happens to be travelling fast. */
+  let dragFace = null;
   let armTimer = null;
   let petTimes = [];
   let petCooldownUntil = 0;
 
   function disarmHold() {
     if (armTimer !== null) { clearTimeout(armTimer); armTimer = null; }
+  }
+
+  /** Paint a drag reaction, but only when it is not already on the glass. */
+  function setDragFace(text) {
+    if (dragFace === text) return;
+    dragFace = text;
+    drawFace(text, {});
+  }
+
+  /* A PRESS THAT NEVER GETS ITS pointerup. `hide()` and `setEnabled(false)` can
+   * both take EMI out from under a live finger (the API is callable from any
+   * moment), and a latched `pressing`/`dragging` would then let the NEXT
+   * pointerup commit a position read from a hidden element - rect 0,0, i.e. she
+   * teleports to the top-left corner the next time she is restored. */
+  function endPress() {
+    if (pressId !== null) {
+      try { if (el.releasePointerCapture) el.releasePointerCapture(pressId); } catch (e) { /* noop */ }
+    }
+    pressing = false;
+    dragging = false;
+    pressId = null;
+    fastSince = 0;
+    wasFling = false;
+    dragFace = null;
+    disarmHold();
+    el.classList.remove('dragging', 'armed');
   }
 
   function inX(ev) {
@@ -508,7 +584,7 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
     el.classList.add('dragging');
     // The reaction is a raw face, not a chain: a chain would fight the next
     // frame of movement. A live SAY keeps the glass (law 3).
-    if (!saying()) { cancelChain(); killTimers(); stopBlink(); clearBody(); drawFace(DRAG_FACE, {}); }
+    if (!saying()) { cancelChain(); killTimers(); stopBlink(); clearBody(); setDragFace(DRAG_FACE); }
   }
 
   function onMove(ev) {
@@ -534,14 +610,16 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
       el.style.top = Math.round(top) + 'px';
       faceBubble(left, s.w, vp.w);
 
-      // FLUNG? speed over the dial, sustained. `>.<` while it lasts.
+      // FLUNG? speed over the dial, sustained. `>.<` while it lasts. setDragFace
+      // swallows the repeats, so a sustained fling repaints the canvas ONCE
+      // instead of once per pointermove.
       const speed = Math.hypot(dx, dy) / dt;
       if (speed > DIALS.FLING_SPEED) {
         if (!fastSince) fastSince = t;
-        else if (t - fastSince > DIALS.FLING_MS && !saying()) { wasFling = true; drawFace(FLING_FACE, {}); }
+        else if (t - fastSince > DIALS.FLING_MS && !saying()) { wasFling = true; setDragFace(FLING_FACE); }
       } else if (fastSince) {
         fastSince = 0;
-        if (!saying()) drawFace(DRAG_FACE, {});
+        if (!saying()) setDragFace(DRAG_FACE);
       }
     }
     if (moved > 0) { lastX = ev.clientX; lastY = ev.clientY; lastT = t; }
@@ -557,6 +635,7 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
 
     if (dragging) {
       dragging = false;
+      dragFace = null;
       el.classList.remove('dragging');
       const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0 };
       commit(r.left, r.top);
@@ -582,20 +661,19 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
 
   function onCancel() {
     if (!pressing) return;
-    pressing = false;
-    disarmHold();
-    if (dragging) {
-      dragging = false;
-      el.classList.remove('dragging');
-      const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0 };
-      commit(r.left, r.top);
+    const wasDragging = dragging;
+    // The rect has to be read BEFORE endPress clears the classes - a cancel that
+    // banked nothing would lose the whole drag.
+    const r = wasDragging && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+    endPress();
+    if (wasDragging) {
+      commit(r ? r.left : 0, r ? r.top : 0);
       save();
       if (!saying()) idle();
     }
-    pressId = null;
   }
 
-  /** A pet: positive cycle, three inside the window buys the love chain. */
+  /** A pet: positive cycle; PET_TARGET inside the window buys the glee chain. */
   function pet() {
     if (!enabled || hidden) return;
     // LAW 3: a line in flight is never cut for a head-pat. Ignore, do not queue -
@@ -617,7 +695,10 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
       petTimes = [];
       petCooldownUntil = t + DIALS.PET_COOLDOWN_MS;
       stats.petStreaks3 += 1;
-      if (CHAINS && CHAINS.love) play(CHAINS.love);
+      // THE LOCK SAYS THE THIRD PET LANDS ON (≧◡≦) - that is `glee`, not
+      // `love` (which ends on the lovestruck kaomoji and is a different beat).
+      const cycle = CHAINS && (CHAINS.glee || CHAINS.love);
+      if (cycle) play(cycle);
       else raw('(≧◡≦)', { hold: 1400, fx: 'hearts', body: 'bounce' });
     } else {
       raw(SETTLE_FACE, { hold: 900, fx: 'hearts', body: reducedMotion() ? null : 'bounce' });
@@ -628,13 +709,23 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
   /* ---------------------- hide / dock ----------------------------------- */
   function hide(opts) {
     if (hidden) return;
+    const o = opts || {};
     hidden = true;
     accrueVisible();
-    if (!(opts && opts.silent)) { stats.hides += 1; touchSeen(); }
+    if (!o.silent) { stats.hides += 1; touchSeen(); }
+    // A live press has to be let go BEFORE she goes: a latched drag would let the
+    // next pointerup commit a position read off a display:none element.
+    endPress();
     cancelChain(); killTimers(); stopBlink(); clearBody(); setBubble(null);
-    el.classList.remove('armed', 'dragging');
     el.hidden = true;
     dock.hidden = false;
+    /* THE ONE-SHOT HINT. The dock is 28px and .35 opacity in a corner, so the
+     * very first dismissal says where she went - once, ever, and only for the x
+     * (an API hide is the shell's doing, not a thing the player needs told). */
+    if (o.fromX && !hintShown) {
+      hintShown = true;
+      try { shout(HINT_LINE); } catch (e) { /* a toast may never hold a dismiss */ }
+    }
     save(true);
   }
 
@@ -654,7 +745,7 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
     // Inside `.emi`: stopping this one is legal and necessary (the pet handler
     // must not also fire). Nothing outside the widget is touched.
     if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
-    hide();
+    hide({ fromX: true });
   });
   // The x owns its own pointer stream so a press on it can never start a drag.
   xBtn.addEventListener('pointerdown', (ev) => { if (ev && ev.stopPropagation) ev.stopPropagation(); });
@@ -667,7 +758,12 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
   el.addEventListener('pointerleave', () => { if (!pressing) el.classList.remove('armed'); });
 
   /* ---------------------- viewport ------------------------------------- */
-  function onResize() { if (!hidden && enabled) place(); }
+  /* A resize re-derives the default width AND re-clamps the anchor, in that
+   * order - clamping against the old size would park her by a stale edge. */
+  function onResize() {
+    refitWidth();
+    if (!hidden && enabled) place();
+  }
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('resize', onResize);
   }
@@ -697,13 +793,31 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
     setBubble,
     hide, show,
     get hidden() { return hidden; },
+    /** True once the first-dismiss hint has been spent (persisted). */
+    get hintShown() { return hintShown; },
+    /**
+     * THE RESIZE SEAM. There is no UI for it yet; the moment there is, calling
+     * this is what turns the width from "the window's default" into "the
+     * player's choice", and only then does `w` start being persisted.
+     */
+    setWidth(px) {
+      const n = num(px);
+      if (n === null) return width;
+      const next = clamp(Math.round(n), DIALS.W_MIN, DIALS.W_MAX);
+      userSized = true;
+      if (next !== width) { width = next; if (!hidden && enabled) place(); }
+      save();
+      return width;
+    },
+    get width() { return width; },
     setEnabled(on) {
       const next = !!on;
       if (next === enabled) return;
       enabled = next;
       if (!enabled) {
         accrueVisible();
-        cancelChain(); killTimers(); stopBlink();
+        endPress();
+        cancelChain(); killTimers(); stopBlink(); clearBody();
         root.hidden = true;
         save(true);
       } else {
@@ -719,7 +833,9 @@ export function createWidget({ root, face, chains, fx, store, log } = {}) {
     destroy() {
       accrueVisible();
       save(true);
-      cancelChain(); killTimers(); stopBlink(); disarmHold();
+      // clearBody() is the easy one to miss: `bodyTimer` outlives everything else
+      // and its callback re-adds `.breath` to a node that is no longer in the page.
+      cancelChain(); killTimers(); stopBlink(); disarmHold(); clearBody();
       if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
       if (typeof window !== 'undefined' && window.removeEventListener) {
         window.removeEventListener('resize', onResize);

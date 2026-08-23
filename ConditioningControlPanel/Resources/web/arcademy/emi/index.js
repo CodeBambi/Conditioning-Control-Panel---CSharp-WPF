@@ -20,9 +20,9 @@
  * worse than one that missed it.
  * ==========================================================================*/
 
-import { createWidget, DIALS, STORE_KEY } from './widget.js';
+import { createWidget, DIALS, HINT_LINE, STORE_KEY } from './widget.js';
 
-export { DIALS, STORE_KEY };
+export { DIALS, HINT_LINE, STORE_KEY };
 
 let singleton = null;
 
@@ -33,16 +33,18 @@ export function getEmi() { return singleton; }
  * @param {Object} o
  * @param {Element} o.layer    the `#arc-emi` layer (absent = EMI simply does not exist)
  * @param {Object=} o.store    core/store.js - position/hidden/telemetry persistence
+ * @param {Function=} o.toast  the SHELL's toast (createShell's `shout`) - the first
+ *                             dismiss ever spends one line through it, then never again
  * @param {boolean=} o.enabled default true; `setEnabled(false)` is the API-only off switch
  * @param {Function=} o.log
  * @returns {Object|null} the controller, or null when there is nothing to mount
  */
-export function mountEmi({ layer, store, enabled = true, log } = {}) {
+export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   if (!layer) return null;
   if (singleton) return singleton;
 
-  const widget = createWidget({ root: layer, store, log: say });
+  const widget = createWidget({ root: layer, store, toast, log: say });
   if (!widget) return null;
 
   /* THE OPENING BEAT LANDS LATE OR NOT AT ALL. The renderer is one dynamic
@@ -124,7 +126,7 @@ export function mountEmi({ layer, store, enabled = true, log } = {}) {
     /** Back to the resting state (0_0 + blink + breath). */
     idle() { widget.idle(); },
 
-    /** Dismiss to the dock (the same state the x affordance writes). */
+    /** Dismiss to the dock. NOT the x: an API hide spends no first-time hint. */
     hide() { widget.hide(); },
     /** Restore from the dock, at the last saved position. */
     show() { widget.show(); },
@@ -138,6 +140,14 @@ export function mountEmi({ layer, store, enabled = true, log } = {}) {
      */
     setEnabled(on) { widget.setEnabled(!!on); },
     get enabled() { return widget.enabled; },
+
+    /**
+     * Set her width in px and REMEMBER it (clamped to DIALS.W_MIN..W_MAX). Until
+     * this is called she follows the window: DIALS.W_DEFAULT on a viewport at
+     * least DIALS.W_NARROW_VW wide, DIALS.W_NARROW below it.
+     */
+    setWidth(px) { return widget.setWidth(px); },
+    get width() { return widget.width; },
 
     /** Lifetime telemetry, read-only. A later Records Office beat reads this. */
     stats() { return widget.stats(); },

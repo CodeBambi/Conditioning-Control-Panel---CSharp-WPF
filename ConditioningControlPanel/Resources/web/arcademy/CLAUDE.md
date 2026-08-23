@@ -209,13 +209,18 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
   face.js      createFace(canvas, opts) - the renderer. Locked settings: res 152,
                95% fit, +2% lift, stroke 5, auto-orientation, kaomoji +10%.
   chains.js    FACES sets + the CHAINS table (wink blink wake shock sus thinking
-               glance nod say sayNod cry rage reveal glitch love cool dizzy smug ko)
-               + playChain(chain, hooks) + makeSay(line, reactionFace, holdMs).
-               VERBATIM from the lock - re-time a chain there, not here.
+               glance nod say sayNod cry rage reveal glitch love glee cool dizzy
+               smug ko) + playChain(chain, hooks) + makeSay(line, reactionFace,
+               holdMs). VERBATIM from the lock - re-time a chain there, not here.
+               `glee` ((≧◡≦)) is the THREE-PETS / STREAK-STAMP beat; `love`
+               ((｡♥‿♥｡)) is a different, rarer one. Do not swap them.
   fx.js        showFx(host, kind) - hearts/sparks/tears/storm/bang as pixel glyphs.
   emi.css      the SKIN: .emi / .emi-body / .emi-screen (the locked glass rect) /
                .emi-fx / .emi-bubble + the body moves (.breath .nod .shiver
-               .bounce .thud .droop). Ships the ONE bundled font, fonts/*.woff2.
+               .bounce .thud .droop). Ships BOTH bundled fonts (fonts/*.woff2,
+               OFL, licences beside them): Noto Sans Mono for the CANVAS face and
+               Press Start 2P for the speech bubble + the dock glyph. The bubble
+               is a fixed 8px/104px pixel grid, never a cqw clamp - see trap 55.
   demo.html    standalone renderer tester (no shell), loads the real modules.
   widget.js    THE FLOATING ELEMENT: mount, drag, pet, hide/dock, persistence.
                Owns the pointer verbs and the ONE chain runner (so there is
@@ -223,8 +228,10 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                mid-line). It NEVER imports the renderer - face/chains/fx are
                injected through attach(), which is what keeps a broken face out
                of the shell's boot path. DIALS at the top are the tunables.
-  index.js     mountEmi({layer, store, enabled}) -> the ONE controller
-               {emote, say, idle, hide, show, setEnabled, stats, flush, destroy, el}
+  index.js     mountEmi({layer, store, toast, enabled}) -> the ONE controller
+               {emote, say, idle, hide, show, setEnabled, setWidth, stats, flush,
+               destroy, el}. `toast` is the SHELL's toast, borrowed for exactly
+               one line (the first x-dismiss ever); EMI mints no toast of her own.
                + getEmi(). Dynamic-imports the three renderer modules OPTIONALLY
                (shell.js's loadOptional discipline) and replays at most one
                pending call inside a 2.5s grace window.
@@ -362,7 +369,11 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     x: 0.83, y: 0.71,        // TOP-LEFT anchor as a FRACTION of the viewport, so a
                              // resize moves her proportionally and then re-clamps
     hidden: false,           // dismissed to the dock (the x affordance)
-    w: 150,                  // her width in px (clamped 110-220)
+    hintShown: true,         // ABSENT until the first x-dismiss spends the hint toast
+    w: 150,                  // ABSENT unless setWidth() was called (clamped 110-220).
+                             // No key = follow the window: 150px at >= 900px wide,
+                             // 116px below. Persisting the auto width would freeze
+                             // whichever window she happened to be born in.
     stats: {                 // LIFETIME telemetry. No UI reads it yet; a later
       pets: 0,               // Records Office beat will show the player their own
       petStreaks3: 0,        // numbers back. Counters only, nothing identifying.
@@ -837,13 +848,29 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     `shell.js`, one browser-only line in the renderer becomes a boot failure for the whole
     school.
 54. **THE BUBBLE HANGS OFF HER RIGHT EAR AND THE VIEWPORT IS NOT INFINITE.** `emi.css` puts
-    `.emi-bubble` at `right:-5%` with `max-width:46%`, i.e. roughly half her width PAST her
-    right edge - and the natural resting place for a dragged mascot is the bottom-right
+    `.emi-bubble` at `right:-5%` with `max-width:104px`, i.e. a fixed pixel box whose right
+    edge hangs past hers - and the natural resting place for a dragged mascot is the bottom-right
     corner, where the line would be cut off by the window. `widget.js` adds `.bubble-left`
     to the root when `left + w * 1.55 > viewportWidth` (and there is room on the other
     side) and `widget.css` mirrors the box and its tail. Clamping her further from the edge
     instead was the wrong fix: it would have made the corner - the place players actually
     park her - unreachable.
+
+55. **THE BUBBLE'S FONT IS A PIXEL GRID, SO ITS BOX CANNOT BE A PERCENTAGE.** Press
+    Start 2P is an 8x8 cell face: set it at a whole pixel size or the cells land
+    between device pixels and the whole point of it is gone. `.emi-bubble` is therefore
+    `font-size:8px` with `max-width:104px` in ABSOLUTE px - not the `clamp(...cqw...)`
+    it started as, and not a % of `.emi`, because EMI herself is 150px or 116px
+    depending on the window and a % box would wrap every line to four rows on the
+    small one. The canvas face is NOT this font: `face.js` measures ink boxes and needs
+    Noto Sans Mono plus the exotic kaomoji fallbacks, which a 96-glyph latin subset
+    does not have. Two faces, two jobs, both local (trap 2).
+56. **HER DEFAULT WIDTH FOLLOWS THE WINDOW, WHICH IS WHY `w` IS USUALLY ABSENT FROM THE
+    BLOB.** `DIALS.W_DEFAULT` 150 at >= `W_NARROW_VW` 900px of viewport, `W_NARROW` 116
+    below, re-derived on every resize. The blob only carries `w` once `setWidth()` has
+    made it the player's choice (there is no resize UI yet). Writing the auto width on
+    every save - which is the obvious thing to do - would out-vote the viewport rule for
+    ever after the first drag, and the mascot would stay laptop-sized on a 4K screen.
 
 ## 5. The game module contract (short version)
 

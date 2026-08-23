@@ -52,6 +52,10 @@ export const CHAINS = {
   reveal:   { label: 'EVENT REVEAL', seq: [['._.', 420], ['0_0', 1200]], fx: 'sparks', body: 'bounce' },
   glitch:   { label: 'GLITCH',       seq: [['x_x', 90], ['#ERR', 90], ['@_@', 90], ['#ERR', 90], ['x_x', 90], ['0_0', 600]] },
   love:     { label: 'LOVESTRUCK',   seq: [['0_0', 260], ['*_*', 420], ['(｡♥‿♥｡)', 1400]], fx: 'hearts', body: 'bounce' },
+  /* GLEE is the lock's "three pets in a row" and "a streak stamp lands" beat: the
+   * squeezed-eye kaomoji, not the lovestruck one. Short run-up so it can ride a
+   * ceremony without holding the screen. */
+  glee:     { label: 'GLEE',         seq: [['^_^', 300], ['(≧◡≦)', 1400]], fx: 'hearts', body: 'bounce' },
   cool:     { label: 'COOL',         seq: [['-_-', 300], ['(⌐■_■)', 1400]], fx: 'sparks', body: 'bounce' },
   dizzy:    { label: 'DIZZY',        seq: [['@_@', 260], ['=_=', 260], ['@_@', 260], ['x_x', 800]] },
   smug:     { label: 'SMUG',         seq: [['^_^', 300], ['(¬‿¬)', 1200]] },

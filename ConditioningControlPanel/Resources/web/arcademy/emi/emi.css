@@ -3,8 +3,9 @@
  * Owned by agent A (renderer). Drag / dock / hide affordances live in emi/widget.css (agent B).
  * Class names here are the A<->B contract and must not be renamed.
  *
- * Trap 2 (arcademy/CLAUDE.md): the WebView2 host is OFFLINE. The only font this bundle loads is
- * the local woff2 below — never add a fonts.googleapis.com link.
+ * Trap 2 (arcademy/CLAUDE.md): the WebView2 host is OFFLINE. The only fonts this bundle loads are
+ * the two local woff2 below — never add a fonts.googleapis.com link. Both are OFL and their
+ * licences ship beside them (fonts/OFL-NotoSansMono.txt, fonts/OFL-PressStart2P.txt).
  * Trap 27: `[hidden]` is a user-agent rule, so any author `display:` beats it. Nothing here
  * writes a bare `display:` on a node that is toggled with the hidden attribute, and .emi-bubble
  * carries its own `[hidden]{display:none!important}` guard.
@@ -19,12 +20,24 @@
   src: url('fonts/NotoSansMono-latin.woff2') format('woff2');
 }
 
+/* THE BUBBLE'S FACE, and only the bubble's (plus the dock glyph in widget.css).
+ * Press Start 2P is an 8x8 pixel grid, so it must be set at a WHOLE pixel size or the
+ * hinting smears — see `.emi-bubble` below, which is why the old `cqw` clamp is gone.
+ * NEVER put this on the canvas: face.js measures ink boxes and needs a face with real
+ * metrics and the exotic kaomoji fallbacks, which a 96-glyph latin subset does not have. */
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;           /* same reason as above: no swap mid-line */
+  src: url('fonts/PressStart2P-latin.woff2') format('woff2');
+}
+
 .emi {
   position: absolute;
   aspect-ratio: 859 / 869;       /* the body PNG */
   width: 140px;                  /* the widget overrides this */
   transform-origin: 50% 100%;
-  container-type: inline-size;   /* the bubble's font-size is in cqw */
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -74,14 +87,18 @@
   position: absolute;
   right: -5%;
   top: -2%;
-  max-width: 46%;
+  /* Absolute, not a % of EMI: the pixel face is a fixed 8px grid, so the box that holds
+   * it has to be fixed too or the 116px EMI wraps every line to four rows. */
+  max-width: 104px;
   text-align: left;
   background: #F5F0E1;
   color: #1A1A2E;
-  font-family: 'Noto Sans Mono', var(--mono, 'Cascadia Mono', 'Consolas', monospace);
-  font-weight: 700;
-  font-size: clamp(7px, 8.5cqw, 11px);
-  letter-spacing: .02em;
+  /* PIXEL GRID. Whole px, no clamp, no cqw, no synthetic bold — Press Start 2P has one
+   * weight and any scaling of it lands the 8x8 cells between device pixels. */
+  font-family: 'Press Start 2P', 'Noto Sans Mono', var(--mono, 'Cascadia Mono', 'Consolas', monospace);
+  font-weight: 400;
+  font-size: 8px;
+  letter-spacing: 0;
   line-height: 1.4;
   padding: 6px 8px;
   border: 3px solid #1A1A2E;

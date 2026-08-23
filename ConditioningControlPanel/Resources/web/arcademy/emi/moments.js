@@ -18,18 +18,27 @@
 
 import { getEmi } from './index.js';
 
-/** Report-card lines, by grade. <= 24 chars, playful school voice, no dashes. */
+/**
+ * REPORT-CARD LINES, by grade. The one place EMI uses words, so this table IS her
+ * voice: lowercase, <= 24 characters, school-flavoured, never explicit, no dashes.
+ * She is a school mascot who is FOND of you, with one habit she does not explain:
+ * about one line in six is a little too aware of how often you come back. Keep
+ * that ratio. Do not write the joke down anywhere; the lines are the whole gag.
+ */
 export const REPORT_LINES = Object.freeze({
-  s: ['Top of the class!', 'Perfect. Show off.', 'Gold star for you.'],
-  a: ['Nice work today.', 'Very good, student.', 'A grade. Earned it.'],
-  b: ['Solid. Keep going.', 'Good. Not your best.', 'That will do nicely.'],
-  c: ['We all have days.', 'Passed. Barely.', 'Try again tomorrow?'],
-  pass: ['You showed up. Good.', 'Attendance counts.'],
-  none: ['Same time tomorrow?', 'Class dismissed.'],
+  s: ['top of the class.', 'perfect. show off.', 'gold star. obviously.', 'you came back.'],
+  a: ['nice work today.', 'very good, student.', 'a grade. earned it.', 'good. again tomorrow.'],
+  b: ['solid. keep going.', 'not your best. fine.', 'you always come back.'],
+  c: ['we all have days.', 'passed. barely.', 'try again tomorrow?'],
+  pass: ['you showed up. good.', 'attendance counts.'],
+  none: ['same time tomorrow?', 'class dismissed.'],
 });
 
 /** Grades that read as "a good day" for the streak/perfect branches. */
 const TOP_GRADES = { s: true, a: true };
+
+/** Days in a row that upgrade a win/stamp from ^_^ to the GLEE chain. */
+const STREAK_GLEE = 3;
 
 function pick(list, seedish) {
   if (!Array.isArray(list) || !list.length) return null;
@@ -60,12 +69,15 @@ export const MOMENTS = Object.freeze({
 
   /* --- winning -------------------------------------------------------- */
   /** A punch card stamp landed, or a class was won.
-   *  streak 3 -> (≧◡≦) · a perfect/S day -> COOL (both from the lock). */
+   *  streak 3 -> GLEE ((≧◡≦)) · a perfect/S day -> COOL (both from the lock).
+   *  The streak beat is the `glee` CHAIN, not a bare frame: it runs up through
+   *  ^_^ first, which is what makes the squeeze read as a reaction to the stamp
+   *  rather than as a face that was always there. */
   stamp: {
     pick(p) {
       const g = gradeKey(p && p.grade);
       if ((p && p.perfect) || g === 's') return { chain: 'cool' };
-      if (p && Number(p.streak) >= 3) return { face: '(≧◡≦)', hold: 1500, fx: 'hearts', body: 'bounce' };
+      if (p && Number(p.streak) >= STREAK_GLEE) return { chain: 'glee' };
       return { face: '^_^', hold: 1200, fx: 'hearts', body: 'bounce' };
     },
   },
@@ -73,7 +85,7 @@ export const MOMENTS = Object.freeze({
     pick(p) {
       const g = gradeKey(p && p.grade);
       if ((p && p.perfect) || g === 's') return { chain: 'cool' };
-      if (TOP_GRADES[g] && p && Number(p.streak) >= 3) return { face: '(≧◡≦)', hold: 1500, fx: 'hearts', body: 'bounce' };
+      if (TOP_GRADES[g] && p && Number(p.streak) >= STREAK_GLEE) return { chain: 'glee' };
       return { face: '^_^', hold: 1200, fx: 'hearts', body: 'bounce' };
     },
   },
