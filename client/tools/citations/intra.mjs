@@ -910,5 +910,11 @@ export function main(argv = [], cwd = process.cwd()) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  process.exit(main(process.argv.slice(2), process.cwd()));
+  // process.exitCode, NEVER process.exit(). On POSIX, node's stdout is ASYNCHRONOUS when it is a
+  // PIPE (and synchronous when it is a file or a TTY), so process.exit() discards whatever is still
+  // buffered. This report is ~975 lines; piped on Linux it lost its tail - including the TOTAL ROWS
+  // line - while the identical run redirected to a FILE kept everything, which is why it looked like
+  // a reader bug rather than a writer one. Windows never showed it: pipe writes are synchronous there.
+  // Setting exitCode lets node drain and exit on its own, with the same status.
+  process.exitCode = main(process.argv.slice(2), process.cwd());
 }
