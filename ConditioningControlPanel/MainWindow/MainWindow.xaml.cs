@@ -3222,6 +3222,9 @@ namespace ConditioningControlPanel
         }
 
         private const int WM_GETMINMAXINFO = 0x0024;
+        private const int WM_ENTERSIZEMOVE = 0x0231;
+        private const int WM_EXITSIZEMOVE = 0x0232;
+        private const int WM_DPICHANGED_MAIN = 0x02E0;
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct POINT { public int X; public int Y; }
@@ -3238,6 +3241,45 @@ namespace ConditioningControlPanel
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            // Mixed-DPI drag hang (#451/#477, Application Hang 1002): a drag across monitors with
+            // different scale factors delivers WM_DPICHANGED INSIDE this window's native modal move
+            // loop, and WPF answers it with a synchronous CompleteRender that can only finish if the
+            // process-wide layered-window render thread is idle. Bracket the whole move loop so the
+            // periodic reconcilers (overlay z-order sweep, tube fullscreen tick) and the tube's
+            // animation writers stand down for the duration, and defer the work-area fit to the end
+            // of the drag instead of fighting the user's mouse mid-loop.
+            if (msg == WM_ENTERSIZEMOVE)
+            {
+                try
+                {
+                    Services.UI.DisplayChangeCoordinator.BeginInteractiveMove();
+                    App.AvatarWindow?.NotifyParentInteractiveMove(true);
+                }
+                catch { /* never let a hook throw */ }
+                return IntPtr.Zero;
+            }
+            if (msg == WM_EXITSIZEMOVE)
+            {
+                try
+                {
+                    Services.UI.DisplayChangeCoordinator.EndInteractiveMove();
+                    App.AvatarWindow?.NotifyParentInteractiveMove(false);
+                    RunWorkAreaFitDeferredByMove();
+                }
+                catch { /* never let a hook throw */ }
+                return IntPtr.Zero;
+            }
+            if (msg == WM_DPICHANGED_MAIN)
+            {
+                // Hooks run BEFORE WPF's HwndTarget processing, so this arms the spawn-suppression
+                // window before the synchronous surface rebuild starts (OnDpiChanged re-arms it
+                // afterwards — that call only ever extended the window after the fact).
+                try { Services.UI.DisplayChangeCoordinator.NotifyDisplayChange("wm-dpichanged"); }
+                catch { /* never let a hook throw */ }
+                // handled stays false: WPF must still rescale the main UI.
+                return IntPtr.Zero;
+            }
+
             // Fix maximized window extending behind taskbar (buttons cut off)
             if (msg == WM_GETMINMAXINFO)
             {

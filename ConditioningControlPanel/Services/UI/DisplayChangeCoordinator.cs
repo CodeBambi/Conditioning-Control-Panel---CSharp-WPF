@@ -39,5 +39,34 @@ namespace ConditioningControlPanel.Services.UI
 
         /// <summary>True while spawns should be skipped (a display change happened within the last <see cref="QuietMs"/> ms).</summary>
         public static bool SpawnsSuppressed => Environment.TickCount64 < Interlocked.Read(ref _quietUntilTick);
+
+        // 1 while the user is inside the main window's native modal move/size loop
+        // (WM_ENTERSIZEMOVE..WM_EXITSIZEMOVE). Written from the main thread's WndProc, read from any
+        // thread (the avatar tube's own-thread reconcilers gate on it), hence Interlocked/Volatile.
+        private static int _interactiveMove;
+
+        /// <summary>Main window entered its native modal move/size loop (WM_ENTERSIZEMOVE).</summary>
+        public static void BeginInteractiveMove()
+        {
+            Interlocked.Exchange(ref _interactiveMove, 1);
+            App.Logger?.Debug("[DISPLAY] interactive move started — quiescing z-order/layered reconcilers");
+        }
+
+        /// <summary>Main window left its modal move/size loop (WM_EXITSIZEMOVE).</summary>
+        public static void EndInteractiveMove()
+        {
+            Interlocked.Exchange(ref _interactiveMove, 0);
+            App.Logger?.Debug("[DISPLAY] interactive move ended");
+        }
+
+        /// <summary>True while the user is dragging/resizing the main window. During that loop a
+        /// WM_DPICHANGED can arrive at any moment and run a synchronous layered-surface rebuild, so
+        /// periodic SetWindowPos sweeps and layered-window writers should stand down (the mixed-DPI
+        /// drag hang: Application Hang 1002, #451/#477).</summary>
+        public static bool InteractiveMoveActive => Volatile.Read(ref _interactiveMove) != 0;
+
+        /// <summary>Union guard for periodic reconcilers that poke layered windows: stand down both
+        /// during a drag of main and for the settle window after any display/DPI change.</summary>
+        public static bool RenderQuiesced => InteractiveMoveActive || SpawnsSuppressed;
     }
 }

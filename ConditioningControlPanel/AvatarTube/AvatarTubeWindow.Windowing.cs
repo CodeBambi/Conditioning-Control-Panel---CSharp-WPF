@@ -114,6 +114,11 @@ namespace ConditioningControlPanel
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
+        // Win10 1607+. The tube swallows WM_DPICHANGED (see WndProc), so its WPF transform is
+        // frozen at birth DPI — this is how the refit learns the CURRENT monitor's real DPI.
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
+
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
@@ -148,6 +153,10 @@ namespace ConditioningControlPanel
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_FRAMECHANGED = 0x0020;
+        // Without this, a z-order SetWindowPos on the OWNED tube lets USER32 reposition the OWNER
+        // (MainWindow) too — synchronous WM_WINDOWPOSCHANGING into the main thread from the avatar
+        // thread, one half of the mixed-DPI drag deadlock cycle. We only ever mean to move the tube.
+        private const uint SWP_NOOWNERZORDER = 0x0200;
         private const int GWL_EXSTYLE = -20;
         private const int GWL_STYLE = -16;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
@@ -254,7 +263,7 @@ namespace ConditioningControlPanel
                 // window's WM_WINDOWPOSCHANGING path) completely alone. This is what keeps the 500ms
                 // tick idle in the steady state instead of poking the tube twice a second.
                 if (!strayTopmost && GetWindow(main, GW_HWNDPREV) == tube) return;
-                SetWindowPos(tube, main, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                SetWindowPos(tube, main, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
             }
             catch { /* window may be tearing down */ }
         }
@@ -263,6 +272,12 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Mixed-DPI drag hang: while main is inside its modal move loop (or a display/DPI
+                // change is settling), every z-order poke this tick could issue lands on layered
+                // windows whose composition surfaces WPF may be rebuilding synchronously. Stand
+                // down; the next tick after the storm reconciles anything that drifted.
+                if (Services.UI.DisplayChangeCoordinator.RenderQuiesced) return;
+
                 // A game host owns the screen: the attached tube is already tucked away with the
                 // minimized main window, and its own hide/restore dance here is the confirmed cause
                 // of the tube popping over the game. Do nothing until the host closes — except push
@@ -433,6 +448,8 @@ namespace ConditioningControlPanel
         private const int WM_DPICHANGED = 0x02E0;
         private DispatcherTimer? _dpiQuiesceTimer;
         private bool _dpiFloatWasRunning;
+        private bool _parentInteractionActive;   // main window is inside its modal move/size loop
+        private bool _dpiRefitPending;           // a swallowed WM_DPICHANGED awaits the settle refit
 
         /// <summary>
         /// Window procedure hook. Only handles WM_DPICHANGED: when a drag crosses onto a
@@ -441,13 +458,17 @@ namespace ConditioningControlPanel
         /// the shared AllowsTransparency render thread is busy (the documented hang in
         /// OnFirstContentRendered — #477).
         ///
-        /// The blocking present can only complete if NOTHING is writing to this surface, and
-        /// TWO independent drivers do: the 60fps float/breath transform, and the Circe emote
-        /// crossfade (~1Hz idle rotation plus its opacity clocks). The original mitigation
-        /// quiesced only the former — emote mode landed on this surface afterwards and kept
-        /// compositing straight through the transition, which is how an attached tube dragged
-        /// between mixed-DPI monitors could still wedge (Hang 1002, no crash.log, last log
-        /// line an [EMOTE] xfade). Quiesce both for the transition, then resume.
+        /// SWALLOWED, like every other persistent layered window in the app (LockCardWindow,
+        /// FlashService, AttentionCheckService, AvatarRandomBubble): WPF's automatic rescale is
+        /// the synchronous CompleteRender itself, delivered inside the parent's modal move loop,
+        /// and quiescing the surface's writers (the 60fps float/breath transform + the Circe
+        /// emote crossfade) only NARROWED the window it could wedge in — an attached tube
+        /// dragged between mixed-DPI monitors could still hang the whole app (Hang 1002, no
+        /// crash.log, #451/#477). Instead: quiesce the writers, swallow the message, and do ONE
+        /// controlled rescale+reposition on the settle debounce, at a quiet moment outside the
+        /// transition storm (RefitAfterDpiSettle — the LockCard "swallow, then re-assert
+        /// physically" pattern). The tube keeps rendering in its birth DPI space forever; all
+        /// positioning runs in physical pixels (UpdatePosition), so no DIP-space mixing occurs.
         /// </summary>
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
@@ -464,23 +485,98 @@ namespace ConditioningControlPanel
                     }
                     QuiesceEmotesForDpi();
 
-                    if (_dpiQuiesceTimer == null)
-                    {
-                        _dpiQuiesceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
-                        _dpiQuiesceTimer.Tick += (s, e) =>
-                        {
-                            _dpiQuiesceTimer?.Stop();
-                            try { if (_dpiFloatWasRunning) { _dpiFloatWasRunning = false; _floatTimer?.Start(); } }
-                            catch { /* window tearing down */ }
-                            try { ResumeEmotesAfterDpi(); } catch { /* window tearing down */ }
-                        };
-                    }
-                    _dpiQuiesceTimer.Stop(); // restart the debounce on rapid re-crossings
+                    _dpiRefitPending = true;
+                    EnsureDpiQuiesceTimer();
+                    _dpiQuiesceTimer!.Stop(); // restart the debounce on rapid re-crossings
                     _dpiQuiesceTimer.Start();
+
+                    // Swallow: WPF never sees the change, so no synchronous rescale runs here.
+                    handled = true;
                 }
                 catch { /* never let a hook throw */ }
             }
             return IntPtr.Zero;
+        }
+
+        private void EnsureDpiQuiesceTimer()
+        {
+            if (_dpiQuiesceTimer != null) return;
+            _dpiQuiesceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+            _dpiQuiesceTimer.Tick += (s, e) =>
+            {
+                // Still inside the parent's drag: stay quiesced. WM_EXITSIZEMOVE restarts the
+                // debounce, so the resume + refit land ~450ms after the mouse is released.
+                if (_parentInteractionActive) return;
+                _dpiQuiesceTimer?.Stop();
+                try { if (_dpiFloatWasRunning) { _dpiFloatWasRunning = false; _floatTimer?.Start(); } }
+                catch { /* window tearing down */ }
+                try { ResumeEmotesAfterDpi(); } catch { /* window tearing down */ }
+                try
+                {
+                    if (_dpiRefitPending)
+                    {
+                        _dpiRefitPending = false;
+                        RefitAfterDpiSettle();
+                    }
+                }
+                catch { /* window tearing down */ }
+            };
+        }
+
+        /// <summary>
+        /// Main window entered/left its native modal move/size loop. Fires on the MAIN thread's
+        /// WndProc (WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE) — self-marshals to the tube's dispatcher.
+        /// While active: both surface writers stand down, so whenever WM_DPICHANGED lands mid-drag
+        /// (this window's swallowed one, or the PARENT's, whose synchronous rebuild also needs the
+        /// shared render thread idle) nothing is writing to this layered surface. The float/emote
+        /// pause during a drag is invisible — the tube is being carried by the drag anyway.
+        /// </summary>
+        internal void NotifyParentInteractiveMove(bool active)
+        {
+            if (!Dispatcher.CheckAccess()) { RunOnAvatar(() => NotifyParentInteractiveMove(active)); return; }
+            try
+            {
+                _parentInteractionActive = active;
+                if (active)
+                {
+                    if (_floatTimer?.IsEnabled == true)
+                    {
+                        _floatTimer.Stop();
+                        _dpiFloatWasRunning = true;
+                    }
+                    QuiesceEmotesForDpi();
+                    _dpiQuiesceTimer?.Stop();   // no resume mid-drag
+                }
+                else
+                {
+                    EnsureDpiQuiesceTimer();
+                    _dpiQuiesceTimer!.Stop();
+                    _dpiQuiesceTimer.Start();   // resume (and refit, if a DPI change was swallowed) after settle
+                }
+            }
+            catch { /* window tearing down */ }
+        }
+
+        /// <summary>
+        /// One controlled rescale + reposition after the DPI transition settles. This is the work
+        /// WPF would have done synchronously inside the modal move loop, done once, with the
+        /// surface's writers still quiesced (the resume above runs first in the Tick, but both run
+        /// in the same dispatcher slice — nothing can interleave). The viewbox write triggers the
+        /// window-follows-viewbox resize, i.e. exactly one layered surface reallocation.
+        /// </summary>
+        private void RefitAfterDpiSettle()
+        {
+            try
+            {
+                _clampScreenValid = false;   // monitor may have changed under the cached clamp bounds
+                CalculateScaleFactor();
+                if (_isAttached) UpdatePosition();
+                App.Logger?.Information("AvatarTube DPI settle refit: scale {Scale:F2}", _scaleFactor);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AvatarTube DPI settle refit failed: {Error}", ex.Message);
+            }
         }
 
         /// <summary>
@@ -507,12 +603,23 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Get DPI scaling
+                // The tube's OWN DIP scale. WM_DPICHANGED is swallowed on this window, so this
+                // transform is frozen at the DPI the window was born under — every size below is
+                // "tube-DIPs", which WPF maps to physical px with exactly this factor. Dividing the
+                // target monitor's PHYSICAL work area by it therefore yields the tube-DIP size that
+                // covers that physical area, regardless of what the monitor's real scale is.
                 var source = PresentationSource.FromVisual(this);
                 double dpiScale = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                if (dpiScale <= 0) dpiScale = 1.0;
 
-                // Get primary screen working area
-                var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                // Measure the monitor the tube is ON (a mixed-DPI secondary has a different work
+                // area than the primary); fall back to primary before the HWND exists.
+                System.Windows.Forms.Screen? screen = null;
+                if (_tubeHandle != IntPtr.Zero)
+                {
+                    try { screen = System.Windows.Forms.Screen.FromHandle(_tubeHandle); } catch { }
+                }
+                screen ??= System.Windows.Forms.Screen.PrimaryScreen;
                 if (screen == null) return;
 
                 double screenHeight = screen.WorkingArea.Height / dpiScale;
@@ -522,8 +629,22 @@ namespace ConditioningControlPanel
                 double maxHeightScale = (screenHeight * 0.85) / DesignHeight;
                 double maxWidthScale = (screenWidth * 0.3) / DesignWidth; // Tube shouldn't be more than 30% of screen width
 
+                // On a monitor scaled HIGHER than the tube's birth DPI the art renders physically
+                // smaller (frozen transform), so let the viewbox scale rise above 1.0 by the DPI
+                // ratio to restore physical parity. 1.0 exactly on the birth monitor.
+                double scaleCeiling = 1.0;
+                try
+                {
+                    if (_tubeHandle != IntPtr.Zero)
+                    {
+                        double monitorScale = GetDpiForWindow(_tubeHandle) / 96.0;
+                        if (monitorScale > 0) scaleCeiling = Math.Max(1.0, monitorScale / dpiScale);
+                    }
+                }
+                catch { /* pre-1607 or handle torn down — keep 1.0 */ }
+
                 _scaleFactor = Math.Min(maxHeightScale, maxWidthScale);
-                _scaleFactor = Math.Max(0.4, Math.Min(1.0, _scaleFactor)); // Clamp between 40% and 100%
+                _scaleFactor = Math.Max(0.4, Math.Min(scaleCeiling, _scaleFactor)); // Clamp between 40% and the DPI-compensated ceiling
 
                 // Apply scale to viewbox
                 ContentViewbox.Width = DesignWidth * _scaleFactor;
@@ -681,6 +802,50 @@ namespace ConditioningControlPanel
             // Don't update if parent window is at origin with zero size (likely transitioning)
             if (g.Top == 0 && g.Left == 0 && g.Height < 100) return;
 
+            // PHYSICAL-pixel route. Under PerMonitorV2 each window's DIP space is anchored to its
+            // own DPI, and this window's is deliberately FROZEN (WM_DPICHANGED is swallowed) — so
+            // mixing the parent's DIPs with our Left/Top would misplace the tube by the scale ratio
+            // the moment main sits on a different-DPI monitor. GetWindowRect / SetWindowPos speak
+            // virtual-desktop physical px for both windows, one space with no conversion (the same
+            // reason the easter-egg glide and MainWindow.WorkAreaFit drive SetWindowPos directly).
+            // Both calls are kernel-side and safe from the avatar thread.
+            if (_tubeHandle != IntPtr.Zero && _parentHandle != IntPtr.Zero
+                && GetWindowRect(_parentHandle, out var pr) && GetWindowRect(_tubeHandle, out var tr))
+            {
+                int prW = pr.Right - pr.Left, prH = pr.Bottom - pr.Top;
+                int tubeW = tr.Right - tr.Left, tubeH = tr.Bottom - tr.Top;
+                if (prW <= 0 || prH <= 0 || tubeW <= 0 || tubeH <= 0) return;
+
+                // Offsets are tube-DIP constants scaled by the art scale; the tube's own (frozen)
+                // transform converts them to physical so they track the ART's real pixel size.
+                var src = PresentationSource.FromVisual(this);
+                double tubeToPx = src?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                if (tubeToPx <= 0) tubeToPx = 1.0;
+
+                int newLeftPx = pr.Left - tubeW - (int)Math.Round(BaseOffsetFromParent * _scaleFactor * tubeToPx);
+                int newTopPx = pr.Top + (prH - tubeH) / 2 + (int)Math.Round(VerticalOffset * _scaleFactor * tubeToPx);
+
+                // Sanity check: reject positions far off the virtual desktop (transitional garbage
+                // during focus/minimize churn — the physical twin of the old DIP guard).
+                var vs = System.Windows.Forms.SystemInformation.VirtualScreen;
+                if (newLeftPx < vs.Left - 2000 || newLeftPx > vs.Right + 2000 ||
+                    newTopPx < vs.Top - 1000 || newTopPx > vs.Bottom + 1000) return;
+
+                // Keep her PAINTED pixels on the monitor (see ClampAttachedLeftToScreenPx).
+                newLeftPx = ClampAttachedLeftToScreenPx(newLeftPx, pr, tubeToPx);
+
+                // Already there? Skip the SetWindowPos — a layered window doesn't need
+                // WM_WINDOWPOSCHANGING churn on every parent event that didn't move it.
+                if (newLeftPx == tr.Left && newTopPx == tr.Top) return;
+
+                SetWindowPos(_tubeHandle, IntPtr.Zero, newLeftPx, newTopPx, 0, 0,
+                    SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                return;
+            }
+
+            // DIP fallback (no HWNDs yet — pre-SourceInitialized only, where both windows still
+            // share the startup monitor's DPI so the old math is exact).
+
             // Get actual window dimensions (scaled)
             double actualWidth = ActualWidth > 0 ? ActualWidth : DesignWidth * _scaleFactor;
             double actualHeight = ActualHeight > 0 ? ActualHeight : DesignHeight * _scaleFactor;
@@ -709,6 +874,46 @@ namespace ConditioningControlPanel
             // Position to the LEFT of the parent window
             Left = newLeft;
             Top = newTop;
+        }
+
+        // Screen lookup cache for the per-move clamp: Screen.FromPoint materializes the whole screen
+        // list, and this runs once per WM_MOVE of main during a drag. Re-query only when the parent's
+        // centre actually leaves the cached monitor.
+        private System.Drawing.Rectangle _clampScreenBounds;
+        private int _clampWorkLeftPx;
+        private bool _clampScreenValid;
+
+        /// <summary>
+        /// Physical twin of <see cref="ClampAttachedLeftToScreen"/>: push the tube right until the
+        /// first painted column of art sits inside the working area of the screen the PARENT is on.
+        /// Only ever moves her RIGHT.
+        /// </summary>
+        private int ClampAttachedLeftToScreenPx(int newLeftPx, RECT pr, double tubeToPx)
+        {
+            try
+            {
+                var centre = new System.Drawing.Point((pr.Left + pr.Right) / 2, (pr.Top + pr.Bottom) / 2);
+                // Bypass the cache while a display change is settling — the cached WorkingArea can
+                // be stale (taskbar/resolution moved) without the parent's centre leaving the bounds.
+                if (!_clampScreenValid || Services.UI.DisplayChangeCoordinator.SpawnsSuppressed
+                    || !_clampScreenBounds.Contains(centre))
+                {
+                    var screen = System.Windows.Forms.Screen.FromPoint(centre);
+                    if (screen == null) return newLeftPx;
+                    _clampScreenBounds = screen.Bounds;
+                    _clampWorkLeftPx = screen.WorkingArea.Left;
+                    _clampScreenValid = true;
+                }
+
+                int paintedLeftPx = newLeftPx + (int)Math.Round(TubeArtLeftPadding * _scaleFactor * tubeToPx);
+                if (paintedLeftPx < _clampWorkLeftPx) newLeftPx += _clampWorkLeftPx - paintedLeftPx;
+                return newLeftPx;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AvatarTube left-clamp (px) skipped: {Error}", ex.Message);
+                return newLeftPx;
+            }
         }
 
         /// <summary>
@@ -1293,7 +1498,7 @@ namespace ConditioningControlPanel
             // property across monitor/focus changes; inserting after a topmost host keeps our own
             // WS_EX_TOPMOST set, so the tube never drops out of the widget band.
             SetWindowPos(_tubeHandle, insertAfter, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
         }
 
         /// <summary>
