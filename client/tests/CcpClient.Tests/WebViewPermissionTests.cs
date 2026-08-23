@@ -41,7 +41,7 @@ namespace CcpClient.Tests;
 /// <para><b>WHAT THESE FACTS DO NOT ESTABLISH.</b> That a real Chromium raises
 /// <c>PermissionRequested</c> for <c>getUserMedia</c>, that it honours the deny, or that no prompt is
 /// painted. Those need a headed Windows run on the Goon voice screen and are NOT discharged here
-/// (<c>client/docs/verification-harness.md:56-64</c>: this is neither <c>draw-verified</c> nor
+/// (<c>client/docs/verification-harness.md:64-72</c>: this is neither <c>draw-verified</c> nor
 /// <c>presentation-verified</c>). What IS established is that the subscription lands on slot 23 and
 /// nothing else, that the handler runs when that subscription is exercised, and that it writes
 /// <c>DENY</c>.</para>

@@ -80,6 +80,22 @@ public class StudioRackHeadlessTests
         window.GetVisualDescendants().OfType<T>().FirstOrDefault(c => c.Name == name)
         ?? throw new InvalidOperationException($"no {typeof(T).Name} named '{name}' in the mounted page");
 
+    /// <summary>
+    /// The rack's rows, in rack order.
+    ///
+    /// <para><b>Scoped to <c>RackScroll</c>, which is what "the rack" has always meant here.</b> It
+    /// used to be every <c>rack-row</c> in the window, and that stopped being the same set when the
+    /// SESSIONS row's panel began building its own rows in the page's rack livery: a scripted
+    /// session's row is a row in a LIST inside a panel, not an entry in the rack column, and an
+    /// order fact about the rack must not be able to fail because a panel gained a list.</para>
+    /// </summary>
+    private static List<string?> RackRows(MainWindow window) =>
+        Descendant<ScrollViewer>(window, "RackScroll").GetVisualDescendants()
+            .OfType<RadioButton>()
+            .Where(r => r.Classes.Contains("rack-row"))
+            .Select(r => r.Name)
+            .ToList();
+
     private static void Click(MainWindow window, Control control, MouseButton button = MouseButton.Left)
     {
         // Bring it into view FIRST. The rack scrolls now (ten rows are taller than the
@@ -693,10 +709,7 @@ public class StudioRackHeadlessTests
         // now upstream's complete group with nothing closed up around. The ORDER is upstream's and
         // is asserted, because a rack that reorders itself as modules land stops being the rack the
         // user learned.
-        var rows = window.GetVisualDescendants().OfType<RadioButton>()
-            .Where(r => r.Classes.Contains("rack-row"))
-            .Select(r => r.Name)
-            .ToList();
+        var rows = RackRows(window);
         Assert.Equal(
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
@@ -707,6 +720,10 @@ public class StudioRackHeadlessTests
                 // (StudioTabView.xaml.cs:513/519/530).
                 "RowHaptics",
                 "RowScheduler", "RowIntensityRamp",
+                // The SESSIONS group's one row — upstream's presets TAB folded into this door
+                // (MainWindow/MainWindow.TabNavigation.cs:592). It is the second row on this page
+                // with no dot, and the reason is the Visuals row's: it has no enable to report.
+                "RowScriptedSession",
             ],
             rows);
 
@@ -933,7 +950,8 @@ public class StudioRackHeadlessTests
         // of them, because every module it had ported was an EFFECT that painted an overlay. The
         // group headers are upstream's own strings (st4_studio_group_effects / _timing,
         // en.json:4816,4819).
-        var groups = window.GetVisualDescendants().OfType<TextBlock>()
+        var groups = Descendant<ScrollViewer>(window, "RackScroll").GetVisualDescendants()
+            .OfType<TextBlock>()
             .Where(t => t.Classes.Contains("rack-group"))
             .Select(t => t.Text)
             .ToList();
@@ -942,13 +960,16 @@ public class StudioRackHeadlessTests
         // (StudioTabView.xaml.cs:483/498/508/530), so the port now has all four and NOTHING was
         // reordered as they arrived. A rack that reshuffles itself as modules land stops being the
         // rack the user learned.
-        Assert.Equal(["EFFECTS", "GAMES & CARDS", "IMMERSION", "TIMING"], groups);
+        //
+        // A FIFTH GROUP, and it is not a fifth group of upstream's four: SESSIONS is upstream's
+        // other Studio-door TAB. WPF's rail maps the studio door to studio + presets + haptics
+        // (MainWindow/MainWindow.TabNavigation.cs:592) and the session rack lives on the presets
+        // one (Views/Tabs/PresetsTabView.xaml:857). It sits LAST for that reason — after every
+        // group that came off the `studio` tab — so nothing above it moved when it arrived.
+        Assert.Equal(["EFFECTS", "GAMES & CARDS", "IMMERSION", "TIMING", "SESSIONS"], groups);
 
         // And the row order is still upstream's, with the new group after the old one.
-        var rows = window.GetVisualDescendants().OfType<RadioButton>()
-            .Where(r => r.Classes.Contains("rack-row"))
-            .Select(r => r.Name)
-            .ToList();
+        var rows = RackRows(window);
         Assert.Equal(
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
@@ -959,6 +980,7 @@ public class StudioRackHeadlessTests
                 // (StudioTabView.xaml.cs:513/519/530).
                 "RowHaptics",
                 "RowScheduler", "RowIntensityRamp",
+                "RowScriptedSession",
             ],
             rows);
 

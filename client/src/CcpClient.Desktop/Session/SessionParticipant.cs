@@ -84,7 +84,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         Func<InputBounds>? bubbleCountPlacement = null,
         IBubblePopSurface? bubblePopSurface = null,
         IBouncingTextSurface? bouncingTextSurface = null,
-        IHapticLimb? haptics = null)
+        IHapticLimb? haptics = null,
+        IScriptedClock? scriptedClock = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -523,6 +524,27 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // so the module raises and the composition root — the only thing that knows a session exists —
         // makes the call. Stop() is idempotent and returns false when nothing is running.
         Ramp.Completed += () => Engine.Stop();
+
+        // THE SCRIPTED SESSION, composed HERE and nowhere else — the timed session with named
+        // phases that runs ON TOP of the engine above (WPF's Services/Session/SessionEngine.cs:22,
+        // reached from MainWindow/MainWindow.Presets.cs:1509-1518). It lands beside the engine
+        // rather than in the shell for the reason MainWindow states about the engine itself: a
+        // second one would borrow the user's dials twice and give them back once.
+        //
+        // Its eleven documents are the REAL stores every module above reads, never copies — see
+        // ScriptedSessionDials — and its ramp-curve document is the twelfth, READ per tick and
+        // never borrowed. It takes the same EffectSignal every module takes, so its per-second
+        // notifications reach a UI thread the same way theirs do.
+        Scripted = new ScriptedSessionRun(
+            Engine,
+            new ScriptedSessionDials(
+                _preset, _visualsPreset, _subliminalPreset, _bouncingTextPreset, _pinkFilterPreset,
+                _spiralPreset, _bubblePopPreset, _mindWipePreset, _videoPreset, _lockCardPreset,
+                _bubbleCountPreset),
+            scriptedClock ?? new SystemScriptedClock(
+                ex => _log.Log($"scripted session: a tick faulted and was contained: {ex.Message}")),
+            _rampPreset,
+            signal);
     }
 
     public string Name => "Session";
@@ -531,6 +553,15 @@ public sealed class SessionParticipant : IBackgroundParticipant
 
     /// <summary>The session itself. The shell drives this; nothing else may.</summary>
     public SessionEngine Engine { get; }
+
+    /// <summary>
+    /// The SCRIPTED session — the timed one with named phases that runs on top of
+    /// <see cref="Engine"/> (WPF <c>Services/Session/SessionEngine.cs:22</c>). Public for the same
+    /// reason <see cref="Engine"/> is: the Studio rack's Scripted Sessions row drives THIS object,
+    /// so the surface that starts a session and the run that borrows the user's dials are the same
+    /// one.
+    /// </summary>
+    public ScriptedSessionRun Scripted { get; }
 
     /// <summary>Flash Images (public so the Studio module panel and the tests reach the real object).</summary>
     public FlashImagesEffect Flash { get; }
@@ -800,10 +831,35 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _bouncingTextPreset.StopAsync(), _visualsPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
-    /// <summary>Teardown flush for the reserved pre-drain slot (persistence contract §11). The
-    /// asset selection has no writer, so it has nothing to flush.</summary>
-    public Task FlushAsync(TimeSpan boundedWait) =>
-        Task.WhenAll(
+    /// <summary>
+    /// Teardown flush for the reserved pre-drain slot (persistence contract §11). The
+    /// asset selection has no writer, so it has nothing to flush.
+    ///
+    /// <para><b>A scripted session is ENDED here first, and that is a correctness requirement
+    /// rather than tidiness.</b> A running one holds eleven documents at the SESSION's values,
+    /// dirty and deliberately unwritten (<see cref="ScriptedSessionDials"/>) — so a flush that ran
+    /// over them would persist the session's dials on top of the user's own and the user would
+    /// never get them back. That is upstream's #471/#476 defect exactly, in the one place this
+    /// port could still reproduce it, and the promise the confirmation makes
+    /// (<c>MainWindow/MainWindow.Presets.cs:1467-1470</c>) covers closing the app as much as
+    /// pressing STOP. This slot is the only one that works: it runs BEFORE the registry is
+    /// cancelled, so the restore's own write is still live, where the same call in
+    /// <see cref="StopAsync"/> would enqueue a write that terminates Cancelled.</para>
+    ///
+    /// <para>The ENGINE is stopped first, and only when a scripted session is really running:
+    /// <see cref="ScriptedSessionRun.Stop"/> re-arms a running engine so the restored dials reach
+    /// the modules (its own documented behaviour), which on the way out of the process would put
+    /// every module back up for the last instant of the app's life.</para>
+    /// </summary>
+    public Task FlushAsync(TimeSpan boundedWait)
+    {
+        if (Scripted.Running)
+        {
+            Engine.Stop();
+            Scripted.Stop();
+        }
+
+        return Task.WhenAll(
             _preset.FlushAsync(boundedWait),
             _subliminalPreset.FlushAsync(boundedWait),
             _pinkFilterPreset.FlushAsync(boundedWait),
@@ -822,6 +878,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             // synchronously before this line, so no flush here can write a ramped value over the
             // user's own (Effects/IntensityDial.cs, the split-write rule).
             _visualsPreset.FlushAsync(boundedWait));
+    }
 
     private void LogIfDegraded(string label, LoadOutcome? outcome)
     {

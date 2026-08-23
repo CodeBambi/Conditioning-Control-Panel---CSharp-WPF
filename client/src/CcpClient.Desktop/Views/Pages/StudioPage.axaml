@@ -384,6 +384,32 @@
                        AutomationProperties.AutomationId="RampRowDot" />
             </Grid>
           </RadioButton>
+
+          <!-- A FIFTH GROUP, and it is not a fifth group of MODULES: it is upstream's other
+               Studio-door TAB. WPF's rail maps the studio door to three tabs — studio, presets and
+               haptics (MainWindow/MainWindow.TabNavigation.cs:592) — and the session rack lives on
+               the PRESETS one (Views/Tabs/PresetsTabView.xaml:857, SessionRackPanel). The four
+               groups above are all the `studio` tab; haptics already folded in as a row; this is
+               the third tab folding in the same way. That is also why it sits LAST rather than
+               anywhere more convenient: `presets` comes after `studio` in the door's own entry
+               list, and a scripted session is not a module in the rack above it.
+
+               NO DOT, and no right-click quick-toggle. Both are the same fact: this row has no
+               enable to flip. Upstream's rack lets exactly such a row fall through unhandled
+               (Views/Tabs/StudioTabView.xaml.cs:659, and :494-496 for the dotless row), and the
+               live state a dot would summarise is on this row's panel in full — the phase, the
+               percentage and the time left. -->
+          <TextBlock Classes="rack-group" Text="SESSIONS" />
+
+          <RadioButton x:Name="RowScriptedSession"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowScriptedSession"
+                       AutomationProperties.Name="Scripted Sessions rack row">
+            <Grid ColumnDefinitions="*" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Scripted Sessions" VerticalAlignment="Center" />
+            </Grid>
+          </RadioButton>
         </StackPanel>
       </Border>
     </StackPanel>
@@ -1742,6 +1768,119 @@
                          Text="" />
               <TextBlock x:Name="RampCustodyState"
                          AutomationProperties.AutomationId="RampCustodyState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Scripted Sessions ================= -->
+        <!-- Upstream's PRESETS tab, folded into this door's rack (the row's own comment above
+             carries the door evidence). What a user can do here is upstream's ceremony and no more:
+             pick one of the four shipped sessions, read what it is, press one button, confirm what
+             it is about to do to your settings, and watch it run.
+
+             THE ROWS ARE BUILT IN CODE, from the four .session.json files beside the binary
+             (Session/ScriptedSession.ReadBuiltIns) — as upstream builds its own from the registry
+             rather than from markup, for upstream's own stated reason: "NOT MVVM, deliberately:
+             this page is code-built UI ... and an ItemsControl here would need a view-model layer
+             that nothing else on the page has" (MainWindow/MainWindow.SessionIO.cs:177-178,
+             :212-232). The port's reason is narrower and its own: the SET of rows is data on disk,
+             so markup would be a fifth copy of it that could disagree with the files. -->
+        <StackPanel x:Name="ScriptedSessionModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Scripted Sessions" />
+          <TextBlock Classes="page-blurb"
+                     Text="A scripted session runs a timeline for you. It borrows your dials for its length, moves them through named phases, and gives them back when it ends." />
+
+          <!-- ONE panel, and nothing else may add a child to it — upstream's rule for its own rack
+               (MainWindow.SessionIO.cs:854-857) and the reason the repaint can be idempotent. -->
+          <StackPanel x:Name="ScriptedSessionRackPanel" Spacing="2" />
+
+          <!-- THE CONFIRMATION, and it is not decoration: it is where the app tells the user what
+               it is about to do to their settings before it does it
+               (MainWindow/MainWindow.Presets.cs:1465-1471). It is an inline strip rather than a
+               modal window because this port has no dialog surface and a whole new window class
+               would be a bigger claim than the ceremony needs; the ceremony is that the start is
+               REFUSED until a second, separate gesture confirms it, and that is what this is. -->
+          <Border Classes="notice" x:Name="ScriptedSessionConfirmPanel" IsVisible="False">
+            <StackPanel Spacing="6">
+              <TextBlock x:Name="ScriptedSessionConfirmTitle"
+                         AutomationProperties.AutomationId="ScriptedSessionConfirmTitle"
+                         Classes="module-title"
+                         FontSize="14"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="ScriptedSessionConfirmDetail"
+                         AutomationProperties.AutomationId="ScriptedSessionConfirmDetail"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="ScriptedSessionConfirmPromise"
+                         AutomationProperties.AutomationId="ScriptedSessionConfirmPromise"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="ScriptedSessionConfirmQuestion"
+                         AutomationProperties.AutomationId="ScriptedSessionConfirmQuestion"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="ScriptedSessionConfirmButton"
+                        Classes="module-action"
+                        HorizontalAlignment="Left"
+                        AutomationProperties.AutomationId="ScriptedSessionConfirmButton"
+                        AutomationProperties.Name="Start Session"
+                        Content="Start Session" />
+                <Button x:Name="ScriptedSessionCancelButton"
+                        Classes="module-action"
+                        HorizontalAlignment="Left"
+                        AutomationProperties.AutomationId="ScriptedSessionCancelButton"
+                        AutomationProperties.Name="Not yet"
+                        Content="Not yet" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- ONE button in two states, never disabled and never duplicated — upstream's own
+               shape, and upstream says why in its own words at the top of the handler: "The button
+               doubles as Start/Stop — state dictates which path to run. This also makes us
+               resilient to any stale/duplicate Click subscriptions"
+               (MainWindow/MainWindow.Presets.cs:1455-1459). It wears the shell's session livery
+               for the same reason the shell's does: WPF paints the running one red
+               (MainWindow.StartStop.cs:756) and captions it STOP SESSION with the time left
+               (en.json:2321, MainWindow.Presets.cs:1752). -->
+          <Button x:Name="ScriptedSessionStartButton"
+                  Classes="session-start"
+                  HorizontalAlignment="Left"
+                  AutomationProperties.AutomationId="ScriptedSessionStartButton"
+                  AutomationProperties.Name="Start Session"
+                  Content="Start Session" />
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="ScriptedSessionPhaseState"
+                         AutomationProperties.AutomationId="ScriptedSessionPhaseState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="ScriptedSessionProgressState"
+                         AutomationProperties.AutomationId="ScriptedSessionProgressState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="ScriptedSessionAbsenceState"
+                         AutomationProperties.AutomationId="ScriptedSessionAbsenceState"
                          Foreground="#FFE8E0EE"
                          Opacity="0.7"
                          FontSize="12"

@@ -131,6 +131,20 @@ public sealed class CompositionRoot
     /// </summary>
     public Func<Scheduling.IScheduleClock>? ScheduleClockFactory { get; init; }
 
+    /// <summary>
+    /// The SCRIPTED session's clock seam, and it is a THIRD clock for the reason
+    /// <see cref="Session.IScriptedClock"/> states at length: that surface reads a wall clock and a
+    /// monotonic one and COMPARES them, which neither of the other two seams can express. Product
+    /// default is the real <see cref="Session.SystemScriptedClock"/>; a headless test injects a
+    /// manual one so it can press the real START, advance the session by hand and read the real
+    /// countdown back off the real button — with no wall-clock wait anywhere in it.
+    ///
+    /// <para>Like both its siblings it is a TIMER and a READING only: it can move what a session
+    /// believes the time is, and it cannot make one start, end or skip a phase the run's own rules
+    /// refuse.</para>
+    /// </summary>
+    public Func<Session.IScriptedClock>? ScriptedClockFactory { get; init; }
+
     // Deliberately adds NO sink-factory seam here. The haptic sink is already injectable
     // through ParticipantsFactory — which is how the ownership, teardown-ordering and
     // entitlement-transition facts drive a recording sink — and a second seam that no test and no
@@ -249,7 +263,8 @@ public sealed class CompositionRoot
         var session = new Session.SessionParticipant(
             infra, Path.GetDirectoryName(SettingsPathFactory())!,
             SessionClockFactory?.Invoke(), FlashImagePoolFactory?.Invoke(),
-            haptics: haptics.Limb);
+            haptics: haptics.Limb,
+            scriptedClock: ScriptedClockFactory?.Invoke());
         return
         [
             store,
