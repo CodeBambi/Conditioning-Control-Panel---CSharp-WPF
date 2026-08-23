@@ -730,10 +730,17 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
   as the asset map. **No text may ever be baked into those images** (lexicon law): the class
   name, the count and every line are rendered live over the top. Files belong in
   `Resources/web/arcademy/art/punchcard/`.
-- **The server mirror is a separate PR** (PUNCHCARD §5, CCP-Server). Nothing in this folder
-  talks to it or ever will: the page is offline and the HOST does the pull-at-launch /
-  push-after-mutation. What the page gets for free when it lands is a restored card
-  suppressing a repeat enrollment - `enrolledAt` is the only flag and it arrives in the blob.
+- ~~**The server mirror is a separate PR**~~ **CLOSED** - the mirror is live at both ends
+  (PUNCHCARD §5; wire contract `proxy/docs/arcademy-cards-api.md`, client
+  `Services/Arcademy/ArcademySyncService.cs`). **Nothing in this folder talks to it or ever
+  will**: the page is offline, and the HOST pulls once at launch and pushes after a mint
+  (debounced ~6s, `PUT /v2/arcademy/cards`, `X-Auth-Token` + `unified_id`). What the page gets
+  for free is a restored card suppressing a repeat enrollment - `enrolledAt` is the only flag
+  and it arrives in the blob, in the ordinary `init` projection or in the whole-blob `meta`
+  push if the reply is slower than the boot. A card is only ever ADDED to: the merged reply is
+  folded in monotonically and every derived number is re-counted from `enrolledAt` + `dates`,
+  the same derivation the server runs, so a cold or nonsense mirror cannot talk a card down.
+  No identity or no network = the Arcademy behaves exactly as before, on local cards.
 - **Nothing consumes `arcademy-fx`.** The engine narrates every primitive on that event and
   only `arcademy-log` is read (by `boot.js`). It is the obvious hook for a future telemetry
   or "what did the engine just do" debug overlay.

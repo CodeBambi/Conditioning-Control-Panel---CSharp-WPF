@@ -308,6 +308,45 @@ internal sealed class ArcademyMetaStore
         lock (_lock) return ArcademyPunchCards.UnlockedKeys(_state[PunchCardsKey] as JObject);
     }
 
+    /// <summary>
+    /// The push payload for the server mirror (PUNCHCARD §5): a normalized clone of every card
+    /// with something earned on it, or an empty object when there is nothing to mirror yet.
+    /// Taken under the lock like every other read, so it can never catch a card mid-mint.
+    /// </summary>
+    public JObject ExportCards()
+    {
+        lock (_lock) return ArcademyPunchCards.Export(_state[PunchCardsKey] as JObject);
+    }
+
+    /// <summary>
+    /// Fold the mirror's merged reply into the cards, monotonically and through the same
+    /// self-healing path a mint takes (<see cref="ArcademyPunchCards.ApplyServer"/>): dates
+    /// unioned, enrollment earliest-wins, every derived number re-counted here rather than
+    /// believed. Nothing local is ever dropped, so a cold or stale mirror costs nothing.
+    ///
+    /// <para>A restored <c>enrolledAt</c> is also what suppresses a repeat enrollment tutorial:
+    /// the shell derives "already enrolled" from the card itself (spec §2.2), so there is no
+    /// separate flag here to restore and none to forget.</para>
+    /// </summary>
+    /// <returns>The game keys the reply changed - empty when the mirror knew nothing new, which
+    /// is the ordinary case and deliberately does not <see cref="Touch"/> (no rev bump, no save,
+    /// no repaint for a no-op sync).</returns>
+    public IReadOnlyList<string> ApplyServerCards(JObject? serverCards)
+    {
+        lock (_lock)
+        {
+            var changed = ArcademyPunchCards.ApplyServer(Cards(), serverCards);
+            if (changed.Count > 0)
+            {
+                Touch();
+                App.Logger?.Information(
+                    "ArcademyMetaStore: mirror restored/updated {N} punch card(s): {Keys}",
+                    changed.Count, string.Join(", ", changed));
+            }
+            return changed;
+        }
+    }
+
     /// <summary>The punch-card bag, created when absent. Called under the lock.</summary>
     private JObject Cards()
     {

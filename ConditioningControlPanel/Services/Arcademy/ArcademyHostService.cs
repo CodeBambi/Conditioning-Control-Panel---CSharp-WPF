@@ -183,6 +183,18 @@ internal static class ArcademyHostService
                 App.Logger?.Information("ArcademyHost: punch cards unlock {N} room(s): {Keys}",
                     unlocked.Count, string.Join(", ", unlocked));
 
+            // THE MIRROR (PUNCHCARD §5). Pull the account's cards now, on a background thread:
+            // the reply restores a reinstalled or second machine's drawer, and a restored
+            // `enrolledAt` suppresses that class's enrollment tutorial for free (the page derives
+            // "enrolled" from the card - §2.2 - so there is no flag to restore separately).
+            //
+            // It is NOT awaited and the launch does not depend on it. In the ordinary case the
+            // reply lands before the page has finished booting and simply rides out in `init`;
+            // when it is slower, the callback pushes the same whole-blob `meta` snapshot a mint
+            // does and the shell repaints. No identity, no network, no server: the Arcademy opens
+            // exactly the same, on the cards this machine already holds.
+            ArcademySyncService.Attach(_meta, OnMirrorCardsChanged);
+
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
             {
@@ -1890,7 +1902,13 @@ internal static class ArcademyHostService
             // the owner wants it for testing, and `--arcademy` never reaches a player build.
             // Excluding them later is this one condition - `if (!_devDoor)`.
             ArcademyPunchCards.PunchMint? punch = null;
-            try { punch = _meta?.StampPunchCard(gameKey, localDate); }
+            try
+            {
+                punch = _meta?.StampPunchCard(gameKey, localDate);
+                // A real punch is worth mirroring; a same-day retake is not. Debounced, so the
+                // enrollment ceremony's second mint rides the same request (PUNCHCARD §5).
+                if (punch is { Minted: true }) ArcademySyncService.NotifyMutation();
+            }
             catch (Exception ex) { App.Logger?.Warning("ArcademyHost punch card: {E}", ex.Message); }
 
             if (_meta != null) _host?.Post(_meta.SnapshotMessage());
@@ -1943,10 +1961,46 @@ internal static class ArcademyHostService
             // LOCAL date, like every other daily gate here (#978).
             var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var mint = _meta?.EnrollPunchCard(gameKey, localDate);
-            if (mint is { Minted: true } && _meta != null) _host?.Post(_meta.SnapshotMessage());
+            if (mint is { Minted: true })
+            {
+                if (_meta != null) _host?.Post(_meta.SnapshotMessage());
+                ArcademySyncService.NotifyMutation();
+            }
             PostPunchCard(gameKey, "enrollment", mint);
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnEnrollmentDone: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// The mirror changed a card (a launch pull that restored something, or a merged push reply
+    /// that carried another machine's day). Repaint the page with the same whole-blob snapshot a
+    /// local mint sends - the page has no idea the server exists and does not need one.
+    ///
+    /// <para>Raised from a background thread, so it hops to the dispatcher: <c>Post</c> reaches
+    /// WebView2 and WebView2 is UI-thread-only. Every guard from the async rules applies - a null
+    /// or shutting-down dispatcher means there is nothing left to repaint anyway.</para>
+    /// </summary>
+    private static void OnMirrorCardsChanged()
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_meta == null || _host == null) return;
+                    _host.Post(_meta.SnapshotMessage());
+                    var unlocked = _meta.UnlockedGameKeys();
+                    if (unlocked.Count > 0)
+                        App.Logger?.Information("ArcademyHost: after sync, punch cards unlock {N} room(s): {Keys}",
+                            unlocked.Count, string.Join(", ", unlocked));
+                }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnMirrorCardsChanged post: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnMirrorCardsChanged: {E}", ex.Message); }
     }
 
     /// <summary>
@@ -2566,6 +2620,10 @@ internal static class ArcademyHostService
             HookVideoEvents(false);
             HookSettingsWatch(false);
             HookBrowserVideoEvents(false);
+            // Unbind the mirror BEFORE the store goes: a push still sitting in the debounce is
+            // sent now (payload taken first, so the request outlives this window without touching
+            // anything being disposed) and every reply still in the air is dropped by generation.
+            try { ArcademySyncService.Detach(); } catch { }
             try { _meta?.FlushSave(); } catch { }
             _meta = null;
             _classActive = false;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services.Arcademy;
@@ -78,9 +79,11 @@ internal static class ArcademyPunchCards
         if (dates.Any(d => string.Equals((string?)d, localDate, StringComparison.Ordinal)))
             return new PunchMint(false, false, card);
 
-        // The enrollment punch is day one's punch (PUNCHCARD §2.1).
-        if (dates.Count == 0
-            && string.Equals((string?)card[EnrolledAtField], localDate, StringComparison.Ordinal))
+        // The enrollment punch is day one's punch (PUNCHCARD §2.1). Keyed on the DATE rather
+        // than on `dates` being empty: the enrollment day is folded out of `dates` (see
+        // Normalize), so a stamp for that day can never be worth a hole no matter how many later
+        // days sit on the card, and minting one would only thud at the shell for nothing.
+        if (string.Equals((string?)card[EnrolledAtField], localDate, StringComparison.Ordinal))
         {
             return new PunchMint(false, false, card);
         }
@@ -179,8 +182,18 @@ internal static class ArcademyPunchCards
                        && IsDate((string?)ev.Value)
             ? (string?)ev.Value
             : null;
-        // The house punch is enrollment's second hole and cannot exist without it.
-        bool house = enrolled != null && ((bool?)card[HouseField] ?? false);
+        // THE ENROLLMENT DAY IS NOT A DAILY STAMP. `enrolledAt` is already worth two holes, so
+        // that date sitting in `dates` as well would read as three for day one. Enroll() folds it
+        // out at the mint; folding it out HERE too is what makes a card arriving from anywhere
+        // else - the mirror, a hand edit, a half-merge - land on the total the server derived it
+        // as (arcademy-cards-api.md: "the enrollment day is folded out of dates").
+        if (enrolled != null) clean.Remove(enrolled);
+
+        // The house punch is enrollment's second hole: granted WITH the enrollment, never apart
+        // from it, so it is derived rather than believed - the same identity the mirror uses
+        // (`house = enrolledAt != null`), which is what keeps both ends counting a restored card
+        // the same way.
+        bool house = enrolled != null;
 
         int punches = Math.Min(Holes, (enrolled != null ? 1 : 0) + (house ? 1 : 0) + clean.Count);
         bool complete = punches >= Holes;
@@ -199,6 +212,149 @@ internal static class ArcademyPunchCards
         card[CompleteField] = complete;
         card[UnlockedAtField] = unlockedAt == null ? JValue.CreateNull() : new JValue(unlockedAt);
     }
+
+    // ======================= the server mirror (PUNCHCARD §5) =======================
+    //
+    // The host is the authority and the mirror is best-effort restore; everything below is the
+    // pure half of that traffic, kept here (rather than in the sync service) so it is testable
+    // without WPF, App or a network - the same reason the mint math lives here.
+
+    /// <summary>
+    /// Fold a merged reply from the mirror into the local cards, MONOTONICALLY: dates are unioned,
+    /// <c>enrolledAt</c> and <c>unlockedAt</c> are earliest-wins, and nothing local is ever
+    /// dropped. A card the reply does not mention is left exactly as it is (the same promise the
+    /// server makes about a push that does not mention one), and a card only the reply knows is
+    /// CREATED - that is the whole point on a fresh install.
+    ///
+    /// <para>Every touched card goes back out through <see cref="Normalize"/>, so the derived four
+    /// (<c>punches</c>/<c>house</c>/<c>complete</c>/<c>unlockedAt</c>) are re-counted here from the
+    /// only two earned fields exactly as the server re-derives them on the way in. A reply is
+    /// therefore never trusted for a total - only for the dates and the enrollment behind it - so
+    /// a mirror that had somehow been talked into nonsense cannot spend it here.</para>
+    /// </summary>
+    /// <returns>The game keys this reply actually changed - empty when the mirror had nothing the
+    /// host did not already know, which is the common case and the one that must not cost a
+    /// save.</returns>
+    public static IReadOnlyList<string> ApplyServer(JObject cards, JObject? serverCards)
+    {
+        var changed = new List<string>();
+        if (serverCards == null) return changed;
+
+        foreach (var prop in serverCards.Properties())
+        {
+            if (prop.Value is not JObject remote) continue;
+            var key = prop.Name;
+            if (string.IsNullOrWhiteSpace(key)) continue;
+
+            // Snapshot BEFORE Card(), which creates and normalizes: a card that merely heals is
+            // still a change worth saving, and one that does nothing at all must not be.
+            var before = cards[key]?.ToString(Formatting.None);
+            var card = Card(cards, key);
+
+            var dates = (JArray)card[DatesField]!;
+            var have = new HashSet<string>(
+                dates.Select(d => (string?)d ?? string.Empty), StringComparer.Ordinal);
+            if (remote[DatesField] is JArray remoteDates)
+            {
+                foreach (var d in remoteDates)
+                {
+                    var s = (d as JValue)?.Value as string;
+                    if (s != null && IsDate(s) && have.Add(s)) dates.Add(s);
+                }
+            }
+
+            // Earliest enrollment wins, and a missing one can never clear the one we hold: the
+            // mirror is colder than this machine every time until the first push lands.
+            var remoteEnrolled = DateOf(remote[EnrolledAtField]);
+            var localEnrolled = DateOf(card[EnrolledAtField]);
+            if (remoteEnrolled != null
+                && (localEnrolled == null || string.CompareOrdinal(remoteEnrolled, localEnrolled) < 0))
+            {
+                card[EnrolledAtField] = remoteEnrolled;
+            }
+
+            // unlockedAt is the one derived field CARRIED rather than recomputed - the day a card
+            // filled is witnessed once, and not necessarily on this machine. Earliest wins;
+            // Normalize still drops it if the card is not actually complete.
+            var remoteUnlocked = DateOf(remote[UnlockedAtField]);
+            var localUnlocked = DateOf(card[UnlockedAtField]);
+            if (remoteUnlocked != null
+                && (localUnlocked == null || string.CompareOrdinal(remoteUnlocked, localUnlocked) < 0))
+            {
+                card[UnlockedAtField] = remoteUnlocked;
+            }
+
+            Normalize(card, null);
+            if (!string.Equals(before, card.ToString(Formatting.None), StringComparison.Ordinal))
+                changed.Add(key);
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// The push payload: a normalized clone of the cards worth mirroring. A card with nothing
+    /// EARNED on it (no enrollment, no dates) is left out - it carries nothing the merge could
+    /// use, and a push of only those is a wasted request.
+    /// </summary>
+    public static JObject Export(JObject? cards)
+    {
+        var payload = new JObject();
+        if (cards == null) return payload;
+
+        foreach (var prop in cards.Properties().ToList())
+        {
+            if (prop.Value is not JObject) continue;
+            var card = (JObject)Card(cards, prop.Name).DeepClone();
+            bool earned = card[EnrolledAtField] is JValue { Type: JTokenType.String }
+                          || (card[DatesField] as JArray)?.Count > 0;
+            if (earned) payload[prop.Name] = card;
+        }
+        return payload;
+    }
+
+    /// <summary>
+    /// Does this machine hold anything the mirror does not? True for a date or an earlier
+    /// enrollment the reply did not carry - the launch-time answer to "did a push fail while we
+    /// were offline", asked of the GET we already made rather than of a flag a crash could lose.
+    /// </summary>
+    public static bool HasUnmirrored(JObject? cards, JObject? serverCards)
+    {
+        if (cards == null) return false;
+        foreach (var prop in cards.Properties())
+        {
+            if (prop.Value is not JObject local) continue;
+            var remote = serverCards?[prop.Name] as JObject;
+
+            var localEnrolled = DateOf(local[EnrolledAtField]);
+            if (localEnrolled != null)
+            {
+                var remoteEnrolled = DateOf(remote?[EnrolledAtField]);
+                if (remoteEnrolled == null
+                    || string.CompareOrdinal(localEnrolled, remoteEnrolled) < 0) return true;
+            }
+
+            if (local[DatesField] is not JArray localDates || localDates.Count == 0) continue;
+            var mirrored = new HashSet<string>(StringComparer.Ordinal);
+            if (remote?[DatesField] is JArray remoteDates)
+            {
+                foreach (var d in remoteDates)
+                {
+                    if ((d as JValue)?.Value is string s) mirrored.Add(s);
+                }
+            }
+            foreach (var d in localDates)
+            {
+                var s = (d as JValue)?.Value as string;
+                if (s != null && IsDate(s) && !mirrored.Contains(s)) return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>A token read as a calendar date, or null for anything that is not one.</summary>
+    private static string? DateOf(JToken? t) =>
+        t is JValue { Type: JTokenType.String } v && IsDate((string?)v.Value) ? (string?)v.Value : null;
 
     private static bool IsDate(string? s) =>
         !string.IsNullOrWhiteSpace(s)
