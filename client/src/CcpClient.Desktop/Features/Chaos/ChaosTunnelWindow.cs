@@ -26,13 +26,22 @@ public sealed class ChaosTunnelWindow : Window
 {
     private readonly Action<string> _log;
     private readonly string _profileDir;
+    private readonly Lifecycle.ApplicationHost? _host;
     private NativeWebView? _web;
     private bool _profileRetryUsed;
 
-    public ChaosTunnelWindow(Action<string> log, string profileDir)
+    /// <summary>
+    /// The host is OPTIONAL because this window is the one hosted surface that never had one:
+    /// <see cref="ChaosTunnelService"/> hands it only a log delegate. It is threaded through for
+    /// the user's motion setting alone (<see cref="Motion.HostedMotion"/>), and a null host
+    /// resolves to <see cref="Motion.MotionLevel.Full"/> — the same default upstream falls back to
+    /// when settings are not up (<c>Chaos/ChaosWebViewHost.cs:768-770</c>).
+    /// </summary>
+    public ChaosTunnelWindow(Action<string> log, string profileDir, Lifecycle.ApplicationHost? host = null)
     {
         _log = log;
         _profileDir = profileDir;
+        _host = host;
         Title = "CCP — Chaos Tunnel"; // harness identification only; no taskbar/Alt-Tab presence
         WindowDecorations = WindowDecorations.None; // WPF WindowStyle.None parity (:180)
         Background = Brushes.Black;
@@ -160,9 +169,13 @@ public sealed class ChaosTunnelWindow : Window
             // stays BELOW the topmost overlays (the app's established anti-MPO flag), and
             // stop Chromium's occlusion tracker from throttling rAF when the game stacks
             // layered windows over the tunnel (skipped frames).
+            // The motion switch is space-joined onto exactly these two flags, which is the
+            // string upstream builds and the line it appends at (ChaosWebViewHost.cs:832-833).
+            var motionArgument = Motion.HostedMotion.BrowserArgument(_host, "chaos-tunnel", _log);
             wv2.AdditionalBrowserArguments =
-                "--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion";
-            _log("chaos-tunnel: WebView2 UserDataFolder set (per-surface profile); anti-MPO + occlusion flags applied");
+                "--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion"
+                + " " + motionArgument;
+            _log($"chaos-tunnel: WebView2 UserDataFolder set (per-surface profile); anti-MPO + occlusion flags applied; {motionArgument}");
         }
     }
 

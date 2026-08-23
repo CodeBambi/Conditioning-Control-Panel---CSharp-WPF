@@ -180,7 +180,7 @@ public sealed class ChaosTunnelService
                 msg => _host.LogDiagnostic(msg));
             _server.Start();
 
-            _window = new ChaosTunnelWindow(msg => _host.LogDiagnostic(msg), ProfileDir());
+            _window = new ChaosTunnelWindow(msg => _host.LogDiagnostic(msg), ProfileDir(), _host);
             _window.PageMessage += OnPageMessage;
             _window.NavigationFinished += success =>
                 _host.LogDiagnostic($"chaos-tunnel: NavigationCompleted success={success}");

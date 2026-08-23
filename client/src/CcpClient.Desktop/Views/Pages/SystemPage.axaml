@@ -11,7 +11,40 @@
   <ScrollViewer>
     <StackPanel Margin="20" Spacing="4">
       <TextBlock Classes="page-title" Text="System" />
-      <TextBlock Classes="page-blurb" Text="Startup trace and capability states" />
+      <TextBlock Classes="page-blurb" Text="Motion, startup trace and capability states" />
+
+      <!--
+        MOTION. Upstream's home for this control is App Settings -> Performance
+        (Views/Controls/AppSettings/PerformanceSettingsSection.xaml:164-180); this port has no
+        App Settings door, and the System door is where WPF's Home-row "System / App Info & Data"
+        class of surface landed (§9 D2), so an app-scoped preference belongs here rather than in
+        the Studio rack, which is a rack of EFFECT modules with dots and master toggles.
+
+        THE THREE ITEMS ARE THE ENUM ORDINALS and are never reordered — upstream's own rule on
+        the same control (PerformanceSettingsSection.xaml:164) and this port's persisted value.
+      -->
+      <Border Classes="module" Margin="0,12,0,0">
+        <StackPanel Spacing="6">
+          <TextBlock Classes="module-title" Text="Motion" />
+          <TextBlock Classes="page-blurb"
+                     TextWrapping="Wrap"
+                     Text="How much movement this app is allowed to show. Full and Reduced both keep the pages this app hosts in motion; Off is the only setting that stops them." />
+          <ComboBox x:Name="MotionLevelPicker"
+                    HorizontalAlignment="Left"
+                    MinWidth="160"
+                    AutomationProperties.AutomationId="MotionLevelPicker"
+                    AutomationProperties.Name="Motion">
+            <ComboBoxItem Content="Full" />
+            <ComboBoxItem Content="Reduced" />
+            <ComboBoxItem Content="Off" />
+          </ComboBox>
+          <TextBlock x:Name="MotionLevelState"
+                     Classes="diagnostic"
+                     AutomationProperties.AutomationId="MotionLevelState"
+                     TextWrapping="Wrap"
+                     Text="" />
+        </StackPanel>
+      </Border>
 
       <Border Classes="module" Margin="0,12,0,0">
         <StackPanel Spacing="6">

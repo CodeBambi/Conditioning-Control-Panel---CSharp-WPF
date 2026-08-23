@@ -158,9 +158,11 @@ public partial class DtrhLoomWindow : Window
             // OWN profile (LoomHostService.cs:64 browser_data_loom parity — the game's
             // WebView2 state stays untouched; never share the b5-profiled surface).
             wv2.UserDataFolder = DtrhProfileLock.WebView2ProfileDir("loom");
-            // The studio's sfx play off worker round-trips, not gestures.
-            wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
-            _host.LogDiagnostic("loom: WebView2 UserDataFolder set (own profile, loom-suffixed); autoplay-policy=no-user-gesture-required");
+            // The studio's sfx play off worker round-trips, not gestures. The motion switch is
+            // space-joined on, as upstream joins it (ChaosWebViewHost.cs:832-833).
+            var motionArgument = Motion.HostedMotion.BrowserArgument(_host, "loom", _host.LogDiagnostic);
+            wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required" + " " + motionArgument;
+            _host.LogDiagnostic($"loom: WebView2 UserDataFolder set (own profile, loom-suffixed); autoplay-policy=no-user-gesture-required; {motionArgument}");
         }
         else if (args is Avalonia.Platform.GtkWebViewEnvironmentRequestedEventArgs gtk)
         {
@@ -175,7 +177,7 @@ public partial class DtrhLoomWindow : Window
     /// too. Upstream's LoomHostService has no permission handler at all, so this tightens beyond
     /// upstream; the studio asks the browser for nothing, which is exactly why denying costs it
     /// nothing. Autoplay is left at the browser default — the studio's sfx already rely on the
-    /// --autoplay-policy switch set at :162 above. A failed attach is typed and LOGGED.</summary>
+    /// --autoplay-policy switch set at :164 above. A failed attach is typed and LOGGED.</summary>
     private void AttachPermissionDeny()
     {
         if (_web?.TryGetPlatformHandle() is Avalonia.Platform.IWindowsWebView2PlatformHandle wv2)

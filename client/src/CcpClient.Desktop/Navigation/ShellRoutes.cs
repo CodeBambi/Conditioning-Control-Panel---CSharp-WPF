@@ -45,7 +45,7 @@ public static class ShellRoutes
     /// <c>Views/Tabs/GradedIntakeTabView.xaml:152</c> -> <c>MainWindow.Lab.cs:108-167</c>).</summary>
     public const string Intake = "intake";
 
-    /// <summary>System: the startup trace and typed capability states.</summary>
+    /// <summary>System: the motion preference, the startup trace and typed capability states.</summary>
     public const string System = "system";
 
     /// <summary>The rail, in rail order — Play sits after Companion because that is WPF's own
@@ -64,7 +64,7 @@ public static class ShellRoutes
         // (Views/Tabs/GradedIntakeTabView.xaml:67) — the same rule the other doors follow.
         new ShellRoute(Intake, "Graded Intake",
             "A banded descent that reads how you answer - and how long you take - and drafts a personalised session from it."),
-        new ShellRoute(System, "System", "Startup trace and capability states"),
+        new ShellRoute(System, "System", "Motion, startup trace and capability states"),
     ];
 
     /// <summary>The door the shell opens on. WPF opens on Home; the port has no Home surface,

@@ -478,7 +478,7 @@
         <RadioButton x:Name="DoorSystem" Classes="door" GroupName="rail"
                      AutomationProperties.AutomationId="DoorSystem"
                      AutomationProperties.Name="System door"
-                     ToolTip.Tip="Startup trace and capability states"
+                     ToolTip.Tip="Motion, startup trace and capability states"
                      Content="System" />
       </StackPanel>
     </Border>

@@ -309,8 +309,10 @@ public partial class GoonHostWindow : Window
             wv2.UserDataFolder = DtrhProfileLock.WebView2ProfileDir("goon");
             // The page builds its audio graph on the first screen rather than the first cue and
             // expects a running context under the host (ui/screens/title.js:161-165).
-            wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
-            _host.LogDiagnostic("goon: WebView2 UserDataFolder set (per-surface); autoplay-policy=no-user-gesture-required");
+            // The motion switch rides along, space-joined (ChaosWebViewHost.cs:832-833).
+            var motionArgument = Motion.HostedMotion.BrowserArgument(_host, "goon", _host.LogDiagnostic);
+            wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required" + " " + motionArgument;
+            _host.LogDiagnostic($"goon: WebView2 UserDataFolder set (per-surface); autoplay-policy=no-user-gesture-required; {motionArgument}");
         }
     }
 
