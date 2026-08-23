@@ -404,8 +404,11 @@ public sealed class PopQuizEffect : PacedSessionEffect<PopQuizFiring>
     /// <c>Degraded</c> case where the OS gave the card the keyboard and holds no ink for it: a
     /// topmost blank window holding the user's keyboard is strictly worse than no question at all,
     /// and without the dismiss it would also leave <see cref="Compose"/>'s already-prompting guard
-    /// dropping every later quiz for the rest of the session. Upstream force-closes on its own error
-    /// path for the same reason (<c>Services/Quiz/PopQuizService.cs:250-254</c>).</para>
+    /// dropping every later quiz for the rest of the session. Upstream's own error path does the
+    /// equivalent in its own currency — it RELEASES the interaction slot it had just claimed rather
+    /// than leaving it held by a quiz that never appeared (<c>Services/Quiz/PopQuizService.cs:250-254</c>),
+    /// and here the shared presence IS the slot. The Lock Card's error path, which really does
+    /// force-close a half-shown card, is <c>Services/LockCard/LockCardService.cs:305-313</c>.</para>
     /// </summary>
     protected override void Deliver(PopQuizFiring firing)
     {

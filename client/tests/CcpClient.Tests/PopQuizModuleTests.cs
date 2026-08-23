@@ -409,8 +409,9 @@ public class PopQuizModuleTests
         // Including Degraded, which is the trap: the OS gave the card the keyboard and only the ink
         // read-back said no, so the window is still up. Without the dismiss it stays there blank,
         // holding the user's keyboard, and Compose's already-prompting guard then drops every later
-        // question for the rest of the session. Upstream force-closes on its own error path for the
-        // same reason (Services/Quiz/PopQuizService.cs:250-254).
+        // question for the rest of the session. Upstream's error path releases the interaction slot
+        // it had just claimed rather than leaving it held by a quiz that never appeared
+        // (Services/Quiz/PopQuizService.cs:250-254); here the shared presence IS that slot.
         using var rig = new Rig();
         rig.Enable();
         rig.Presence.NextPromptOutcome = new CapabilityState.Degraded(
