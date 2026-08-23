@@ -19,12 +19,14 @@ namespace CcpClient.Tests;
 /// property of the COMPILATION, not of the assembly. A gate that does not force compilation is
 /// therefore vacuous, and would sign off a tree with live warnings in it.</para>
 ///
-/// <para>THE CENTRAL TRAP THIS SUITE ALSO PINS. <c>check-floor.mjs</c> runs
-/// <c>dotnet test --no-build</c> deliberately (<c>client/docs/port-lessons.md:204</c>) and its
-/// <c>assertBuildIsFresh</c> stale-build guard exists because it once measured the previous wave's
-/// assemblies and called them a regression. This gate did NOT make the floor build, and
-/// <see cref="TheTestFloorStillRunsNoBuild_AndKeepsItsStaleBuildGuard"/> is the pin that stops a
-/// later lane doing it while citing this packet as precedent.</para>
+/// <para>THE CENTRAL TRAP THIS SUITE ALSO PINS. <c>check-floor.mjs</c> DELIBERATELY DOES NOT BUILD
+/// (<c>client/docs/port-lessons.md:204</c>) and its <c>assertBuildIsFresh</c> stale-build guard exists
+/// because it once measured the previous wave's assemblies and called them a regression. It used to
+/// run <c>dotnet test --no-build</c>; as of 2026-08-23 it runs the xunit v3 ASSEMBLY directly with
+/// <c>-trx</c>, which cannot build by construction, so the invariant is now stronger rather than
+/// weaker. <see cref="TheTestFloorStillRunsNoBuild_AndKeepsItsStaleBuildGuard"/> is the pin that stops
+/// a later lane teaching it to build while citing this packet as precedent, and it binds BOTH shapes:
+/// a returning <c>dotnet</c> invocation may still only ever carry the <c>test</c> verb.</para>
 ///
 /// <para>NEVER-SKIP SHAPE. These facts read repository files with <c>File.ReadAllText</c> and no
 /// existence predicate: a missing file throws and the fact FAILS, which is the intended refusal.
@@ -76,28 +78,39 @@ public partial class WarningGateGuardTests
         // wave-30 observation of 1022 counted against a source tree containing 1018).
         var floor = File.ReadAllText(Path.Combine([FindRepoRoot(), .. FloorParts]));
 
+        // ZERO dotnet invocations is the CURRENT and strongest state: the floor runs the prebuilt
+        // assembly, so there is no verb to get wrong. It is accepted here, but only together with the
+        // direct-runner assertions at the end of this fact — without those, "no dotnet invocation"
+        // would also be true of a floor that had been gutted, and this pin would pass on a gate that
+        // runs nothing at all.
         var verbs = DotnetInvocation().Matches(floor).Select(m => m.Groups[1].Value).Distinct().ToArray();
-        Assert.True(verbs.Length > 0,
-            "check-floor.mjs no longer contains a recognisable `\"dotnet\", [\"<verb>\"` invocation — "
-            + "the guard that keeps the floor from becoming a builder refuses to go blind on it");
-        Assert.True(verbs is ["test"],
+        Assert.True(verbs.Length == 0 || verbs is ["test"],
             $"check-floor.mjs invokes dotnet with verb(s) [{string.Join(", ", verbs)}] — the test floor must "
-            + "only ever run `dotnet test`. The warning gate is SEPARATE precisely so the floor "
-            + "would not become a builder: making it build deletes the signal assertBuildIsFresh exists "
-            + "to raise (client/docs/port-lessons.md:204).");
+            + "never build. It may run the test assembly directly (its current shape) or `dotnet test`, "
+            + "and nothing else. The warning gate is SEPARATE precisely so the floor would not become a "
+            + "builder: making it build deletes the signal assertBuildIsFresh exists to raise "
+            + "(client/docs/port-lessons.md:204).");
         // The verb check alone binds only the literal `"dotnet", ["verb"` shape, so a build passed
         // as a VARIABLE (`execFileSync("dotnet", buildArgs)`) would slip past it with the verb set
         // still reading [test]. Require every dotnet invocation's argument list to be a literal
         // array, so the verb check above can actually see all of them.
         var argumentHeads = DotnetArgumentHead().Matches(floor).Select(m => m.Groups[1].Value).ToArray();
         var nonLiteral = argumentHeads.Where(h => h != "[").ToArray();
-        Assert.True(argumentHeads.Length > 0 && nonLiteral.Length == 0,
+        Assert.True(nonLiteral.Length == 0,
             $"check-floor.mjs passes a NON-LITERAL argument list to dotnet (heads: [{string.Join(", ", argumentHeads)}]). "
             + "The verb check above can only read literal arrays, so a build hidden behind a variable "
             + "would leave the verb set reading [test] and this pin would pass. Keep the floor's dotnet "
             + "invocations literal, or this guard is decorative.");
 
-        Assert.Contains("--no-build", floor, StringComparison.Ordinal);
+        // The floor no longer shells out to `dotnet` at all: it runs the xunit v3 assembly directly
+        // (testAssemblyPath + "-trx"), which CANNOT build, so "does not build" is now structural
+        // rather than a flag it has to remember to pass. Bind that shape, or a lane could delete the
+        // direct-runner path and this pin would still read green on the verb check above (which is
+        // vacuously satisfied by ZERO dotnet invocations).
+        Assert.Contains("testAssemblyPath", floor, StringComparison.Ordinal);
+        Assert.Contains("\"-trx\"", floor, StringComparison.Ordinal);
+        // And the stale-build guard stays, because running a prebuilt assembly is exactly the
+        // condition under which measuring YESTERDAY's binaries is possible.
         Assert.Contains("assertBuildIsFresh", floor, StringComparison.Ordinal);
         Assert.Contains("STALE BUILD", floor, StringComparison.Ordinal);
     }

@@ -3,19 +3,21 @@
 // Board row 49 part 1, framing e: the pin is NAME-ANCHORED — per project
 // { total, allowedSkips[] }; expected skips are pinned by fully-qualified test NAME,
 // never by count (closes the earlier counts-not-identity limit; machine-portable).
-// Runs BOTH test projects with TRX loggers into a per-run temp dir OUTSIDE the worktree,
-// then post-processes the results against the exact per-project pin (floor.json).
+// Runs BOTH test projects — as xunit v3 ASSEMBLIES with `-trx`, not through `dotnet test`;
+// see runProject for the measurement that forced that choice — writing into a per-run temp
+// dir OUTSIDE the worktree, then post-processes the results against the exact per-project
+// pin (floor.json).
 //
-// Green requires ALL THREE: dotnet test exit 0, every fail-closed TRX check, and the pin:
+// Green requires ALL THREE: runner exit 0, every fail-closed TRX check, and the pin:
 // zero bad outcomes, passed + skipped == total, and every NotExecuted result's testName
 // present in allowedSkips (offender NAMED in the failure). May-skip semantics: a listed
 // test that runs and passes is green.
 // Exit 0 = floor met. Exit 1 = any violation (each prints a loud named reason).
 //
 // Never sets CCP_DATA_ROOT (port-workflow.md:204 — a process-wide override makes the
-// data-root pin skip and the floor goes blind). Never writes inside the worktree:
-// --results-directory targets os.tmpdir(); *.trx / TestResults/ are gitignored and the
-// merge-time dirty check tolerates nothing.
+// data-root pin skip and the floor goes blind). Never writes inside the worktree: the TRX
+// path targets os.tmpdir(); *.trx / TestResults/ are gitignored and the merge-time dirty
+// check tolerates nothing.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -131,8 +133,16 @@ export function verifyProjectResults(projectName, resultsDir, pinEntry, runStart
   const xml = fs.readFileSync(trxPath, "utf8");
   // Unparseable / truncated detection without a parser dependency: the envelope must be
   // complete and the summary must be singular and well-formed.
-  if (!xml.startsWith("\uFEFF<?xml") && !xml.startsWith("<?xml")) {
-    fail(`${projectName}: ${trxPath} does not start with an XML declaration — unparseable results`);
+  // The head check exists to catch GARBAGE and a run that died before writing anything at all;
+  // the truncation half is carried by the </TestRun> check below, which is the one that actually
+  // detects a run dying mid-write. AN XML DECLARATION IS OPTIONAL in XML 1.0, and the xunit v3 TRX
+  // writer omits it - its documents open straight on the root element, where VSTest's opened on
+  // "<?xml". Requiring the declaration therefore rejected a perfectly well-formed result file for a
+  // property this check was never about. Both openings are accepted, with or without a BOM;
+  // anything else is still refused, and nothing else here is relaxed.
+  const head = xml.startsWith("\uFEFF") ? xml.slice(1) : xml;
+  if (!head.startsWith("<?xml") && !head.startsWith("<TestRun")) {
+    fail(`${projectName}: ${trxPath} starts with neither an XML declaration nor <TestRun — unparseable results`);
   }
   if (!xml.trimEnd().endsWith("</TestRun>")) {
     fail(`${projectName}: ${trxPath} does not end with </TestRun> — truncated results (run died mid-write)`);
@@ -318,17 +328,52 @@ function namedFailures(resultsDir) {
   return rows;
 }
 
+// THE RUNNER IS PART OF THE MEASUREMENT, and choosing the wrong one cost this board a long-lived
+// row (2026-08-23). This gate used to shell out to `dotnet test`, i.e. VSTest hosting the xunit v3
+// adapter. Measured back to back on ONE build, interleaved A-B-A to rule out drift:
+//
+//     dotnet test (VSTest)            -> 4 failed / 2643 passed
+//     the xunit v3 assembly directly  -> 0 failed / 2665 total
+//     dotnet test (VSTest)            -> 4 failed / 2643 passed
+//
+// The four are exactly the real-desktop Win32 band facts (PointerCoexistenceTests and the tray
+// band regression). They lose WS_EX_TOPMOST only under the VSTest test host, which is a property
+// of that host's process, not of the product: no product change can close it, and for a long time
+// the board carried it as "the floor is not reliably green on this machine" as though it were one.
+//
+// xunit v3 test projects ARE executables and that is their first-class run mode; `-trx` emits the
+// same format this file already parses. Its Counters are in fact stricter than VSTest's: they
+// CLOSE OVER SKIPS (passed 2663 + notExecuted 2 == total 2665), where the VSTest arithmetic did
+// not, which is why the result-list anchoring below was needed in the first place. That anchoring
+// stays exactly as it is — it is correct for both, and it is not being relaxed on the strength of
+// a nicer runner.
+//
+// This does NOT retry, soften, or filter anything. It runs every fact the assembly has and holds
+// them to the same pins. A red here is still a red.
+function testAssemblyPath(project) {
+  const projDir = path.dirname(project.csproj);
+  const base = path.join(projDir, "bin", "Debug", "net10.0", project.name);
+  // The apphost carries .exe on Windows and no extension elsewhere; Linux is a supported target
+  // for this suite's non-UI legs, so the gate must find it on both rather than assume Windows.
+  const withExe = `${base}.exe`;
+  if (fs.existsSync(withExe)) return withExe;
+  if (fs.existsSync(base)) return base;
+  fail(`${project.name}: no test assembly executable at ${withExe} or ${base} — ` +
+    "the floor runs the xunit v3 assembly directly; build the solution before running it");
+  return null; // unreachable; fail() throws
+}
+
 function runProject(project, runDir) {
   assertBuildIsFresh(project);
   const resultsDir = path.join(runDir, project.name);
   fs.mkdirSync(resultsDir, { recursive: true });
+  const exe = testAssemblyPath(project);
   let exitCode = 0;
   let output = "";
   try {
     output = execFileSync(
-      "dotnet",
-      ["test", project.csproj, "-c", "Debug", "--nologo", "--no-build",
-        "--results-directory", resultsDir, "--logger", "trx;LogFileName=results.trx"],
+      exe,
+      ["-trx", path.join(resultsDir, "results.trx")],
       { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
     );
   } catch (err) {
@@ -363,7 +408,7 @@ export function main() {
     try {
       ({ exitCode, output, resultsDir } = runProject(project, runDir));
       if (exitCode !== 0) {
-        fail(`dotnet test exited ${exitCode} for ${project.name} — runner-level failure (see tail below)`);
+        fail(`the test assembly exited ${exitCode} for ${project.name} — runner-level failure (see tail below)`);
       }
       const summary = verifyProjectResults(project.name, resultsDir, pin.projects[project.name], runStartMs);
       const pinEntry = pin.projects[project.name];
