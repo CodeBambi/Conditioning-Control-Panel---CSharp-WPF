@@ -17,7 +17,8 @@
 //   1. Anchor the repo root by walking UP from process.cwd() to the directory holding
 //      client/CcpClient.sln (the anchor UpstreamPayloadInventoryTests.cs:98-114 uses,
 //      because it survives worktrees where .git is a file, not a directory).
-//   2. Read the committed inventory. Never write it.
+//   2. Read the committed inventory. The two REVIEW modes never write it; `--regenerate --write`
+//      is the one path in this file that does, and it is a third mode you ask for by name.
 //   3. Verify BOTH window endpoints with `git rev-parse --verify <sha>^{commit}`
 //      BEFORE any diff. A detector that reports "nothing to review" because it could
 //      not read its own baseline is worse than no detector.
@@ -134,6 +135,51 @@
 //   first and does nothing when it is absent, so "no blanket line-number validation" is a
 //   property of the code and not a promise. Citations into the other entries stay FILE-level.
 //
+// THE REGENERATE MODE — THE THIRD MODE, AND THE ONLY ONE THAT WRITES
+//   `changedAtSync` was HAND-MAINTAINED, and it is the field the default mode GATES on:
+//   NEEDS-VERDICT reads it as its changed-in-window gate (:651) and DELTA-MISMATCH re-measures
+//   it (:758-794). A hand slip there does not make noise, it silently SHRINKS the review list —
+//   the one failure shape a review tool cannot afford. `--regenerate` recomputes the field for
+//   EVERY entry from git and from nothing else:
+//     add/del  readNumstat() over the window — THE SAME CALL DELTA-MISMATCH uses, so a
+//              regenerated inventory leaves that class silent by construction (fact F29).
+//     status   `git diff --name-status` over the same window with the same options.
+//     sync     the committer date of the window's `until` endpoint (`git show -s --format=%cs`).
+//              Measured: db3e842f is 2026-08-14, which is the date the file already records, so
+//              the derivation reproduces the hand value rather than replacing it with a new one.
+//   An entry with no numstat row AT ITS OWN PATH regenerates to `null`. That is the mechanically
+//   true answer and it is exactly what the DELTA-MISMATCH action ("re-key or re-measure") asks
+//   for. Measured on this checkout over the recorded window: 1 of 297 entries moves, and it is
+//   the single live DELTA-MISMATCH row — ConditioningControlPanel/Models/AppSettings.cs, whose
+//   recorded +441/-5 was in fact the numstat of CCP.Core/Models/AppSettings.cs, a basename
+//   collision. Over db3e842f..fb89d087a, 127 of 297 move.
+//
+//   IT NEVER TOUCHES `baseline`, AND THAT IS NOT AN OVERSIGHT. Advancing baseline.previous to
+//   db3e842f moves the needle mode's default comparison window onto a span holding ZERO rows,
+//   which reds CitationNeedleTests.TheNeedleMode_ExitsZero_WithANonEmptyReviewList by making
+//   that guard VACUOUS rather than by fixing anything. Measured on this checkout:
+//   `--needles --since db3e842f` prints TOTAL ROWS: 0. The bump was tried and reverted before
+//   this mode existed. Regenerating the deltas is a separate mechanical job and stays one.
+//
+//   IT NEVER TOUCHES `verdict` EITHER. A verdict is judgment, and dropping or rewriting the
+//   delta a verdict was written ABOUT does not settle it — the AppSettings row above is a verdict
+//   reasoning over a delta that never happened at that path. So every row carries `verdictAtRisk`
+//   and the summary counts them, instead of the tool editing prose it cannot judge.
+//
+//   ONE NAMED CEILING. Plain numstat keys a RENAME by its combined `{old => new}` path, so an
+//   entry upstream renamed INTO its recorded path has no row at that path and regenerates to
+//   null. The summary COUNTS those (`renameDestinations`) rather than guessing at them. The
+//   upgrade path is keying rename rows by their destination inside readNumstat(), which would
+//   change which entries DELTA-MISMATCH can match and is therefore its own change with its own
+//   fact — not a quiet widening smuggled in under a regenerate flag.
+//
+//   THE WRITE IS SURGICAL, NEVER A RE-SERIALISATION. JSON.stringify(inventory, null, 2)
+//   REFORMATS this file: measured, it expands the hand-inlined needle records and rewrites 279
+//   bytes that no regeneration touched. So the writer replaces ONLY the value span following
+//   each `"changedAtSync":` key, reuses the file's own line ending and the key's own indent, and
+//   then RE-PARSES its own output and compares it against the intended object before a single
+//   byte reaches disk. A mismatch is a could-not-run condition, never a partial write.
+//
 // WHAT THIS FILE DELIBERATELY DOES NOT DO
 //   - The DEFAULT mode does not validate citation LINE NUMBERS: the `:NNN` suffix is matched
 //     and then discarded, and there is no line-number field in the row shape. `--needles`
@@ -161,7 +207,7 @@
 //     why editing this header or another non-corpus file can never move the coverage counts — which is
 //     what makes those counts a stable fixed point. A reader told only the reassuring half has
 //     been told half a fact. See D260's seventh blind spot.
-//   - It does not re-derive an entry's `citedBy`. NEW-CITATION (:640-651) skips any path
+//   - It does not re-derive an entry's `citedBy`. NEW-CITATION (:726-737) skips any path
 //     already in the inventory, and no class anywhere in runDetector diffs an existing
 //     entry's citer list — the recorded citedBy is only copied into rows for display. A
 //     citation ADDED to a file the inventory already carries is therefore invisible to all
@@ -173,8 +219,9 @@
 //     (first-attempt-lessons.md:108 lists `LocalAiService.cs` unqualified beside a
 //     path-qualified CCP.Core citation) is still credited to shipping AND is invisible to
 //     the counter. The counter is a floor on the erasure, never a ceiling.
-//   - It does not write anything except the opt-in `--out <path>` target. A generated
-//     report committed into the tree is the next thing to rot.
+//   - NEITHER REVIEW MODE writes anything except the opt-in `--out <path>` target. A generated
+//     report committed into the tree is the next thing to rot. `--regenerate` is the sole exception:
+//     no INVENTORY byte without `--write` (rejected alone), and its report obeys `--out` (:1692-1695).
 //   - It does not pick a candidate when a basename is ambiguous, and it does not treat a
 //     CCP.* path as the shipping tree without labelling it.
 
@@ -405,6 +452,45 @@ function readNumstat(repoRoot, since, until) {
     if (m) map.set(toPosix(m[3]), { add: m[1], del: m[2] });
   }
   return map;
+}
+
+/** `git diff --name-status <since>..<until>` as a Map keyed by the row's LAST path field.
+ *  The SAME window and the SAME options as readNumstat(), deliberately: the regenerate mode
+ *  reads a status only for a path that already has a numstat row, so the two must agree about
+ *  what changed. A rename row is `R100\told\tnew` and is keyed here by `new`; numstat keys that
+ *  same row by its combined `{old => new}` path, so the status is unreachable for a rename and
+ *  the entry regenerates to null. That asymmetry is the mode's one named ceiling, counted in
+ *  the summary rather than guessed at. */
+function readNameStatus(repoRoot, since, until) {
+  const range = `${since}..${until}`;
+  const result = runGit(repoRoot, ["diff", "--name-status", range, "--", "ConditioningControlPanel/"]);
+  if (!result.ok) {
+    throw new DetectorError(
+      `git diff --name-status failed for window ${range} (exit ${result.status}): ${result.stderr.trim()}`,
+    );
+  }
+  const map = new Map();
+  for (const line of result.stdout.split("\n")) {
+    const fields = line.split("\t");
+    if (fields.length < 2 || !fields[0].trim()) continue;
+    map.set(toPosix(fields[fields.length - 1]), fields[0]);
+  }
+  return map;
+}
+
+/** A commit's committer date as YYYY-MM-DD — the regenerated `sync` field, DERIVED rather than
+ *  typed. The shape is checked because a `sync` that silently became git's error text would be
+ *  written into 297 entries. */
+function commitDate(repoRoot, sha) {
+  const result = runGit(repoRoot, ["show", "-s", "--format=%cs", sha]);
+  const date = result.stdout.trim();
+  if (!result.ok || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new DetectorError(
+      `could not derive a sync date from ${sha} (git show -s --format=%cs exited ${result.status}, ` +
+        `gave ${JSON.stringify(date)}); nothing was regenerated`,
+    );
+  }
+  return date;
 }
 
 // ------------------------------------------------------------------- repo root
@@ -767,7 +853,7 @@ const NEEDLE_CLASS_ORDER = [
 
 /** A FILE-QUALIFIED citation carrying an explicit line span: `Name.cs:426`, `Name.cs:427-429`,
  *  with or without a path prefix. The FILE half is character-for-character CITATION_TOKEN's own
- *  pattern (:248) and not a second, drifting copy of it — the two must agree about what a
+ *  pattern (:295) and not a second, drifting copy of it — the two must agree about what a
  *  citation token is, or the needle mode would resolve names the default mode cannot. */
 const CITATION_WITH_LINE = /([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:cs|xaml)\b):(\d+)(?:-(\d+))?/g;
 
@@ -838,7 +924,7 @@ export function runNeedleReview({ repoRoot, since, inventoryPath } = {}) {
   verifyEndpoint(root, endpoint, "comparison endpoint");
 
   // Resolve citation tokens against the SHIPPING universe only, by the same rule and the same
-  // index the default mode uses (:482-487): an ambiguous basename picks nothing.
+  // index the default mode uses (:568-573): an ambiguous basename picks nothing.
   const isWpfSource = (name) => /\.(?:cs|xaml)$/i.test(name);
   const shippingUniverse = walkFiles(wpfRoot, isWpfSource)
     .map((p) => p.slice(root.length + 1))
@@ -1108,6 +1194,307 @@ export function formatNeedleReport(outcome) {
   return out.join("\n");
 }
 
+// ------------------------------------------------------------ the regenerate mode
+
+/** The three ways a hand-maintained delta differs from the one git reports. A typed
+ *  vocabulary, like CLASS and NEEDLE_CLASS above, and for the same reason. */
+export const REGEN_CLASS = Object.freeze({
+  REWRITTEN: "DELTA-REWRITTEN",
+  ADDED: "DELTA-ADDED",
+  DROPPED: "DELTA-DROPPED",
+});
+
+const REGEN_CLASS_ORDER = [REGEN_CLASS.REWRITTEN, REGEN_CLASS.ADDED, REGEN_CLASS.DROPPED];
+
+/** Field-by-field, because two objects that merely stringify alike would also compare equal
+ *  under a key reordering, and the schema is small enough to say what it means. */
+function sameDelta(a, b) {
+  if (a === null || b === null) return a === b;
+  return a.sync === b.sync && a.status === b.status && a.add === b.add && a.del === b.del;
+}
+
+/** Index just past the JSON object opening at `open`. Counts braces while skipping string
+ *  literals and their escapes, so a `{` inside a verdict cannot unbalance the scan. */
+function endOfObject(text, open) {
+  let depth = 0;
+  let inString = false;
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === "\\") i += 1;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  throw new DetectorError("the inventory's JSON is unbalanced: a changedAtSync object never closes");
+}
+
+/** The byte span of every `"changedAtSync":` VALUE in the raw inventory text, in file order.
+ *  Only `null` and an object are accepted: those are the schema's two forms, and anything else
+ *  is a file this writer must not touch rather than one it should guess at. */
+function changedAtSyncSpans(raw) {
+  const KEY = '"changedAtSync":';
+  const spans = [];
+  for (let i = 0; ; ) {
+    const keyAt = raw.indexOf(KEY, i);
+    if (keyAt < 0) return spans;
+    let j = keyAt + KEY.length;
+    while (j < raw.length && (raw[j] === " " || raw[j] === "\t")) j += 1;
+    const start = j;
+    if (raw.startsWith("null", j)) j += 4;
+    else if (raw[j] === "{") j = endOfObject(raw, j);
+    else {
+      throw new DetectorError(
+        `the changedAtSync value at byte ${start} is neither null nor an object ` +
+          `(${JSON.stringify(raw.slice(start, start + 24))}); nothing was written`,
+      );
+    }
+    spans.push({ keyAt, start, end: j });
+    i = j;
+  }
+}
+
+/** The surgical rewrite. `values[i]` replaces the i-th `"changedAtSync":` value and NOTHING
+ *  else in the file moves: the line ending is the file's own, the object indent is the key's
+ *  own, and every byte outside the spans is copied through verbatim. Exported so the facts can
+ *  drive it directly on hand-formatted bytes. */
+export function rewriteChangedAtSync(raw, values) {
+  const spans = changedAtSyncSpans(raw);
+  if (spans.length !== values.length) {
+    throw new DetectorError(
+      `the inventory holds ${spans.length} changedAtSync key(s) but ${values.length} entry(ies): every ` +
+        `entry must carry the key (null when it did not change in the window), and the key must not ` +
+        `appear inside a string. Nothing was written.`,
+    );
+  }
+  const eol = raw.includes("\r\n") ? "\r\n" : "\n";
+  const out = [];
+  let cursor = 0;
+  for (let i = 0; i < spans.length; i++) {
+    const { keyAt, start, end } = spans[i];
+    const indent = /^[ \t]*/.exec(raw.slice(raw.lastIndexOf("\n", keyAt) + 1, keyAt))[0];
+    const text = values[i] === null ? "null" : JSON.stringify(values[i], null, 2).split("\n").join(eol + indent);
+    out.push(raw.slice(cursor, start), text);
+    cursor = end;
+  }
+  out.push(raw.slice(cursor));
+  return out.join("");
+}
+
+/** Pure-ish core of the third mode: computes every entry's delta from git, reports what moved,
+ *  and writes ONLY when asked. PRINTS NOTHING, like the other two cores. The write lives here
+ *  rather than in main() so the facts exercise the same path the CLI does. */
+export function runRegenerate({ repoRoot, since, until, inventoryPath, write = false } = {}) {
+  if (!repoRoot) throw new DetectorError("runRegenerate requires a repoRoot");
+  const root = toPosix(path.resolve(repoRoot));
+  const invPath = inventoryPath
+    ? toPosix(path.resolve(inventoryPath))
+    : `${root}/client/docs/upstream-citation-inventory.json`;
+
+  let raw;
+  try {
+    raw = fs.readFileSync(invPath, "utf8");
+  } catch {
+    throw new DetectorError(`inventory not readable at ${invPath}`);
+  }
+  let inventory;
+  try {
+    inventory = JSON.parse(raw);
+  } catch (err) {
+    throw new DetectorError(`inventory at ${invPath} is not parseable JSON: ${err.message}`);
+  }
+  if (!inventory || !Array.isArray(inventory.entries)) {
+    throw new DetectorError(`inventory at ${invPath} has no "entries" array`);
+  }
+
+  const wpfRoot = path.join(root, "ConditioningControlPanel");
+  if (!fs.existsSync(wpfRoot)) {
+    throw new DetectorError(`ConditioningControlPanel/ is absent under ${root} — there is no history to regenerate from`);
+  }
+
+  const baselineRecord = inventory.baseline ?? {};
+  const sinceSha = since ?? baselineRecord?.previous?.merge;
+  const untilSha = until ?? baselineRecord?.merge;
+  if (!sinceSha || !untilSha) {
+    throw new DetectorError(
+      `no change window: pass --since/--until, or give the inventory a baseline.previous.merge ` +
+        `and baseline.merge (got since=${sinceSha ?? "none"} until=${untilSha ?? "none"})`,
+    );
+  }
+  verifyEndpoint(root, sinceSha, "since");
+  verifyEndpoint(root, untilSha, "until");
+
+  const syncDate = commitDate(root, untilSha);
+  const numstat = readNumstat(root, sinceSha, untilSha);
+  const status = readNameStatus(root, sinceSha, untilSha);
+
+  const values = [];
+  const rows = [];
+  let unchanged = 0;
+  for (const entry of inventory.entries) {
+    const observed = numstat.get(entry.path);
+    let next = null;
+    if (observed) {
+      if (observed.add === "-" || observed.del === "-") {
+        throw new DetectorError(
+          `${entry.path} has a BINARY numstat row (+${observed.add}/-${observed.del}) over ` +
+            `${sinceSha}..${untilSha}. An inventory entry names a WPF source file, so this is a ` +
+            `could-not-run condition rather than a zero to record. Nothing was written.`,
+        );
+      }
+      const code = status.get(entry.path); // the refusal below is unreachable: :443 and :466 share range + pathspec
+      if (!code) {
+        throw new DetectorError(
+          `${entry.path} has a numstat row over ${sinceSha}..${untilSha} but no --name-status row at the ` +
+            `same path. The two git calls disagree, and inventing a status is the one thing this mode ` +
+            `must not do. Nothing was written.`,
+        );
+      }
+      next = { sync: syncDate, status: code, add: Number(observed.add), del: Number(observed.del) };
+    }
+    values.push(next);
+
+    const recorded = entry.changedAtSync ?? null;
+    if (sameDelta(recorded, next)) {
+      unchanged += 1;
+      continue;
+    }
+    const verdict = typeof entry.verdict === "string" ? entry.verdict : "";
+    rows.push({
+      cls: recorded === null ? REGEN_CLASS.ADDED : next === null ? REGEN_CLASS.DROPPED : REGEN_CLASS.REWRITTEN,
+      path: entry.path,
+      tier: entry.tier,
+      recorded,
+      regenerated: next,
+      // A verdict reasoning over a delta this pass is about to change or remove is judgment work
+      // the pass CREATES. Named on the row; never resolved here.
+      verdictAtRisk: verdict.trim() !== "" && !verdict.startsWith(UNREVIEWED_SENTINEL),
+    });
+  }
+
+  const nextText = rewriteChangedAtSync(raw, values);
+
+  // The writer's own proof, run BEFORE anything reaches disk: re-parse the produced bytes and
+  // compare them with the inventory this pass intended. A surgical edit that fell out of step
+  // with the entry order would be caught here rather than committed.
+  const intended = {
+    ...inventory,
+    entries: inventory.entries.map((entry, i) => ({ ...entry, changedAtSync: values[i] })),
+  };
+  let verified;
+  try {
+    verified = JSON.parse(nextText);
+  } catch (err) {
+    throw new DetectorError(`the regenerated inventory did not re-parse (${err.message}); nothing was written`);
+  }
+  if (JSON.stringify(verified) !== JSON.stringify(intended)) {
+    throw new DetectorError(
+      "the surgical rewrite did not reproduce the intended inventory, so the value spans and the entry " +
+        "order are out of step; nothing was written",
+    );
+  }
+
+  const written = write && nextText !== raw;
+  if (written) fs.writeFileSync(invPath, nextText, "utf8");
+
+  const entryPaths = new Set(inventory.entries.map((e) => e.path));
+  const renameDestinations = [...status]
+    .filter(([p, code]) => code.startsWith("R") && entryPaths.has(p) && !numstat.has(p))
+    .map(([p]) => p)
+    .sort();
+
+  // What the default mode's NEEDS-VERDICT would report once these values land, by that class's
+  // own three gates (tier 1, changed in window, no usable verdict — :651-656).
+  const tier1Total = inventory.entries.filter((e) => e.tier === 1).length;
+  const needsVerdictAfter = inventory.entries.filter((entry, i) => {
+    if (entry.tier !== 1 || values[i] === null) return false;
+    const verdict = typeof entry.verdict === "string" ? entry.verdict : "";
+    return verdict.trim() === "" || verdict.startsWith(UNREVIEWED_SENTINEL);
+  }).length;
+
+  return {
+    window: { since: sinceSha, until: untilSha, syncDate },
+    rows: rows.sort((a, b) => {
+      const ci = REGEN_CLASS_ORDER.indexOf(a.cls) - REGEN_CLASS_ORDER.indexOf(b.cls);
+      return ci !== 0 ? ci : a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+    }),
+    summary: {
+      inventoryPath: invPath,
+      inventoryEntries: inventory.entries.length,
+      moved: rows.length,
+      unchanged,
+      byClass: Object.fromEntries(REGEN_CLASS_ORDER.map((c) => [c, rows.filter((r) => r.cls === c).length])),
+      changedAfter: values.filter((v) => v !== null).length,
+      verdictAtRisk: rows.filter((r) => r.verdictAtRisk).length,
+      tier1: { total: tier1Total, needsVerdictAfter },
+      renameDestinations,
+      written,
+      wouldWriteBytes: nextText.length - raw.length,
+    },
+  };
+}
+
+const deltaText = (d) => (d === null ? "(unchanged in window)" : `${d.status} +${d.add}/-${d.del} @ ${d.sync}`);
+
+export function formatRegenerateReport(outcome) {
+  const { window, rows, summary } = outcome;
+  const out = [];
+  out.push("UPSTREAM CITATION INVENTORY REGENERATION");
+  out.push(`window: ${window.since}..${window.until} (sync date derived from ${window.until}: ${window.syncDate})`);
+  out.push(`inventory: ${summary.inventoryPath}`);
+  out.push(
+    `${summary.inventoryEntries} entries — ${summary.moved} move, ${summary.unchanged} already agree with git | ` +
+      `changed-in-window after this pass: ${summary.changedAfter}`,
+  );
+  out.push("");
+
+  for (const cls of REGEN_CLASS_ORDER) {
+    const group = rows.filter((r) => r.cls === cls);
+    out.push(`## ${cls} (${group.length})`);
+    if (group.length === 0) out.push("  (none)");
+    for (const row of group) {
+      out.push(`  ${row.path}  [${row.tier == null ? "-" : `tier ${row.tier}`}]`);
+      out.push(`      recorded:    ${deltaText(row.recorded)}`);
+      out.push(`      regenerated: ${deltaText(row.regenerated)}`);
+      if (row.verdictAtRisk) {
+        out.push("      VERDICT AT RISK: this entry's verdict reasons over the delta above. The verdict is");
+        out.push("        NOT touched by this pass — re-reading it is judgment work, and it is now owed.");
+      }
+    }
+    out.push("");
+  }
+
+  out.push("## SUMMARY");
+  for (const cls of REGEN_CLASS_ORDER) out.push(`  ${cls}: ${summary.byClass[cls]}`);
+  out.push(`  verdicts left describing a delta this pass changed or removed: ${summary.verdictAtRisk}`);
+  out.push(
+    `  tier-1 entries: ${summary.tier1.total} — the judgment work this mode deliberately does NOT do. ` +
+      `${summary.tier1.needsVerdictAfter} of them would be NEEDS-VERDICT rows after this pass.`,
+  );
+  out.push(
+    `  entry paths that are a RENAME DESTINATION in this window: ${summary.renameDestinations.length} — ` +
+      `plain numstat keys a rename by its combined {old => new} path, so these regenerate to null:`,
+  );
+  if (summary.renameDestinations.length === 0) out.push("      (none)");
+  for (const p of summary.renameDestinations) out.push(`      ${p}`);
+  out.push(
+    summary.written
+      ? `  WRITTEN: ${summary.inventoryPath} (${summary.wouldWriteBytes >= 0 ? "+" : ""}${summary.wouldWriteBytes} bytes; ` +
+        `only changedAtSync value spans were replaced)`
+      : `  NOT WRITTEN: pass --write to apply this` +
+        `${summary.moved === 0 ? " (nothing to apply: the file already agrees with git)" : ""}.`,
+  );
+  out.push("");
+  out.push("`baseline` and every `verdict` are untouched by this mode, by design. Exit 0 means it ran.");
+  return out.join("\n");
+}
+
 // -------------------------------------------------------------------- reporting
 
 /** `needleCoverage` is the needle mode's coverage block, optional so the fourteen facts that call
@@ -1180,7 +1567,7 @@ export function formatReport(outcome, needleCoverage) {
 // -------------------------------------------------------------------------- CLI
 
 function parseArgs(argv) {
-  const opts = { since: undefined, until: undefined, out: undefined, needles: false };
+  const opts = { since: undefined, until: undefined, out: undefined, needles: false, regenerate: false, write: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const eq = arg.indexOf("=");
@@ -1205,6 +1592,12 @@ function parseArgs(argv) {
       case "--needles":
         opts.needles = true;
         break;
+      case "--regenerate":
+        opts.regenerate = true;
+        break;
+      case "--write":
+        opts.write = true;
+        break;
       case "-h":
       case "--help":
         opts.help = true;
@@ -1217,10 +1610,16 @@ function parseArgs(argv) {
 }
 
 const USAGE = [
-  "usage: node client/tools/citations/detect.mjs [--needles] [--since <sha>] [--until <sha>] [--out <path>]",
+  "usage: node client/tools/citations/detect.mjs [--needles | --regenerate [--write]]",
+  "                                             [--since <sha>] [--until <sha>] [--out <path>]",
   "",
   "  Emits the upstream citation REVIEW LIST to stdout.",
   "  --since/--until override the window read from the inventory's baseline.",
+  "  --regenerate recomputes every entry's changedAtSync from git over that window and reports",
+  "            what moves. It NEVER touches baseline or any verdict. Nothing is written without",
+  "            --write, and the write replaces only the changedAtSync value spans: the file's",
+  "            line endings, indentation and hand formatting are preserved byte for byte.",
+  "            --write on its own, and --regenerate with --needles, are both REJECTED.",
   "  --needles emits the LINE-LEVEL review list instead: every inventory needle is re-grepped in",
   "            the working tree and compared with its position at the comparison endpoint.",
   "            --since overrides that endpoint (default: the inventory's baseline.merge).",
@@ -1228,8 +1627,8 @@ const USAGE = [
   "            because this mode always compares against the WORKING TREE.",
   "  --out writes the same report to a file as well (opt-in; nothing is written otherwise).",
   "",
-  "  Both modes print the NEEDLE COVERAGE block, every run: an unstated coverage gap is how a",
-  "  review list becomes a false reassurance.",
+  "  Both REVIEW modes print the NEEDLE COVERAGE block, every run: an unstated coverage gap is",
+  "  how a review list becomes a false reassurance.",
   "",
   "  Exit 0: the detector ran (an empty list and a long list both exit 0).",
   "  Exit 1: the detector could not run honestly; the reason is named on stderr.",
@@ -1250,7 +1649,21 @@ export function main(argv = [], cwd = process.cwd()) {
   let report;
   try {
     const repoRoot = findRepoRoot(cwd);
-    if (opts.needles) {
+    // Both combinations are REJECTED rather than resolved by precedence: a mode chosen for the
+    // caller by argument order is a tool deciding what it was asked to do, and one of these two
+    // flags authorises a WRITE.
+    if (opts.regenerate && opts.needles) {
+      throw new DetectorError(
+        "--regenerate and --needles are different modes: one recomputes the inventory's deltas, the " +
+          "other reviews needle positions. Run them one at a time.",
+      );
+    }
+    if (opts.write && !opts.regenerate) {
+      throw new DetectorError("--write only means something with --regenerate; the review modes never write the inventory.");
+    }
+    if (opts.regenerate) {
+      report = formatRegenerateReport(runRegenerate({ repoRoot, since: opts.since, until: opts.until, write: opts.write }));
+    } else if (opts.needles) {
       // --until is REJECTED, not ignored: this mode always compares against the working tree,
       // and a flag that is silently dropped is a tool lying about what it measured.
       if (opts.until !== undefined) {
