@@ -339,11 +339,12 @@
       "line": 327,
       "method": "CompanionViewModelTests.ClearFlow_DeleteFails_HonestFailureText_NeverReportsCleared",
       "shapes": [
-        "fs-predicate"
+        "fs-predicate",
+        "dynamic-skip"
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
+      "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3) A later change added dynamic-skip: staging a delete that FAILS is platform work (Windows refuses the unlink while the file is held with no sharing; Unix consults the DIRECTORY write bit and never the advisory flock, so the same handle let the delete succeed and this branch was unreachable there), and the staging PROVES itself on a sentinel before the product is asked. The skip fires only where this process can unlink through a directory it cannot write - an effective-root or CAP_DAC_OVERRIDE process, a property of the machine - and never on the OS name, an env var, a CI flag, or Debugger.IsAttached. Pinned may-skip by NAME in floor.json allowedSkips. Every product assertion is unchanged and runs in full on both platforms."
     },
     {
       "key": "CcpClient.Tests/CompanionViewModelTests.cs::CompanionViewModelTests.ConsentDenied_SendPersistsNothing_TypedAdmission",
@@ -1061,6 +1062,894 @@
       "expectDetected": true,
       "verdict": "not-vacuous",
       "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS), the same disposition and the same mechanical reason as DataRootChokePointGuardTests / TestTimingGuardTests / UnboundedWaitGuardTests above. The Directory.EnumerateFiles walk that follows is pinned by Assert.True(scanned > 100) BEFORE the violations assertion, so a scan that walked an empty or wrong tree FAILS rather than reporting zero violations"
+    },
+    {
+      "key": "CcpClient.Tests/FlashDrawTests.cs::FlashDrawTests.PaintingWithNothingPresented_IsATypedRefusal_NotASilentNoOp",
+      "path": "CcpClient.Tests/FlashDrawTests.cs",
+      "line": 201,
+      "method": "FlashDrawTests.PaintingWithNothingPresented_IsATypedRefusal_NotASilentNoOp",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
+    },
+    {
+      "key": "CcpClient.Tests/FlashDrawTests.cs::FlashDrawTests.AFrameThatIsNotTheSurfacesSize_IsRefusedRatherThanStretched",
+      "path": "CcpClient.Tests/FlashDrawTests.cs",
+      "line": 220,
+      "method": "FlashDrawTests.AFrameThatIsNotTheSurfacesSize_IsRefusedRatherThanStretched",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
+    },
+    {
+      "key": "CcpClient.Tests/FlashDrawTests.cs::FlashDrawTests.TheProductsOwnDecoder_SizesARealImageFileByWpfsGeometry",
+      "path": "CcpClient.Tests/FlashDrawTests.cs",
+      "line": 252,
+      "method": "FlashDrawTests.TheProductsOwnDecoder_SizesARealImageFileByWpfsGeometry",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/FlashDrawTests.cs::FlashDrawTests.ATransparentImage_IsComposedOverBlack_AsWpfsFlashWindowDoes",
+      "path": "CcpClient.Tests/FlashDrawTests.cs",
+      "line": 281,
+      "method": "FlashDrawTests.ATransparentImage_IsComposedOverBlack_AsWpfsFlashWindowDoes",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.PresentEarnsAvailableONLYWhereTheMachineHasADesktop",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 142,
+      "method": "GlyphCapabilityTests.PresentEarnsAvailableONLYWhereTheMachineHasADesktop",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.TheOSHoldsTheSurface_ItExists_IsVisible_AndCarriesExactlyTheRequestedRectangle",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 162,
+      "method": "GlyphCapabilityTests.TheOSHoldsTheSurface_ItExists_IsVisible_AndCarriesExactlyTheRequestedRectangle",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.THESURFACEHOLDSNOUNIFORMALPHA_WhichIsTheWholeDifferenceFromTheOverlay",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 180,
+      "method": "GlyphCapabilityTests.THESURFACEHOLDSNOUNIFORMALPHA_WhichIsTheWholeDifferenceFromTheOverlay",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.TheExtendedStyleReadBackCarriesEveryBitThatWasWritten",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 200,
+      "method": "GlyphCapabilityTests.TheExtendedStyleReadBackCarriesEveryBitThatWasWritten",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.TheOSsOwnZOrderPutsTheSurfaceAboveEveryOrdinaryWindow",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 218,
+      "method": "GlyphCapabilityTests.TheOSsOwnZOrderPutsTheSurfaceAboveEveryOrdinaryWindow",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.TheSurfaceNeverTakesTheForeground",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 232,
+      "method": "GlyphCapabilityTests.TheSurfaceNeverTakesTheForeground",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.TheWindowManagerRoutesThePointPASTIt_AndTOItWhenMomentarilyMadeOpaque",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 245,
+      "method": "GlyphCapabilityTests.TheWindowManagerRoutesThePointPASTIt_AndTOItWhenMomentarilyMadeOpaque",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.THEOSSOWNCOPYOFTHESURFACECarriesTheFrame_AtEveryOpaqueInkPoint",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 265,
+      "method": "GlyphCapabilityTests.THEOSSOWNCOPYOFTHESURFACECarriesTheFrame_AtEveryOpaqueInkPoint",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.AndTheTransparentQuadrantReadsBackAsNOTHING_WhichIsTheLIMITOfThisReadBack",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 287,
+      "method": "GlyphCapabilityTests.AndTheTransparentQuadrantReadsBackAsNOTHING_WhichIsTheLIMITOfThisReadBack",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.PaintReplacesTheContent_AndTheOSsCopyREALLYCHANGED",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 305,
+      "method": "GlyphCapabilityTests.PaintReplacesTheContent_AndTheOSsCopyREALLYCHANGED",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.AMOVEIsOneCall_ItEarnsAvailableFromGetWindowRect_AndTheContentSurvivesIt",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 330,
+      "method": "GlyphCapabilityTests.AMOVEIsOneCall_ItEarnsAvailableFromGetWindowRect_AndTheContentSurvivesIt",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.AMoveThatWouldRESIZEIsRefused_BecauseTheLayeredSurfaceISTheFrame",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 354,
+      "method": "GlyphCapabilityTests.AMoveThatWouldRESIZEIsRefused_BecauseTheLayeredSurfaceISTheFrame",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.ANINKLESSFRAMEIsREFUSED_BecauseNothingCouldTellItFromAGhost",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 369,
+      "method": "GlyphCapabilityTests.ANINKLESSFRAMEIsREFUSED_BecauseNothingCouldTellItFromAGhost",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.PRESENTALSOREFUSESANINKLESSFRAME_NotOnlyPaint",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 387,
+      "method": "GlyphCapabilityTests.PRESENTALSOREFUSESANINKLESSFRAME_NotOnlyPaint",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.AMismatchedFrameIsRefusedRatherThanStretched",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 416,
+      "method": "GlyphCapabilityTests.AMismatchedFrameIsRefusedRatherThanStretched",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.WithdrawTakesItOffTheScreenAndOutOfTheHitTest_AndKeepsTheComposite",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 431,
+      "method": "GlyphCapabilityTests.WithdrawTakesItOffTheScreenAndOutOfTheHitTest_AndKeepsTheComposite",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.PaintingAWithdrawnSurfaceIsRefused",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 456,
+      "method": "GlyphCapabilityTests.PaintingAWithdrawnSurfaceIsRefused",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.DisposeLeavesNoTopLevelWindowBehind_AndNoTeardownDiagnostic",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 471,
+      "method": "GlyphCapabilityTests.DisposeLeavesNoTopLevelWindowBehind_AndNoTeardownDiagnostic",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.AnUnpresentedSurfaceRefusesPaintMoveAndWithdraw",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 658,
+      "method": "GlyphCapabilityTests.AnUnpresentedSurfaceRefusesPaintMoveAndWithdraw",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.PresentNAMESWhatItDoesNotClaim_TheTransparentPixelAndTheHumanEye",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 685,
+      "method": "GlyphCapabilityTests.PresentNAMESWhatItDoesNotClaim_TheTransparentPixelAndTheHumanEye",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCapabilityTests.cs::GlyphCapabilityTests.AndTheMOVEsAvailableSaysExactlyWhatItDidNotReask",
+      "path": "CcpClient.Tests/GlyphCapabilityTests.cs",
+      "line": 707,
+      "method": "GlyphCapabilityTests.AndTheMOVEsAvailableSaysExactlyWhatItDidNotReask",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCoexistenceTests.cs::GlyphCoexistenceTests.TheFifthRectangleIsDisjointFromAllFour_AssertedRatherThanAssumed",
+      "path": "CcpClient.Tests/GlyphCoexistenceTests.cs",
+      "line": 63,
+      "method": "GlyphCoexistenceTests.TheFifthRectangleIsDisjointFromAllFour_AssertedRatherThanAssumed",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCoexistenceTests.cs::GlyphCoexistenceTests.TheOverlayStaysCLICKTHROUGH_AtAllFourMoments_IncludingDuringAMove",
+      "path": "CcpClient.Tests/GlyphCoexistenceTests.cs",
+      "line": 78,
+      "method": "GlyphCoexistenceTests.TheOverlayStaysCLICKTHROUGH_AtAllFourMoments_IncludingDuringAMove",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCoexistenceTests.cs::GlyphCoexistenceTests.THECARDKEEPSTHEFOREGROUNDANDTHEKEYBOARD_ThroughAPresentAMoveAndAWithdraw",
+      "path": "CcpClient.Tests/GlyphCoexistenceTests.cs",
+      "line": 142,
+      "method": "GlyphCoexistenceTests.THECARDKEEPSTHEFOREGROUNDANDTHEKEYBOARD_ThroughAPresentAMoveAndAWithdraw",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/GlyphCoexistenceTests.cs::GlyphCoexistenceTests.ThePointerTargetStillOwnsItsOwnPoint",
+      "path": "CcpClient.Tests/GlyphCoexistenceTests.cs",
+      "line": 184,
+      "method": "GlyphCoexistenceTests.ThePointerTargetStillOwnsItsOwnPoint",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/InputCapabilityTests.cs::InputCapabilityTests.DismissingThePrompt_TakesItDownAndGivesTheKeyboardBack",
+      "path": "CcpClient.Tests/InputCapabilityTests.cs",
+      "line": 249,
+      "method": "InputCapabilityTests.DismissingThePrompt_TakesItDownAndGivesTheKeyboardBack",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/InputCapabilityTests.cs::InputCapabilityTests.AskingAPresenceThatHasPromptedNothing_NeverReadsAsSuccess",
+      "path": "CcpClient.Tests/InputCapabilityTests.cs",
+      "line": 423,
+      "method": "InputCapabilityTests.AskingAPresenceThatHasPromptedNothing_NeverReadsAsSuccess",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
+    },
+    {
+      "key": "CcpClient.Tests/InputCapabilityTests.cs::InputCapabilityTests.ACardOnNoDisplayAtAll_NeverClaimsAvailable_AndTheINKReadBackIsWhatCatchesIt",
+      "path": "CcpClient.Tests/InputCapabilityTests.cs",
+      "line": 467,
+      "method": "InputCapabilityTests.ACardOnNoDisplayAtAll_NeverClaimsAvailable_AndTheINKReadBackIsWhatCatchesIt",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/InputCapabilityTests.cs::InputCapabilityTests.HoldingTheInputRequiresTheFOREGROUND_NotJustAFocusRead",
+      "path": "CcpClient.Tests/InputCapabilityTests.cs",
+      "line": 583,
+      "method": "InputCapabilityTests.HoldingTheInputRequiresTheFOREGROUND_NotJustAFocusRead",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/InputOverlayCoexistenceTests.cs::InputOverlayCoexistenceTests.TheOverlayStillPassesInputThrough_BeforeDuringAndAfterACard",
+      "path": "CcpClient.Tests/InputOverlayCoexistenceTests.cs",
+      "line": 41,
+      "method": "InputOverlayCoexistenceTests.TheOverlayStillPassesInputThrough_BeforeDuringAndAfterACard",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/OverlayCapabilityTests.cs::OverlayCapabilityTests.AskingAPresenceThatHasPresentedNothing_NeverReadsAsSuccess",
+      "path": "CcpClient.Tests/OverlayCapabilityTests.cs",
+      "line": 268,
+      "method": "OverlayCapabilityTests.AskingAPresenceThatHasPresentedNothing_NeverReadsAsSuccess",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
+    },
+    {
+      "key": "CcpClient.Tests/PointerCapabilityTests.cs::PointerCapabilityTests.TheDeliveryOracle_CanSeeAClickArriveAtAWindowItBuiltItself_OrNoFactBelowMeansAnything",
+      "path": "CcpClient.Tests/PointerCapabilityTests.cs",
+      "line": 42,
+      "method": "PointerCapabilityTests.TheDeliveryOracle_CanSeeAClickArriveAtAWindowItBuiltItself_OrNoFactBelowMeansAnything",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/PointerCapabilityTests.cs::PointerCapabilityTests.PLACINGATargetTakesNothing_TheForegroundIsTheSameWindowBeforeAndAfterAndIsNeverTheTarget",
+      "path": "CcpClient.Tests/PointerCapabilityTests.cs",
+      "line": 111,
+      "method": "PointerCapabilityTests.PLACINGATargetTakesNothing_TheForegroundIsTheSameWindowBeforeAndAfterAndIsNeverTheTarget",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/PointerCapabilityTests.cs::PointerCapabilityTests.ACLICKARRIVESATTHETARGETSOWNWINDOWPROCEDURE_WHILETHEFOREGROUNDDOESNOTMOVE",
+      "path": "CcpClient.Tests/PointerCapabilityTests.cs",
+      "line": 133,
+      "method": "PointerCapabilityTests.ACLICKARRIVESATTHETARGETSOWNWINDOWPROCEDURE_WHILETHEFOREGROUNDDOESNOTMOVE",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/PointerCapabilityTests.cs::PointerCapabilityTests.ClosingATargetTakesItOffTheDesktop_StopsTheRouting_AndStillCostsTheUserNothing",
+      "path": "CcpClient.Tests/PointerCapabilityTests.cs",
+      "line": 202,
+      "method": "PointerCapabilityTests.ClosingATargetTakesItOffTheDesktop_StopsTheRouting_AndStillCostsTheUserNothing",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/PointerCapabilityTests.cs::PointerCapabilityTests.AClickAtAPointAnsweredBEFORETheTargetMoved_StillReachesTheSAMETargetOneStepLater",
+      "path": "CcpClient.Tests/PointerCapabilityTests.cs",
+      "line": 272,
+      "method": "PointerCapabilityTests.AClickAtAPointAnsweredBEFORETheTargetMoved_StillReachesTheSAMETargetOneStepLater",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/PointerCapabilityTests.cs::PointerCapabilityTests.AClickAtAPointTheTargetHasLEFTDoesNotReachIt_WhichIsWhatMakesTheFactAboveMeanSomething",
+      "path": "CcpClient.Tests/PointerCapabilityTests.cs",
+      "line": 305,
+      "method": "PointerCapabilityTests.AClickAtAPointTheTargetHasLEFTDoesNotReachIt_WhichIsWhatMakesTheFactAboveMeanSomething",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/PointerCapabilityTests.cs::PointerCapabilityTests.ASurfaceRefusesAFourthTarget_RatherThanSilentlyDroppingIt",
+      "path": "CcpClient.Tests/PointerCapabilityTests.cs",
+      "line": 367,
+      "method": "PointerCapabilityTests.ASurfaceRefusesAFourthTarget_RatherThanSilentlyDroppingIt",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
+    },
+    {
+      "key": "CcpClient.Tests/PointerCoexistenceTests.cs::PointerCoexistenceTests.TheOverlayStaysCLICKTHROUGH_AtAllFourMoments_IncludingDuringAMove",
+      "path": "CcpClient.Tests/PointerCoexistenceTests.cs",
+      "line": 57,
+      "method": "PointerCoexistenceTests.TheOverlayStaysCLICKTHROUGH_AtAllFourMoments_IncludingDuringAMove",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/PointerCoexistenceTests.cs::PointerCoexistenceTests.THECARDKEEPSTHEFOREGROUNDANDTHEKEYBOARD_ThroughAnOpenAMoveAndAClose",
+      "path": "CcpClient.Tests/PointerCoexistenceTests.cs",
+      "line": 111,
+      "method": "PointerCoexistenceTests.THECARDKEEPSTHEFOREGROUNDANDTHEKEYBOARD_ThroughAnOpenAMoveAndAClose",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/RealClipDecodeTests.cs::RealClipDecodeTests.TheStreamIsH264_SoTheOsMustDECODEIt_AndTheVIDEOPROCESSORIsWhatMakesItBgrx",
+      "path": "CcpClient.Tests/RealClipDecodeTests.cs",
+      "line": 107,
+      "method": "RealClipDecodeTests.TheStreamIsH264_SoTheOsMustDECODEIt_AndTheVIDEOPROCESSORIsWhatMakesItBgrx",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/RealClipDecodeTests.cs::RealClipDecodeTests.EveryFrameOfTheCompressedClipDecodes_AndThenTheClipENDS_RatherThanRunningOn",
+      "path": "CcpClient.Tests/RealClipDecodeTests.cs",
+      "line": 158,
+      "method": "RealClipDecodeTests.EveryFrameOfTheCompressedClipDecodes_AndThenTheClipENDS_RatherThanRunningOn",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/RealClipDecodeTests.cs::RealClipDecodeTests.TheDecodedPictureIsAPICTURE_AndItMOVES_WhichNoSolidColourFixtureCanShow",
+      "path": "CcpClient.Tests/RealClipDecodeTests.cs",
+      "line": 191,
+      "method": "RealClipDecodeTests.TheDecodedPictureIsAPICTURE_AndItMOVES_WhichNoSolidColourFixtureCanShow",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/RealClipDecodeTests.cs::RealClipDecodeTests.TheStrideForThisRealContainerIsPOSITIVE_SoTheFLIPBranchIsTheAviFixturesAlone",
+      "path": "CcpClient.Tests/RealClipDecodeTests.cs",
+      "line": 233,
+      "method": "RealClipDecodeTests.TheStrideForThisRealContainerIsPOSITIVE_SoTheFLIPBranchIsTheAviFixturesAlone",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/RealClipDecodeTests.cs::RealClipDecodeTests.TheFrameRateAndTheDurationComeFromTheCONTAINER_NotFromThePortsOwnFallback",
+      "path": "CcpClient.Tests/RealClipDecodeTests.cs",
+      "line": 257,
+      "method": "RealClipDecodeTests.TheFrameRateAndTheDurationComeFromTheCONTAINER_NotFromThePortsOwnFallback",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.TheOperatingSystemOpensASynthesisedClipAndReportsItsOwnPictureSize",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 31,
+      "method": "VideoCapabilityTests.TheOperatingSystemOpensASynthesisedClipAndReportsItsOwnPictureSize",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.TheDecodedPictureComesBackTheRIGHTWAYUP_BecauseTheOperatingSystemHandsItBackBOTTOMUP",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 60,
+      "method": "VideoCapabilityTests.TheDecodedPictureComesBackTheRIGHTWAYUP_BecauseTheOperatingSystemHandsItBackBOTTOMUP",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.AFileTheOperatingSystemCannotDecode_RefusesTYPED_AndTheRefusalIsAboutTheFILE_NotTheSurface",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 89,
+      "method": "VideoCapabilityTests.AFileTheOperatingSystemCannotDecode_RefusesTYPED_AndTheRefusalIsAboutTheFILE_NotTheSurface",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.AMissingFileRefusesTyped_AndNothingIsOpened",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 117,
+      "method": "VideoCapabilityTests.AMissingFileRefusesTyped_AndNothingIsOpened",
+      "shapes": [
+        "platform-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "not-vacuous: exhaustive platform arms over a TYPED REFUSAL CODE, with no skip and no early return. Every backend checks the MECHANISM before it checks whether anything is presented, so the same call answers nothing-presented on Windows and mechanism-absent off it; both are refusals, both are true of their platform, and NEITHER arm is a success. The platform predicate selects the EXPECTED CODE and guards no assertion - the fact executes end to end on every platform, which is why it is NOT in allowedSkips."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.DecodedFramesAndFramesTheOperatingSystemHOLDS_AreTwoDifferentNumbers_AndBothAreReported",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 136,
+      "method": "VideoCapabilityTests.DecodedFramesAndFramesTheOperatingSystemHOLDS_AreTwoDifferentNumbers_AndBothAreReported",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.TheOperatingSystemHoldsTheSurfaceAboveEveryOrdinaryWindow_AndNEVERMakesItTheForeground",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 166,
+      "method": "VideoCapabilityTests.TheOperatingSystemHoldsTheSurfaceAboveEveryOrdinaryWindow_AndNEVERMakesItTheForeground",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.TheOperatingSystemsOwnCopyOfTheSurfaceCarriesTheDECODEDPicture_OverABarItReadsBackEXACTLY",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 208,
+      "method": "VideoCapabilityTests.TheOperatingSystemsOwnCopyOfTheSurfaceCarriesTheDECODEDPicture_OverABarItReadsBackEXACTLY",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.TheSurfacesOwnPixelsCHANGEBetweenTwoDifferentFrames_WhichNoCountOfDecodedBuffersCanShow",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 244,
+      "method": "VideoCapabilityTests.TheSurfacesOwnPixelsCHANGEBetweenTwoDifferentFrames_WhichNoCountOfDecodedBuffersCanShow",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.AFrameHandedOverTWICE_LeavesTheSurfaceUnchanged_AndIsStillALivePicture",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 275,
+      "method": "VideoCapabilityTests.AFrameHandedOverTWICE_LeavesTheSurfaceUnchanged_AndIsStillALivePicture",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.TheOperatingSystemsOwnRENDERINGOfTheWindow_MatchesThePortsCompositionPixelForPixel",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 304,
+      "method": "VideoCapabilityTests.TheOperatingSystemsOwnRENDERINGOfTheWindow_MatchesThePortsCompositionPixelForPixel",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.TheCOMPOSITEDDESKTOPCarriesTheDecodedPicture_AndItChangesFrameByFrame",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 329,
+      "method": "VideoCapabilityTests.TheCOMPOSITEDDESKTOPCarriesTheDecodedPicture_AndItChangesFrameByFrame",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.WithdrawTakesTheSurfaceDown_AndTheOperatingSystemAgrees",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 369,
+      "method": "VideoCapabilityTests.WithdrawTakesTheSurfaceDown_AndTheOperatingSystemAgrees",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.EveryRefusalIsTyped_AndNamesWHICHLinkOfTheChainFailed",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 391,
+      "method": "VideoCapabilityTests.EveryRefusalIsTyped_AndNamesWHICHLinkOfTheChainFailed",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.TheDisplayReadBackIsTheNECESSARYCondition_AndItIsAskedOfTheOperatingSystem",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 409,
+      "method": "VideoCapabilityTests.TheDisplayReadBackIsTheNECESSARYCondition_AndItIsAskedOfTheOperatingSystem",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.ASurfaceTAKESItsOwnPointBackFromAWindowPlacedOverIt_AndThatIsWhyOcclusionCannotBeStaged",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 486,
+      "method": "VideoCapabilityTests.ASurfaceTAKESItsOwnPointBackFromAWindowPlacedOverIt_AndThatIsWhyOcclusionCannotBeStaged",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.AWindowREADBACKIsAboutTheOperatingSystemsCopy_NOTAboutAnyMonitor_AndThatLimitIsMeasured",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 517,
+      "method": "VideoCapabilityTests.AWindowREADBACKIsAboutTheOperatingSystemsCopy_NOTAboutAnyMonitor_AndThatLimitIsMeasured",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoCapabilityTests.cs::VideoCapabilityTests.AFileWithNoVIDEOSTREAMSaysSO_RatherThanBlamingThePixelFormat",
+      "path": "CcpClient.Tests/VideoCapabilityTests.cs",
+      "line": 543,
+      "method": "VideoCapabilityTests.AFileWithNoVIDEOSTREAMSaysSO_RatherThanBlamingThePixelFormat",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs::VideoOverlayCoexistenceTests.BothOtherCapabilitiesReallyWereUP_WithoutWhichEveryFactBelowTestsNothingHappening",
+      "path": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs",
+      "line": 30,
+      "method": "VideoOverlayCoexistenceTests.BothOtherCapabilitiesReallyWereUP_WithoutWhichEveryFactBelowTestsNothingHappening",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs::VideoOverlayCoexistenceTests.TheOverlayStillLetsThePointerTHROUGHAtAllThreeMoments_AndKeepsItsTransparentStyle",
+      "path": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs",
+      "line": 54,
+      "method": "VideoOverlayCoexistenceTests.TheOverlayStillLetsThePointerTHROUGHAtAllThreeMoments_AndKeepsItsTransparentStyle",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs::VideoOverlayCoexistenceTests.TheOverlayCapabilityStillEARNSAvailableAfterAVideoSurfaceHasComeAndGone",
+      "path": "CcpClient.Tests/VideoOverlayCoexistenceTests.cs",
+      "line": 100,
+      "method": "VideoOverlayCoexistenceTests.TheOverlayCapabilityStillEARNSAvailableAfterAVideoSurfaceHasComeAndGone",
+      "shapes": [
+        "platform-predicate",
+        "dynamic-skip"
+      ],
+      "expectDetected": true,
+      "verdict": "platform-skip-converted",
+      "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
     }
   ]
 }
