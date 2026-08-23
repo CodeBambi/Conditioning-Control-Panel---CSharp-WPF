@@ -234,5 +234,65 @@
                    Text="" />
       </StackPanel>
     </Border>
+
+    <!-- THE ARCADEMY, AND IT SHIPS DARK. Upstream's strip sits in this same tab's MORE zone
+         (Views/Tabs/PlayTabView.xaml:1312) with Visibility="Collapsed" as its DEFAULT, and
+         RefreshPlayCards re-asserts that from ArcademyHostService.DoorAvailable on every repaint
+         (MainWindow/MainWindow.PlayTab.cs:106-112). Both halves are ported. The RE-ASSERT is the
+         load-bearing one and it is what a fact holds: it runs in PlayPage's constructor and again
+         on every mount - the port's repaint, since the page is mounted each time the Play door is
+         chosen - so a stray IsVisible written here or anywhere else cannot survive a navigation.
+         The markup default below is the belt to that brace, the value the strip carries if the
+         derivation is ever removed, which is the same pairing upstream ships.
+
+         There is NO reveal switch. ArcademyDoor.Available is a static readonly false with no
+         override seam, no argument and no environment variable, so nothing in a shipped build
+         can turn this on - and Attend refuses on that same flag anyway, because the code path
+         that opens the door has to be the one that can say no (ArcademyHostService.cs:133-141).
+
+         The strip's shape is upstream's: a title, a blurb (verbatim, :1332-1333), a T2 sign, and
+         a single "Attend" button (:1353-1359). No hero art, for upstream's own reason at
+         :1301-1305 - there is none for it yet, and a card built around a missing image is a
+         failure mode this wall already knows about. -->
+    <StackPanel x:Name="ArcademyEntry"
+                Margin="0,16,0,0"
+                AutomationProperties.AutomationId="ArcademyEntry"
+                IsVisible="False">
+      <Border Classes="hero">
+        <StackPanel Spacing="10">
+          <!-- The badge art's own words for tier 2 (Controls/TierBadge.cs:21), never the literal
+               "TIER 2": it is a price tag on the feature, not a claim about the reader. -->
+          <Border Classes="tier-badge" HorizontalAlignment="Left">
+            <TextBlock Classes="tier-badge-text"
+                       AutomationProperties.AutomationId="ArcademyTierBadgeText"
+                       Text="PRIME SUBJECT" />
+          </Border>
+          <TextBlock x:Name="ArcademyTitle"
+                     Classes="hero-title"
+                     AutomationProperties.AutomationId="ArcademyTitle"
+                     Text="THE ARCADEMY" />
+          <!-- PlayTabView.xaml:1332, verbatim. -->
+          <TextBlock Classes="page-blurb" MaxWidth="640" HorizontalAlignment="Left"
+                     Text="three classes a day. simple little games made hard by everything else on your screen. show up, get graded, keep the streak." />
+          <Button x:Name="ArcademyAttendButton"
+                  Classes="hero-primary"
+                  HorizontalAlignment="Left"
+                  AutomationProperties.AutomationId="ArcademyAttendButton"
+                  AutomationProperties.Name="Attend"
+                  ToolTip.Tip="today's timetable is waiting."
+                  Content="Attend" />
+          <!-- The tier bar's refusal, when there is one. Never disabled and never a curtain: the
+               press ARRIVES and ArcademyLaunch does the refusing (:1358 -> MainWindow.Lab.cs:310
+               -> Launch's own gates). -->
+          <TextBlock x:Name="ArcademyGateText"
+                     Classes="fault-text"
+                     AutomationProperties.AutomationId="ArcademyGateText"
+                     TextWrapping="Wrap"
+                     MaxWidth="640"
+                     IsVisible="False"
+                     Text="" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
   </StackPanel>
 </UserControl>

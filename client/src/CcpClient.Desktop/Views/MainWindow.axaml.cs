@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
@@ -66,13 +66,16 @@ public partial class MainWindow : Window
         // page reports. A shell-local instance would let the two drift, and the one place the
         // port tells the truth about what it cannot do would be reporting a different object
         // than the one refusing people.
-        Dtrh = new Features.Dtrh.DtrhLaunch(
-            host, this,
-            host.Entitlement ?? throw new InvalidOperationException(
-                "the shell needs the entitlement capability and this host has none — an ungated DTRH "
-                + "launcher would hand out paid content, so composition refuses rather than degrading"),
-            ShellTray,
-            dtrhHarness);
+        var entitlement = host.Entitlement ?? throw new InvalidOperationException(
+            "the shell needs the entitlement capability and this host has none — an ungated DTRH "
+            + "launcher would hand out paid content, so composition refuses rather than degrading");
+        Dtrh = new Features.Dtrh.DtrhLaunch(host, this, entitlement, ShellTray, dtrhHarness);
+        // The ONE Arcademy construction site (Features/Arcademy/ArcademyLaunch.cs), on the SAME
+        // entitlement object the DTRH door and the System page use. It takes one anyway even
+        // though its door is shut and the tier bar behind it is never reached: a launcher that
+        // could be built without one is a launcher that could hand out paid content the day the
+        // door opens.
+        Arcademy = new Features.Arcademy.ArcademyLaunch(host, entitlement.ResolveAsync);
         // The ONE intake construction site (Features/Intake/IntakeLaunch.cs). The --intake-demo
         // flag reaches this same object's coordinator rather than building a second one, which is
         // the LoomLaunch/DtrhLaunch convention two waves already depend on.
@@ -128,7 +131,7 @@ public partial class MainWindow : Window
 
         _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
-        _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon);
+        _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon, Arcademy);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
         _pages[ShellRoutes.System] = new SystemPage(host);
 
@@ -228,6 +231,11 @@ public partial class MainWindow : Window
     /// future second caller reaches the SAME launcher the user path builds — <c>--goon-demo</c> was
     /// granted and is NOT built, D259).</summary>
     public Features.Goon.GoonLaunch Goon { get; }
+
+    /// <summary>The one Arcademy launch path (public so tests drive the real seam). Its door is a
+    /// <c>static readonly false</c> with no override seam, so this refuses before it allocates
+    /// anything — and the Play page's strip that reaches it is hidden from the same flag.</summary>
+    public Features.Arcademy.ArcademyLaunch Arcademy { get; }
 
     /// <summary>Demonstrator popup manager; public so tests drive the real wiring.</summary>
     public FeaturePopupManager Popups => _popups;
