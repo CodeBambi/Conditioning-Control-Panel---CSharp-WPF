@@ -141,7 +141,7 @@ public class DesktopPreflightVerdictTests
 
         Assert.NotNull(refusal);
         Assert.Contains("OUR OWN harness or product", refusal, StringComparison.Ordinal);
-        Assert.Contains("verification-harness.md:39", refusal, StringComparison.Ordinal);
+        Assert.Contains("verification-harness.md:47", refusal, StringComparison.Ordinal);
         Assert.Contains("hunt a harness bug, not a foreign application", refusal, StringComparison.Ordinal);
         Assert.DoesNotContain("THIS IS THE SHIPPING WPF PRODUCT", refusal, StringComparison.Ordinal);
     }

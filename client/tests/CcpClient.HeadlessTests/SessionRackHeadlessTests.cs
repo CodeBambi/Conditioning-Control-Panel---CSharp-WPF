@@ -286,9 +286,24 @@ public class SessionRackHeadlessTests
         Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
         Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
 
+        // MINUTE TWO FIRST, AND THE MUTATION CHECK IS WHY. Morning Drift's second phase opens at
+        // minute 10 and its first delayed feature at minute 5, so an advance past either of those
+        // repaints this page through a DIFFERENT signal — the phase change, or a module arming —
+        // and the fact would pass with the per-tick readout unsubscribed entirely (measured: it
+        // did). Minute 2 is inside phase 1 with nothing else moving, so the numbers below can only
+        // have come from the tick's own ProgressUpdated.
+        boot.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        Assert.Contains(
+            "Phase 1 of 5 — Settling In",
+            TextOf(window, "ScriptedSessionPhaseState"),
+            StringComparison.Ordinal);
+        Assert.Equal("6% — 02:00 elapsed, 28:00 remaining", TextOf(window, "ScriptedSessionProgressState"));
+        Assert.Equal("STOP SESSION (28:00)", Descendant<Button>(window, "ScriptedSessionStartButton").Content);
+
         // The run's OWN one-second tick fires here, on the injected clock: nothing in this test
         // calls Tick(), and nothing waits.
-        boot.Clock.Advance(TimeSpan.FromMinutes(12));
+        boot.Clock.Advance(TimeSpan.FromMinutes(10));
 
         // Minute 12 is inside Morning Drift's second phase, which opens at minute 10.
         Assert.Equal(
@@ -375,6 +390,17 @@ public class SessionRackHeadlessTests
         Click(window, Descendant<RadioButton>(window, "SessionRowMorningDrift"));
         Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
         Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
+
+        // THE SHELL'S OWN STOP, PRESSED MID-SESSION, and it is here for two reasons. It is a real
+        // user path — that button is never disabled, which is the whole point of a panic button —
+        // and it takes the ENGINE down without ending the scripted session, which is upstream's
+        // behaviour too (its StopSession is a different handler on a different control). So the
+        // completion below happens with nothing else on this page listening, which is what makes
+        // the surface's own Ended subscription the only thing that can repaint it. Without that
+        // second half the fact passed with Ended unsubscribed entirely (measured).
+        Click(window, window.FindControl<Button>("SessionStartButton")!);
+        Assert.False(window.Session.Engine.Running);
+        Assert.True(boot.Run.Running);
 
         // Upstream's own completion: the tick that reaches the duration stops the session and does
         // nothing else that tick (Services/Session/SessionEngine.cs:512-517). Nobody presses

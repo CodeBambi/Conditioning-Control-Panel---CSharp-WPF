@@ -85,9 +85,25 @@
 # gets disabled. The state is driven by REAL INPUT throughout (Play door, then PRACTICE) -- there
 # is a --goon-demo flag and this script deliberately does not use it, because the click is the
 # thing a regression would break.
+# THE SESSION RACK, and the one thing it needs that no surface here needed before: a state that
+# only exists because a user ASKED for it. `session-start -State running` is not a style, a dial or
+# a selection — it is a scripted session really running inside the app, started the way a user
+# starts one: open the SESSIONS row at the foot of the Studio rack, pick a session, press the
+# button, read the confirmation, press its Start Session. Four gestures, every one real input, and
+# the state cannot be reached any other way (there is no flag for it and deliberately so).
+#
+# So this surface is gated on the RUN's own published state before any pixel: the rack rows'
+# names and durations, then — for `running` — the confirmation's own promise text, then the
+# readout's phase line and the button's own caption carrying a countdown. Every one of those is a
+# UIA read of a control the product painted, not an inference from "the click did not throw".
+#
+# The row is at the FOOT of the rack (upstream's presets tab comes after its studio tab,
+# MainWindow/MainWindow.TabNavigation.cs:592), so it is below the scroll fold at this window size
+# and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
+# fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -141,6 +157,11 @@ $statesFor = @{
     'rack-row-dot' = @('off', 'armed')
     'goon-page'    = @('first-run')
     'trainer-card' = @('no-runs-yet')
+    # The two session-rack states are two different ROWS (a 30-minute Easy one and a 60-minute
+    # Hard one), because the thing being photographed is a per-session colour: a stripe check that
+    # cannot fail on another row is a check that is not reading the session's own data.
+    'session-row'   = @('easy', 'hard')
+    'session-start' = @('idle', 'running')
 }
 if ($statesFor[$Surface] -notcontains $State) {
     Write-Output "FAIL: surface '$Surface' has no state '$State' (it has: $($statesFor[$Surface] -join ', '))"
@@ -895,6 +916,172 @@ elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     }
     else {
         $capX = $rowRect.X; $capY = $rowRect.Y; $capW = $rowRect.W; $capH = $rowRect.H
+    }
+}
+elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start') {
+    # =============================================================================================
+    # THE SESSION RACK. The shell opens on Studio, so no navigation is needed — but the SESSIONS
+    # row is the LAST row of the rack and is below the scroll fold at this window size, so it is
+    # wheeled in with real input, one notch at a time, testing after each. Never a fixed count: a
+    # rack that grew another row would otherwise stop scrolling far enough while still reporting a
+    # plausible rect, and UIA would still say IsOffscreen=False (the trainer-card finding).
+    # =============================================================================================
+    $scale = (Get-DoorRect $window 'studio').Scale
+    $viewport = Get-Rect (Get-Element $window 'RackScroll')
+    $notches = 0
+    while ($true) {
+        $sessionsRow = Get-Element $window 'RowScriptedSession'
+        $sessionsRect = Get-Rect $sessionsRow
+        if (Test-Inside $sessionsRect $viewport) { break }
+        if ($notches -ge 24) {
+            Fail ("the Scripted Sessions rack row never came fully inside the rack viewport after $notches " +
+    "wheel notches: row $($sessionsRect.X),$($sessionsRect.Y) $($sessionsRect.W)x$($sessionsRect.H) vs " +
+    "viewport $($viewport.X),$($viewport.Y) $($viewport.W)x$($viewport.H)")
+        }
+        Wheel-Down $viewport
+        $notches++
+    }
+    Assert-Inside $sessionsRect $windowRect 'the Scripted Sessions rack row' 'the shell window'
+
+    Click-Rect $sessionsRect
+    $sessionsRow = Get-Element $window 'RowScriptedSession'
+    if (-not (Get-Selected $sessionsRow)) { Fail 'the left-click did not open the Scripted Sessions row (state drive failed)' }
+    Write-Output "state drive: left-click on the Scripted Sessions rack row -> IsSelected=True ($notches wheel notch(es))"
+
+    # (1) THE PANEL'S OWN TEXT. The rows are built at runtime from the four .session.json files
+    # beside the binary (Session/ScriptedSession.ReadBuiltIns), so an EMPTY rack is a real state
+    # with its own line — and it would photograph as a perfectly plausible panel. Every needle here
+    # is a value that came out of a file rather than out of the markup.
+    #
+    # ASCII ONLY, deliberately, and for the reason the Goon window lookup gives: this file has to
+    # survive an encoding round trip, so no needle contains the middle dot the meta cell really
+    # renders or the em dash the readout uses.
+    $panelText = (Get-Texts $window) -join "`n"
+    foreach ($needle in @('Morning Drift', 'Gamer Girl', 'Good Girls', 'The Distant Doll', '30 min', '60 min')) {
+        if ($panelText -notlike "*$needle*") { Fail "the session rack is missing '$needle' (its rows did not build from the shipped files)" }
+    }
+    Write-Output 'rack gate: four shipped sessions present with their own names and durations'
+
+    if ($Surface -eq 'session-row') {
+        # ONE ROW PER STATE, and they are different SESSIONS: the stripe's colour is the session's
+        # own difficulty (Resources/Theme/Colors.xaml:191-197), so the two captures differ only in
+        # which row was photographed. That is what makes each check's failure on the other capture
+        # mean something about the data rather than about a style.
+        $sessionId = if ($State -eq 'easy') { 'MorningDrift' } else { 'GoodGirlsDontCum' }
+        $row = Get-Element $window "SessionRow$sessionId"
+        $rowRect = Get-Rect $row
+        Assert-Inside $rowRect $windowRect "session row $sessionId" 'the shell window'
+
+        # THE STRIPE CELL, DERIVED FROM TWO MEASURED RECTS AND CROSS-CHECKED — the dot cell's rule.
+        # The row's Grid is Auto,Auto,*,Auto,Auto: the stripe is the trailing Auto column, 4 DIP
+        # wide and 20 DIP tall inside a row whose template pads 10 DIP each side, and the meta cell
+        # carries a 10 DIP right margin. So meta's right edge + 10 DIP must land exactly on the
+        # stripe's left edge, or the row grid has changed and this derivation no longer names it.
+        $metaRect = Get-Rect (Get-Element $window "SessionMeta$sessionId")
+        $pad = [int][math]::Round(10 * $scale)
+        $stripeW = [int][math]::Round(4 * $scale)
+        $stripeH = [int][math]::Round(20 * $scale)
+        $stripeX = $rowRect.X + $rowRect.W - $pad - $stripeW
+        $closes = $metaRect.X + $metaRect.W + $pad
+        if ([math]::Abs($closes - $stripeX) -gt 2) {
+            Fail ("the session row grid does not close: the meta cell ends at $($metaRect.X + $metaRect.W) px and " +
+    "its 10 DIP margin puts the stripe at $closes, but the row's trailing edge less its 10 DIP padding and the " +
+    "4 DIP stripe puts it at $stripeX (scale $scale). The row grid has changed and this no longer names the stripe")
+        }
+
+        $capX = $stripeX
+        $capY = [int]($rowRect.Y + ($rowRect.H - $stripeH) / 2)
+        $capW = $stripeW
+        $capH = $stripeH
+        Write-Output ("stripe cell: $capX,$capY ${capW}x${capH} - row $($rowRect.X),$($rowRect.Y) " +
+    "$($rowRect.W)x$($rowRect.H), meta ends $($metaRect.X + $metaRect.W), grid closes at $closes (scale $scale)")
+    }
+    else {
+        # THE ONE BUTTON, IN ITS TWO STATES. Idle is pink and says Start Session; running is red and
+        # says STOP SESSION with the time left in it (MainWindow.StartStop.cs:756,
+        # MainWindow.Presets.cs:1752, en.json:2321). Reaching `running` means really starting a
+        # scripted session, through the confirmation, with real clicks.
+        $pick = Get-Element $window 'SessionRowMorningDrift'
+        Click-Rect (Get-Rect $pick)
+        if (-not (Get-Selected (Get-Element $window 'SessionRowMorningDrift'))) {
+            Fail 'the left-click did not select the Morning Drift session row (state drive failed)'
+        }
+        Write-Output 'state drive: left-click on the Morning Drift session row -> IsSelected=True'
+
+        $button = Get-Element $window 'ScriptedSessionStartButton'
+        if ($State -eq 'running') {
+            Click-Rect (Get-Rect $button)
+
+            # THE CONFIRMATION IS THE CEREMONY, and it is read before it is answered: this is the
+            # sentence the whole snapshot/restore machinery exists to keep
+            # (MainWindow/MainWindow.Presets.cs:1467-1470). A capture taken past a confirmation that
+            # never appeared would be a capture of a session started without one.
+            $confirmTitle = (Get-Element $window 'ScriptedSessionConfirmTitle').Current.Name
+            $confirmDetail = (Get-Element $window 'ScriptedSessionConfirmDetail').Current.Name
+            $confirmPromise = (Get-Element $window 'ScriptedSessionConfirmPromise').Current.Name
+            if ($confirmTitle -ne 'Start Morning Drift?') { Fail "the start confirmation reads '$confirmTitle'" }
+            if ($confirmDetail -ne 'Duration: 30 minutes') { Fail "the confirmation does not name the duration: '$confirmDetail'" }
+            if ($confirmPromise -notlike '*restored when the session ends*') {
+                Fail "the confirmation does not carry the settings promise: '$confirmPromise'"
+            }
+
+            # NOTHING HAS STARTED YET, read rather than assumed: the button is still the start.
+            $stillIdle = (Get-Element $window 'ScriptedSessionStartButton').Current.Name
+            if ($stillIdle -ne 'Start Session') { Fail "a session started before the confirmation was answered: button reads '$stillIdle'" }
+            Write-Output "confirm gate: '$confirmTitle' / '$confirmDetail' / promise present, and nothing started yet"
+
+            Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionConfirmButton'))
+
+            # THE RUN'S OWN STATE, from three of its own controls: the phase it announced at START,
+            # the readout it published on the same reading, and the button's countdown caption.
+            $phase = (Get-Element $window 'ScriptedSessionPhaseState').Current.Name
+            $readout = (Get-Element $window 'ScriptedSessionProgressState').Current.Name
+            $caption = (Get-Element $window 'ScriptedSessionStartButton').Current.Name
+            if ($phase -notlike '*Phase 1 of 5*') { Fail "the session did not announce its first phase: '$phase'" }
+            # A PATTERN, NOT AN INSTANT, and the first draft got that wrong: it demanded
+            # "00:00 elapsed" and a real desktop read back "00:01 elapsed, 29:58 remaining",
+            # because a real session's clock really does run between the click and the read. What
+            # is being confirmed is that the readout is a live countdown of a 30-minute session,
+            # which is exactly what this matches.
+            if ($readout -notmatch '^\d+%.*\b(\d\d):(\d\d) elapsed, (\d\d):(\d\d) remaining$') {
+                Fail "the readout is not a live countdown: '$readout'"
+            }
+            if ($caption -notlike 'STOP SESSION (*') { Fail "the button did not become the stop: '$caption'" }
+            Write-Output "run gate: '$phase' / '$readout' / button '$caption'"
+        }
+        else {
+            $caption = (Get-Element $window 'ScriptedSessionStartButton').Current.Name
+            if ($caption -ne 'Start Session') { Fail "the idle capture would not be idle: the button reads '$caption'" }
+            Write-Output "idle gate: button '$caption', nothing running"
+        }
+
+        $buttonRect = Get-Rect (Get-Element $window 'ScriptedSessionStartButton')
+        Assert-Inside $buttonRect $windowRect 'the scripted session button' 'the shell window'
+
+        # THE BAND checks.json SAMPLES, PROVED AGAINST THE MEASURED CONTROL. y 0.08..0.20 must land
+        # inside the button's own 12 DIP top padding (Button.session-start, MainWindow.axaml:357) so
+        # it is flat fill and not caption glyphs, and x 0.25..0.75 must clear the 14 DIP corner
+        # radius (:353) at both ends. A button that grew a different padding fails here by name
+        # instead of sampling its own text.
+        $bandTop = $buttonRect.Y + [int]($buttonRect.H * 0.08)
+        $bandBottom = $buttonRect.Y + [int]($buttonRect.H * 0.20)
+        $padTop = $buttonRect.Y + [int][math]::Round(12 * $scale)
+        if ($bandBottom -gt $padTop) {
+            Fail ("the fill band y 0.08..0.20 of this capture is $bandTop..$bandBottom, which reaches past the " +
+    "button's own top padding ending at $padTop. Those pixels would contain the caption's glyphs, so the " +
+    'capture would not be evidence about the fill')
+        }
+        $radius = [int][math]::Round(14 * $scale)
+        $bandLeft = $buttonRect.X + [int]($buttonRect.W * 0.25)
+        $bandRight = $buttonRect.X + [int]($buttonRect.W * 0.75)
+        if ($bandLeft -lt ($buttonRect.X + $radius) -or $bandRight -gt ($buttonRect.X + $buttonRect.W - $radius)) {
+            Fail ("the fill band x 0.25..0.75 is $bandLeft..$bandRight, which is not clear of the button's 14 DIP " +
+    "corner radius at $($buttonRect.X + $radius)..$($buttonRect.X + $buttonRect.W - $radius)")
+        }
+        Write-Output ("button rect $($buttonRect.X),$($buttonRect.Y) $($buttonRect.W)x$($buttonRect.H) @ scale $scale; " +
+    "fill band y $bandTop..$bandBottom inside the top padding ending $padTop, x $bandLeft..$bandRight clear of the radius")
+
+        $capX = $buttonRect.X; $capY = $buttonRect.Y; $capW = $buttonRect.W; $capH = $buttonRect.H
     }
 }
 else {

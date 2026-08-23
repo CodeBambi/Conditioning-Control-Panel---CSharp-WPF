@@ -215,6 +215,74 @@
       "tolerance": 2,
       "minPixelFraction": 0.98
     },
+    // THE SESSION RACK. Four checks over two surfaces, and between them they photograph the two
+    // things this slice claims: that a rack row renders the SESSION'S OWN DATA, and that pressing
+    // the button really started a session.
+    //
+    // THE TWO ROW CHECKS ARE THE SAME REGION ON TWO DIFFERENT ROWS. `easy` is Morning Drift's
+    // stripe and `hard` is Good Girls Don't Cum's; the difference between the two captures is the
+    // difficulty in the .session.json file and nothing else — same page, same panel, same
+    // derivation, same 7x35 cell. So each check failing on the other capture is a statement about
+    // the data reaching the screen, which is the one thing a stripe check is for. Measured: each
+    // scores 1.0000 on its own capture and 0.0000 on the other.
+    //
+    // THE TWO BUTTON CHECKS ARE THE SAME CONTROL IN ITS TWO STATES, which is upstream's own
+    // one-button-two-liveries shape (MainWindow.StartStop.cs:756 paints the running one
+    // #FFFF6B6B; the idle pink #FFD05CE8 is the shell's session-start livery). `running` is only
+    // reachable by really starting a scripted session through its confirmation, so the pair also
+    // proves the ceremony completed.
+    //
+    // TOLERANCES ARE 4, WHICH IS TIGHTER THAN EVERYTHING ABOVE EXCEPT THE TRAINER CARD'S GROUND,
+    // and for the same kind of named reason. #FFD05CE8 is only 23 from the rail door's selected
+    // #FFE066FF on its widest channel and 10 on its narrowest, so at the rail-door precedent of
+    // 32 this check would pass on a photograph of a selected rail door. ScriptedSessionPresentation
+    // Tests.NoSessionCheckAcceptsTheColourOfAnotherDeclaredState asserts that separation
+    // mechanically over this file, so widening any of these four reddens the floor and names both
+    // colours.
+    {
+      "name": "session-row-easy-stripe",
+      "surface": "session-row",
+      "state": "easy",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.0, "y": 0.1, "w": 1.0, "h": 0.8 } },
+      "expectedColor": "#57D9A3",
+      "tolerance": 4,
+      "minPixelFraction": 0.9
+    },
+    {
+      "name": "session-row-hard-stripe",
+      "surface": "session-row",
+      "state": "hard",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.0, "y": 0.1, "w": 1.0, "h": 0.8 } },
+      "expectedColor": "#FF8A4C",
+      "tolerance": 4,
+      "minPixelFraction": 0.9
+    },
+    {
+      "name": "session-start-idle-fill",
+      "surface": "session-start",
+      "state": "idle",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.25, "y": 0.08, "w": 0.5, "h": 0.12 } },
+      "expectedColor": "#D05CE8",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "session-start-running-fill",
+      "surface": "session-start",
+      "state": "running",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.25, "y": 0.08, "w": 0.5, "h": 0.12 } },
+      "expectedColor": "#FF6B6B",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
+    },
     {
       "name": "trainer-card-ink",
       "surface": "trainer-card",

@@ -109,7 +109,7 @@ public sealed class RealDesktopLease : IDisposable
     ///
     /// <para><b>The order is load-bearing.</b> The lease comes FIRST so that every peer
     /// <c>CcpClient.Tests</c> process and every <c>capture.ps1</c> run is already excluded
-    /// (<c>client/docs/verification-harness.md:39</c>) by the time the pre-flight looks. A
+    /// (<c>client/docs/verification-harness.md:47</c>) by the time the pre-flight looks. A
     /// pre-flight that ran before the lease would spend its refusals naming our own harness.</para>
     /// </summary>
     public RealDesktopLease()
@@ -437,7 +437,7 @@ public static class DesktopPreflight
 
     /// <summary>
     /// Our own harness and product. The lease already serialises these
-    /// (<c>client/docs/verification-harness.md:39</c>: <c>capture.ps1</c> takes
+    /// (<c>client/docs/verification-harness.md:47</c>: <c>capture.ps1</c> takes
     /// <c>%TEMP%/ccp-real-desktop.lease</c> before the app launches and until after it exits), so
     /// seeing one here is a HARNESS bug, and the refusal says so instead of sending the reader
     /// after a foreign application.
@@ -716,7 +716,7 @@ public static class DesktopPreflight
         if (OurFamily.Contains(loss.ProcessName, StringComparer.OrdinalIgnoreCase))
         {
             return $"{Environment.NewLine}      *** This is OUR OWN harness or product, which the machine-wide "
-                + "lease is supposed to serialise: client/docs/verification-harness.md:39 has capture.ps1 take "
+                + "lease is supposed to serialise: client/docs/verification-harness.md:47 has capture.ps1 take "
                 + "%TEMP%/ccp-real-desktop.lease BEFORE the app launches and hold it until after it exits, and this "
                 + "pre-flight runs while that lease is held. Seeing it here means that contract was broken — hunt a "
                 + "harness bug, not a foreign application. ***";

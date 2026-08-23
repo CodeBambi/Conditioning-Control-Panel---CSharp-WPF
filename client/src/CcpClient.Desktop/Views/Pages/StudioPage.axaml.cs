@@ -597,6 +597,21 @@ public partial class StudioPage : UserControl
     //  THE SCRIPTED SESSION RACK
     // =====================================================================================
 
+    /// <summary>The difficulty stripe's width in DIP — upstream's 4
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:423</c>). The headed capture derives the cell it
+    /// photographs from this and from the meta cell's own margin, so it is a constant rather than a
+    /// literal in two places.</summary>
+    public const double StripeWidth = 4;
+
+    /// <summary>The difficulty stripe's height in DIP. See the note at its construction: the row's
+    /// content is centred, so this is what makes the cell derivable.</summary>
+    public const double StripeHeight = 20;
+
+    /// <summary>The gap either side of the meta cell in DIP, which is also the row template's own
+    /// padding (<c>MainWindow.axaml:79</c>) and therefore the whole arithmetic between the meta
+    /// cell's right edge and the stripe.</summary>
+    public const double RowGutter = 10;
+
     /// <summary>Which question the confirmation strip is asking. Explicit rather than derived from
     /// <see cref="ScriptedSessionRun.Running"/> at click time, because a session can END between
     /// the strip going up and the button being pressed, and a strip that silently changed its mind
@@ -701,7 +716,7 @@ public partial class StudioPage : UserControl
             FontSize = 11,
             Opacity = 0.8,
             TextAlignment = TextAlignment.Right,
-            Margin = new Avalonia.Thickness(10, 0, 10, 0),
+            Margin = new Avalonia.Thickness(RowGutter, 0, RowGutter, 0),
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             [Avalonia.Automation.AutomationProperties.AutomationIdProperty] =
                 "SessionMeta" + PascalId(session.Id),
@@ -716,8 +731,14 @@ public partial class StudioPage : UserControl
         var stripe = new Border
         {
             Name = "SessionStripe" + PascalId(session.Id),
-            Width = 4,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+            Width = StripeWidth,
+            // An explicit height rather than upstream's full bleed, and it is a HARNESS
+            // requirement as much as a visual one: this rack row's content is vertically CENTRED
+            // by the row template (RadioButton.rack-row, MainWindow.axaml:80-95), so a stretched
+            // child would be as tall as whatever the font metrics made the tallest cell — a
+            // number nothing can derive, on the one cell a headed capture has to aim at exactly.
+            Height = StripeHeight,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             Background = new SolidColorBrush(
                 Color.Parse(SessionRackNotices.DifficultyStripe(session.Difficulty))),
         };
@@ -739,6 +760,13 @@ public partial class StudioPage : UserControl
             Name = "SessionRow" + PascalId(session.Id),
             GroupName = "scripted-sessions",
             Content = grid,
+            // The rack livery aligns its content LEFT (MainWindow.axaml:84), which arranges the row's
+            // content presenter at its DESIRED width — so a trailing cell would float in the middle
+            // of the row instead of sitting at its edge. The module rows above do not notice because
+            // they set MinWidth=200 and are exactly that wide; this row's blurb column is a star and
+            // has to fill. Measured by the headed capture's own grid-closes cross-check, which
+            // refused a stripe 43 DIP short of the row's trailing edge.
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
             [Avalonia.Automation.AutomationProperties.AutomationIdProperty] =
                 "SessionRow" + PascalId(session.Id),
             [Avalonia.Automation.AutomationProperties.NameProperty] = session.Name,
