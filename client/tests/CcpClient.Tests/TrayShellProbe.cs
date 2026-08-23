@@ -47,6 +47,14 @@ internal static class TrayShellProbe
 
     internal static bool WindowsHost => OperatingSystem.IsWindows();
 
+    /// <summary>The window the OS currently reports as the foreground, or 0 off Windows. Its own
+    /// P/Invoke, like every other reading here: the point of this probe is to ask the OS directly
+    /// rather than through the capability under test.</summary>
+    internal static nint Foreground() => WindowsHost ? GetForegroundWindow() : 0;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
+
     /// <summary>
     /// Does this machine have a notification area at all? <c>Shell_TrayWnd</c> is the shell's
     /// taskbar window; without it there is nowhere for an icon to go, and the honest expectation

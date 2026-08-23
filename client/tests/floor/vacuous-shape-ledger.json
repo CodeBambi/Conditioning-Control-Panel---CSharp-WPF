@@ -848,16 +848,16 @@
       "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS)"
     },
     {
-      "key": "CcpClient.Tests/TrayCapabilityTests.cs::TrayCapabilityTests.TheRightClickGesture_LeavesTheProcessAbleToPlaceAWindowInTheTopmostBand",
+      "key": "CcpClient.Tests/TrayCapabilityTests.cs::TrayCapabilityTests.TheRightClickGesture_NeverParksTheForegroundOnTheHiddenOwnerWindow",
       "path": "CcpClient.Tests/TrayCapabilityTests.cs",
-      "line": 383,
-      "method": "TrayCapabilityTests.TheRightClickGesture_LeavesTheProcessAbleToPlaceAWindowInTheTopmostBand",
+      "line": 398,
+      "method": "TrayCapabilityTests.TheRightClickGesture_NeverParksTheForegroundOnTheHiddenOwnerWindow",
       "shapes": [
         "dynamic-skip"
       ],
       "expectDetected": true,
       "verdict": "platform-skip-converted",
-      "reason": "the topmost band is a Win32 concept and the whole fact is a Win32 read-back, so the OS gate is expressed as Assert.SkipUnless in order to REPORT rather than pass silently; pinned by name in floor.json allowedSkips under the admission rule, with the machine class named there. It is not vacuous on the machine class where it executes: on Windows every path asserts, and the fact carries its own CONTROL leg (the band is proved grantable BEFORE the gesture) so a green cannot mean the band was never reachable."
+      "reason": "the foreground and the tray owner window are Win32 concepts, so the OS gate is expressed as Assert.SkipUnless in order to REPORT rather than pass silently; pinned by name in floor.json allowedSkips under the admission rule, with the machine class named there. It is not vacuous on the machine class where it executes: on Windows every path asserts, and the fact carries its own two preconditions (an owner window was really built, and the synthetic right-click really reached the menu tracker) so a green cannot mean the gesture never ran."
     },
     {
       "key": "CcpClient.Tests/UnboundedWaitGuardTests.cs::UnboundedWaitGuardTests.NoUnboundedJoinsOrInjectedBudgetsInClientTests",

@@ -462,7 +462,11 @@ public sealed class Win32InputPresence : IInputPresence
     /// <inheritdoc/>
     public int Pump(int maxMessages)
     {
-        if (!OperatingSystem.IsWindows() || maxMessages <= 0)
+        // _disposed FIRST, and it is the SAME guard every other path on this type already carries
+        // (:121, :164, :327, :367, :484). Pump was the one path without it, so a disposed presence
+        // still dispatched whatever was queued on the calling thread - and PeekMessageW(hWnd 0)
+        // drains the WHOLE thread, not this presence, so what it dispatched belonged to somebody else.
+        if (_disposed || !OperatingSystem.IsWindows() || maxMessages <= 0)
         {
             return 0;
         }

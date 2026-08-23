@@ -361,132 +361,59 @@ public class TrayCapabilityTests
         Assert.False(TrayIconRequest.Default.ToolTipWasClamped);
         Assert.Equal("Conditioning Control Panel", TrayIconRequest.Default.ToolTip);
     }
+
     /// <summary>
-    /// The right-click gesture must not cost this process the TOPMOST BAND.
+    /// The right-click gesture must not park the user's FOREGROUND on an invisible window.
     ///
-    /// <para><b>This is a repaired defect, and it was invisible because it was an accident of test
-    /// order.</b> The gesture's only real Win32 call is <c>SetForegroundWindow</c> on the tray's
-    /// OWNER window, and in a headless-ish run that owner is HIDDEN. A hidden window cannot come
-    /// forward, so the call can only fail - and the failed attempt left this process unable to place
-    /// ANY window in the topmost band afterwards. Measured, not inferred: a subsequent
-    /// <c>SetWindowPos(HWND_TOPMOST)</c> returned TRUE and applied NOTHING, the extended-style
-    /// read-back identical before and after, thirty-two assertions running. Three
-    /// <c>PointerCoexistenceTests</c> facts failed whenever this class ran first and passed whenever
-    /// it did not.</para>
+    /// <para><b>The gesture's only real Win32 call is <c>SetForegroundWindow</c> on the tray's OWNER
+    /// window, and that owner is HIDDEN — it exists to receive the shell's callback messages and is
+    /// never shown.</b> Unguarded, that call moves the foreground onto a window with nothing on
+    /// screen: the user's next keystroke goes somewhere they cannot see, and nothing explains it.
+    /// <c>Win32TrayPresence.ShowContextMenu</c> therefore asks <c>IsWindowVisible</c> first.</para>
     ///
-    /// <para><b>It is written as ONE fact for that reason.</b> The damage and the reading are in the
-    /// same method, so it reds on the defect rather than on an ordering it cannot control - and the
-    /// control below proves the band was reachable BEFORE the gesture, without which "topmost still
-    /// applies" would be equally true of a machine that never grants it.</para>
+    /// <para><b>Why the assertion is on the OS's foreground and not on the call's return value.</b>
+    /// Measured on this machine: <c>SetForegroundWindow</c> on a hidden top-level window returns
+    /// TRUE, and <c>GetForegroundWindow</c> afterwards really is that invisible window. A fact that
+    /// checked the return value would have certified the defect. Only the OS's own answer to "what
+    /// holds the foreground now" can tell the two apart.</para>
+    ///
+    /// <para><b>What this fact used to assert, and why it no longer does.</b> It asserted a
+    /// process-wide CONSEQUENCE — that a window could still be placed in the topmost band
+    /// afterwards. That reading needed an artificial environment to be true in: the band is only
+    /// lost when this process reaches ZERO top-level windows, a state the shipping app can never
+    /// reach because it always owns the Avalonia main window or this very owner window, and which
+    /// only the test harness produced (<see cref="RealDesktopWindowFloor"/>). The consequence was
+    /// therefore both an unreliable detector and a claim about the harness rather than the product.
+    /// This asserts the CAUSE instead: it needs no band, no floor and no window count.</para>
+    ///
+    /// <para><b>Named blind spot, measured.</b> The gesture can only park the foreground when this
+    /// process still holds <c>SetForegroundWindow</c> permission at that moment, so with the guard
+    /// removed this fact reds in the full assembly and in any run that includes
+    /// <c>PointerCapabilityTests</c>, and stays GREEN when <c>TrayCapabilityTests</c> runs ALONE —
+    /// by then the class's own earlier gestures have spent the permission and the call cannot take
+    /// the foreground from anyone. It under-reports in isolation; it never reports a defect that is
+    /// not there, which is the direction that matters and the one its predecessor got wrong.</para>
     /// </summary>
     [Fact]
-    public void TheRightClickGesture_LeavesTheProcessAbleToPlaceAWindowInTheTopmostBand()
+    public void TheRightClickGesture_NeverParksTheForegroundOnTheHiddenOwnerWindow()
     {
-        Assert.SkipUnless(OverlayWindowProbe.WindowsHost, "the topmost band is a Win32 concept; this leg is Windows-only");
+        Assert.SkipUnless(TrayShellProbe.WindowsHost,
+            "the foreground is a Win32 concept and the owner window only exists on Windows; off it every handle "
+            + "here is 0 and a 0 != 0 comparison would answer NO about a window that was never created");
 
-        // THIS FACT RUNS UNFLOORED, DELIBERATELY, AND IT IS THE ONLY ONE THAT DOES.
-        // RealDesktopWindowFloor keeps one hidden window alive per clicking thread because a thread
-        // that reaches ZERO top-level windows after one of them was clicked costs the WHOLE PROCESS
-        // the top-most band - a state the shipping app can never reach, since it always owns the
-        // Avalonia main window or the tray's own hidden owner window. Every other fact wants that
-        // floor, because it is measuring something THROUGH the band. This one is measuring the BAND
-        // ITSELF, so a floored thread would answer yes for the floor's reasons and this detector
-        // would die quietly. It is suspended for the fact and re-armed on the way out.
-        using var unfloored = RealDesktopWindowFloor.SuspendForThisFact(
-            "this fact's subject IS the process-wide foreground permission the floor preserves");
+        var run = TrayObservations.PlaceThenSyntheticRightClick();
 
-        var control = TopmostProbeWindow.Create();
-        try
-        {
-            // THE CONTROL. Without it a green below could mean "the band was never reachable".
-            OverlayWindowProbe.RaiseTopmost(control.Handle);
-            Assert.True(
-                (OverlayWindowProbe.ExStyleOf(control.Handle) & OverlayWindowProbe.TopmostBit) != 0,
-                "the topmost band was already refused BEFORE this fact ran its own gesture. Two things produce "
-                + "that, and both are the defect this fact exists for rather than a bad machine: either an "
-                + "EARLIER tray gesture in this same process already spent the band (the collection runs several), "
-                + "or the guard on the foreground request has been removed. A machine that simply does not grant "
-                + "the band is ruled out by the real overlay taking it in this same process. "
-                + $"{OverlayWindowProbe.DescribeWindow(control.Handle)}");
-        }
-        finally
-        {
-            control.Dispose();
-        }
+        // The gesture has to have REACHED the owner window first, or "the foreground did not move"
+        // is equally true of a gesture that never ran.
+        Assert.True(run.OwnerWindow != 0, "the tray presence built no owner window, so no gesture was delivered");
+        Assert.True(run.TrackerInvocations > 0,
+            $"the synthetic right-click did not reach the menu tracker ({run.TrackerInvocations} invocations), so "
+            + "nothing below is a reading of what the gesture did");
 
-        _ = TrayObservations.PlaceThenSyntheticRightClick();
-
-        var after = TopmostProbeWindow.Create();
-        try
-        {
-            OverlayWindowProbe.RaiseTopmost(after.Handle);
-            Assert.True(
-                (OverlayWindowProbe.ExStyleOf(after.Handle) & OverlayWindowProbe.TopmostBit) != 0,
-                "after the tray right-click gesture, SetWindowPos(HWND_TOPMOST) no longer places a window in the "
-                + "topmost band. The gesture asked a HIDDEN owner window to come forward, which cannot succeed, and "
-                + "the refused request costs this process the band for every later window - which is the overlay, "
-                + $"the glyph surface and the video surface: {OverlayWindowProbe.DescribeWindow(after.Handle)}");
-        }
-        finally
-        {
-            after.Dispose();
-        }
+        Assert.True(run.ForegroundAfterGesture != run.OwnerWindow,
+            $"after the tray right-click the OS reports the foreground window as 0x{run.ForegroundAfterGesture:X}, "
+            + $"which IS the tray's hidden owner window (0x{run.OwnerWindow:X}). The user's keyboard now goes to a "
+            + "window with nothing on screen, and nothing tells them so. SetForegroundWindow on a hidden window "
+            + "returns TRUE and really does take the foreground, so only this read catches it");
     }
-}
-
-/// <summary>
-/// A throwaway top-level window, owned by this process, used ONLY to ask the OS whether the topmost
-/// band is currently grantable. Deliberately not the overlay's own window: the question is about the
-/// PROCESS's standing with the window manager, and borrowing a surface under test would make the
-/// reading depend on that surface's own correctness.
-/// </summary>
-internal sealed class TopmostProbeWindow : IDisposable
-{
-    private const uint WsPopup = 0x80000000;
-    private const uint WsExToolwindow = 0x00000080;
-    private const int SwShownoactivate = 4;
-
-    private TopmostProbeWindow(nint handle) => Handle = handle;
-
-    internal nint Handle { get; private set; }
-
-    internal static TopmostProbeWindow Create()
-    {
-        // "Static" is a stock system class, so no class registration and no window proc to keep
-        // alive - the window only has to exist and be top-level.
-        var handle = CreateWindowExW(
-            WsExToolwindow, "Static", "CcpTopmostProbe", WsPopup, 0, 0, 8, 8, 0, 0, 0, 0);
-        Assert.True(handle != 0, $"CreateWindowExW for the topmost probe returned NULL (last-error {Marshal.GetLastWin32Error()})");
-
-        // SHOWN, and without taking activation. A window that has never been shown does not take the
-        // topmost band on this OS - measured: the control leg reported "refused" against an unshown
-        // probe on a machine that grants the band perfectly well to the real overlay in the same
-        // process. An unshown probe would therefore fail for its own reason rather than the one it
-        // exists to detect, which is the worst kind of green-adjacent red. The real overlay is
-        // visible when it asserts topmost, so this matches it.
-        ShowWindow(handle, SwShownoactivate);
-        return new TopmostProbeWindow(handle);
-    }
-
-    public void Dispose()
-    {
-        if (Handle != 0)
-        {
-            DestroyWindow(Handle);
-            Handle = 0;
-        }
-    }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint CreateWindowExW(
-        uint exStyle, string className, string windowName, uint style,
-        int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyWindow(nint window);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindow(nint window, int command);
 }

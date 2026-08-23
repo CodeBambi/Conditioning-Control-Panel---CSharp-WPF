@@ -160,6 +160,12 @@ internal static class TrayObservations
 
         TrayShellProbe.PostSyntheticRightClick(handles.OwnerWindow, handles.CallbackMessage, handles.IconId);
 
+        // READ WHILE THE OWNER WINDOW IS STILL ALIVE. PostSyntheticRightClick drains the owner's
+        // queue on this thread, so ShowContextMenu has already run by the time it returns - and the
+        // using above destroys the owner on the way out, so a read taken after this method returned
+        // would be asking about a window that no longer exists.
+        var foregroundAfter = TrayShellProbe.Foreground();
+
         return new RightClickRun(
             WindowsHost: TrayShellProbe.WindowsHost,
             MachineHasNotificationArea: TrayShellProbe.MachineHasNotificationArea,
@@ -173,7 +179,9 @@ internal static class TrayObservations
             WakeInvocations: Volatile.Read(ref fixture.WakeInvocations),
             ExitInvocations: Volatile.Read(ref fixture.ExitInvocations),
             MenuState: menuState,
-            PlaceState: place);
+            PlaceState: place,
+            OwnerWindow: handles.OwnerWindow,
+            ForegroundAfterGesture: foregroundAfter);
     }
 
     /// <summary>Ask for a balloon with no icon placed, then place one and ask again.</summary>
@@ -276,7 +284,9 @@ internal static class TrayObservations
         int WakeInvocations,
         int ExitInvocations,
         CapabilityState MenuState,
-        CapabilityState PlaceState);
+        CapabilityState PlaceState,
+        nint OwnerWindow,
+        nint ForegroundAfterGesture);
 
     internal sealed record BalloonRun(
         bool MachineHasNotificationArea,
