@@ -35,7 +35,7 @@ namespace CcpClient.Desktop.Features.Companion;
 ///   The c7 surface does NOT dispatch reply commands: a model reply never reaches
 ///   <see cref="AiEnvelopeValidator"/> at all (<c>AiOperationPipeline.cs:340-346</c> refuses
 ///   envelope-shaped replies with <c>MalformedOutput</c>, a decision recorded at
-///   <c>AiTextHygiene.cs:24-30</c>), so nothing in this build calls
+///   <c>client/src/CcpClient.Desktop/Ai/AiTextHygiene.cs:24-30</c>), so nothing in this build calls
 ///   <see cref="AiCommandExecutor.Execute"/>.
 ///
 /// Session-state holders (<see cref="MemoryConsent"/>) are runtime-only: every default

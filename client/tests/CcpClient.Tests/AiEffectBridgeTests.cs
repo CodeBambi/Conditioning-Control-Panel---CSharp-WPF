@@ -128,7 +128,7 @@ public class AiEffectBridgeTests
     /// <summary>
     /// Every command kind is on exactly one row, so there is no kind the user cannot see or
     /// change. Ten rows for eleven kinds because upstream's OVERLAY switch governs both overlays
-    /// (<c>Services/Commands/AiCommandService.cs:186-187</c>).
+    /// (<c>Services/Commands/AiCommandService.cs:193-194</c>).
     /// </summary>
     [Fact]
     public void EveryCommandKindSitsOnExactlyOneRow()
@@ -176,7 +176,7 @@ public class AiEffectBridgeTests
     /// <summary>
     /// Admitted, and the REAL spiral module moves: the opacity the envelope carried is on the
     /// module's own dial, its enable flag is set and it took a generation. Upstream's
-    /// <c>SpiralCommand.cs:26-32</c> writes exactly those two settings and starts the overlay.
+    /// <c>SpiralCommand.cs:26-39</c> writes exactly those two settings and starts the overlay.
     /// </summary>
     [Fact]
     public void AnAdmittedSpiralPutsTheRealModuleUpAtTheOpacityItAskedFor()
@@ -196,8 +196,8 @@ public class AiEffectBridgeTests
 
     /// <summary>
     /// Off takes the layer down and LEAVES THE GENERATION ALIVE, because that is what upstream
-    /// does: <c>PinkCommand.cs:78</c> clears the flag and <c>RefreshOverlays()</c> drops the layer
-    /// while the overlay service keeps running (<c>OverlayService.cs:421-437</c>). Disarming here
+    /// does: <c>PinkCommand.cs:27</c> clears the flag and <c>RefreshOverlays()</c> drops the layer
+    /// while the overlay service keeps running (<c>OverlayService.cs:451-483</c>). Disarming here
     /// would cancel the module's generation, which is what STOP means in this port — a different
     /// user-visible thing.
     /// </summary>
@@ -259,7 +259,7 @@ public class AiEffectBridgeTests
 
     /// <summary>
     /// The refusal that cost the most to decide. Bounce on/off IS expressible here, but the
-    /// command may carry WORDS (<c>BounceCommand.cs:122</c> passes them to <c>Start</c>) and this
+    /// command may carry WORDS (<c>BounceCommand.cs:20</c> passes them to <c>Start</c>) and this
     /// build's module draws the user's own configured phrases with no phrase setter. Half-applying
     /// — bouncing the user's words while she asked for hers — is the silent defect this slice
     /// exists to remove, so the kind is refused whole, by name, and the real module never arms.

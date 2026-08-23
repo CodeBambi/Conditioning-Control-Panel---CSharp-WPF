@@ -73,7 +73,7 @@ public class CompanionPermissionsHeadlessTests
     /// overlay kinds in the participant's typed state — the same state the execution gates read
     /// (<c>AiExecutionGates.IsEffectAllowed</c>) — and pressing it again withdraws them.
     /// One switch, two kinds, because upstream's <c>AllowAiOverlay</c> governs both
-    /// (<c>Services/Commands/AiCommandService.cs:186-187</c>).
+    /// (<c>Services/Commands/AiCommandService.cs:193-194</c>).
     /// </summary>
     [AvaloniaFact]
     public async Task PressingASwitchMovesTheGateTheExecutorReads_AndPressingItAgainWithdrawsIt()

@@ -22,8 +22,9 @@ namespace CcpClient.Desktop.Ai;
 //
 // WHAT IS STILL NOT WIRED, so nobody reads the above as more than it is: nothing calls
 // Execute. A model reply never reaches AiEnvelopeValidator — AiOperationPipeline.cs:340-346
-// refuses envelope-shaped replies with MalformedOutput and AiTextHygiene.cs:24-30 records
-// that as a decision — so no companion reply can reach this executor in this build.
+// refuses envelope-shaped replies with MalformedOutput and
+// client/src/CcpClient.Desktop/Ai/AiTextHygiene.cs:24-30 records that as a decision — so no
+// companion reply can reach this executor in this build.
 
 /// <summary>
 /// The dispatch target for one admitted effect command (c6). Product implementations live in
@@ -93,7 +94,7 @@ public sealed record AiCommandExecution(IReadOnlyList<AiCommandVerdict> Verdicts
 /// generation-live → master gate → per-effect gate → handler resolution → dispatch.
 /// SYNCHRONOUS by design, and the landed backends keep it that way: every module the bridge
 /// drives applies its dials and engages synchronously (<c>OwnedSessionEffect.Arm</c>, which
-/// upstream's services do too — <c>OverlayService.cs:362-395</c> puts the layers up before
+/// upstream's services do too — <c>OverlayService.cs:394-428</c> puts the layers up before
 /// <c>Start</c> returns). A real async backend lands with a signature change, recorded.
 /// </summary>
 public sealed class AiCommandExecutor

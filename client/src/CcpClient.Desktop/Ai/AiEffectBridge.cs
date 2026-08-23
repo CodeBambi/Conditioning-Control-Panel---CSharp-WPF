@@ -14,8 +14,8 @@ namespace CcpClient.Desktop.Ai;
 /// <see cref="AiNotExecutedReason.EffectUnavailable"/> and the surface can say which effect this
 /// build does not have. Upstream's dispatcher has the opposite failure mode — a gated or
 /// unbuildable command is dropped with a log line and the user sees nothing
-/// (<c>Services/Commands/AiCommandService.cs:44-62</c>, <c>CommandFactory.cs:233</c> returns null
-/// and <c>AiCommandService.cs:81-83</c> simply does not execute) — which is the defect this bridge
+/// (<c>Services/Commands/AiCommandService.cs:44,:51</c>, <c>CommandFactory.cs:37</c> returns null
+/// and <c>AiCommandService.cs:82-85</c> simply does not execute) — which is the defect this bridge
 /// exists to not reproduce.</para>
 ///
 /// <para><b>Why three and not eleven.</b> The rack's modules are driven by persisted DIALS plus
@@ -37,29 +37,29 @@ public static class AiEffectBridge
             [AiCommandKind.FlashImage] = new(
                 "ai-effect-no-one-shot-flash",
                 "flash_image asks for a burst of N images for D seconds at a given size "
-                + "(WPF FlashImageCommand.cs:75 -> FlashService.TriggerFlashOnce). This build's "
+                + "(WPF FlashImageCommand.cs:30 -> FlashService.TriggerFlashOnce). This build's "
                 + "Flash Images module is a paced schedule with an on/off dial and no one-shot "
                 + "entry point, so the amount, the duration and the size have nowhere to land"),
             [AiCommandKind.Subliminal] = new(
                 "ai-effect-no-caller-supplied-phrase",
-                "subliminal carries the text she chose (WPF SubliminalCommand.cs:113 -> "
+                "subliminal carries the text she chose (WPF SubliminalCommand.cs:27 -> "
                 + "FlashSubliminalCustom). This build's Subliminals module draws from the user's "
                 + "own phrase pool and has no seam for a caller-supplied phrase, so her words "
                 + "would be silently replaced by the user's"),
             [AiCommandKind.MantraLockscreen] = new(
                 "ai-effect-no-caller-supplied-phrase",
                 "mantra_lockscreen carries a mantra and a repeat count (WPF "
-                + "MantraLockScreenCommand.cs:151 -> ShowLockCard(phrase, amount, strict)). This "
+                + "MantraLockScreenCommand.cs:27 -> ShowLockCard(phrase, amount, strict)). This "
                 + "build's Lock Card module draws from the user's own phrase pool on a schedule "
                 + "and has no show-this-now entry point"),
             [AiCommandKind.Bounce] = new(
                 "ai-effect-no-caller-supplied-phrase",
-                "bounce may carry words (WPF BounceCommand.cs:122 -> Start(true, words)). This "
+                "bounce may carry words (WPF BounceCommand.cs:20 -> Start(true, words)). This "
                 + "build's Bouncing Text module draws the user's own configured phrases and "
                 + "exposes no phrase setter, so a bounce command could only ever half-apply"),
             [AiCommandKind.Haptic] = new(
                 "ai-effect-no-haptic-route",
-                "haptic drives a toy (WPF HapticCommand.cs:186 -> ApplyVibrationModeAsync). The "
+                "haptic drives a toy (WPF HapticCommand.cs:24 -> ApplyVibrationModeAsync). The "
                 + "haptic sink in this build is not an effect module and nothing here has ever "
                 + "driven a real device, so no AI command may reach it"),
             [AiCommandKind.Video] = new(
@@ -117,7 +117,7 @@ public static class AiEffectBridge
     /// <summary>
     /// Turn a module on with the dials the command carries, or take it back down. Upstream's own
     /// shape for both overlays: write the opacity, write the enable flag, and START the overlay if
-    /// it was not already up (<c>SpiralCommand.cs:26-39</c>, <c>PinkCommand.cs:77-90</c> — the
+    /// it was not already up (<c>SpiralCommand.cs:26-39</c>, <c>PinkCommand.cs:26-39</c> — the
     /// identical body twice). <see cref="OwnedSessionEffect.Arm"/> is this port's counterpart of
     /// that start, and it is idempotent about the generation, so an AI spiral during a running
     /// session re-applies rather than starting a second one.
@@ -125,7 +125,7 @@ public static class AiEffectBridge
     /// <para>The OFF path is <see cref="OwnedSessionEffect.Refresh"/>, not
     /// <see cref="OwnedSessionEffect.Disarm"/>, and that is upstream's behaviour rather than a
     /// convenience: <c>SpiralCommand</c> clears the flag and calls <c>RefreshOverlays()</c>, which
-    /// takes the LAYER down and leaves the overlay service running (<c>OverlayService.cs:421-437</c>).
+    /// takes the LAYER down and leaves the overlay service running (<c>OverlayService.cs:451-483</c>).
     /// Disarming would cancel the module's generation, which is what STOP means here.</para>
     /// </summary>
     private sealed class OverlayHandler(OwnedSessionEffect effect, Action<int> setOpacityPercent) : IAiEffectHandler

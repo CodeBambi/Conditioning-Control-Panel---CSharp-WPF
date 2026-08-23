@@ -337,6 +337,39 @@
       "expectedColor": "#E8E0EE",
       "tolerance": 24,
       "minPixelFraction": 0.05
+    },
+
+    // THE AI PERMISSIONS GRID. Both checks read the SAME derived band - 380x4 DIP, 8 DIP below the
+    // master switch's own UIA rect - in the two states one press of that switch produces. In
+    // `admitted` those pixels are the permissions panel's own padding (#FF1E1822 behind its amber
+    // border); in `closed` there is no panel and they are the window's ground (#FF141018).
+    //
+    // TOLERANCE 4, for the session pair's reason and by the same arithmetic: the two colours are
+    // only 10/8/10 apart, so at 8 either check would pass on the other capture and the pair would
+    // prove nothing about the default. The band is flat fill in both states, which is why the
+    // fractions can sit this high - measured, then pinned strictly between the two captures'
+    // own numbers.
+    {
+      "name": "companion-permissions-panel-fill",
+      "surface": "companion-permissions",
+      "state": "admitted",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.0, "w": 0.96, "h": 1.0 } },
+      "expectedColor": "#1E1822",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "companion-permissions-closed-ground",
+      "surface": "companion-permissions",
+      "state": "closed",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.0, "w": 0.96, "h": 1.0 } },
+      "expectedColor": "#141018",
+      "tolerance": 4,
+      "minPixelFraction": 0.90
     }
   ]
 }

@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Ai;
 /// <summary>
 /// One row of the permissions grid: the label the user reads and the command kinds that row
 /// governs. Ten rows for eleven kinds, because upstream's OVERLAY switch governs BOTH the spiral
-/// and the pink filter through one setting (<c>Services/Commands/AiCommandService.cs:186-187</c>:
+/// and the pink filter through one setting (<c>Services/Commands/AiCommandService.cs:193-194</c>:
 /// <c>spiral =&gt; s.AllowAiOverlay</c> and <c>pink =&gt; s.AllowAiOverlay</c>). The row order and
 /// the labels are upstream's own grid, read in its reading order
 /// (<c>Views/Controls/Companion/AiPermissionsGrid.xaml:185-199</c>, labels from
