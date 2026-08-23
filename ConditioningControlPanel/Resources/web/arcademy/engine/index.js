@@ -77,7 +77,16 @@
  *   variant?: 'whisper'|'centre'|'scatter'|'stamp'
  *   anchor?: Element       mount the card inside a game element instead of the layer
  *   sfx?: true|string      emit a whisper cue (ducks the voice bus)
- * }) -> { kind, variant, text, durMs } | null
+ *   holdMs?: number        ADDITIVE: hold the word LONGER. Clamped to
+ *                          [spec.durMs, SUB_HOLD_MAX_MS 1400] - it can only ever
+ *                          lengthen, and it never touches alpha (the ceiling rule
+ *                          is untouched: TIME is the legibility lever, intensity
+ *                          is not). Moves the release timer with it and answers
+ *                          `holdMs` on the handle. Omit it and the blip, the
+ *                          release and the handle are byte-identical to before.
+ *                          A caller that lengthens must widen its own cadence or
+ *                          two words overlap.
+ * }) -> { kind, variant, text, durMs, holdMs? } | null
  *
  * fire('flash_burst', {
  *   count?: number         default = burstCountForHeat(heat) (1..10 window)
@@ -88,11 +97,17 @@
  *   onPop?: (node) => void; onForceComplete?: (why) => void
  *   hydraGen?: 0..5        pop-splits (default 1, 0 on coarse/low-motion)
  *   sizePx?, holdMs?, alpha?, x?, y?, url?, assetKind?: 'still'|'loop'
+ *   fullBleed?: true       ADDITIVE: ONE node covering the WHOLE layer
+ *                          (object-fit:cover, no transform, no rotation) - CCP's
+ *                          "fullscreen GIF". Forces count 1. Opt-in: omit it and
+ *                          a burst behaves exactly as it always has.
  *   variant?: 'single'|'scatter'|'double'|'hydra'
- * }) -> { kind, variant, count, clickSafe, clickable, live, cancel(), escape } | null
+ * }) -> { kind, variant, count, clickSafe, clickable, fullBleed, live, cancel(), escape } | null
  *
  * fire('gif_burst', { ...same as flash_burst, but never clickable })
  *   node cap 10 (flash_burst is 20, or 3 on a coarse-pointer/low-motion device).
+ *   `x` / `y` place the FIRST node (percent) - with count:1 that is exact
+ *   placement, which is how a class pins a corner GIF without a new primitive.
  *
  * fire('audio_trigger', {
  *   name: string           sfx id (the shell/host owns the audio element)
@@ -102,6 +117,15 @@
  *                          emits a duck request under DTRH's .4/.25/.15 policy,
  *                          scaled by the player's duckDepth cap
  *   duckMs?: number
+ *   pitch?: 0.5..2         pass-through; shell/audio.js owns the clamp
+ *   url?: string           A CLIP: a same-origin ccp.* media url the mixer plays
+ *                          through the bus INSTEAD of synthesising `name`. The
+ *                          level is still this call's clamped one, so a clip can
+ *                          never outrun the channel. A host that cannot play it
+ *                          falls back to the `name` recipe.
+ *   key?: string           the clip's VOICE SLOT: a re-fire on the same key cuts
+ *                          the one still playing (no pile-up on a fast sequence)
+ *   maxMs?, fadeMs?: number  truncate + fade the clip (default 1200 / 180)
  * }) -> { kind, name, level, duck }
  *
  * sustain('row_drift', {
@@ -124,7 +148,11 @@
  *   url?: string           spiral image (else the injected spiralUrl provider)
  *   sustainForever?: true  hold until stop('wash') instead of fading on a deadline
  *   sfx?: true|string
- * })  — re-triggering the same kind REFRESHES the deadline; DOM never piles.
+ * })  -> { kind, variant, alpha, holdMs, url, retune(), stop() } | null
+ *      — re-triggering the same kind REFRESHES the deadline; DOM never piles.
+ *      `url` is ADDITIVE and is a READ: the url actually written to the element
+ *      (opts.url, else spiralUrl() for a spiral), or null when the wash kept its
+ *      CSS gradient. A class records THAT, never its own request (Law I).
  *
  * sustain('gif_rain', {
  *   durationMs?, durationMult?, strength?, alpha?: number

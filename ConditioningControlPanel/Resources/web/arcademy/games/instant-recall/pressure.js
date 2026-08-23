@@ -1,28 +1,31 @@
 /* ============================================================================
  * games/instant-recall/pressure.js - DECK IV of the House Rules for the vigil:
  * THE SURGE. The casino lights the hall, the trickster lies about the slip;
- * this file is what the ROOM does to you as the vigil climbs. In THIS class
- * the montage's own channels (sub_flash words, bubbles, rain, glitch swaps,
- * row drift, the swirl's wheel) are CORE's - they ARE the quiz material and
- * the ledger reads them. This deck is the weather AROUND the screen: it never
- * fires a channel the ledger records as quiz truth (no sub_flash, no
- * audio_trigger stings, no gif_rain / glitch_swap on the montage), so a
- * pressure rung can never plant a false memory. What it spends:
+ * this file is what the ROOM does to you as the vigil climbs.
+ *
+ * THE POOL IS CORE'S, AND THIS DECK MAY NOT TOUCH IT (retuned 2026-08-23, the
+ * mosaic rework). The class now asks "which CCP effect just fired?" off a pool
+ * of ten - Flash image, Subliminal, Whisper, Corner GIF, Fullscreen GIF,
+ * Cascade, Bubbles, Spiral, Pink Filter, Brain Drain - and every one of them is
+ * a ledger entry. A pink wash breathed by THIS file would be a second honest
+ * answer to a question whose key came from the ledger, so the old BREATH /
+ * BURST / SURGE rungs (wash:pink, gif_burst, flash_burst) are GONE. What is
+ * left is weather the quiz never names: the scanline, the motes, the HUD
+ * glitch, and this deck's own CSS tremor.
  *
  *   THE LADDER   the surge = 0.6 * progress + 0.4 * min(streak,4)/4 - rising
  *                with the class and with the player's own run. Rung by rung
  *                (cumulative; a lower rung is stepped DOWN behind a hysteresis,
  *                never snapped):
  *     rung 0  clean hall
- *     rung 1  BREATH      pink wash breathes on a cadence             [engine wash:pink]
- *     rung 2  MOTES+CRT   ambient motes in the beam + scanline whisper [engine ambient_field, crt]
+ *     rung 1  CRT         a scanline whisper over the hall             [engine crt]
+ *     rung 2  MOTES       ambient dust in the beam                     [engine ambient_field]
  *     rung 3  TREMOR      the chrome (HUD chips, proctor line) carries a
- *                         CSS tremor whose amplitude rides heat; a correct
- *                         answer pays a gif burst over the hall         [CSS + engine gif_burst]
- *     rung 4  GLITCH      the HUD glitches (vhsroll) on stops + a flash
- *                         burst; crt turns chroma                      [engine glitch_swap, flash_burst, crt]
- *     rung 5  SURGE       the breath deepens to a flood on every correct
- *                         answer, the tremor peaks, bursts double      [engine wash:pink, gif_burst]
+ *                         CSS tremor whose amplitude rides heat        [CSS only]
+ *     rung 4  GLITCH      the HUD glitches (vhsroll) on stops and layout
+ *                         beats; crt turns chroma            [engine glitch_swap, crt]
+ *     rung 5  GALE        the tremor peaks (TREMOR_PX[5]) and the chroma
+ *                         is repainted - no new primitive, no new node [CSS only]
  *   THE PUNCH    every verdict punches the chrome (extend-not-stack: a CSS
  *                class with a bigger amplitude for 300ms); reduced motion /
  *                motionLevel 0 turn every punch into a bloom (a transition).
@@ -36,7 +39,10 @@
  *
  * TABLE LAW AUDIT (House Rules):
  *   I   ledger honest - reads nothing, writes nothing about the ledger, the
- *       stops, the streak or the grade; the chips' TEXT is never touched.
+ *       stops, the streak or the grade; the chips' TEXT is never touched; and
+ *       it NEVER fires a POOL primitive (flash_burst / sub_flash /
+ *       bubble_field / wash / audio_trigger stings / gif_burst / gif_rain),
+ *       because the quiz's answer key comes from CORE's ledger alone.
  *   II  input honest  - the tremor is applied to chrome only (never the slip,
  *       never an option, never a tile); every engine fire is clickSafe.
  *   III never still   - the breath and the tremor ride the rung.
@@ -49,9 +55,9 @@
  *   PERF LAW         - zero per-frame JS; zero touches on .g-ir-tile or the
  *       montage container; CSS animations on chrome only.
  *
- * NEVER: engine.stop('wash') - it blacks out EVERY wash kind, including the
- * swirl wheel CORE holds. A wash is stepped down by re-triggering the same
- * variant with a tiny alpha and a 120ms hold.
+ * NEVER: engine.stop('wash') - it blacks out EVERY wash kind at once, and CORE
+ * pulses three of them as POOL effects. This deck no longer touches wash at all
+ * (the guard in stopKind stays, because a future rung must not be able to).
  * ==========================================================================*/
 
 import { makeRng } from '../../core/rng.js';
@@ -67,28 +73,21 @@ export const IR_PRESSURE = Object.freeze({
    *  announces itself with (one per rung CHANGE, never per frame). */
   LADDER: Object.freeze([
     Object.freeze({ rung: 0, adds: Object.freeze([]), cue: null }),
-    Object.freeze({ rung: 1, adds: Object.freeze(['breath']), cue: 'wash' }),
-    Object.freeze({ rung: 2, adds: Object.freeze(['motes', 'crt']), cue: 'whisper' }),
-    Object.freeze({ rung: 3, adds: Object.freeze(['tremor', 'burst']), cue: 'burst' }),
+    Object.freeze({ rung: 1, adds: Object.freeze(['crt']), cue: 'whisper' }),
+    Object.freeze({ rung: 2, adds: Object.freeze(['motes']), cue: 'wash' }),
+    Object.freeze({ rung: 3, adds: Object.freeze(['tremor']), cue: 'burst' }),
     Object.freeze({ rung: 4, adds: Object.freeze(['glitch', 'chroma']), cue: 'glitch' }),
-    Object.freeze({ rung: 5, adds: Object.freeze(['surge']), cue: 'near_miss' }),
+    /* rung 5 adds no PRIMITIVE at all: the gale is TREMOR_PX[5] plus a chroma
+     * repaint. Everything louder than that belongs to the pool, and the pool
+     * belongs to CORE. */
+    Object.freeze({ rung: 5, adds: Object.freeze(['gale']), cue: 'near_miss' }),
   ]),
   /** Stepping DOWN waits this long (a dip in the surge never snaps the storm). */
   HYST_MS: 1600,
   /** Forever-ish things are repainted when heat moved at least this much. */
   HEAT_REPAINT_STEP: 0.08,
   /* ---- the rungs' knobs ------------------------------------------------ */
-  BREATH_MS: Object.freeze([9000, 5200]),
-  BREATH_HOLD_MS: 2400,
-  BREATH_ALPHA: Object.freeze([0.1, 0.36]),
-  SURGE_ALPHA: Object.freeze([0.3, 0.55]),
-  SURGE_HOLD_MS: 1600,
   MOTES_DENSITY: Object.freeze([0.25, 0.7]),
-  BURST_COUNT: Object.freeze([1, 3]),
-  BURST_HOLD_MS: 900,
-  BURST_CHANCE: Object.freeze([0.45, 0.95]),
-  FLASH_COUNT: Object.freeze([1, 2]),
-  FLASH_HOLD_MS: 700,
   GLITCH_S: 0.55,
   GLITCH_CHANCE: Object.freeze([0.5, 1]),
   /* ---- the tremor (CSS on chrome) ------------------------------------- */
@@ -299,7 +298,6 @@ export function createIrPressure(o) {
   let hystTarget = -1;
   let outOn = false;
   const present = new Set();
-  let breathTimer = 0;
   let punchTimer = 0;
   let bloomTimer = 0;
   let tremorAmp = 0;
@@ -340,19 +338,6 @@ export function createIrPressure(o) {
 
   /* ------------------------------------------------------------ the rungs */
   const has = (k) => present.has(k);
-  function breathe(alphaBand, hold) {
-    sustain('wash', { variant: 'pink', alpha: lerp(alphaBand, heat), holdMs: hold });
-  }
-  function armBreath() {
-    if (breathTimer) cancel(breathTimer);
-    const ms = lerp(P.BREATH_MS, heat) * (0.85 + roll('breath') * 0.3);
-    breathTimer = after(Math.round(ms), () => { breathTimer = 0; if (has('breath') && !stopped) { breathe(P.BREATH_ALPHA, P.BREATH_HOLD_MS); armBreath(); } });
-  }
-  function fadeWash(variant) {
-    // NEVER stop('wash'): a tiny alpha + a short hold lets the engine's own
-    // transition carry it out - and a held wheel elsewhere stays held.
-    sustain('wash', { variant, alpha: 0.01, holdMs: 120 });
-  }
   function motes() {
     sustain('ambient_field', { kind: 'motes', density: lerp(P.MOTES_DENSITY, heat) });
   }
@@ -360,12 +345,6 @@ export function createIrPressure(o) {
     const o2 = { variant };
     if (restartIt) o2.restart = true;
     return sustain('crt', o2);
-  }
-  function burst(n) {
-    return fire('gif_burst', { count: Math.max(1, n | 0), holdMs: P.BURST_HOLD_MS, clickSafe: true, clickable: false });
-  }
-  function flash(n) {
-    return fire('flash_burst', { count: Math.max(1, n | 0), holdMs: P.FLASH_HOLD_MS, clickSafe: true, clickable: false });
   }
   function hudGlitch() {
     if (still || !opts.hud) return null;
@@ -379,14 +358,14 @@ export function createIrPressure(o) {
     return fire('glitch_swap', { targets, variant: 'vhsroll', seconds: P.GLITCH_S, onSwap() {}, sfx: false });
   }
   const FEATURES = {
-    breath: { on() { breathe(P.BREATH_ALPHA, P.BREATH_HOLD_MS); armBreath(); }, off() { if (breathTimer) { cancel(breathTimer); breathTimer = 0; } fadeWash('pink'); } },
     motes: { on() { motes(); }, off() { stopKind('ambient_field'); } },
     crt: { on() { crtOn('scanline', false); }, off() { stopKind('crt'); } },
     tremor: { on() { paintTremor(); }, off() { paintTremor(); } },
-    burst: { on() { burst(1); }, off() {} },
     glitch: { on() { hudGlitch(); }, off() {} },
     chroma: { on() { crtOn('chroma', true); }, off(dest) { if (dest >= 2) crtOn('scanline', true); } },
-    surge: { on() { breathe(P.SURGE_ALPHA, P.SURGE_HOLD_MS); burst(2); }, off() {} },
+    /* THE GALE: no primitive at all. paintTremor() reads the rung, so entering
+     * and leaving rung 5 is the whole feature. */
+    gale: { on() { paintTremor(); }, off() { paintTremor(); } },
   };
   function enterRung(k) {
     const row = P.LADDER[k];
@@ -499,19 +478,16 @@ export function createIrPressure(o) {
       }
       if (k === 'correct') {
         punch('correct');
-        if (has('surge')) breathe(P.SURGE_ALPHA, P.SURGE_HOLD_MS);
-        if (has('burst') && roll('burst') < lerp(P.BURST_CHANCE, heat)) burst(Math.round(lerp(P.BURST_COUNT, heat)) + (has('surge') ? 1 : 0));
       } else if (k === 'wrong' || k === 'timeout') {
         punch(k);
       } else if (k === 'stop') {
         punch('stop');
-        if (has('glitch') && roll('glitch') < lerp(P.GLITCH_CHANCE, heat)) { hudGlitch(); flash(Math.round(lerp(P.FLASH_COUNT, heat))); }
+        if (has('glitch') && roll('glitch') < lerp(P.GLITCH_CHANCE, heat)) hudGlitch();
       } else if (k === 'layout') {
         punch('layout');
         if (has('glitch')) hudGlitch();
       } else if (k === 'peak') {
         punch('peak');
-        if (has('breath')) breathe(P.BREATH_ALPHA, P.BREATH_HOLD_MS);
       }
     },
     /** The last stretch: nothing new climbs past where it is. */

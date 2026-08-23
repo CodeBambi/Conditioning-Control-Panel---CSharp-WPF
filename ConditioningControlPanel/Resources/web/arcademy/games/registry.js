@@ -98,8 +98,22 @@ export const GAME_SEMESTER = Object.freeze({
  */
 export const OPEN_SEMESTERS = new Set([1, 2, 3]);
 
-/** True when a class's semester has opened (unknown keys are Semester I). */
+/**
+ * RETIRED CLASSES (owner ruling 2026-08-23). A class whose semester is open but
+ * which has been pulled from the deal: it is ABSENT exactly like a closed
+ * semester's games (no stub, no board row, no campus room - the wing stays
+ * open for its neighbours), so the module can stay on disk while a
+ * replacement is designed. Misdirection was retired as "boring" after the
+ * owner's play-test; its room (201, The Parlour) is dark until something new
+ * moves in. Remove a key from this set and the class is simply back.
+ */
+export const RETIRED_GAMES = new Set(['misdirection']);
+
+/** True when a class's semester has opened (unknown keys are Semester I) AND
+ *  the class has not been retired - this is the ONE gate the registry pool,
+ *  the timetable and shell/campus.js all read, so they can never disagree. */
 export function isOpenSemester(key) {
+  if (RETIRED_GAMES.has(key)) return false;
   return OPEN_SEMESTERS.has(GAME_SEMESTER[key] || 1);
 }
 
