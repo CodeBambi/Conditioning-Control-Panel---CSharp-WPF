@@ -166,6 +166,9 @@ export const DEFAULT_LEXICON = Object.freeze({
   punchcard_count: '{have}/{need}',
   punchcard_mastered: 'Mastered',
   punchcard_stamped: 'Stamped for today.',
+  /* THE S DOUBLE (owner ruling 2026-08-23): a day the class graded S is worth a
+     second hole, and the ceremony says so on the beat that punches it. */
+  punchcard_stamped_s: 'Top marks. The card takes a second stamp.',
   punchcard_next_hole: 'Come back tomorrow for the next stamp.',
   punchcard_unlocked_chip: 'Unlocked',
   punchcard_unlocked_title: 'Assignment complete',
@@ -176,6 +179,8 @@ export const DEFAULT_LEXICON = Object.freeze({
   enroll_card_line: 'Every class carries a stamp card. Ten stamps, one a night.',
   enroll_tutorial_line: 'One stamp for finishing your first class.',
   enroll_house_line: 'And one on the house. Welcome to the class.',
+  /* DAY ONE IS THREE (owner ruling 2026-08-23), and the third hole says why. */
+  enroll_signon_line: 'And one for signing on. The card starts warm.',
   /* --- the Records Office (PUNCHCARD §6) --------------------------------- */
   records_kicker: 'Records Office',
   records_lede: 'Ten cards, ten stamps each. The wall keeps them whether you come back or not.',
@@ -187,8 +192,8 @@ export const DEFAULT_LEXICON = Object.freeze({
   records_stamps: 'Daily stamps',
   records_no_stamps: 'No daily stamps yet.',
   records_not_enrolled: 'Not enrolled - attend the class',
-  records_enroll_hint: 'The first graded finish opens the card and earns two stamps.',
-  records_house_note: 'Day one is two stamps: one for finishing, one on the house.',
+  records_enroll_hint: 'The first graded finish opens the card and earns three stamps.',
+  records_house_note: 'Day one is three stamps: finishing, on the house, signing on.',
   records_flip_hint: 'Pick a card to read its stamps.',
   records_empty_wall: 'Nothing on the wall yet. Attend a class and the first card gets pinned.',
 

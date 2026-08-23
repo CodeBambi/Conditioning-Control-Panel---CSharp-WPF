@@ -1,10 +1,10 @@
 /* ============================================================================
  * shell/punchcard.js - THE CARD ITSELF (PUNCHCARD.md §2 / §6 / §7).
  *
- * One class, one card, ten stamps. Enrollment lands two of them on the first
- * night (the tutorial punch and the one on the house); after that a graded
- * finish punches one per local day, and the tenth hole unlocks the room for
- * good. The MATH is C#'s (`ArcademyPunchCards`), the STATE is the host's
+ * One class, one card, ten stamps. Enrollment lands THREE of them on the first
+ * night (the tutorial punch, the one on the house, and one for signing on);
+ * after that a graded finish punches one per local day - TWO on a day the class
+ * graded S - and the tenth hole unlocks the room for good. The MATH is C#'s (`ArcademyPunchCards`), the STATE is the host's
  * (`punchCards`, refused to the page - core/store.js), and this file is only
  * ever the FACE of it: given a normalized card it draws one, and it can punch a
  * stamp with a thud on request.
@@ -79,10 +79,25 @@ import { t } from '../core/lexicon.js';
 /** Holes on a card. Mirrors ArcademyPunchCards.Holes and store.PUNCH_HOLES. */
 export const HOLES = 10;
 
+/* THE PACE (owner ruling 2026-08-23). Both numbers are the HOST's decision and
+ * arrive on `punchcard-result.minted`; they live here as the ceremony's own
+ * default so a frame that somehow lacks the field still animates the right
+ * number of holes. Mirrors ArcademyPunchCards.EnrollPunches / SPunches and
+ * core/store.js's ENROLL_PUNCHES / S_DAY_PUNCHES. */
+/** Holes enrolling is worth, on the first night, all at once. */
+export const ENROLL_PUNCHES = 3;
+/** Holes a stamped day that graded S is worth (an ordinary day is one). */
+export const S_DAY_PUNCHES = 2;
+
 /** The sfx the punch rides. `shell/audio.js` synthesises it (tone + body hit). */
 const THUD_CUE = 'stamp';
-/** thud-1 is the tutorial punch, thud-2 the one on the house: lower, heavier. */
-export const THUD_PITCH = Object.freeze({ first: 1, house: 0.78, daily: 0.92, unlock: 1.18 });
+/** thud-1 is the tutorial punch, thud-2 the one on the house: lower, heavier.
+ *  `bonus` is the EXTRA hole a day earns - enrollment's third, and the second
+ *  one an S buys - pitched above the punch it follows so a double reads as two
+ *  events and not as one thud with an echo. */
+export const THUD_PITCH = Object.freeze({
+  first: 1, house: 0.78, daily: 0.92, bonus: 1.06, unlock: 1.18,
+});
 
 /** Where the face geometry lives, relative to THIS module's folder. */
 const FACES_URL = '../art/punchcard/faces.json';
@@ -522,7 +537,7 @@ export function holesLine(punches) {
 }
 
 export default {
-  HOLES, cardFace, thud, holesLine, THUD_PITCH,
+  HOLES, ENROLL_PUNCHES, S_DAY_PUNCHES, cardFace, thud, holesLine, THUD_PITCH,
   loadFaceGeometry, setFaceGeometry, geomFor, faceGeometryLoaded,
   DEFAULT_GEOM, phraseFor, PHRASES, PHRASE_LEX,
 };

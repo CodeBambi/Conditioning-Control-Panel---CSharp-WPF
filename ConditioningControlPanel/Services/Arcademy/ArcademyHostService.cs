@@ -1201,6 +1201,8 @@ internal static class ArcademyHostService
         ["punchcard_phrase_7"] = "Progress in here is measured in ink, never in effort.",
         ["punchcard_phrase_8"] = "You will stop noticing that you collect these. That is the intention.",
         ["punchcard_stamped"] = "Stamped for today.",
+        // THE S DOUBLE (owner ruling 2026-08-23) - the second hole an S day buys says so.
+        ["punchcard_stamped_s"] = "Top marks. The card takes a second stamp.",
         ["punchcard_next_hole"] = "Come back tomorrow for the next stamp.",
         ["punchcard_unlocked_chip"] = "Unlocked",
         ["punchcard_unlocked_title"] = "Assignment complete",
@@ -1211,6 +1213,8 @@ internal static class ArcademyHostService
         ["enroll_card_line"] = "Every class carries a stamp card. Ten stamps, one a night.",
         ["enroll_tutorial_line"] = "One stamp for finishing your first class.",
         ["enroll_house_line"] = "And one on the house. Welcome to the class.",
+        // DAY ONE IS THREE (owner ruling 2026-08-23) - the third hole says why.
+        ["enroll_signon_line"] = "And one for signing on. The card starts warm.",
         // ---- punch cards: the Records Office (PUNCHCARD.md §6) --------------------------
         ["records_kicker"] = "Records Office",
         ["records_lede"] = "Ten cards, ten stamps each. The wall keeps them whether you come back or not.",
@@ -1222,8 +1226,8 @@ internal static class ArcademyHostService
         ["records_stamps"] = "Daily stamps",
         ["records_no_stamps"] = "No daily stamps yet.",
         ["records_not_enrolled"] = "Not enrolled - attend the class",
-        ["records_enroll_hint"] = "The first graded finish opens the card and earns two stamps.",
-        ["records_house_note"] = "Day one is two stamps: one for finishing, one on the house.",
+        ["records_enroll_hint"] = "The first graded finish opens the card and earns three stamps.",
+        ["records_house_note"] = "Day one is three stamps: finishing, on the house, signing on.",
         ["records_flip_hint"] = "Pick a card to read its stamps.",
         ["records_empty_wall"] = "Nothing on the wall yet. Attend a class and the first card gets pinned.",
         // ---- enrollment flavour, per class (PUNCHCARD.md §4) ----------------------------
@@ -2345,7 +2349,14 @@ internal static class ArcademyHostService
             ArcademyPunchCards.PunchMint? punch = null;
             try
             {
-                punch = _meta?.StampPunchCard(gameKey, localDate);
+                // THE S DOUBLE (owner ruling 2026-08-23). The grade is only known HERE, so the
+                // host decides it and the page is told on the frame - `minted:2`. `grade` has
+                // already been clamped to a table key above (zen and anything unrecognised
+                // degrade to "pass"/"C"), so this cannot be talked into an S by a junk field, and
+                // the mint's own per-day idempotence means a retake that grades S is still worth
+                // nothing (trap 23).
+                bool gradedS = string.Equals(grade, "S", StringComparison.OrdinalIgnoreCase);
+                punch = _meta?.StampPunchCard(gameKey, localDate, gradedS);
                 // A real punch is worth mirroring; a same-day retake is not. Debounced, so the
                 // enrollment ceremony's second mint rides the same request (PUNCHCARD §5).
                 if (punch is { Minted: true }) ArcademySyncService.NotifyMutation();
@@ -2368,7 +2379,7 @@ internal static class ArcademyHostService
             });
             PostPunchCard(gameKey, "daily", punch);
             App.Logger?.Information(
-                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Retake}, streak {Streak}, {Today}/3 today",
+                "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Retake}, streak {Streak}, {Today}/4 today",
                 gameKey, tier, grade, xp, firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
                 streak, classesToday);
         }
@@ -2378,14 +2389,14 @@ internal static class ArcademyHostService
     // ============================ enrollment-done: the first-run punches ============================
 
     /// <summary>
-    /// <c>enrollment-done {gameKey}</c> -> the two first-run punches (PUNCHCARD §4). The shell
-    /// posts this once, at the end of the enrollment ceremony that follows a class's FIRST graded
-    /// finish; everything the mint needs beyond the key is derived host-side, so the frame carries
-    /// no numbers to forge and a replayed one is a no-op.
+    /// <c>enrollment-done {gameKey}</c> -> the three first-run punches (PUNCHCARD §4, owner ruling
+    /// 2026-08-23). The shell posts this once, at the end of the enrollment ceremony that follows a
+    /// class's FIRST graded finish; everything the mint needs beyond the key is derived host-side,
+    /// so the frame carries no numbers to forge and a replayed one is a no-op.
     ///
     /// <para>It arrives AFTER that run's <c>class-ended</c>, whose daily stamp it supersedes - the
-    /// two punches replace it rather than adding to it, so day one is exactly two either way
-    /// round (<see cref="ArcademyPunchCards.Enroll"/>).</para>
+    /// three punches replace it rather than adding to it, so day one is exactly three either way
+    /// round, even when that first night graded S (<see cref="ArcademyPunchCards.Enroll"/>).</para>
     /// </summary>
     private static void OnEnrollmentDone(JObject o)
     {
@@ -2450,7 +2461,12 @@ internal static class ArcademyHostService
     /// whether THIS finish punched anything and whether it was the tenth hole - which a snapshot
     /// can only answer by diffing. Same reason <c>payout-result</c> carries the streak.
     ///
-    /// <para>Posted even for a no-op mint (<c>minted:false</c> — a same-day retake, a repeat
+    /// <para><c>minted</c> is a COUNT, not a flag (owner ruling 2026-08-23): 3 for an enrollment,
+    /// 2 for a day the class graded S, 1 for an ordinary day, 0 for a no-op. The ceremony walks
+    /// that many beats. Zero is still falsy, so the shell's "no ceremony for a hole that was not
+    /// punched" test reads exactly as it did when this was a bool.</para>
+    ///
+    /// <para>Posted even for a no-op mint (<c>minted:0</c> — a same-day retake, a repeat
     /// enrollment, a full card), so the shell never has to tell "nothing happened" apart from "the
     /// host did not answer". A NULL mint is the other thing entirely: there was no card to touch
     /// (no game key, or no store), and that gets no frame.</para>
@@ -2465,7 +2481,7 @@ internal static class ArcademyHostService
                 type = "punchcard-result",
                 gameKey,
                 reason,
-                minted = m.Minted,
+                minted = m.Punches,
                 justUnlocked = m.JustUnlocked,
                 holes = ArcademyPunchCards.Holes,
                 card = m.Card,

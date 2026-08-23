@@ -44,7 +44,14 @@ import { createKeybinds } from './keybinds.js';
 import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
 import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createRecords } from './records.js';
-import { loadFaceGeometry } from './punchcard.js';
+import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
+/* EMI, the mascot. Two of B's own modules: `mountEmi` builds the floating widget
+ * (which dynamic-imports agent A's renderer optionally, so a broken face costs
+ * EMI's expression and never the shell's boot) and `fireMoment` is the ONE verb
+ * every seam below uses. Both are no-ops when there is no `#arc-emi` layer -
+ * which is exactly the case in the node DOM double. */
+import { mountEmi } from '../emi/index.js';
+import { fireMoment } from '../emi/moments.js';
 
 const FLAVOR_XP_CAP = 15;          // BUILD-CONTRACT §8 - the page clamps too
 const MEATY_MAX_SEC = 300;
@@ -347,6 +354,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ---------------------- state ----------------------------------------- */
+  /* THE GRADE EMI SPEAKS ABOUT. Set by finishClass, read once by showReport, so
+   * a report opened cold from the Records Office gets the day's line and a report
+   * opened ON a finish does not have her talk over her own win face. */
+  let lastGraded = null;
+
   const utcDateSeed = String(src.utcDateSeed || '');
   const localDate = String(src.localDate || utcDateSeed);
 
@@ -542,6 +554,26 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       catch (e) { /* a card that cannot be read is simply not an unlock */ }
     }
     return out;
+  }
+
+  /** How many cards are MASTERED once `gameKey`'s tenth hole lands (EMI seam).
+   *  Read off the store like every other card question; the shell counts
+   *  nothing of its own, it only folds in the card the ceremony is drawing. */
+  function masteredCount(gameKey) {
+    const done = unlockedMap();
+    if (gameKey) done[gameKey] = true;
+    return Object.keys(done).length;
+  }
+
+  /** How many classes the player holds a card for, counting `gameKey` (EMI seam). */
+  function enrolledCount(gameKey) {
+    const out = Object.create(null);
+    for (const entry of games.list) {
+      try { if (store.punchCard(entry.key).enrolled) out[entry.key] = true; }
+      catch (e) { /* a card that cannot be read is not an enrollment */ }
+    }
+    if (gameKey) out[gameKey] = true;
+    return Object.keys(out).length;
   }
 
   /** Is this room open tonight regardless of the board? (a full card, §2.3) */
@@ -764,10 +796,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       return;
     }
 
+    const wasScreen = screen;
     screen = 'board';
     teardownClass();
     clearScreen();
     renderTopbar();
+    // EMI SEAM: arriving at the campus, not repainting it.
+    if (wasScreen !== 'board') fireMoment('greet');
     if (!dom || !dom.screen) return;
 
     if (src.audioOnlySession) {
@@ -889,6 +924,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   /* ============================ SCREEN: REPORT ========================== */
   function showReport() {
+    const wasScreen = screen;
     screen = 'report';
     clearScreen();
     renderTopbar();
@@ -912,6 +948,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // last so it stays the topmost thing on the screen it was earned on.
     if (punchStage && punchStage.root) dom.screen.appendChild(punchStage.root);
     setStage('arc-report-on');
+    /* EMI SEAM: the one moment she uses words (the talk rule puts them in the
+     * bubble, never on the face). Two suppressions, both load-bearing:
+     * a REPAINT is not an arrival (onPayout re-renders this very screen the
+     * instant the host pays out - trap 50's neighbour), and a FRESH finish
+     * already got its win/miss reaction in finishClass one screen ago. */
+    if (wasScreen !== 'report') {
+      if (lastGraded && lastGraded.fresh) lastGraded.fresh = false;
+      else fireMoment('reportCard', lastGraded || { grade: null, perfect: allDone() });
+    }
   }
 
   /* ============================ SCREEN: RECORDS =========================
@@ -957,7 +1002,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *               all - a ceremony for a hole that was not punched is a lie.
    *   enrollment  the first graded finish of a class. The shell KNOWS it is
    *               owed (the card has no `enrolledAt`), so it suppresses that
-   *               run's daily beat, runs the two-punch ceremony on its own
+   *               run's daily beat, runs the three-punch ceremony on its own
    *               clock, and posts `enrollment-done` when the punches land.
    *               The host's answer supersedes the daily stamp it already made,
    *               which is what keeps day one at exactly two either way round.
@@ -1000,6 +1045,32 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   /** Mount the card, full screen, over the report it was earned on. */
   function runPunchCeremony(o) {
+    // EMI SEAM: the stamp lands. ^_^ + hearts, (≧◡≦) on a 3-day streak, COOL on
+    // the tenth hole - moments.js owns which.
+    try {
+      fireMoment('stamp', {
+        gameKey: o && o.gameKey,
+        streak: store.streak().count,
+        perfect: !!(o && o.justUnlocked),
+        grade: (o && o.justUnlocked) ? 's' : null,
+        // The post-mint total and how many holes this finish bought: the card
+        // the ceremony is about to draw, never a count of our own.
+        holes: (o && o.card && Number(o.card.punches)) || (o && Number(o.to)) || 0,
+        minted: (o && Number(o.minted)) || 1,
+      });
+    } catch (e) { /* a mascot may never break a ceremony */ }
+    // EMI SEAM: the card turned MASTERED - and, when it was the last one, the
+    // whole school. `justUnlocked` is the host's own signal; nothing is diffed.
+    try {
+      if (o && o.justUnlocked) fireMoment('cardMastered', { gameKey: o.gameKey, count: masteredCount(o.gameKey) });
+    } catch (e) { /* a mascot may never break a ceremony */ }
+    try {
+      if (o && o.justUnlocked && masteredCount(o.gameKey) >= games.list.length) fireMoment('allMastered', { count: masteredCount(o.gameKey) });
+    } catch (e) { /* a mascot may never break a ceremony */ }
+    // EMI SEAM: the enrollment mint (the three first-run punches).
+    try {
+      if (o && o.reason === 'enrollment') fireMoment('enrolMint', { gameKey: o.gameKey, enrolled: enrolledCount(o.gameKey), total: games.list.length });
+    } catch (e) { /* a mascot may never break a ceremony */ }
     dismissPunchStage();
     if (!dom || !dom.screen) return null;
     const spec = o || {};
@@ -1009,6 +1080,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       name: gameName(spec.gameKey),
       card: spec.card,
       reason: spec.reason,
+      minted: spec.minted,
       from: spec.from,
       to: spec.to,
       justUnlocked: !!spec.justUnlocked,
@@ -1588,6 +1660,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'class';
     clearScreen();
     renderTopbar();
+    fireMoment('classStart', { gameKey: cls.gameKey, tier: gradeTier });   // EMI SEAM
     const chrome = classScreenChrome(
       Object.assign({}, cls, { timeBudgetSec }), gradeTier, retake, endless);
 
@@ -1728,7 +1801,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // `enrolling` is decided at the DOOR, not at the bell: the intro that
         // ran is the one this finish pays for, so a card the host enrolled
         // mid-class (it cannot, but a snapshot could) can never turn the
-        // two-punch ceremony into a one-punch one halfway through.
+        // three-punch ceremony into a one-punch one halfway through.
         finishClass(cls, gradeTier, result, { peek, belowPar, endless, enrolling });
       },
     };
@@ -2023,6 +2096,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       + (graded.capped.length ? ', capped: ' + graded.capped.join(',') : '')
       + (isRetake ? ', RETAKE - the day keeps ' + String(priorRow.grade).toUpperCase() : '') + ')');
 
+    /* EMI SEAM: she reacts to the letter. The report card lands one screen later
+     * and its SAY is suppressed for this finish (see showReport) so the two beats
+     * do not talk over each other. */
+    lastGraded = { grade: graded.grade, perfect: allDone(), fresh: true };
+    fireMoment(/^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'miss',
+      { grade: graded.grade, streak: store.streak().count });
+
     bridge.send({
       type: 'class-ended',
       gameKey: cls.gameKey,
@@ -2058,7 +2138,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // store.applyPayout folds them in. Writing them locally would be refused
       // by the host anyway - see core/store.js HOST_OWNED_KEYS.
       if (allDone()) {
+        // Read the row BEFORE the write: a retake of the last class finds the
+        // day already complete, and the bell rings once per LOCAL day.
+        const dayWasDone = !!(store.day(localDate) || {}).complete;
         store.completeDay(localDate, { classCount: timetable.classes.length, perfect: true });
+        // EMI SEAM: that was the last class of the night.
+        if (!dayWasDone) { try { fireMoment('dayDone', { classes: timetable.classes.length }); } catch (e) { /* noop */ } }
       }
     } catch (e) {
       say('meta write failed (screen unaffected): ' + ((e && e.message) || e));
@@ -2079,16 +2164,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try {
       if (shellState && shellState.enrolling) {
         /* FIRST RUN. The host has already taken today's daily stamp off this
-         * very `class-ended`; the two enrollment punches SUPERSEDE it, and the
-         * frame that does so is the one we post at the end of the ceremony. The
-         * daily beat for this run is suppressed by arming 'enrollment'. */
+         * very `class-ended`; the THREE enrollment punches SUPERSEDE it (owner
+         * ruling 2026-08-23), and the frame that does so is the one we post at
+         * the end of the ceremony. The daily beat for this run is suppressed by
+         * arming 'enrollment'. */
         armPunch(cls.gameKey, 'enrollment');
         runPunchCeremony({
           gameKey: cls.gameKey,
           reason: 'enrollment',
           card: store.punchCard(cls.gameKey),
+          minted: ENROLL_PUNCHES,
           from: 0,
-          to: 2,
+          to: ENROLL_PUNCHES,
           onPunched: () => {
             // ONCE, AFTER THE CEREMONY (§4). Repeats are host-side no-ops, but
             // the shell does not lean on that: the card it just drew is the one
@@ -2183,6 +2270,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function applySuspend(on, reason) {
     suspendedGlobally = !!on;
+    fireMoment(on ? 'suspend' : 'resume', { reason });   // EMI SEAM
     if (active) {
       try { active.engine.suspend(!!on); } catch (e) { say('engine.suspend threw: ' + ((e && e.message) || e)); }
       try { active.peek.forceHide(); } catch (e) { /* noop */ }
@@ -2324,7 +2412,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (!punchArm || punchArm.gameKey !== m.gameKey) return;
 
       if (punchArm.mode === 'enrollment') {
-        // The two-punch beat is already running and has just reconciled above;
+        // The three-punch beat is already running and has just reconciled above;
         // the daily frame for this same finish is the one enrollment supersedes,
         // so it is deliberately ignored rather than played as a second ceremony.
         if (m.reason === 'enrollment') disarmPunch();
@@ -2343,6 +2431,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           gameKey: m.gameKey,
           reason: 'daily',
           card: norm,
+          // `minted` is a COUNT now, not a flag: 2 on a day the class graded S,
+          // 1 otherwise. The ceremony walks that many beats; the shell still
+          // grades nothing and counts nothing of its own.
+          minted: Math.round(Number(m.minted) || 1),
           to: Math.round(Number(norm.punches) || 0),
           justUnlocked: !!m.justUnlocked,
         });
@@ -2450,6 +2542,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   };
 
   store.onChange(() => { if (screen === 'board' || screen === 'report') renderTopbar(); });
+
+  /* EMI. Mounted before the first board so the opening `greet` has a face to
+   * wear. The layer is optional on purpose: `dom.emi` if the host passed one,
+   * else `#arc-emi` from the document, else nothing at all (the node DOM double
+   * registers no ids, so every suite runs EMI-less and unchanged). */
+  try {
+    const emiLayer = (dom && dom.emi)
+      || (typeof document !== 'undefined' && document.getElementById
+        ? document.getElementById('arc-emi') : null);
+    // `shout` is boot.js's toast (#arc-toast). EMI borrows it for exactly one
+    // line - the first time the player ever dismisses her with the x.
+    if (emiLayer) mountEmi({ layer: emiLayer, store, toast: shout, log: say });
+  } catch (e) { say('EMI failed to mount (the shell is unaffected): ' + ((e && e.message) || e)); }
 
   showBoard();
   return api;

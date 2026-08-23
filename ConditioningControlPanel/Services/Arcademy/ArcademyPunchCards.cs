@@ -20,10 +20,29 @@ namespace ConditioningControlPanel.Services.Arcademy;
 /// note).</para>
 ///
 /// <para>SHAPE, per game key:
-/// <c>{punches:0..10, dates:["yyyy-MM-dd"], enrolledAt:"yyyy-MM-dd"|null, house:bool,
-/// complete:bool, unlockedAt:"yyyy-MM-dd"|null}</c>. <c>punches</c> is denormalized for the page
-/// but RECOMPUTED on every touch (<see cref="Normalize"/>), so a hand-edited or half-merged blob
-/// heals itself rather than carrying a wrong total forever.</para>
+/// <c>{punches:0..10, dates:["yyyy-MM-dd"], sDates:["yyyy-MM-dd"], enrolledAt:"yyyy-MM-dd"|null,
+/// house:bool, complete:bool, unlockedAt:"yyyy-MM-dd"|null}</c>. <c>punches</c> is denormalized
+/// for the page but RECOMPUTED on every touch (<see cref="Normalize"/>), so a hand-edited or
+/// half-merged blob heals itself rather than carrying a wrong total forever.</para>
+///
+/// <para>THE PACE, and THE FORMULA (owner ruling 2026-08-23). Three levers shortened the time to
+/// master a card, and only the last two are visible here:
+/// <list type="bullet">
+///   <item>enrolling is worth <see cref="EnrollPunches"/> = 3 holes, not two;</item>
+///   <item>a stamped day the class graded S is worth <see cref="SPunches"/> = 2, not one —
+///         which is all <c>sDates</c> is, the subset of <c>dates</c> that graded S;</item>
+///   <item>(the third lever is four classes a day, which lives in the timetable.)</item>
+/// </list>
+/// So: <c>punches = min(10, (enrolledAt != null ? 3 : 0) + dates.Count + sDates.Count)</c>, and
+/// <c>core/store.js punchCard()</c> computes that same line character for character. The two MUST
+/// agree: the page re-derives every total it draws, so a formula that drifts here draws a hole the
+/// host does not hold.</para>
+///
+/// <para>OLD BLOBS ARE PROMOTED, DELIBERATELY. A card enrolled under the two-punch rule carries no
+/// marker of which rule it was minted under — <c>enrolledAt</c> is the only earned field — so the
+/// re-derivation simply pays it three. Everybody who enrolled before today gains one hole on the
+/// next touch. That is the generous reading and it cannot overflow: the total is capped at
+/// <see cref="Holes"/>, and a card already complete stays complete.</para>
 ///
 /// <para>LOCAL dates throughout — never the UTC seed. Regression #978 / CLAUDE.md trap 8: the UTC
 /// day seeds tonight's content, local midnight rolls every daily gate the player feels.</para>
@@ -34,9 +53,22 @@ internal static class ArcademyPunchCards
     /// room permanently (PUNCHCARD §1).</summary>
     public const int Holes = 10;
 
+    /// <summary>Holes the first-run mint is worth, all at once (owner ruling 2026-08-23: three —
+    /// the tutorial punch, the one on the house, and one for signing on). Mirrored by
+    /// <c>core/store.js ENROLL_PUNCHES</c> and <c>shell/punchcard.js ENROLL_PUNCHES</c>.</summary>
+    public const int EnrollPunches = 3;
+
+    /// <summary>Holes a stamped day is worth when the class graded S (an ordinary day is one).
+    /// Mirrored by <c>core/store.js S_DAY_PUNCHES</c>.</summary>
+    public const int SPunches = 2;
+
     /// <summary>Field names, spelled once so the store, the host and the page cannot drift.</summary>
     public const string PunchesField = "punches";
     public const string DatesField = "dates";
+    /// <summary>The subset of <see cref="DatesField"/> whose class graded S — each is worth a
+    /// SECOND hole. Always intersected with <c>dates</c> on the way out, so a stray entry can
+    /// never buy a hole on its own.</summary>
+    public const string SDatesField = "sDates";
     public const string EnrolledAtField = "enrolledAt";
     public const string HouseField = "house";
     public const string CompleteField = "complete";
@@ -46,9 +78,14 @@ internal static class ArcademyPunchCards
     /// idempotent no-op (same day twice, already enrolled, card already full) — the caller uses it
     /// to decide whether anything needs saving or broadcasting.</summary>
     /// <param name="Minted">Did the card actually change?</param>
+    /// <param name="Punches">How many holes this mint bought: 3 for an enrollment, 2 for a day the
+    /// class graded S, 1 for an ordinary day, 0 for every no-op. This is the number that rides
+    /// <c>punchcard-result.minted</c>, because the ceremony has to know how many beats to play —
+    /// it is a COUNT on the wire, not a flag (0 is still falsy, so the shell's "no ceremony for a
+    /// no-op" test is unchanged).</param>
     /// <param name="JustUnlocked">Did THIS mint carry the card over the tenth hole?</param>
     /// <param name="Card">The card after the attempt (a live handle into the blob).</param>
-    internal readonly record struct PunchMint(bool Minted, bool JustUnlocked, JObject Card);
+    internal readonly record struct PunchMint(bool Minted, int Punches, bool JustUnlocked, JObject Card);
 
     /// <summary>
     /// A DAILY STAMP: one per (local day, game), earned by any graded finish. Called from the
@@ -60,24 +97,33 @@ internal static class ArcademyPunchCards
     /// and is sheddable by salvage, and a stamp that survives on its own terms is one less way to
     /// lose a card.</para>
     ///
-    /// <para>DAY ONE IS NOT A DAILY STAMP. Enrollment mints two holes (tutorial + on the house)
-    /// and that pair IS day one's punch, so a card enrolled TODAY with no dates yet is skipped —
+    /// <para>DAY ONE IS NOT A DAILY STAMP. Enrollment mints <see cref="EnrollPunches"/> holes and
+    /// that grant IS day one's punch, so a card enrolled TODAY with no dates yet is skipped —
     /// the guard for the ordering where <c>enrollment-done</c> lands before the class's own
     /// attendance credit. The other ordering (the real one: the shell posts
     /// <c>enrollment-done</c> after the ceremony, so this stamp lands first) is handled at the
-    /// other end, by <see cref="Enroll"/> superseding it. Day one can never net three.</para>
+    /// other end, by <see cref="Enroll"/> superseding it. Day one can never net four.</para>
+    ///
+    /// <para>AN S DAY IS WORTH TWO (owner ruling 2026-08-23). The grade is known only at the
+    /// <c>class-ended</c> frame, so the HOST decides it here and the page is merely told: the date
+    /// also lands in <c>sDates</c> and the mint reports <see cref="SPunches"/>. The FIRST graded
+    /// finish of the day is the one that decides — a later run the same day is a retake, the date
+    /// guard below refuses it, and it can never upgrade a day that already stamped at one (trap
+    /// 23's shape: a retake mints nothing, whatever it grades).</para>
     /// </summary>
-    public static PunchMint Stamp(JObject cards, string gameKey, string localDate)
+    /// <param name="gradedS">Did this finish grade S? Only ever acted on when the day is actually
+    /// about to stamp — a retake never gets past the date guard.</param>
+    public static PunchMint Stamp(JObject cards, string gameKey, string localDate, bool gradedS = false)
     {
         var card = Card(cards, gameKey);
         bool wasComplete = (bool?)card[CompleteField] ?? false;
 
-        if (wasComplete) return new PunchMint(false, false, card);
+        if (wasComplete) return new PunchMint(false, 0, false, card);
 
         var dates = (JArray)card[DatesField]!;
-        if (!IsDate(localDate)) return new PunchMint(false, false, card);
+        if (!IsDate(localDate)) return new PunchMint(false, 0, false, card);
         if (dates.Any(d => string.Equals((string?)d, localDate, StringComparison.Ordinal)))
-            return new PunchMint(false, false, card);
+            return new PunchMint(false, 0, false, card);
 
         // The enrollment punch is day one's punch (PUNCHCARD §2.1). Keyed on the DATE rather
         // than on `dates` being empty: the enrollment day is folded out of `dates` (see
@@ -85,24 +131,33 @@ internal static class ArcademyPunchCards
         // days sit on the card, and minting one would only thud at the shell for nothing.
         if (string.Equals((string?)card[EnrolledAtField], localDate, StringComparison.Ordinal))
         {
-            return new PunchMint(false, false, card);
+            return new PunchMint(false, 0, false, card);
         }
 
+        int before = (int?)card[PunchesField] ?? 0;
         dates.Add(localDate);
+        if (gradedS) ((JArray)card[SDatesField]!).Add(localDate);
         Normalize(card, localDate);
-        return new PunchMint(true, !wasComplete && (bool?)card[CompleteField] == true, card);
+        // The COUNT is MEASURED, never assumed. The cap is what decides whether an S day's second
+        // hole actually existed: a card sitting on nine holes that grades S gains one, not two, and
+        // the ceremony is told one so it does not animate a hole nobody owns.
+        int after = (int?)card[PunchesField] ?? before;
+        return new PunchMint(true, Math.Max(0, after - before),
+            !wasComplete && (bool?)card[CompleteField] == true, card);
     }
 
     /// <summary>
-    /// ENROLLMENT: the first-run mint, two holes at once — the tutorial-completion punch and the
-    /// "on the house" punch (PUNCHCARD §1/§4). Idempotent on <c>enrolledAt</c>, so a repeated or
-    /// replayed <c>enrollment-done</c> frame is a no-op.
+    /// ENROLLMENT: the first-run mint, <see cref="EnrollPunches"/> holes at once — the
+    /// tutorial-completion punch, the "on the house" punch and the sign-on punch (PUNCHCARD §1/§4,
+    /// owner ruling 2026-08-23). Idempotent on <c>enrolledAt</c>, so a repeated or replayed
+    /// <c>enrollment-done</c> frame is a no-op.
     ///
     /// <para>IT SUPERSEDES TODAY'S DAILY STAMP. The shell posts <c>enrollment-done</c> at the end
     /// of the enrollment ceremony, which runs AFTER the <c>class-ended</c> frame that already
-    /// credited attendance and stamped — so today's date is normally sitting in <c>dates</c> when
-    /// we get here, and keeping it would make day one worth three. It is removed: the enrollment
-    /// pair replaces it, exactly, and the total is two.</para>
+    /// credited attendance and stamped — so today's date is normally sitting in <c>dates</c> (and,
+    /// on an S first night, in <c>sDates</c> as well) when we get here, and keeping it would make
+    /// day one worth four or five. It is removed from BOTH lists: the enrollment grant replaces
+    /// it, exactly, and the total is three.</para>
     ///
     /// <para>Superseding rather than suppressing is also what keeps a host running ahead of the
     /// shell honest. Until the shell learns to send <c>enrollment-done</c> at all, cards still
@@ -115,19 +170,27 @@ internal static class ArcademyPunchCards
         bool wasComplete = (bool?)card[CompleteField] ?? false;
 
         if (card[EnrolledAtField] is JValue { Type: JTokenType.String })
-            return new PunchMint(false, false, card);
-        if (!IsDate(localDate)) return new PunchMint(false, false, card);
+            return new PunchMint(false, 0, false, card);
+        if (!IsDate(localDate)) return new PunchMint(false, 0, false, card);
 
-        var dates = (JArray)card[DatesField]!;
-        foreach (var stamp in dates.Where(d => string.Equals((string?)d, localDate, StringComparison.Ordinal)).ToList())
+        int before = (int?)card[PunchesField] ?? 0;
+        foreach (var field in new[] { DatesField, SDatesField })
         {
-            stamp.Remove();
+            var list = (JArray)card[field]!;
+            foreach (var stamp in list
+                         .Where(d => string.Equals((string?)d, localDate, StringComparison.Ordinal))
+                         .ToList())
+            {
+                stamp.Remove();
+            }
         }
 
         card[EnrolledAtField] = localDate;
         card[HouseField] = true;
         Normalize(card, localDate);
-        return new PunchMint(true, !wasComplete && (bool?)card[CompleteField] == true, card);
+        int after = (int?)card[PunchesField] ?? before;
+        return new PunchMint(true, Math.Max(0, after - before),
+            !wasComplete && (bool?)card[CompleteField] == true, card);
     }
 
     /// <summary>The card for one game, created (normalized and empty) when absent. A live handle
@@ -154,20 +217,13 @@ internal static class ArcademyPunchCards
             .ToList();
     }
 
-    /// <summary>
-    /// SELF-HEALING. Re-derives every field from the two that are actually earned
-    /// (<c>enrolledAt</c> and <c>dates</c>): junk dates are dropped, duplicates collapsed, the
-    /// list sorted (yyyy-MM-dd sorts chronologically under ordinal compare) and capped,
-    /// <c>house</c> is only real once enrolled, and <c>punches</c> / <c>complete</c> are counted
-    /// fresh. A blob that arrives wrong — hand-edited, half-merged, or restored from a server
-    /// mirror — is corrected on the next touch instead of being trusted.
-    /// </summary>
-    /// <param name="onUnlock">The local date to stamp as <c>unlockedAt</c> when the card
-    /// completes and has no unlock date yet. Null when merely reading a card into shape.</param>
-    private static void Normalize(JObject card, string? onUnlock)
+    /// <summary>One date list, cleaned: non-dates dropped, duplicates collapsed, sorted
+    /// (yyyy-MM-dd sorts chronologically under ordinal compare). Shared by <c>dates</c> and
+    /// <c>sDates</c> so the two can never be cleaned by two slightly different rules.</summary>
+    private static List<string> CleanDates(JToken? token)
     {
         var clean = new List<string>();
-        if (card[DatesField] is JArray raw)
+        if (token is JArray raw)
         {
             foreach (var d in raw)
             {
@@ -176,6 +232,27 @@ internal static class ArcademyPunchCards
             }
         }
         clean.Sort(StringComparer.Ordinal);
+        return clean;
+    }
+
+    /// <summary>
+    /// SELF-HEALING. Re-derives every field from the THREE that are actually earned
+    /// (<c>enrolledAt</c>, <c>dates</c> and <c>sDates</c>): junk dates are dropped, duplicates
+    /// collapsed, the lists sorted (yyyy-MM-dd sorts chronologically under ordinal compare) and
+    /// capped, <c>sDates</c> intersected with <c>dates</c>, <c>house</c> is only real once
+    /// enrolled, and <c>punches</c> / <c>complete</c> are counted fresh. A blob that arrives
+    /// wrong — hand-edited, half-merged, or restored from a server mirror — is corrected on the
+    /// next touch instead of being trusted.
+    ///
+    /// <para>THE FORMULA (see the type header): <c>punches = min(Holes, (enrolled ? EnrollPunches
+    /// : 0) + dates.Count + sDates.Count)</c>. <c>core/store.js punchCard()</c> is the same line
+    /// in JavaScript and the two must never drift.</para>
+    /// </summary>
+    /// <param name="onUnlock">The local date to stamp as <c>unlockedAt</c> when the card
+    /// completes and has no unlock date yet. Null when merely reading a card into shape.</param>
+    private static void Normalize(JObject card, string? onUnlock)
+    {
+        var clean = CleanDates(card[DatesField]);
         if (clean.Count > Holes) clean = clean.Take(Holes).ToList();
 
         var enrolled = card[EnrolledAtField] is JValue { Type: JTokenType.String } ev
@@ -189,13 +266,25 @@ internal static class ArcademyPunchCards
         // as (arcademy-cards-api.md: "the enrollment day is folded out of dates").
         if (enrolled != null) clean.Remove(enrolled);
 
+        // THE S DAYS. A subset of `dates`, never a list in its own right: intersected here so an
+        // sDate for a day that never stamped (a hand edit, a half-merge, a mirror that carried the
+        // S list but not the day) is worth exactly nothing. A card heals DOWN, never up.
+        var byDate = new HashSet<string>(clean, StringComparer.Ordinal);
+        var sClean = CleanDates(card[SDatesField]).Where(byDate.Contains).ToList();
+
         // The house punch is enrollment's second hole: granted WITH the enrollment, never apart
         // from it, so it is derived rather than believed - the same identity the mirror uses
         // (`house = enrolledAt != null`), which is what keeps both ends counting a restored card
         // the same way.
         bool house = enrolled != null;
 
-        int punches = Math.Min(Holes, (enrolled != null ? 1 : 0) + (house ? 1 : 0) + clean.Count);
+        // THE FORMULA. Mirrored character for character by core/store.js punchCard(); the page
+        // re-derives every total it draws, so a drift here draws a hole the host does not hold.
+        // An OLD blob (enrolled under the two-punch rule) is promoted to three by this line alone
+        // — enrolledAt is the only marker there is, and paying it the current rate is both the
+        // simplest reading and the generous one. It cannot overflow: the total is capped.
+        int punches = Math.Min(Holes,
+            (enrolled != null ? EnrollPunches : 0) + clean.Count + sClean.Count);
         bool complete = punches >= Holes;
 
         var unlockedAt = card[UnlockedAtField] is JValue { Type: JTokenType.String } uv
@@ -206,6 +295,7 @@ internal static class ArcademyPunchCards
         else unlockedAt ??= onUnlock;
 
         card[DatesField] = new JArray(clean);
+        card[SDatesField] = new JArray(sClean);
         card[EnrolledAtField] = enrolled == null ? JValue.CreateNull() : new JValue(enrolled);
         card[HouseField] = house;
         card[PunchesField] = punches;
@@ -228,7 +318,7 @@ internal static class ArcademyPunchCards
     ///
     /// <para>Every touched card goes back out through <see cref="Normalize"/>, so the derived four
     /// (<c>punches</c>/<c>house</c>/<c>complete</c>/<c>unlockedAt</c>) are re-counted here from the
-    /// only two earned fields exactly as the server re-derives them on the way in. A reply is
+    /// only three earned fields exactly as the server re-derives them on the way in. A reply is
     /// therefore never trusted for a total - only for the dates and the enrollment behind it - so
     /// a mirror that had somehow been talked into nonsense cannot spend it here.</para>
     /// </summary>
@@ -251,15 +341,20 @@ internal static class ArcademyPunchCards
             var before = cards[key]?.ToString(Formatting.None);
             var card = Card(cards, key);
 
-            var dates = (JArray)card[DatesField]!;
-            var have = new HashSet<string>(
-                dates.Select(d => (string?)d ?? string.Empty), StringComparer.Ordinal);
-            if (remote[DatesField] is JArray remoteDates)
+            // Both date lists are unioned the same way. sDates is a subset of dates by
+            // construction, and Normalize re-intersects them below, so a remote S day whose stamp
+            // this machine never saw arrives on the DATES pass and is only then worth its second
+            // hole - the union can add a hole, never invent one.
+            foreach (var field in new[] { DatesField, SDatesField })
             {
-                foreach (var d in remoteDates)
+                var local = (JArray)card[field]!;
+                var have = new HashSet<string>(
+                    local.Select(d => (string?)d ?? string.Empty), StringComparer.Ordinal);
+                if (remote[field] is not JArray remoteList) continue;
+                foreach (var d in remoteList)
                 {
                     var s = (d as JValue)?.Value as string;
-                    if (s != null && IsDate(s) && have.Add(s)) dates.Add(s);
+                    if (s != null && IsDate(s) && have.Add(s)) local.Add(s);
                 }
             }
 
@@ -334,19 +429,25 @@ internal static class ArcademyPunchCards
                     || string.CompareOrdinal(localEnrolled, remoteEnrolled) < 0) return true;
             }
 
-            if (local[DatesField] is not JArray localDates || localDates.Count == 0) continue;
-            var mirrored = new HashSet<string>(StringComparer.Ordinal);
-            if (remote?[DatesField] is JArray remoteDates)
+            // BOTH lists. An S day whose date the mirror already holds but whose S the mirror does
+            // not is a hole this machine owns and the mirror cannot pay back, so it counts as
+            // unmirrored exactly like a missing date would.
+            foreach (var field in new[] { DatesField, SDatesField })
             {
-                foreach (var d in remoteDates)
+                if (local[field] is not JArray localDates || localDates.Count == 0) continue;
+                var mirrored = new HashSet<string>(StringComparer.Ordinal);
+                if (remote?[field] is JArray remoteDates)
                 {
-                    if ((d as JValue)?.Value is string s) mirrored.Add(s);
+                    foreach (var d in remoteDates)
+                    {
+                        if ((d as JValue)?.Value is string s) mirrored.Add(s);
+                    }
                 }
-            }
-            foreach (var d in localDates)
-            {
-                var s = (d as JValue)?.Value as string;
-                if (s != null && IsDate(s) && !mirrored.Contains(s)) return true;
+                foreach (var d in localDates)
+                {
+                    var s = (d as JValue)?.Value as string;
+                    if (s != null && IsDate(s) && !mirrored.Contains(s)) return true;
+                }
             }
         }
         return false;

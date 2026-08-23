@@ -24,15 +24,19 @@
  *   xpPaidDays              : { '<utcDay>': [gameKey] }  the XP ledger: a class
  *                             pays once per UTC day, every later run that day is
  *                             a free replay (payout-result carries retake:true)
- *   punchCards              : { <gameKey>: {punches, dates[], enrolledAt, house,
- *                             complete, unlockedAt} }  PUNCHCARD.md §2. Ten holes
- *                             per class; ArcademyPunchCards mints them from the
- *                             same `class-ended` that credits attendance, plus the
- *                             page's one `enrollment-done` frame. A full card IS
+ *   punchCards              : { <gameKey>: {punches, dates[], sDates[], enrolledAt,
+ *                             house, complete, unlockedAt} }  PUNCHCARD.md §2. Ten
+ *                             holes per class; ArcademyPunchCards mints them from
+ *                             the same `class-ended` that credits attendance, plus
+ *                             the page's one `enrollment-done` frame. A full card IS
  *                             the room's permanent unlock, and `enrolledAt` is the
  *                             ONLY enrollment-seen flag there is - derived, so a
  *                             blob restored from the server mirror suppresses a
  *                             repeat tutorial for free.
+ *                             THE PACE (owner ruling 2026-08-23): enrolling is worth
+ *                             THREE holes, an ordinary stamped day one, and a day
+ *                             the class graded S is worth TWO - which is all
+ *                             `sDates` is: the subset of `dates` that graded S.
  *
  * PAGE-OWNED:
  *   days   : { '2026-08-19': { classes: { <gameKey>: {grade, zen, at} },
@@ -54,6 +58,10 @@
 const DAY_HISTORY_MAX = 30;   // keep the local view small; C# owns the archive
 /** Holes on a punch card. Mirrors ArcademyPunchCards.Holes - the two must agree. */
 export const PUNCH_HOLES = 10;
+/** Holes enrolling is worth. Mirrors ArcademyPunchCards.EnrollPunches (owner: 3). */
+export const ENROLL_PUNCHES = 3;
+/** Holes a day that graded S is worth. Mirrors ArcademyPunchCards.SPunches (2). */
+export const S_DAY_PUNCHES = 2;
 
 /** Keys the host mints. The page never writes them (the write would be refused). */
 export const HOST_OWNED_KEYS = Object.freeze([
@@ -224,30 +232,51 @@ export function createStore({ bridge, initialMeta, log } = {}) {
     /**
      * One class's card, NORMALIZED - an absent, half-written or hand-edited card
      * still answers with the full shape, so no caller has to guard six fields.
-     * `punches` is trusted only as far as the two fields that are actually
+     * `punches` is trusted only as far as the three fields that are actually
      * earned: it is recomputed here the same way ArcademyPunchCards.Normalize
      * recomputes it in C#, which is what keeps a stale denormalized total from
      * drawing a hole the host never punched.
-     * @returns {{punches:number, dates:string[], enrolledAt:?string, house:boolean,
-     *            complete:boolean, unlockedAt:?string, enrolled:boolean}}
+     *
+     * THE FORMULA, and it is the ONE that must match C# byte for byte:
+     *
+     *   punches = min(10, (enrolledAt ? 3 : 0) + dates.length + sDates.length)
+     *
+     * `dates` are the stamped local days (the enrollment day folded OUT of them,
+     * since enrolling is already worth three); `sDates` is the subset of those
+     * days the class graded S, and each one is worth a SECOND hole. Both are
+     * intersected here, so an sDate with no matching date can never buy a hole
+     * on its own - a half-merged blob heals down, never up.
+     * @returns {{punches:number, dates:string[], sDates:string[], enrolledAt:?string,
+     *            house:boolean, complete:boolean, unlockedAt:?string, enrolled:boolean}}
      */
     punchCard(gameKey) {
       const all = isObj(cache.punchCards) ? cache.punchCards : {};
       const c = isObj(all[gameKey]) ? all[gameKey] : {};
-      const dates = (Array.isArray(c.dates) ? c.dates : [])
-        .filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d));
-      const seen = [];
-      for (const d of dates) if (seen.indexOf(d) < 0) seen.push(d);
-      seen.sort();
+      const clean = (list) => {
+        const out = [];
+        for (const d of (Array.isArray(list) ? list : [])) {
+          if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && out.indexOf(d) < 0) out.push(d);
+        }
+        out.sort();
+        return out;
+      };
       const enrolledAt = (typeof c.enrolledAt === 'string' && c.enrolledAt) ? c.enrolledAt : null;
-      // The house punch is enrollment's second hole and cannot exist without it.
-      const house = !!enrolledAt && c.house === true;
+      // The enrollment day is NOT a daily stamp: enrolling is worth three holes on
+      // its own, so that date is folded out of both lists exactly as C# folds it.
+      const seen = clean(c.dates).filter((d) => d !== enrolledAt).slice(0, PUNCH_HOLES);
+      // An S day is worth a SECOND hole. Intersected with `seen`, so a stray entry
+      // is worth nothing at all.
+      const sSeen = clean(c.sDates).filter((d) => seen.indexOf(d) >= 0);
+      // The house punch rides the enrollment (it is derived, never believed) - the
+      // three enrollment holes are one grant, not three separate flags.
+      const house = !!enrolledAt;
       const punches = Math.min(PUNCH_HOLES,
-        (enrolledAt ? 1 : 0) + (house ? 1 : 0) + Math.min(PUNCH_HOLES, seen.length));
+        (enrolledAt ? ENROLL_PUNCHES : 0) + seen.length + sSeen.length);
       const complete = punches >= PUNCH_HOLES;
       return {
         punches,
-        dates: seen.slice(0, PUNCH_HOLES),
+        dates: seen,
+        sDates: sSeen,
         enrolledAt,
         house,
         complete,

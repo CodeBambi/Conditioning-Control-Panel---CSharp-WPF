@@ -147,7 +147,7 @@ export function createRecords({ gameName, punchCard, log } = {}) {
         box.appendChild(el('p', 'arc-records-empty',
           t('records_not_enrolled', 'Not enrolled - attend the class')));
         box.appendChild(el('p', 'arc-note', t('records_enroll_hint',
-          'The first graded finish opens the card and earns two stamps.')));
+          'The first graded finish opens the card and earns three stamps.')));
         return;
       }
 
@@ -166,7 +166,7 @@ export function createRecords({ gameName, punchCard, log } = {}) {
       }
       box.appendChild(rows);
 
-      /* THE STAMP RECAP. `dates` is daily stamps only - day one's pair lives in
+      /* THE STAMP RECAP. `dates` is daily stamps only - day one's three live in
        * `enrolledAt` + `house` and is shown as the enrollment row above, which
        * is exactly the split the host stores (§2.1). Saying so is cheaper than
        * a player counting two rows that do not add up. */
@@ -180,7 +180,7 @@ export function createRecords({ gameName, punchCard, log } = {}) {
         box.appendChild(list);
       }
       box.appendChild(el('p', 'arc-note', t('records_house_note',
-        'Day one is two stamps: one for finishing, one on the house.')));
+        'Day one is three stamps: finishing, on the house, signing on.')));
     }
     paintDocket();
 

@@ -1,0 +1,174 @@
+/* emi/emi.css — EMI's own skin: body image, screen canvas, fx layer, speech bubble, body moves.
+ *
+ * Owned by agent A (renderer). Drag / dock / hide affordances live in emi/widget.css (agent B).
+ * Class names here are the A<->B contract and must not be renamed.
+ *
+ * Trap 2 (arcademy/CLAUDE.md): the WebView2 host is OFFLINE. The only fonts this bundle loads are
+ * the two local woff2 below — never add a fonts.googleapis.com link. Both are OFL and their
+ * licences ship beside them (fonts/OFL-NotoSansMono.txt, fonts/OFL-PressStart2P.txt).
+ * Trap 27: `[hidden]` is a user-agent rule, so any author `display:` beats it. Nothing here
+ * writes a bare `display:` on a node that is toggled with the hidden attribute, and .emi-bubble
+ * carries its own `[hidden]{display:none!important}` guard.
+ */
+
+@font-face {
+  font-family: 'Noto Sans Mono';
+  font-style: normal;
+  font-weight: 400 700;          /* one variable woff2 covers the whole range */
+  font-stretch: 100%;
+  font-display: block;           /* the face is pixel-rendered; a swap mid-draw would flicker */
+  src: url('fonts/NotoSansMono-latin.woff2') format('woff2');
+}
+
+/* THE BUBBLE'S FACE, and only the bubble's (plus the dock glyph in widget.css).
+ * Press Start 2P is an 8x8 pixel grid, so it must be set at a WHOLE pixel size or the
+ * hinting smears — see `.emi-bubble` below, which is why the old `cqw` clamp is gone.
+ * NEVER put this on the canvas: face.js measures ink boxes and needs a face with real
+ * metrics and the exotic kaomoji fallbacks, which a 96-glyph latin subset does not have. */
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;           /* same reason as above: no swap mid-line */
+  src: url('fonts/PressStart2P-latin.woff2') format('woff2');
+}
+
+.emi {
+  position: absolute;
+  aspect-ratio: 859 / 869;       /* the body PNG */
+  width: 140px;                  /* the widget overrides this */
+  transform-origin: 50% 100%;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.emi-body {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+/* The glass. Locked rect, as a fraction of the body image. */
+.emi-screen {
+  position: absolute;
+  left: 34.46%;
+  top: 29.46%;
+  width: 41.68%;
+  height: 37.63%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  pointer-events: none;
+}
+
+.emi-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+}
+
+.emi-px {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  will-change: transform, opacity;
+}
+
+/* ---- speech bubble ------------------------------------------------------ */
+/* Words NEVER go on the face (talk rule, locked); they go here. */
+.emi-bubble {
+  position: absolute;
+  right: -5%;
+  top: -2%;
+  /* Absolute, not a % of EMI: the pixel face is a fixed 8px grid, so the box that holds
+   * it has to be fixed too or the 116px EMI wraps every line to four rows. */
+  max-width: 104px;
+  text-align: left;
+  background: #F5F0E1;
+  color: #1A1A2E;
+  /* PIXEL GRID. Whole px, no clamp, no cqw, no synthetic bold — Press Start 2P has one
+   * weight and any scaling of it lands the 8x8 cells between device pixels. */
+  font-family: 'Press Start 2P', 'Noto Sans Mono', var(--mono, 'Cascadia Mono', 'Consolas', monospace);
+  font-weight: 400;
+  font-size: 8px;
+  letter-spacing: 0;
+  line-height: 1.4;
+  padding: 6px 8px;
+  border: 3px solid #1A1A2E;
+  box-shadow: 4px 4px 0 #0E0E1C;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  z-index: 3;
+  transform-origin: 0 100%;
+  pointer-events: none;
+}
+.emi-bubble[hidden] { display: none !important; }
+
+/* the tail, at the head */
+.emi-bubble::after {
+  content: "";
+  position: absolute;
+  left: -3px;
+  bottom: -3px;
+  width: 10px;
+  height: 10px;
+  background: #F5F0E1;
+  border-left: 3px solid #1A1A2E;
+  border-bottom: 3px solid #1A1A2E;
+  transform: translate(-6px, 6px) skewX(30deg);
+}
+
+.emi-bubble.dots { letter-spacing: 2px; }
+.emi-bubble.pop { animation: emi-bpop .28s cubic-bezier(.2, 1.5, .4, 1) 1; }
+@keyframes emi-bpop { 0% { transform: scale(.6); } 100% { transform: scale(1); } }
+
+/* ---- body moves --------------------------------------------------------- */
+/* One at a time, then back to .breath. They all animate `transform`, so a widget that
+ * POSITIONS EMI with a transform must hang these on an inner wrapper instead of on the root —
+ * both selectors are supported for exactly that reason. Positioning with left/top is simpler. */
+.emi.breath, .emi .breath { animation: emi-breath 3.2s ease-in-out infinite; }
+.emi.shiver, .emi .shiver { animation: emi-shiver .32s steps(2, end) infinite; }
+.emi.bounce, .emi .bounce { animation: emi-bounce .34s cubic-bezier(.2, 1.5, .4, 1) 1; }
+.emi.thud,   .emi .thud   { animation: emi-thud .28s cubic-bezier(.2, 1.5, .4, 1) 1; }
+.emi.droop,  .emi .droop  { animation: emi-droop .6s cubic-bezier(.2, .8, .2, 1) forwards; }
+.emi.nod,    .emi .nod    { animation: emi-nod .9s ease-in-out 2; }
+
+@keyframes emi-breath { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes emi-shiver { 0% { transform: translate(-2px, 0); } 100% { transform: translate(2px, 0); } }
+@keyframes emi-bounce { 0% { transform: scale(1); } 40% { transform: scale(1.08, .94); } 100% { transform: scale(1); } }
+@keyframes emi-thud   { 0% { transform: translateY(-6px) scale(1); } 55% { transform: translateY(0) scale(1.10, .88); } 100% { transform: translateY(0) scale(1); } }
+@keyframes emi-droop  { to { transform: translateY(6px) rotate(-1.5deg); } }
+@keyframes emi-nod    { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(4px) rotate(1.2deg); } }
+
+/* ---- fx keyframes ------------------------------------------------------- */
+@keyframes emi-rise {
+  0%   { opacity: 0; transform: translate(0, 0) scale(.6); }
+  15%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1); }
+}
+@keyframes emi-fall {
+  0%   { opacity: 1; transform: translate(0, 0); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)); }
+}
+@keyframes emi-pop {
+  0%   { opacity: 0; transform: scale(.4); }
+  30%  { opacity: 1; transform: scale(1.15); }
+  70%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.9); }
+}
+.emi-px.rise { animation: emi-rise var(--t) ease-out forwards; }
+.emi-px.fall { animation: emi-fall var(--t) ease-in forwards; }
+.emi-px.pop  { animation: emi-pop var(--t) steps(6, end) forwards; }
+
+/* Reduced motion: no loops, no flying pixels, no bubble pop. Chains still change frames —
+ * the face is information, the motion is decoration. */
+@media (prefers-reduced-motion: reduce) {
+  .emi, .emi *, .emi-px, .emi-bubble.pop { animation: none !important; }
+}

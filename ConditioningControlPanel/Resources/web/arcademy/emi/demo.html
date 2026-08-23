@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>EMI — renderer tester</title>
+<!-- No shell, no bridge, no remote anything. This page loads the REAL emi modules so a change
+     to face.js / chains.js / fx.js / emi.css is visible here before it reaches the Arcademy. -->
+<link rel="stylesheet" href="emi.css">
+<style>
+  :root{--ground:#1A1A2E;--panel:#252542;--panel2:#1F1F3A;--pink:#FF69B4;--gold:#FFD700;
+        --cream:#F5F0E1;--dim:#9A94B8;--line:#3A3A62;--ink:#0E0E1C}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--ground);color:var(--cream);line-height:1.45;
+       font-family:'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:14px 12px 60px}
+  h1{font-family:'Noto Sans Mono',monospace;font-size:26px;margin:0;color:var(--pink);letter-spacing:.1em}
+  header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+         border-bottom:3px solid var(--gold);padding-bottom:8px;margin-bottom:12px}
+  .eyebrow{font-family:'Noto Sans Mono',monospace;font-size:10px;color:var(--gold);letter-spacing:1px}
+  .stage{position:relative;height:360px;background:var(--panel2);border:2px solid var(--line);
+         display:grid;place-items:center;overflow:hidden}
+  /* the widget owns placement in the real shell; here it just sits in the middle */
+  #emi{position:absolute;left:50%;top:52%;margin-left:-160px;margin-top:-162px;width:320px}
+  .lab{font-family:'Noto Sans Mono',monospace;font-size:10px;color:var(--gold);
+       letter-spacing:1px;margin:14px 0 6px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-family:'Noto Sans Mono','Segoe UI Symbol','Nirmala UI','MS Gothic',monospace;
+        font-size:15px;min-height:40px;padding:5px 10px;background:var(--panel);color:var(--cream);
+        border:2px solid var(--line);cursor:pointer;box-shadow:3px 3px 0 var(--ink);white-space:nowrap}
+  .chip:active{transform:translate(2px,2px);box-shadow:0 0 0 var(--ink)}
+  .chip[aria-pressed="true"]{background:var(--pink);color:var(--ground);border-color:var(--pink)}
+  .chip.k{color:var(--gold);font-size:12px;letter-spacing:.5px}
+  .row{display:flex;gap:6px;align-items:center;margin-top:10px}
+  input[type=text]{flex:1 1 0;min-width:0;font-size:16px;min-height:40px;padding:6px 10px;
+        background:var(--ink);color:var(--cream);border:2px solid var(--line)}
+  button.go{font-family:'Noto Sans Mono',monospace;font-size:11px;min-height:40px;padding:8px 12px;
+        background:var(--panel);color:var(--cream);border:2px solid var(--line);cursor:pointer;
+        box-shadow:3px 3px 0 var(--ink)}
+  .note{color:var(--dim);font-size:12px;margin:14px 0 0}
+  #fontstate{font-family:'Noto Sans Mono',monospace;font-size:10px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>EMI</h1><span class="eyebrow">renderer tester · face.js + chains.js + fx.js + emi.css</span></header>
+
+  <div class="stage">
+    <div class="emi breath" id="emi">
+      <img class="emi-body" id="body" src="../art/emi/body.png" alt="EMI, a pixel CRT on legs">
+      <canvas class="emi-screen" id="cv"></canvas>
+      <div class="emi-fx" id="fx"></div>
+      <div class="emi-bubble" id="bubble" hidden><span id="btxt"></span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <input type="text" id="custom" maxlength="60" placeholder="type anything…  ._.  (◕‿◕)  6.7  #ERR" aria-label="custom screen text">
+    <button class="go" id="show">SHOW</button>
+    <button class="go" id="sayit">SAY</button>
+  </div>
+
+  <div class="lab">CHAINS</div><div class="chips" id="gChains"></div>
+  <div class="lab">FX</div><div class="chips" id="gFx"></div>
+  <div class="lab">FLAT (everyday)</div><div class="chips" id="gFlat"></div>
+  <div class="lab">KAOMOJI (rare / special)</div><div class="chips" id="gKao"></div>
+  <div class="lab">SIDEWAYS CLASSIC (auto-rotates)</div><div class="chips" id="gSide"></div>
+  <div class="lab">SPECIAL / EVENT TEXT</div><div class="chips" id="gSpecial"></div>
+
+  <p class="note">The face is text on a 152 px canvas, nearest-neighbour upscaled. SHOW draws one
+    frame; SAY runs the locked bubble cadence (<code>.</code> <code>..</code> <code>...</code> →
+    the line, face reacts). <span id="fontstate">font: checking…</span></p>
+</div>
+
+<script type="module">
+import { createFace } from './face.js';
+import { FACES, CHAINS, playChain, makeSay } from './chains.js';
+import { showFx, FX_KINDS } from './fx.js';
+
+const root   = document.getElementById('emi');
+const cv     = document.getElementById('cv');
+const fxHost = document.getElementById('fx');
+const bubble = document.getElementById('bubble');
+const btxt   = document.getElementById('btxt');
+
+const face = createFace(cv);
+let running = null;          // the in-flight chain handle
+let bodyTimer = null;
+let current = '0_0';
+
+function setBubble(t) {
+  if (t == null) { bubble.hidden = true; return; }
+  btxt.textContent = t;
+  bubble.hidden = false;
+  bubble.classList.toggle('dots', /^\.+$/.test(t));
+  bubble.classList.remove('pop');
+  void bubble.offsetWidth;                    // force reflow or the animation is coalesced away
+  bubble.classList.add('pop');
+}
+function setBody(cls) {
+  clearTimeout(bodyTimer);
+  root.className = 'emi';
+  void root.offsetWidth;
+  if (cls) root.classList.add(cls);
+  bodyTimer = setTimeout(() => {
+    root.classList.remove('shiver', 'droop', 'bounce', 'thud', 'nod');
+    root.classList.add('breath');
+  }, cls === 'shiver' ? 900 : cls === 'nod' ? 1900 : 800);
+}
+function drawFrame(text, o) { current = text; face.draw(text, o); }
+
+const hooks = {
+  draw: drawFrame,
+  bubble: setBubble,
+  body: setBody,
+  fx: (kind) => showFx(fxHost, kind),
+  done: () => { running = null; }
+};
+
+function stop() { if (running) { running.cancel(); running = null; } }
+function play(chain, id) {
+  stop();
+  running = playChain(chain, hooks);
+  press('[data-chain]', 'chain', id);
+}
+function show(t) {
+  stop();
+  setBubble(null);
+  drawFrame(t, {});
+  press('[data-face]', 'face', t);
+}
+function press(sel, key, val) {
+  document.querySelectorAll(sel).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[key] === val)));
+}
+
+function chips(hostId, list, mk) {
+  const host = document.getElementById(hostId);
+  list.forEach(item => host.appendChild(mk(item)));
+}
+chips('gChains', Object.keys(CHAINS), id => {
+  const b = document.createElement('button');
+  b.className = 'chip k'; b.dataset.chain = id; b.textContent = CHAINS[id].label;
+  b.onclick = () => play(CHAINS[id], id);
+  return b;
+});
+chips('gFx', FX_KINDS, kind => {
+  const b = document.createElement('button');
+  b.className = 'chip k'; b.dataset.fx = kind; b.textContent = kind.toUpperCase();
+  b.onclick = () => showFx(fxHost, kind);
+  return b;
+});
+for (const [hostId, set] of [['gFlat', FACES.FLAT], ['gKao', FACES.KAO], ['gSide', FACES.SIDE], ['gSpecial', FACES.SPECIAL]]) {
+  chips(hostId, set, t => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.dataset.face = t; b.textContent = t;
+    b.onclick = () => show(t);
+    return b;
+  });
+}
+
+const input = document.getElementById('custom');
+document.getElementById('show').onclick = () => { const v = input.value; if (v.trim()) show(v); };
+document.getElementById('sayit').onclick = () => {
+  const v = input.value.trim() || 'nice one!';
+  play(makeSay(v, '^_^'), null);
+};
+input.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('show').click(); });
+
+// Idle blink, per the lock: every 5.2 s, -_- for 110 ms, only while the face is 0_0 and idle.
+setInterval(() => {
+  if (current !== '0_0' || running) return;
+  drawFrame('-_-', {});
+  setTimeout(() => { if (current === '-_-' && !running) drawFrame('0_0', {}); }, 110);
+}, 5200);
+
+show('0_0');
+face.ready.then(() => {
+  const el = document.getElementById('fontstate');
+  const ok = document.fonts && document.fonts.check ? document.fonts.check('12px "Noto Sans Mono"') : false;
+  el.textContent = ok ? 'font: Noto Sans Mono (bundled) ✓' : 'font: FALLBACK monospace — the woff2 did not load';
+  el.style.color = ok ? 'var(--gold)' : 'var(--pink)';
+  face.draw(current, {});
+});
+
+// Handles for the headless pass.
+window.__emi = { face, show, play, showFx: k => showFx(fxHost, k), setBubble, CHAINS, makeSay, get running() { return !!running; } };
+</script>
+</body>
+</html>

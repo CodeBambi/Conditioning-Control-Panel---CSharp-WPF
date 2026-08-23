@@ -22,7 +22,7 @@
  * `punchcard-result` frame carries the POST-mint card, and `justUnlocked` is the
  * unlock-beat signal - so a card that the host healed, merged or clamped shows
  * what the host actually holds, and a page that guessed can only ever be wrong.
- * The enrollment beat is the one place the schedule leads: it runs its two
+ * The enrollment beat is the one place the schedule leads: it runs its three
  * punches on its own clock and reconciles when the host answers, because the
  * mint it is celebrating is the one this ceremony is about to ask for.
  *
@@ -36,7 +36,7 @@
 
 import { t } from '../core/lexicon.js';
 import { exitBar, sign as signExit } from './exits.js';
-import { cardFace, thud, THUD_PITCH, HOLES } from './punchcard.js';
+import { cardFace, thud, THUD_PITCH, HOLES, ENROLL_PUNCHES } from './punchcard.js';
 
 /* ----------------------------------------------------------------------------
  * THE FLAVOUR COPY
@@ -206,7 +206,7 @@ export function createEnrollmentIntro(o) {
 
   /* The card that explains the mechanic sits under every page: this is the
    * first time the player has ever heard of a punch card, and the ceremony is
-   * about to hand them two holes. */
+   * about to hand them three holes. */
   const note = el('p', 'arc-enroll-note', String(t('enroll_card_line',
     'Every class carries a stamp card. Ten stamps, one a night.')));
   card.appendChild(note);
@@ -310,6 +310,10 @@ const BEAT = Object.freeze({ first: 520, gap: 600, unlock: 900, reduced: 140 });
  *                                     for enrollment, or the host's post-mint
  *                                     card for a daily stamp
  * @param {'enrollment'|'daily'} o.reason
+ * @param {number=} o.minted           how many holes THIS finish bought - the
+ *                                     host's number, off `punchcard-result`
+ *                                     (3 on enrollment, 2 on an S day, else 1).
+ *                                     It is the LENGTH of the beat schedule.
  * @param {number=} o.from             holes already on the card (the animation's
  *                                     starting point). Defaults to
  *                                     `card.punches - minted`.
@@ -332,8 +336,13 @@ export function createPunchCeremony(o) {
   const card = s.card || {};
   const to = Math.max(0, Math.min(HOLES,
     Math.round(s.to == null ? (Number(card.punches) || 0) : s.to)));
+  /* HOW MANY HOLES THIS FINISH BOUGHT. The host decides it (it is the only end
+   * that knows the grade) and ships it on the frame; the defaults below are the
+   * shape of the two mints, not a second opinion about them. */
+  const minted = Math.max(1, Math.min(HOLES,
+    Math.round(Number(s.minted) || (enrollment ? ENROLL_PUNCHES : 1))));
   const from = Math.max(0, Math.min(to,
-    Math.round(s.from == null ? Math.max(0, to - (enrollment ? 2 : 1)) : s.from)));
+    Math.round(s.from == null ? Math.max(0, to - minted) : s.from)));
 
   const timers = new Set();
   let destroyed = false;
@@ -411,32 +420,49 @@ export function createPunchCeremony(o) {
     setLine('');
   }
 
+  /* ONE SCHEDULE, WALKED `minted` TIMES. There is no second (or third) punch
+   * path: a beat is {pitch, line} and the mint decides how many of them run, so
+   * enrollment's three, an S day's two and an ordinary day's one are the same
+   * eight lines of code. Adding a lever means adding a row, never a branch. */
+  function beatsFor() {
+    if (enrollment) {
+      /* DAY ONE IS EXACTLY THREE (owner ruling 2026-08-23, §3). One for
+       * finishing, one on the house, one for signing on. */
+      return [
+        [THUD_PITCH.first, t('enroll_tutorial_line', 'One stamp for finishing your first class.')],
+        [THUD_PITCH.house, t('enroll_house_line', 'And one on the house. Welcome to the class.')],
+        [THUD_PITCH.bonus, t('enroll_signon_line', 'And one for signing on. The card starts warm.')],
+      ];
+    }
+    /* A DAY IS ONE HOLE, AN S DAY IS TWO. The second row only ever runs when the
+     * host minted the second hole - the shell never grades anything itself. */
+    return [
+      [THUD_PITCH.daily, t('punchcard_stamped', 'Stamped for today.')],
+      [THUD_PITCH.bonus, t('punchcard_stamped_s', 'Top marks. The card takes a second stamp.')],
+    ];
+  }
+
   function schedule() {
     const step = reduced ? BEAT.reduced : BEAT.gap;
     const head = reduced ? BEAT.reduced : BEAT.first;
-    if (enrollment) {
-      /* DAY ONE IS EXACTLY TWO (owner ruling, §3). The first hole is for
-       * finishing; the second is on the house and says so. */
-      later(() => beat(from + 1, THUD_PITCH.first,
-        t('enroll_tutorial_line', 'One stamp for finishing your first class.')), head);
-      later(() => beat(from + 2, THUD_PITCH.house,
-        t('enroll_house_line', 'And one on the house. Welcome to the class.')), head + step);
-      later(() => {
-        punchedDone = true;
-        try { if (s.onPunched) s.onPunched(); } catch (e) { say('onPunched threw: ' + ((e && e.message) || e)); }
-      }, head + step + 40);
-    } else {
-      later(() => {
-        beat(to, THUD_PITCH.daily, t('punchcard_stamped', 'Stamped for today.'));
-        punchedDone = true;
-        try { if (s.onPunched) s.onPunched(); } catch (e) { say('onPunched threw: ' + ((e && e.message) || e)); }
-      }, head);
-      if (!s.justUnlocked && to < HOLES) {
-        later(() => setLine(t('punchcard_next_hole', 'Come back tomorrow for the next stamp.')),
-          head + step);
-      }
+    const rows = beatsFor();
+    // Never zero (the LINE still has to land when a card is already at its cap)
+    // and never more rows than the schedule has: an unexpected mint degrades to
+    // the beats we have copy for rather than punching in silence.
+    const count = Math.max(1, Math.min(rows.length, minted, Math.max(1, to - from)));
+    for (let i = 0; i < count; i++) {
+      const row = rows[i];
+      later(() => beat(from + i + 1, row[0], row[1]), head + i * step);
     }
-    if (s.justUnlocked) later(unlockBeat, head + step + (reduced ? BEAT.reduced : BEAT.unlock));
+    later(() => {
+      punchedDone = true;
+      try { if (s.onPunched) s.onPunched(); } catch (e) { say('onPunched threw: ' + ((e && e.message) || e)); }
+    }, head + (count - 1) * step + (count > 1 ? 40 : 0));
+    if (!enrollment && !s.justUnlocked && to < HOLES) {
+      later(() => setLine(t('punchcard_next_hole', 'Come back tomorrow for the next stamp.')),
+        head + count * step);
+    }
+    if (s.justUnlocked) later(unlockBeat, head + count * step + (reduced ? BEAT.reduced : BEAT.unlock));
   }
 
   const api = {
