@@ -192,6 +192,17 @@ bridge.on('payout-result', guard('payout-result', (m) => {
   if (shell) shell.onPayout(m);
   log('payout: ' + m.gameKey + ' +' + Math.round(Number(m.xp) || 0) + 'xp' + (m.levelUp ? ' (level up)' : ''));
 }));
+/* THE PUNCH CARD (PUNCHCARD.md §2/§4). It lands right behind the meta snapshot
+ * on both mint paths, and `bridge.on` REPLAYS anything that arrived before this
+ * subscription existed - which is what makes a frame that beats the shell's two
+ * dynamic imports safe without a buffer of its own (unlike suspend below, which
+ * is a LEVEL and has to collapse rather than queue). */
+bridge.on('punchcard-result', guard('punchcard-result', (m) => {
+  if (shell) shell.onPunchCard(m);
+  log('punch card: ' + m.gameKey + ' ' + (m.reason || '?')
+    + (m.minted ? ' +1' : ' (no-op)')
+    + (m.justUnlocked ? ' UNLOCKED' : ''));
+}));
 bridge.on('suspend', guard('suspend', (m) => {
   // PRE-SHELL SUSPEND REPLAY. The host seeds the current native state right after
   // `init` (a mandatory video already playing, AudioOnlySession flipped between the
