@@ -164,6 +164,12 @@ export function tierProgress(gameMeta) {
  * the class seed and then held, so a class loads at most ONE of them and a
  * retake dives the same water. Adding a file to the list reshuffles the pick
  * for every seed - append, never insert.
+ *
+ * TWO SEAMS OFF THE SAME ROWS (2026-08-23): `pickSpiralUrl` is the one-url pick
+ * every class's `spiralUrl()` provider wears; `spiralPoolRows` is the whole
+ * resolved pool a class may OFFER as answers (`ctx.spiralPool`). They walk the
+ * same rows in the same order at the same weights, so factoring the second one
+ * out moved no pick for any seed.
  * -------------------------------------------------------------------------- */
 const SPIRAL_POOL = Object.freeze([
   ['sp6.gif', 34], ['sp7.gif', 26], ['sp1.gif', 9], ['sp2.webp', 9],
@@ -191,6 +197,36 @@ function loomSpiralRows(settings) {
   } catch (e) { /* a bad list is an empty list */ }
   return out;
 }
+/** Resolve one pool row's file to the url the engine would actually paint. */
+function spiralUrlFor(file) {
+  if (/^https:\/\//.test(file)) return file;
+  return new URL('../../dtrh/assets/bubbles/effects/spirals/' + file, import.meta.url).href;
+}
+/**
+ * THE WHOLE POOL, resolved: `[{url, weight}]` - the seven bundled files as
+ * absolute urls, then the player's Loom rows, de-duplicated by url (first wins,
+ * so a Loom url that somehow shadowed a bundled one never doubles its weight).
+ *
+ * Factored out of `pickSpiralUrl` so a class can OFFER the pool as answers
+ * ("which spiral did you just see") instead of only ever receiving one url.
+ * `pickSpiralUrl` still walks the same rows in the same order with the same
+ * weights and the same `|spiral` stream, so every class's `classSpiral` is
+ * byte-identical to before. Additive: nothing that ignores `ctx.spiralPool`
+ * moves. Never awaited, never fetched here.
+ */
+function spiralPoolRows(settings) {
+  const rows = [];
+  const seen = new Set();
+  try {
+    for (const row of SPIRAL_POOL.concat(loomSpiralRows(settings))) {
+      const url = spiralUrlFor(row[0]);
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      rows.push({ url, weight: row[1] });
+    }
+  } catch (e) { /* a bad list is an empty list */ }
+  return rows;
+}
 function pickSpiralUrl(seed, settings) {
   try {
     const roll = makeRng(String(seed == null ? '' : seed) + '|spiral');
@@ -200,8 +236,7 @@ function pickSpiralUrl(seed, settings) {
     let r = roll() * total;
     let file = pool[0][0];
     for (const row of pool) { r -= row[1]; if (r < 0) { file = row[0]; break; } }
-    if (/^https:\/\//.test(file)) return file;
-    return new URL('../../dtrh/assets/bubbles/effects/spirals/' + file, import.meta.url).href;
+    return spiralUrlFor(file);
   } catch (e) { return null; }
 }
 
@@ -1244,6 +1279,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * when the first spiral wash actually mounts, and the CSS conic gradient
      * is still the fallback if it 404s. */
     const classSpiral = pickSpiralUrl(seed, src.settings);
+    /* The whole pool, frozen, for a class that needs to OFFER spirals rather
+     * than only wear one (Instant Recall's SPIRAL question). Same rows, same
+     * order, same weights the pick walks - see spiralPoolRows. */
+    const spiralPool = Object.freeze(spiralPoolRows(src.settings)
+      .map((r) => Object.freeze({ url: r.url, weight: r.weight })));
     let engine;
     try {
       engine = createEngine({
@@ -1336,6 +1376,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       sessionWords,
       // The phrases WITH their whisper clips (frozen rows; see dayTriggers).
       triggers: dayTriggers.slice(),
+      // The class's spiral POOL (frozen `{url, weight}` rows) beside the one
+      // spiral the engine wears. A class that never reads it is unaffected.
+      spiralPool,
 
       log: (m) => say('[' + cls.gameKey + '] ' + m),
       endClass: (result) => {

@@ -77,7 +77,16 @@
  *   variant?: 'whisper'|'centre'|'scatter'|'stamp'
  *   anchor?: Element       mount the card inside a game element instead of the layer
  *   sfx?: true|string      emit a whisper cue (ducks the voice bus)
- * }) -> { kind, variant, text, durMs } | null
+ *   holdMs?: number        ADDITIVE: hold the word LONGER. Clamped to
+ *                          [spec.durMs, SUB_HOLD_MAX_MS 1400] - it can only ever
+ *                          lengthen, and it never touches alpha (the ceiling rule
+ *                          is untouched: TIME is the legibility lever, intensity
+ *                          is not). Moves the release timer with it and answers
+ *                          `holdMs` on the handle. Omit it and the blip, the
+ *                          release and the handle are byte-identical to before.
+ *                          A caller that lengthens must widen its own cadence or
+ *                          two words overlap.
+ * }) -> { kind, variant, text, durMs, holdMs? } | null
  *
  * fire('flash_burst', {
  *   count?: number         default = burstCountForHeat(heat) (1..10 window)
@@ -139,7 +148,11 @@
  *   url?: string           spiral image (else the injected spiralUrl provider)
  *   sustainForever?: true  hold until stop('wash') instead of fading on a deadline
  *   sfx?: true|string
- * })  — re-triggering the same kind REFRESHES the deadline; DOM never piles.
+ * })  -> { kind, variant, alpha, holdMs, url, retune(), stop() } | null
+ *      — re-triggering the same kind REFRESHES the deadline; DOM never piles.
+ *      `url` is ADDITIVE and is a READ: the url actually written to the element
+ *      (opts.url, else spiralUrl() for a spiral), or null when the wash kept its
+ *      CSS gradient. A class records THAT, never its own request (Law I).
  *
  * sustain('gif_rain', {
  *   durationMs?, durationMult?, strength?, alpha?: number

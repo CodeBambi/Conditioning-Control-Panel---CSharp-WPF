@@ -53,6 +53,35 @@
  * ENGINE TARGETING NOTE: `.g-ir-face` is the only element the engine may ever
  * be handed - never `.g-ir-tile`, whose transform belongs to style.js. Nothing
  * in CORE targets the wall today; the rule stands for the decks.
+ *
+ * ---------------------------------------------------------------------------
+ * THE WALL AS AN ANSWER (2026-08-23). The wall is now quizzed ("which of these
+ * was on the wall", "which one was on it twice", "which one never showed"), and
+ * that needs four things from this file and NOT a fifth:
+ *
+ *   snapshot()   a pure READ of the frozen DOM state - what is actually painted
+ *                right now, which urls are doubled, which are single.
+ *   unseen()     urls the wall has NOT worn this generation, for the decoys.
+ *   plant()      one seeded duplicate, laid down through the NORMAL swap path.
+ *   highlight()  the verdict's ring on the truth tiles.
+ *
+ * The fifth thing it does NOT do is write a ledger entry, or grow a ledger
+ * reference, or answer a question. THE WALL STILL NEVER WRITES THE TRUTH: CORE
+ * reads a snapshot at the freeze and books it. A plant that failed is simply not
+ * in `snapshot.dups`, and the question falls back like any other.
+ *
+ * DETERMINISM, STATED HONESTLY. The PLAN is seeded (Law V). The wall's CONTENTS
+ * come from the provider and the frame governor (Math.random, by design) and are
+ * therefore NOT replay-identical. WALL_* questions are DOM-truth at the freeze,
+ * with the CHOICE among candidates seeded by the caller. A retake replays the
+ * same families at the same stops, not the same faces. That is the honest
+ * contract and it is the reason the answer is read from the snapshot rather than
+ * from the plant request.
+ *
+ * NEVER STILL, EVEN WHEN PLANTED (Law III). The plant does not freeze two tiles:
+ * it rides `startSwapTo` like every other swap, staggered a tick apart so
+ * `MAX_SWAPS_IN_FLIGHT` still holds, and then simply gives those two tiles a
+ * LONGER dwell. Everything else on the wall keeps turning over.
  * ==========================================================================*/
 
 import { makeTaggedRoll } from '../../core/rng.js';
@@ -122,6 +151,16 @@ export const MONTAGE = Object.freeze({
   /** The truth tail: entries kept in memory, and nodes kept in the DOM. */
   LEDGER_CAP: 128,
   LEDGER_NODES: 24,
+
+  /** THE WALL AS AN ANSWER (see the header). */
+  /** How many provider draws `unseen()` will spend looking for fresh urls. */
+  UNSEEN_TRIES: 16,
+  /** How many draws the plant will spend looking for a plantable url. */
+  PLANT_URL_TRIES: 8,
+  /** How many NATURAL duplicates one dedupe pass will break up. */
+  DEDUPE_MAX: 4,
+  /** Ticks between the plant's two swaps (so MAX_SWAPS_IN_FLIGHT still holds). */
+  PLANT_STAGGER_TICKS: 1,
 });
 
 /* ----------------------------------------------------------------------------
@@ -420,6 +459,16 @@ export function createMontage(o = {}) {
       seq: 0, node: null, faces: [null, null], front: 0, _liveUrl: null,
       swapping: false,
       dueAt: 0,
+      /** EVERY face this tile has worn SINCE THE LAST RESHUFFLE. A decoy that
+       *  was on the wall four swaps ago is not an honest "never showed", so the
+       *  memory has to be per-tile and per-generation, not just "current url". */
+      worn: new Set(),
+      /** wallMs when the current face became FRONT (a tile the player only
+       *  glimpsed for 200ms is a bad truth to ask about). */
+      shownAt: 0,
+      /** A stable seeded tie-break for the plant's tile choice. Its own tag, so
+       *  adding it shifted no existing stream (core/rng.js makeTaggedRoll). */
+      pk: roll('plant'),
       jit: roll('dwell'),
       styleRing: [
         pickStyle(roll('style')), pickStyle(roll('style')), pickStyle(roll('style')),
@@ -447,6 +496,11 @@ export function createMontage(o = {}) {
   let driver = 0;
   let swaps = 0;
   let reshuffles = 0;
+  /** THE GENERATION. 0 at dress; +1 on every reshuffle. A wall book entry that
+   *  spans two generations is comparing two different rooms, so CORE stamps it. */
+  let gen = 0;
+  /** The one armed plant, or null. Never more than one (see plant()). */
+  let plant = null;
   const inFlight = new Map();       // tile.i -> { tile, doneAt, oldUrl, oldFace }
   const queue = [];
   const dressTimers = new Set();
@@ -501,6 +555,11 @@ export function createMontage(o = {}) {
     tile.remote = !!(draw && draw.remote);
     if (anim) acquireLive(tile, url);
     tile.seq = (tile.seq | 0) + 1;
+    /* THE WORN SET: a face this tile has shown this generation. Stamped on the
+     * PAINT path as well as the swap path, or the first dress would be invisible
+     * to "was this on the wall?". */
+    if (url) tile.worn.add(url);
+    tile.shownAt = wallMs;
 
     const wait = opts && opts.paintDelayMs > 0 ? (opts.paintDelayMs | 0) : 0;
     if (!wait) { paintFace(frontFace(tile), tile.url); return true; }
@@ -532,6 +591,11 @@ export function createMontage(o = {}) {
   function drawSleeper() {
     const got = poolNext('still');
     if (got && got.url && !isAnimatedUrl(got.url)) return got;
+    /* WHILE A PLANT IS DOWN, THE PARK IS CLOSED. Parking two seats on one live
+     * gif is exactly how a NATURAL duplicate appears - and a second duplicate
+     * makes "which one was on the wall twice?" have two right answers. The seat
+     * simply re-dwells instead; the wall is still never still. */
+    if (plantActive()) return null;
     const parks = [];
     for (const url of liveUse.keys()) if (!isVideoUrl(url)) parks.push(url);
     if (parks.length) return { url: parks[Math.floor(Math.random() * parks.length)], remote: false };
@@ -612,6 +676,7 @@ export function createMontage(o = {}) {
     tile.remote = !!draw.remote;
     if (tile.live) acquireLive(tile, url);
     tile.seq = (tile.seq | 0) + 1;
+    if (url) tile.worn.add(url);
     tile.swapping = true;
     swaps += 1;
 
@@ -643,7 +708,155 @@ export function createMontage(o = {}) {
     /* an ANIMATED outgoing url must lose its element or its decoder outlives
      * the seat that paid for it; a still is kept for recycling. */
     if (isAnimatedUrl(rec.oldUrl)) paintFace(rec.oldFace, null);
+    tile.shownAt = wallMs;
     tile.dueAt = wallMs + dwellMs(tile);
+    /* A PLANTED tile holds instead of re-dwelling: its whole job is to still be
+     * wearing the duplicate when the wall freezes. Applied AFTER the normal
+     * re-due above, because finishSwap is the one place that sets it. */
+    if (plant && plant.state !== 'failed' && plant.tiles.indexOf(tile.i) >= 0) {
+      tile.dueAt = Math.max(tile.dueAt, plant.holdUntil);
+      settlePlant();
+    }
+  }
+
+  /* ============================================================ THE PLANT ==
+   * ONE seeded duplicate, so "which one was on the wall twice?" has a truth on
+   * a wall that would otherwise only duplicate by accident.
+   *
+   * It is NOT a special rendering path: both tiles reach the duplicate through
+   * `startSwapTo`, a tick apart, and then simply hold a longer dwell. Nothing
+   * freezes, nothing is dealt, and the ANSWER is still read from the frozen DOM
+   * (`snapshot().dups`) - if the swap never landed, there is no dup and the
+   * question falls back like any other.
+   * ======================================================================== */
+
+  function plantActive() { return !!plant && (plant.state === 'armed' || plant.state === 'landed'); }
+
+  /** Is this url on the wall RIGHT NOW (any tile's current face)? */
+  function onWall(url) {
+    if (!url) return false;
+    for (const t of tiles) if (t.url === url) return true;
+    return false;
+  }
+
+  /** A url two tiles may share. A GIF is ideal (two tiles, one decoder, one
+   *  clock); a video is not - each element is its own decode - so the loop
+   *  branch takes gifs only and everything else falls through to a still. */
+  function drawPlantUrl() {
+    if (liveUse.size < liveCap) {
+      for (let i = 0; i < MONTAGE.PLANT_URL_TRIES; i++) {
+        const got = poolNext('loop');
+        const u = got && got.url;
+        if (u && isGifUrl(u) && !onWall(u) && !liveUse.has(u)) return got;
+      }
+    }
+    for (let i = 0; i < MONTAGE.PLANT_URL_TRIES; i++) {
+      const got = poolNext('still');
+      const u = got && got.url;
+      if (u && !isAnimatedUrl(u) && !onWall(u)) return got;
+    }
+    return null;
+  }
+
+  /** The two seats: free, and the two nearest their own next beat, so the plant
+   *  rides swaps that were about to happen anyway. Seeded tie-break.
+   *  A tile already QUEUED counts as taken - the driver would otherwise swap the
+   *  reserved second seat out from under the plant on the stagger tick, which is
+   *  exactly how the first cut of this failed every time. */
+  function plantSeats() {
+    const free = tiles.filter((t) => !t.swapping && !inFlight.has(t.i) && queue.indexOf(t) < 0);
+    free.sort((a, b) => (a.dueAt - b.dueAt) || (a.pk - b.pk) || (a.i - b.i));
+    return free.slice(0, 2);
+  }
+  /** Room in the transient decoder budget for one more swap. The plant obeys the
+   *  same cap as everything else; it just gets first claim on it (see step()). */
+  function swapRoom() { return inFlight.size < MONTAGE.MAX_SWAPS_IN_FLIGHT; }
+
+  /** Break up NATURAL duplicates of any OTHER url, so the plant is the only one.
+   *  Re-dues rather than repaints: the tile leaves through the normal swap. */
+  function dedupePass() {
+    if (!plantActive()) return 0;
+    const byUrl = new Map();
+    for (const t of tiles) {
+      if (t.swapping || !t.url || t.url === plant.url) continue;
+      const list = byUrl.get(t.url);
+      if (list) list.push(t); else byUrl.set(t.url, [t]);
+    }
+    let n = 0;
+    for (const list of byUrl.values()) {
+      if (list.length < 2) continue;
+      for (let i = 1; i < list.length && n < MONTAGE.DEDUPE_MAX; i++) {
+        const t = list[i];
+        if (t.dueAt <= wallMs) continue;      // already on its way out
+        t.dueAt = wallMs;
+        n += 1;
+      }
+      if (n >= MONTAGE.DEDUPE_MAX) break;
+    }
+    return n;
+  }
+
+  /** Both swaps finished on the planted url -> the plant has LANDED. */
+  function settlePlant() {
+    if (!plant || plant.state !== 'armed' || plant.tiles.length < 2) return;
+    for (const i of plant.tiles) {
+      const t = tiles[i];
+      if (!t || t.swapping || t.url !== plant.url) return;
+    }
+    plant.state = 'landed';
+    plant.landedAt = wallMs;
+  }
+
+  /** One landing attempt, run from the driver. */
+  function plantStep() {
+    if (!plant || plant.state !== 'armed') return;
+
+    /* the SECOND seat, a tick behind the first (MAX_SWAPS_IN_FLIGHT holds) */
+    if (plant.pending) {
+      if (plant.stagger > 0) { plant.stagger -= 1; return; }
+      const t = plant.pending;
+      if (t.swapping) { plant.pending = null; plant.state = 'failed'; return; }
+      /* no room in the transient budget this tick: WAIT, do not overshoot it */
+      if (!swapRoom()) {
+        if (plant.byMs > 0 && wallMs > plant.byMs) { plant.pending = null; plant.state = 'failed'; }
+        return;
+      }
+      plant.pending = null;
+      if (!startSwapTo(t, { url: plant.url, remote: plant.remote })) { plant.state = 'failed'; return; }
+      t.dueAt = plant.holdUntil;
+      dedupePass();
+      settlePlant();
+      return;
+    }
+    if (plant.tiles.length) { dedupePass(); settlePlant(); return; }
+
+    const seats = plantSeats();
+    if (seats.length < 2 || !swapRoom()) {
+      /* nothing free this tick - try again until the lead the caller asked for
+       * has run out, then say so honestly rather than landing it late */
+      if (plant.byMs > 0 && wallMs > plant.byMs) plant.state = 'failed';
+      return;
+    }
+    const got = drawPlantUrl();
+    if (!got || !got.url) { plant.state = 'failed'; return; }
+
+    plant.url = got.url;
+    plant.remote = !!got.remote;
+    plant.holdUntil = wallMs + plant.holdMs;
+
+    const first = seats[0];
+    const second = seats[1];
+    /* RESERVE BOTH SEATS BEFORE SWAPPING EITHER. The driver fills its queue from
+     * `dueAt` later in this same tick, and a second seat still due would be
+     * swapped to something else before the stagger tick ever arrived. */
+    first.dueAt = plant.holdUntil;
+    second.dueAt = plant.holdUntil;
+    if (!startSwapTo(first, { url: plant.url, remote: plant.remote })) { plant.state = 'failed'; return; }
+    first.dueAt = plant.holdUntil;
+    plant.tiles = [first.i, second.i];
+    plant.pending = second;
+    plant.stagger = MONTAGE.PLANT_STAGGER_TICKS;
+    dedupePass();
   }
 
   /* ------------------------------------------------------------ the driver */
@@ -653,6 +866,9 @@ export function createMontage(o = {}) {
     for (const rec of Array.from(inFlight.values())) {
       if (wallMs >= rec.doneAt) finishSwap(rec);
     }
+    /* AFTER the completions (so it sees a drained budget) and BEFORE the queue
+     * fill (so it gets first claim on the two seats it reserved). */
+    plantStep();
     for (const tile of tiles) {
       if (tile.swapping || queue.indexOf(tile) >= 0) continue;
       if (wallMs >= tile.dueAt) queue.push(tile);
@@ -780,9 +996,16 @@ export function createMontage(o = {}) {
   function reshuffle() {
     if (destroyed) return 0;
     reshuffles += 1;
+    /* A NEW GENERATION. What a tile has WORN resets to what it is still showing
+     * - those faces really are on the wall of the new room - and everything else
+     * becomes "never showed" again, which is exactly what the player experiences
+     * across a stop. An armed plant does not survive the room it was laid in. */
+    gen += 1;
+    plant = null;
     const n = Math.max(1, tiles.length);
     for (let i = 0; i < tiles.length; i++) {
       const tile = tiles[i];
+      tile.worn = new Set(tile.url ? [tile.url] : []);
       if (tile.swapping) continue;
       tile.dueAt = wallMs + Math.round((MONTAGE.RESHUFFLE_MS * i) / n + tile.jit * 180);
     }
@@ -911,6 +1134,160 @@ export function createMontage(o = {}) {
     }
   }
 
+  /* ========================================================= THE WALL BOOK ==
+   * Pure reads. No DOM write, no ledger, no draw that changes the wall.
+   * ======================================================================== */
+
+  /** Is this tile's FRONT face actually showing its url right now? A media
+   *  element that 404'd removes itself, and a `<video>` that has not reached
+   *  metadata is a black box - neither is an honest thing to ask about. The DOM
+   *  double answers neither `complete` nor `readyState`, so it reads as painted. */
+  function isPainted(tile) {
+    const face = frontFace(tile);
+    const kids = (face && face.children) || [];
+    const m = kids.length ? kids[0] : null;
+    if (!m || !tile.url || m._irUrl !== tile.url) return false;
+    const tag = String(m.tagName || '').toUpperCase();
+    if (tag === 'VIDEO') return typeof m.readyState !== 'number' ? true : m.readyState >= 1;
+    if (typeof m.complete === 'boolean') return m.complete && (m.naturalWidth == null || m.naturalWidth > 0);
+    return true;
+  }
+
+  /**
+   * THE FROZEN TRUTH. Everything a WALL_* question may ever read, taken in one
+   * pass at the moment CORE freezes the wall. Multiplicity is counted over
+   * PAINTED, NON-SWAPPING tiles only: a tile mid-crossfade is showing two things
+   * and is nobody's honest answer.
+   */
+  function snapshot() {
+    const rows = [];
+    const counts = new Map();
+    for (const t of tiles) {
+      const painted = isPainted(t);
+      rows.push(Object.freeze({
+        i: t.i,
+        url: t.url || null,
+        remote: !!t.remote,
+        live: !!t.live,
+        isVideo: !!t.isVideo,
+        swapping: !!t.swapping,
+        painted,
+        shownForMs: Math.max(0, wallMs - (t.shownAt || 0)),
+      }));
+      if (!painted || t.swapping || !t.url) continue;
+      const list = counts.get(t.url);
+      if (list) list.push(t.i); else counts.set(t.url, [t.i]);
+    }
+    const dups = [];
+    const singles = [];
+    let paintedN = 0;
+    for (const [url, list] of counts) {
+      paintedN += list.length;
+      if (list.length >= 2) dups.push(Object.freeze({ url, tiles: Object.freeze(list.slice()) }));
+      else singles.push(url);
+    }
+    return Object.freeze({
+      gen,
+      frozen,
+      wallMs,
+      cells: tiles.length,
+      tiles: Object.freeze(rows),
+      painted: paintedN,
+      dups: Object.freeze(dups),
+      singles: Object.freeze(singles),
+      plant: plantState(),
+    });
+  }
+
+  /**
+   * Urls the wall has NEVER worn this generation and is not wearing now - the
+   * only honest "that one never showed" and the only honest WALL_PICK decoy.
+   * Spends at most UNSEEN_TRIES provider draws and returns what it found, which
+   * may be short: a thin pool is a reason to fall back, never to lie.
+   */
+  function unseen(kind, n) {
+    const want = Math.max(0, Math.round(Number(n) || 0));
+    if (!want || !pool) return [];
+    const loop = kind === 'loop';
+    const out = [];
+    const seen = new Set(out);
+    for (let i = 0; i < MONTAGE.UNSEEN_TRIES && out.length < want; i++) {
+      const got = poolNext(loop ? 'loop' : 'still');
+      const url = got && got.url;
+      if (!url || seen.has(url)) continue;
+      if (loop ? !isAnimatedUrl(url) : isAnimatedUrl(url)) continue;
+      let worn = false;
+      for (const t of tiles) {
+        if (t.url === url || t.worn.has(url)) { worn = true; break; }
+      }
+      if (worn) continue;
+      seen.add(url);
+      out.push(url);
+    }
+    return out;
+  }
+
+  /** `{ kind, url, tiles, state, byMs, landedAt } | null` - never the request. */
+  function plantState() {
+    if (!plant) return null;
+    return Object.freeze({
+      kind: plant.kind,
+      url: plant.url,
+      tiles: Object.freeze(plant.tiles.slice()),
+      state: plant.state,
+      byMs: plant.byMs,
+      landedAt: plant.landedAt,
+    });
+  }
+
+  /**
+   * Arm ONE duplicate. A second call replaces the first (there is never more
+   * than one, or "twice" has two answers). Lands on the next step() through the
+   * normal swap path; see THE PLANT above.
+   * @param {Object} o { kind:'dup', byMs, holdMs }
+   */
+  function armPlant(o = {}) {
+    if (destroyed) return null;
+    const holdMs = Math.max(0, Math.round(Number(o && o.holdMs) || 0));
+    const byMs = Math.max(0, Math.round(Number(o && o.byMs) || 0));
+    plant = {
+      kind: 'dup',
+      url: null,
+      remote: false,
+      tiles: [],
+      state: 'armed',
+      byMs: byMs ? wallMs + byMs : 0,
+      holdMs,
+      holdUntil: wallMs + holdMs,
+      landedAt: 0,
+      pending: null,
+      stagger: 0,
+    };
+    return plantState();
+  }
+
+  /**
+   * THE VERDICT RING. A class on the TILE element is allowed (style.js draws a
+   * box-shadow); a transform or a filter is not - the tile may be holding a live
+   * decode, and the face belongs to the swap animation.
+   */
+  function highlight(indices, on) {
+    const want = on !== false;
+    const wanted = indices == null ? null
+      : new Set((Array.isArray(indices) ? indices : [indices]).map((v) => Number(v)));
+    let n = 0;
+    for (const t of tiles) {
+      const node = t.node;
+      if (!node || !node.classList) continue;
+      const hit = want && wanted != null && wanted.has(t.i);
+      try {
+        if (hit) { node.classList.add('is-truth'); n += 1; }
+        else node.classList.remove('is-truth');
+      } catch (e) { /* DOM double */ }
+    }
+    return n;
+  }
+
   const api = {
     /* ---- structure ---- */
     build,
@@ -924,6 +1301,16 @@ export function createMontage(o = {}) {
     /* ---- media ---- */
     dress,
     reshuffle,
+
+    /* ---- THE WALL AS AN ANSWER (CORE reads these; the wall never answers) ---- */
+    snapshot,
+    unseen,
+    plant: armPlant,
+    plantState,
+    highlight,
+    /** The current generation (0 at dress, +1 per reshuffle). */
+    gen() { return gen; },
+
     /** The density band drives the dwell and how many seats are alive. */
     setBand(b) {
       const v = Number(b);
@@ -970,6 +1357,7 @@ export function createMontage(o = {}) {
       dressTimers.clear();
       inFlight.clear();
       queue.length = 0;
+      plant = null;
       clearContainers();
       liveUse.clear();
       videoTiles = 0;
@@ -997,6 +1385,8 @@ export function createMontage(o = {}) {
         want: liveWant(),
         swaps,
         reshuffles,
+        gen,
+        plant: plantState(),
         inFlight: inFlight.size,
         queued: queue.length,
         driver: !!driver,
