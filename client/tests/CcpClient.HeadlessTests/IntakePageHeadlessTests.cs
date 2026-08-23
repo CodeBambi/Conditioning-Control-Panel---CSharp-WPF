@@ -264,9 +264,16 @@ public class IntakePageHeadlessTests
         Assert.DoesNotContain(strings, s => s.Contains("Unlock unlimited retakes", StringComparison.Ordinal));
         // Exactly one button on the page: WPF's gate CTA and its hidden classic-quiz launcher
         // have no port analogue, and a second button here would be the dead control §10 D17 bans.
-        Assert.DoesNotContain(page.GetVisualDescendants().OfType<Button>(),
-            b => b.Name != "BeginIntakeButton");
-        Assert.Single(page.GetVisualDescendants().OfType<Button>());
+        //
+        // AUTHORED buttons, which is what the rule was always about. The page scrolls now that it
+        // carries the Trainer Card, and a ScrollViewer's template supplies four RepeatButtons of its
+        // own (RepeatButton derives from Button). TemplatedParent is null for a control this page
+        // declares and non-null for one a control template supplied, so the filter keeps the fact
+        // pointed at the page's own controls instead of at the theme's.
+        var authored = page.GetVisualDescendants().OfType<Button>()
+            .Where(b => b.TemplatedParent is null).ToList();
+        Assert.DoesNotContain(authored, b => b.Name != "BeginIntakeButton");
+        Assert.Single(authored);
 
         await host.ShutdownAsync();
     }

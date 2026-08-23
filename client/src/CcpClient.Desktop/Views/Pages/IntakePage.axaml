@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:progression="using:CcpClient.Desktop.Features.Progression"
              x:Class="CcpClient.Desktop.Views.Pages.IntakePage">
   <!--
     The Graded Intake page (WPF Views/Tabs/GradedIntakeTabView.xaml). Hop 2 of the route the
@@ -34,6 +35,10 @@
     past-run index, and nowhere for an unlock CTA to go (the §10 D17 rule). Rendering any of them
     would be the greyed control that swallows the gesture — the §9 D7 rule. ABSENT, not disabled.
   -->
+  <!-- The page scrolls now that it carries a second module, the same way the System page does.
+       PageHost is a bare ContentControl (MainWindow.axaml:486), so a page that outgrows the window
+       is CLIPPED rather than scrolled, and the card is the part that would have gone off the bottom. -->
+  <ScrollViewer>
   <StackPanel Margin="20" Spacing="4">
     <TextBlock Classes="page-title" Text="Graded Intake" />
     <TextBlock Classes="page-blurb" MaxWidth="640" HorizontalAlignment="Left"
@@ -130,5 +135,87 @@
         </Border>
       </Panel>
     </Border>
+
+    <!--
+      THE TRAINER CARD. Upstream's is a portrait with a wardrobe over it, a level, a rank, four
+      pinned badges and a scene banner — eight MainWindow.Profile* partials, 3060 lines
+      (client/docs/trainer-card-census.md §1.7). This port has exactly one piece of that: the
+      graded-run award record the intake writes (Features/Progression/GradedRunAwards.cs), so the
+      card renders THAT and says the rest out loud instead of showing it empty.
+
+      It lives on this page rather than behind a rail door of its own, and that is the port's own
+      rule rather than a shortcut: ShellRoutes.cs declares five doors and refuses a sixth whose
+      destination is nearly empty ("a door that navigates to an empty room is the same
+      unreachability the shell exists to end"). One module of real state does not fill a room. It
+      sits on the page whose runs earn the awards, which is also where a user looks for them.
+
+      WHAT IS NOT HERE, and is not here as a control either: no share, export, upload or publish
+      button. Upstream's counterpart is the eleven-toggle leaderboard privacy dialog
+      (Views/Controls/ProfilePrivacyPanel.xaml.cs:43-74) over real outbound traffic
+      (Services/Progression/LeaderboardService.cs:16,106,174) — owner-gated and unapproved (census
+      §7). A disabled share button would be the greyed control that swallows the gesture (§9 D7), so
+      there is none to disable. No portrait, no wardrobe stage, no banner, no pinned badges: all of
+      those need bytes and a compositor this build does not have (census §6.2 B3/B5).
+    -->
+    <Border Classes="module" Margin="0,16,0,0">
+      <StackPanel Spacing="8">
+        <TextBlock x:Name="TrainerCardTitle"
+                   Classes="module-title"
+                   AutomationProperties.AutomationId="TrainerCardTitle" />
+
+        <!-- The two absences a user would otherwise read as a broken card. Said in words, never
+             rendered as an empty stat or a zero: no XP, level, streak or rank exists anywhere in
+             client/src, so a "Level 0" here would be a number nothing in the app computes. -->
+        <TextBlock x:Name="TrainerCardLevelNote"
+                   Classes="page-blurb"
+                   MaxWidth="640" HorizontalAlignment="Left"
+                   AutomationProperties.AutomationId="TrainerCardLevelNote" />
+        <TextBlock x:Name="TrainerCardPortraitNote"
+                   Classes="page-blurb"
+                   MaxWidth="640" HorizontalAlignment="Left"
+                   AutomationProperties.AutomationId="TrainerCardPortraitNote" />
+
+        <!-- Only visible when the record has something to say for itself: never read, or read and
+             failed. A card that could not read the record must not look like a card with nothing
+             on it. -->
+        <TextBlock x:Name="TrainerCardRecordNote"
+                   Classes="page-blurb"
+                   Opacity="1"
+                   MaxWidth="640" HorizontalAlignment="Left"
+                   AutomationProperties.AutomationId="TrainerCardRecordNote"
+                   IsVisible="False" />
+
+        <ItemsControl x:Name="TrainerCardAwards"
+                      AutomationProperties.AutomationId="TrainerCardAwards">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="progression:TrainerCardAward">
+              <StackPanel Spacing="1" Margin="0,6,0,0">
+                <!-- Name and requirement are upstream's own authored strings
+                     (Models/Achievement.cs:663-701); the status line is what THIS build can stand
+                     behind about them today. -->
+                <TextBlock Text="{Binding Name}" Classes="module-title" FontSize="13" />
+                <TextBlock Text="{Binding Requirement}" Classes="diagnostic" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Status}" Classes="page-blurb" Opacity="0.9"
+                           MaxWidth="640" HorizontalAlignment="Left" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- The entitlement sentence (divergence D228) and the locality sentence. The first is why
+             a patron-exclusive award appears here at all; the second is the whole of what this
+             build does with it. -->
+        <TextBlock x:Name="TrainerCardTierNote"
+                   Classes="diagnostic"
+                   MaxWidth="640" HorizontalAlignment="Left" TextWrapping="Wrap"
+                   Margin="0,10,0,0"
+                   AutomationProperties.AutomationId="TrainerCardTierNote" />
+        <TextBlock x:Name="TrainerCardLocalOnlyNote"
+                   Classes="diagnostic"
+                   MaxWidth="640" HorizontalAlignment="Left" TextWrapping="Wrap"
+                   AutomationProperties.AutomationId="TrainerCardLocalOnlyNote" />
+      </StackPanel>
+    </Border>
   </StackPanel>
+  </ScrollViewer>
 </UserControl>

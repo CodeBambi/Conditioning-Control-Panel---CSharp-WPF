@@ -38,12 +38,20 @@ public sealed class IntakeParticipant : IDisposable
     public IntakeParticipant(ILogSink log, string? dataDirectory = null)
     {
         _log = log;
-        DataDirectory = dataDirectory
-            ?? Path.GetDirectoryName(CompositionRoot.DefaultSettingsPath())!;
+        DataDirectory = ResolveDataDirectory(dataDirectory);
         // §3.3 parity: per-session unguessable token, generated at construction, never logged.
         BridgeToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16))
             .Replace('+', '-').Replace('/', '_').TrimEnd('=');
     }
+
+    /// <summary>
+    /// Where the intake's files live: the caller's directory, or the install's own data root through
+    /// the data-root choke point. Static so a reader that must NOT construct a participant — the
+    /// Trainer Card's passive read of the award record, <c>IntakeLaunch.ReadTrainerCard</c> — resolves
+    /// the SAME directory the participant would, instead of carrying a second copy of the fallback.
+    /// </summary>
+    public static string ResolveDataDirectory(string? dataDirectory) =>
+        dataDirectory ?? Path.GetDirectoryName(CompositionRoot.DefaultSettingsPath())!;
 
     /// <summary>The per-session bridge token (delivered in the navigated URL query; never logged).</summary>
     public string BridgeToken { get; }
