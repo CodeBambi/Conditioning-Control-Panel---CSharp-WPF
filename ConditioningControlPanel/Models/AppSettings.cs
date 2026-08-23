@@ -7004,12 +7004,29 @@ namespace ConditioningControlPanel.Models
 
         internal static Dictionary<string, double> DefaultArcademyAudioLevels() => new()
         {
-            ["fx"] = 0.48,
+            ["fx"] = 0.85,
             ["voice"] = 0.85,
             ["tutorial"] = 0.85,
             ["drops"] = 0.4,
             ["music"] = 1.0,
         };
+
+        /// <summary>
+        /// The 6.8.x fx default (0.48) stacked under the engine level and MasterVolume left every
+        /// synthesized Arcademy cue near -29 dB - inaudible in the field. One-shot: a stored fx
+        /// gain still sitting exactly on the old default moves to the new one; any other value is
+        /// a user's own mix and is never touched.
+        /// </summary>
+        public void MigrateArcademyFxLevel()
+        {
+            if (_arcademyAudioLevels != null
+                && _arcademyAudioLevels.TryGetValue("fx", out var fx)
+                && Math.Abs(fx - 0.48) < 0.0001)
+            {
+                _arcademyAudioLevels["fx"] = 0.85;
+                OnPropertyChanged(nameof(ArcademyAudioLevels));
+            }
+        }
 
         private bool _arcademyAudioMute;
         /// <summary>Hard on/off over every Arcademy audio group. Separate from the gains on

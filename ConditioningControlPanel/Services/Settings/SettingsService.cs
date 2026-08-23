@@ -228,6 +228,8 @@ namespace ConditioningControlPanel.Services
                         // Library vs selection (SORT): every custom sub the user kept before the
                         // library existed joins it. One-way and idempotent - it only ever appends.
                         settings.MigrateRemoteSubLibrary();
+                    settings.MigrateArcademyFxLevel();
+                        settings.MigrateArcademyFxLevel();
 
                         return settings;
                     }

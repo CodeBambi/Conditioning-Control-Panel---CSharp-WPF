@@ -12,7 +12,7 @@
  * is a short oscillator/noise envelope, so the mixer is real today and swapping
  * in real samples later only touches `play()`.
  *
- * LEVELS: gain = sfx level x group level x masterVolume x (audioMute ? 0 : 1).
+ * LEVELS: gain = sqrt(sfx level) x group level x masterVolume x (audioMute ? 0 : 1).
  * The group levels arrive already clamped in `init.audioLevels` and move ONLY on
  * the host's `setting` echo (`audioLevels.fx`, `audioMute`, `masterVolume`) -
  * same law as the settings page: the echo is the truth, never the control.
@@ -49,7 +49,7 @@
  * ==========================================================================*/
 
 const BUSES = ['fx', 'voice', 'tutorial', 'drops', 'music'];
-const DEFAULT_LEVELS = { fx: 0.48, voice: 0.85, tutorial: 0.85, drops: 0.4, music: 1.0 };
+const DEFAULT_LEVELS = { fx: 0.85, voice: 0.85, tutorial: 0.85, drops: 0.4, music: 1.0 };
 
 /** Which buses a duck target pulls down (DTRH's sidechain hierarchy). */
 const DUCK_TARGETS = {
@@ -389,7 +389,11 @@ export function createAudio({ init, bridge, log } = {}) {
     if (mute || master <= 0) { stats.dropped += 1; return; }
     if (!ensureContext()) { stats.dropped += 1; return; }
     const bus = BUSES.indexOf(d.bus) >= 0 ? d.bus : 'fx';
-    const amp = clamp01(d.level == null ? 0.5 : d.level);
+    // PERCEPTUAL CURVE (2026-08-24): engine levels are fractions of fractions - a 0.25
+    // cue under the bus and master gains landed near -29 dB and the whole campus read
+    // as silent. sqrt lifts the quiet floor (0.25 -> 0.5) while 1.0 stays 1.0, so the
+    // relative loudness ladder the games ratchet is preserved, just audible.
+    const amp = Math.sqrt(clamp01(d.level == null ? 0.5 : d.level));
     if (amp <= 0 || levels[bus] <= 0) { stats.dropped += 1; return; }
     try {
       // A url is a CLIP, whatever the name says. If the host cannot play one we
