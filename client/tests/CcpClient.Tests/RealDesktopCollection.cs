@@ -1147,6 +1147,7 @@ internal static class RealDesktopWindowFloor
     private const uint WsPopup = 0x80000000;
     private const uint WsExToolwindow = 0x00000080;
     private const uint WsExNoactivate = 0x08000000;
+    private const uint PmRemove = 0x0001;
 
     [ThreadStatic]
     private static nint _floor;
@@ -1167,17 +1168,96 @@ internal static class RealDesktopWindowFloor
         _floor = CreateWindowExW(
             WsExToolwindow | WsExNoactivate, "Static", "CcpRealDesktopWindowFloor", WsPopup,
             0, 0, 0, 0, 0, 0, 0, 0);
+
+        // THE FLOOR'S OWN MESSAGES ARE DRAINED HERE, FILTERED TO THE FLOOR'S HANDLE. A fact that
+        // asserts an EMPTY thread queue reads them otherwise: Win32InputPresence.Pump takes
+        // PeekMessageW(hWnd 0), which drains the WHOLE calling thread rather than one window, and
+        // InputCapabilityTests.ADisposedPresence_RefusesEveryPathAndNeverPromptsAgain asserts that
+        // a disposed presence pumps zero. The filter is the load-bearing part: a bare thread drain
+        // here would swallow messages the probes are waiting for, since this runs on the injection
+        // path with scratch targets already up.
+        var drained = 0;
+        while (_floor != 0 && drained++ < 64 && PeekMessageW(out var message, _floor, 0, 0, PmRemove))
+        {
+            TranslateMessage(ref message);
+            DispatchMessageW(ref message);
+        }
     }
 
-    /// <summary>This thread's floor handle, or 0 where none is up. Read by the collection's own
-    /// control so a floor that silently stopped being created cannot pass unnoticed.</summary>
+    /// <summary>
+    /// <b>Drops this thread's floor for one fact, and puts it back on dispose.</b>
+    ///
+    /// <para>For the facts whose SUBJECT IS the process-wide foreground permission rather than
+    /// something measured through it. <c>TrayCapabilityTests.
+    /// TheRightClickGesture_LeavesTheProcessAbleToPlaceAWindowInTheTopmostBand</c> is the case: it
+    /// asks whether this process can still put a window in the top-most band, which is exactly the
+    /// state the floor exists to preserve, so a floored thread answers YES for the floor's reasons
+    /// and the fact stops being a detector. An unexplained opt-out is how a detector dies quietly,
+    /// so every caller states its reason in <paramref name="why"/>.</para>
+    ///
+    /// <para>Re-arming on dispose is not tidying and it is not a repair: a window back on the thread
+    /// RESTORES the band (measured — the revocation is a live condition, not a latch), so the next
+    /// fact starts clean without anyone calling <c>SetForegroundWindow</c> to fix it up.</para>
+    ///
+    /// <para>Construct and dispose on ONE thread: the floor is <see cref="ThreadStaticAttribute"/>
+    /// and <c>DestroyWindow</c> is refused from any thread but the owning one.</para>
+    /// </summary>
+    internal static IDisposable SuspendForThisFact(string why) => new Suspension(why);
+
+    /// <summary>Why the floor is down, or null while it is up. Diagnostics only.</summary>
+    internal static string? SuspendedBecause { get; private set; }
+
+    /// <summary>This thread's floor handle, or 0 where none is up.</summary>
     internal static nint Window => _floor;
+
+    private sealed class Suspension : IDisposable
+    {
+        internal Suspension(string why)
+        {
+            SuspendedBecause = why;
+            if (OperatingSystem.IsWindows() && _floor != 0)
+            {
+                DestroyWindow(_floor);
+                _floor = 0;
+            }
+        }
+
+        public void Dispose()
+        {
+            SuspendedBecause = null;
+            Ensure();
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FloorMsg
+    {
+        public nint Window;
+        public uint Message;
+        public nint WParam;
+        public nint LParam;
+        public uint Time;
+        public int X;
+        public int Y;
+    }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern nint CreateWindowExW(
         uint exStyle, string className, string windowName, uint style,
         int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyWindow(nint window);
+
     [DllImport("user32.dll")]
     private static extern bool IsWindow(nint window);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool PeekMessageW(out FloorMsg message, nint window, uint filterMin, uint filterMax, uint remove);
+
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage(ref FloorMsg message);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint DispatchMessageW(ref FloorMsg message);
 }

@@ -384,6 +384,17 @@ public class TrayCapabilityTests
     {
         Assert.SkipUnless(OverlayWindowProbe.WindowsHost, "the topmost band is a Win32 concept; this leg is Windows-only");
 
+        // THIS FACT RUNS UNFLOORED, DELIBERATELY, AND IT IS THE ONLY ONE THAT DOES.
+        // RealDesktopWindowFloor keeps one hidden window alive per clicking thread because a thread
+        // that reaches ZERO top-level windows after one of them was clicked costs the WHOLE PROCESS
+        // the top-most band - a state the shipping app can never reach, since it always owns the
+        // Avalonia main window or the tray's own hidden owner window. Every other fact wants that
+        // floor, because it is measuring something THROUGH the band. This one is measuring the BAND
+        // ITSELF, so a floored thread would answer yes for the floor's reasons and this detector
+        // would die quietly. It is suspended for the fact and re-armed on the way out.
+        using var unfloored = RealDesktopWindowFloor.SuspendForThisFact(
+            "this fact's subject IS the process-wide foreground permission the floor preserves");
+
         var control = TopmostProbeWindow.Create();
         try
         {

@@ -441,6 +441,12 @@ internal static class PointerWindowProbe
                 return null;
             }
 
+            // The floor goes up BEFORE the target is created, not after. A window can only take the
+            // top-most band when its thread ALREADY owned another window at the moment it was made
+            // (measured), so a scratch target that is the thread's first window loses its own point
+            // to whatever is maximised underneath - which is what the delivery oracle reads as "the
+            // probe could not inject".
+            RealDesktopWindowFloor.Ensure();
             var module = GetModuleHandleW(null);
             ScratchTarget? built = null;
 
