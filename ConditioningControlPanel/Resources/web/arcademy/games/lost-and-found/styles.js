@@ -393,6 +393,16 @@ export const CSS = [
   '@keyframes g-lf-kb {',
   '  from { transform:scale(1.01) translate(0,0); }',
   '  to { transform:scale(1.08) translate(2.2%,-1.8%); } }',
+
+  /* THE STICKY WAY PAST THE SHEET (shell exits wave). Alone among the ten this
+     polaroid never declared a bound of any kind, and it lives inside
+     .g-lf-view, which clips - so a sheet taller than the view was simply
+     guillotined and GO went with it. The class could not be entered and nothing
+     on the page said why. Bound it, let it scroll, and pin GO to the bottom of
+     the card as a full-width bar. */
+  '.g-lf-howto { max-height:calc(100% - 26px); overflow:auto; }',
+  '.g-lf-hw-go { position:sticky; bottom:0; z-index:3; align-self:stretch;',
+  '  margin-top:10px; }',
 ].join('\n');
 
 /** Inject once per document. Idempotent - re-entering the class is free. */

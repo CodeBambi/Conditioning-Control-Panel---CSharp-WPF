@@ -526,6 +526,32 @@ html.arc-reduced .g-ic-dusk{transition:none}
   .g-ic-hw-ring{--ic-hk:.62}
   .g-ic-hw-nohand::after{opacity:1}
 }
+
+/* ---- THE STICKY WAY PAST THE SHEET (shell exits wave) ----
+   The card already declared max-height + overflow:auto, but it declared
+   pointer-events:none in the same breath - and a box the pointer cannot hit is
+   a box the wheel cannot scroll. So the moment the sheet was taller than the
+   window, GO sat below a fold that nothing on the page could reach: the class
+   was unenterable and nothing said why. The root takes the pointer back
+   (nothing on the sheet is live except GO, so this costs the class nothing)
+   and GO rides the bottom of the card as a full-width bar for as long as the
+   sheet is up. The look is the game's own - the shell's lit arrow board is for
+   terminal screens, and this one is a door in, not a door out. */
+.g-ic-howto{pointer-events:auto}
+.g-ic-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
+
+/* ---- THE TICKET'S ACTIONS STICK TOO ----
+   The debrief is the one END screen in the collection with a real button on it,
+   and its scroller is .g-ic-debrief (the paper is just the thing inside). A
+   long ticket on a short window used to park Submit report below the fold with
+   the class already over. The row now rides the bottom of the scroller, and the
+   centring is SAFE-aligned so an over-tall ticket can no longer push its own head off
+   the top edge where no scrollbar can follow it. */
+.g-ic-debrief{place-items:safe center;padding:14px 0}
+.g-ic-paper-actions{position:sticky;bottom:0;z-index:4;
+  margin:8px -30px -26px;padding:12px 30px 16px;
+  background:linear-gradient(180deg,rgba(26,26,50,0),#1A1A32 42%)}
+
 `;
 
 export function ensureStyle() {

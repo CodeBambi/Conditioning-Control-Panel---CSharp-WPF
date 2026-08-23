@@ -420,6 +420,20 @@ html.arc-reduced .g-dt-mq{opacity:.16}
   .g-dt-lesson{display:none}
   .g-dt-slab{padding:10px 14px;border-width:1px}
 }
+
+/* ---- THE STICKY WAY PAST THE SHEET (shell exits wave) ----
+   The card already declared max-height + overflow:auto, but it declared
+   pointer-events:none in the same breath - and a box the pointer cannot hit is
+   a box the wheel cannot scroll. So the moment the sheet was taller than the
+   window, GO sat below a fold that nothing on the page could reach: the class
+   was unenterable and nothing said why. The root takes the pointer back
+   (nothing on the sheet is live except GO, so this costs the class nothing)
+   and GO rides the bottom of the card as a full-width bar for as long as the
+   sheet is up. The look is the game's own - the shell's lit arrow board is for
+   terminal screens, and this one is a door in, not a door out. */
+.g-dt-howto{pointer-events:auto}
+.g-dt-hw-go{position:sticky;bottom:0;z-index:3;align-self:stretch;margin-top:14px}
+
 `;
 
 /** Inject once per document. No-op headless (and never throws). */
