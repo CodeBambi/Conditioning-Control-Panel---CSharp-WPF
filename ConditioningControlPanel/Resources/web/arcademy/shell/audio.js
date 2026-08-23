@@ -377,6 +377,10 @@ export function createAudio({ init, bridge, log } = {}) {
   function onSfx(e) {
     const d = (e && e.detail) || {};
     stats.handled += 1;
+    // The one CONTROL message on the sfx bus: the shell sends it when a class is
+    // torn down so a trigger clip (<=1.2s) never leaks into the lobby. No audio
+    // handle crosses into shell.js for this; the bus was already the seam.
+    if (d.name === 'stop_clips') { stopAllClips(); return; }
     const pitch = clampPitch(d.pitch);
     stats.last = {
       name: d.name || null, level: d.level, bus: d.bus || 'fx', duck: d.duck || null, pitch,

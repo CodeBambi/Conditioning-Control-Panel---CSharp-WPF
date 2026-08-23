@@ -1714,6 +1714,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try { bridge.send({ type: 'class-left', gameKey: a.cls && a.cls.gameKey }); }
     catch (e) { say('class-left send failed: ' + ((e && e.message) || e)); }
     try { a.instance.destroy(); } catch (e) { say('game destroy threw: ' + ((e && e.message) || e)); }
+    // Cut any trigger clip still playing (Echo's pads): shell/audio.js owns the
+    // voices, so this rides the sfx bus as its one control message.
+    try { document.dispatchEvent(new CustomEvent('arcademy-sfx', { detail: { name: 'stop_clips' } })); } catch (e) { /* no DOM double */ }
     try { a.peek.destroy(); } catch (e) { /* noop */ }
     try { a.keys.destroy(); } catch (e) { /* noop */ }
     try { a.ceremonies.destroy(); } catch (e) { /* noop */ }
