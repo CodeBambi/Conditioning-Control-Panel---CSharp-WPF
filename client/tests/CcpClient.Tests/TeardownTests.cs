@@ -37,7 +37,9 @@ public class TeardownTests
         await host.StartParticipantsAsync(CancellationToken.None);
 
         // Concurrent invocation (close racing panic) plus a later repeat.
-        await Task.WhenAll(host.ShutdownAsync(), host.ShutdownAsync());
+        await TestWait.Until(
+            Task.WhenAll(host.ShutdownAsync(), host.ShutdownAsync()),
+            "both racing ShutdownAsync calls to return (the loser must not block on the winner)");
         await host.ShutdownAsync();
 
         Assert.Equal(1, participant.StopCount);

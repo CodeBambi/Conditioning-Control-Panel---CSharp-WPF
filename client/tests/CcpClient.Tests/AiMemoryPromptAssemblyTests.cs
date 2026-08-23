@@ -65,7 +65,7 @@ public class AiMemoryPromptAssemblyTests
                 Registry.OwnerFor("AiMemory"), new ListLogSink(), MemoryPath,
                 consent: defaultConsent ? null : (consent ?? (() => Consent)),
                 retention: retention);
-            Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult(); // wallclock-allow: a passthrough to PersistenceStore.StartAsync, which loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
             Pipeline = new AiOperationPipeline(
                 Registry, Capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics,
                 new AiModerationBoundary(), Memory);

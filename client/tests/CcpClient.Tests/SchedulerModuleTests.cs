@@ -779,7 +779,7 @@ public class SchedulerModuleTests
             rig.Clock.WhileScheduling = null;
             rig.Registry.CancelAndDrainAsync(
                 rig.Log, CcpClient.Desktop.Lifecycle.CompositionRoot.DefaultFlushTimeout)
-                .GetAwaiter().GetResult();
+                .GetAwaiter().GetResult(); // wallclock-allow: the re-entrant drain IS the subject, and CancelAndDrainAsync bounds its own drain by the flush budget handed to it
         };
 
         rig.Clock.Advance(SessionScheduler.PollInterval);

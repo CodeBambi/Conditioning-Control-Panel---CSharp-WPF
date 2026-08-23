@@ -121,7 +121,7 @@ public class AsyncLifecycleTests
             });
 
             registered.SetResult();
-            await stopped.Task;
+            await stopped.Task; // wallclock-allow: the parked operation IS the subject (product shape) — its cancellation callback always sets this, and the test never waits on it
             return OperationOutcome.Cancelled.Instance;
         });
         await TestWait.Until(registered.Task, "the parked operation to register its cancellation callback");
@@ -176,12 +176,12 @@ public class AsyncLifecycleTests
             using var registration = token.Register(() =>
             {
                 callbackEntered.SetResult();
-                releaseTheCallback.Wait(); // deterministic signal; the finally below always sets it
+                releaseTheCallback.Wait(); // wallclock-allow: the wedge IS the subject — a cancellation callback still running is what the fact observes, and the test's finally releases it on every path
                 stopped.TrySetResult();
             });
 
             registered.SetResult();
-            await stopped.Task;
+            await stopped.Task; // wallclock-allow: the parked operation IS the subject (product shape) — the cancellation callback sets it once the test's finally releases the wedge, so no path leaves it unset
             return OperationOutcome.Cancelled.Instance;
         });
         await TestWait.Until(registered.Task, "the parked operation to register its cancellation callback");

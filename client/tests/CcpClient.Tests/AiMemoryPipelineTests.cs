@@ -40,7 +40,7 @@ public class AiMemoryPipelineTests
         {
             if (_gate is not null)
             {
-                await _gate.Task.ConfigureAwait(false); // uncooperative: ignores the token, replies late
+                await _gate.Task.ConfigureAwait(false); // wallclock-allow: the uncooperative provider IS the subject — it ignores the token and replies late; the test releases the gate on every path
             }
 
             return Reply;
@@ -64,7 +64,7 @@ public class AiMemoryPipelineTests
         {
             MemoryPath = _dir.Path(AiMemoryStore.FileName);
             Memory = new AiMemoryStore(Registry.OwnerFor("AiMemory"), new ListLogSink(), MemoryPath, consent ?? (() => AiMemoryConsent.Granted));
-            Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult(); // wallclock-allow: a passthrough to PersistenceStore.StartAsync, which loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
             Pipeline = new AiOperationPipeline(
                 Registry, Capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics,
                 new AiModerationBoundary(policy), Memory);

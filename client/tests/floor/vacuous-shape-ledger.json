@@ -859,6 +859,18 @@
       "reason": "the topmost band is a Win32 concept and the whole fact is a Win32 read-back, so the OS gate is expressed as Assert.SkipUnless in order to REPORT rather than pass silently; pinned by name in floor.json allowedSkips under the admission rule, with the machine class named there. It is not vacuous on the machine class where it executes: on Windows every path asserts, and the fact carries its own CONTROL leg (the band is proved grantable BEFORE the gesture) so a green cannot mean the band was never reachable."
     },
     {
+      "key": "CcpClient.Tests/UnboundedWaitGuardTests.cs::UnboundedWaitGuardTests.NoUnboundedJoinsOrInjectedBudgetsInClientTests",
+      "path": "CcpClient.Tests/UnboundedWaitGuardTests.cs",
+      "line": 111,
+      "method": "UnboundedWaitGuardTests.NoUnboundedJoinsOrInjectedBudgetsInClientTests",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "the wall-clock guard's shape exactly: fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 \u2014 the guard never skips by design (a missing directory FAILS). The obj/ filter inside the walk skips only SDK-generated sources, which have no author to act on a finding"
+    },
+    {
       "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_HalfPresentWpfTree_Fails_RefusesToSkip",
       "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
       "line": 447,

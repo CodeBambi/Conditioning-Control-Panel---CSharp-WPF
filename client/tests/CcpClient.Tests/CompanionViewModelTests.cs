@@ -119,7 +119,7 @@ public class CompanionViewModelTests
 
         public void Dispose()
         {
-            Participant.StopAsync().GetAwaiter().GetResult();
+            Participant.StopAsync().GetAwaiter().GetResult(); // wallclock-allow: a passthrough to PersistenceStore.StopAsync, which cancels a generation on the calling thread and touches no file — this bridge waits on nothing
             try { Directory.Delete(_dir, recursive: true); }
             catch (IOException) { /* best-effort temp cleanup */ }
         }

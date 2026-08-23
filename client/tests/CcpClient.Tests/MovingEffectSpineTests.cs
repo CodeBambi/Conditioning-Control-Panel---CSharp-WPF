@@ -727,7 +727,7 @@ public class MovingEffectSpineTests
                 _arrived.TrySetResult();
                 if (Environment.CurrentManagedThreadId != Volatile.Read(ref _disarmingThread))
                 {
-                    _gate.Wait();
+                    _gate.Wait(); // wallclock-allow: the wedge IS the subject — parks the release inside ReleaseWork so the disarm tail is observable; OpenGate() releases it
                 }
             }
 

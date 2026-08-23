@@ -31,7 +31,7 @@ public sealed class IntakePunchCardTests : IDisposable
             new SinkAdapter(_log),
             Path.Combine(dir ?? Path.Combine(_root, Guid.NewGuid().ToString("N")), "intake_punchcard.json"),
             IntakePunchCardDocument.CurrentSchemaVersion);
-        store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+        store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
         return (store, new IntakePunchCard(store, () => _now, _log.Add));
     }
 

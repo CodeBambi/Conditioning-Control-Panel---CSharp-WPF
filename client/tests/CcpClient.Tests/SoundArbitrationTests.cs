@@ -606,7 +606,7 @@ public sealed class SoundArbitrationTests
     // population 2). Every rendezvous is a deterministic signal: the probe is PROVEN parked
     // (TryInitInFlight) before Dispose is called, so the budget always expires with the
     // native call still in flight — the outcome never depends on scheduler timing.
-    private static readonly TimeSpan GiveUpBudget = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan GiveUpBudget = TimeSpan.FromMilliseconds(200); // wallclock-allow: the budget's elapsing IS the subject — the probe is PROVEN parked before Dispose, so the give-up always fires with the native call in flight
 
     /// <summary>
     /// Drive the REAL probe path (suppressed → kick → the scheduled one-shot fires on a
@@ -1105,7 +1105,7 @@ public sealed class SoundArbitrationTests
     // The budget whose ELAPSING is the subject (TestWait population 2 — same pinned-literal
     // discipline as the GiveUpBudget). Every rendezvous below is a deterministic signal
     // (gates + the recorded event stream), never timing.
-    private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200); // wallclock-allow: the budget's elapsing IS the subject — every rendezvous is a gate, so the abandonment always fires with the construction still wedged
 
     private sealed class OrphanPlayer(string path, float volume)
     {
@@ -1157,7 +1157,7 @@ public sealed class SoundArbitrationTests
                 {
                     Interlocked.Increment(ref ConstructCount);
                     ConstructStarted?.Set();
-                    ConstructGate?.Wait(); // the wedge — released by the test, never by timing
+                    ConstructGate?.Wait(); // wallclock-allow: the wedge IS the subject — a native construction still inside the call, released by the test, never by timing
                     InsideWedgedConstruct?.Invoke(); // still INSIDE the native call, before it returns
                     if (ConstructThrows is { } failure)
                     {
@@ -1173,7 +1173,7 @@ public sealed class SoundArbitrationTests
                 dispose: p =>
                 {
                     Events.Enqueue("dispose-entered"); // inside the product's _lifecycle lock
-                    DisposeGate?.Wait();
+                    DisposeGate?.Wait(); // wallclock-allow: the wedge IS the subject — parks the orphan disposer inside the product's lifecycle lock, released by the test
                     p.Dispose();
                     Interlocked.Increment(ref DisposeCount);
                     Events.Enqueue("orphan-disposed");
@@ -1311,7 +1311,7 @@ public sealed class SoundArbitrationTests
         {
             h.Events.Enqueue("teardown-start");
             teardownStarted.Set();
-            teardownMayFinish.Wait(); // the wedged native teardown — holds the lifecycle lock
+            teardownMayFinish.Wait(); // wallclock-allow: the wedge IS the subject — the wedged native teardown holds the lifecycle lock until the test releases it
             disposeCountAtTeardownEnd = h.DisposeCount; // the ordering observation
             h.Events.Enqueue("teardown-end");
         }))
@@ -1729,7 +1729,7 @@ public sealed class SoundArbitrationTests
             if (EnumerateRelease is { } release)
             {
                 EnumerateInFlight = true;
-                release.Wait(); // the wedged native enumeration — released by the test
+                release.Wait(); // wallclock-allow: the wedge IS the subject — the wedged native enumeration, released by the test
                 InsideWedgedEnumerate?.Invoke();
                 EnumerateInFlight = false;
                 NativeEvents.Enqueue("enumerate-returned");
@@ -1745,7 +1745,7 @@ public sealed class SoundArbitrationTests
             if (TryInitRelease is { } release)
             {
                 TryInitInFlight = true;
-                release.Wait(); // the wedged native call — released by the test, never by timing
+                release.Wait(); // wallclock-allow: the wedge IS the subject — the wedged native call, released by the test, never by timing
                 InsideWedgedInit?.Invoke(); // still INSIDE the native call, still holding _initLock
                 TryInitInFlight = false;
                 NativeEvents.Enqueue("init-returned");

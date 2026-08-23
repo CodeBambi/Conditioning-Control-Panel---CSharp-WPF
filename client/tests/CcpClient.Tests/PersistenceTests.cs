@@ -162,7 +162,7 @@ public class PersistenceTests
             store.Mutate(m => m.Volume = i);
             await store.Save();
         })).ToArray();
-        await Task.WhenAll(tasks);
+        await TestWait.Until(Task.WhenAll(tasks), "all 32 concurrent mutate/save callers to return");
         await store.SaveImmediate();
 
         // The final file parses cleanly (no interleaved/partial content) and carries the

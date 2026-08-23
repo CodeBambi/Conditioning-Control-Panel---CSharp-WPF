@@ -229,7 +229,7 @@ public sealed class AssetActivePoolTests : IDisposable
             new SinkAdapter(_log),
             Path.Combine(dir, AssetSelectionStore.FileName),
             AssetSelectionDocument.CurrentSchemaVersion);
-        store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+        store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
         return store;
     }
 

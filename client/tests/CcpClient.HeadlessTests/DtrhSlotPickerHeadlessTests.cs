@@ -21,7 +21,7 @@ public class DtrhSlotPickerHeadlessTests
         Directory.CreateDirectory(dir);
         var slots = new DtrhSaveSlots(
             new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), new Sink()), dir);
-        slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+        slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult(); // wallclock-allow: DtrhSaveSlots.StartAsync only awaits PersistenceStore starts, each already complete when handed over (pinned by PersistenceStoreTests) — the chain runs inline, which is also why it is safe on the dispatcher thread
         return (slots, dir);
     }
 

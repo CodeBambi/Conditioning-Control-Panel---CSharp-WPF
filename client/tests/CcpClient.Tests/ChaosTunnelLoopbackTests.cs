@@ -379,7 +379,7 @@ public sealed class ChaosTunnelLoopbackTests : IDisposable
         File.WriteAllText(Path.Combine(dtrhRoot, "weird.bin"), "binary");
         var inbox = new Inbox();
         var dtrh = new LoopbackServer(dtrhRoot, overlay, media, inbox, "token", _log,
-            longPollTimeout: TimeSpan.FromMilliseconds(200));
+            longPollTimeout: TestWait.InjectedBudget); // no poll is issued here; the §4 invariants must not turn on a budget
         dtrh.Start();
         LoopbackListenerRegistry.RegisterLoopbackServer(nameof(ChaosTunnelLoopbackTests), dtrh);
         try

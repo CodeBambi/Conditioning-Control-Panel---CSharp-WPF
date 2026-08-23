@@ -56,7 +56,7 @@ public class AiReplyHygienePipelineTests
             MemoryPath = _dir.Path(AiMemoryStore.FileName);
             Memory = new AiMemoryStore(
                 Registry.OwnerFor("AiMemory"), new ListLogSink(), MemoryPath, () => AiMemoryConsent.Granted);
-            Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult(); // wallclock-allow: a passthrough to PersistenceStore.StartAsync, which loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
             Pipeline = new AiOperationPipeline(
                 Registry, Capabilities, LoopbackOnlyAdmissionPolicy.Instance, Diagnostics,
                 new AiModerationBoundary(policy), Memory);

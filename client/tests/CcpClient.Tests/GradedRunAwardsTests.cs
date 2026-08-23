@@ -74,7 +74,7 @@ public sealed class GradedRunAwardsTests : IDisposable
             Path.Combine(dir ?? Path.Combine(_root, Guid.NewGuid().ToString("N")), "graded_run_awards.json"),
             GradedRunAwardsDocument.CurrentSchemaVersion,
             hooks: hooks);
-        store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+        store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
         return (store, new GradedRunAwards(store, _log.Add));
     }
 

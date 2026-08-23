@@ -17,7 +17,11 @@ public class TestTimingGuardTests
     private static readonly string[] RepoAnchorParts = ["client", "CcpClient.sln"];
     private static readonly string[] TestsParts = ["client", "tests"];
 
-    private static readonly string[] ForbiddenTokens =
+    /// <summary>Internal so the sibling guard (<see cref="UnboundedWaitGuardTests"/>, which bans
+    /// unbounded joins and injected budgets) can SKIP the lines this guard already owns: a site
+    /// pinned in both places is two pins to keep in sync and one to forget. Reading the real list
+    /// rather than copying it means the division of labour cannot drift.</summary>
+    internal static readonly string[] ForbiddenTokens =
     [
         "Environment.TickCount",
         "Thread.Sleep(",
@@ -88,9 +92,10 @@ public class TestTimingGuardTests
         foreach (var file in Directory.EnumerateFiles(testsRoot, "*.cs", SearchOption.AllDirectories))
         {
             var normalized = file.Replace('\\', '/');
-            if (ExemptFileNames.Any(e => normalized.EndsWith("/" + e, StringComparison.Ordinal)))
+            if (normalized.Contains("/obj/", StringComparison.Ordinal)
+                || ExemptFileNames.Any(e => normalized.EndsWith("/" + e, StringComparison.Ordinal)))
             {
-                continue; // the helper and this guard
+                continue; // SDK-generated sources nobody can edit, the helper, and this guard
             }
 
             var relative = normalized[(normalized.IndexOf("tests/", StringComparison.Ordinal) + "tests/".Length)..];
