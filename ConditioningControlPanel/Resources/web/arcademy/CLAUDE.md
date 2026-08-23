@@ -96,6 +96,16 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    plan from tier 2 telegraphed) / grade / lex EC_LEX; keybinds pad1..pad6; six pads always live,
                    the TIER restricts the alphabet; tones = engine audio_trigger 'pad' x pitch (+1 semitone per
                    link, cap 7); a fail is NOT the class (new sequences until the bell); Encore once, auto
+                   THE TURN IS EXPLICIT (owner verdict 2026-08-23): `.g-ec-phase` (a banner, data-p
+                   ready|listen|yours|miss|clear|over) + `.g-ec-steps` (one dot per sequence step,
+                   data-fill off|on|bad) + the LISTEN LOCK (--ec-sat drop + not-allowed on the ring
+                   while the room plays) + a HAND-OFF beat (its own chime, one pulse per pad). Both
+                   tells are text/attribute, so motionLevel 0 loses nothing. Pad states grew `wrong`
+                   (red + shake) and `reveal` (the answer, held REVEAL_MS under a "this one" halo).
+                   THE PADS ARE THE BUBBLES: each is bound (seeded, no duplicates) to ONE trigger
+                   from `init.triggers`, wears its PHRASE as the face, and plays that trigger's
+                   whisper clip faintly UNDER its note. `ec_pad_words` = words (default) | glyphs |
+                   media - the old gif faces are now the opt-in, not the look
   instant-recall/  the vigil (recall, 120s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
                    GUARANTEE in the last 15s, density sawtooth, plants, templates LAST_WORD/EFFECT/STING/TWO,
                    + THE EFFECT POOL: ten CCP effects under CCP's own names, 4/6/8/10 by tier, and ONE seeded
@@ -161,6 +171,37 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   handler that requires `key` silently drops the authoritative streak.
 - **Board size** is a per-game setting under a derived key, `<gameKey>_board_size`
   (`shell/settings.js` `boardSizeKey()`), also surfaced to games as `ctx.settings.boardSize`.
+- **`init.triggers` is `init.words` WITH THE AUDIO** (2026-08-23, Echo's pads). Shape:
+  `[{text: string, audio: string|null}]`, projected top-level beside `words` and passed
+  through to games as `ctx.triggers`. Four things are load-bearing:
+  - **It is the SAME draw as `words`, in the SAME order.** `BuildInit` shuffles the enabled
+    `SubliminalPool` ONCE and hands the list to both, so `triggers[i].text === words[i]`.
+    Two `BuildWords()` calls would reshuffle and silently desynchronise a page that reads
+    one and indexes the other. `words` itself is unchanged - every other class still reads it.
+  - **`audio` is a url on one of two new origins**, resolved by the same rules
+    `SubliminalService.FindLinkedAudio` / `KeywordTriggerService.FindLinkedAudio` use
+    (case/apostrophe filename variants, then a case-insensitive scan; the active mod wins):
+    `ccp.modaudio` -> the mod's `resources/sounds/flashes_audio`, else `ccp.subaudio` ->
+    `Resources/sub_audio`. **Both are mapped `Allow`, not `Deny`, and that is deliberate:**
+    `shell/audio.js` routes the clip's media element through the WebAudio bus graph, and a
+    CORS-tainted stream cannot feed a `MediaElementSource` - it would fall back to raw
+    element volume and slip the mixer's mute/level laws.
+  - **It is gated TWICE on the whisper mute.** With `SubAudioAudible` false the host writes
+    `audio: null` on every row AND the page refuses to fire a clip (`ctx.audioAudible`).
+    Neither side alone opens the tap; a phrase whose file cannot be read is a text row,
+    never a missing row.
+  - **A host that predates the field is fine**: a game falls back to `words` and gets text
+    faces with no clips. An empty pool is a contract, not a failure, exactly like `words`.
+- **`arcademy-sfx` takes an optional `url` (a CLIP)** alongside `name`. `engine/oneshots.js`
+  `audio_trigger` passes `url` / `key` / `maxMs` / `fadeMs` straight through the way it
+  already passes `pitch`, and `shell/audio.js` plays the url from an `HTMLAudioElement`
+  routed through the requested bus, so mute, master, bus level and ducking all still apply.
+  `key` is a VOICE SLOT (a re-fire on the same key cuts the one still playing - Echo keys
+  per pad so a fast sequence cannot pile six whispers up), `maxMs` truncates with a fade
+  (default 1200), and `CLIP_GAIN` gives a clip the same headroom a recipe gets from its own
+  `gain`, so a clip at level L is never louder than an oscillator at level L. The `name` is
+  still sent and is the FALLBACK: a host that cannot decode the url plays the recipe rather
+  than going silent.
 - **`shell/audio.js` accepts an optional `pitch`** on the `arcademy-sfx` detail (0.5-2,
   default 1). It multiplies every frequency in the recipe - oscillator sweep, arpeggio step,
   noise band, stamp thunk - and deliberately NOT the duration, so a pitch ratchet climbs

@@ -191,6 +191,14 @@ internal static class ArcademyHostService
                 // shell's spiral pool mixes them in via settings.loomSpirals; a missing folder
                 // is simply an empty list, so create it the way DtrhHostService does.
                 ("ccp.spirals", Chaos.DtrhLoomStore.SpiralsFolder, CoreWebView2HostResourceAccessKind.Allow),
+                // THE WHISPER CLIPS. Echo's pads wear the player's own triggers and play that
+                // trigger's clip faintly under the pad's note, so the page needs to REACH the
+                // audio, not merely be told a phrase. Allow (CORS-clean) for the same reason
+                // ccp.assets is: shell/audio.js routes the media element through the WebAudio
+                // bus graph, and a tainted stream cannot feed a MediaElementSource - it would
+                // fall back to raw element volume and slip the mixer's laws.
+                ("ccp.subaudio", Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio"),
+                    CoreWebView2HostResourceAccessKind.Allow),
             };
             try { Directory.CreateDirectory(Chaos.DtrhLoomStore.SpiralsFolder); }
             catch (Exception ex) { App.Logger?.Debug("ArcademyHost: spirals dir create failed: {E}", ex.Message); }
@@ -200,6 +208,12 @@ internal static class ArcademyHostService
             var modRoot = ModArcademyRoot();
             if (modRoot != null)
                 mappings.Add(("ccp.mod", modRoot, CoreWebView2HostResourceAccessKind.Allow));
+            // The active mod's own whisper clips get a SECOND origin rather than being copied:
+            // KeywordTriggerService/SubliminalService let a mod override a phrase's audio, and
+            // BuildTriggers resolves against the mod dir first for exactly that reason.
+            var modAudio = ModAudioRoot();
+            if (modAudio != null)
+                mappings.Add(("ccp.modaudio", modAudio, CoreWebView2HostResourceAccessKind.Allow));
 
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
             {
@@ -546,6 +560,10 @@ internal static class ArcademyHostService
     {
         var s = App.Settings?.Current;
         var now = DateTime.Now;
+        // ONE shuffled draw of the active pool feeds BOTH projections, so `triggers[i]` and
+        // `words[i]` are the same phrase. Two independent shuffles would silently desynchronise
+        // a page that reads one and indexes the other.
+        var phrases = BuildWords();
         return new
         {
             type = "init",
@@ -577,7 +595,11 @@ internal static class ArcademyHostService
             motionLevel = ResolvedMotionLevel(),
             performanceMode = PerformanceProfile.CurrentTier != Models.PerformanceTier.Quality,
             reducedMotion = MotionFx.Level != Models.MotionLevel.Full,
-            words = BuildWords(),
+            words = phrases,
+            // The SAME phrases with each one's whisper clip resolved to a url (or null). Echo
+            // binds one per pad and plays it under the pad's note; `words` stays exactly as it
+            // was for every other class. Empty audio everywhere when SubAudioAudible is off.
+            triggers = BuildTriggers(phrases),
             // UTC date seeds the content so the day's classes are globally identical (#978)...
             utcDateSeed = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             // ...and the LOCAL date is what rolls the attendance streak.
@@ -656,6 +678,113 @@ internal static class ArcademyHostService
             return Array.Empty<string>();
         }
     }
+
+    /// <summary>The active mod's <c>resources/sounds/flashes_audio</c> folder, or null. Same
+    /// precedence <c>KeywordTriggerService.FindLinkedAudio</c> applies: a mod's clip for a phrase
+    /// beats the bundled one.</summary>
+    private static string? ModAudioRoot()
+    {
+        try
+        {
+            var installed = App.Mods?.ActiveMod?.InstalledPath;
+            if (string.IsNullOrEmpty(installed)) return null;
+            var root = Path.Combine(installed, "resources", "sounds", "flashes_audio");
+            return Directory.Exists(root) ? root : null;
+        }
+        catch { return null; }
+    }
+
+    private static readonly string[] SubAudioExts = { ".mp3", ".wav", ".ogg" };
+
+    /// <summary>
+    /// The day's phrases WITH their whisper clips: <c>[{text, audio}]</c>, <c>audio</c> a
+    /// <c>ccp.modaudio</c> / <c>ccp.subaudio</c> url or null. Echo's pads are the only consumer
+    /// today (each pad wears one trigger and plays its clip under the pad's note).
+    /// <para>
+    /// GATED ON <see cref="Models.AppSettings.SubAudioAudible"/>, the app-wide whisper mute, which
+    /// is the same flag <c>init.audioAudible</c> projects and <c>SubliminalService</c> gates every
+    /// whisper on: with it off every row is text-only and the page has nothing it could play.
+    /// The page gates again on <c>ctx.audioAudible</c> - neither side alone opens the tap.
+    /// </para>
+    /// </summary>
+    private static object[] BuildTriggers(string[] phrases)
+    {
+        if (phrases == null || phrases.Length == 0) return Array.Empty<object>();
+        var audible = App.Settings?.Current?.SubAudioAudible == true;
+        var modDir = audible ? ModAudioRoot() : null;
+        var defaultDir = audible
+            ? Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio")
+            : null;
+        var rows = new List<object>(phrases.Length);
+        foreach (var text in phrases)
+        {
+            string? url = null;
+            if (audible)
+            {
+                try { url = ResolveTriggerAudioUrl(text, modDir, defaultDir); }
+                catch (Exception ex)
+                {
+                    // A phrase whose clip cannot be resolved is a TEXT row, never a missing row.
+                    App.Logger?.Debug("ArcademyHost.BuildTriggers({Text}): {E}", text, ex.Message);
+                    url = null;
+                }
+            }
+            rows.Add(url != null ? (object)new { text, audio = url } : new { text, audio = (string?)null });
+        }
+        return rows.ToArray();
+    }
+
+    /// <summary>
+    /// Resolve one phrase's whisper clip to a virtual-host url, mirroring
+    /// <c>SubliminalService.FindLinkedAudio</c> / <c>KeywordTriggerService.FindLinkedAudio</c>:
+    /// exact filename match against the case/apostrophe variants first, then a case-insensitive
+    /// directory scan, with the active mod's folder winning over the bundled one.
+    /// </summary>
+    private static string? ResolveTriggerAudioUrl(string text, string? modDir, string? defaultDir)
+    {
+        var clean = (text ?? string.Empty).Trim();
+        if (clean.Length == 0) return null;
+        var variants = new[]
+        {
+            clean,
+            clean.ToUpperInvariant(),
+            clean.ToLowerInvariant(),
+            clean.Replace('\u2019', '\''),
+            clean.Replace('\'', '\u2019'),
+            clean.ToUpperInvariant().Replace('\u2019', '\''),
+        };
+        var exts = new[] { ".mp3", ".wav", ".ogg", ".MP3", ".WAV", ".OGG" };
+
+        foreach (var (dir, host) in new[] { (modDir, "ccp.modaudio"), (defaultDir, "ccp.subaudio") })
+        {
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
+
+            foreach (var v in variants)
+                foreach (var ext in exts)
+                {
+                    var p = Path.Combine(dir, v + ext);
+                    if (File.Exists(p)) return ToAudioUrl(host, Path.GetFileName(p));
+                }
+
+            try
+            {
+                var norm = clean.ToUpperInvariant().Replace('\u2019', '\'');
+                foreach (var f in Directory.GetFiles(dir))
+                {
+                    if (Array.IndexOf(SubAudioExts, Path.GetExtension(f).ToLowerInvariant()) < 0) continue;
+                    var name = Path.GetFileNameWithoutExtension(f).ToUpperInvariant().Replace('\u2019', '\'');
+                    if (name == norm) return ToAudioUrl(host, Path.GetFileName(f));
+                }
+            }
+            catch { /* the scan is best-effort; the exact-match pass already ran */ }
+        }
+        return null;
+    }
+
+    /// <summary>A flat filename on one of the audio origins, escaped the way
+    /// <see cref="ToAssetsUrl"/> escapes an assets path.</summary>
+    private static string ToAudioUrl(string host, string fileName)
+        => "https://" + host + "/" + Uri.EscapeDataString(fileName);
 
     /// <summary>
     /// The persisted flat settings bag (per-game knobs from game manifests) plus
@@ -1254,6 +1383,7 @@ internal static class ArcademyHostService
         ["ec_chip_clock"] = "Time left",
         ["ec_chip_len"] = "Sequence length",
         ["ec_chip_streak"] = "Streak",
+        ["ec_clear"] = "Echo held: {n}",
         ["ec_decoy_tell"] = "Not this one",
         ["ec_end_accuracy"] = "Accuracy",
         ["ec_end_best"] = "Longest echo",
@@ -1279,6 +1409,8 @@ internal static class ArcademyHostService
         ["ec_key_pad4"] = "Pad 4",
         ["ec_key_pad5"] = "Pad 5",
         ["ec_key_pad6"] = "Pad 6",
+        ["ec_late"] = "Too late",
+        ["ec_miss"] = "Miss - again",
         ["ec_msg_bell_warn"] = "Last of the class.",
         ["ec_msg_clear"] = "Clean. One longer now.",
         ["ec_msg_decoy_warn"] = "One of them lies tonight. Do not echo it.",
@@ -1296,14 +1428,25 @@ internal static class ArcademyHostService
         ["ec_near_miss"] = "So nearly",
         ["ec_pad_aria"] = "Pad {n}",
         ["ec_pad_words"] = "Pad faces",
-        ["ec_pad_words_hint"] = "Pads wear a word from your pool, or a plain glyph only.",
+        ["ec_pad_words_hint"] = "Pads wear one of your triggers, a plain glyph, or your own media.",
+        ["ec_phase_aria"] = "Whose turn it is",
+        ["ec_phase_listen"] = "Listen...",
+        ["ec_phase_over"] = "Class over",
+        ["ec_phase_ready"] = "Sit down",
+        ["ec_phase_yours"] = "Your turn",
         ["ec_retake"] = "Retake",
         ["ec_ring_aria"] = "The pads",
         ["ec_royal"] = "The whole melody",
+        ["ec_stamp_clear"] = "HELD",
+        ["ec_stamp_late"] = "LATE",
+        ["ec_stamp_miss"] = "MISS",
+        ["ec_step_aria"] = "Step {n}",
+        ["ec_steps_aria"] = "The sequence, step by step",
         ["ec_taunt_ghost"] = "This one. Surely this one.",
         ["ec_taunt_label"] = "Read it again. Or do not.",
         ["ec_taunt_slow"] = "Slower than you were.",
         ["ec_taunt_stall"] = "Still there?",
+        ["ec_this_one"] = "This one",
         // ---- INSTANT RECALL (ir_) - games/instant-recall/lex.js IR_LEX
         ["ir_almost"] = "ALMOST",
         ["ir_answer_hint"] = "Tap an answer, or press 1-4.",

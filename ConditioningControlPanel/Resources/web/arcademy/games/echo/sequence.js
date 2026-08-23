@@ -115,7 +115,30 @@ export const PLAYTEST = Object.freeze({
   CLEAR_HOLD_MS_REDUCED: 520,
   FAIL_HOLD_MS: 1250,
   FAIL_HOLD_MS_REDUCED: 700,
-  REVEAL_MS: 620,
+  /** THE REVEAL after a miss: the pad you needed holds lit, wearing the
+   *  "this one" halo, long enough to actually be read (owner verdict B). */
+  REVEAL_MS: 700,
+
+  /** THE HAND-OFF (owner verdict A): the beat between the room's turn and
+   *  yours. The ring sweeps bright, every pad pulses once, one chime. */
+  HANDOFF_MS: 260,
+  HANDOFF_MS_REDUCED: 160,
+  /** How long each pad's hand-off pulse holds. */
+  HANDOFF_PULSE_MS: 180,
+  /** THE ROUND-CLEAR SWEEP: a ring flourish, one pad after another. */
+  SWEEP_STEP_MS: 70,
+  SWEEP_LIT_MS: 320,
+
+  /** THE TRIGGER CLIP (owner verdict C): the player's own whisper audio for
+   *  the phrase a pad wears, UNDER the pad's note - never instead of it and
+   *  never louder. `LEVEL` is the request the engine then clamps; `MAX_MS`
+   *  truncates a long clip so a fast sequence does not smear. */
+  CLIP_LEVEL: 0.3,
+  CLIP_MAX_MS: 1200,
+  CLIP_FADE_MS: 180,
+  /** The clip bus. `voice` is where the app's own whispers belong, so the
+   *  player's voice slider owns them. */
+  CLIP_BUS: 'voice',
   END_HOLD_MS: 2400,
   END_HOLD_MS_REDUCED: 1300,
   STALL_TICK_MS: 500,

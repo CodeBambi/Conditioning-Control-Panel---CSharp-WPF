@@ -108,6 +108,15 @@
  *                          emits a duck request under DTRH's .4/.25/.15 policy,
  *                          scaled by the player's duckDepth cap
  *   duckMs?: number
+ *   pitch?: 0.5..2         pass-through; shell/audio.js owns the clamp
+ *   url?: string           A CLIP: a same-origin ccp.* media url the mixer plays
+ *                          through the bus INSTEAD of synthesising `name`. The
+ *                          level is still this call's clamped one, so a clip can
+ *                          never outrun the channel. A host that cannot play it
+ *                          falls back to the `name` recipe.
+ *   key?: string           the clip's VOICE SLOT: a re-fire on the same key cuts
+ *                          the one still playing (no pile-up on a fast sequence)
+ *   maxMs?, fadeMs?: number  truncate + fade the clip (default 1200 / 180)
  * }) -> { kind, name, level, duck }
  *
  * sustain('row_drift', {

@@ -32,7 +32,23 @@ export const EC_LEX = Object.freeze({
 
   /* ---- the per-game setting -------------------------------------------- */
   ec_pad_words: 'Pad faces',
-  ec_pad_words_hint: 'Pads wear a word from your pool, or a plain glyph only.',
+  ec_pad_words_hint: 'Pads wear one of your triggers, a plain glyph, or your own media.',
+
+  /* ---- THE TURN (the phase banner + the step strip) --------------------- */
+  ec_phase_listen: 'Listen...',
+  ec_phase_yours: 'Your turn',
+  ec_phase_ready: 'Sit down',
+  ec_phase_over: 'Class over',
+  ec_phase_aria: 'Whose turn it is',
+  ec_steps_aria: 'The sequence, step by step',
+  ec_step_aria: 'Step {n}',
+  ec_clear: 'Echo held: {n}',
+  ec_miss: 'Miss - again',
+  ec_late: 'Too late',
+  ec_this_one: 'This one',
+  ec_stamp_miss: 'MISS',
+  ec_stamp_late: 'LATE',
+  ec_stamp_clear: 'HELD',
 
   /* ---- HUD chips (aria labels; the numbers themselves are not strings) -- */
   ec_chip_len: 'Sequence length',
