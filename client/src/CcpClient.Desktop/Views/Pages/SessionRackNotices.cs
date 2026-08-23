@@ -78,7 +78,7 @@ public static class SessionRackNotices
     /// (§9 D7's rule: absent rather than greyed, and named rather than silently missing).</summary>
     public const string Absences =
         "Not here yet: the session editor, custom and imported sessions, the rack's filter, sort "
-        + "and search, the end-of-session recap and history, pause, and the XP award.";
+        + "and search, pause, and the XP award.";
 
     /// <summary>
     /// The icon cell — upstream's, including its fallback for a session that carries none

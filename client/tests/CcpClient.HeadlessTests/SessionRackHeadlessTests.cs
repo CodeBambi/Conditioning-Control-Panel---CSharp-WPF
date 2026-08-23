@@ -66,11 +66,11 @@ public class SessionRackHeadlessTests
         return new Boot(host, window, clock);
     }
 
-    private static T Descendant<T>(MainWindow window, string name) where T : Control =>
+    private static T Descendant<T>(Window window, string name) where T : Control =>
         window.GetVisualDescendants().OfType<T>().FirstOrDefault(c => c.Name == name)
         ?? throw new InvalidOperationException($"no {typeof(T).Name} named '{name}' in the mounted page");
 
-    private static void Click(MainWindow window, Control control, MouseButton button = MouseButton.Left)
+    private static void Click(Window window, Control control, MouseButton button = MouseButton.Left)
     {
         control.BringIntoView();
         window.UpdateLayout();
@@ -89,7 +89,7 @@ public class SessionRackHeadlessTests
         Click(window, Descendant<RadioButton>(window, "RowScriptedSession"));
     }
 
-    private static string TextOf(MainWindow window, string name) =>
+    private static string TextOf(Window window, string name) =>
         Descendant<TextBlock>(window, name).Text ?? string.Empty;
 
     // =====================================================================================
@@ -416,6 +416,167 @@ public class SessionRackHeadlessTests
             StringComparison.Ordinal);
 
         await boot.Host.ShutdownAsync();
+    }
+
+    // =====================================================================================
+    //  what the user sees when it ends
+    // =====================================================================================
+
+    [AvaloniaFact]
+    public async Task WhenTheSessionENDSTheRecapIsUP_AndItIsBuiltFromTheRunThatJustHappened()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+
+        Click(window, Descendant<RadioButton>(window, "SessionRowMorningDrift"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
+
+        // NOTHING IS UP WHILE IT RUNS. Upstream's recap is raised by the media log's LogReady and by
+        // nothing else (MainWindow/MainWindow.xaml.cs:373-378), so a session in progress has no
+        // recap over it.
+        boot.Clock.Advance(TimeSpan.FromMinutes(29));
+        Assert.Null(window.Recap.CurrentRecap);
+
+        // Upstream's own completion path: the tick that reaches the duration ends the session
+        // (Services/Session/SessionEngine.cs:512-517). Nobody presses anything.
+        boot.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.False(boot.Run.Running);
+
+        var recap = window.Recap.CurrentRecap;
+        Assert.NotNull(recap);
+        Assert.True(recap.IsVisible);
+        Assert.Equal("morning_drift", recap.Log.SessionId);
+        Assert.True(recap.Log.Completed);
+
+        // Upstream's headline pair for a finished run (Windows/SessionCompleteWindow.xaml.cs:80-83).
+        Assert.Equal("Good Girl!", TextOf(recap, "Headline"));
+        Assert.Equal("\U0001F305 Morning Drift Completed", TextOf(recap, "Subtitle"));
+        Assert.Equal("Morning Drift", TextOf(recap, "SessionName"));
+        Assert.Equal("30:00", TextOf(recap, "Duration"));
+
+        // Nothing played: this build's flash and video modules never came due on the real clock in
+        // this test, so the recap shows upstream's empty-media sentence (en.json:2791) and no count.
+        Assert.True(Descendant<TextBlock>(recap, "NoMedia").IsVisible);
+        Assert.Empty(TextOf(recap, "MediaCount"));
+        Assert.Empty(Descendant<StackPanel>(recap, "MediaList").Children);
+
+        // The two refusals are ON THE WINDOW, not merely in a constant.
+        Assert.Contains("never a name or a path", TextOf(recap, "NamesNotice"), StringComparison.Ordinal);
+        Assert.Contains("No XP", TextOf(recap, "AwardsNotice"), StringComparison.Ordinal);
+
+        Click(recap, Descendant<Button>(recap, "CloseButton"));
+        Assert.Null(window.Recap.CurrentRecap);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task AnABORTEDRunGetsARecapToo_AndOnlyONERecapIsEverUp()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+
+        // Upstream shows the recap for BOTH endings (Services/Session/SessionEngine.cs:420-423) and
+        // the headline is the whole difference.
+        StartMorningDrift(window);
+        boot.Clock.Advance(TimeSpan.FromMinutes(4));
+        Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
+
+        var first = window.Recap.CurrentRecap;
+        Assert.NotNull(first);
+        Assert.False(first.Log.Completed);
+        Assert.Equal("Session Ended Early", TextOf(first, "Headline"));
+        Assert.Equal("\U0001F305 Morning Drift", TextOf(first, "Subtitle"));
+        Assert.Equal("04:00", TextOf(first, "Duration"));
+
+        // A second run ends with the first recap still on screen. Upstream keeps exactly one -
+        // "two runs ending in quick succession would stack two live cards. Keep exactly one"
+        // (MainWindow/MainWindow.Presets.cs:1690-1692).
+        StartMorningDrift(window);
+        boot.Clock.Advance(TimeSpan.FromMinutes(7));
+        Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
+
+        var second = window.Recap.CurrentRecap;
+        Assert.NotNull(second);
+        Assert.NotSame(first, second);
+        Assert.False(first.IsVisible);
+        Assert.Equal("07:00", TextOf(second, "Duration"));
+        Assert.Equal(2, window.Recap.RecapCount);
+
+        Click(second, Descendant<Button>(second, "CloseButton"));
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task TheRecentSessionsButtonOpensTheHistory_AndARowREOPENSThatRunsRecap()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenTheSessionsRow(window);
+
+        // One run long enough to be kept (30 minutes is past the 30-second floor,
+        // Services/Session/SessionLogService.cs:24, :94) and one deliberately not - a four second
+        // abort with nothing on screen is the accidental start upstream refuses to keep (:22-23).
+        StartMorningDrift(window);
+        boot.Clock.Advance(TimeSpan.FromMinutes(30));
+        Assert.False(boot.Run.Running);
+        Click(
+            window.Recap.CurrentRecap!,
+            Descendant<Button>(window.Recap.CurrentRecap!, "CloseButton"));
+
+        StartMorningDrift(window);
+        boot.Clock.Advance(TimeSpan.FromSeconds(4));
+        Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
+        Click(
+            window.Recap.CurrentRecap!,
+            Descendant<Button>(window.Recap.CurrentRecap!, "CloseButton"));
+
+        // Upstream's door button (MainWindow/MainWindow.Presets.cs:1440).
+        Click(window, Descendant<Button>(window, "ScriptedSessionHistoryButton"));
+
+        var history = window.Recap.CurrentHistory;
+        Assert.NotNull(history);
+        Assert.True(history.IsVisible);
+        Assert.Single(history.Rows);
+        Assert.True(history.Rows[0].Completed);
+        Assert.Equal("1 sessions", TextOf(history, "HistoryCount"));
+        Assert.False(Descendant<TextBlock>(history, "EmptyLine").IsVisible);
+        Assert.Equal("🌅 Morning Drift", TextOf(history, "SessionHistoryTitle0"));
+        Assert.Contains("30:00", TextOf(history, "SessionHistoryDetail0"), StringComparison.Ordinal);
+        Assert.Contains("0 videos · 0 images", TextOf(history, "SessionHistoryDetail0"), StringComparison.Ordinal);
+        Assert.Equal("Completed", TextOf(history, "SessionHistoryStatus0"));
+
+        // The row reopens THAT run in the same recap window the session's own end raised - upstream's
+        // second caller (Windows/SessionLogHistoryWindow.xaml.cs:46-50).
+        Click(history, Descendant<Button>(history, "SessionHistoryRow0"));
+        var reopened = window.Recap.CurrentRecap;
+        Assert.NotNull(reopened);
+        Assert.Equal("morning_drift", reopened.Log.SessionId);
+        Assert.Equal("30:00", TextOf(reopened, "Duration"));
+        Assert.Equal("Good Girl!", TextOf(reopened, "Headline"));
+
+        Click(reopened, Descendant<Button>(reopened, "CloseButton"));
+        Click(history, Descendant<Button>(history, "CloseButton"));
+        Assert.Null(window.Recap.CurrentHistory);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    /// <summary>The four gestures a start really takes, so no fact here reaches past the surface to
+    /// call Start().</summary>
+    private static void StartMorningDrift(MainWindow window)
+    {
+        Click(window, Descendant<RadioButton>(window, "SessionRowMorningDrift"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionStartButton"));
+        Click(window, Descendant<Button>(window, "ScriptedSessionConfirmButton"));
+        Assert.True(window.Session.Scripted.Running);
     }
 
     /// <summary>

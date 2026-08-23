@@ -1,3 +1,4 @@
+using CcpClient.Desktop.Session;
 using CcpClient.Desktop.Views.Pages;
 using CcpVerify;
 using Xunit;
@@ -50,7 +51,7 @@ public class ScriptedSessionPresentationTests
     public void EverySessionCheckClaimsPresentationVerified()
     {
         var checks = SessionChecks();
-        Assert.Equal(4, checks.Count);
+        Assert.Equal(6, checks.Count);
         Assert.All(checks, check => Assert.Equal(CheckManifest.EvidencePresentation, check.EvidenceClass));
     }
 
@@ -69,7 +70,11 @@ public class ScriptedSessionPresentationTests
             .ToArray();
 
         Assert.Equal(
-            ["session-row/easy", "session-row/hard", "session-start/idle", "session-start/running"],
+            [
+                "session-history/kept", "session-history/not-kept",
+                "session-row/easy", "session-row/hard",
+                "session-start/idle", "session-start/running",
+            ],
             pairs);
     }
 
@@ -97,8 +102,9 @@ public class ScriptedSessionPresentationTests
             ("the running session button (session-start.running, :364)", 0xFF, 0x6B, 0x6B),
             ("the selected rail door (RadioButton.door:checked, :69)", 0xE0, 0x66, 0xFF),
             ("the module panel ground (Border.module, :122)", 0x1B, 0x16, 0x22),
-            ("the notice ground (Border.notice, :129)", 0x24, 0x1E, 0x2A),
+            ("the notice ground (Border.notice, :129) and the history plate", 0x24, 0x1E, 0x2A),
             ("the rack ground (Border.rack, :117)", 0x19, 0x14, 0x1F),
+            ("the selected rack row and the history row card (:102, Button.history-row)", 0x2A, 0x21, 0x30),
         ];
 
         var checks = SessionChecks();
@@ -145,6 +151,11 @@ public class ScriptedSessionPresentationTests
             ("session-row-hard-stripe", 0.000, 1.000),
             ("session-start-idle-fill", 0.000, 1.000),
             ("session-start-running-fill", 0.000, 1.000),
+            // Measured 2026-08-24 on the two real history captures: each scored 2352/2352 EXACT on
+            // its own and 0/2352 on the other, where the only difference between the two runs is
+            // that one session was left running for 34 seconds and the other for 0.
+            ("session-history-kept-row-fill", 0.000, 1.000),
+            ("session-history-not-kept-plate", 0.000, 1.000),
         ];
 
         var checks = SessionChecks();
@@ -181,6 +192,8 @@ public class ScriptedSessionPresentationTests
             ("session-row-hard-stripe", 0x57, 0xD9, 0xA3),      // the Easy row's stripe
             ("session-start-idle-fill", 0xFF, 0x6B, 0x6B),      // the button while a session runs
             ("session-start-running-fill", 0xD0, 0x5C, 0xE8),   // the button before one does
+            ("session-history-kept-row-fill", 0x24, 0x1E, 0x2A),     // the empty plate, where the row is not
+            ("session-history-not-kept-plate", 0x2A, 0x21, 0x30),    // the row card, where the plate is not
         ];
 
         // The cardinality pin the vacuous-shape ledger asks for: a loop is the only assertion in
@@ -206,6 +219,8 @@ public class ScriptedSessionPresentationTests
             ("session-row-hard-stripe", 0xFF, 0x8A, 0x4C),
             ("session-start-idle-fill", 0xD0, 0x5C, 0xE8),
             ("session-start-running-fill", 0xFF, 0x6B, 0x6B),
+            ("session-history-kept-row-fill", 0x2A, 0x21, 0x30),
+            ("session-history-not-kept-plate", 0x24, 0x1E, 0x2A),
         ];
 
         // The same cardinality pin, for the same reason.
@@ -257,6 +272,63 @@ public class ScriptedSessionPresentationTests
         Assert.InRange(script.IndexOf("run gate:", StringComparison.Ordinal), 0, read);
         Assert.InRange(script.IndexOf("confirm gate:", StringComparison.Ordinal), 0, read);
         Assert.InRange(script.IndexOf("rack gate:", StringComparison.Ordinal), 0, read);
+    }
+
+    /// <summary>
+    /// THE HISTORY PAIR'S OWN GATES, and they carry more than the others because the two captures
+    /// are the same window in the same place: what makes them different is a RULE, and the rule is
+    /// read off the running product before any pixel.
+    ///
+    /// <para>The retention gate parses the elapsed time out of the stop confirmation's own line and
+    /// refuses a <c>kept</c> capture whose run was under 30 seconds — or a <c>not-kept</c> capture
+    /// whose run was over it. Without it, a machine slow enough to spend 30 seconds between two
+    /// clicks would photograph a row and call it the empty state.</para>
+    ///
+    /// <para>The recap gate is the only evidence in this repository that the Session Complete
+    /// window really opens on a real desktop: it reads the window's headline, the session it names,
+    /// its MM:SS duration cell, both of its refusals and its empty-media line, out of a SECOND
+    /// top-level window that a headless frame cannot produce.</para>
+    ///
+    /// <para><b>Honest limit, the same one the run gate has: this is LEXICAL.</b> It proves the
+    /// gates have not been deleted. What proves they work is the run that failed by name when the
+    /// recap could not be clicked — the shell was HWND_TOPMOST, so the press landed on the shell —
+    /// and the run before that, which found an owned Avalonia window is a UIA DESCENDANT of its
+    /// owner rather than a sibling of it.</para>
+    /// </summary>
+    [Fact]
+    public void TheHistoryCapturesReadTheRetentionRuleAndTheRecapBeforeAnyPixel()
+    {
+        var script = CaptureScriptCode();
+        foreach (var needle in new[]
+        {
+            "ScriptedSessionHistoryButton", "SessionRecapHeadline", "SessionRecapDuration",
+            "SessionRecapNamesNotice", "SessionRecapAwardsNotice", "SessionRecapNoMedia",
+            "SessionHistoryCount", "SessionHistoryEmpty", "SessionHistoryStatus0", "SessionHistoryRow0",
+            "SessionHistoryHeader",
+        })
+        {
+            Assert.Contains(needle, script, StringComparison.Ordinal);
+        }
+
+        // The two refusals are read off the WINDOW, not restated by the script.
+        Assert.Contains("never a name or a path", script, StringComparison.Ordinal);
+        Assert.Contains("No XP", script, StringComparison.Ordinal);
+
+        // The rule itself: each state refuses the wrong side of the floor by name.
+        Assert.Contains("would not be kept", script, StringComparison.Ordinal);
+        Assert.Contains("would be kept", script, StringComparison.Ordinal);
+        Assert.Contains(
+            $"-lt {(int)ScriptedSessionLogStore.PersistenceMinDuration.TotalSeconds}",
+            script,
+            StringComparison.Ordinal);
+
+        var read = script.IndexOf("CopyFromScreen", StringComparison.Ordinal);
+        Assert.InRange(script.IndexOf("retention gate:", StringComparison.Ordinal), 0, read);
+        Assert.InRange(script.IndexOf("recap gate:", StringComparison.Ordinal), 0, read);
+        Assert.InRange(script.IndexOf("history gate:", StringComparison.Ordinal), 0, read);
+
+        // And the derived cell is cross-checked against the one state that has a real row.
+        Assert.Contains("the history list does not start where the plate says it does", script, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -1,0 +1,86 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Views.SessionHistoryWindow"
+        Title="Recent Sessions"
+        Width="560" Height="560"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#FF141018">
+  <!--
+    RECENT SESSIONS — upstream's Windows/SessionLogHistoryWindow.xaml(.cs), opened by the door
+    button (MainWindow/MainWindow.Presets.cs:1440, Views/Tabs/PresetsTabView.xaml:646-651). It
+    lists the retained logs newest first and reopens any of them in the same recap window the
+    session's own end put up (SessionLogHistoryWindow.xaml.cs:46-50).
+
+    TWENTY is the whole list: the store keeps at most that many files and reads at most that many
+    (Services/Session/SessionLogService.cs:20, :125, :260-268). Upstream's filter, sort and search
+    belong to the rack rather than to this window and neither has them.
+  -->
+  <Window.Styles>
+    <Style Selector="Border.plate">
+      <Setter Property="Background" Value="#FF241E2A" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="Button.history-row">
+      <Setter Property="Background" Value="#FF2A2130" />
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.history-row:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#FF36305A" />
+      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+    </Style>
+    <Style Selector="Button.history-close">
+      <Setter Property="Background" Value="#FF2A2130" />
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="24,8" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="20">
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+      <TextBlock Grid.Column="0" x:Name="Header"
+                 AutomationProperties.AutomationId="SessionHistoryHeader"
+                 Foreground="#FFD05CE8" FontSize="20" FontWeight="Bold"
+                 Text="Recent Sessions" />
+      <TextBlock Grid.Column="1" x:Name="HistoryCount"
+                 AutomationProperties.AutomationId="SessionHistoryCount"
+                 Foreground="#FFE8E0EE" Opacity="0.7" FontSize="12"
+                 VerticalAlignment="Center" Text="" />
+    </Grid>
+
+    <Button DockPanel.Dock="Bottom" x:Name="CloseButton"
+            Classes="history-close"
+            HorizontalAlignment="Right"
+            Margin="0,12,0,0"
+            AutomationProperties.AutomationId="SessionHistoryCloseButton"
+            AutomationProperties.Name="Close"
+            Content="Close" />
+
+    <Border Classes="plate">
+      <Panel>
+        <TextBlock x:Name="EmptyLine"
+                   AutomationProperties.AutomationId="SessionHistoryEmpty"
+                   Foreground="#FFE8E0EE" Opacity="0.6" FontSize="12" FontStyle="Italic"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   TextWrapping="Wrap" IsVisible="False" Text="" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel x:Name="HistoryList"
+                      AutomationProperties.AutomationId="SessionHistoryList"
+                      Spacing="4" />
+        </ScrollViewer>
+      </Panel>
+    </Border>
+  </DockPanel>
+</Window>

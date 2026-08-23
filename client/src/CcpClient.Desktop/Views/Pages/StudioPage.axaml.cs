@@ -84,6 +84,7 @@ public partial class StudioPage : UserControl
     /// one built here, for the reason <c>MainWindow</c> gives about the engine: two runs would
     /// borrow the user's dials twice and give them back once.</summary>
     private readonly ScriptedSessionRun _scripted;
+    private readonly SessionRecapLaunch _recap;
 
     private readonly List<(RadioButton Row, ScriptedSession Session)> _scriptedRows = [];
     private ScriptedSession? _scriptedSelection;
@@ -108,14 +109,22 @@ public partial class StudioPage : UserControl
     /// the engine never touches. It is reached here rather than rebuilt, so the switch this panel
     /// offers and the gate the composition root resolved are the same object.
     /// </param>
+    /// <param name="recap">
+    /// The ONE session-recap and session-history launch path
+    /// (<see cref="SessionRecapLaunch"/>), built by the shell because the windows it opens are
+    /// owned by the shell window and a page is not one — the same reason
+    /// <paramref name="loom"/> arrives already built.
+    /// </param>
     public StudioPage(LoomLaunch loom, SessionParticipant session, SessionScheduler scheduler,
-        Haptics.HapticParticipant haptics)
+        Haptics.HapticParticipant haptics, SessionRecapLaunch recap)
     {
         ArgumentNullException.ThrowIfNull(loom);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(scheduler);
         ArgumentNullException.ThrowIfNull(haptics);
+        ArgumentNullException.ThrowIfNull(recap);
         InitializeComponent();
+        _recap = recap;
         _scheduler = scheduler;
         _haptics = haptics;
 
@@ -365,6 +374,17 @@ public partial class StudioPage : UserControl
         // An ending session hands the dials back, so the panels above have to re-read them: that
         // is the whole visible half of the restore, and it is the same repaint a quick-toggle does.
         _scripted.Ended += _ => OnSessionChanged();
+
+        // THE RECAP, AND IT IS DRIVEN OFF THE LOG RATHER THAN OFF THE END OF THE SESSION.
+        // Upstream states the reason where it makes the same choice: "SessionEngine raises LogReady
+        // AFTER it fires SessionCompleted, so OnSessionCompleted handles XP awarding only - the
+        // dialog is shown from this hook" (MainWindow/MainWindow.xaml.cs:373-378). A recap wired to
+        // `Ended` would be racing the write of the very log it renders, and would render the log of
+        // a session that had not been finalized. It fires for COMPLETION AND ABORT alike, because
+        // the log does (Services/Session/SessionLogService.cs:95-101 — the persist is inside an if,
+        // the raise is outside it).
+        session.MediaLog.LogReady += log => _recap.ShowRecap(log);
+        ScriptedSessionHistoryButton.Click += (_, _) => _recap.ShowHistory();
 
         LoadDialsFromPreset();
         Refresh();
