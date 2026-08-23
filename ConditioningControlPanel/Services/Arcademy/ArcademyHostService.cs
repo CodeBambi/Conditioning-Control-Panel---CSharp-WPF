@@ -1908,6 +1908,8 @@ internal static class ArcademyHostService
         ["enroll_sort_2"] = "Yours goes right. Everything else goes left. The ring closes while you decide.",
         ["enroll_sort_3"] = "Sort your own things quickly enough and you stop asking why they are yours.",
         ["game_sort"] = "Sort",
+        ["sort_jackpot"] = "JACKPOT",
+        ["sort_record_near"] = "ONE OFF YOUR BEST",
         // ---- ANOMALY (an_) - games/anomaly/lex.js AN_LEX
         ["an_almost"] = "ALMOST",
         ["an_bell"] = "Time.",
