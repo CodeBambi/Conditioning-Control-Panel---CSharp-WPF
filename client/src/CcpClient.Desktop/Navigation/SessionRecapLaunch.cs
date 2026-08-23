@@ -23,12 +23,37 @@ namespace CcpClient.Desktop.Navigation;
 /// <para>The history window is a singleton for the same reason and refocuses rather than opening a
 /// second (upstream's is modal, <c>MainWindow.Presets.cs:1445</c>, so a second is impossible
 /// there).</para>
+///
+/// <para><b>NO RECAP IS OWED ON THE APP-CLOSE PATH, and that is a decision this port had to make
+/// alone.</b> Upstream never faces the question: its scripted stop is not in a teardown slot, so a
+/// session that is still running when the app quits simply dies with the process and no
+/// <c>LogReady</c> is raised at all. This port deliberately stops the run in the reserved pre-drain
+/// slot, so that closing the app mid-session cannot persist the session's dials over the user's
+/// (<see cref="Session.SessionParticipant.FlushAsync"/>) — and that stop finalises the log and
+/// raises <c>LogReady</c> on a shell that has already closed. Three facts decide it:</para>
+/// <list type="number">
+/// <item><b>The user asked the app to quit.</b> A recap is a card to read and dismiss; producing
+/// one out of a close gesture answers a question nobody asked and resurrects a window they just
+/// dismissed.</item>
+/// <item><b>It could not be read even if it opened.</b> The lifetime is
+/// <c>ShutdownMode.OnMainWindowClose</c> and teardown runs from <c>Exit</c> with
+/// <c>ShutdownAsync().GetAwaiter().GetResult()</c> on the UI thread (<c>App.axaml.cs</c>), so a
+/// window shown from inside it never pumps a frame. "Shown" would be a lie told in a log line.</item>
+/// <item><b>Nothing is lost.</b> <see cref="ScriptedSessionLogStore.Complete"/> writes the file
+/// SYNCHRONOUSLY before it raises <c>LogReady</c>, so the run the user just closed out of is on
+/// disk and is the newest row under Studio's <b>Recent sessions</b> the next time they open the
+/// app — reachable, and readable, which is more than the card would have been.</item>
+/// </list>
+/// <para>So the ask is refused BEFORE a window is constructed, and the diagnostic line says
+/// DECISION rather than failure. The try/catch below is untouched and deliberately not widened: it
+/// caught this for weeks and is exactly why nobody saw it.</para>
 /// </summary>
 public sealed class SessionRecapLaunch
 {
     private readonly ScriptedSessionLogStore _store;
     private readonly Window _owner;
     private readonly Action<string> _log;
+    private bool _shellClosed;
 
     /// <param name="store">The log store the session writes into and the history reads back.</param>
     /// <param name="owner">The shell window every one of these is owned by, as upstream owns its
@@ -46,6 +71,12 @@ public sealed class SessionRecapLaunch
         _store = store;
         _owner = owner;
         _log = log;
+
+        // The shell's close is the ONLY signal that distinguishes "a session ended" from "a session
+        // ended because the app is going away". Latched from the window's own event rather than read
+        // off visibility at the moment of the ask: by the time LogReady arrives the lifetime has
+        // already exited, and a hidden window and a closed one are not the same thing.
+        _owner.Closed += (_, _) => _shellClosed = true;
     }
 
     /// <summary>
@@ -83,6 +114,18 @@ public sealed class SessionRecapLaunch
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(owner);
         RecapCount++;
+
+        if (_shellClosed)
+        {
+            // The DECISION, stated as one. Same content-free shape as the shown line below — a
+            // duration, an outcome and a COUNT, never a name — and it names where the run went so
+            // the line is actionable rather than an apology.
+            _log("session recap: not shown — the app is closing, so the run of "
+                + $"{log.Duration.TotalSeconds:0}s ({(log.Completed ? "completed" : "stopped early")}, "
+                + $"{log.Media.Count} media entries) is left in Recent sessions rather than opened "
+                + "over a shell that is already gone");
+            return null;
+        }
 
         CloseRecap();
         try

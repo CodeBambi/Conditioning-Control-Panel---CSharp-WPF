@@ -383,7 +383,13 @@ public sealed class SessionParticipant : IBackgroundParticipant
             // WPF wraps the tick's dial writes in Dispatcher.Invoke (MainWindow.StartStop.cs:504).
             // Here only the half that touches a LIVE surface goes through the dispatch; the persisted
             // half is synchronous so a restore survives a teardown whose dispatcher is already down.
-            Dispatch);
+            Dispatch,
+            // THE STAND-DOWN'S ONE WIRE (MainWindow/MainWindow.StartStop.cs:492). It is a closure
+            // rather than the object because the ramp is composed HERE, above, and the scripted run
+            // below it — and the null test is upstream's own `_sessionEngine?.IsRunning == true`
+            // rather than an ordering assumption: a tick that somehow arrived between these two
+            // lines reads "no session", which is the truth at that instant.
+            () => Scripted is { Running: true });
 
         // The first two modules whose output is not on the screen at all. They take the ONE
         // shared audio presence and their own clip folder under the same user-media root every other
