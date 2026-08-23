@@ -220,8 +220,8 @@
 //     path-qualified CCP.Core citation) is still credited to shipping AND is invisible to
 //     the counter. The counter is a floor on the erasure, never a ceiling.
 //   - NEITHER REVIEW MODE writes anything except the opt-in `--out <path>` target. A generated
-//     report committed into the tree is the next thing to rot. `--regenerate` is the sole
-//     exception and it still writes nothing without `--write`, which is rejected on its own.
+//     report committed into the tree is the next thing to rot. `--regenerate` is the sole exception:
+//     no INVENTORY byte without `--write` (rejected alone), and its report obeys `--out` (:1692-1695).
 //   - It does not pick a candidate when a basename is ambiguous, and it does not treat a
 //     CCP.* path as the shipping tree without labelling it.
 
@@ -1348,7 +1348,7 @@ export function runRegenerate({ repoRoot, since, until, inventoryPath, write = f
             `could-not-run condition rather than a zero to record. Nothing was written.`,
         );
       }
-      const code = status.get(entry.path);
+      const code = status.get(entry.path); // the refusal below is unreachable: :443 and :466 share range + pathspec
       if (!code) {
         throw new DetectorError(
           `${entry.path} has a numstat row over ${sinceSha}..${untilSha} but no --name-status row at the ` +

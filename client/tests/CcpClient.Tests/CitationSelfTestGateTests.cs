@@ -63,13 +63,15 @@ public sealed partial class CitationSelfTestGateTests
     /// gate; F1-F14 are here because the board's acceptance is F1-F24 on the floor and they carried
     /// the identical unguarded limit. F25-F29 are the REGENERATE mode — the only one that writes the
     /// inventory — and they are anchored for the sharper reason: a deleted write fact leaves a
-    /// writer loose on a tracked document with nothing watching what it moves. Updating this list IS
-    /// the review friction when a fact is legitimately retired.</summary>
+    /// writer loose on a tracked document with nothing watching what it moves. F30-F32 are that same
+    /// reason applied to the writer's REFUSALS and its one counted ceiling, which were each measured
+    /// deletable while the script stayed green. Updating this list IS the review friction when a fact
+    /// is legitimately retired.</summary>
     private static readonly string[] AnchoredFactIds =
     [
         "F1", "F2", "F2b", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14",
         "F15", "F16", "F17", "F18", "F19", "F20", "F21", "F22", "F23", "F24",
-        "F25", "F26", "F27", "F28", "F29",
+        "F25", "F26", "F27", "F28", "F29", "F30", "F31", "F32",
     ];
 
     /// <summary>The subject the negative-path facts mutate. F16 is the moved class, whose reason
@@ -88,7 +90,9 @@ public sealed partial class CitationSelfTestGateTests
     /// finite so a genuinely wedged node fails loudly instead of hanging the host.
     /// <para>Re-measured at 20.4 s over 30 fixture repositories (node v24.5.0, 2026-08-23) when
     /// F25-F29 added the regenerate mode's five. The window is unchanged: adding facts moved the
-    /// honest duration DOWN on this machine, so nothing here was widened to buy room.</para>
+    /// honest duration DOWN on this machine, so nothing here was widened to buy room. Re-measured
+    /// again at 22.4 s over 33 fixture repositories (node v24.5.0, 2026-08-23) with F30-F32; the
+    /// window is still unchanged.</para>
     /// </summary>
     private static readonly TimeSpan SelfTestWindow = TimeSpan.FromMinutes(3);
 

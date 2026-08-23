@@ -54,6 +54,7 @@ import {
   NEEDLE_CLASS,
   REASON,
   REGEN_CLASS,
+  rewriteChangedAtSync,
   runDetector,
   runNeedleReview,
   runRegenerate,
@@ -1116,5 +1117,189 @@ test("F29: a regenerated inventory leaves DELTA-MISMATCH silent — the two mode
     const again = runRegenerate({ repoRoot: fx.root, write: true });
     assert.equal(again.summary.moved, 0);
     assert.equal(again.summary.written, false, "an inventory that already agrees with git is not rewritten");
+  });
+});
+
+// ============ F30-F32 the regenerate mode's NAMED refusals and its one COUNTED ceiling
+//
+// F25-F29 pin what the mode COMPUTES and what it WRITES. They do not pin the four places it
+// refuses to run or counts what it could not do, and three of those four were measured DELETABLE
+// against a fully green suite: the rename counter (:1407-1410) could return nothing, the BINARY
+// refusal (:1344-1350) could be `if (false)`, and the writer's own re-parse-and-compare
+// (:1383-1401) could be `if (false)`, each leaving 30 of 30 facts passing. That is exactly the
+// shape F11/F12/F13 (the default mode's three refusals) and F19 (its gap counter) exist to
+// prevent, so the same standard applies here. The fourth — a numstat row with no name-status row
+// at the same path (:1352-1358) — is left uncounted on purpose: both git calls share a range and
+// a pathspec, so no fixture reaches it. That reasoning lives in its comment, not in a fact that
+// could only assert vacuously.
+
+test("F30: an entry RENAMED INTO its recorded path regenerates to null AND is named in the summary — the mode's one ceiling is counted, never silent", () => {
+  withFixtureRepo((fx) => {
+    // The subject starts at a DIFFERENT path and is moved onto the inventory's recorded path
+    // inside the window. Measured on this fixture shape: plain `git diff --numstat` keys that row
+    // by its combined path (`0\t0\t...Services/{Old.cs => Renamed.cs}`) while `--name-status`
+    // keys it `R100` by the DESTINATION, so there is no numstat row at the destination and the
+    // entry regenerates to null.
+    fx.write("ConditioningControlPanel/Services/Old.cs", "a\nb\nc\nd\ne\nf\ng\nh\n");
+    fx.write("ConditioningControlPanel/Services/Plain.cs", "a\n");
+    fx.sln();
+    const since = fx.commit("base");
+    // Rename DETECTION is git's own default and the ceiling only exists while it is on, so the
+    // fixture pins it repo-locally instead of inheriting whatever the machine's global config says.
+    execFileSync("git", ["-C", fx.root, "config", "diff.renames", "true"], { stdio: ["ignore", "pipe", "pipe"] });
+    fs.renameSync(
+      path.join(fx.root, "ConditioningControlPanel", "Services", "Old.cs"),
+      path.join(fx.root, "ConditioningControlPanel", "Services", "Renamed.cs"),
+    );
+    fx.write("ConditioningControlPanel/Services/Plain.cs", "a\nb\n");
+    const until = fx.commit("head");
+    const plain = fx.numstat(since, until, "ConditioningControlPanel/Services/Plain.cs");
+    const sync = fx.commitDate(until);
+
+    const renamed = "ConditioningControlPanel/Services/Renamed.cs";
+    fx.inventory({
+      schemaVersion: 1,
+      baseline: baseline(since, until),
+      entries: [
+        {
+          path: renamed,
+          tier: 1,
+          citedBy: [],
+          changedAtSync: { sync: "1999-01-01", status: "M", add: 3, del: 1 },
+          verdict: "reviewed at the fixture sync, no parity impact",
+        },
+        { path: "ConditioningControlPanel/Services/Plain.cs", tier: 1, citedBy: [], changedAtSync: null, verdict: "" },
+      ],
+    });
+
+    const outcome = runRegenerate({ repoRoot: fx.root });
+
+    // Half one: the ceiling is REAL. A recorded delta is dropped from an entry that did change
+    // upstream — it changed under its old name.
+    const dropped = regenRows(outcome, REGEN_CLASS.DROPPED);
+    assert.equal(dropped.length, 1, "the rename destination has no numstat row at its own path");
+    assert.equal(dropped[0].path, renamed);
+    assert.equal(dropped[0].regenerated, null);
+
+    // Half two, and it is the half a deleted counter kills silently: the summary NAMES the entry
+    // it just nulled. A 0 here hands the operator a dropped delta and no reason for it, which is
+    // the "silently shrinks the review list" failure this whole file exists to prevent.
+    assert.deepEqual(outcome.summary.renameDestinations, [renamed]);
+    const report = formatRegenerateReport(outcome);
+    assert.match(report, /RENAME DESTINATION in this window: 1/);
+    assert.ok(report.includes(`      ${renamed}`), "counting them is not enough — the report must NAME them");
+
+    // The control: an ordinary modification in the SAME window regenerates normally and is not
+    // swept into the rename count.
+    const added = regenRows(outcome, REGEN_CLASS.ADDED);
+    assert.equal(added.length, 1);
+    assert.equal(added[0].path, "ConditioningControlPanel/Services/Plain.cs");
+    assert.deepEqual(added[0].regenerated, { sync, status: "M", add: plain.add, del: plain.del });
+  });
+});
+
+test("F31: a BINARY numstat row at an entry's path is a could-not-run condition, never a zero to record", () => {
+  withFixtureRepo((fx) => {
+    fx.write("ConditioningControlPanel/Services/B1.cs", "plain text\n");
+    fx.sln();
+    const since = fx.commit("base");
+    // REACHABILITY, not a hypothetical row shape: a .cs carrying a NUL byte is BINARY to git, and
+    // `git diff --numstat` prints `-\t-\t<path>` for the change. The fact is only non-vacuous
+    // because this fixture actually produces that row — the refusal below fires on nothing else.
+    fx.write("ConditioningControlPanel/Services/B1.cs", "plain" + String.fromCharCode(0) + "text\n");
+    const until = fx.commit("head");
+
+    fx.inventory({
+      schemaVersion: 1,
+      baseline: baseline(since, until),
+      entries: [
+        {
+          path: "ConditioningControlPanel/Services/B1.cs",
+          tier: 1,
+          citedBy: [],
+          changedAtSync: null,
+          verdict: "reviewed at the fixture sync, no parity impact",
+        },
+      ],
+    });
+    const before = fx.inventoryBytes();
+
+    assert.throws(
+      () => runRegenerate({ repoRoot: fx.root, write: true }),
+      /has a BINARY numstat row/,
+      "an inventory entry names a WPF source file, so `-` add/del is a broken run, not a delta",
+    );
+    assert.equal(fx.inventoryBytes(), before, "a refused regeneration writes nothing");
+
+    // WHY IT MUST REFUSE RATHER THAN RECORD WHAT IT READ, and why no downstream guard would catch
+    // it: `Number("-")` is NaN, JSON.stringify turns NaN into `null`, so the writer's own
+    // re-parse-and-compare (:1383-1401) compares EQUAL with `"add": null, "del": null` on BOTH
+    // sides. MEASURED by removing the refusal on this fixture: the run does not fail, it reports
+    // written = true and leaves `"add": null, "del": null` in the inventory it just wrote.
+    assert.equal(JSON.stringify({ add: Number("-") }), '{"add":null}');
+  });
+});
+
+test("F32: value spans out of step with the entry order are REFUSED by the writer's own re-parse, and nothing reaches disk", () => {
+  withFixtureRepo((fx) => {
+    fx.write("ConditioningControlPanel/Services/W1.cs", "a\nb\nc\n");
+    fx.write("ConditioningControlPanel/Services/W2.cs", "a\n");
+    fx.sln();
+    const since = fx.commit("base");
+    fx.write("ConditioningControlPanel/Services/W1.cs", "a\nX\nY\nc\n");
+    // W2 is deliberately untouched in the window, so its regenerated value is null.
+    const until = fx.commit("head");
+    const w1 = fx.numstat(since, until, "ConditioningControlPanel/Services/W1.cs");
+    const sync = fx.commitDate(until);
+
+    // TWO `"changedAtSync":` keys and TWO entries, so the COUNT guard F28 pins (:1269-1275) is
+    // SATISFIED — and the mapping is still wrong, because one of those keys is not an entry's: it
+    // sits in `baseline`, and the second entry carries no key at all. Counting spans cannot see
+    // this; only re-reading the produced bytes can.
+    const before = [
+      "{",
+      '  "schemaVersion": 1,',
+      '  "baseline": {',
+      `    "merge": "${until}",`,
+      '    "previous": {',
+      `      "merge": "${since}"`,
+      "    },",
+      '    "changedAtSync": null',
+      "  },",
+      '  "entries": [',
+      "    {",
+      '      "path": "ConditioningControlPanel/Services/W1.cs",',
+      '      "tier": 1,',
+      '      "citedBy": [],',
+      '      "changedAtSync": null,',
+      '      "verdict": "ok"',
+      "    },",
+      "    {",
+      '      "path": "ConditioningControlPanel/Services/W2.cs",',
+      '      "tier": 2,',
+      '      "citedBy": [],',
+      '      "verdict": "ok"',
+      "    }",
+      "  ]",
+      "}",
+      "",
+    ].join("\n");
+    fx.rawInventory(before);
+
+    // The surgical writer CANNOT see the misalignment. Driven directly — it is exported at :1267
+    // for exactly this — it writes the entry's regenerated delta into `baseline`, the one record this
+    // mode swears it never touches, and nulls the entry the delta belonged to.
+    const delta = { sync, status: "M", add: w1.add, del: w1.del };
+    const misaligned = JSON.parse(rewriteChangedAtSync(before, [delta, null]));
+    assert.deepEqual(misaligned.baseline.changedAtSync, delta, "the first span is baseline's, not the entry's");
+    assert.equal(misaligned.entries[0].changedAtSync, null, "so every value lands one span early");
+
+    // Which makes the re-parse-and-compare the ONLY thing between that and a tracked document.
+    assert.throws(
+      () => runRegenerate({ repoRoot: fx.root, write: true }),
+      /did not reproduce the intended inventory/,
+      "a rewrite that fell out of step with the entry order is a could-not-run condition",
+    );
+    assert.equal(fx.inventoryBytes(), before, "never a partial write — not one byte");
   });
 });
