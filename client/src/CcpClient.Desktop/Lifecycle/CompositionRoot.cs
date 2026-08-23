@@ -221,6 +221,16 @@ public sealed class CompositionRoot
         var store = new PersistenceStore<DemoSettings>(
             infra.OwnerFor("Persistence"), infra.Log, SettingsPathFactory(),
             DemoSettings.CurrentSchemaVersion, [new DemoMigrationV0ToV1()]);
+        // The MOTION preference, registered second for the same reason the demo store is
+        // registered first: it is a settings store, so its phase-3 load must complete before
+        // anything that reads it. Its readers are the phase-4 hosted surfaces (five WebView2
+        // environment sites) and the System page's picker, so second is early enough with room to
+        // spare — but a settings store below a consumer participant is the ordering bug the
+        // contract's rule 1 exists to prevent, and this is the position that cannot become one.
+        var motion = new PersistenceStore<Motion.MotionSettingsDocument>(
+            infra.OwnerFor("MotionSettings"), infra.Log,
+            Path.Combine(Path.GetDirectoryName(SettingsPathFactory())!, Motion.MotionSettingsDocument.FileName),
+            Motion.MotionSettingsDocument.CurrentSchemaVersion);
         // The haptic participant is CONSTRUCTED here, above the session, because the session
         // is constructed AGAINST its limb — and construction starts nothing (contract §4.4),
         // so hoisting it changes no behaviour at all. It is still REGISTERED last, below, which is
@@ -243,6 +253,7 @@ public sealed class CompositionRoot
         return
         [
             store,
+            motion,
             new HeartbeatParticipant(infra.OwnerFor("Heartbeat"), infra.UiDispatch),
             // demo.status-ticker: registered AFTER the store — phase-3 start order
             // IS the restore-then-start ordering (its start reads the restored flag).
@@ -360,6 +371,9 @@ public sealed class CompositionRoot
         // Persistence contract §11: the store's flush is wired into the host's reserved
         // pre-drain slot. A custom participants factory without a store gets no flush.
         var store = participants.OfType<PersistenceStore<DemoSettings>>().FirstOrDefault();
+        // The motion preference flushes in the same slot. A user who switched motion off on
+        // the way out must not find it back on at the next launch.
+        var motion = participants.OfType<PersistenceStore<Motion.MotionSettingsDocument>>().FirstOrDefault();
         // The DTRH slot stores flush in the same reserved pre-drain slot.
         var slotStores = participants.OfType<Features.Dtrh.DtrhSaveSlots>().FirstOrDefault();
         // The companion's memory store flushes in the same slot (contract §11).
@@ -429,8 +443,8 @@ public sealed class CompositionRoot
 
         return new ApplicationHost(
             log, participants, trace, infra.Registry, infra.UiDispatch,
-            preDrainFlush: store is null && slotStores is null && companion is null && session is null
-                && scheduler is null && haptics is null
+            preDrainFlush: store is null && motion is null && slotStores is null && companion is null
+                && session is null && scheduler is null && haptics is null
                 ? null
                 : async () =>
                 {
@@ -440,6 +454,7 @@ public sealed class CompositionRoot
                     // be the worst possible place to lose the rest of the sequence.
                     if (haptics is not null) await haptics.ShutdownStopAsync().ConfigureAwait(false);
                     if (store is not null) await store.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
+                    if (motion is not null) await motion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (slotStores is not null) await slotStores.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (companion is not null) await companion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (session is not null) await session.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);

@@ -243,8 +243,10 @@ public partial class IntakeHostWindow : Window
         {
             wv2.UserDataFolder = DtrhProfileLock.WebView2ProfileDir("intake");
             // :123 parity — the binaural bed starts with no gesture (spike W10 verified class).
-            wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
-            _host.LogDiagnostic("intake: WebView2 UserDataFolder set (browser_data_intake parity); autoplay-policy=no-user-gesture-required");
+            // The motion switch is space-joined on, as upstream joins it (ChaosWebViewHost.cs:832-833).
+            var motionArgument = Motion.HostedMotion.BrowserArgument(_host, "intake", _host.LogDiagnostic);
+            wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required" + " " + motionArgument;
+            _host.LogDiagnostic($"intake: WebView2 UserDataFolder set (browser_data_intake parity); autoplay-policy=no-user-gesture-required; {motionArgument}");
         }
     }
 

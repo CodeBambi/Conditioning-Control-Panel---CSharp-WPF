@@ -637,6 +637,18 @@
       "reason": "File.Exists/Directory.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion; a missing file FAILS, never silences (mechanical per-use proof in record.md Step 3)"
     },
     {
+      "key": "CcpClient.Tests/MotionLevelTests.cs::MotionArgumentChokePointGuardTests.EveryHostedSurface_RoutesThroughTheOneMotionArgumentHelper",
+      "path": "CcpClient.Tests/MotionLevelTests.cs",
+      "line": 205,
+      "method": "MotionArgumentChokePointGuardTests.EveryHostedSurface_RoutesThroughTheOneMotionArgumentHelper",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 \u2014 the guard never skips by design (a missing directory FAILS). The per-surface Assert.True(File.Exists(path)) in the second half is the same shape and the same intent: a hosted surface that vanished from the list FAILS rather than being quietly walked past."
+    },
+    {
       "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.ConcurrentWrites_Serialized_NoInterleave_LatestStateWins",
       "path": "CcpClient.Tests/PersistenceTests.cs",
       "line": 153,

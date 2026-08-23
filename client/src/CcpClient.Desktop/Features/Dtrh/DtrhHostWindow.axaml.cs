@@ -634,8 +634,11 @@ public partial class DtrhHostWindow : Window
             wv2.UserDataFolder = DtrhProfileLock.WebView2ProfileDir();
             // WPF parity (DtrhHostService.cs:119-120): the game's audio bed / drift voice
             // must start without a click; spike W10 verified the flag end-to-end.
-            wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required";
-            _host.LogDiagnostic("dtrh: WebView2 UserDataFolder set; autoplay-policy=no-user-gesture-required");
+            // The motion switch is appended the same way upstream appends it, space-joined onto
+            // the surface's own arguments (ChaosWebViewHost.cs:832-833).
+            var motionArgument = Motion.HostedMotion.BrowserArgument(_host, "dtrh", _host.LogDiagnostic);
+            wv2.AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required" + " " + motionArgument;
+            _host.LogDiagnostic($"dtrh: WebView2 UserDataFolder set; autoplay-policy=no-user-gesture-required; {motionArgument}");
         }
         else if (args is Avalonia.Platform.GtkWebViewEnvironmentRequestedEventArgs gtk)
         {

@@ -92,6 +92,10 @@ public static class HarnessEntryPoints
         new("--avcodec-hw=none", EntryPointDisposition.NotAStartupFlag),
         new("--autoplay-policy=no-user-gesture-required", EntryPointDisposition.NotAStartupFlag),
         new("--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion", EntryPointDisposition.NotAStartupFlag),
+        // The hosted-page motion switches (Motion/MotionSettings.cs). Chromium command-line
+        // arguments handed to a WebView2 environment, never to this process.
+        new("--force-prefers-reduced-motion", EntryPointDisposition.NotAStartupFlag),
+        new("--force-prefers-no-reduced-motion", EntryPointDisposition.NotAStartupFlag),
         new("--label=ccp-client", EntryPointDisposition.NotAStartupFlag),
     ];
 
