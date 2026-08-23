@@ -581,12 +581,14 @@ public class SchedulerModuleTests
             Assert.True(root.Validate(out _));
             var host = root.Build(new StartupTrace());
 
-            // The haptic sink was registered after this one, so the scheduler is now the
-            // second-from-last participant. Its ORDER relative to the session — the property this
-            // fact is about — is unchanged: it still registers after the session, so phase 3 still
-            // starts it after the session's preset load and teardown still stops it first of the two.
-            var participant = Assert.IsType<SchedulerParticipant>(host.Participants[^2]);
-            Assert.IsType<SessionParticipant>(host.Participants[^3]);
+            // The haptic sink and then the camera capability were registered after this one, so the
+            // scheduler is now the third-from-last participant. Its ORDER relative to the session —
+            // the property this fact is about — is unchanged: it still registers after the session,
+            // so phase 3 still starts it after the session's preset load and teardown still stops it
+            // first of the two. Haptics is still LAST, which is its own load-bearing position.
+            var participant = Assert.IsType<SchedulerParticipant>(host.Participants[^3]);
+            Assert.IsType<SessionParticipant>(host.Participants[^4]);
+            Assert.IsType<CcpClient.Desktop.Camera.CameraParticipant>(host.Participants[^2]);
             Assert.IsType<CcpClient.Desktop.Haptics.HapticParticipant>(host.Participants[^1]);
 
             Assert.IsType<StartupOutcome.Success>(
@@ -853,9 +855,9 @@ public class SchedulerModuleTests
             };
             Assert.True(root.Validate(out _));
             var host = root.Build(new StartupTrace());
-            // The haptic sink was registered after this one; the slot this fact is about is
-            // unchanged and the scheduler still flushes in it.
-            var participant = Assert.IsType<SchedulerParticipant>(host.Participants[^2]);
+            // The haptic sink and the camera capability were registered after this one; the slot
+            // this fact is about is unchanged and the scheduler still flushes in it.
+            var participant = Assert.IsType<SchedulerParticipant>(host.Participants[^3]);
             Assert.IsType<StartupOutcome.Success>(
                 await host.StartParticipantsAsync(TestContext.Current.CancellationToken));
 

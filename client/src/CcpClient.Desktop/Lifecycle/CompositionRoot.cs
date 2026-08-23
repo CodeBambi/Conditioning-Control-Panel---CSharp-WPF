@@ -316,6 +316,24 @@ public sealed class CompositionRoot
             // It is CONSTRUCTED above the session (which takes its limb) and REGISTERED here,
             // last. Registration order is what decides phase-3 start and reverse-order teardown, so
             // the limb and its sink are still released before anything that could drive them.
+            // The CAMERA capability's consent document and enumeration route. Like the sink below
+            // it, it belongs to the APPLICATION rather than to a session — upstream's webcam service
+            // owns "the only VideoCapture handle in the application"
+            // (Services/Webcam/WebcamTrackingService.cs:86-90) — and nothing else in this list reads
+            // its document: its only reader is the capability probe, which runs in the
+            // CapabilityProbes phase after every participant has started, so the persistence
+            // contract's store-before-consumer rule has nothing to order it against.
+            //
+            // It is registered ABOVE the haptic sink rather than below it, and that is deliberate:
+            // participant stop is REVERSE order, and HAPTICS STAYING LAST is load-bearing (a level
+            // left on a device outlives the process, App.xaml.cs:4401-4407). This participant holds
+            // no device, no socket and no handle, so nothing is lost by stopping after it.
+            //
+            // Construction selects an enumeration route and asks it NOTHING; phase 3 loads one file
+            // and asks it nothing. That is the consent contract made structural: restoring settings
+            // is exactly the path client/docs/capability-inventory.md says must never start a camera,
+            // and CameraParticipant.Enumerations stays zero across a whole launch.
+            new Camera.CameraParticipant(infra, Path.GetDirectoryName(SettingsPathFactory())!),
             haptics,
         ];
     }
@@ -393,6 +411,11 @@ public sealed class CompositionRoot
         // (ConditioningControlPanel/App.xaml.cs:4401-4407). A settings write that lost its race would
         // cost a dial; a level that lost its race is still running when the user has closed the app.
         var haptics = participants.OfType<Haptics.HapticParticipant>().FirstOrDefault();
+        // The camera's CONSENT document flushes in the same slot. It is the one file this capability
+        // writes, and a consent a user gave or withdrew on the way out is the last thing it may lose:
+        // a lost grant re-prompts, and a lost WITHDRAWAL leaves a stored agreement the user believes
+        // they revoked.
+        var camera = participants.OfType<Camera.CameraParticipant>().FirstOrDefault();
 
         // Capability contract §3: the demonstrator probes are registered at composition
         // (never run here) and execute as owned operations in the CapabilityProbes phase.
@@ -445,12 +468,30 @@ public sealed class CompositionRoot
             capabilities.Register(HapticCapabilityName, haptics.ProbeSinkAsync);
         }
 
+        // Registers the CAMERA capability for the same reason as the entitlement and haptic ones: the
+        // System page is the ONE place the port reports what it cannot do, and a capability that
+        // refuses every user while staying invisible there is exactly the shape the truthful-capability
+        // contract exists to prevent. Today it refuses EVERY user on BOTH platforms with
+        // camera-no-engine, which is true of the build rather than of anybody's hardware.
+        //
+        // THE PROBE IS GATED, on the engine and then on consent, and the gate is the consent contract
+        // rather than an optimisation: an ungated registration would ask the operating system for a
+        // camera roster on every launch of a default install, on behalf of a user who has not
+        // consented, in a build with nothing that could use the answer. The gate lives on the
+        // participant beside the document it reads, so the root registers it rather than restating it
+        // — one expression, which is what lets a fact assert that no camera was ever asked about
+        // (Camera/CameraParticipant.ProbeAsync).
+        if (camera is not null)
+        {
+            capabilities.Register(Camera.CameraCapability.CapabilityName, camera.ProbeAsync);
+        }
+
         var probeRunner = new CapabilityProbeRunner(infra.Registry.OwnerFor("CapabilityProbes"), capabilities);
 
         return new ApplicationHost(
             log, participants, trace, infra.Registry, infra.UiDispatch,
             preDrainFlush: store is null && motion is null && slotStores is null && companion is null
-                && session is null && scheduler is null && haptics is null
+                && session is null && scheduler is null && haptics is null && camera is null
                 ? null
                 : async () =>
                 {
@@ -461,6 +502,7 @@ public sealed class CompositionRoot
                     if (haptics is not null) await haptics.ShutdownStopAsync().ConfigureAwait(false);
                     if (store is not null) await store.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (motion is not null) await motion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
+                    if (camera is not null) await camera.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (slotStores is not null) await slotStores.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (companion is not null) await companion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (session is not null) await session.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
