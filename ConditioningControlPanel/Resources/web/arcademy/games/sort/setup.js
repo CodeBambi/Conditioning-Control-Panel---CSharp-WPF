@@ -553,23 +553,30 @@ export function createSetupDoor(o) {
       panel.appendChild(g);
     }
 
-    /* the noise starter row: one tap, probed on first pick */
+    /* THE STARTER ROW OFFERS WHAT THE LIBRARY DOES NOT. A starter that is
+     * already a library row was drawn twice on this step - once as an EASY
+     * NOISE chip and again as a MY LIBRARY pill - and the two chips toggled the
+     * same name, so the step asked the same question in two places and answered
+     * itself in both. A sub in the library renders ONLY as its library pill
+     * (which is the richer control: it carries the clip count and the X). */
     if (sideName === 'noise') {
-      panel.appendChild(el('p', 'g-sort-sub-h', t('sort_starter_head')));
-      const g = wireArrows(el('div', 'g-sort-chips'));
-      for (const name of STARTER_NOISE) {
-        const dead = deadStarters.has(lc(name));
-        const busy = probingStarters.has(lc(name));
-        const lib = cat.subLibrary.find((r) => lc(r.name) === lc(name));
-        chip(g, 'r/' + name, hasCI(side.subs, name), () => pickStarter(name, sideName), {
-          disabled: dead || busy,
-          state: dead ? 'dead' : busy ? 'probing' : '',
-          lib: !!(lib && lib.ok === true),
-          title: dead ? t('sort_probe_missing') : '',
-        });
+      const fresh = STARTER_NOISE.filter(
+        (name) => !cat.subLibrary.some((r) => lc(r.name) === lc(name)));
+      if (fresh.length) {
+        panel.appendChild(el('p', 'g-sort-sub-h', t('sort_starter_head')));
+        const g = wireArrows(el('div', 'g-sort-chips'));
+        for (const name of fresh) {
+          const dead = deadStarters.has(lc(name));
+          const busy = probingStarters.has(lc(name));
+          chip(g, 'r/' + name, hasCI(side.subs, name), () => pickStarter(name, sideName), {
+            disabled: dead || busy,
+            state: dead ? 'dead' : busy ? 'probing' : '',
+            title: dead ? t('sort_probe_missing') : '',
+          });
+        }
+        panel.appendChild(g);
+        panel.appendChild(el('p', 'g-sort-hint', t('sort_starter_hint')));
       }
-      panel.appendChild(g);
-      panel.appendChild(el('p', 'g-sort-hint', t('sort_starter_hint')));
     }
 
     /* the library: ORANGE pills, a clip count, and an X that removes the sub
@@ -986,6 +993,11 @@ export function createSetupDoor(o) {
       foot.appendChild(back);
     }
 
+    /* THE SOURCE STEP HAS NO NEXT. It shipped one, permanently disabled, and it
+     * would have done nothing if it were not: picking a door IS the advance.
+     * A dead button on a step is a promise the step never meant to make. */
+    if (step === 'source' && !opt.quickOnly) return null;
+
     const lastStep = step === 'noise' || (step === 'source' && opt.quickOnly);
     const primary = el('button', 'btn primary',
       lastStep ? (opt.quickOnly && step === 'source' ? t('sort_quick_head') : t('sort_play')) : t('sort_next'));
@@ -1001,7 +1013,6 @@ export function createSetupDoor(o) {
         play(buildSetup());
       }
     });
-    if (step === 'source' && !opt.quickOnly) primary.disabled = true;
     foot.appendChild(primary);
     return step === 'source' ? null : primary;
   }
@@ -1054,6 +1065,11 @@ export function createSetupDoor(o) {
     clear(body);
     attr(root, 'data-step', step);
     tutLine.hidden = !teach;
+    /* THE RAIL DESCRIBES THE THREE-STEP WALK, so it only shows on that walk.
+     * On the night-two "same sort" step none of the three is current and none is
+     * done, which drew three dead lamps under the title: a progress rail
+     * reporting no progress through a journey the player is not taking. */
+    rail.hidden = step === 'same';
     for (const key of ['source', 'target', 'noise']) {
       const order = ['source', 'target', 'noise'];
       const here = order.indexOf(step);

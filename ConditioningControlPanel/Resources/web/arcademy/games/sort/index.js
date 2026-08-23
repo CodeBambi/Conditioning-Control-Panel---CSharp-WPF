@@ -979,6 +979,9 @@ export default {
       /* A PASS IS NOT AN ERROR. No chain, no rung, no accuracy: the card sinks
        * under the stack and is dealt again later, and that is the whole of it. */
       S.passQueue.push(Object.assign({}, top.card));
+      /* a sinking card is not the top card either (see flyOut) */
+      setAttr(top.node, 'data-depth', 'x');
+      setAttr(top.node, 'data-gone', '1');
       addCls(top.node, 'is-sink');
       verdictWord(t('sort_pass', 'PASSED'), 'grey');
       cue('whisper', 0.22, { pitch: 0.85 });
@@ -1055,6 +1058,16 @@ export default {
     function flyOut(live, dir, wrong) {
       if (!live) return;
       const px = S.swipe ? S.swipe.flyPx() : 0;
+      /* THE STACK HAS EXACTLY ONE TOP CARD, INCLUDING RIGHT NOW. reseat() seats
+       * the new live[0] at data-depth="0", but the node we are throwing kept
+       * the same attribute for the ~450ms it spends leaving - so for that whole
+       * beat two nodes answered [data-depth="0"], and the one the sheet drew on
+       * top (z-index 3, cursor grab) was the card the player had just finished
+       * with. Anything reading the DOM for "the card I am being timed on" - the
+       * rig, a capture, a probe - got the wrong one. It is not a depth any more
+       * the instant it is thrown. */
+      setAttr(live.node, 'data-depth', 'x');
+      setAttr(live.node, 'data-gone', '1');
       addCls(live.node, 'is-gone');
       if (wrong) addCls(live.node, 'is-wrong');
       delCls(live.node, 'is-held');
@@ -1264,7 +1277,12 @@ export default {
           bus.emit('grab', { card: top ? top.card : null, rung: S.rung });
         },
         onDrag: (d) => {
-          if (!S) return;
+          /* A CARD THAT CANNOT COMMIT DOES NOT ANSWER. The stack is dealt at
+           * INTRO_MS before armTop() arms it, and for that first ~900ms the
+           * hand was live while the class was not: the stamp tracked the finger
+           * and leaned YES while the card itself refused to move or commit. The
+           * gesture is gated on the same armed state everything else is. */
+          if (!S || !S.armed) return;
           const top = S.live[0];
           if (!top) return;
           setVar(top.node, '--sort-dx', d.dx + 'px');
@@ -1274,7 +1292,7 @@ export default {
           bus.emit('drag', { dx: d.dx, side: d.side, alpha: d.alpha, card: top.card });
         },
         onRelease: (r) => {
-          if (!S) return;
+          if (!S || !S.armed) return;
           const top = S.live[0];
           if (!top) return;
           delCls(top.node, 'is-held');
@@ -1290,6 +1308,10 @@ export default {
         },
         onCommit: (c) => { onCommit(c.dir); },
       });
+      /* AND THE HAND STAYS DOWN UNTIL THERE IS A CARD TO PLAY. createSwipe binds
+       * enabled, so without this the pointer and the keys are both live over an
+       * unarmed stack. armTop() is the one thing that lifts it. */
+      S.swipe.enabled(false);
 
       bindKeys();
       buildDecks();

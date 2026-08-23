@@ -48,6 +48,7 @@ export const SORT_CSS = `
   --sort-a-no:0;
   --sort-ring:1;
   --sort-bg-fade:.35;
+  --sort-strip:64px;
   background:radial-gradient(120% 90% at 50% 8%,#232346 0%,var(--sort-navy) 62%,#141428 100%)}
 
 /* ---------------------------------------------------------------- THE WALL */
@@ -57,8 +58,14 @@ export const SORT_CSS = `
 .g-sort-wall.is-bleed{opacity:1;transition:opacity 620ms ease}
 .g-sort-wall-grid{position:absolute;inset:0;display:grid;gap:2px;
   grid-template-columns:repeat(var(--sort-wall-cols,8),1fr);
-  grid-auto-rows:1fr;align-content:start}
+  grid-auto-rows:auto;align-content:start}
+/* A TILE IS SQUARE, AND THE ROW HEIGHT MAY NOT ARGUE. grid-auto-rows:1fr splits
+   the stage's whole height between however few rows have landed, so the first
+   eight cards were 178x400 slabs of cropped media. The column count wall.js
+   solves for is already the near-square one (layout()); aspect-ratio is simply
+   the tile agreeing to it at every count. */
 .g-sort-wall-tile{position:relative;overflow:hidden;border-radius:3px;
+  aspect-ratio:1;
   background:hsl(var(--sort-tile-h,320) 42% 22%)}
 .g-sort-wall-tile.is-wrong{opacity:.4;filter:grayscale(.75)}
 .g-sort-wall-face{position:absolute;inset:0;width:100%;height:100%;
@@ -83,8 +90,8 @@ export const SORT_CSS = `
   background:hsl(var(--sort-card-h-hue,318) 38% 18%);
   border:1px solid var(--sort-line);
   box-shadow:0 18px 44px rgba(0,0,0,.55),0 2px 0 rgba(255,255,255,.05) inset;
-  transform:translate3d(0,calc(var(--sort-depth,0) * 12px),0)
-    scale(var(--sort-scale,1));
+  transform:translate3d(0,calc(var(--sort-card-h) * (1 - var(--sort-scale,1)) / 2
+    + var(--sort-peek,0px)),0) scale(var(--sort-scale,1));
   transition:transform 200ms cubic-bezier(.2,1.4,.4,1),opacity 200ms ease;
   will-change:transform}
 .g-sort-card[data-depth="0"]{z-index:3;cursor:grab}
@@ -94,9 +101,29 @@ export const SORT_CSS = `
   transform:translate3d(var(--sort-dx),0,0) rotate(var(--sort-tilt))
     scale(var(--sort-scale,1))}
 .g-sort-card.is-band{transition:transform 260ms cubic-bezier(.2,1.5,.4,1)}
+/* THE COMMITTED CARD LEAVES, AND IT STOPS BEING THE TOP CARD THE INSTANT IT
+   DOES. index.js strips its data-depth on commit so exactly one node ever
+   answers [data-depth="0"]; this drops the z-index and the grab cursor it was
+   still wearing over the live card either way, and belt and braces is the right
+   amount of braces for a control the player is already touching.
+   THE TRAVEL LIVES HERE. flyOut() writes --sort-dx and --sort-tilt and only the
+   is-held rule ever read them, so a commit used to spring the card back to
+   centre (drag) or sit still (key) and dissolve. It flies now, which is what
+   the 280ms transform transition on this rule was always for. */
 .g-sort-card.is-gone{transition:transform 280ms cubic-bezier(.3,.1,.3,1),opacity 280ms ease;
-  opacity:.15;pointer-events:none}
+  opacity:.15;pointer-events:none;z-index:2;cursor:default;
+  transform:translate3d(var(--sort-dx),calc(var(--sort-card-h) * (1 - var(--sort-scale,1)) / 2
+    + var(--sort-peek,0px)),0) rotate(var(--sort-tilt)) scale(var(--sort-scale,1))}
 .g-sort-card.is-sink{transition:transform 260ms ease,opacity 260ms ease;opacity:0}
+
+/* THE PEEK IS THE WHOLE STACK. Three cards of the SAME box scaled about their
+   centre come out very nearly flush at the bottom - 0.95 of a 470px card gives
+   back 11.75px at each edge, so the old 12px depth offset cancelled itself and
+   the stack was one card. The offset now PAYS THE SCALE BACK first
+   (card-h * (1 - scale) / 2 seats the bottom edges level) and then adds the
+   peek, so what you see below the top card is exactly --sort-peek. */
+.g-sort-card[data-depth="1"]{--sort-peek:10px}
+.g-sort-card[data-depth="2"]{--sort-peek:16px}
 
 /* the face. A loop is a muted video, a still an img, and a card with neither
    is the drawn back: a seeded hue and a soft chevron weave. */
@@ -124,7 +151,13 @@ export const SORT_CSS = `
 .g-sort-stamp.no{right:7%;color:#9FA3C8;transform:rotate(11deg);
   opacity:var(--sort-a-no)}
 .g-sort-glyph{font-size:.86em;line-height:1}
-.g-sort-card.is-gone .g-sort-stamp{opacity:1}
+/* ONE STAMP LEAVES WITH THE CARD, NOT BOTH. A blanket opacity:1 here overrode
+   the per-side vars flyOut() had just written, so every committed card left
+   wearing YES and NO at once - the room answering both ways at the moment it
+   was supposed to answer one. The sides read their own var; flyOut sets the
+   committed one to 1 and the other to 0. */
+.g-sort-card.is-gone .g-sort-stamp.yes{opacity:var(--sort-a-yes)}
+.g-sort-card.is-gone .g-sort-stamp.no{opacity:var(--sort-a-no)}
 .g-sort-card.is-wrong .g-sort-stamp{color:#8B8FAE;text-shadow:none}
 
 /* ----------------------------------------------------------- THE RIPE RING */
@@ -143,7 +176,11 @@ export const SORT_CSS = `
   filter:drop-shadow(0 0 14px rgba(255,240,184,.85))}
 
 /* --------------------------------------------------------------- THE CHROME */
-.g-sort-hud{position:absolute;left:0;right:0;top:0;z-index:4;
+/* THE STRIP OWNS THE TOP 56px (styles.css CLASS RUNNER). .arc-proctor is pinned
+   at top 0 with z-index 30 OVER the class, so a HUD at top 0 is a HUD nobody can
+   read: the chain chip, the nine-pip ladder, the sorted count and the clock all
+   sat behind it. 64px is the number games/impulse-control already uses. */
+.g-sort-hud{position:absolute;left:0;right:0;top:var(--sort-strip,64px);z-index:4;
   display:flex;align-items:center;gap:14px;padding:10px 16px;
   pointer-events:none;font-family:var(--mono,ui-monospace,monospace);
   font-size:clamp(11px,1.5vh,14px);letter-spacing:.08em;text-transform:uppercase}
@@ -205,7 +242,8 @@ export const SORT_CSS = `
   70%{transform:translate3d(-4px,1px,0)}}
 
 /* --------------------------------------------------------- THE RULES SHEET */
-.g-sort-howto{position:absolute;inset:0;z-index:8;display:grid;place-items:center;
+.g-sort-howto{position:absolute;inset:0;z-index:8;display:grid;place-items:safe center;
+  padding:var(--sort-strip,64px) 16px 16px;
   background:rgba(14,14,30,.9)}
 .g-sort-howto-card{width:min(560px,92vw);padding:26px 26px 18px;border-radius:18px;
   background:linear-gradient(180deg,#2A2A50,#1E1E3A);
@@ -239,7 +277,7 @@ export const SORT_CSS = `
 
 /* -------------------------------------------------------------- THE TICKET */
 .g-sort-end{position:absolute;inset:0;z-index:9;display:grid;place-items:safe center;
-  padding:16px 0;overflow:auto;background:rgba(12,12,26,.62)}
+  padding:var(--sort-strip,64px) 0 16px;overflow:auto;background:rgba(12,12,26,.62)}
 .g-sort-ticket{width:min(460px,92vw);border-radius:16px;padding:22px 26px 8px;
   background:linear-gradient(180deg,#2C2C54,#1F1F3C);
   border:1px solid var(--sort-line);box-shadow:0 26px 64px rgba(0,0,0,.62);
@@ -294,6 +332,11 @@ export const SORT_CSS = `
   .g-sort-wall-tile.thud,.g-sort-word.show{animation:none}
   .g-sort-card,.g-sort-card.is-band,.g-sort-card.is-gone,.g-sort-card.is-sink{
     transition:opacity 120ms linear}
+  /* the travel is a TRANSFORM now (see is-gone), so killing the transition is no
+     longer enough: without this the card would teleport a viewport and a half
+     instead of simply fading, which is the one thing this block exists to stop.
+     data-reduced="1" already says the same thing above. */
+  .g-sort-card.is-gone,.g-sort-card.is-sink{transform:none}
   .g-sort-stage.is-shiver{animation:none}
 }
 
