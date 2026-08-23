@@ -60,50 +60,66 @@ and obeyed the stricter document, which was the right call.
 **If you say no**, the entitlement bridge still works from the on-disk token; you lose the server-resolved
 tier, not the feature.
 
-### 2. The haptic dependency
-`task-board.md:34` · the port currently ships "admit nothing"
+### 2. The haptic dependency - ANSWERED, AND NOW BUILT
+the haptic rows of `task-board.md` · this section is kept only so the answer is findable
 
-The blocker is narrower than "haptics". **The two providers do not cost the same:**
+**You admitted BOTH routes on 2026-08-23, and both are now implemented and merged.** Buttplug.io through
+Intiface Central and Lovense through Connect/Remote are driven TOGETHER by a composite sink, which is
+upstream's own shape - its device manager connects every enabled provider concurrently, and its own class
+doc says the old single-active-provider design meant *"a Lovense user could not also drive an Intiface toy"*.
 
-- **Lovense needs zero packages.** An HTTP GET against `http://127.0.0.1:20010` using the runtime's own
-  `HttpClient`, one file plus a keep-alive.
-- **Buttplug needs a package** (`Buttplug` 5.0.1, one reference plus one file), and its .NET 10 compatibility
-  and licence were **read from a source comment, not verified against the package**.
+Two things were decided during the build that you should know about, because both changed user-visible
+behaviour:
 
-So three of the four options are answerable as written; only the Buttplug one needs a check first. Until you
-answer, the capability refuses every user and the panel says so in words a user reads. Everything above the
-device is already built: the effect modules command the haptic limb with your app's own numbers.
+- **The capability probe no longer contacts a server for a feature you have not switched on.** It had been
+  firing an HTTP GET at `127.0.0.1:20010` on *every launch* of a default install, for a feature whose master
+  toggle was off. It is now gated on the same conjunction upstream uses for its own auto-connect.
+- **Both provider flags default OFF**, matching upstream, and the two checkboxes ship with them - so the
+  refusal names a control that exists instead of telling you to tick something that does not.
 
-### 3. For You Feed gaze engines - resolved 2026-08-22
-`task-board.md:25` · implementation and provider admission remain `WIP`
+**What is still owed is yours and it is not code:** install Intiface Central or Lovense Connect, pair a toy,
+tick the route, and report whether a level is felt and whether a stop silences it. Nothing in this
+repository has driven a real toy on any platform, no test opens a socket to a real haptic server, and the
+rows say so.
 
-The owner requires both the current WPF-equivalent local BlazeFace/FaceMesh/Iris pipeline and a
-third-party deep-learning gaze engine. The user chooses the active engine in webcam settings; the
-local WPF-equivalent path is the default until the alternative is admitted.
+### 3. For You Feed gaze - the 2026-08-22 answer stands, and a SECOND blocker was cleared 2026-08-23
+the gaze row of `task-board.md` · nothing further is owed by you here
 
-The selector is not permission to send webcam data anywhere. Before the third-party option can
-become available, its named provider and model, local or remote execution location, commercial
-weight and training-data rights, outbound-data policy, retention, and Windows/Linux support need
-recorded evidence. Each engine has distinct calibration identity and validity; changing engines
-requires selecting a valid calibration or recalibrating. No unavailable engine silently falls back
-or keeps the camera running under a different engine.
+Your 2026-08-22 decision is unchanged: the local BlazeFace/FaceMesh/Iris pipeline is the default, a
+third-party engine is a visible choice only after a documented admission, and the selector is not permission
+to send webcam data anywhere. The third-party side was then closed UNAVAILABLE on 2026-08-23 - every
+mainstream engine fails the commercial-rights bar on TRAINING DATA rather than code licence.
 
-For You Feed's separate remote-media decision is unchanged: its third-party content source and
-the consent that unlocks remote media in Flash, Video, Wallpaper, IntakeHost, and the DTRH asset
-manifest remain distinct from this camera-engine decision.
+**A scoping pass then filed the row BLOCKED on a webcam-capability decision. That was a misreading and the
+row is unblocked.** `capability-inventory.md`'s "Expanding sensors... requires a consent-contract revision
+and owner review" governs EXPANSION BEYOND the contract the same section already writes down - and that
+section already admits the local engine, names it the default, and specifies its full privacy contract
+(memory-only derivatives, audio never opened, camera only after current explicit consent AND an explicit
+start). Implementing as specified executes an existing admission rather than widening a boundary.
 
-### 4. Goon Game, six items
-the Goon Game row of `task-board.md` · this is the port's first outbound network boundary
+**What would still be expansion, named so it cannot be quietly stretched:** any remote or third-party
+engine, any persistence of a frame or derivative, any transmission of anything camera-derived, the
+microphone, or telemetry over camera data.
 
-The port has no outbound network today. Its only `HttpClient` is a loopback probe. So this builds the first
-boundary rather than extending one, and two properties are inherent to the transport rather than defects:
+### 4. Goon Game beyond practice mode - STILL YOURS, AND DELIBERATELY SO
+the Goon Game row of `task-board.md` · the row is `BLOCKED` and says why in its own text
 
-- With no relay server, a successful connection is **direct**, so **each player learns the other's public IP
-  address** — and that composes with a `/join` route that is free and needs no account.
-- A second channel, `goon-media`, carries **your own photos and videos to another person**, not to a service.
+**I was given full authority for the 2026-08-23 session and used it on every other open question. This one I
+declined.** Not for lack of evidence - the census, the four upstream `GOON_*.md` contracts and the shipped
+client tree settle every factual question. It is what the decision opens:
 
-Two of its eight routes are `/report` and `/blocked`, which are **moderation** — explicitly named as
-untouched by your 2026-08-14 authorization. Practice mode, which already ships, needs none of this.
+- It is the port's **first outbound network boundary**. Today the only `HttpClient` here is a loopback probe.
+- With no relay server a successful connection is **direct**, so **each player learns the other's public IP
+  address** - and that composes with a `/join` route that is free and needs no account.
+- A second channel carries **your own photos and videos to another person**, not to a service.
+- Two of the eight routes are `/report` and `/blocked`, which are **moderation** - explicitly left untouched
+  by your 2026-08-14 authorization. Admitting them REVERSES a standing decision rather than making a new one.
+- Hosting is tier-2 gated behind an `X-Auth-Token` header, so it also depends on decision 1 below.
+
+**Practice mode already ships and needs none of it.** So the cost of waiting is zero and the cost of being
+wrong is a home IP address and private media reaching a stranger. A join-as-guest-only subset is the smallest
+thing that could be admitted separately - it needs neither the token nor the moderation routes - but it still
+exposes the guest's IP to the host, so it is a smaller decision, not a free one.
 
 ### 5. The leaderboard
 `task-board.md:29` · smallest of the five
