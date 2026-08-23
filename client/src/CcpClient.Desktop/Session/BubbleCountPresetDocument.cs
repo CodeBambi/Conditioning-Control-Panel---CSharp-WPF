@@ -23,7 +23,10 @@ namespace CcpClient.Desktop.Session;
 /// with no panic-key hook (D112, <c>LockCardWindow.xaml.cs:632</c>). A switch that moved nothing is
 /// the dead dial §9 D7 refuses, so it is not on the panel and not in this file.</para>
 ///
-/// <para><b>Also not here:</b> XP scaling and the level-50 unlock (no progression subsystem), the
+/// <para><b>Also not here:</b> XP scaling and the level-50 unlock. An XP ledger DOES exist now
+/// (<c>Features/Progression/ProgressionLedger</c>) but this module has no completion payout to hand
+/// it, and the level-50 requirement gates nobody in either product
+/// (<c>Features/Progression/LevelUnlocks</c>). Also absent: the
 /// content-pack video source and its decryption (<c>BubbleCountService.cs:551-575</c>), and the
 /// mercy phrase pool (<c>BubbleCountResultWindow.xaml.cs:311-315</c>) — each a subsystem rather
 /// than a dial.</para>
