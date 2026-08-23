@@ -28,6 +28,14 @@ public sealed class GradedRunAwardsDocument
     /// <summary>The schema version this build writes.</summary>
     public const int CurrentSchemaVersion = 1;
 
+    /// <summary>
+    /// The record's file name inside the intake data directory. Named here rather than at the two
+    /// call sites so the writer (<c>Features/Intake/IntakeHostContext.cs</c>) and the read-only
+    /// reader (<see cref="TrainerCard.Read"/>) cannot drift onto two different files — and so a
+    /// message that has to name the file for a user never has to spell it again.
+    /// </summary>
+    public const string FileName = "graded_run_awards.json";
+
     private HashSet<string> _perfectedCategories = new(GradedRunAwards.CategoryComparer);
     private HashSet<string> _awardedIds = new(GradedRunAwards.AwardIdComparer);
 

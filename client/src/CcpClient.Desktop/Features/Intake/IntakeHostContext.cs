@@ -167,7 +167,7 @@ public sealed class IntakeHostContext : IDisposable
         var awardsStore = new PersistenceStore<GradedRunAwardsDocument>(
             host.Registry.OwnerFor("IntakeGradedRunAwards"),
             new LogSinkAdapter(host),
-            Path.Combine(dataDir, "graded_run_awards.json"),
+            Path.Combine(dataDir, GradedRunAwardsDocument.FileName),
             GradedRunAwardsDocument.CurrentSchemaVersion);
         awardsStore.StartAsync(System.Threading.CancellationToken.None).GetAwaiter().GetResult();
         if (awardsStore.LastLoadOutcome is not LoadOutcome.Loaded and not LoadOutcome.Missing)

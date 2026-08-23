@@ -92,6 +92,24 @@ public sealed class IntakeLaunch
         new IntakeLaunchCoordinator(
             _host, _owner, _options.Drive, _options.KillRenderers, EntitlementSource, DataDirectory);
 
+    /// <summary>
+    /// The Trainer Card's PASSIVE read of what the graded runs on this machine have earned
+    /// (<see cref="Progression.TrainerCard"/>).
+    ///
+    /// <para>It lives here because this is the object that already knows both halves of the answer —
+    /// the host and <see cref="DataDirectory"/> — and because the alternative is to prepare the
+    /// session context, which starts three stores, runs the punch-card load repairs and can WRITE a
+    /// healed file (<c>IntakeHostContext.cs:150-158</c>). A card being looked at must not do any of
+    /// that: <see cref="Progression.TrainerCard.Read"/> opens one file, parses it and closes it.</para>
+    ///
+    /// <para>Nothing is cached. The record changes when a run ends, and a card that answered from a
+    /// snapshot taken at startup would show a stale one for the rest of the session.</para>
+    /// </summary>
+    public Progression.TrainerCard ReadTrainerCard() =>
+        Progression.TrainerCard.Read(Path.Combine(
+            IntakeParticipant.ResolveDataDirectory(DataDirectory),
+            Progression.GradedRunAwardsDocument.FileName));
+
     /// <summary>How many times the launch gesture arrived (presses, not runs). The refused page
     /// takes the click, so this rises on refusals too — that is the point, and the same reason
     /// <c>DtrhLaunch.GateArrivals</c> counts them.</summary>

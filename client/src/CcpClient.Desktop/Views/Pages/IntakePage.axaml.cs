@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using CcpClient.Desktop.Features.Intake;
+using CcpClient.Desktop.Features.Progression;
 
 namespace CcpClient.Desktop.Views.Pages;
 
@@ -46,6 +47,41 @@ public partial class IntakePage : UserControl
 
         intake.Decided += Render;
         intake.Faulted += RenderFault;
+
+        // The card's fixed words. They are properties of the BUILD, not of the record, so they are
+        // written once and never re-rendered — and they live as constants on TrainerCard so the
+        // unit suite can hold them to what the build actually is.
+        TrainerCardTitle.Text = TrainerCard.Title;
+        TrainerCardLevelNote.Text = TrainerCard.NoLevelNote;
+        TrainerCardPortraitNote.Text = TrainerCard.NoPortraitNote;
+        TrainerCardTierNote.Text = TrainerCard.NoTierNote;
+        TrainerCardLocalOnlyNote.Text = TrainerCard.LocalOnlyNote;
+
+        // WHEN THE CARD READS THE RECORD, and the bound on it, stated rather than left to be
+        // discovered. Two triggers, both deterministic and both free: every time the page is
+        // mounted (the shell swaps PageHost.Content, so navigating here re-attaches it), and every
+        // gate decision, which is every press of Begin Intake.
+        //
+        // THE BOUND: a run that FINISHES while this page is already mounted does not refresh the
+        // card by itself. The coordinator's FlowEnded is one-shot per coordinator
+        // (IntakeLaunchCoordinator.cs:_flowEnded, an Interlocked latch that never resets), so a
+        // second run's end raises nothing at all and subscribing to it would refresh the card
+        // exactly once per process — worse than a rule a user can predict. Navigating away and
+        // back, or starting another run, shows the current record.
+        AttachedToVisualTree += (_, _) => RenderTrainerCard(intake.ReadTrainerCard());
+        intake.Decided += _ => RenderTrainerCard(intake.ReadTrainerCard());
+    }
+
+    /// <summary>
+    /// Render whatever the record could say. The awards are handed over as the model's own typed
+    /// rows: the page chooses no wording of its own, which is what keeps "could not read" from being
+    /// rendered as "not earned" by a later edit here.
+    /// </summary>
+    private void RenderTrainerCard(TrainerCard card)
+    {
+        TrainerCardRecordNote.Text = card.RecordNote;
+        TrainerCardRecordNote.IsVisible = card.RecordNote.Length > 0;
+        TrainerCardAwards.ItemsSource = card.Awards;
     }
 
     private void Render(IntakePassDecision decision)

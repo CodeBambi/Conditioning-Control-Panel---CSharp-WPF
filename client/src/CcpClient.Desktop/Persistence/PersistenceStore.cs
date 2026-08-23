@@ -82,8 +82,11 @@ public sealed class AtomicWriteHooks
 /// </summary>
 public sealed class PersistenceStore<TModel> : IBackgroundParticipant where TModel : class, new()
 {
-    /// <summary>Store-owned reserved DOM members (contract §1): never model members, never extension data.</summary>
-    private const string SchemaVersionKey = "schemaVersion";
+    /// <summary>Store-owned reserved DOM members (contract §1): never model members, never extension data.
+    /// <see cref="SchemaVersionKey"/> is public because a read-only reader that deliberately does NOT
+    /// take the store (<c>Features/Progression/TrainerCard.Read</c>) still has to look at the same key
+    /// this class writes, and a second literal is how those two drift apart.</summary>
+    public const string SchemaVersionKey = "schemaVersion";
     private const string MigrationJournalKey = "migrationJournal";
 
     private static readonly JsonSerializerOptions JsonOptions = new()

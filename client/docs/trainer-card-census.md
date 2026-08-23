@@ -8,6 +8,22 @@ is named in §6 with its file inventory. Everything the board row actually descr
 the banners, the achievement gating, the leaderboard privacy dialog — sits behind either an absent
 subsystem or an owner decision about what leaves the machine.
 
+**STATUS 2026-08-23 — §6.1'S BUILDABLE UNIT IS BUILT, AND THIS DOCUMENT DID NOT SAY SO.** Commit
+`9057cfa5b` landed `client/src/CcpClient.Desktop/Features/Progression/GradedRunAwards.cs` (293 lines,
+wired end to end at `client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs:553`, 21
+facts in `client/tests/CcpClient.Tests/GradedRunAwardsTests.cs`) AFTER this census was written, and
+amended nothing here. The string `GradedRunAwards` appeared zero times in this document until this
+repair. Corrected below: §3 rows B1, B4, B7, B8, B9; the §3.1 tally; §4's headline and rows C9-C16;
+§6.1; §6.2; §8's first bullet. **And the same wave built the surface that renders it** —
+`client/src/CcpClient.Desktop/Features/Progression/TrainerCard.cs` on
+`client/src/CcpClient.Desktop/Views/Pages/IntakePage.axaml`, which is why B1 moved too. What that
+card deliberately does NOT carry is recorded in §6.2 and in its own remarks: no sharing, export,
+upload or publish path exists in this build, not even as a disabled control. Unchanged and still
+re-derived from the shipping bytes by
+`TrainerCardCensusTests` on every run: §1-§2 (the WPF inventory), §5 (the `honor_roll` defect) and §9
+(the pins). **The evidence method is unchanged too — every "port anchor" cell below is an opened
+`client/src/**` line, and the repair opened them rather than trusting this document's own prose.**
+
 **And the board row's evidence is wrong in a way that a wrong number would not have been.** Four of
 its five counts are arithmetically CORRECT (§1.2). The row is still misleading, because its
 headline number counts a directory that is **96.5% other people's features** — 109 of its 113 (§1.3; 95.6% of the directory as it stands today, §9.5). A wrong number
@@ -165,31 +181,43 @@ kind is not an anchor.
 
 | # | Owner's phrase | WPF evidence (opened) | Required primitive | Port anchor | Label | Platform |
 |---|---|---|---|---|---|---|
-| B1 | Profile rebuilt as a Trainer Card | `MainWindow/MainWindow.ProfileCard.cs` (337 lines) + `Views/Tabs/DiscordTabView.xaml` (1077) | A page that renders a portrait, a name, a level and a stat block from local state | `client/src/CcpClient.Desktop/Views/Pages/SystemPage.axaml.cs` — a real shipped page bound to live state | **PARTIAL on the shipped page precedent** — missing member: **there is no progression model to render.** No XP, level, streak or rank exists anywhere in `client/src` | Windows: unproven — gate: a headed capture of the page. **Linux: unproven** — no WSL distro on this machine (`client/memories/port-status.md:89-93 @ a8d32c219`) |
+| B1 | Profile rebuilt as a Trainer Card | `MainWindow/MainWindow.ProfileCard.cs` (337 lines) + `Views/Tabs/DiscordTabView.xaml` (1077) | A page that renders a portrait, a name, a level and a stat block from local state | `client/src/CcpClient.Desktop/Features/Progression/TrainerCard.cs` + `Views/Pages/IntakePage.axaml` — the card, mounted on the Graded Intake page | **PARTIAL, and the half that landed is the half the port can stand behind.** *Re-derived 2026-08-23:* **no XP, level, streak or rank exists anywhere in `client/src`** — still true, and every `XP` hit in the tree is a comment saying the port does not have one (`Effects/BouncingTextEffect.cs:35`, `Effects/BubbleCountEffect.cs:84`). So the card renders the award ledger and SAYS, in words a user reads, that it has no level, no portrait and no wardrobe, and that an unreadable record is not the same as an empty one. Still missing: the portrait, the name, the level, the pinned badges and the banner — every one of them needs state or bytes this build does not have | Windows: unproven — gate: a headed capture of the page; the headless facts are draw-level only. **Linux: unproven** — no WSL distro on this machine (`client/memories/port-status.md:89-93 @ a8d32c219`) |
 | B2 | 12 hand-made scene banners (3 per mod, card-sized) | `Resources/banners/` = 12 PNG (walk); `MainWindow.ProfileCard.cs` selects one | Show one of twelve fixed images behind the card, chosen by active mod | `client/src/CcpClient.Desktop/CcpClient.Desktop.csproj:50-51` (`dtrh` payload glob) — the linked-read-only mechanism, already shipped four times | **COVERED by the payload-link precedent** — the cheapest item in the inventory | Windows: unproven — gate: headed capture. Linux: unproven — same gate on X11/Wayland |
 | B3 | wardrobe of 60 adornments with a full editor + click-to-pin | `Dialogs/ProfileCustomizeDialog.xaml.cs:88` `BuildPins()`, `:356-370` pin tiles capped at `ProfileCosmetics.MaxPinnedAchievements` (`Models/ProfileCosmetics.cs:83` = 4); `Services/Profile/WardrobeCatalog.cs` (431) | Place, move and remove image adornments on a portrait, and pin up to four badges | `none` — nothing in `client/src` composes user-placed layers over an image, and nothing takes a drag-and-drop | **GAP: a layered image compositor with hit-testable, user-placed items** — (a) primitive: per-item placement + z-order + drag; (b) WPF uses a `Canvas` with `WardrobeStageGeometry` normalised coordinates (`Services/Profile/WardrobeStageGeometry.cs`, 131 lines); (c) the port would have to build the stage, the geometry mapping and the editor | Windows: unproven. Linux: unproven — identical gap on both, no OS interop involved |
-| B4 | earn-it-to-wear-it (wardrobe pieces, guild avatars and badges unlock through achievements) | `Services/Profile/WardrobeCatalog.cs:181-194` `IsUnlockedForCurrentUser` — `RequiredAchievementId` (`:41-43`) then `App.Achievements?.Progress.IsUnlocked(gate)`, **fail-OPEN**: *"gating must never brick the picker"* (`:178-179`) | A predicate that hides an item until a named achievement is earned | `none` — the port has **no achievement subsystem at all** | **GAP: an achievement ledger** — (a) primitive: a persisted set of earned ids with an `IsUnlocked(id)` predicate; (b) WPF uses `AchievementService` (1130 lines) over `%APPDATA%/ConditioningControlPanel/achievements.json` (`Services/Progression/AchievementService.cs:70-74`); (c) the port would have to build the ledger, and 63 of 79 wardrobe items depend on it | Windows: unproven. Linux: unproven — pure logic + a file, so the gap is identical on both |
+| B4 | earn-it-to-wear-it (wardrobe pieces, guild avatars and badges unlock through achievements) | `Services/Profile/WardrobeCatalog.cs:181-194` `IsUnlockedForCurrentUser` — `RequiredAchievementId` (`:41-43`) then `App.Achievements?.Progress.IsUnlocked(gate)`, **fail-OPEN**: *"gating must never brick the picker"* (`:178-179`) | A predicate that hides an item until a named achievement is earned | `client/src/CcpClient.Desktop/Features/Progression/GradedRunAwards.cs:190` — `IsAwarded(id)`, a persisted membership test over `graded_run_awards.json` | **GAP: the wardrobe catalog and its gate.** *Corrected 2026-08-23: this row read "the port has **no achievement subsystem at all**", and that has been false since `9057cfa5b`.* (a) The ledger primitive this row asked for — a persisted earned-id set with an `IsUnlocked(id)` predicate — EXISTS; (b) what is still absent is the catalog side: `RequiredAchievementId` (`Services/Profile/WardrobeCatalog.cs:41-43`) and the fail-OPEN predicate (`:181-194`) over 79 items; (c) the ledger holds two ids, so 63 gated items would resolve against a two-entry set | Windows: unproven. Linux: unproven — pure logic + a file, so the gap is identical on both |
 | B5 | 12 preset blank-subject avatars (3 per mod) | `Resources/cosmetics/avatars/` = 12 PNG, the 12 files the registry does NOT reference (§1.4); `Services/Profile/CosmeticsCatalog.cs` (406) | Offer twelve fixed portraits and remember which one is chosen | `client/src/CcpClient.Desktop/Persistence/PersistenceStore.cs:83` — a generic typed store with typed load outcomes, already shipped | **PARTIAL on persistence** — missing member: no profile document type exists to hold the choice; the store itself is generic and ready | Windows: unproven — gate: headed capture of the picker. Linux: unproven |
 | B6 | a leaderboard **privacy dialog** deciding exactly what is shared | `Dialogs/ProfilePrivacyDialog.xaml(.cs)` (119 lines) hosting `Views/Controls/ProfilePrivacyPanel.xaml.cs` — **11 sharing toggles** at `:43-74` (`ChkDiscordRichPresence`, `ChkShowLevelInPresence`, `ChkShowOnlineStatus`, `ChkShareAchievements`, `ChkShareLevelUps`, `ChkAllowDiscordDm`, `ChkShareProfilePicture`, `ChkPublicShareRealAvatar`, `ChkGoonShareAvatar`, `ChkGoonShareDiscordDm`, `ChkGoonRichPresence`) | Decide, per channel, what of the user's identity and progress other people can see | `none`, **and it may not get one from a lane** | **OWNER-GATED** (§5) — it expands both the network boundary and what is shown to others; `client/docs/capability-inventory.md:70` requires *"a consent-contract revision and owner review"* | Windows: unproven. Linux: unproven. **Neither cell is dischargeable by engineering** |
-| B7 | the "Quiz" section renamed **"Graded runs"**, source-agnostic `OnQuizCompleted` | `Services/GamificationBridge.cs:88` (*"Graded runs (patron: top_of_the_class, teachers_pet, honor_roll, held_back)"*), `:91` subscribe, `:193` unsubscribe, `:578-611` the handler; *"source-agnostic on purpose"* (`:566-567`) | One handler that reads a grade and a category and does not care which surface produced them | `client/src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs:132-159` (`IntakeGraded`) — the grade and category are **computed** | **PARTIAL on the shipped intake seam** — missing member: **nothing subscribes and nothing is raised** (§4) | Windows: unproven. Linux: unproven — pure logic; a unit test covers both equally, which is why no gate is claimed |
-| B8 | `top_of_the_class` at the 90% bar | `Services/GamificationBridge.cs:571`, `:599-600`; bar `Services/Quiz/IntakeHostService.cs:55` `TopMarksPercent = 90.0`, guard `:434` `run.MaxScore > 0 && pct >= TopMarksPercent` | Award once when a run grades at or above 90% of max | `client/src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs:139` `TopMarksPercent = 90.0`, `:147-148` `IsTopMarks` | **PARTIAL on the shipped intake seam** — the predicate is ported verbatim including the `MaxScore > 0` guard; missing member: the award | Windows: unproven. Linux: unproven — pure arithmetic, already unit-pinned by the shipped intake port |
-| B9 | `honor_roll` over **DISTINCT** categories | `Services/GamificationBridge.cs:40` `HonorRollCategories = 3`, `:601-606` the add-and-count | Count distinct perfected categories and award at three | `client/src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs:153-154` `Category(...)` — normalisation only | **PARTIAL on the shipped intake seam** — missing members: the distinct SET, its comparer, and the threshold. **§5.2 is the finding** | Windows: unproven. Linux: unproven |
+| B7 | the "Quiz" section renamed **"Graded runs"**, source-agnostic `OnQuizCompleted` | `Services/GamificationBridge.cs:88` (*"Graded runs (patron: top_of_the_class, teachers_pet, honor_roll, held_back)"*), `:91` subscribe, `:193` unsubscribe, `:578-611` the handler; *"source-agnostic on purpose"* (`:566-567`) | One handler that reads a grade and a category and does not care which surface produced them | `client/src/CcpClient.Desktop/Features/Progression/GradedRunAwards.cs:234` — `RecordGradedRun(bool topMarks, string? category)`, reached from `client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs:553` | **COVERED** since `9057cfa5b`. *Corrected 2026-08-23: this row read PARTIAL, "nothing subscribes and nothing is raised".* The consumer takes a verdict and a category and knows nothing about the producer, which is upstream's own stated property (`Services/GamificationBridge.cs:566-567`). The port carries no static event: the seam is a direct call at `IntakeQuizRun.cs:188`, which is mechanism, not outcome | Windows: unproven. Linux: unproven — pure logic; a unit test covers both equally, which is why no gate is claimed |
+| B8 | `top_of_the_class` at the 90% bar | `Services/GamificationBridge.cs:571`, `:599-600`; bar `Services/Quiz/IntakeHostService.cs:55` `TopMarksPercent = 90.0`, guard `:434` `run.MaxScore > 0 && pct >= TopMarksPercent` | Award once when a run grades at or above 90% of max | `client/src/CcpClient.Desktop/Features/Intake/IntakeQuizRun.cs:139` `TopMarksPercent = 90.0`, `:147-148` `IsTopMarks`, and the award at `Features/Progression/GradedRunAwards.cs:274` `TryAward` | **COVERED** since `9057cfa5b`. *Corrected 2026-08-23: this row read PARTIAL, "missing member: the award".* The predicate stays on the producer exactly as upstream keeps it, and `top_of_the_class` is granted once, membership tested before the mutation (`AchievementService.cs:1115` ordering) | Windows: unproven. Linux: unproven — pure arithmetic, already unit-pinned by the shipped intake port |
+| B9 | `honor_roll` over **DISTINCT** categories | `Services/GamificationBridge.cs:40` `HonorRollCategories = 3`, `:601-606` the add-and-count | Count distinct perfected categories and award at three | `client/src/CcpClient.Desktop/Features/Progression/GradedRunAwards.cs:47` (the persisted set), `:162` (`CategoryComparer`), `:153` (`HonorRollCategories = 3`) | **COVERED** since `9057cfa5b`, and **it does not import §5.2's defect**. *Corrected 2026-08-23: this row read PARTIAL, "missing members: the distinct SET, its comparer, and the threshold".* All three exist, and the comparer is `OrdinalIgnoreCase` where upstream's is the default ordinal one, with consumer-side normalisation at `:208` as the second layer — §5.3's recommendation, taken | Windows: unproven. Linux: unproven |
 | B10 | `held_back` deliberately fail-streak-only | `Services/GamificationBridge.cs:42` `HeldBackFailStreak = 3`, `:592-595`; the deliberateness at `:574-576` (*"An intake has no fail state, so this can only ever come from the classic quiz. Left as-is deliberately (product decision)"*) and again at `Services/Quiz/IntakeHostService.cs:418-420` | Count consecutive failures and award at three — from the classic quiz only | `none` — no fail streak exists in the port | **GAP: a persisted fail-streak counter** — (a) primitive: an integer that survives restart and resets on a pass; (b) WPF keeps it on `ProgressionData.QuizFailStreak`; (c) trivial to build, **but it is dead in this port** because the only ported source can never fail | Windows: unproven. Linux: unproven |
 
 ### 3.1 What the map says overall
 
-- **COVERED: 1 of 10** (B2, the payload link).
-- **PARTIAL: 5 of 10** (B1, B5, B7, B8, B9).
-- **GAP: 3 of 10** (B3, B4, B10).
-- **OWNER-GATED: 1 of 10** (B6).
+*Retallied 2026-08-23 after `9057cfa5b`. The tally when this census was written is kept beside it,
+because the movement is the point: three rows moved, and all three moved for the same commit.*
+
+| | At authoring (2026-08-21) | Today (2026-08-23) |
+|---|---|---|
+| **COVERED** | 1 of 10 (B2) | **4 of 10** (B2, **B7**, **B8**, **B9**) |
+| **PARTIAL** | 5 of 10 (B1, B5, B7, B8, B9) | **2 of 10** (B1, B5) |
+| **GAP** | 3 of 10 (B3, B4, B10) | 3 of 10 (B3, B4, B10) — B4's missing member SHRANK (the ledger landed; the catalog did not) |
+| **OWNER-GATED** | 1 of 10 (B6) | 1 of 10 (B6) — unmoved, and not movable by engineering |
 
 ---
 
 ## 4. What the port already has of the consumer side — member by member
 
-Answered by walking `client/src/` whole, not by reading the board row. **Five of sixteen enumerated
-members are present, and every one of the five is pure arithmetic.** Nothing stateful, nothing
-persisted, nothing that awards.
+Answered by walking `client/src/` whole, not by reading the board row.
+
+**AT AUTHORING (2026-08-21): five of sixteen enumerated members were present, and every one of the
+five was pure arithmetic** — nothing stateful, nothing persisted, nothing that awarded.
+
+**RE-WALKED 2026-08-23: eleven of sixteen are present, and the five that moved are exactly the
+stateful ones.** `9057cfa5b` built the ledger, so "nothing persisted, nothing that awards" is no
+longer true of this port. Three members remain deliberately absent (C6-C8, the static event and its
+args — the port calls the consumer directly, which is mechanism rather than outcome) and two remain
+absent because their behaviour was not built (C10, C12 — the passed branch; §6.2).
 
 | # | Upstream member | Cited | Port | Status |
 |---|---|---|---|---|
@@ -198,21 +226,23 @@ persisted, nothing that awards.
 | C3 | perfect guard `MaxScore > 0 && pct >= bar` | `IntakeHostService.cs:434` | `IntakeQuizRun.cs:147-148` | **PRESENT** |
 | C4 | category normalisation | `IntakeHostService.cs:427-429` | `IntakeQuizRun.cs:153-154` | **PRESENT — verbatim** (§5.1) |
 | C5 | mantra credit `min(affirmed, 5)` | `IntakeHostService.cs:451` | `IntakeQuizRun.cs:158-159` | **PRESENT** |
-| C6 | `QuizService.QuizCompleted` static event | `Services/Quiz/QuizService.cs:29` | — | **ABSENT** |
-| C7 | `QuizService.RaiseQuizCompleted(...)` | `Services/Quiz/QuizService.cs:32-35` | — | **ABSENT** — the port logs instead (`IntakeHostWindow.axaml.cs:541-543`) |
-| C8 | `QuizCompletedEventArgs` | `Services/Quiz/QuizService.cs:133` | — | **ABSENT** |
-| C9 | `OnQuizCompleted` handler | `GamificationBridge.cs:578-611` | — | **ABSENT** |
-| C10 | `TeachersPetPasses = 25` | `GamificationBridge.cs:41` | — | **ABSENT** |
-| C11 | `HonorRollCategories = 3` | `GamificationBridge.cs:40` | — | **ABSENT** |
-| C12 | `HeldBackFailStreak = 3` | `GamificationBridge.cs:42` | — | **ABSENT** |
-| C13 | `ProgressionData.QuizzesPassed` / `QuizFailStreak` | `GamificationBridge.cs:586-593` | — | **ABSENT** |
-| C14 | `AchievementProgress.PerfectedQuizCategories` | `Models/AchievementProgress.cs:169` | — | **ABSENT** |
-| C15 | `Ach.TryUnlockExclusive(id)` | `GamificationBridge.cs:589,595,600,605` | — | **ABSENT** |
-| C16 | `Ach.MarkDirty()` | `GamificationBridge.cs:608` | — | **ABSENT** |
+| C6 | `QuizService.QuizCompleted` static event | `Services/Quiz/QuizService.cs:29` | — | **ABSENT, and deliberately.** The port's seam is a direct call (`IntakeQuizRun.cs:188`); a static event is mechanism, and the outcome it carries is ported |
+| C7 | `QuizService.RaiseQuizCompleted(...)` | `Services/Quiz/QuizService.cs:32-35` | — | **ABSENT, and deliberately** — same reason as C6. *Corrected 2026-08-23: this cell read "the port logs instead"; since `9057cfa5b` the same site RECORDS and then logs what it awarded (`IntakeHostWindow.axaml.cs:553-555`).* |
+| C8 | `QuizCompletedEventArgs` | `Services/Quiz/QuizService.cs:133` | — | **ABSENT, and deliberately** — the two fields the consumer reads travel as parameters (`GradedRunAwards.cs:234`) |
+| C9 | `OnQuizCompleted` handler | `GamificationBridge.cs:578-611` | `Features/Progression/GradedRunAwards.cs:234` `RecordGradedRun` | **PRESENT** since `9057cfa5b` — the perfect branch only; the passed branch is C10/C12/C13 |
+| C10 | `TeachersPetPasses = 25` | `GamificationBridge.cs:41` | — | **ABSENT** — named residue (§6.2); the port awards no id it cannot count toward |
+| C11 | `HonorRollCategories = 3` | `GamificationBridge.cs:40` | `Features/Progression/GradedRunAwards.cs:153` | **PRESENT** since `9057cfa5b` |
+| C12 | `HeldBackFailStreak = 3` | `GamificationBridge.cs:42` | — | **ABSENT** — and unreachable by construction here: the port's only producer emits `passed: true` (§6.2, B10) |
+| C13 | `ProgressionData.QuizzesPassed` / `QuizFailStreak` | `GamificationBridge.cs:586-593` | — | **ABSENT** — both counters; they belong to the passed branch, which was not built |
+| C14 | `AchievementProgress.PerfectedQuizCategories` | `Models/AchievementProgress.cs:169` | `Features/Progression/GradedRunAwards.cs:47` `PerfectedCategories` | **PRESENT, and NOT a copy** — the set carries a named `OrdinalIgnoreCase` comparer (`:162`) where upstream's is the default ordinal one, which is §5.2's defect refused |
+| C15 | `Ach.TryUnlockExclusive(id)` | `GamificationBridge.cs:589,595,600,605` | `Features/Progression/GradedRunAwards.cs:274` `TryAward` | **PRESENT, and UNGATED on purpose.** Upstream refuses unless `App.Patreon?.HasPremiumAccess == true` (`Services/Progression/AchievementService.cs:1107`, gate at `:1116-1120`); all four ids are `IsExclusive = true` (`Models/Achievement.cs:670,680,690,700`). This port has no entitlement AUTHORITY, and reading that absence as a refusal is what `Entitlement/EntitlementOutcome.cs:7-17` forbids — so it grants (owner decision; divergence D228) |
+| C16 | `Ach.MarkDirty()` | `GamificationBridge.cs:608` | `Features/Progression/GradedRunAwards.cs:262` | **PRESENT as the OUTCOME** — upstream's 30 s dirty timer becomes an immediate save, and a run that changed nothing writes nothing |
 
-**The board row's claim that the shipped intake port "computes and logs … but raises nothing" is VERIFIED.** The
-exact seam a next packet attaches to is `client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs:541-543`,
-where the four computed values are written to a diagnostic line and discarded.
+**The board row's claim that the shipped intake port "computes and logs … but raises nothing" was
+VERIFIED when this census was written, and it is NO LONGER TRUE.** The seam it named is
+`client/src/CcpClient.Desktop/Features/Intake/IntakeHostWindow.axaml.cs:553`, and `9057cfa5b`
+attached the consumer there: the verdict reaches `IntakeGraded.Record` before the diagnostic line,
+and the line reports what was awarded (`:555`) instead of discarding four computed values.
 
 ### 4.1 A citation defect inside the port's own product code
 
@@ -307,7 +337,11 @@ Applying plan §12.2 in order: clause 1 fails (there are GAP and OWNER-GATED row
 — a subset of rows is entirely COVERED/PARTIAL and is independently user-observable — so the verdict
 is BUILDABLE-IN-PART and clause 3 is not reached.
 
-### 6.1 The buildable unit, named with its inventory
+### 6.1 The buildable unit, named with its inventory — **BUILT at `9057cfa5b`**
+
+*Status 2026-08-23: this section is no longer a proposal. Every item in the inventory below landed,
+and the "Port code to add" row now reads as what was added. The unit's own honest bound — that it
+writes to a store nothing renders — is what the Trainer Card surface row addresses; see §6.2.*
 
 > **The graded-run award path.** B7 + B8 + B9 as a unit: subscribe the computed verdict that
 > `IntakeGraded` already produces, hold a persisted distinct-category set with an explicit comparer,
@@ -317,7 +351,7 @@ is BUILDABLE-IN-PART and clause 3 is not reached.
 |---|---|
 | Upstream behaviour to port | `Services/GamificationBridge.cs:578-611` — **34 lines**, plus 3 constants at `:40-42` |
 | Port code already present | `IntakeQuizRun.cs:133-159` — 5 of 16 members (§4) |
-| Port code to add | an award ledger with `IsUnlocked(id)`/`TryUnlockExclusive(id)` over the existing `PersistenceStore<TModel>` (`Persistence/PersistenceStore.cs:83`), a distinct-category set with a **named** comparer, and the subscribe at `IntakeHostWindow.axaml.cs:541-543` |
+| Port code ADDED (`9057cfa5b`) | `Features/Progression/GradedRunAwards.cs`, 293 lines: the ledger (`IsAwarded` `:190`, `TryAward` `:274`) over the existing `PersistenceStore<TModel>` (`Persistence/PersistenceStore.cs:83`), the distinct-category set with its **named** comparer (`:47`, `:162`), and the call at `IntakeHostWindow.axaml.cs:553`. 21 facts, `client/tests/CcpClient.Tests/GradedRunAwardsTests.cs` |
 | Assets required | **none** — no banner, no badge art, no wardrobe PNG is needed to award an achievement the port does not yet render |
 | OS interop required | **none.** Cross-platform by construction, headlessly testable |
 | Owner decisions required | **none** — it writes to a store the port already owns and expands no contract (plan §12.1) |
@@ -349,13 +383,13 @@ That is the honest bound on the one soft predicate here.
 | Item | Disposition |
 |---|---|
 | Wardrobe + editor + click-to-pin (B3) | **GAP.** Needs a layered image stage with placement geometry; 79 items, 63 of them gated. |
-| Earn-it-to-wear-it (B4) | **GAP.** Needs the achievement ledger. §6.1 builds the ledger's first consumer, which is why §6.1 is the right first packet. |
+| Earn-it-to-wear-it (B4) | **GAP, and one half of it is now built.** The ledger landed with §6.1 (`GradedRunAwards.cs:190`); what remains is the 79-item catalog and its fail-OPEN predicate (`Services/Profile/WardrobeCatalog.cs:41-43,181-194`). |
 | `held_back` (B10) | **GAP, and dead on arrival.** The only ported source cannot fail. Port the counter only if the classic quiz is ever ported. |
-| Trainer Card page (B1) | **PARTIAL.** Blocked on a progression model — XP, level, streak and rank exist nowhere in `client/src`. |
+| Trainer Card surface (B1) | **PARTIAL, and the honest minimum is BUILT** (`Features/Progression/TrainerCard.cs`, rendered on `Views/Pages/IntakePage.axaml`). XP, level, streak and rank still exist nowhere in `client/src` (re-derived 2026-08-23), so the card shows none of them and says so rather than showing a zero. It is a section on the Graded Intake page rather than a sixth rail door, because `Navigation/ShellRoutes.cs` refuses a door whose destination is nearly empty and one module of real state does not fill a room. |
 | Banners (B2) | **COVERED.** A four-line csproj glob; the cheapest item here. |
 | Preset avatars (B5) | **PARTIAL.** Needs a profile document; the store is generic and shipped. |
 | Leaderboard privacy dialog (B6) | **OWNER-GATED.** §5 of this document's owner section; **never priced.** |
-| `teachers_pet` | Not in the row's phrases; found by the walk. 25 passes, same ledger as §6.1. |
+| `teachers_pet` | Not in the row's phrases; found by the walk. 25 passes, same ledger as §6.1 — **still unbuilt**, because the ledger holds no pass counter (C10/C13) and an award nothing can count toward is worse than an absent one. |
 
 ### 6.3 What the next packet should NOT be
 
@@ -414,8 +448,13 @@ contract. **Q2 and Q3 are the gated pair**, and they are what §7.1 is about.
 
 ## 8. What this census does NOT prove
 
-- **Nothing was built, run, or rendered.** No Trainer Card code exists in `client/`; `client/src/**`
-  was closed to this packet and no product code was written.
+- **Nothing was built, run, or rendered BY THIS CENSUS.** `client/src/**` was closed to the packet
+  that wrote it and no product code was written here. *Corrected 2026-08-23: this bullet also said
+  "No Trainer Card code exists in `client/`", and that stopped being true at `9057cfa5b` — which
+  landed after this document and amended nothing in it. A census that is trusted for what the port
+  does NOT have is exactly the document a later build must come back and amend; this one was not,
+  for two days. Anything below about the port's own tree is a claim about the tree AS OF the date in
+  the line that makes it.*
 - **No headed evidence of any kind.** No window was shown, no frame composited, no pixel compared.
   Every claim above is a claim about *source*.
 - **Linux is unproven for every row without exception.** `wsl.exe --list --verbose` reports no
