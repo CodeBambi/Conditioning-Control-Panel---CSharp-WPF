@@ -76,10 +76,15 @@ const BODY_MS = { bounce: 800, thud: 800, shiver: 900, nod: 1900, droop: 800, sh
  * emi.css owns the keyframes and this file owns how long a move runs, so a
  * shake is SHIVER cut short. It inherits the reduced-motion refusal with it. */
 const BODY_ALIAS = { shake: 'shiver' };
-/* The bubble hangs OFF EMI's right edge (emi.css: right:-5%, max-width:104px),
- * so she needs roughly this multiple of her own width to the right of her left
- * edge or the line runs off the viewport - at which point it flips left. */
+/* The bubble hangs UP OFF EMI's right ear (emi.css: left:58%, bottom:96%,
+ * max-width:104px), so she needs roughly this multiple of her own width to the
+ * right of her left edge or the line runs off the viewport - at which point it
+ * flips to the left ear (.bubble-left). */
 const BUBBLE_REACH = 1.55;
+/* ...and it RISES, so parked within this many px of the top edge there is no
+ * sky for it: it drops below the chin instead (.bubble-low). Sized for the
+ * worst wrapped bark (~5 lines) plus the tail. */
+const BUBBLE_RISE = 96;
 
 /** The persisted blob's key in the C# meta store (core/store.js top-level). */
 export const STORE_KEY = 'emi';
@@ -336,18 +341,20 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     el.style.width = s.w + 'px';
     el.style.left = Math.round(left) + 'px';
     el.style.top = Math.round(top) + 'px';
-    faceBubble(left, s.w, vp.w);
+    faceBubble(left, top, s.w, vp.w);
     return { left, top, s, vp };
   }
   /** THE BUBBLE HANGS OFF HER RIGHT EAR and would run off the right edge of the
    *  window there, so it flips to the left ear instead (`.bubble-left`, styled in
    *  widget.css). Decided from the position, so a drag and a resize both fix it. */
-  function faceBubble(left, w, vw) {
+  function faceBubble(left, top, w, vw) {
     const overRight = left + w * BUBBLE_REACH > vw;
     const room = left - w * (BUBBLE_REACH - 1) > 0;
     // `classList.toggle` is not in every DOM double; add/remove is.
     if (overRight && room) el.classList.add('bubble-left');
     else el.classList.remove('bubble-left');
+    if (top < BUBBLE_RISE) el.classList.add('bubble-low');
+    else el.classList.remove('bubble-low');
   }
 
   /** Record the CURRENT pixel position back into the fractions. */
@@ -634,7 +641,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       const top = clamp(ev.clientY - grabY, DIALS.MARGIN, Math.max(DIALS.MARGIN, vp.h - s.h - DIALS.MARGIN));
       el.style.left = Math.round(left) + 'px';
       el.style.top = Math.round(top) + 'px';
-      faceBubble(left, s.w, vp.w);
+      faceBubble(left, top, s.w, vp.w);
 
       // FLUNG? speed over the dial, sustained. `>.<` while it lasts. setDragFace
       // swallows the repeats, so a sustained fling repaints the canvas ONCE
