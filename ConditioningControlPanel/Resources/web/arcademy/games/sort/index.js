@@ -374,6 +374,9 @@ export default {
         bestRung: S.bestRung, longestChain: S.longestChain,
         heat: S.heat, elapsedMs: S.startedAt ? now() - S.startedAt : 0,
         budgetMs: S.budgetMs, nodes: S.nodes,
+        /* THE WALL (LOT D). Decoration reads it: the surge floods it at rung 8
+         * and the casino banks tokens out of its slots. It is not the ledger. */
+        wall: S.wall,
       };
     }
     async function buildDecks() {
@@ -877,7 +880,11 @@ export default {
       if (S.swipe) S.swipe.enabled(true);
       timers.cancel(S.ringTimer);
       S.ringTimer = timers.every(reduced ? RING_TICK_MS_REDUCED : RING_TICK_MS, ringTick);
-      bus.emit('deal', { card: top.card, rung: S.rung, ringMs: S.ringMs, chain: S.chain });
+      /* THE NODE RIDES THE DEAL (LOT D). A deck that dresses the top card -
+       * the freeze's poster hold, the mirrored doppelganger, the ghost drift,
+       * the lying label - needs the element, and this is the ONE moment the
+       * room can hand it over honestly: the card is armed and it is the top. */
+      bus.emit('deal', { card: top.card, node: top.node, rung: S.rung, ringMs: S.ringMs, chain: S.chain });
     }
     function ringTick() {
       if (!S || !S.armed || halted() || S.over) return;
@@ -1068,7 +1075,12 @@ export default {
       timers.after(flyMs + shrinkMs, () => {
         dropCard(live);
         if (!S || destroyed) return;
-        try { if (S.wall) S.wall.land(card, { wrong: !!wrong }); } catch (e) { /* noop */ }
+        let tile = null;
+        try { if (S.wall) tile = S.wall.land(card, { wrong: !!wrong }) || null; } catch (e) { /* noop */ }
+        /* THE THUD, as an event. The wall slot is where the casino's BANK
+         * token leaves from and where the surge's shudder is felt, and only
+         * this callback knows which tile the card actually landed in. */
+        bus.emit('land', { card, tile, dir, wrong: !!wrong });
       });
     }
 

@@ -308,9 +308,10 @@ html.ae-lite .g-sort-halo{display:none}
 html.ae-lite .g-sort-face{animation:none}
 `;
 
-/** The whole class sheet: the room plus the door (LOT G2's half). */
+/** The whole class sheet: the room, the door (LOT G2) and the decks (LOT D). */
 export function styleText() {
-  return SORT_CSS + '\n' + (typeof SETUP_CSS === 'string' ? SETUP_CSS : '');
+  return SORT_CSS + '\n' + (typeof SETUP_CSS === 'string' ? SETUP_CSS : '')
+    + '\n' + (typeof DECK_CSS === 'string' ? DECK_CSS : '');
 }
 
 /** Inject once per document. An unstyled class is still playable. */
@@ -326,4 +327,263 @@ export function ensureStyle() {
   } catch (e) { return false; }
 }
 
+/* DECK_CSS is deliberately NOT on this object: it is declared BELOW, and an
+   object literal evaluated up here would read it inside its temporal dead zone
+   and take the whole module down. Import it by name. */
 export default { ensureStyle, styleText, SORT_CSS, STYLE_ID };
+
+/* ============================================================================
+ * THE HOUSE RULES SHEET (LOT D). Appended, never woven into SORT_CSS above:
+ * the room's own look is one thing and the three decks that dress it are
+ * another, and a deck that never builds must leave no rule of the room behind.
+ * Everything here is scoped under .g-sort exactly like the room's half, every
+ * node it styles is pointer-events:none, and NOTHING here is ever the thing a
+ * press lands on.
+ *
+ * SAME TRAP, SAME WARNING: no backtick in a CSS comment in this file (37).
+ *
+ * WHO WRITES WHAT
+ *   casino.js    .g-sort-bulbs (inside nodes.halo), .g-sort-cas and its
+ *                children, is-bounce on a card, the stamp GLOW tokens
+ *   pressure.js  is-flood on the stage, is-shudder / is-flood on the wall
+ *                (through wall.flood), nothing else - the surge is the
+ *                ENGINE's effects, not nodes of its own
+ *   trickster.js data-tk-* on a card, data-crooked on a ring box, is-flick on
+ *                the chain chip, and its own ghost node
+ * ==========================================================================*/
+export const DECK_CSS = `
+/* ================================================================== CASINO */
+/* THE MARQUEE. The room already owns the halo (it crawls at rung 0 and chases
+   from 6 off data-chase); the casino hangs the BULBS on it. The ring TURNS as
+   one layer rather than each lamp lighting in sequence, which is the cheap way
+   to buy the same read: the lamps are evenly spaced and identical, so a ring
+   rotating at N degrees a second and a light travelling round a fixed ring are
+   the same picture - and the seeded lit/dim pattern turning with it IS the
+   chase. One composited layer instead of eighteen animations, and no
+   background-position anywhere near it (trap 36).
+   Tonight's hue is a draw off the UTC DATE, not the class seed, so the hall is
+   a different colour tonight than it was last night and the same colour all
+   evening. About one night in twenty the draw goes off-arc and it is gold. */
+.g-sort{--sort-mq-h:330;--sort-mq-a:.32;--sort-mq-t:7000ms;--sort-heat:.2}
+.g-sort-bulbs{position:absolute;inset:0;pointer-events:none;
+  opacity:var(--sort-mq-a);
+  animation:g-sort-mqspin var(--sort-mq-t) linear infinite}
+.g-sort-bulbs i{position:absolute;left:50%;top:50%;width:7px;height:7px;
+  margin:-3.5px 0 0 -3.5px;border-radius:50%;
+  background:hsl(var(--sort-mq-h) 88% 68%);
+  transform:rotate(calc(var(--sort-bulb,0) * 1deg)) translateY(calc(var(--sort-card-w) * -.95));
+  box-shadow:0 0 7px hsl(var(--sort-mq-h) 90% 66% / .8);
+  opacity:calc(.3 + .7 * var(--sort-bulb-on,0))}
+@keyframes g-sort-mqspin{
+  0%{rotate:0deg}
+  100%{rotate:360deg}}
+.g-sort-bulbs.is-payout{animation:g-sort-mqspin var(--sort-mq-t) linear infinite,
+  g-sort-payout 620ms ease-out}
+@keyframes g-sort-payout{
+  0%{opacity:calc(var(--sort-mq-a) * 3.2);filter:brightness(1.9)}
+  100%{opacity:var(--sort-mq-a);filter:brightness(1)}}
+.g-sort-bulbs.is-gold i{background:var(--sort-gold);
+  box-shadow:0 0 14px rgba(255,201,74,.9)}
+
+/* the casino's own layer: sparkles, tokens, the badge, the reveal. It sits
+   ABOVE the stack and below the chrome, and nothing in it can be clicked. */
+.g-sort-cas{position:absolute;inset:0;z-index:4;pointer-events:none;
+  overflow:hidden}
+.g-sort-cas *{pointer-events:none}
+
+/* SPARKLE: the PERFECT payout. Eight specks off the card centre, 520ms, and
+   they are drawn - never media, never a decode, never an engine kind. */
+.g-sort-spark{position:absolute;left:50%;top:50%;width:0;height:0}
+.g-sort-spark i{position:absolute;width:6px;height:6px;margin:-3px 0 0 -3px;
+  border-radius:50%;background:var(--sort-gold);
+  box-shadow:0 0 10px rgba(255,201,74,.85);
+  animation:g-sort-spark 520ms cubic-bezier(.2,.9,.3,1) both}
+@keyframes g-sort-spark{
+  0%{transform:rotate(var(--sort-spark-a,0deg)) translateY(0) scale(.4);opacity:0}
+  18%{opacity:1}
+  100%{transform:rotate(var(--sort-spark-a,0deg)) translateY(calc(var(--sort-card-w) * -.62)) scale(.1);
+    opacity:0}}
+
+/* THE BANK: a token leaves the wall slot the card landed in and is paid into
+   the Sorted chip. 500-650ms, one per THUD, and the chip takes the punch. */
+.g-sort-token{position:absolute;width:14px;height:14px;border-radius:50%;
+  left:0;top:0;background:radial-gradient(circle at 34% 32%,#FFF0B8,var(--sort-gold) 62%,#B57B14);
+  box-shadow:0 0 12px rgba(255,201,74,.7);
+  animation:g-sort-bank var(--sort-tok-ms,560ms) cubic-bezier(.35,.05,.2,1) both}
+@keyframes g-sort-bank{
+  0%{transform:translate3d(var(--sort-tok-x0,0px),var(--sort-tok-y0,0px),0) scale(.5);opacity:0}
+  14%{opacity:1;transform:translate3d(var(--sort-tok-x0,0px),var(--sort-tok-y0,0px),0) scale(1.1)}
+  100%{transform:translate3d(var(--sort-tok-x1,0px),var(--sort-tok-y1,0px),0) scale(.42);opacity:0}}
+.g-sort-chip.is-paid b{animation:g-sort-paid 320ms cubic-bezier(.2,1.5,.4,1)}
+@keyframes g-sort-paid{
+  0%{scale:1}
+  40%{scale:1.34;color:var(--sort-gold)}
+  100%{scale:1}}
+
+/* THE BADGE: the record ping and the jackpot word. One hero per beat, so it
+   never shares the screen with the room's own verdict word (the casino holds
+   it back a beat and drops it if the room is already talking). */
+.g-sort-badge{position:absolute;left:50%;top:calc(50% - var(--sort-card-h) * .66);
+  transform:translate(-50%,0);white-space:nowrap;
+  font-family:var(--disp,system-ui,sans-serif);font-weight:800;
+  font-size:clamp(12px,1.9vh,18px);letter-spacing:.18em;text-transform:uppercase;
+  color:var(--sort-gold);text-shadow:0 0 16px rgba(255,201,74,.6);
+  padding:.3em .8em;border-radius:999px;
+  background:rgba(24,24,48,.72);border:1px solid rgba(255,201,74,.4);
+  opacity:0}
+.g-sort-badge.show{animation:g-sort-badge 1100ms ease-out both}
+.g-sort-badge[data-tone="record"]{color:#8CE8FF;border-color:rgba(140,232,255,.45);
+  text-shadow:0 0 16px rgba(140,232,255,.6)}
+@keyframes g-sort-badge{
+  0%{opacity:0;transform:translate(-50%,8px) scale(.92)}
+  16%{opacity:1;transform:translate(-50%,0) scale(1.05)}
+  74%{opacity:1;transform:translate(-50%,0) scale(1)}
+  100%{opacity:0;transform:translate(-50%,-6px) scale(1)}}
+
+/* THE REVEAL: the royal, 620ms, and the only full-stage light this class
+   ever pays for itself. It is a wash of its own drawing, not an engine kind:
+   the royal has to be able to land while the surge already owns every wash. */
+.g-sort-reveal{position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 48%,rgba(255,201,74,.5) 0%,rgba(255,201,74,.14) 34%,transparent 68%);
+  opacity:0;animation:g-sort-reveal 620ms cubic-bezier(.15,.9,.25,1) both}
+@keyframes g-sort-reveal{
+  0%{opacity:0;scale:.62}
+  26%{opacity:1;scale:1.04}
+  100%{opacity:0;scale:1.3}}
+
+/* BOUNCE: 80ms on the grab, and it is the only thing the casino does to the
+   card the player is holding. It rides scale (an INDIVIDUAL property), not
+   transform, because the room writes the transform on every drag frame. */
+.g-sort-card.is-bounce{animation:g-sort-bounce 80ms ease-out}
+@keyframes g-sort-bounce{
+  0%{scale:1}
+  60%{scale:1.035}
+  100%{scale:1}}
+
+/* GLOW: the stamp lights as it is earned, 180ms in and 300ms out. The room
+   already drives the two opacities off the drag; this is what makes them warm
+   instead of merely visible. */
+.g-sort-stamp{transition:box-shadow 300ms ease}
+.g-sort-card.is-held .g-sort-stamp{transition:box-shadow 180ms ease}
+.g-sort-card.is-held .g-sort-stamp.yes{
+  box-shadow:0 0 calc(26px * var(--sort-a-yes)) rgba(255,105,180,calc(.55 * var(--sort-a-yes)))}
+.g-sort-card.is-held .g-sort-stamp.no{
+  box-shadow:0 0 calc(20px * var(--sort-a-no)) rgba(159,163,200,calc(.4 * var(--sort-a-no)))}
+
+/* ================================================================ PRESSURE */
+/* rung 4: the wall SHUDDERS on the thud. A transform on the grid, never on
+   the tiles - one composited layer instead of ninety-six. */
+.g-sort-wall.is-shudder .g-sort-wall-grid{animation:g-sort-wshud 240ms ease-in-out}
+@keyframes g-sort-wshud{
+  0%,100%{transform:translate3d(0,0,0) scale(1)}
+  22%{transform:translate3d(-5px,2px,0) scale(1.006)}
+  56%{transform:translate3d(4px,-3px,0) scale(1.004)}
+  80%{transform:translate3d(-2px,1px,0) scale(1)}}
+
+/* rung 8: THE FLOOD. The collage stops being a backdrop and becomes the room,
+   and a swiped card flies INTO it instead of off the edge of the world. */
+.g-sort-wall.is-flood{opacity:calc(.55 + .45 * var(--sort-bg-fade,.35));
+  transition:opacity 900ms ease}
+.g-sort-wall.is-flood .g-sort-wall-grid{gap:0}
+.g-sort.is-flood .g-sort-card.is-gone{
+  transition:transform 340ms cubic-bezier(.3,.1,.3,1),opacity 340ms ease;
+  transform:translate3d(calc(var(--sort-dx) * .32),0,0)
+    rotate(var(--sort-tilt)) scale(.14);opacity:0}
+.g-sort.is-flood .g-sort-wall-tile.thud{animation-duration:420ms}
+
+/* KEN-BURNS ON THE WALL (Law III: no frame of the room is ever still). The
+   tiles drift on a long seeded period; a tile that never decodes drifts its
+   drawn back instead, which is the point. It is switched ON by the wall, so a
+   capped or reduced class simply never asks for it. */
+.g-sort-wall.is-kb .g-sort-wall-face{
+  animation:g-sort-wkb var(--sort-wall-kb,17s) ease-in-out infinite alternate}
+@keyframes g-sort-wkb{
+  0%{transform:scale(1) translate3d(0,0,0)}
+  100%{transform:scale(1.06) translate3d(1.5%,-1.5%,0)}}
+
+/* =============================================================== TRICKSTER */
+/* THE FREEZE. A loop holds its poster for 400ms and then plays. A video is
+   really paused (that is honest); a gif cannot be, so the frost is what stops
+   the eye. Never a filter over a live decode (trap 36) - this is one flat
+   plate at low alpha. */
+.g-sort-tk-frost{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(160deg,rgba(210,225,255,.2),rgba(120,140,200,.14));
+  box-shadow:0 0 0 1px rgba(220,235,255,.2) inset}
+.g-sort-card[data-tk-freeze="1"] .g-sort-face{animation-play-state:paused}
+
+/* THE DOPPELGANGER. A repeat arrives mirrored. The ken-burns owns transform on
+   the face, so the mirror is a SECOND KEYFRAME rather than a static rule an
+   animation would simply outrank. */
+.g-sort-card[data-tk-mirror="1"] .g-sort-face{animation-name:g-sort-kb-flip}
+@keyframes g-sort-kb-flip{
+  0%{transform:scaleX(-1) scale(1)}
+  100%{transform:scaleX(-1) scale(1.06)}}
+
+/* GHOST CARD. After a stall, a ghost of the card you are staring at drifts one
+   way, as if it had already gone. It cannot be grabbed and it changes nothing. */
+.g-sort-tk-ghost{position:absolute;inset:0;border-radius:18px;
+  pointer-events:none;overflow:hidden;opacity:0;
+  border:1px solid rgba(237,235,255,.18);
+  background:linear-gradient(160deg,hsl(var(--sort-back-h,318) 44% 24%),hsl(var(--sort-back-h2,268) 40% 15%));
+  animation:g-sort-ghost 1400ms ease-out both}
+.g-sort-tk-ghost img{position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;display:block;opacity:.5}
+@keyframes g-sort-ghost{
+  0%{opacity:0;transform:translate3d(0,0,0) rotate(0deg) scale(1)}
+  24%{opacity:.42}
+  100%{opacity:0;
+    transform:translate3d(var(--sort-ghost-dx,90px),8px,0) rotate(var(--sort-ghost-r,7deg)) scale(.97)}}
+
+/* THE CROOKED RING. The room keeps writing the TRUTH into --sort-ring every
+   tick; while a card is crooked the arc reads a SECOND variable the trickster
+   writes instead, and the two meet exactly in the last 15%. Nothing about the
+   real ring, the ripe attribute or the verdict moves - only the face. */
+.g-sort-ringbox[data-crooked="1"] .g-sort-ring-arc{
+  stroke-dashoffset:calc(var(--sort-ring-len,1000) * (1 - var(--sort-ring-bend,1)))}
+
+/* STAT FLICKER. The chain chip reads a number that was never true, then
+   corrects itself with a static pop. The ledger did not move; you did. */
+.g-sort-chip.is-flick b{animation:g-sort-flick 120ms steps(2,end) 2;
+  color:#8B8FAE}
+@keyframes g-sort-flick{
+  0%{opacity:1;translate:0 0}
+  50%{opacity:.55;translate:1px -1px}
+  100%{opacity:1;translate:0 0}}
+
+/* UNRELIABLE LABEL. The glyph is the truth and the word is not, so the word is
+   the only thing that may move: it is nudged, never restyled, because a lie
+   that announces itself is not a lie. */
+.g-sort-stamp[data-tk-lie="1"] .g-sort-word-t{letter-spacing:.02em}
+
+/* --------------------------------------------------------- REDUCED MOTION *
+   The two cards that are NOT motion survive: STAT FLICKER is a number and
+   UNRELIABLE LABEL is a word. Everything else in this sheet stops travelling,
+   and the surge is left with wash alpha and nothing that flies.               */
+.g-sort[data-reduced="1"] .g-sort-bulbs,
+.g-sort[data-reduced="1"] .g-sort-spark i,
+.g-sort[data-reduced="1"] .g-sort-token,
+.g-sort[data-reduced="1"] .g-sort-reveal,
+.g-sort[data-reduced="1"] .g-sort-card.is-bounce,
+.g-sort[data-reduced="1"] .g-sort-tk-ghost,
+.g-sort[data-reduced="1"] .g-sort-wall.is-kb .g-sort-wall-face,
+.g-sort[data-reduced="1"] .g-sort-wall.is-shudder .g-sort-wall-grid{animation:none}
+.g-sort[data-reduced="1"] .g-sort-badge.show{animation:none;opacity:1}
+.g-sort[data-reduced="1"] .g-sort-chip.is-paid b{animation:none}
+.g-sort[data-reduced="1"] .g-sort-chip.is-flick b{animation:none;opacity:.6}
+.g-sort[data-reduced="1"] .g-sort-stamp{transition:none}
+@media (prefers-reduced-motion: reduce){
+  .g-sort-bulbs,.g-sort-spark i,.g-sort-token,.g-sort-reveal,
+  .g-sort-card.is-bounce,.g-sort-tk-ghost,
+  .g-sort-wall.is-kb .g-sort-wall-face,
+  .g-sort-wall.is-shudder .g-sort-wall-grid{animation:none}
+}
+
+/* A COARSE POINTER PAYS FOR EVERY GLOW (trap 42): the casino keeps its light
+   and loses its shadows, and the wall stops drifting under a finger. */
+html.ae-touch .g-sort-bulbs i,
+html.ae-touch .g-sort-spark i,
+html.ae-touch .g-sort-token{box-shadow:none}
+html.ae-touch .g-sort-wall.is-kb .g-sort-wall-face{animation:none}
+html.ae-lite .g-sort-bulbs,
+html.ae-lite .g-sort-wall.is-kb .g-sort-wall-face{animation:none}
+`;

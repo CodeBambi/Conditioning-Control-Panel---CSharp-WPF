@@ -25,6 +25,8 @@
  * tile (CLAUDE.md trap 36).
  * ==========================================================================*/
 
+import { hash01 } from '../../core/rng.js';
+
 export const WALL = Object.freeze({
   /** The rung the wall first appears at, by grade tier. 0 = end card only. */
   FROM_RUNG_BY_TIER: Object.freeze({ 1: 0, 2: 3, 3: 2, 4: 1 }),
@@ -39,6 +41,8 @@ export const WALL = Object.freeze({
   COLS: Object.freeze([6, 7, 8, 9, 10, 11, 12]),
   /** The full-bleed hold at the bell. */
   BLEED_MS: 3000,
+  /** THE KEN-BURNS period band, in seconds. One seeded draw for the collage. */
+  KB_S: Object.freeze([14, 22]),
 });
 
 function tierOf(tier) { return Math.max(1, Math.min(4, Math.round(Number(tier) || 1))); }
@@ -111,10 +115,25 @@ export function createWall(o = {}) {
   if (root && root.style) {
     try { root.style.setProperty('--sort-wall-cols', String(cols)); } catch (e) { /* noop */ }
   }
+  /* KEN-BURNS (Law III: no frame of the room is ever still). The whole collage
+   * drifts on ONE seeded period - the animation is declared on the faces but it
+   * is switched at the ROOT, so a hundred tiles cost one class toggle and not a
+   * hundred style writes. Reduced motion never asks for it; the touch and lite
+   * rungs drop it in the sheet, because a drifting mosaic is exactly the
+   * per-frame re-raster a phone cannot afford (trap 36 / trap 42). */
+  let kenBurns = false;
+  if (!reduced && root && root.classList) {
+    const period = WALL.KB_S[0]
+      + (WALL.KB_S[1] - WALL.KB_S[0]) * hash01(String(o.seed || 'sort') + '|sort-wall-kb');
+    try { root.style.setProperty('--sort-wall-kb', period.toFixed(1) + 's'); } catch (e) { /* noop */ }
+    root.classList.add('is-kb');
+    kenBurns = true;
+  }
   let visible = false;
   let landed = 0;
   const tiles = [];
   let bleeding = false;
+  let flooding = false;
 
   function setAttr(node, k, v) { try { if (node && node.setAttribute) node.setAttribute(k, String(v)); } catch (e) { /* DOM double */ } }
 
@@ -124,6 +143,7 @@ export function createWall(o = {}) {
    * answer as "off" to anything reading the DOM (a deck, a capture, a suite). */
   setAttr(root, 'data-on', '0');
   setAttr(root, 'data-bleed', '0');
+  setAttr(root, 'data-flood', '0');
 
   function paint(tile, card) {
     if (!tile) return;
@@ -204,6 +224,29 @@ export function createWall(o = {}) {
       return tile;
     },
 
+    /**
+     * THE FLOOD (rung 8, LOT D's surge). The collage stops being a backdrop
+     * and becomes the room: full bleed, full alpha, and the swiped cards fly
+     * INTO it. It is a STATE, not the bleed - the bell's bleed is the wall
+     * taking the stage when the class is over, and the two can be true at
+     * once without either clearing the other.
+     * @param {boolean} on
+     */
+    flood(on) {
+      flooding = on !== false;
+      if (root && root.classList) {
+        if (flooding) { root.classList.add('is-on'); root.classList.add('is-flood'); }
+        else root.classList.remove('is-flood');
+      }
+      /* A FLOOD LIGHTS THE WALL, AND `data-on` HAS TO SAY SO. `show()` is
+       * idempotent on its own `visible` flag, so setting that flag here and
+       * leaving the attribute alone would make the next show() return early
+       * and the DOM would claim a dark wall over a flooded stage. */
+      if (flooding) { visible = true; setAttr(root, 'data-on', '1'); }
+      setAttr(root, 'data-flood', flooding ? '1' : '0');
+      return flooding;
+    },
+
     /** The bell: the wall takes the whole stage and holds. */
     bleed(on) {
       bleeding = on !== false;
@@ -218,7 +261,7 @@ export function createWall(o = {}) {
 
     diagnostics() {
       return {
-        landed, cols, visible, bleeding, tiles: tiles.length,
+        landed, cols, visible, bleeding, flooding, kenBurns, tiles: tiles.length,
         fromRung: fromRungFor(tier), tier,
       };
     },
