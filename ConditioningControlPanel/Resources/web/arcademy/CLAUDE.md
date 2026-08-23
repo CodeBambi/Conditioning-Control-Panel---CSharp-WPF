@@ -744,18 +744,25 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
   snapshot. The page still needs no new code: it already honours the frame. (The gate properties
   themselves — `ShouldDeferInterruptions` / `ShouldDeferNewVideo` — are polls, and polling a
   class's freeze state would be worse than not having it, which is why the event is the hook.)
-- **The punch cards ship on a CSS floor; the art batch is still open** (PUNCHCARD §7). Every
-  graphic on a card is a `--pc-*-src` custom property in the PUNCH CARDS section of
-  `styles.css` that currently resolves to `none`, and the rules under it draw the whole thing
-  out of gradients - so the batch landing is ONE edit to that token block plus ten
-  `.arc-pc[data-game="<key>"] { --pc-face-src/--pc-crest-src: url(...) }` pairs that are
-  already written out as the asset map, **plus `art/punchcard/faces.json`** (the seam in §3:
-  no json, no `data-art="on"`, and the card keeps its floor). **No text may ever be baked into
-  the stamp, the crest or the seal** (lexicon law): the count, the flavour line and every label
-  are rendered live over the top. The face image is the ONE owner-locked exception - it bakes
-  the class logo and the Arcademy logo, which is why the drawn name band steps aside under
-  `[data-art="on"]` rather than printing the name twice. Files belong in
-  `Resources/web/arcademy/art/punchcard/`.
+- ~~**The punch cards ship on a CSS floor; the art batch is still open**~~ **HALF CLOSED
+  2026-08-23.** Landed in `Resources/web/arcademy/art/punchcard/`: nine `face-<gameKey>.png`
+  (1208x794), `stamp.png`, and `faces.json` beside them - `--pc-face-src` per class plus
+  `--pc-stamp-src` now resolve to `url(...)`. **Misdirection has no art on purpose** (the class
+  was scrapped): it is absent from `faces.json`, its token stays `none`, and its card must keep
+  drawing the whole gradient floor. Still open: `--pc-crest-src` (ten crests), `--pc-ribbon-src`,
+  `--pc-desk-src`. Three things a reader needs:
+  - **`faces.json` carries an `aspect` per class and it is load-bearing.** The faces are
+    1208x794 = 1.52141, not the 1.6 `DEFAULT_ASPECT`; without it `background-size:cover` crops
+    the face and every measured slot fraction lands somewhere the art did not paint a square.
+  - **`data-art="on"` says a FACE shipped, and NOTHING about a crest.** The
+    `[data-art="on"] .arc-pc-crest` override that strips the drawn well is therefore PARKED in
+    `styles.css` (an unstripped comment, restore it with the crest pngs) and the crest floor is
+    re-lit as a gold wax seal for the art path - the dark `--pc-well` read as a missing image
+    over a painted face. Without both, a mastered card revealed an EMPTY BOX on its unlock beat.
+  - **No text may ever be baked into the stamp, the crest or the seal** (lexicon law): the count,
+    the flavour line and every label are rendered live over the top. The face image is the ONE
+    owner-locked exception - it bakes the class logo and the Arcademy logo, which is why the
+    drawn name band steps aside under `[data-art="on"]` rather than printing the name twice.
 - ~~**The server mirror is a separate PR**~~ **CLOSED** - the mirror is live at both ends
   (PUNCHCARD §5; wire contract `proxy/docs/arcademy-cards-api.md`, client
   `Services/Arcademy/ArcademySyncService.cs`). **Nothing in this folder talks to it or ever
