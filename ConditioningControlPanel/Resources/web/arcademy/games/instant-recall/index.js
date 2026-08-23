@@ -2427,7 +2427,7 @@ export default {
           casino: casino && typeof casino.diagnostics === 'function' ? (() => { try { return casino.diagnostics(); } catch (e) { return null; } })() : null,
           trickster: trickster && typeof trickster.diagnostics === 'function' ? (() => { try { return trickster.diagnostics(); } catch (e) { return null; } })() : null,
           pressure: pressure && typeof pressure.diagnostics === 'function' ? (() => { try { return pressure.diagnostics(); } catch (e) { return null; } })() : null,
-          stage, montageEl, ledgerEl, stopEl, qEl, optsEl, timerEl, msgEl, endEl, hud,
+          stage, montageEl, ledgerEl, stopEl, qEl, optsEl, timerEl, msgEl, endEl, hud, well, qFaceEl,
           clockChip, stopsChip, densityChip, optEls: optEls.slice(),
         };
       },

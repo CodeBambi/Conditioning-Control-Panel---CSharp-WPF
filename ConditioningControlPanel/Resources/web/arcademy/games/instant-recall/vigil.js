@@ -754,7 +754,8 @@ export function buildVigil(o = {}) {
    * can starve the whole table; the class still has to be able to ask TWO
    * things, and LAST_WORD's may-be-empty contract already resumes uncounted at
    * stop time when the tail cannot serve it. */
-  if (pool.length < 2) pool = ['LAST_EFFECT', 'LAST_WORD'];
+  let degenerate = false;
+  if (pool.length < 2) { pool = ['LAST_EFFECT', 'LAST_WORD']; degenerate = true; }
   const totalQ = count * qPer;
 
   /* THE ROUNDS. A weighted ban over ten draws out of a four-template pool is a
@@ -843,6 +844,7 @@ export function buildVigil(o = {}) {
     stings: STINGS.slice(),
     templates: pool.slice(),
     templateDrops: drops,
+    degenerate,
     rounds,
     wordCount: Number.isFinite(wordCount) ? wordCount : null,
     clipCount,
@@ -1142,8 +1144,10 @@ export function assertPlan(p) {
 
   /* THE DROPS ARE HONEST. A family whose material does not exist is never
    * dealt - it is not "dealt and quietly replaced", which is the bug the
-   * variety rework existed to kill. */
-  const has = (key) => p.templates.indexOf(key) >= 0;
+   * variety rework existed to kill. The DEGENERATE FLOOR is exempt on purpose:
+   * a harness with nothing at all still has to be able to ask two things, and
+   * LAST_WORD's may-be-empty contract resumes it uncounted at stop time. */
+  const has = (key) => !p.degenerate && p.templates.indexOf(key) >= 0;
   if (!p.audible && (has('LAST_STING') || has('HEARD'))) bad.push('an inaudible class kept an audio family');
   if (p.audible && p.clipCount > 0 && has('LAST_STING')) bad.push('LAST_STING dealt while the mix carries clips');
   if (p.audible && p.clipCount === 0 && has('HEARD')) bad.push('HEARD dealt with no clip to hear');
