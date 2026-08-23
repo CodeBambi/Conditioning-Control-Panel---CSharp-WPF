@@ -1519,15 +1519,17 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
                         .arc-pc[data-game] exactly the way the crest is
                                               art/punchcard/face-KEY.png   LANDED
      --pc-stamp-src     the ink stamp mark    art/punchcard/stamp.png      LANDED
+     --pc-crest-src     per class, one each   art/punchcard/crest-KEY.png  LANDED
      --pc-ribbon-src    the UNLOCKED seal     art/punchcard/ribbon.png     open
      --pc-desk-src      the office backdrop   art/punchcard/desk.jpg       open
-     --pc-crest-src     per class, one each   art/punchcard/crest-KEY.png  open
 
-   THE 2026-08-23 BATCH WAS NINE FACES PLUS THE STAMP. Misdirection is absent on
-   purpose (the class was scrapped) and keeps the whole gradient floor. The ten
-   crests did not land, which is why the [data-art="on"] crest well below is a
-   drawn SEAL rather than the "the crest IS the seal" rule - read the comment
-   there before you ship one.
+   THE 2026-08-23 BATCH WAS NINE FACES PLUS THE STAMP, AND THEN THE NINE CRESTS.
+   Misdirection is absent from both halves on purpose (the class was scrapped):
+   no face, no crest, both tokens none, and its card keeps the whole gradient
+   floor. With the crests in, the [data-art="on"] rule below is the ORIGINAL
+   "the crest IS the seal" rule again - the drawn gold wax seal that stood in
+   for it while the pngs were missing is gone, because a real crest carries its
+   own rim and must not be framed a second time.
 
    NO TEXT MAY BE BAKED INTO THE STAMP, THE CREST OR THE SEAL (lexicon law):
    the count, the flavour line and every label are rendered live over the top.
@@ -1550,14 +1552,14 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 
 :root {
   /* THE ART SLOTS. Swap none for a url() and the CSS floor steps aside.
-     LANDED 2026-08-23: the nine face images + the ink stamp. The ribbon, the
-     desk backdrop and the ten crests have NOT shipped yet and stay none, so
-     the rules below still draw those three out of gradients. */
+     LANDED 2026-08-23: the nine face images, the ink stamp, and the nine
+     crests. The ribbon and the desk backdrop have NOT shipped yet and stay
+     none, so the rules below still draw those two out of gradients. */
   --pc-face-src:none;                        /* per class, see the map below */
+  --pc-crest-src:none;                       /* per class, see the map below */
   --pc-stamp-src:url(art/punchcard/stamp.png);
   --pc-ribbon-src:none;
   --pc-desk-src:none;
-  --pc-crest-src:none;
 
   /* WRITTEN PER CARD BY shell/punchcard.js, off art/punchcard/faces.json - they
      are listed here only so a reader finds them where the other tokens live:
@@ -1578,47 +1580,48 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
    The asset map, in the one place a reader will look for it. Ten classes, two
    files each, one rule apiece - and the face overrides ride the SAME mechanism
    the crest overrides always used, so there is one pattern here and not two.
-   A class with no art keeps the gradient floor the rules below draw. */
+   Nine classes carry both files as of 2026-08-23; a class with no art keeps the
+   gradient floor the rules below draw. */
 .arc-pc[data-game="daily_trigger"] {
-  --pc-crest-src:none;  /* crest-daily_trigger.png  quill + bell */
+  --pc-crest-src:url(art/punchcard/crest-daily_trigger.png);  /* the flip tile + the bell */
   --pc-face-src:url(art/punchcard/face-daily_trigger.png);
 }
 .arc-pc[data-game="lost_and_found"] {
-  --pc-crest-src:none;  /* crest-lost_and_found.png  magnifier */
+  --pc-crest-src:url(art/punchcard/crest-lost_and_found.png);  /* the magnifier + the tag */
   --pc-face-src:url(art/punchcard/face-lost_and_found.png);
 }
 .arc-pc[data-game="deja_vu"] {
-  --pc-crest-src:none;  /* crest-deja_vu.png  twin slides */
+  --pc-crest-src:url(art/punchcard/crest-deja_vu.png);  /* the twin cards, one a ghost */
   --pc-face-src:url(art/punchcard/face-deja_vu.png);
 }
 .arc-pc[data-game="impulse_control"] {
-  --pc-crest-src:none;  /* crest-impulse_control.png  halted hand */
+  --pc-crest-src:url(art/punchcard/crest-impulse_control.png);  /* the halted palm in the tube */
   --pc-face-src:url(art/punchcard/face-impulse_control.png);
 }
 .arc-pc[data-game="the_deep_end"] {
-  --pc-crest-src:none;  /* crest-the_deep_end.png  sinking tile */
+  --pc-crest-src:url(art/punchcard/crest-the_deep_end.png);  /* the sinking tile on the wave */
   --pc-face-src:url(art/punchcard/face-the_deep_end.png);
 }
 /* MISDIRECTION HAS NO ART ON PURPOSE - the class was scrapped (2026-08-23), so
    it is absent from faces.json too and its card keeps the drawn floor. */
 .arc-pc[data-game="misdirection"] {
-  --pc-crest-src:none;  /* crest-misdirection.png  three cups */
-  --pc-face-src:none;   /* face-misdirection.png */
+  --pc-crest-src:none;  /* crest-misdirection.png - never drawn */
+  --pc-face-src:none;   /* face-misdirection.png  - never drawn */
 }
 .arc-pc[data-game="echo"] {
-  --pc-crest-src:none;  /* crest-echo.png  rings */
+  --pc-crest-src:url(art/punchcard/crest-echo.png);  /* the lit pad + three rings */
   --pc-face-src:url(art/punchcard/face-echo.png);
 }
 .arc-pc[data-game="instant_recall"] {
-  --pc-crest-src:none;  /* crest-instant_recall.png  flashbulb */
+  --pc-crest-src:url(art/punchcard/crest-instant_recall.png);  /* the projector + the static */
   --pc-face-src:url(art/punchcard/face-instant_recall.png);
 }
 .arc-pc[data-game="anomaly"] {
-  --pc-crest-src:none;  /* crest-anomaly.png  odd one out */
+  --pc-crest-src:url(art/punchcard/crest-anomaly.png);  /* the nine glyphs, one odd */
   --pc-face-src:url(art/punchcard/face-anomaly.png);
 }
 .arc-pc[data-game="composure"] {
-  --pc-crest-src:none;  /* crest-composure.png  sliding tiles */
+  --pc-crest-src:url(art/punchcard/crest-composure.png);  /* the sliding tiles + the gap */
   --pc-face-src:url(art/punchcard/face-composure.png);
 }
 
@@ -1710,40 +1713,25 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 }
 .arc-pc[data-art="on"] .arc-pc-bay { display:none; }
 
-/* THE CREST WELL ON THE ART PATH - A WAX SEAL, NOT A DARK HOLE.
-   `data-art="on"` says a FACE image shipped; it says NOTHING about a crest, and
-   the 2026-08-23 batch shipped the nine faces and the stamp only. Two things
-   follow, and both are temporary:
-     - the crest still needs a floor, or a mastered card reveals an EMPTY BOX on
-       its unlock beat - the one moment the card exists to pay out;
-     - the fallback's floor is `--pc-well`, a dark navy that is right under the
-       gradient cardstock and reads as a MISSING IMAGE over a painted face
-       (measured: a black slab in the bay on all nine faces).
-   So the floor is re-lit here as a seal - a gold rim, a warm translucent fill,
-   an inner ring - which sits on any class colour. WHEN THE CREST PNGS LAND, fill
-   the --pc-crest-src tokens above and replace this whole block with the original
-   "the crest IS the seal" rule, in the same commit:
-
-     .arc-pc[data-art="on"] .arc-pc-crest {
-       background-image:var(--pc-crest-src);
-       border:0; border-radius:0; box-shadow:none;
-       filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));
-     }
-*/
+/* THE CREST IS THE SEAL (restored 2026-08-23, with the crest pngs).
+   On the fallback path the crest needs a WELL - a rim, a fill and an inner ring -
+   because there is no image and the bay would otherwise read as nothing. On the
+   art path there is an image, and it is a badge that already carries its own
+   thick gold border, its own navy depth edge and its own transparent margin. So
+   every drawn frame comes OFF here: a second rim around a crest that has one
+   reads as a box someone forgot to remove, and the dark `--pc-well` under a
+   painted face read as a missing image (measured on all nine faces, which is
+   what the parked gold-wax-seal stand-in was for while the pngs were open).
+   What is left is the picture plus one drop shadow, so the seal sits ON the
+   card instead of in a hole cut into it - and `drop-shadow` follows the badge's
+   own silhouette, which `box-shadow` on the square box could never do.
+   A class on the art path with NO crest png (none today) would land on
+   background-image:none here and simply show nothing until its tenth stamp
+   reveals an empty box - so a face and a crest ship together, per class. */
 .arc-pc[data-art="on"] .arc-pc-crest {
-  border-radius:14px;
-  border:2px solid color-mix(in srgb, var(--gold), transparent 18%);
-  background-image:var(--pc-crest-src),
-    radial-gradient(circle at 50% 50%,
-      transparent 0 34%,
-      color-mix(in srgb, var(--gold), transparent 62%) 34% 38%,
-      transparent 38%),
-    radial-gradient(circle at 36% 30%,
-      color-mix(in srgb, var(--gold), transparent 34%),
-      color-mix(in srgb, var(--pink-deep), transparent 42%) 72%);
-  box-shadow:inset 0 2px 10px color-mix(in srgb, black, transparent 62%),
-    0 6px 18px rgba(0,0,0,.42),
-    0 0 22px color-mix(in srgb, var(--gold), transparent 58%);
+  background-image:var(--pc-crest-src);
+  border:0; border-radius:0; box-shadow:none;
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));
 }
 
 /* THE REVEAL. Same beat and the same easing as the ribbon's seal below, so the

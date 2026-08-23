@@ -666,9 +666,9 @@ must never grow a test seam that ships. Cases opt in through an `overrideCalenda
 other case still sees the shipping five-game pool and the seeded boards it asserts against.
 Remember `clearTimetableCache()` between boots (trap 25).
 
-Last full run: **271 assertions, 0 failures** (timetable 27, grades 23, shell 48,
+Last full run: **276 assertions, 0 failures** (timetable 27, grades 23, shell 48,
 bridge+boot 15, **e2e seams 14**, campus 23, **host fixes 20**, time bar + free swim 15,
-rake 44, **punch cards 42**), against the live `engine/` + `provider/` modules (the note line
+rake 44, **punch cards 47**), against the live `engine/` + `provider/` modules (the note line
 in the shell run says which). The four game suites (`games-dt`, `games-lf`, `games-dv`,
 `games-ic`) drive the REAL games and run green alongside it.
 
@@ -746,19 +746,33 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
   class's freeze state would be worse than not having it, which is why the event is the hook.)
 - ~~**The punch cards ship on a CSS floor; the art batch is still open**~~ **HALF CLOSED
   2026-08-23.** Landed in `Resources/web/arcademy/art/punchcard/`: nine `face-<gameKey>.png`
-  (1208x794), `stamp.png`, and `faces.json` beside them - `--pc-face-src` per class plus
+  (1208x794), `stamp.png`, nine `crest-<gameKey>.png` (700x700, keyed, transparent) and
+  `faces.json` beside them - `--pc-face-src` and `--pc-crest-src` per class plus
   `--pc-stamp-src` now resolve to `url(...)`. **Misdirection has no art on purpose** (the class
-  was scrapped): it is absent from `faces.json`, its token stays `none`, and its card must keep
-  drawing the whole gradient floor. Still open: `--pc-crest-src` (ten crests), `--pc-ribbon-src`,
-  `--pc-desk-src`. Three things a reader needs:
+  was scrapped): it is absent from `faces.json`, BOTH its tokens stay `none`, and its card must
+  keep drawing the whole gradient floor. Still open: `--pc-ribbon-src`, `--pc-desk-src`.
+  Four things a reader needs:
   - **`faces.json` carries an `aspect` per class and it is load-bearing.** The faces are
     1208x794 = 1.52141, not the 1.6 `DEFAULT_ASPECT`; without it `background-size:cover` crops
     the face and every measured slot fraction lands somewhere the art did not paint a square.
-  - **`data-art="on"` says a FACE shipped, and NOTHING about a crest.** The
-    `[data-art="on"] .arc-pc-crest` override that strips the drawn well is therefore PARKED in
-    `styles.css` (an unstripped comment, restore it with the crest pngs) and the crest floor is
-    re-lit as a gold wax seal for the art path - the dark `--pc-well` read as a missing image
-    over a painted face. Without both, a mastered card revealed an EMPTY BOX on its unlock beat.
+  - **`data-art="on"` says a FACE shipped, and NOTHING about a crest** - which is why the
+    `[data-art="on"] .arc-pc-crest` override was PARKED in a comment while only the faces had
+    landed, and the crest floor was re-lit as a drawn gold wax seal (the dark `--pc-well` read
+    as a missing image over a painted face; without the stand-in a mastered card revealed an
+    EMPTY BOX on its unlock beat, the one moment the card exists to pay out). **Both are now
+    UNPARKED**: the nine crests shipped, the original rule is restored, and the stand-in seal is
+    gone. It had to go - every crest carries its own thick gold rim and navy depth edge, so the
+    drawn rim was a second frame around a framed badge. The rule is now the picture plus one
+    `drop-shadow` (which follows the badge silhouette; a `box-shadow` on the square box could
+    not). The invariant that replaces the old one: **a face and a crest ship together per
+    class**, because a class on the art path with no crest png lands on `background-image:none`
+    and is back to revealing an empty box.
+  - **The crests are ~700px squares with a transparent margin, and they are BADGES.** Locked
+    varsity-pixel DNA (chunky pixel art, gold outline, navy depth, cel shading), one per class
+    on its own card's palette, a different shield silhouette each so they collect - and NO TEXT,
+    like every other live-drawn layer. They are placed by `faces.json`'s `crest {x,y,scale,
+    rotation}` (centre, width, -8.79deg) and drawn `background-size:contain`, so a crest that is
+    not square simply letterboxes inside its bay rather than stretching.
   - **No text may ever be baked into the stamp, the crest or the seal** (lexicon law): the count,
     the flavour line and every label are rendered live over the top. The face image is the ONE
     owner-locked exception - it bakes the class logo and the Arcademy logo, which is why the
