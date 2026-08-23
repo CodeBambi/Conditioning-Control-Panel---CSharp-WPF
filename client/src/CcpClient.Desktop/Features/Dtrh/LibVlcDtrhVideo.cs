@@ -100,7 +100,7 @@ public sealed class LibVlcDtrhVideo : IDtrhVideoBackend
             if (!ok)
             {
                 Interlocked.Exchange(ref _playing, 0);
-                _log($"dtrh-video: libvlc refused play ({Path.GetFileName(path)})");
+                _log($"dtrh-video: libvlc refused play ({PortablePath.FileName(path)})");
             }
 
             return ok;

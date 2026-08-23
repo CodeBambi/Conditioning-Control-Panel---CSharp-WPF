@@ -1866,7 +1866,7 @@ public partial class StudioPage : UserControl
     public static string DescribeSpiralLibrary(string? spiralPath, string spiralsFolder) =>
         spiralPath is null
             ? $"No spiral to draw. Put a .gif, .png or .jpg in {spiralsFolder} and this module will find it."
-            : $"Drawing {System.IO.Path.GetFileName(spiralPath)}.";
+            : $"Drawing {PortablePath.FileName(spiralPath)}.";
 
     /// <summary>
     /// The words for the MOVING module, and the place where the dot's third meaning becomes a

@@ -371,7 +371,7 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
             {
                 return Record(new CapabilityState.Unavailable(new CapabilityReason(
                     VideoReasonCodes.VideoAlreadyPlaying,
-                    $"a clip is already playing on this surface ('{Path.GetFileName(PlayingClip)}'), so "
+                    $"a clip is already playing on this surface ('{PortablePath.FileName(PlayingClip)}'), so "
                     + "nothing was opened; one video-class interaction at a time")));
             }
         }
@@ -418,7 +418,7 @@ public sealed class VideoSurfacePresenter : IVideoSurface, IDisposable
             clip.Dispose();
             return Record(new CapabilityState.Unavailable(new CapabilityReason(
                 VideoReasonCodes.VideoClipHasNoPicture,
-                $"the operating system opened '{Path.GetFileName(clipPath)}' and produced no picture from it")));
+                $"the operating system opened '{PortablePath.FileName(clipPath)}' and produced no picture from it")));
         }
 
         // The FIRST picture is painted too. A painter that only reached frames 1..n would leave the

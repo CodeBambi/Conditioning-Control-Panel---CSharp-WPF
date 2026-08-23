@@ -1049,6 +1049,18 @@
       "expectDetected": true,
       "verdict": "not-vacuous",
       "reason": "File.Exists appears only inside Assert.True at body depth 0 — the predicate IS the assertion, and a RealButtplugSession.cs that moved or vanished FAILS this guard rather than silencing it. That is the stated idiom of the guard it follows (DataRootChokePointGuardTests.cs:32): a guard never skips"
+    },
+    {
+      "key": "CcpClient.Tests/PathPortabilityGuardTests.cs::PathPortabilityGuardTests.NoOsVaryingPathApiAndNoHardcodedDriveLetterInClientSrc",
+      "path": "CcpClient.Tests/PathPortabilityGuardTests.cs",
+      "line": 60,
+      "method": "PathPortabilityGuardTests.NoOsVaryingPathApiAndNoHardcodedDriveLetterInClientSrc",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS), the same disposition and the same mechanical reason as DataRootChokePointGuardTests / TestTimingGuardTests / UnboundedWaitGuardTests above. The Directory.EnumerateFiles walk that follows is pinned by Assert.True(scanned > 100) BEFORE the violations assertion, so a scan that walked an empty or wrong tree FAILS rather than reporting zero violations"
     }
   ]
 }
