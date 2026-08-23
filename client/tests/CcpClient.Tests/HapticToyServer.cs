@@ -170,10 +170,29 @@ internal sealed class HapticToyServer : IDisposable
 
         // Unregistered ONLY after the listener really closed — the registry's rule, because a leak
         // report that lied would fail the whole assembly loud on a false fact.
+        //
+        // Close() ALONE, never Stop() and then Close(). Off Windows this is the MANAGED
+        // HttpListener, where Stop() and Close() BOTH call HttpEndPointManager.RemoveListener. The
+        // first one really does remove the endpoint and release the port; the second finds nothing
+        // registered for that port, and RemovePrefixInternal's GetEPListener then BINDS AND LISTENS
+        // ON IT AGAIN just to remove it (dotnet/runtime Managed/HttpEndPointManager.cs:148-164). If
+        // the port is momentarily taken when that re-bind runs, the SocketException comes back out
+        // as an HttpListenerException, this catch swallows it, the server stays registered, and the
+        // assembly fixture reports a leaked listener that is in fact already shut. Caught in the act
+        // on Linux:
+        //
+        //   HttpListenerException errorcode=98 "Address already in use"
+        //     at HttpEndPointManager.GetEPListener   <- the RE-BIND
+        //     at HttpEndPointManager.RemovePrefixInternal
+        //     at HttpEndPointManager.RemoveListener
+        //     at HttpListener.Close(Boolean force)   <- the SECOND removal
+        //     at HapticToyServer.Dispose()
+        //
+        // and a fresh bind on that same port succeeded a moment later, so nothing was leaking.
+        // Close() by itself removes the endpoint exactly once and never re-binds.
         var closed = false;
         try
         {
-            _listener.Stop();
             _listener.Close();
             closed = true;
         }
