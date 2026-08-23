@@ -46,15 +46,24 @@ export function makeRng(seedStr) {
  * A tag-namespaced roll stream over one seed: roll('burst') advances only the
  * 'burst' namespace, so adding a new roll never shifts an existing sequence
  * (the fix reward.js applies to its kind rolls). Additive helper.
+ *
+ * Each tag owns a mulberry32 stream seeded from hash01(seed|tag). The first
+ * version hashed `seed|tag|n` per call and the trailing counter byte barely
+ * avalanches through FNV-1a, so consecutive rolls of one tag clustered (~0.4%
+ * near-equal pairs; the decks worked around it with per-tag mulberry32 - this
+ * IS that fix, in core). Same contract: tags are independent, replay is exact.
  */
 export function makeTaggedRoll(seedStr) {
   const seed = seedStr == null ? '' : String(seedStr);
-  const counts = new Map();
+  const streams = new Map();
   return function roll(tag) {
     const t = String(tag == null ? '' : tag);
-    const n = counts.get(t) || 0;
-    counts.set(t, n + 1);
-    return hash01(seed + '|' + t + '|' + n);
+    let s = streams.get(t);
+    if (!s) {
+      s = mulberry32(Math.floor(hash01(seed + '|' + t) * 0xFFFFFFFF));
+      streams.set(t, s);
+    }
+    return s();
   };
 }
 

@@ -1,12 +1,19 @@
 /* ============================================================================
  * games/registry.js - the guarded registry (BUILD-CONTRACT §11).
  *
- * Imports the five shipped classes with Promise.allSettled, exactly like
- * intake/render/captcha/index.js (Semester I's four, plus The Deep End - the
- * first Semester III class brought forward): one broken module NEVER blocks the
- * others and NEVER throws. A failed import logs and leaves a STUB in its slot
- * whose class renders `class_suspended` - the shell must always be able to deal a
- * board, because a blank board is indistinguishable from a dead app.
+ * Imports every OPEN class with Promise.allSettled, exactly like
+ * intake/render/captcha/index.js (Semester I's four, Semester II's three,
+ * Semester III's three): one broken module NEVER blocks the others and NEVER
+ * throws. A failed import logs and leaves a STUB in its slot whose class renders
+ * `class_suspended` - the shell must always be able to deal a board, because a
+ * blank board is indistinguishable from a dead app.
+ *
+ * THE SEMESTER GATE. `GAME_SEMESTER` says which semester each class belongs to
+ * and `OPEN_SEMESTERS` says which semesters have opened; `loadGames` imports
+ * ONLY the open ones. A closed semester is not a suspended class - it is simply
+ * ABSENT from the pool, so the timetable never deals it and shell/campus.js
+ * keeps that wing taped shut. That is the one-line release gate: ship a semester
+ * dark by dropping its number from the set, open it by putting the number back.
  *
  * STATIC DESCRIPTORS. The timetable needs {family, meaty, flagship, timeBudgetSec}
  * for a game even when its module failed to load, so they live here as a fallback
@@ -26,6 +33,11 @@ export const GAME_PATHS = Object.freeze({
   lost_and_found: './lost-and-found/index.js',
   deja_vu: './deja-vu/index.js',
   impulse_control: './impulse-control/index.js',
+  misdirection: './misdirection/index.js',
+  echo: './echo/index.js',
+  instant_recall: './instant-recall/index.js',
+  anomaly: './anomaly/index.js',
+  composure: './composure/index.js',
   the_deep_end: './the-deep-end/index.js',
 });
 
@@ -45,7 +57,51 @@ export const GAME_META = Object.freeze({
   // The Deep End is the second meaty class (DECISIONS #3's 300s slot) and the first
   // Semester III class brought forward - family 'comfort', never a flagship.
   the_deep_end: { family: 'comfort', meaty: true, flagship: false, timeBudgetSec: 300 },
+  /* Semester II. Families per SYNTHESIS #3; 'recall' joins the list with Instant
+     Recall (core/lexicon.js has no family_recall/family_puzzle row yet, so the
+     chip degrades to the de-snaked key - readable English, never a raw token). */
+  misdirection: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120 },
+  echo: { family: 'memory', meaty: false, flagship: false, timeBudgetSec: 105 },
+  // MEATY (ruled 2026-08-23): the third meaty class. With ten games no-repeat-3 binds again
+  // and outranks the meaty preference, so two meaty classes left ~a third of nights with the
+  // slot unfilled (trap 6 re-opened); see composure below for the full count. Mirrors the module's own export.
+  instant_recall: { family: 'recall', meaty: true, flagship: false, timeBudgetSec: 120 },
+  /* Semester III (The Deep End above was brought forward). */
+  anomaly: { family: 'search', meaty: false, flagship: false, timeBudgetSec: 90 },
+  // MEATY (ruled 2026-08-23, same reason as instant_recall): four meaty classes (L&F, The Deep
+  // End, Instant Recall, Composure) are what it takes for a no-repeat-3 pool to deal one meaty
+  // class EVERY night (measured 28/28; three gave 21/28). Mirrors the module's own export.
+  composure: { family: 'puzzle', meaty: true, flagship: false, timeBudgetSec: 120 },
 });
+
+/**
+ * Which semester each class belongs to. A key missing from this table is treated
+ * as Semester I (open by default) - a new game is never accidentally invisible.
+ */
+export const GAME_SEMESTER = Object.freeze({
+  daily_trigger: 1,
+  lost_and_found: 1,
+  deja_vu: 1,
+  impulse_control: 1,
+  misdirection: 2,
+  echo: 2,
+  instant_recall: 2,
+  anomaly: 3,
+  composure: 3,
+  the_deep_end: 3,
+});
+
+/**
+ * The semesters that have opened. THE release gate - see the header. Drop a
+ * number and every class in it leaves the pool (no stub, no board row) and
+ * shell/campus.js re-tapes that wing; put it back and the wing opens.
+ */
+export const OPEN_SEMESTERS = new Set([1, 2, 3]);
+
+/** True when a class's semester has opened (unknown keys are Semester I). */
+export function isOpenSemester(key) {
+  return OPEN_SEMESTERS.has(GAME_SEMESTER[key] || 1);
+}
 
 export const MAX_TIER = 4;
 const PROMOTIONS_PER_TIER = 2;
@@ -149,13 +205,21 @@ function validate(mod) {
 }
 
 /**
- * Load every game. Never rejects.
+ * Load every game whose semester has opened. Never rejects.
  * @param {Function=} log
  * @returns {Promise<{list:Array, byKey:Object, ok:number, failed:string[]}>}
  */
 export async function loadGames(log) {
   const say = typeof log === 'function' ? log : () => {};
   const keys = Object.keys(GAME_PATHS);
+  /* THE SEMESTER GATE. Filtered IN PLACE so the two lines around it keep their
+   * exact shape (the scratch shell-suite harness patches this function by
+   * literal text to register its fixture class). A closed semester's games are
+   * ABSENT - never a class_suspended stub, which is reserved for a class that
+   * exists and could not open. */
+  for (let i = keys.length - 1; i >= 0; i--) {
+    if (!isOpenSemester(keys[i])) keys.splice(i, 1);
+  }
 
   const settled = await Promise.allSettled(keys.map((k) => import(GAME_PATHS[k])));
 

@@ -65,6 +65,19 @@ const SOUNDS = {
      thunk - a muted loss, never silence. */
   slide:     { noise: true, hp: 260,  lp: 2600, ms: 150, gain: 0.55, attack: 0.18 },
   bump:      { type: 'sawtooth', f0: 92,  f1: 46,  ms: 150, gain: 0.85, thunk: true },
+  /* Semesters II/III (2026-08-23). `pad` is Echo's instrument: an UNSWEPT triangle
+     so `pitch` alone carries pad identity (six pads = six pitches off one recipe,
+     +1 semitone per streak link); `decoy` is the telegraphed false pad. `tell` /
+     `lift` are Misdirection's trackability tell and the decoy-lid sting; `near` the
+     Anomaly near-miss ping (distinct from the long `near_miss` riser); `chime` a
+     clean bell for the streak ladders; `shutter` the darkroom's camera click. */
+  pad:       { type: 'triangle', f0: 392, f1: 392, ms: 200, gain: 0.55 },
+  decoy:     { noise: true, hp: 600,  lp: 3800, ms: 120, gain: 0.6, bits: 5 },
+  tell:      { type: 'sine',     f0: 880, f1: 880, ms: 70,  gain: 0.5 },
+  lift:      { type: 'triangle', f0: 330, f1: 495, ms: 120, gain: 0.55 },
+  near:      { type: 'sine',     f0: 740, f1: 620, ms: 110, gain: 0.55 },
+  chime:     { type: 'sine',     f0: 1046.5, f1: 1046.5, ms: 160, gain: 0.5 },
+  shutter:   { noise: true, hp: 1800, lp: 9000, ms: 40,  gain: 0.7 },
 };
 
 const clamp01 = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : 0);

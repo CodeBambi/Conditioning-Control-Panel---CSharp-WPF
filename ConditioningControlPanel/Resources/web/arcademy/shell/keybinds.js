@@ -58,6 +58,47 @@ export function keyLabel(k) {
   return s.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
+/* ----------------------------------------------------------------------------
+ * DECK VI - VERB GLYPHS. "Every keybind gets a drawn glyph; the label string
+ * survives only in tooltips and the settings sheet." `keyGlyph` is the FACE of
+ * the drawn keycap (settings.js paints the cap itself in CSS); `keyLabel` above
+ * is untouched and stays the string the row, the tooltip and the aria-label all
+ * use. A key with no glyph of its own falls back to its label, and the caller
+ * widens the cap - a legible word beats a clever symbol nobody recognises.
+ * -------------------------------------------------------------------------- */
+const KEY_GLYPHS = Object.freeze({
+  Space: '␣',          // ␣ open box
+  Enter: '↵',          // ↵
+  NumpadEnter: '↵',
+  Backspace: '⌫',      // ⌫
+  Delete: '⌦',         // ⌦
+  Tab: '⇥',            // ⇥
+  Escape: 'Esc',
+  ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓',
+  Shift: '⇧',          // ⇧
+  CapsLock: '⇪',       // ⇪
+  Home: '↖', End: '↘',
+  PageUp: '⇞', PageDown: '⇟',
+});
+
+/**
+ * The drawn face for a binding.
+ * @returns {string} one glyph where one exists, else the human label ('--' when
+ *   nothing is bound). Never an empty string, so a cap is never blank.
+ */
+export function keyGlyph(k) {
+  const s = normalizeKey(k);
+  if (!s) return '--';
+  const g = KEY_GLYPHS[s];
+  if (g) return g;
+  if (/^Numpad[0-9]$/.test(s)) return s.slice(6);      // Numpad4 -> 4 (aria says numpad)
+  if (s.length === 1) return s;                        // letters and digits draw as themselves
+  return keyLabel(s);
+}
+
+/** True when a glyph needs a wide cap (it is a word, not a symbol). */
+export function keyGlyphWide(k) { return keyGlyph(k).length > 2; }
+
 /**
  * @param {Object} o
  * @param {Object} o.init      the init projection (settings + keybinds + panic key)

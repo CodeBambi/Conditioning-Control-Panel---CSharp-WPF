@@ -27,7 +27,7 @@
  * ==========================================================================*/
 
 import { t } from '../core/lexicon.js';
-import { keyLabel } from './keybinds.js';
+import { keyLabel, keyGlyph, keyGlyphWide } from './keybinds.js';
 
 /* ----------------------------------------------------------------------------
  * THE KEY MAP (cross-agent contract - keep in sync with ArcademyHostService's
@@ -238,15 +238,35 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     return row;
   }
 
-  /** Keybind capture row - the shared framework's only UI (SYNTHESIS #7). */
+  /** Keybind capture row - the shared framework's only UI (SYNTHESIS #7).
+   *
+   * DECK VI (VERB GLYPHS): the cap is DRAWN - a CSS keycap wearing the key's
+   * glyph, not its name. The label string is not deleted, it MOVES: the verb's
+   * own label stays in this sheet on the left (that is the settings row), and
+   * the key's human name lives on the cap's `title` and `aria-label`, so a
+   * screen reader and a hover both still say "Space" while the eye reads ␣. */
   function keyRow(gameKey, slot) {
     const row = el('div', 'arc-row');
     const label = slot.labelKey ? t(slot.labelKey, slot.verb) : slot.verb;
     const lab = el('span', 'arc-rowlabel', label);
     const msg = el('span', 'arc-conflict', '');
     lab.appendChild(msg);
-    const cap = el('button', 'arc-keycap', keyLabel(keybinds.get(gameKey, slot.verb)));
+    const cap = el('button', 'arc-keycap arc-glyphcap');
     cap.type = 'button';
+
+    /** Paint the drawn cap for the CURRENT binding (glyph on the face, name in
+     *  the tooltip + aria). One place, so capture and cancel cannot drift. */
+    function paintCap() {
+      const bound = keybinds.get(gameKey, slot.verb);
+      const name = keyLabel(bound);
+      cap.textContent = keyGlyph(bound);
+      if (keyGlyphWide(bound)) cap.classList.add('wide'); else cap.classList.remove('wide');
+      // The label survives HERE - the glyph is for the eye, this is for
+      // everything else (SYNTHESIS #7's rebind UI must stay announceable).
+      cap.setAttribute('title', label + ': ' + name);
+      cap.setAttribute('aria-label', label + ': ' + name);
+    }
+    paintCap();
 
     let capturing = false;
     const stop = () => {
@@ -257,23 +277,25 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     const grab = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (e.key === 'Escape') { stop(); cap.textContent = keyLabel(keybinds.get(gameKey, slot.verb)); return; }
+      if (e.key === 'Escape') { stop(); paintCap(); return; }
       const res = keybinds.bind(gameKey, slot.verb, e.code || e.key);
       if (res.ok) {
         msg.textContent = '';
-        cap.textContent = keyLabel(keybinds.get(gameKey, slot.verb));
+        paintCap();
       } else {
         const r = res.conflict && res.conflict.reason;
         msg.textContent = r === 'panic' ? ' - that is the panic key'
           : r === 'taken' ? ' - already bound to ' + res.conflict.with
             : ' - reserved key';
+        paintCap();
       }
       stop();
     };
     cap.addEventListener('click', () => {
-      if (capturing) { stop(); return; }
+      if (capturing) { stop(); paintCap(); return; }
       capturing = true;
       cap.classList.add('capturing');
+      cap.classList.add('wide');
       cap.textContent = 'press a key';
       msg.textContent = '';
       window.addEventListener('keydown', grab, true);

@@ -57,6 +57,8 @@ shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
 games/registry.js  guarded allSettled registry + tier math + class_suspended stub
+                   + GAME_SEMESTER / OPEN_SEMESTERS (the release gate: a CLOSED semester's
+                   games are ABSENT from the pool, never stubs; isOpenSemester())
                    GAME_META here is the PARACHUTE: it must mirror each module's
                    own family/meaty/flagship/timeBudgetSec, because the timetable
                    reads a suspended class's descriptor too
@@ -81,10 +83,37 @@ games/<key>/index.js  one folder per game; games NEVER import each other
   the-deep-end/    2048 with trance-depth tiers (MEATY) - board/schedule/grade/lex/style/casino/trickster/pressure
                    the deepest tile is the heat dial; board/schedule/grade pure, casino+trickster+pressure decks
                    (pressure = the rung-by-rung CCP effects ladder + the Balatro board tremor/HUD juice)
+  -- Semesters II + III (2026-08-23; every class below ships ALL the House Rules decks from day one:
+     style (the look + the drawn class-rules sheet) / casino (THE FLOOR) / trickster (schedule-dealt
+     cards, budget 2/4/6/8 by tier) / pressure (THE SURGE, the CCP-effects ladder on the game's own
+     streak) + a lex.js <P>_LEX table; decks are dynamic-imported + null-safe so a broken deck never
+     takes the class down) --
+  misdirection/    the shell game (tracking, 120s)        - shuffle (PURE seeded plan + verifyRound = the
+                   TRACKABILITY INVARIANT: occlusion hides at most ONE link of a swap chain and every
+                   occlusion carries a tell) / grade / lex MD_LEX; keybinds pick1..pick5; md_stake_mode
+                   ask|bank|ride (greed scored UPWARD only, ride cap 5), md_shell_skin themed|minimal|contrast
+  echo/            the Simon ring (memory, 105s)          - sequence (PURE: warm start 3..6 off bestLen, decoy
+                   plan from tier 2 telegraphed) / grade / lex EC_LEX; keybinds pad1..pad6; six pads always live,
+                   the TIER restricts the alphabet; tones = engine audio_trigger 'pad' x pitch (+1 semitone per
+                   link, cap 7); a fail is NOT the class (new sequences until the bell); Encore once, auto
+  instant-recall/  the vigil (recall, 120s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
+                   GUARANTEE in the last 15s, layouts rows/mosaic/swirl, density sawtooth, plants, templates
+                   LAST_WORD/EFFECT/STING/TWO + MODE tier 4 <=10%) / montage (the stage + the L&F live-window
+                   discipline + createLedger = the TRUTH tail, aria-hidden) / grade / lex IR_LEX; ir_density
+  anomaly/         the odd-one-out grid (search, 90s)     - rounds (PURE: kinds/deltas at PERCEPTIBLE floors,
+                   relocations cap 2/round, drift) / grade / lex AN_LEX; the odd index lives in CLOSURE ONLY -
+                   never a DOM attr/class (suite asserts it); decks get a canMelt(i)/meltCandidates() oracle
+                   and nothing else; an_kinds all|gentle
+  composure/       the sliding picture (puzzle, 120s, MEATY) - board (PURE, seeded SOLVABLE scramble w/ parity)
+                   / solver (PURE baseline: optimal 3x3 IDA*, 4x4/5x5 BFS over tracked-tiles+gap - the greedy
+                   textbook solver deadlocked 1 board in 5) / grade (par from the solver) / lex CP_LEX;
+                   manifest.peek TRUE (the shell's hold-to-reveal = A-cap); cp_mode timed|zen (zen ends
+                   {zen:true} = 'pass'), cp_zen_grid; skill-floor rescue after 20s (solver hint + sGate false);
+                   locks are MARKERS never freezes (a frozen tile can make a board unsolvable)
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
-one of them** (200 rows as of Semester 1; `de_*` + the IC House Rules wave since - the count is a
+one of them** (672 rows as of Semesters II+III, 2026-08-23 - the count is a
 floor, never a contract: a scratch script diffs every `t('key'` / lexicon table against the C#
 table, see §7) or the shell renders raw keys for the settings
 page's `label_key` / `hint_key`. Impulse Control exports its table as data
@@ -151,10 +180,14 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
    no-repeat) and no-repeat *narrows* (3→2→1→off) instead of dying, so the board still
    refuses yesterday's class. Every constraint is also a seeded weight so the preference
    survives relaxation. `day.relaxed` and `day.noRepeatWindow` report what happened.
-6. ~~**A pool with exactly one meaty game cannot be meaty every day.**~~ **CLOSED by The Deep
-   End.** no-repeat outranks meaty, so with one meaty game the meaty slot filled ~1 day in 4.
-   With two (`lost_and_found` 120s + `the_deep_end` 300s) a dealt fortnight carries exactly one
-   meaty class on all 14 days. The arithmetic never changed — the pool grew.
+6. **A pool needs FOUR meaty games to deal one meaty class EVERY night.** no-repeat outranks
+   meaty. With the five-game pool no-repeat-3 was unsatisfiable and relaxed first, so two meaty
+   games (`lost_and_found`, `the_deep_end`) filled the slot nightly "for free". The TEN-game pool
+   re-opened it: no-repeat-3 binds again (`noRepeatWindow === 3` every day) and two meaty classes
+   cannot cover a 3-day window - measured 13/28 nights with two, 21/28 with three, **28/28 with four**
+   (`scratchpad/ttcheck/check.mjs`). So `instant_recall` and `composure` are meaty too (ruled
+   2026-08-23); the flag is a timetable fact, nothing in a module branches on it. A fifth meaty game
+   changes nothing; dropping to three silently loses a quarter of the nights.
 7. **The timetable's history is an epoch walk, not a recursion.** `EPOCH = '2026-08-01'`
    and the generator walks forward to the target date, memoised. That makes it a fixed
    point (day D-1 computed as history === day D-1 computed on its own — tested). **Moving
@@ -370,6 +403,32 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     room that changes its own look twice is worse than a room that is simply lighter. With no
     `requestAnimationFrame` (node, the DOM double) the probe must **stay full**: a missing
     frame clock is not evidence of a slow machine.
+
+37. **A backtick inside a CSS comment inside a template-literal stylesheet kills the WHOLE
+    sheet.** `` /* `[data-tier]` */ `` in a `STYLE_TEXT` template ends the literal early; the page
+    dies with `ReferenceError: data is not defined` and `node --check` passes it - only a browser
+    load catches it. Three agents hit it in one day (IC stage, DE howto, MD decks). Never write a
+    backtick in a CSS comment in a `.js` stylesheet.
+38. **`applySuspend(false)` must re-assert the pause.** The shell leaves a lifted suspend behind
+    its pause card on purpose (the Resume button is the way back), but a game's `suspend(false)`
+    typically restarts its own loop - Misdirection and The Deep End both played on behind the
+    overlay. `applySuspend` now calls `instance.pause()` again when `active.paused` is set.
+39. **The spiral pool is bundled + THE LOOM.** `shell.js pickSpiralUrl(seed, settings)` appends
+    `init.settings.loomSpirals` (the host's `https://ccp.spirals/loom_<slug>.gif` list, same folder
+    DTRH exposes) at weight 20 each, cap 24, validated + de-duplicated. No Loom = byte-identical
+    picks. The host maps `ccp.spirals` for the Arcademy too (`ArcademyHostService` mappings).
+40. **`core/rng.js makeTaggedRoll` is per-tag mulberry32 now.** The first version hashed
+    `seed|tag|n` per call and the trailing counter barely avalanched through FNV-1a (~0.4%
+    near-equal consecutive pairs); every deck had worked around it with its own per-tag mulberry32.
+    Same contract (tags independent, replay exact), different stream - any golden value recorded
+    off the old stream (none were) would move.
+41. **iOS/WebKit: a `transform` whose `calc()` reads an UNREGISTERED custom property does NOT
+    transition when that property changes - the tile TELEPORTS** (owner, iPhone 13 Pro Max, the
+    Deep End web teaser, 2026-08-23). `--r`/`--c`/`--x` are the CORE<->deck contract and stay
+    unregistered (decks read them; `--r` is even an ANGLE in one casino, so a global `@property
+    --r <number>` would break it). Fix = game-scoped REGISTERED twins: CORE writes `--cp-r/--cp-c`
+    (`--md-x`, `--de-r/--de-c`) beside the contract vars and the stylesheet's transform reads the
+    twin. Chromium/WebView2 never showed it, so the desktop rigs cannot catch it - the iPhone can.
 
 ## 5. The game module contract (short version)
 

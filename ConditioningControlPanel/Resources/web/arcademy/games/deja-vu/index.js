@@ -1187,6 +1187,130 @@ export default {
         .catch((e) => say('asset claim failed - glyph faces stand: ' + ((e && e.message) || e)));
     }
 
+    /* ---- the class rules sheet (Deck VI, Law IV: drawn, not told) --------- */
+    /**
+     * Three vignettes in this lab's own language: the pair turning face-up and
+     * locking, the settled board trading two slides AFTER its shudder (law 2 +
+     * law 3 of this file, drawn rather than told), and the whole board
+     * re-dealing without losing a pair. Every figure is CSS on the same slide
+     * chrome the board uses, so the sheet costs no media.
+     */
+    let howtoEl = null;
+
+    /** Tiers this player has already had the rules sheet for (persisted). */
+    function howtoSeenTiers() {
+      try {
+        const m = (ctx.store && typeof ctx.store.gameMeta === 'function')
+          ? (ctx.store.gameMeta('deja_vu') || {}) : {};
+        return Array.isArray(m.howtoTiers) ? m.howtoTiers.slice() : [];
+      } catch (e) { return []; }
+    }
+
+    function hideHowto() {
+      if (howtoEl) { try { howtoEl.remove(); } catch (e) { /* noop */ } }
+      howtoEl = null;
+    }
+
+    function buildHowto(onGo) {
+      const sheet = el('div', 'g-dv-howto');
+      sheet.appendChild(el('h2', 'g-dv-hw-title', t('dv_howto_title', 'Class rules')));
+
+      const row = (build, caption) => {
+        const r = el('div', 'g-dv-hw-row');
+        const fig = el('span', 'g-dv-hw-fig');
+        fig.setAttribute('aria-hidden', 'true');
+        try { build(fig); } catch (e) { /* a caption alone still teaches */ }
+        r.appendChild(fig);
+        r.appendChild(el('p', 'g-dv-hw-cap', caption));
+        sheet.appendChild(r);
+        return r;
+      };
+
+      const slide = (cls, glyph) => {
+        const card = el('span', 'g-dv-hw-card' + (cls ? ' ' + cls : ''));
+        card.appendChild(el('span', 'g-dv-hw-back'));
+        card.appendChild(el('span', 'g-dv-hw-face', glyph == null ? '' : glyph));
+        return card;
+      };
+
+      /* 1 - THE PAIR. Two slides turn over, match, and stay lit. */
+      row((fig) => {
+        const line = el('span', 'g-dv-hw-line');
+        line.appendChild(slide('turn a', GLYPHS[0]));
+        line.appendChild(slide('turn b', GLYPHS[0]));
+        fig.appendChild(line);
+        fig.appendChild(el('span', 'g-dv-hw-lock'));
+      }, t('dv_howto_flip', 'Turn two slides. A matching pair stays lit. Anything else turns back over.'));
+
+      /* 2 - THE SWAP. It shudders BEFORE it moves, and only while the board is
+         settled - the tell always precedes (law 2). */
+      row((fig) => {
+        const line = el('span', 'g-dv-hw-line');
+        line.appendChild(slide('down'));
+        line.appendChild(slide('down tell left'));
+        line.appendChild(slide('down tell right'));
+        line.appendChild(slide('down'));
+        fig.appendChild(line);
+      }, t('dv_howto_swap', 'The board only moves while nothing is face up, and it always shudders first.'));
+
+      /* 3 - THE RE-DEAL. The whole board goes down and comes back; the pairs
+         are the same pairs, only the seats changed. */
+      row((fig) => {
+        const grid6 = el('span', 'g-dv-hw-grid');
+        for (let i = 0; i < 6; i++) {
+          const c = slide('down redeal');
+          c.style.setProperty('--dv-hw-i', String(i));
+          grid6.appendChild(c);
+        }
+        grid6.appendChild(el('span', 'g-dv-hw-sweep'));
+        fig.appendChild(grid6);
+      }, t('dv_howto_redeal', 'Sometimes the whole board re-deals. Same pairs - only the seats change.'));
+
+      const go = el('button', 'g-dv-hw-go', t('dv_howto_go', 'Deal the board'));
+      go.type = 'button';
+      go.addEventListener('click', () => { try { onGo(); } catch (e) { say('howto go: ' + ((e && e.message) || e)); } });
+      sheet.appendChild(go);
+      try { if (typeof go.focus === 'function') go.focus(); } catch (e) { /* noop */ }
+      return sheet;
+    }
+
+    /**
+     * Policy is the shell's "Skip class tutorials" contract: by default the
+     * sheet shows EVERY class; with the skip on, the lab still explains itself
+     * ONCE per grade tier. Dismissal is the sheet's own button and nothing
+     * else - Cram Assist is bound to a key the moment the board deals, and a
+     * key shortcut here would spend the player's A-cap on a tutorial.
+     */
+    function howto(onDone) {
+      if (ctx.hideTutorial === true && howtoSeenTiers().indexOf(dials ? dials.tier : 1) >= 0) {
+        onDone(); return;
+      }
+      if (!stage) { onDone(); return; }
+      const tierNow = dials ? dials.tier : 1;
+      let done = false;
+      let sheet = null;
+      try {
+        sheet = buildHowto(() => {
+          if (done || dead || ended) return;
+          done = true;
+          try {
+            const seen = howtoSeenTiers();
+            if (seen.indexOf(tierNow) < 0) {
+              seen.push(tierNow);
+              if (ctx.store && typeof ctx.store.mergeGameMeta === 'function') {
+                ctx.store.mergeGameMeta('deja_vu', { howtoTiers: seen });
+              }
+            }
+          } catch (e) { /* best effort - the sheet just shows again next time */ }
+          hideHowto();
+          onDone();
+        });
+      } catch (e) { say('rules sheet refused: ' + ((e && e.message) || e)); sheet = null; }
+      if (!sheet) { onDone(); return; }
+      howtoEl = sheet;
+      stage.appendChild(sheet);
+    }
+
     /* ==================================================================== *
      * THE MODULE INSTANCE
      * ==================================================================== */
@@ -1248,10 +1372,18 @@ export default {
           log: say,
         });
 
-        wireCram();
         claimAssets();
-        startClock();
-        deal();
+
+        /* THE SHEET FIRST (Deck VI). Nothing that measures the player runs
+           until GO: the clock is not ticking, the board has not dealt and Cram
+           Assist is not bound to a key, so a class read at leisure grades
+           exactly like one that skipped the sheet. */
+        howto(() => {
+          if (dead || ended) return;
+          wireCram();
+          startClock();
+          deal();
+        });
 
         liveClass = instance;
         lastReport = null;
@@ -1287,6 +1419,7 @@ export default {
 
       destroy() {
         dead = true;
+        hideHowto();
         stopClock();
         clearTimers();
         stopAmbience();

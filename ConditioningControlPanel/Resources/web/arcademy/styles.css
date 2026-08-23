@@ -312,6 +312,128 @@ html.arc-report-on body { overflow:hidden; }
 .arc-reportstage .arc-classbar { margin:16px 0 0; }
 .arc-reportstage .arc-sharepreview { background:color-mix(in srgb, var(--flap-well), transparent 25%); }
 
+/* ============================ DECK V: THE RAKE ===========================
+   The one-more card. It sits OVER the report stage (z 20 vs 10) and never in
+   place of it - dismissing the card reveals the transcript underneath, which is
+   why the small "Report Card" button exists at all.
+
+   Law VI is a LAYOUT rule here as much as a wiring one: the exits live in their
+   own fixed row with a fixed height, so nothing about a grade, a drop or a
+   progress label can push them around between classes. The lit button pulses;
+   the dim ones do not move.
+
+   No `display:` here belongs to a node the shell toggles with the hidden
+   attribute - the end card is REMOVED, not hidden (shell.js dismissEndCard). */
+.arc-endcard {
+  position:fixed; inset:0; z-index:20;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(16px, 4vh, 48px);
+  overflow:auto;
+  background:
+    radial-gradient(700px 520px at 50% 40%, color-mix(in srgb, var(--pink), transparent 90%), transparent 70%),
+    color-mix(in srgb, var(--ground), transparent 8%);
+  backdrop-filter:blur(7px);
+  animation:arc-endcard-in .28s ease-out both;
+}
+@keyframes arc-endcard-in { from { opacity:0; } to { opacity:1; } }
+.arc-endcard-card {
+  width:min(520px, 92vw); margin:auto;
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+  text-align:center;
+  padding:26px 28px 22px;
+  background:linear-gradient(168deg, var(--panel), var(--navy) 78%);
+  border:var(--hairline); border-radius:var(--radius);
+  box-shadow:0 30px 80px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06);
+  animation:arc-endcard-rise .38s cubic-bezier(.2,1.2,.4,1) both;
+}
+@keyframes arc-endcard-rise {
+  from { transform:translateY(22px) scale(.97); opacity:0; }
+  to   { transform:none; opacity:1; }
+}
+.arc-endcard-card .arc-kicker { margin:0; }
+.arc-endcard-card .arc-h2 { margin:0; font-size:20px; letter-spacing:.14em; }
+/* The grade OBJECT lands here (ceremonies.gradeObject) - a minimum height so a
+   jackpot beat and a near-miss beat leave the buttons in the same place. */
+.arc-endcard-grade {
+  position:relative; min-height:64px;
+  display:flex; align-items:center; justify-content:center; gap:10px;
+}
+.arc-endcard-grade .arc-stamp { font-size:30px; padding:8px 18px; letter-spacing:.1em; }
+.arc-gradeobj.g-s { color:var(--gS); border-color:var(--gS); }
+.arc-gradeobj.g-b { color:var(--gB); border-color:var(--gB); }
+.arc-gradeobj.g-c { color:var(--gC); border-color:var(--gC); box-shadow:none; }
+.arc-gradeobj.g-pass { color:var(--gPass); border-color:var(--gPass); }
+
+/* The sunk-cost meter. The FILL is eased (shell.js easedFill); the label beside
+   it prints the honest count, so the bar flatters without the number lying. */
+.arc-rake-meter {
+  width:100%; height:9px; border-radius:999px; overflow:hidden;
+  background:var(--flap-well); border:1px solid var(--line);
+}
+.arc-rake-meter-fill {
+  height:100%; width:calc(var(--arc-p, 0) * 100%);
+  background:linear-gradient(90deg, var(--pink-deep), var(--pink) 70%, var(--gold));
+  box-shadow:0 0 12px color-mix(in srgb, var(--pink), transparent 45%);
+  transition:width .55s cubic-bezier(.2,.9,.3,1);
+}
+.arc-rake-meterlabel {
+  margin:0; font-family:var(--mono); font-size:10.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+
+/* The variable-ratio drop. Rare by construction, so it gets to be loud. */
+.arc-endcard-drop {
+  display:flex; flex-direction:column; align-items:center; gap:7px;
+  padding:12px 14px; margin-top:2px;
+  border:1px dashed color-mix(in srgb, var(--gold), transparent 45%);
+  border-radius:10px;
+  background:radial-gradient(140% 100% at 50% 0%, color-mix(in srgb, var(--gold), transparent 88%), transparent 70%);
+}
+.arc-endcard-drop .arc-note { margin:0; font-size:12px; color:var(--ink-dim); max-width:38ch; }
+.arc-endcard-dropstamp { min-height:32px; display:flex; align-items:center; justify-content:center; }
+
+/* THE BUTTONS. One lit, pulsing, pre-focused; two small and dim in a row that
+   never re-orders. `min-height` on the exits row is deliberate - a wrapped
+   label must not shift the exit up or down between classes. */
+.arc-endcard-actions {
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  width:100%; margin-top:6px;
+}
+.arc-endcard-actions .arc-retake {
+  min-width:220px; font-size:13px; letter-spacing:.14em; padding:10px 22px;
+  animation:arc-retake-pulse 1.9s ease-in-out infinite;
+}
+.arc-endcard-actions .arc-retake:focus-visible { outline:2px solid var(--ink); outline-offset:3px; }
+@keyframes arc-retake-pulse {
+  0%, 100% { box-shadow:0 0 0 0 color-mix(in srgb, var(--pink), transparent 45%); }
+  50%      { box-shadow:0 0 22px 4px color-mix(in srgb, var(--pink), transparent 55%); }
+}
+html.arc-reduced .arc-endcard-actions .arc-retake { animation:none; box-shadow:0 0 16px rgba(255,105,180,.4); }
+@media (prefers-reduced-motion: reduce) {
+  .arc-endcard-actions .arc-retake { animation:none; box-shadow:0 0 16px rgba(255,105,180,.4); }
+}
+.arc-endcard-exits {
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  min-height:30px; width:100%;
+}
+.arc-endcard-small {
+  font-size:9.5px; letter-spacing:.1em; padding:5px 11px;
+  opacity:.62;                       /* dim, never dead - Law VI */
+}
+.arc-endcard-small:hover { opacity:1; }
+.arc-endcard-small:focus-visible { opacity:1; outline:2px solid var(--pink); outline-offset:2px; }
+.arc-endcard-chip {
+  margin:2px 0 0; font-size:11px; color:var(--ink-faint); max-width:40ch;
+}
+
+/* STREAK JEOPARDY, on the pause card. A line, never a gate. */
+.arc-jeopardy {
+  color:var(--gold);
+  font-family:var(--mono); font-size:11.5px; letter-spacing:.06em;
+  border-top:1px solid color-mix(in srgb, var(--gold), transparent 72%);
+  padding-top:9px; margin-top:2px;
+}
+
 /* ============================ CEREMONIES ================================= */
 .arc-ceremony { position:fixed; inset:0; z-index:45; pointer-events:none; }
 .arc-stamp {
@@ -530,6 +652,37 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 }
 .arc-keycap.capturing { border-color:var(--pink); color:var(--pink); animation:arc-caret 1.1s steps(2) infinite; }
 @keyframes arc-caret { 50% { border-color:var(--line); } }
+
+/* DECK VI - VERB GLYPHS. The cap is DRAWN: a square key with a moulded lip and
+   a shadow under it, wearing the key's glyph (␣, ←, P) instead of its name. The
+   name is not deleted, it moves - settings.js puts it on `title` + `aria-label`
+   and the verb's own label stays in the row beside it. `.wide` is the escape
+   hatch for keys with no symbol (F11, Numpad4) and for the capture prompt. */
+.arc-keycap.arc-glyphcap {
+  min-width:38px; width:38px; height:36px; padding:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-family:var(--mono); font-size:15px; line-height:1;
+  background:linear-gradient(180deg, var(--panel2), color-mix(in srgb, var(--panel2), black 24%));
+  border:1px solid color-mix(in srgb, var(--line), var(--lav) 18%);
+  border-radius:7px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.14),
+    inset 0 -2px 0 rgba(0,0,0,.45),
+    0 3px 0 color-mix(in srgb, var(--flap-well), black 20%),
+    0 5px 10px rgba(0,0,0,.45);
+  transform:translateY(-1px);
+  transition:transform .08s, box-shadow .08s;
+}
+.arc-keycap.arc-glyphcap.wide {
+  width:auto; min-width:74px; padding:0 11px; font-size:11px; letter-spacing:.06em;
+}
+.arc-keycap.arc-glyphcap:hover { color:var(--pink); border-color:var(--pink-deep); }
+.arc-keycap.arc-glyphcap:active,
+.arc-keycap.arc-glyphcap.capturing {
+  transform:translateY(1px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1), inset 0 -1px 0 rgba(0,0,0,.4), 0 1px 0 rgba(0,0,0,.5);
+}
+.arc-keycap.arc-glyphcap:focus-visible { outline:2px solid var(--pink); outline-offset:3px; }
 
 /* ============================ PEEK ======================================= */
 .arc-peekbtn {

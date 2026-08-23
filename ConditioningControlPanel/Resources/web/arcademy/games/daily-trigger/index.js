@@ -781,6 +781,135 @@ export default {
       catch (e) { say('endClass threw: ' + ((e && e.message) || e)); }
     }
 
+    /* ---------------------- class rules sheet ---------------------------- */
+    /**
+     * THE SHEET (Deck VI, Law IV - the rules are DRAWN, the words only caption).
+     * Three vignettes in this class's own language: the letterboard taking a
+     * typed word, the three marks a committed row wears, and the six-row budget
+     * with the rung strip that climbs beside it. Every figure is CSS - cells,
+     * glyphs and pips - so it costs no media and reads at any size.
+     */
+    let howtoEl = null;
+
+    /** Tiers this player has already had the rules sheet for (persisted). */
+    function howtoSeenTiers() {
+      const m = readMeta();
+      return Array.isArray(m.howtoTiers) ? m.howtoTiers.slice() : [];
+    }
+
+    function hideHowto() {
+      if (howtoEl) { try { howtoEl.remove(); } catch (e) { /* noop */ } }
+      howtoEl = null;
+    }
+
+    function buildHowto(onGo) {
+      const sheet = el('div', 'g-dt-howto');
+      sheet.appendChild(el('h2', 'g-dt-hw-title', t('dt_howto_title', 'Class rules')));
+
+      const row = (build, caption) => {
+        const r = el('div', 'g-dt-hw-row');
+        const fig = el('span', 'g-dt-hw-fig');
+        fig.setAttribute('aria-hidden', 'true');
+        try { build(fig); } catch (e) { /* a caption alone still teaches */ }
+        r.appendChild(fig);
+        r.appendChild(el('p', 'g-dt-hw-cap', caption));
+        sheet.appendChild(r);
+        return r;
+      };
+
+      /* 1 - THE ROW. Letters land in the board one cell at a time and the last
+         cell holds the caret; the commit key sits beside it, pressing itself. */
+      row((fig) => {
+        const line = el('span', 'g-dt-hw-line');
+        const glyphs = ['G', 'O', 'O', 'D'];
+        for (let i = 0; i < glyphs.length; i++) {
+          const c = el('span', 'g-dt-hw-cell typed', glyphs[i]);
+          c.style.setProperty('--dt-hw-i', String(i));
+          line.appendChild(c);
+        }
+        const caret = el('span', 'g-dt-hw-cell caret');
+        caret.style.setProperty('--dt-hw-i', String(glyphs.length));
+        line.appendChild(caret);
+        fig.appendChild(line);
+        fig.appendChild(el('span', 'g-dt-hw-key' + (coarse ? ' wide' : ''),
+          coarse ? t('dt_commit', 'COMMIT ROW') : t('dt_enter', 'ENTER')));
+      }, t('dt_howto_type', 'Type a word into the row, then Enter. One answer a day, the same for everyone.'));
+
+      /* 2 - THE MARKS. The three faces a committed cell can wear, in the order
+         the caption names them. Same tokens as the board, same glyph badges. */
+      row((fig) => {
+        const line = el('span', 'g-dt-hw-line');
+        const marks = ['hit', 'near', 'miss'];
+        const glyphs = ['G', 'O', 'O'];
+        for (let i = 0; i < marks.length; i++) {
+          const c = el('span', 'g-dt-hw-cell flip ' + marks[i], glyphs[i]);
+          c.style.setProperty('--dt-hw-i', String(i));
+          line.appendChild(c);
+        }
+        fig.appendChild(line);
+      }, t('dt_howto_marks', 'Star: right letter, right place. Half: right letter, elsewhere. Cross: not in it.'));
+
+      /* 3 - THE BUDGET. Six slabs, two already spent, and the rung strip that
+         climbs one notch with each of them. */
+      row((fig) => {
+        const stack = el('span', 'g-dt-hw-stack');
+        for (let i = 0; i < ROWS; i++) {
+          const slab = el('span', 'g-dt-hw-slab' + (i < 2 ? ' spent' : i === 2 ? ' next' : ''));
+          slab.style.setProperty('--dt-hw-i', String(i));
+          stack.appendChild(slab);
+        }
+        fig.appendChild(stack);
+        const rungs = el('span', 'g-dt-hw-rungs');
+        for (let i = 0; i < 5; i++) {
+          const pip = el('i', i < 2 ? 'on' : null);
+          pip.style.setProperty('--dt-hw-i', String(i));
+          rungs.appendChild(pip);
+        }
+        fig.appendChild(rungs);
+      }, t('dt_howto_rows', 'Six rows is the whole budget. Every wrong row turns the room up one notch.'));
+
+      const go = el('button', 'g-dt-hw-go', t('dt_howto_go', 'Start homeroom'));
+      go.type = 'button';
+      go.addEventListener('click', () => { try { onGo(); } catch (e) { say('howto go: ' + ((e && e.message) || e)); } });
+      sheet.appendChild(go);
+      try { if (typeof go.focus === 'function') go.focus(); } catch (e) { /* noop */ }
+      return sheet;
+    }
+
+    /**
+     * Policy is the shell's "Skip class tutorials" contract: by default the
+     * sheet shows EVERY class; with the skip on, homeroom still explains itself
+     * ONCE per grade tier (the tier is what changes the room). Dismissal is the
+     * sheet's own button and nothing else - every letter key is already a verb
+     * here, so a keyboard shortcut would type into the board it is covering.
+     */
+    function howto(onDone) {
+      if (ctx.hideTutorial === true && howtoSeenTiers().indexOf(tier) >= 0) { onDone(); return; }
+      if (!wrap) { onDone(); return; }
+      let done = false;
+      let sheet = null;
+      try {
+        sheet = buildHowto(() => {
+          if (done || finished) return;
+          done = true;
+          try {
+            const seen = howtoSeenTiers();
+            if (seen.indexOf(tier) < 0) {
+              seen.push(tier);
+              if (ctx.store && ctx.store.mergeGameMeta) {
+                ctx.store.mergeGameMeta('daily_trigger', { howtoTiers: seen });
+              }
+            }
+          } catch (e) { /* best effort - the sheet just shows again next time */ }
+          hideHowto();
+          onDone();
+        });
+      } catch (e) { say('rules sheet refused: ' + ((e && e.message) || e)); sheet = null; }
+      if (!sheet) { onDone(); return; }
+      howtoEl = sheet;
+      wrap.appendChild(sheet);
+    }
+
     /* ---------------------- lifecycle ------------------------------------ */
     return {
       start(classSpec) {
@@ -837,8 +966,6 @@ export default {
             onGlitchSwap: swapGlyphs,
           },
         });
-        ladder.open();
-
         /* The House decks (House Rules floor map: homeroom's three cards +
          * the lighting rig). Both disarm themselves when bgIntensity is
          * capped to 0; both replay identically on a retake. */
@@ -869,10 +996,6 @@ export default {
           t,
           log: say,
         });
-        casino.start();
-        trickster.start();
-        casino.setHeat(ladder.heat);
-
         consumeStudyHint();
         paintCurrentRow();
         paintKeys();
@@ -883,27 +1006,41 @@ export default {
           msg(t('revision_day_hint', 'Revision: you have met this one before.'));
         }
 
-        startMs = Date.now();
-        const clock = () => {
+        /* THE SHEET FIRST (Deck VI). Nothing that measures the player runs
+           until GO: the ladder is still shut, the decks are dark, no key is
+           bound and startMs has not been taken, so a class read at leisure
+           grades exactly like one that skipped the sheet. */
+        const beginClass = () => {
           if (finished) return;
-          if (!paused && !suspended) {
-            elapsedSec = Math.max(0, Math.round((Date.now() - startMs) / 1000));
-            if (clockChip) {
-              const budget = Number(spec.timeBudgetSec) || 90;
-              // CROOKED CLOCK (House Rules): the FACE may bend from rung 3;
-              // elapsedSec itself - the composite input, the warn state, the
-              // log line - is exact and never routes through the trickster.
-              const face = trickster ? trickster.clockFace(elapsedSec, budget) : elapsedSec;
-              clockChip.textContent = face + 's';
-              if (elapsedSec >= budget) clockChip.className = 'chip num warn';
-            }
-          }
-          later(1000, clock);
-        };
-        later(1000, clock);
+          ladder.open();
+          casino.start();
+          trickster.start();
+          casino.setHeat(ladder.heat);
+          paintHud();                      // the opening rung, now that it exists
 
-        try { if (typeof window !== 'undefined') window.addEventListener('keydown', onKeyDown); }
-        catch (e) { say('keydown bind failed: ' + ((e && e.message) || e)); }
+          startMs = Date.now();
+          const clock = () => {
+            if (finished) return;
+            if (!paused && !suspended) {
+              elapsedSec = Math.max(0, Math.round((Date.now() - startMs) / 1000));
+              if (clockChip) {
+                const budget = Number(spec.timeBudgetSec) || 90;
+                // CROOKED CLOCK (House Rules): the FACE may bend from rung 3;
+                // elapsedSec itself - the composite input, the warn state, the
+                // log line - is exact and never routes through the trickster.
+                const face = trickster ? trickster.clockFace(elapsedSec, budget) : elapsedSec;
+                clockChip.textContent = face + 's';
+                if (elapsedSec >= budget) clockChip.className = 'chip num warn';
+              }
+            }
+            later(1000, clock);
+          };
+          later(1000, clock);
+
+          try { if (typeof window !== 'undefined') window.addEventListener('keydown', onKeyDown); }
+          catch (e) { say('keydown bind failed: ' + ((e && e.message) || e)); }
+        };
+        howto(beginClass);
 
         say('board ' + entry.dateUtc + ' #' + entry.puzzleNumber + ' ' + entry.kind
           + ' letters ' + entry.letters + ' tier ' + tier
@@ -934,6 +1071,7 @@ export default {
 
       destroy() {
         finished = true;
+        hideHowto();
         clearTimers();
         if (ladder) ladder.stopAll();
         try { if (trickster) trickster.destroy(); } catch (e) { /* ignore */ }
