@@ -251,7 +251,45 @@ export const STYLE_TEXT = `
   background:rgba(184,166,232,.35);border:1px solid rgba(90,60,140,.35)}
 .g-ir-hear:hover{background:rgba(184,166,232,.55)}
 .g-ir-hear:focus-visible{outline:2px solid var(--pink);outline-offset:1px}
-.g-ir-opt img,.g-ir-opt video{display:block;width:44px;height:44px;object-fit:cover;border-radius:6px;pointer-events:none}
+/* the 44px thumb rule is for a TEXT option's little icon only - scoped away
+   from the media options below, which are the whole point of their card */
+.g-ir-opt:not(.g-ir-opt-media) img,.g-ir-opt:not(.g-ir-opt-media) video{display:block;width:44px;height:44px;object-fit:cover;border-radius:6px;pointer-events:none}
+/* ---- MEDIA OPTIONS: the card asks with pictures ---------------------------
+   SPIRAL / WALL_PICK / WALL_TWICE / WALL_GONE render a preview instead of a
+   label. There is deliberately NO .g-ir-opt-t inside one, which is how the
+   trickster's Unreliable Label folds on these cards - it has no text surface to
+   lie on. Never a filter and never a blend on a face: a preview can hold a live
+   decode (PERF LAW, web CLAUDE.md trap 36). */
+.g-ir-stop[data-kind="media"]{width:min(720px,94%)}
+.g-ir-opt-media{align-items:stretch;flex-direction:column;gap:6px;padding:10px 10px 8px;min-height:0}
+.g-ir-opt-media .g-ir-opt-n{top:8px;margin-top:0}
+.g-ir-opt-face{position:relative;width:100%;aspect-ratio:16/10;max-height:22vh;border-radius:6px;overflow:hidden;
+  background:#0b0a16;border:1px solid rgba(60,40,90,.35);pointer-events:none}
+.g-ir-opt-face img,.g-ir-opt-face video,.g-ir-opt-face .g-ir-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+/* a spiral preview is the asset AS SHIPPED - square, unspun, uncoloured. The
+   wash showed it screen-blended and turning; the arm shape and the palette are
+   what the player actually recalls, so that is what the option shows. */
+.g-ir-opt-face[data-media="spiral"]{aspect-ratio:1/1;width:clamp(84px,14vh,132px);max-height:none;margin:0 auto;
+  background:#0b0716;border:2px solid rgba(184,166,232,.55)}
+.g-ir-opt-media.is-true .g-ir-opt-face{box-shadow:0 0 0 3px rgba(240,194,75,.8)}
+.g-ir-opt-media.is-wrong .g-ir-opt-face{opacity:.55}
+/* WALL_SEEN's single face: the thing being asked about, above two text options */
+.g-ir-q-face{position:relative;z-index:1;width:min(360px,100%);aspect-ratio:16/10;max-height:24vh;margin:0 auto;
+  border-radius:6px;overflow:hidden;background:#0b0a16;border:1px solid rgba(60,40,90,.35)}
+.g-ir-q-face img,.g-ir-q-face video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+/* THE PROOF: the tiles that really wore the answer, ringed at the verdict */
+.g-ir-tile.is-truth{box-shadow:0 0 0 3px var(--gold),0 0 22px rgba(240,194,75,.7);z-index:3}
+/* THE SHROUD: a wall question's answer is ON the wall, so the wall goes out
+   while the card is up and comes back for the verdict (which IS the proof) */
+.g-ir-stage[data-shroud="1"] .g-ir-montage{opacity:.03;transition-duration:.25s}
+/* a phrase option can be a whole sentence (Echo's lesson): clamp, never cut */
+.g-ir-opt-t{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere}
+.g-ir-stop[data-family="HEARD"] .g-ir-opt{font-size:clamp(12px,1.6vmin,14px)}
+@media (pointer: coarse){
+  .g-ir-opt-face{max-height:18vh}
+  .g-ir-opt-face[data-media="spiral"]{width:clamp(68px,12vh,108px)}
+}
+html.ae-touch .g-ir-opt-face{max-height:18vh}
 .g-ir-opt.is-picked,.g-ir-opt[aria-pressed="true"]{background:linear-gradient(180deg, rgba(255,105,180,.28), rgba(255,105,180,.12));
   border-color:rgba(212,72,143,.6)}
 .g-ir-opt.is-true,.g-ir-opt.is-correct,.g-ir-opt.is-truth,.g-ir-opt[data-verdict="correct"]{
@@ -292,8 +330,23 @@ export const STYLE_TEXT = `
   max-width:90%;z-index:3;text-align:center}
 
 /* ---- proctor line + end card ---------------------------------------------- */
-.g-ir-flashwell{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:6}
+.g-ir-flashwell{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:6;
+  opacity:1;transition:opacity .18s ease}
 .g-ir-flashwell *{pointer-events:none}
+/* ---- THE SUB WORD, LEGIBLE (owner: "the text on the sub is pretty faded") --
+   NOT an intensity raise - the node's opacity is still the engine's --ae-alpha
+   and the CEILING RULE is untouched. What this buys is CONTRAST: a plain rgba
+   plate under the letters, a hard outline, and a size that reads across a
+   bright moving wall. GAME-LOCAL by construction (the nodes land in our own
+   .g-ir-flashwell / .g-ir-stop, both under .g-ir-stage), so no other class
+   inherits it. No filter, no blend - the wall behind is a live decode. */
+.g-ir-stage .ae-sub-word{font-size:clamp(36px,6.5vw,84px);line-height:1.05;white-space:normal;
+  max-width:min(72vw,16ch);text-align:center;text-wrap:balance;padding:.14em .5em;border-radius:.16em;
+  color:#fff;letter-spacing:.08em;
+  background:rgba(10,6,22,.78);
+  box-shadow:0 0 0 2px rgba(255,105,180,.38),0 16px 44px rgba(0,0,0,.55);
+  text-shadow:0 0 2px #000,0 0 2px #000,0 2px 0 rgba(0,0,0,.65),0 0 18px var(--ae-pink)}
+.g-ir-stage .ae-sub-stamp{border-width:3px}
 .g-ir-msg{position:relative;z-index:2;margin:0;min-height:1.4em;text-align:center;
   font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
   color:var(--ink-dim);transition:opacity .3s ease}

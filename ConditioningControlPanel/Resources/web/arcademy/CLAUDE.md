@@ -144,6 +144,34 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    and NO deck may fire a POOL primitive - pressure.js dresses with crt / ambient_field /
                    glitch_swap only, and casino.js passes `garnish:false` to `ceremony('jackpot')` because the
                    forced `drain|spiral` garnish would otherwise be a real Spiral the ledger never saw.
+                   THE VARIETY REWORK (owner ruling 2026-08-23, "seems to ask me only about the subliminals
+                   that played"): TEN question families - LAST_WORD / LAST_EFFECT / WALL_PICK / SPIRAL (t1),
+                   LAST_STING or HEARD / WALL_SEEN / WALL_TWICE (t2), LAST_TWO / WALL_GONE (t3). The dealt
+                   variety was always real; the RESOLUTION collapsed, for two reasons that are both gone:
+                   `DISTRACTOR_EXCLUDE` (LAST_EFFECT's decoys were the tier pool minus the last five
+                   emissions, and a tier-1 pool is FOUR keys, so it was almost never instantiable) is replaced
+                   by the per-tier `TAIL_DISTRACTORS` allowance - a thing that fired EARLIER is the
+                   recency-error decoy `ir_near` was written for, not an ambiguity, because "the LAST one" is
+                   unique by the 700ms rule; and `resolveTemplate` is HISTORY-AWARE (it picks the family the
+                   class has asked LEAST, never the one the last question resolved to) instead of walking a
+                   fixed FALLBACK_ORDER that always landed on LAST_WORD.
+                   THE DEAL IS PERMUTATION ROUNDS, not a weighted ban: round r is a seeded permutation of the
+                   surviving pool, the stops walk round 0 then 1..., and a round whose first entry equals the
+                   last dealt swaps its first two. Coverage is structural (floor/ceil(n/k) each, never twice
+                   in a row) and `assertPlan` re-checks it. Families whose MATERIAL does not exist are dropped
+                   at PLAN time (`templateDrops`: wordCount<4, clipCount, spiralCount<4, wallOk) - a family
+                   the plan deals and then always falls out of is the bug this replaced. LAST_STING and HEARD
+                   are ONE-OF-TWO: clips in the mix -> HEARD (the phrase is the content, NO re-listen button);
+                   no clips -> LAST_STING. Media families render `.g-ir-opt-media` previews with no
+                   `.g-ir-opt-t`, which is how the trickster's Unreliable Label folds on them.
+                   THREE TIMING RULES the new families need: THE CUE (`seedDues(..., wantKey)` pulls the next
+                   stop's own channel in to `CUE_LEAD_MS`), THE QUIET (`nextEmission(..., stopAtMs)` refuses to
+                   start a channel inside `PRE_STOP_QUIET_MS`, so the last entry was fully PERCEIVED), THE
+                   QUENCH (trap 44). THE WALL BOOK = one frozen `montage.snapshot()` per stop, cap 16, and
+                   every WALL_* answer is DOM truth read there - never the plan, never the plant request.
+                   Sub words are HELD, not brightened: `fire('sub_flash', {holdMs: SUB_HOLD_MS[tier]})` plus a
+                   game-local plate on `.g-ir-stage .ae-sub-word` (the alpha is still the engine's clamped
+                   channel); `CADENCE.subliminal.min` 1000 -> 1400 so two held words cannot overlap.
   anomaly/         the odd-one-out grid (search, 90s)     - rounds (PURE: kinds/deltas at PERCEPTIBLE floors,
                    relocations cap 2/round, drift) / grade / lex AN_LEX; the odd index lives in CLOSURE ONLY -
                    never a DOM attr/class (suite asserts it); decks get a canMelt(i)/meltCandidates() oracle
@@ -558,6 +586,37 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     passes the field sees byte-identical behaviour**, which is the bar every engine addition has to
     clear. Alpha still comes from the clamped channel - `fullBleed` changes the SHAPE of a burst,
     never its ceiling, so THE CEILING RULE is untouched.
+
+44. **THE ANSWER CAN STILL BE ON SCREEN WHEN THE CARD IS UP - THAT IS WHAT THE QUENCH IS
+    FOR (Instant Recall, 2026-08-23).** `#arc-fx` is `position:fixed; z-index:40` over the
+    WHOLE page, and a held effect outlives the freeze: a spiral / pink / drain wash holds
+    2.4s, a corner GIF 2s, a bubble field 3.4s (and `clearChannels()` deletes the pulse timer
+    that would have stopped it). For the old LAST_EFFECT that gave the answer away some of
+    the time; for a SPIRAL or a WALL card it would give it away EVERY time - the thing you are
+    being asked to remember is still playing over the slip. So `beginStop()` clears the air
+    BEFORE the card: cancel every live burst handle (a ring of 6), `stop('bubble_field')` /
+    `stop('gif_rain')`, step the three washes down to alpha 0.01 (**never `stop('wash')` -
+    trap 33**), one `fire('audio_trigger', {name:'stop_clips'})` to cut a whisper clip
+    mid-word, and blank the game's own `.g-ir-flashwell` so a still-fading sub word cannot sit
+    on the slip. **None of it writes a ledger entry** - a silence is not an emission, and the
+    truth of what happened is already written. The wall itself is hidden a second way, by
+    attribute rather than by effect: `.g-ir-stage[data-shroud="1"]` while a WALL card is up,
+    `"0"` at the verdict (the wall IS the proof, with the truth tiles ringed), removed at the
+    resume. If you ever add a new held primitive to the pool, it must join the quench in the
+    same commit or the class starts handing out answers.
+45. **A SPIRAL LOOK-ALIKE IS ANOTHER ASSET, NEVER A CSS VARIANT OF THE ONE YOU SAW.** The
+    owner asked for "three generated ones, similar to that one". Five of the seven bundled
+    spirals are mirror- and/or rotation-symmetric (sp1/sp7 concentric rings, sp5/sp6 heart
+    tunnels, sp3 a kaleidoscope), so `scaleX(-1)` and any `rotate()` produce an option
+    IDENTICAL to the truth - input honesty broken, and the card has two right answers.
+    `hue-rotate` is a no-op on the two monochrome sets, `invert` on rings is a phase-swap of
+    the same animation, and a recolour makes "the canonically-coloured tile" the tell after
+    two classes. Recolouring the EMITTED wash is worse still: it is a 150vmax `filter:` over a
+    live decode, per frame (trap 36). So `spirals.js` draws a SET of four different spirals
+    the engine could equally have shown, kin-first (rings<->rings, hearts<->hearts,
+    Loom<->Loom), and the decoys are the other three of that set. The preview is the asset AS
+    SHIPPED - square, unspun, uncoloured - because arm shape and palette are what the player
+    actually recalls, not the screen-blended turning wash.
 
 ## 5. The game module contract (short version)
 
