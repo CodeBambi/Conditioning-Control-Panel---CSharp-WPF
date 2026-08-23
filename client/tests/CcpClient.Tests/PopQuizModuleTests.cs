@@ -458,9 +458,14 @@ public class PopQuizModuleTests
         rig.Presence.CanReachAUser = true;
 
         // Clause three, and its "of MINE" qualifier. Somebody ELSE's card on the shared presence
-        // must not darken this row: it is idle and healthy.
+        // must not darken this row: it is idle and healthy. HoldsTheInput is set FALSE here on
+        // purpose — a foreign card that has lost the foreground is the only state in which the
+        // qualifier is observable, and without it a bare _presence.IsPrompting passes this fact
+        // (measured: mutation M20 survived the first sweep).
         rig.Presence.SimulateForeignCard();
+        rig.Presence.HoldsTheInput = false;
         Assert.Equal(EffectDotState.Live, rig.Effect.Dot);
+        rig.Presence.HoldsTheInput = true;
         rig.Presence.Dismiss();
 
         // This module's own card, with the OS holding the input, is Live — waiting for a human IS
