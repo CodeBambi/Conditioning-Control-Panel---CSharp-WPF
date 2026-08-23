@@ -483,8 +483,20 @@ export default {
           door = null;
           resolve(ok);
         };
+        /* onPlay can fire MORE THAN ONCE: the door's thin strip offers "add
+           another pick", which walks back to the picker and presses PLAY again.
+           Each press is a generation; an older claim or ghost that lands late
+           is disposed, never dealt. */
+        let playGen = 0;
+        const disposePending = () => {
+          try { if (pending && pending.pool && typeof pending.pool.dispose === 'function') pending.pool.dispose(); }
+          catch (e) { /* noop */ }
+          pending = { pool: null, quick: false, hot: false, thin: false, sources: null };
+        };
         const onPlay = (blob, resolved) => {
           if (settled) return;
+          const gen = ++playGen;
+          disposePending();
           const res = resolved || { sources: [], hot: false, quick: true };
           /* THE DOOR'S BLOB IS PAGE-OWNED and written HERE, once, so a door
              that crashed after picking cannot leave half a setup behind. */
@@ -498,6 +510,11 @@ export default {
           try { if (door && typeof door.setBusy === 'function') door.setBusy(true, 'sort_dealing'); }
           catch (e) { /* noop */ }
           claimPool(res).then((got) => {
+            if (settled || gen !== playGen) {
+              try { if (got && got.pool && typeof got.pool.dispose === 'function') got.pool.dispose(); }
+              catch (e) { /* noop */ }
+              return;
+            }
             pending = {
               pool: got.pool,
               quick: !!got.quick,
@@ -507,13 +524,25 @@ export default {
             };
             try { if (door && typeof door.setBusy === 'function') door.setBusy(false, ''); }
             catch (e) { /* noop */ }
+            /* THIN is only knowable now: the door raises its strip (non-blocking,
+               the ghost still runs under it) and may press PLAY again. */
+            if (!pending.quick && pending.pool && typeof pending.pool.thin === 'function') {
+              const thin = ['target', 'noise'].filter((tg) => {
+                try { return !!pending.pool.thin(tg); } catch (e) { return false; }
+              });
+              if (thin.length) {
+                pending.thin = true;
+                try { if (door && typeof door.warnThin === 'function') door.warnThin(thin); }
+                catch (e) { /* noop */ }
+              }
+            }
             /* THE GHOST ROUND needs rows, which is why it runs AFTER the claim:
                two of the player's own cards swiping themselves is the rulebook,
                and a mock-up of somebody else's media would not be. */
             const ghost = door && typeof door.ghost === 'function' ? door.ghost : null;
             if (!ghost) { finish(true); return; }
             let done = false;
-            const go = () => { if (!done) { done = true; finish(true); } };
+            const go = () => { if (!done) { done = true; if (gen === playGen) finish(true); } };
             try {
               const r = ghost(ghostRows(pending.pool, pending.quick));
               if (r && typeof r.then === 'function') r.then(go, go); else go();
@@ -521,6 +550,7 @@ export default {
             /* a door whose ghost never resolves may not hold the class hostage */
             timers.after(12000, go);
           }, (e) => {
+            if (settled || gen !== playGen) return;
             say('the deal failed: ' + ((e && e.message) || e));
             pending = { pool: null, quick: true, hot: false, thin: false, sources: [] };
             finish(true);
