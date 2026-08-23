@@ -282,9 +282,9 @@ public class PopQuizModuleTests
     [Fact]
     public void AnsweringRevealsTheAffirmationAfterThreeHundredMillisecondsAndClosesFifteenHundredAfterThat()
     {
-        // Windows/PopQuizWindow.xaml.cs:170-177 — await Task.Delay(300), swap the panels, await
-        // Task.Delay(1500), close. Both on the INJECTED clock here; there is no Task.Delay in this
-        // port's session paths at all.
+        // Windows/PopQuizWindow.xaml.cs:170-177 — upstream awaits 300 ms, swaps the panels, awaits
+        // 1500 ms and closes. Both delays ride the INJECTED clock here; this port has no awaited
+        // wall-clock delay on any session path.
         //
         // THE NUMBERS ARE LITERALS BELOW, NOT THE MODULE'S OWN CONSTANTS. Advancing by
         // PopQuizEffect.AffirmationDelay would move with the constant, so a mutation that changed
@@ -322,9 +322,10 @@ public class PopQuizModuleTests
     }
 
     [Fact]
-    public void EscapeTakesTheCardDownAtOnceWithNoAffirmationAndNoXp()
+    public async Task EscapeTakesTheCardDownAtOnceWithNoAffirmationAndNoXp()
     {
         using var rig = new Rig(withLedger: true);
+        await rig.OpenLedgerAsync();
         rig.Enable();
         rig.Effect.Arm();
         rig.Clock.Advance(PopQuizSchedule.Interval(PopQuizSchedule.DefaultPerHour, 0.5));
@@ -345,13 +346,14 @@ public class PopQuizModuleTests
     // =================================================================================
 
     [Fact]
-    public void AnAnsweredQuestionBanksUpstreamsTwentyFiveIntoTheRealLedgerAtThePickAndNotAtTheClose()
+    public async Task AnAnsweredQuestionBanksUpstreamsTwentyFiveIntoTheRealLedgerAtThePickAndNotAtTheClose()
     {
         // Windows/PopQuizWindow.xaml.cs:157-167 awards 25 at the CLICK, before the 300 ms wait and
         // before the affirmation is drawn (:170-173). The packet's premise that nothing in this build
         // awards XP is stale: Features/Progression/ProgressionLedger banks from three call sites
         // already, so upstream's own number goes to the real store rather than being refused.
         using var rig = new Rig(withLedger: true);
+        await rig.OpenLedgerAsync();
         rig.Enable();
         rig.Effect.Arm();
         rig.Clock.Advance(PopQuizSchedule.Interval(PopQuizSchedule.DefaultPerHour, 0.5));
@@ -583,9 +585,10 @@ public class PopQuizModuleTests
                     _registry.OwnerFor("PopQuizProgression"), new NullLog(),
                     Path.Combine(_directory, ProgressionDocument.FileName),
                     ProgressionDocument.CurrentSchemaVersion);
-                _xpStore.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
                 // ownsStore: this rig opened it, so the ledger's own flush-then-stop is the teardown
-                // (ProgressionLedger.Dispose, contract §11: a stop is not a flush).
+                // (ProgressionLedger.Dispose, contract §11: a stop is not a flush). The store is
+                // STARTED by OpenLedgerAsync, awaited by the caller and never bridged synchronously,
+                // which is what keeps this rig off the blocking-wait ledger entirely.
                 Ledger = new ProgressionLedger(_xpStore, static _ => { }, ownsStore: true);
             }
 
@@ -618,6 +621,13 @@ public class PopQuizModuleTests
         public List<PopQuizEvent> Shown { get; } = [];
 
         public List<PopQuizResolution> Resolutions { get; } = [];
+
+        /// <summary>Bring the XP ledger's store up. Awaited by the caller rather than bridged, so
+        /// this rig adds no blocking wait of any kind.</summary>
+        public Task OpenLedgerAsync() =>
+            _xpStore is null
+                ? Task.CompletedTask
+                : _xpStore.StartAsync(TestContext.Current.CancellationToken);
 
         public void Enable(int perHour = PopQuizSchedule.DefaultPerHour) =>
             Preset.Mutate(p =>
