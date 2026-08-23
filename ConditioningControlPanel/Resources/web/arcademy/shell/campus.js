@@ -653,6 +653,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220 }, 'campus-ghall'));
   floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'url(#campusCarpet)' }, 'campus-carpet'));
   floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
+  /* THE GATE ALLEY HAS A FLOOR. x 700..740 is the run between the Entrance
+   * Hall's east wall and the Sorting Room's west one, and the nightly route has
+   * always walked it (M720,908 straight up to the Main Hall) - but until lot 3
+   * built a room on the hall's west span there was a hall under it, and after
+   * lot 3 there was nothing: the marching pink dashes climbed a 40-unit strip
+   * of open sky between two buildings. Paved, it is what the plan always meant
+   * it to be, a front walk. CORRIDOR STONE, NOT CARPET: the midway tile is a
+   * 48-unit pattern and a 40-wide slot of it reads as noise, and this is the
+   * one run of the school a player is meant to walk THROUGH, never stand in. */
+  floors.appendChild(svg('rect', { x: 700, y: 510, width: 40, height: 220 }, 'campus-ghall'));
+  floors.appendChild(svg('rect', { x: 700, y: 510, width: 40, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
   plan.appendChild(stag(floors, 60));
 
   /* ------------------------------ wings ---------------------------------- */
@@ -818,13 +829,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
          its neighbours tipped left and right - the two piles and the one you
          are holding. Scaled up from the parlour original to storefront size;
          the rotations stay around each card's own centre. */
-      [[810, -14], [840, 0], [870, 14]].forEach(([cx, deg]) => {
-        const card = svg('rect', { x: cx - 8, y: 606, width: 16, height: 22, rx: 2 }, 'campus-furnf');
-        if (deg) card.setAttribute('transform', 'rotate(' + deg + ' ' + cx + ' 617)');
+      [[782, -14], [840, 0], [898, 14]].forEach(([cx, deg]) => {
+        const card = svg('rect', { x: cx - 21, y: 595, width: 42, height: 58, rx: 3 }, 'campus-furnf');
+        if (deg) card.setAttribute('transform', 'rotate(' + deg + ' ' + cx + ' 624)');
         put(card);
       });
       // the felt line the fan sits on
-      put(svg('line', { x1: 786, y1: 642, x2: 894, y2: 642 }, 'campus-furn'));
+      put(svg('line', { x1: 762, y1: 668, x2: 918, y2: 668 }, 'campus-furn'));
     } else if (key === 'echo') {
       // the ring, laid out along the top wall: six pads and the room's own line
       [1013, 1037, 1061, 1085, 1109, 1133].forEach((x) => put(svg('rect', { x, y: 220, width: 14, height: 14 }, 'campus-furnf')));
@@ -1054,11 +1065,18 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   hall.appendChild(svg('rect', { x: 662, y: 548, width: 12, height: 150 }, 'campus-furnf'));
   [[566, 'gold'], [596, 'gold'], [626, 'lav'], [656, 'dim']].forEach(([cy, k]) => hall.appendChild(svg('circle', { cx: 668, cy, r: 2.4 }, 'campus-trophy ' + k)));
   hall.appendChild(svgText(639, 628, 'campus-rsub tiny', t('campus_trophy_case', 'Trophy Case').toUpperCase(), { transform: 'rotate(-90 639 628)' }));
-  hall.appendChild(svg('rect', { x: 472, y: 600, width: 46, height: 86 }, 'campus-furnf'));
-  hall.appendChild(svg('line', { x1: 480, y1: 616, x2: 510, y2: 616 }, 'campus-furn'));
-  hall.appendChild(svg('line', { x1: 480, y1: 632, x2: 510, y2: 632 }, 'campus-furn'));
-  hall.appendChild(svg('circle', { cx: 495, cy: 662, r: 3 }, 'campus-lamp'));
-  hall.appendChild(svgText(452, 644, 'campus-rsub tiny', t('campus_admissions', 'Admissions').toUpperCase(), { transform: 'rotate(-90 452 644)' }));
+  /* THE ADMISSIONS DESK, SHIFTED EIGHT UNITS EAST - and its rotated sign with
+   * it. The label used to hang at x 452, twenty units clear of the desk and
+   * twenty units OUTSIDE the hall, which the old 480-wide hall could afford
+   * because nothing stood there. The Pool's covered walk does: its two roof
+   * lines run x 443..457 all the way down to the water, and the sign was
+   * standing in the middle of the walkway. Inside the wall it goes; the desk
+   * moves with it so the sign still reads as the counter's own. */
+  hall.appendChild(svg('rect', { x: 480, y: 600, width: 46, height: 86 }, 'campus-furnf'));
+  hall.appendChild(svg('line', { x1: 488, y1: 616, x2: 518, y2: 616 }, 'campus-furn'));
+  hall.appendChild(svg('line', { x1: 488, y1: 632, x2: 518, y2: 632 }, 'campus-furn'));
+  hall.appendChild(svg('circle', { cx: 503, cy: 662, r: 3 }, 'campus-lamp'));
+  hall.appendChild(svgText(472, 644, 'campus-rsub tiny', t('campus_admissions', 'Admissions').toUpperCase(), { transform: 'rotate(-90 472 644)' }));
   plan.appendChild(stag(hall, 600));
 
   /* Entrance hall as a facility hit-area (notices card) */
@@ -1080,8 +1098,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   plan.appendChild(stag(hallG, 860));
 
   /* corridor <-> entrance opening + main gate */
-  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 738, y2: 510 }, 'campus-gap'));
-  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 738, y2: 510, 'stroke-dasharray': '3 6' }, 'campus-opening'));
+  /* THE OPENING NOW RUNS TO THE ALLEY'S FAR JAMB. It used to stop at 738 and
+   * nobody could tell, because until lot 3 there was 200 more units of Entrance
+   * Hall behind it; with the Sorting Room's west wall standing at 740 those two
+   * units were a sliver of corridor wall left hanging across the mouth of the
+   * gate alley. Flush with the jamb, the hall's own 38-unit doorway and the
+   * alley's 40 read as the one wide opening they are. */
+  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 740, y2: 510 }, 'campus-gap'));
+  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 740, y2: 510, 'stroke-dasharray': '3 6' }, 'campus-opening'));
   plan.appendChild(svg('line', { x1: 682, y1: 730, x2: 758, y2: 730 }, 'campus-gap'));
   plan.appendChild(svg('path', { d: 'M682,730 A38,38 0 0 0 720,768' }, 'campus-door'));
   plan.appendChild(svg('path', { d: 'M758,730 A38,38 0 0 1 720,768' }, 'campus-door'));
