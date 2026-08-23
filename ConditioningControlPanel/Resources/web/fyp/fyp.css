@@ -316,6 +316,16 @@ html, body {
   background: transparent;
   color: #7d7d9c;
 }
+/* LIBRARY vs SELECTION: a sub that is kept but NOT in this feed right now (added for
+   another surface, or clicked off here). Dimmed, never hidden - it is one click from
+   being back, and its ✕ still forgets it everywhere. Declared last so it beats
+   .verified's colours at equal specificity. */
+.niche-chip.custom.off {
+  border-color: #3a3a5c;
+  background: transparent;
+  color: #8f8fae;
+  opacity: 0.8;
+}
 
 /* B2 expander: the subs behind each selected niche. Collapsed = one line each. */
 #niche-subs { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; }

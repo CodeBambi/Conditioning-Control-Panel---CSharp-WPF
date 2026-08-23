@@ -96,6 +96,23 @@ export const ROOMS = Object.freeze({
     descKey: 'campus_desc_the_deep_end',
     descEn: 'Sink tile into tile. The deeper you go, the harder the board is to read.',
   },
+  /* ---- THE SORTING ROOM - Semester II's newest front (lot 3) ---------------
+   * SORT shipped after lot 2 gave Misdirection's old parlour to the front
+   * office, so the newest class got the last buildable lot on the map: the
+   * Entrance Hall's west span. The hall compacted to x 460..700 and the run
+   * x 700..740 became the GATE ALLEY - the Main Gate's double doors already
+   * met at x 720 and the nightly route has always entered on that line
+   * (M720,908 straight up to the Main Hall), so the alley costs the plan
+   * nothing: the walk between the hall and the Sorting Room IS the front walk.
+   * An ordinary south-corridor room otherwise: side/door only, badge in the
+   * Main Hall, plate on the corridor wall like Lost & Found across the way. */
+  sort: {
+    rect: [740, 510, 200, 220], side: 's', door: 840, rm: '203',
+    gameEn: 'Sort',
+    nameKey: 'campus_room_sort', nameEn: 'The Sorting Room',
+    descKey: 'campus_desc_sort',
+    descEn: 'Two piles, and you decide what goes in them. Yours to the right.',
+  },
   /* ---- THE EAST FRONTS - Semester II's two storefronts ---------------------
    * Ordinary corridor rooms, and deliberately so: `side`/`door` are all they
    * carry, which means doorFor(), stopAnchor() and routeFor() treat them exactly
@@ -633,9 +650,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * night that deals a west class drew the marching pink dashes straight
    * through the words. y 452 is the same floor, one row up. */
   floors.appendChild(svgText(252, 452, 'campus-rsub start wide', t('campus_main_hall', 'Main Hall').toUpperCase(), { 'text-anchor': 'start' }));
-  floors.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220 }, 'campus-ghall'));
-  floors.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220, fill: 'url(#campusCarpet)' }, 'campus-carpet'));
-  floors.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
+  floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220 }, 'campus-ghall'));
+  floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'url(#campusCarpet)' }, 'campus-carpet'));
+  floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
   plan.appendChild(stag(floors, 60));
 
   /* ------------------------------ wings ---------------------------------- */
@@ -795,6 +812,19 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       // diving block on the west deck
       put(svg('rect', { x: 306, y: 774, width: 20, height: 14 }, 'campus-furnf'));
       put(svg('line', { x1: 326, y1: 774, x2: 326, y2: 788 }, 'campus-furn'));
+    } else if (key === 'sort') {
+      /* A THREE-CARD FAN in the logo band (SORT has no keyed art yet, so the
+         fan is the room's interim art): the middle card square to the room,
+         its neighbours tipped left and right - the two piles and the one you
+         are holding. Scaled up from the parlour original to storefront size;
+         the rotations stay around each card's own centre. */
+      [[810, -14], [840, 0], [870, 14]].forEach(([cx, deg]) => {
+        const card = svg('rect', { x: cx - 8, y: 606, width: 16, height: 22, rx: 2 }, 'campus-furnf');
+        if (deg) card.setAttribute('transform', 'rotate(' + deg + ' ' + cx + ' 617)');
+        put(card);
+      });
+      // the felt line the fan sits on
+      put(svg('line', { x1: 786, y1: 642, x2: 894, y2: 642 }, 'campus-furn'));
     } else if (key === 'echo') {
       // the ring, laid out along the top wall: six pads and the room's own line
       [1013, 1037, 1061, 1085, 1109, 1133].forEach((x) => put(svg('rect', { x, y: 220, width: 14, height: 14 }, 'campus-furnf')));
@@ -1012,8 +1042,8 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');
-  hall.appendChild(svg('circle', { cx: 700, cy: 622, r: 46, 'stroke-dasharray': '4 6' }, 'campus-crestring'));
-  hall.appendChild(svgText(700, 638, 'campus-crestA', 'A'));
+  hall.appendChild(svg('circle', { cx: 582, cy: 622, r: 46, 'stroke-dasharray': '4 6' }, 'campus-crestring'));
+  hall.appendChild(svgText(582, 638, 'campus-crestA', 'A'));
   /* THE NOTICE BOARD is corkboard under a lamp now: a felt backing behind the
    * existing board, and a gold plate instead of a chalk one. The board rect,
    * its four pins and their coordinates are untouched. */
@@ -1021,9 +1051,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   hall.appendChild(svg('rect', { x: 500, y: 516, width: 130, height: 10 }, 'campus-furnf'));
   [[516, 'p1'], [548, 'p2'], [583, 'p3'], [612, 'p4']].forEach(([cx, k]) => hall.appendChild(svg('circle', { cx, cy: 521, r: 1.6 }, 'campus-pin ' + k)));
   hall.appendChild(svgText(565, 542, 'campus-rsub tiny gold', t('campus_notice_board', 'Notice Board').toUpperCase()));
-  hall.appendChild(svg('rect', { x: 916, y: 548, width: 12, height: 150 }, 'campus-furnf'));
-  [[566, 'gold'], [596, 'gold'], [626, 'lav'], [656, 'dim']].forEach(([cy, k]) => hall.appendChild(svg('circle', { cx: 922, cy, r: 2.4 }, 'campus-trophy ' + k)));
-  hall.appendChild(svgText(893, 628, 'campus-rsub tiny', t('campus_trophy_case', 'Trophy Case').toUpperCase(), { transform: 'rotate(-90 893 628)' }));
+  hall.appendChild(svg('rect', { x: 662, y: 548, width: 12, height: 150 }, 'campus-furnf'));
+  [[566, 'gold'], [596, 'gold'], [626, 'lav'], [656, 'dim']].forEach(([cy, k]) => hall.appendChild(svg('circle', { cx: 668, cy, r: 2.4 }, 'campus-trophy ' + k)));
+  hall.appendChild(svgText(639, 628, 'campus-rsub tiny', t('campus_trophy_case', 'Trophy Case').toUpperCase(), { transform: 'rotate(-90 639 628)' }));
   hall.appendChild(svg('rect', { x: 472, y: 600, width: 46, height: 86 }, 'campus-furnf'));
   hall.appendChild(svg('line', { x1: 480, y1: 616, x2: 510, y2: 616 }, 'campus-furn'));
   hall.appendChild(svg('line', { x1: 480, y1: 632, x2: 510, y2: 632 }, 'campus-furn'));
@@ -1033,8 +1063,8 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   /* Entrance hall as a facility hit-area (notices card) */
   const hallG = svg('g', null, 'campus-room facility');
-  hallG.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220, fill: 'transparent', stroke: 'none' }, 'campus-hit'));
-  hallG.appendChild(svgText(700, 700, 'campus-rname dim', t('campus_entrance_hall', 'Entrance Hall').toUpperCase()));
+  hallG.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'transparent', stroke: 'none' }, 'campus-hit'));
+  hallG.appendChild(svgText(582, 704, 'campus-rname dim', t('campus_entrance_hall', 'Entrance Hall').toUpperCase()));
   hallG.addEventListener('click', () => openFacilityCard({
     name: t('campus_entrance_hall', 'Entrance Hall'),
     status: t('campus_notice_board', 'Notice Board'),

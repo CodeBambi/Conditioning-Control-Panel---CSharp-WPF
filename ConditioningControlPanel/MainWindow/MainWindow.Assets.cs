@@ -2411,16 +2411,25 @@ namespace ConditioningControlPanel
                 clean = sanitized;
 
                 var current = settings.FypOnlineCustomSubs ?? new List<string>();
-                if (current.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
+                if (settings.LibraryHasSub(clean))
                 {
-                    ShowRemoteSubError(string.Format(LocOr("msg_remote_sub_duplicate",
-                        "r/{0} is already added"), clean));
+                    // Already KEPT. Typing it again is a "use it here", not an error - that is
+                    // what one shared library buys; only a name already in the pool is a dupe.
                     box.Text = "";
+                    if (current.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        ShowRemoteSubError(string.Format(LocOr("msg_remote_sub_duplicate",
+                            "r/{0} is already added"), clean));
+                        return;
+                    }
+                    ToggleRemoteSubSelection(clean);
                     return;
                 }
-                if (current.Count >= RemoteCustomSubCap)
+                if (settings.RemoteSubLibrary.Count >= Models.AppSettings.RemoteSubLibraryCap)
                 {
-                    ShowRemoteSubError(LocOr("msg_remote_sub_cap", "Up to 20 custom subreddits"));
+                    ShowRemoteSubError(string.Format(LocOr("msg_remote_sub_library_cap",
+                        "You can keep up to {0} subreddits - remove one with its X first"),
+                        Models.AppSettings.RemoteSubLibraryCap));
                     return;
                 }
 
@@ -2459,8 +2468,12 @@ namespace ConditioningControlPanel
 
                 if (probe.Ok)
                 {
+                    // Keep it (the library), then use it here (the selection). Adding from any
+                    // surface lands in the library; only the surface you are on lights it up.
+                    settings.TryAddLibrarySub(clean);
                     var list = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
-                    if (!list.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
+                    if (!list.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase))
+                        && list.Count < RemoteCustomSubCap)
                         list.Add(clean);
                     settings.FypOnlineCustomSubs = list;
                     settings.FypOnlineSubVerdicts[clean] = new RemoteSubVerdict
@@ -2537,18 +2550,53 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// The X on a pill: FORGET this subreddit, everywhere. The library entry, its probe
+        /// verdict and its membership of the app-wide pool go together
+        /// (<c>AppSettings.RemoveLibrarySub</c>) - one gesture, gone from every surface, including
+        /// the For You popover and any Arcademy sort that referenced it.
+        ///
+        /// <para>Dropping a sub from THIS pool without forgetting it is the pill's other gesture:
+        /// click the pill body (<see cref="ToggleRemoteSubSelection"/>).</para>
+        /// </summary>
         private void RemoveRemoteCustomSub(string sub)
         {
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            var list = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
-            list.RemoveAll(x => string.Equals(x, sub, StringComparison.OrdinalIgnoreCase));
-            settings.FypOnlineCustomSubs = list;
-            // The verdict is about a sub the user no longer keeps, so it goes with it: leaving it
-            // behind would silently re-verify a name they deliberately dropped and re-probed later.
+            if (settings.RemoveLibrarySub(sub))
+                App.Logger?.Information("[remote media] r/{Sub} removed from the library", sub);
+            ShowRemoteSubError(null);
+
+            PersistRemoteChannelChange();
+            RefreshRemoteMediaPicker();
+        }
+
+        /// <summary>
+        /// The pill body: is this KEPT subreddit in the app-wide media pool
+        /// (<c>FypOnlineCustomSubs</c>) or not. Selection only - the name stays in the library
+        /// either way, which is what lets a sub be kept for the Arcademy's sorting room without
+        /// its clips turning up in flashes.
+        /// </summary>
+        private void ToggleRemoteSubSelection(string sub)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
             var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(sub) ?? sub;
-            settings.FypOnlineSubVerdicts.Remove(clean);
+            var list = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
+            int idx = list.FindIndex(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase));
+            if (idx >= 0) list.RemoveAt(idx);
+            else
+            {
+                if (list.Count >= RemoteCustomSubCap)
+                {
+                    ShowRemoteSubError(LocOr("msg_remote_sub_cap", "Up to 20 custom subreddits"));
+                    return;
+                }
+                list.Add(clean);
+            }
+            settings.FypOnlineCustomSubs = list;
             ShowRemoteSubError(null);
 
             PersistRemoteChannelChange();
@@ -2573,28 +2621,29 @@ namespace ConditioningControlPanel
 
             var verified = AssetsTab?.TryFindResource("RemoteSubVerifiedBrush") as Brush;
             var muted = Application.Current?.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
-            var removeTip = LocOr("tooltip_remote_custom_sub_remove", "Remove this subreddit");
+            var removeTip = LocOr("tooltip_remote_library_remove", "Forget this subreddit everywhere");
 
-            foreach (var sub in (settings.FypOnlineCustomSubs ?? new List<string>()).ToList())
+            // The chips ARE the library (every sub kept anywhere in the app), not the pool. A lit
+            // pill is in this machine's media pool; a dashed one is kept but unused here, one
+            // click from being back. The X is the only thing that forgets a name.
+            foreach (var row in settings.BuildRemoteSubLibraryView())
             {
-                var name = sub;   // captured per chip, not per loop variable
-                settings.FypOnlineSubVerdicts.TryGetValue(name, out var verdict);
-
+                var name = row.Name;   // captured per chip, not per loop variable
                 var label = $"r/{name}";
                 Brush? accent = null;
-                string? chipTip = null;
+                string? chipTip;
 
-                if (verdict != null && verdict.Ok)
+                if (row.Ok == true)
                 {
                     // Orange = we asked and it answered. VideoCount 0 is a real answer too, and
                     // the pill says "stills only" rather than promising clips it does not have.
-                    accent = verified;
-                    chipTip = verdict.VideoCount.GetValueOrDefault() > 0
-                        ? string.Format(LocOr("label_remote_sub_verified",
-                            "Verified · {0} clips on Scrolller"), verdict.VideoCount.GetValueOrDefault())
-                        : LocOr("label_remote_sub_verified_stills", "Verified · stills only");
+                    accent = row.Selected ? verified : muted;
+                    chipTip = row.StillOnly
+                        ? LocOr("label_remote_sub_verified_stills", "Verified · stills only")
+                        : string.Format(LocOr("label_remote_sub_verified",
+                            "Verified · {0} clips on Scrolller"), row.VideoCount.GetValueOrDefault());
                 }
-                else if (verdict != null)
+                else if (row.Ok == false)
                 {
                     // Probed and NOT found. It stays in the list (the user put it there and may
                     // know something we do not) but it is marked, not quietly rendered as fine.
@@ -2603,10 +2652,21 @@ namespace ConditioningControlPanel
                     chipTip = string.Format(LocOr("msg_remote_sub_not_found",
                         "r/{0} isn't on Scrolller"), name);
                 }
-                // No verdict at all = added before probing existed. Default pill, no claim either way.
+                else
+                {
+                    // No verdict at all = kept before probing existed. No claim either way.
+                    accent = row.Selected ? null : muted;
+                    chipTip = null;
+                }
+
+                var toggleTip = row.Selected
+                    ? LocOr("tooltip_remote_sub_in_pool", "In your media pool - click to drop it")
+                    : LocOr("tooltip_remote_sub_kept", "Kept - click to add it to your media pool");
+                chipTip = chipTip == null ? toggleTip : chipTip + "\n" + toggleTip;
 
                 host.Children.Add(BuildRemoteChip(label, removeTip,
-                    () => RemoveRemoteCustomSub(name), accent, chipTip));
+                    () => RemoveRemoteCustomSub(name), accent, chipTip,
+                    dashed: !row.Selected, onToggle: () => ToggleRemoteSubSelection(name)));
             }
 
             // Grey dashed placeholder while the probe is out, so the click has a visible effect
@@ -2632,10 +2692,22 @@ namespace ConditioningControlPanel
         /// <paramref name="dashed"/> draws the outline as a rounded Rectangle instead, because a
         /// WPF Border has no dash style of its own.</summary>
         private Border BuildRemoteChip(string label, string? removeTip, Action? onRemove,
-            Brush? accent = null, string? chipTip = null, bool dashed = false)
+            Brush? accent = null, string? chipTip = null, bool dashed = false, Action? onToggle = null)
         {
             var chip = new Border { Style = AssetsTab?.TryFindResource("RemoteChipBorder") as Style };
             if (chipTip != null) chip.ToolTip = chipTip;
+            if (onToggle != null)
+            {
+                // Two gestures on one pill: the body toggles this surface's selection, the X
+                // forgets the sub everywhere. ButtonBase marks its own MouseLeftButtonUp handled,
+                // so a click on the X never reaches this handler.
+                chip.Cursor = Cursors.Hand;
+                chip.MouseLeftButtonUp += (_, _) =>
+                {
+                    try { onToggle(); }
+                    catch (Exception ex) { App.Logger?.Debug("Remote chip toggle failed: {E}", ex.Message); }
+                };
+            }
             var row = new StackPanel { Orientation = Orientation.Horizontal };
 
             row.Children.Add(new TextBlock

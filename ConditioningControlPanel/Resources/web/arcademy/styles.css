@@ -117,6 +117,12 @@
   --room-instant_recall-a:#2E2E6B;  /* projector navy   (Lecture Hall) */
   --room-instant_recall-b:#1B1D32;
   --room-instant_recall-glow:#656DE2;
+  /* SORT'S CARD IS NOT DRAWN YET (its punchcard face ships as a byte-copy of
+     Discipline Hall's) - so these three are a PLACEHOLDER reading "casino
+     felt", not a sample of locked art. Re-sample when the real card lands. */
+  --room-sort-a:#2E6B4A;            /* felt emerald     (The Sorting Room) */
+  --room-sort-b:#152F22;
+  --room-sort-glow:#4FD08E;
   --room-anomaly-a:#4C4554;         /* graphite/silver  (Darkroom) */
   --room-anomaly-b:#1F1F28;
   --room-anomaly-glow:#A699B8;
@@ -989,6 +995,10 @@ svg.campus-plan [data-game="echo"] {
 svg.campus-plan [data-game="instant_recall"] {
   --room-a:var(--room-instant_recall-a); --room-b:var(--room-instant_recall-b);
   --room-glow:var(--room-instant_recall-glow);
+}
+svg.campus-plan [data-game="sort"] {
+  --room-a:var(--room-sort-a); --room-b:var(--room-sort-b);
+  --room-glow:var(--room-sort-glow);
 }
 svg.campus-plan [data-game="anomaly"] {
   --room-a:var(--room-anomaly-a); --room-b:var(--room-anomaly-b);
@@ -1928,6 +1938,15 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 .arc-pc[data-game="the_deep_end"] {
   --pc-crest-src:url(art/punchcard/crest-the_deep_end.png);  /* the sinking tile on the wave */
   --pc-face-src:url(art/punchcard/face-the_deep_end.png);
+}
+/* SORT ships PLACEHOLDER ART (2026-08-23): face-sort.png and crest-sort.png are
+   byte-copies of Discipline Hall's pair so the card has a floor to stand on
+   while the real pass is drawn. They are listed here and in faces.json for the
+   same reason - a class in faces.json is a class whose face SHIPPED, and both
+   files exist. Replace the two pngs and nothing else changes. */
+.arc-pc[data-game="sort"] {
+  --pc-crest-src:url(art/punchcard/crest-sort.png);  /* PLACEHOLDER - the fan + the two piles */
+  --pc-face-src:url(art/punchcard/face-sort.png);    /* PLACEHOLDER */
 }
 /* MISDIRECTION HAS NO ART ON PURPOSE - the class was scrapped (2026-08-23), so
    it is absent from faces.json too and its card keeps the drawn floor. */
