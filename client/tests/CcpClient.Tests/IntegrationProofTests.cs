@@ -65,12 +65,14 @@ public class IntegrationProofTests
         Assert.False(scheduler.Scheduler.Polling);
         Assert.False(scheduler.Scheduler.Enabled);
         Assert.Null(scheduler.Scheduler.Last);
-        // The HAPTIC sink registers last, and its phase-3 start CONNECTS TO NOTHING. This
-        // build admits no provider client, so the participant never asks — a product that opened a
-        // WebSocket to ws://127.0.0.1:12345 with nothing able to speak the protocol would be making
-        // a connection no user could benefit from. The gate is closed too, and closed through the
-        // "could not verify" answer rather than through "you are not a patron", because this build's
-        // entitlement authority is unconfigured.
+        // The HAPTIC sink registers last, and its phase-3 start CONNECTS TO NOTHING. Both provider
+        // routes have a real client here, and the participant still never asks: the master toggle is
+        // off and the user has ticked no route, which is upstream's own auto-connect conjunction
+        // (App.xaml.cs:2176, predicate :3580-3589). A product that opened a WebSocket to
+        // ws://127.0.0.1:12345 for a feature nobody switched on would be making a connection no user
+        // could benefit from. The gate is closed too, and closed through the "could not verify"
+        // answer rather than through "you are not a patron", because this build's entitlement
+        // authority is unconfigured.
         var haptics = Assert.IsType<CcpClient.Desktop.Haptics.HapticParticipant>(host.Participants[10]);
         Assert.True(haptics.Running);
         Assert.Equal(0, haptics.ConnectAttempts);
@@ -79,10 +81,14 @@ public class IntegrationProofTests
         Assert.False(haptics.Enabled);
         Assert.False(haptics.OutputAllowed);
         Assert.IsType<CcpClient.Desktop.Haptics.HapticGateDecision.RefusedUnverified>(haptics.Gate);
-        // The real root now owns a REAL client, and the three assertions above are what makes that
-        // safe: a route is admitted, and still nothing was connected, observed or allowed, because
-        // the setting is off and the entitlement is unverified.
-        Assert.Equal(CcpClient.Desktop.Haptics.HapticProviderRoute.Lovense, haptics.Sink.Route);
+        // The real root owns REAL clients for both routes, and the assertions above are what makes
+        // that safe: nothing was connected, observed or allowed. Route is None because the user has
+        // ticked no provider - the flags default false, upstream's own stored default
+        // (Models/HapticSettings.cs:769) - and that None is what HapticParticipant.StartAsync returns
+        // early on, before any socket.
+        Assert.Equal(CcpClient.Desktop.Haptics.HapticProviderRoute.None, haptics.Sink.Route);
+        Assert.False(haptics.Preset.Current.LovenseEnabled);
+        Assert.False(haptics.Preset.Current.ButtplugEnabled);
         Assert.Equal(0, haptics.ConnectAttempts);
         // And the gate it consulted is the composition root's OWN entitlement capability — the same
         // object the DTRH door consults and the same one the System page reports. A missing

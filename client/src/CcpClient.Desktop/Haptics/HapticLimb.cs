@@ -64,9 +64,9 @@ public enum HapticMoment
 /// <see cref="Moments"/> therefore counts what was asked; <see cref="Sends"/> counts what was
 /// attempted.</para>
 ///
-/// <para><b>NOTHING MOVES.</b> No provider client is admitted, so the sink refuses and there is no
-/// device key to address: on this build <see cref="Sends"/> stays at zero for every session and
-/// <see cref="EvaluationsWithNoDevice"/> is where the truth of that is visible.</para>
+/// <para><b>WHETHER ANYTHING MOVES IS NOT THIS CLASS'S QUESTION.</b> Both routes have a client, so a
+/// ticked route with a running server gives real <see cref="Sends"/>; with none ticked the sink
+/// refuses before a wire and <see cref="EvaluationsWithNoDevice"/> is where that shows.</para>
 /// </summary>
 public sealed class HapticLimb : IHapticLimb, IDisposable
 {
@@ -133,15 +133,15 @@ public sealed class HapticLimb : IHapticLimb, IDisposable
     /// <summary>
     /// Evaluations that produced a level with <b>no device key to address it to</b>.
     ///
-    /// <para>This is where "nothing moves" is legible rather than asserted: on this build it equals
-    /// <see cref="Evaluations"/> whenever the gate is open, because
-    /// <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, nothing was ever asked of a server,
-    /// and an observation that was never made names no device.</para>
+    /// <para>This is where "nothing moves" is legible rather than asserted. It equals
+    /// <see cref="Evaluations"/> whenever the gate is open and the roster is empty — which is every
+    /// run in which the user has ticked no provider route, and every run in which the route they
+    /// ticked named no device, because an observation that was never made names none either.</para>
     /// </summary>
     public int EvaluationsWithNoDevice { get; private set; }
 
-    /// <summary>How many <see cref="IHapticSink.SetOutputsAsync"/> calls were attempted. Zero on
-    /// every run of this build.</summary>
+    /// <summary>How many <see cref="IHapticSink.SetOutputsAsync"/> calls were attempted. Zero until
+    /// an observation names a device, which needs a ticked route and a running server.</summary>
     public int Sends { get; private set; }
 
     /// <summary>Envelopes dropped at promotion for failing to out-rank the weakest thing playing

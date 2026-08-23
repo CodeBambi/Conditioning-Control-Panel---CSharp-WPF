@@ -178,6 +178,18 @@ public class StatusTickerSliceTests
         Assert.IsType<OperationOutcome.Cancelled>(await completion);
     }
 
+    /// <summary>
+    /// Every registered capability really ran its probe, and none was left at the registry's
+    /// unprobed default.
+    ///
+    /// <para><b>The haptic capability is the ONE exception and it is named rather than skipped.</b>
+    /// Its probe is deliberately GATED — it must not contact a haptic server for a feature the user
+    /// has not switched on (<c>Haptics/HapticParticipant.ProbeSinkAsync</c>, upstream's own
+    /// conjunction at <c>App.xaml.cs:2176</c>) — so on this fresh root it RUNS and answers
+    /// <c>not-probed</c> about the SERVER. That is a real answer, not a skipped probe, and the two
+    /// are told apart below: the state must be present and must be exactly the gate's answer, which
+    /// a probe that never ran could not produce with that detail.</para>
+    /// </summary>
     [Fact]
     public async Task CapabilitySurface_PriorIntegrationProofs_StillIntact()
     {
@@ -186,12 +198,25 @@ public class StatusTickerSliceTests
         Assert.NotNull(host.Capabilities);
         foreach (var name in host.Capabilities!.Names)
         {
+            if (name == CompositionRoot.HapticCapabilityName)
+            {
+                continue;
+            }
+
             // Probed, never left "not-probed" — the capability surface survives intact.
             if (host.Capabilities.GetState(name) is CapabilityState.Unavailable unavailable)
             {
                 Assert.NotEqual("not-probed", unavailable.Reason.Code);
             }
         }
+
+        // The haptic one, checked POSITIVELY rather than waved past: the gate refused before any
+        // socket, and said so in the words only that arm carries.
+        var haptic = Assert.IsType<CapabilityState.Unavailable>(
+            host.Capabilities.GetState(CompositionRoot.HapticCapabilityName));
+        Assert.Equal("not-probed", haptic.Reason.Code);
+        Assert.Contains("a haptic client is admitted in this build", haptic.Reason.Detail,
+            StringComparison.Ordinal);
 
         await host.ShutdownAsync();
     }

@@ -16,7 +16,7 @@ namespace CcpClient.Tests;
 /// <c>GoonDoors.cs</c> telling the user the browser can still ask; another wired the haptic limb and
 /// left <c>HapticsPanelNotices.cs</c> telling the user no module sends anything. In both cases the
 /// XML docs beside the code were maintained (<c>HapticLimb.cs:139-140</c>,
-/// <c>IHapticSink.cs:223</c>) and the sentence the USER reads was not.</para>
+/// <c>IHapticSink.cs:288</c>) and the sentence the USER reads was not.</para>
 ///
 /// <para><b>What this file is: a claim-to-code BINDING, not a prose matcher.</b> Each entry pairs a
 /// sentence read <b>from the running product</b> with <b>one machine-evaluated fact about this
@@ -102,6 +102,18 @@ public sealed class UserFacingClaimTests
     /// <summary>The clause the haptic limb falsified, in the absence line.</summary>
     private const string FalsifiedHapticClause = "no effect in this build sends";
 
+    /// <summary>
+    /// The absence line's SECOND falsified clause, banned by name for the same reason as the first.
+    ///
+    /// <para>When the limb was wired, the sentence stopped blaming the modules and started blaming
+    /// the BUILD: <i>"no provider route is admitted at all — so the thing to fix is the missing
+    /// route"</i>. Admitting both of upstream's providers falsified that in turn, and a user reading
+    /// it would have been sent to wait for a release while the repair — tick a box, start your
+    /// server — was on the screen in front of them. Two clauses, one defect, and the pattern is
+    /// why both are pinned rather than only the current one.</para>
+    /// </summary>
+    private const string FalsifiedAdmissionClause = "no provider route is admitted";
+
     /// <summary>The clause the haptic limb falsified, in the Armed arm.</summary>
     private const string FalsifiedArmedClause = "nothing sends anything to it yet";
 
@@ -168,10 +180,12 @@ public sealed class UserFacingClaimTests
     /// <para>Six live sites fire the limb (<c>FlashSurfacePresenter.cs:314</c>,
     /// <c>MandatoryVideoEffect.cs:307</c>, <c>:340</c>, <c>:419</c>,
     /// <c>SubliminalsEffect.cs:223</c>, <c>BouncingTextField.cs:237</c>), each incrementing
-    /// <c>HapticLimb.Moments</c> and posting a real envelope. What stops delivery is one rung
-    /// further out: <c>HapticSinkFactory.AdmittedRoutes</c> is <c>[]</c>, so
-    /// <c>HapticLimb.Send</c> returns at <c>EvaluationsWithNoDevice++</c>
-    /// (<c>HapticLimb.cs:566-570</c>).</para>
+    /// <c>HapticLimb.Moments</c> and posting a real envelope. What stops delivery is no longer
+    /// inside this program at all: <c>HapticSinkFactory.AdmittedRoutes</c> carries BOTH upstream
+    /// routes, so <c>HapticLimb.Send</c> reaches <c>EvaluationsWithNoDevice++</c>
+    /// (<c>HapticLimb.cs:566-570</c>) only while no observation has named a device — which needs a
+    /// ticked provider box and a running server. The line must say THAT, and must carry neither of
+    /// the two clauses this file has already watched go false.</para>
     /// </summary>
     [Fact]
     public void TheHapticAbsenceLine_SaysWhereTheSendReallyStops()
@@ -288,14 +302,15 @@ public sealed class UserFacingClaimTests
     private static bool HapticAbsenceVerdict(bool modulesCommandTheLimb, string sentence) =>
         modulesCommandTheLimb
             ? sentence.Contains("command the haptic limb now", StringComparison.Ordinal)
-                && sentence.Contains("no provider route is admitted", StringComparison.Ordinal)
+                && sentence.Contains("tick a provider above", StringComparison.Ordinal)
                 && !sentence.Contains(FalsifiedHapticClause, StringComparison.Ordinal)
+                && !sentence.Contains(FalsifiedAdmissionClause, StringComparison.Ordinal)
             : sentence.Contains(FalsifiedHapticClause, StringComparison.Ordinal);
 
     /// <summary>
     /// The Armed arm, which renders in ONE world only: the one where a provider route HAS been
-    /// admitted (<c>HapticParticipant.cs:214-215</c> → <c>IHapticSink.cs:136</c> →
-    /// <c>HapticParticipant.cs:259-270</c>). Bound SEPARATELY from the absence line because a
+    /// admitted (<c>HapticParticipant.cs:257-258</c> → <c>IHapticSink.cs:196</c> →
+    /// <c>HapticParticipant.cs:306-335</c>). Bound SEPARATELY from the absence line because a
     /// needle over the two joined would let the absence line satisfy it while this arm said
     /// anything at all — which is how this packet's own first attempt shipped a sentence that is FALSE
     /// on the only day it renders. Both self-refuting wordings are banned by name.
@@ -316,10 +331,11 @@ public sealed class UserFacingClaimTests
     /// <summary>The absence line, which every user of this panel reads today.</summary>
     private static string HapticAbsenceText() => HapticsPanelNotices.DescribeAbsences();
 
-    /// <summary>The Armed arm ALONE — never joined to the absence line. It is unreachable while
-    /// <c>AdmittedRoutes</c> is empty, which is precisely why it needs its OWN binding: it goes live
-    /// the day a route is admitted, and a sentence that is only NEGATIVELY constrained can be false
-    /// on exactly that day while a needle shared with the absence line stays green.</summary>
+    /// <summary>The Armed arm ALONE — never joined to the absence line. It was unreachable while
+    /// <c>AdmittedRoutes</c> was empty, which is precisely why it needed its OWN binding: it went live
+    /// the day the routes were admitted, and a sentence that is only NEGATIVELY constrained can be
+    /// false on exactly that day while a needle shared with the absence line stays green. It is now
+    /// reachable by any user who ticks a provider and runs its server.</summary>
     private static string HapticArmedArmText() =>
         HapticsPanelNotices.DescribeLiveState(EffectDotState.Armed, enabled: true, reachable: true);
 

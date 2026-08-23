@@ -236,9 +236,9 @@ public sealed class CompositionRoot
         // so hoisting it changes no behaviour at all. It is still REGISTERED last, below, which is
         // what actually decides start and teardown order.
         //
-        // A session that built its own sink instead would be a SECOND sink: harmless only while
-        // HapticSinkFactory.AdmittedRoutes is empty, and two live clients against one server the day
-        // a route is admitted.
+        // A session that built its own sink instead would be a SECOND sink: two live clients against
+        // one haptic server, both holding levels on the same device, with no arbitration between
+        // them. Both routes have a client now, so that is not a future hazard.
         var haptics = new Haptics.HapticParticipant(
             infra, Path.GetDirectoryName(SettingsPathFactory())!,
             sink: null,
@@ -427,16 +427,22 @@ public sealed class CompositionRoot
         // shipping app's login at all) and never claims a tier: a readable login with no
         // authority behind it is Degraded, never Available (HostLoginEntitlement.ProbeAsync).
         capabilities.Register(Entitlement.HostLoginEntitlement.CapabilityName, entitlement.ProbeAsync);
-        // Registers the haptic sink for the same reason as the entitlement
-        // capability: this build refuses every user, and a capability that refuses everyone while
-        // staying invisible in the ONE place the port reports what it cannot do is exactly the shape
-        // the truthful-capability contract exists to prevent. The probe asks the sink and classifies
-        // the answer; it can never produce Available here, because the classification's first arm is
-        // the admitted-provider question (Haptics/IHapticSink.cs, HapticServerObservation.Classify).
+        // Registers the haptic sink for the same reason as the entitlement capability: it is the ONE
+        // place the port reports what it cannot do, and a capability that refuses while staying
+        // invisible there is exactly the shape the truthful-capability contract exists to prevent.
+        // This CAN now produce Available — both routes have a real client — which is precisely why
+        // the next paragraph exists.
+        //
+        // THE PROBE IS GATED, AND THE GATE IS THE PRODUCT BEHAVIOUR RATHER THAN AN OPTIMISATION:
+        // CapabilityRegistry.RunAllAsync probes every registered capability at launch, so an ungated
+        // registration here would open a socket to a haptic server on EVERY launch of a default
+        // install, for a feature nobody switched on. The gate is upstream's own auto-connect
+        // conjunction and lives on the participant beside the settings it reads, so the root
+        // registers it rather than restating it — one expression, which is what lets a fact assert
+        // that nothing was contacted (Haptics/HapticParticipant.ProbeSinkAsync).
         if (haptics is not null)
         {
-            capabilities.Register(HapticCapabilityName, async token =>
-                (await haptics.Sink.ObserveAsync(token).ConfigureAwait(false)).Classify());
+            capabilities.Register(HapticCapabilityName, haptics.ProbeSinkAsync);
         }
 
         var probeRunner = new CapabilityProbeRunner(infra.Registry.OwnerFor("CapabilityProbes"), capabilities);

@@ -20,10 +20,12 @@ namespace CcpClient.Desktop.Haptics;
 /// so "this build has no limb here" and "the limb decided nothing should happen" stay different
 /// facts. A no-op double is exactly the shape that lets a wiring regression pass every test.</para>
 ///
-/// <para><b>NOTHING MOVES, and that is correct.</b> No provider client is admitted
-/// (<see cref="HapticSinkFactory.AdmittedRoutes"/> is empty), so the sink behind this refuses every
-/// call and there is no device key to address. These verbs command; whether anything is delivered is
-/// the sink's business and today the honest answer is no.</para>
+/// <para><b>THESE VERBS COMMAND; DELIVERY IS THE SINK'S BUSINESS.</b> Both provider routes have a
+/// client (<see cref="HapticSinkFactory.AdmittedRoutes"/>), so whether anything moves depends on what
+/// the user ticked and on whether their haptic server is running with a device paired to it. With no
+/// route ticked the sink refuses before touching a wire and there is no device key to address — and
+/// these verbs are unchanged by that, because a limb that behaved differently depending on the sink's
+/// answer would be deciding delivery in the one place that must not.</para>
 /// </summary>
 public interface IHapticLimb
 {

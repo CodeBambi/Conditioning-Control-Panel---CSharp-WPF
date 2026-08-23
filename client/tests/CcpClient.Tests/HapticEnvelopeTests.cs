@@ -123,8 +123,10 @@ public class HapticEnvelopeTests
     [Fact]
     public void TheSubliminalDurationIsKeyedOffTheTriggersOwnWording()
     {
-        // HapticService.cs:899-909, with the Buttplug multiplier at 1.0 because
-        // HapticSinkFactory.AdmittedRoutes is empty and no provider can be active.
+        // HapticService.cs:899-909, with the Buttplug multiplier at 1.0 because this port does not
+        // port it: upstream keys that doubling off the ACTIVE provider (:903) and these envelopes
+        // are built before any route is chosen. Named as unported rather than as unreachable - the
+        // Buttplug route has a client now (HapticEnvelope.cs, SubliminalDurationMs).
         Assert.Equal(250, HapticEnvelopes.SubliminalDurationMs("you will CUM on command"));
         Assert.Equal(250, HapticEnvelopes.SubliminalDurationMs("collapse"));
         Assert.Equal(250, HapticEnvelopes.SubliminalDurationMs("DROP"));

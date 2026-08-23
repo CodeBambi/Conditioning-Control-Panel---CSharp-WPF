@@ -462,22 +462,31 @@ public class CapabilityTests
                 ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded", "host-login-entitlement", "haptic-sink"],
                 capabilities.Names);
 
-            // A route IS admitted now, so the probe no longer reports the admission gap — it reports
-            // what the SERVER said, which on a machine with no Lovense server running is that nobody
-            // answered. That is the honest answer and the whole point of admitting a client: the
-            // capability line can finally change.
+            // THE PROBE DID NOT OPEN A SOCKET, and this assertion is what says so.
+            //
+            // This is a REAL composition root on a fresh data directory: the master haptics toggle is
+            // off and both provider flags default false, so the probe's gate refuses before
+            // ObserveAsync is called at all. It therefore reports not-probed — a client IS admitted
+            // and nobody asked it anything — and it must NEVER report haptic-server-unreachable
+            // here, because that is a claim about a socket this code deliberately did not open.
+            //
+            // Without the gate the same line read "haptic-server-unreachable", which meant every
+            // launch of a default install fired an HTTP GET at http://127.0.0.1:20010/GetToys for a
+            // feature nobody had switched on. Upstream will not do that either: its startup guard is
+            // `Settings.Current.Haptics.AutoConnect && HasRealHapticProviderEnabled()`
+            // (App.xaml.cs:2176), predicate `lovense.Enabled || buttplug.Enabled` (:3580-3589).
             var hapticState = Assert.IsType<CapabilityState.Unavailable>(
                 capabilities.GetState(CompositionRoot.HapticCapabilityName));
-            Assert.Equal("haptic-server-unreachable", hapticState.Reason.Code);
-            // Still not the device-refusal wording ("No devices found. Connect your device in
-            // Intiface first.", ButtplugProvider.cs:135): a server that never answered is not a
-            // missing toy, and telling a user to pair one would send them to fix the wrong thing.
-            Assert.Contains("the haptic server did not answer", hapticState.Reason.Detail, StringComparison.Ordinal);
+            Assert.Equal(CapabilityReasonCodes.NotProbed, hapticState.Reason.Code);
+            Assert.NotEqual("haptic-server-unreachable", hapticState.Reason.Code);
+            Assert.Contains("nothing has been asked of its server yet",
+                hapticState.Reason.Detail, StringComparison.Ordinal);
 
-            // And it names BOTH servers a user might need to start, not just the admitted route's:
-            // the classification is shared, and a user who owns the other kind of toy must not be
-            // told to install the wrong program.
-            Assert.Contains("Lovense Connect", hapticState.Reason.Detail, StringComparison.Ordinal);
+            // And it is NOT the admission gap either: this build HAS both clients, and telling a user
+            // otherwise sends them to wait for a release. Nor is it the device-refusal wording
+            // ("No devices found. Connect your device in Intiface first.", ButtplugProvider.cs:135) —
+            // nothing was asked, so nothing may be said about a toy.
+            Assert.NotEqual("haptic-no-admitted-provider", hapticState.Reason.Code);
             Assert.DoesNotContain("Connect your device in Intiface first",
                 hapticState.Reason.Detail, StringComparison.OrdinalIgnoreCase);
 

@@ -59,7 +59,7 @@ public sealed class ButtplugHapticSink : IHapticSink
     {
         if (_disposed)
         {
-            return HapticServerObservation.NotAsked;
+            return HapticServerObservation.SinkDisposed;
         }
 
         var session = Session();

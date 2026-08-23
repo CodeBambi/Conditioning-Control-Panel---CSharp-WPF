@@ -9,8 +9,9 @@ namespace CcpClient.Desktop.Views.Pages;
 ///
 /// <para><b>This panel has to say two different "no"s without letting either be read as the
 /// other.</b> The switch is off because an entitlement could not be verified; and the sink reaches
-/// nothing because <see cref="Haptics.HapticSinkFactory.AdmittedRoutes"/> is empty, so no server
-/// was ever asked. Collapsing them into one sentence would send a user to fix the wrong thing —
+/// nothing because the user has ticked no provider route, or because the server behind the route
+/// they ticked is not running. Collapsing them into one sentence would send a user to fix the wrong
+/// thing —
 /// which is exactly what upstream's own <i>"No devices found. Connect your device in Intiface
 /// first."</i> (<c>Services/Haptics/ButtplugProvider.cs:135</c>) does when the real problem is that
 /// Intiface is not running.</para>
@@ -23,7 +24,7 @@ namespace CcpClient.Desktop.Views.Pages;
 /// incrementing <see cref="Haptics.HapticLimb.Moments"/> and posting a real envelope
 /// (<c>HapticLimb.cs:187-227</c>). D210 records that the reason moved one rung out and that
 /// <c>Views/**</c> was not touched: <b>the XML docs were maintained (<c>HapticLimb.cs:139-140</c>,
-/// <c>IHapticSink.cs:223</c>) and the sentence the user reads was not.</b> Misnaming the cause is
+/// <c>IHapticSink.cs:288</c>) and the sentence the user reads was not.</b> Misnaming the cause is
 /// the exact defect the paragraph above cites upstream for.</para>
 /// </summary>
 public static class HapticsPanelNotices
@@ -49,14 +50,15 @@ public static class HapticsPanelNotices
     /// <see cref="HapticParticipant.Dot"/>. The two reachable states are spelled out here so a dark
     /// dot is never read as a fault.</para>
     ///
-    /// <para><b>The <see cref="EffectDotState.Armed"/> arm is the one nobody can read
-    /// TODAY and the one that would be worst tomorrow.</b> <c>Dot</c> is
+    /// <para><b>The <see cref="EffectDotState.Armed"/> arm is the one this packet made
+    /// READABLE, and it was written before anybody could read it.</b> <c>Dot</c> is
     /// <c>Enabled &amp;&amp; LastObservation is { Confirmed: true }</c>
-    /// (<c>HapticParticipant.cs:214-215</c>), <c>Confirmed</c> requires
-    /// <c>ClientAdmitted &amp;&amp; DeviceCount &gt;= 1</c> (<c>IHapticSink.cs:136</c>), and
+    /// (<c>HapticParticipant.cs:257-258</c>), <c>Confirmed</c> requires
+    /// <c>ClientAdmitted &amp;&amp; DeviceCount &gt;= 1</c> (<c>IHapticSink.cs:196</c>), and
     /// <c>LastObservation</c> is assigned only past the <c>Sink.Route == None</c> early return
-    /// (<c>HapticParticipant.cs:259-270</c>). <b>So this arm cannot render unless a route HAS been
-    /// admitted</b> — which is why neither "nothing sends anything to it yet" (the earlier
+    /// (<c>HapticParticipant.cs:306-335</c>). <b>So this arm renders only where a route the user
+    /// ticked has been asked and a server has answered with a device</b> — which is why neither
+    /// "nothing sends anything to it yet" (the earlier
     /// wording) nor "the sink admits no provider route" (this file's own first attempt) may appear
     /// here: in the only world where a user reads this arm, a confirmed observation has given the
     /// limb non-empty <c>DeviceKeys</c> (<c>:103</c>) and <c>Send</c> reaches <c>Sends++</c>
@@ -73,13 +75,14 @@ public static class HapticsPanelNotices
             + "the same whether or not a pulse is going out. Whether one is going out is decided by the entitlement "
             + "gate that every command from the effect modules passes on its way to the device.",
         _ when enabled && !reachable =>
-            "The dot is dark: the switch is on and nothing here can reach a device. See the line below for which "
-            + "part is missing.",
+            "The dot is dark: the switch is on and no device has been reached. See the line below for which part "
+            + "is missing — it is usually a provider box left un-ticked, or its server not running.",
         _ when !enabled && reachable =>
             "The dot is dark because the switch is off. A device is reachable, so turning it on is all that is "
             + "missing.",
         _ =>
-            "The dot is dark: the switch is off, and nothing here could reach a device even if it were on.",
+            "The dot is dark: the switch is off, and no device has been reached. Nothing has been asked of a "
+            + "haptic server, because nothing is asked of one until you switch this on.",
     };
 
     /// <summary>
@@ -110,11 +113,13 @@ public static class HapticsPanelNotices
     /// <summary>
     /// The capability line: what the sink itself last said, verbatim.
     ///
-    /// <para><b>It must never say "no device found."</b> That refusal is available in this port's
-    /// vocabulary (<c>HapticReasonCodes.HapticNoDevice</c>) and is deliberately not what this build
-    /// produces, because there is no client here with which to look. The
-    /// <see cref="CapabilityState.DependencyMissing"/> arm below is the one that WOULD say it, and
-    /// it names the dependency the way the port names every other absent one.</para>
+    /// <para><b>It says "no device found" in exactly ONE case and never as a catch-all.</b> That
+    /// refusal (<c>HapticReasonCodes.HapticNoDevice</c>) is earned only when a server really answered
+    /// and really named nothing, which is the <see cref="CapabilityState.DependencyMissing"/> arm
+    /// below; it names the dependency the way the port names every other absent one. Every other
+    /// refusal — no route ticked, no server listening, nothing asked yet — renders its own detail
+    /// verbatim, because the whole reason those codes are distinct is that they have different
+    /// repairs.</para>
     /// </summary>
     public static string DescribeSink(CapabilityState state)
     {
@@ -140,25 +145,30 @@ public static class HapticsPanelNotices
     /// <para>It is on the PAGE rather than only in a record, on the precedent four earlier rows
     /// set for a half-ported row.</para>
     ///
-    /// <para><b>The last sentence was corrected; it had TWO false clauses.</b> It read "even
-    /// with a device attached, nothing would move: no effect in this build sends anything to
-    /// haptics yet". Both halves went false at D210: the modules DO send — six live sites
-    /// fire the limb — and with a route admitted those sends would go out, so the counterfactual
-    /// was wrong too. What is true is one rung further out:
-    /// <see cref="Haptics.HapticSinkFactory.AdmittedRoutes"/> is <c>[]</c>
-    /// (<c>HapticSinkFactory.cs:27</c>), <c>Create()</c> returns
-    /// <see cref="Haptics.UnadmittedHapticSink"/>, and <c>HapticLimb.Send</c> returns at
-    /// <see cref="Haptics.HapticLimb.EvaluationsWithNoDevice"/><c>++</c>
-    /// (<c>HapticLimb.cs:566-570</c>) without ever reaching
-    /// <see cref="Haptics.IHapticSink.SetOutputsAsync"/>. D179/D202 are the superseded rows.</para>
+    /// <para><b>This sentence has now been wrong TWICE, in the same way, and the pattern is the
+    /// point.</b> Its first version blamed the effect modules ("no effect in this build sends anything
+    /// to haptics yet"), which D210 falsified by wiring the limb. Its second version blamed the
+    /// BUILD — "no provider route is admitted at all, so the thing to fix is the missing route" —
+    /// which this packet falsifies by admitting both of them. Each time, a user was sent to wait for a
+    /// release when the actual repair was in front of them. What is true now is a SERVER and a
+    /// DEVICE: <see cref="Haptics.HapticSinkFactory.AdmittedRoutes"/> carries both upstream routes,
+    /// the panel has a checkbox for each, and <c>HapticLimb.Send</c> stops at
+    /// <see cref="Haptics.HapticLimb.EvaluationsWithNoDevice"/><c>++</c> only while no observation has
+    /// named a device. D179/D202/D210 are the superseded rows.</para>
+    ///
+    /// <para><b>What it still may NOT say is that anything moved.</b> Nothing in this repository has
+    /// driven a real toy on any platform (<see cref="Haptics.HapticSinkFactory.DeviceManualGate"/>),
+    /// so this line describes what the product will ATTEMPT and never what a user will feel.</para>
     /// </summary>
     public static string DescribeAbsences() =>
-        "The Windows app's haptics page also has a provider list with two server addresses, an auto-connect box, a "
-        + "per-event routing table, a master cap and a signal-processing block. None of them is here, because every "
-        + "one of them configures a connection this build cannot make — a control that decides nothing is worse "
-        + "than a missing one. The effect modules are no longer the reason nothing moves: the flash decay ladder, "
-        + "the video background layer and its stop, the subliminal pulse and the bounce tap all command the haptic "
-        + "limb now. Every one of those commands ends with no device to address, because no provider "
-        + "route is admitted at all — so the thing to fix is the missing route, never the modules and never your "
-        + "toy.";
+        "The Windows app's haptics page also has two server addresses, an auto-connect box, a per-event routing "
+        + "table, a master cap and a signal-processing block. None of them is here, because none of them has an "
+        + "implementation here that would honour it — a control that decides nothing is worse than a missing one. "
+        + "The provider boxes ARE here, because this build has a client for both routes and connects every one you "
+        + "tick, together rather than one instead of the other. The effect modules are not the reason nothing "
+        + "moves either: the flash decay ladder, the video background layer and its stop, the subliminal pulse and "
+        + "the bounce tap all command the haptic limb now. What is left between those commands and a motor is "
+        + "outside this program: tick a provider above, and have its server running — Intiface Central for "
+        + "Intiface, Lovense Connect or Lovense Remote for Lovense — with your toy already paired to it. Until a "
+        + "server names a device there is nothing to address, and no run of this app has yet driven a real toy.";
 }

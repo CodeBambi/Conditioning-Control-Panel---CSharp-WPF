@@ -164,12 +164,12 @@ would be `absent-unexplained`, and there are none.
 | site | decision | quote |
 |---|---|---|
 | 5 | `Effects/FlashSurfacePresenter.cs:303` | `serve pop / hydra / XP mechanics this port does not have` |
-| 8 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
-| 9 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
+| 8 | `Haptics/IHapticSink.cs:301` | `a script player this port has not ported at all` |
+| 9 | `Haptics/IHapticSink.cs:301` | `a script player this port has not ported at all` |
 | 10 | `Effects/MandatoryVideoEffect.cs:405` | `not ported and not shown as dead controls: attention` |
 | 11 | `Effects/MandatoryVideoEffect.cs:405` | `not ported and not shown as dead controls: attention` |
-| 11 | `Haptics/IHapticSink.cs:235` | `haptic INPUT` |
-| 13 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
+| 11 | `Haptics/IHapticSink.cs:304` | `haptic INPUT` |
+| 13 | `Haptics/IHapticSink.cs:301` | `a script player this port has not ported at all` |
 | 16 | `Effects/SubliminalsEffect.cs:56` | `follow-up (<c>:276-404</c>)` |
 | 17 | `Effects/SubliminalsEffect.cs:56` | `follow-up (<c>:276-404</c>)` |
 <!-- /census:decisions -->
@@ -280,7 +280,7 @@ phrase is shown by this port.
 | claim | where | verdict against this census |
 |---|---|---|
 | **8 sites in three modules**, citing `Services/SubliminalService.cs:230` | the haptics plan §5, three source comments, D202's first draft | **wrong twice**: the path has no `Subliminal/` directory segment and the file drives four sites, not one |
-| **13 sites**, three files | `client/docs/wpf-surface-reachability.md` D202, `Haptics/IHapticSink.cs:210-215` | **correct for the three files it names, under a rule that excluded FunScript.** Misses three files' worth of sites |
+| **13 sites**, three files | `client/docs/wpf-surface-reachability.md` D202, `Haptics/IHapticSink.cs:276-281` | **correct for the three files it names, under a rule that excluded FunScript.** Misses three files' worth of sites |
 | **14 sites**, adding `VideoService.Browser.cs:452` | this packet's brief | **correct as far as it goes.** Still misses `BouncingTextService.cs:515` and `VideoService.Browser.cs:453` |
 | **18 sites** | this census | derived from the bytes by §2 |
 | **21 sites** | **this packet's own committed plan**, `plan.md:140-141` | what the census's helper clause would yield if the plan's opposite clause governed instead. It does not, and §2.1 says why and lists the five lines that move |

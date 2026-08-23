@@ -232,6 +232,14 @@ public partial class StudioPage : UserControl
         // BEFORE HapticCfg.Enabled = isEnabled).
         HapticsEnableToggle.IsCheckedChanged += (_, _) => OnHapticsEnableToggled();
 
+        // The two provider boxes. They are a SET rather than a choice — upstream connects every
+        // enabled provider concurrently (Services/Haptics/Core/HapticDeviceManager.cs:101-125) — so
+        // both write through the same one-argument entry and neither un-ticks the other.
+        HapticsLovenseToggle.IsCheckedChanged +=
+            (_, _) => OnHapticsRouteToggled(Haptics.HapticProviderRoute.Lovense, HapticsLovenseToggle);
+        HapticsButtplugToggle.IsCheckedChanged +=
+            (_, _) => OnHapticsRouteToggled(Haptics.HapticProviderRoute.Buttplug, HapticsButtplugToggle);
+
         // Upstream writes BOTH times from ONE LostFocus handler and saves once
         // (Features/SchedulerFeatureControl.xaml.cs:71-79, wired at .xaml:49 and :58), so both
         // boxes land on the same entry here. LostFocus rather than TextChanged is upstream's own
@@ -638,6 +646,24 @@ public partial class StudioPage : UserControl
 
         _haptics.RequestEnable(target);
         LoadDialsFromPreset();
+        Refresh();
+    }
+
+    /// <summary>
+    /// One provider box. <b>Never gated and never exclusive</b>: upstream's per-provider handler
+    /// writes and saves with no premium check (<c>MainWindow/MainWindow.Haptics.cs:580-595</c>) and
+    /// its own comment records that assigning the legacy single-choice enum here was the bug —
+    /// <i>"ticking a second provider un-ticked the first one on the way out"</i> (<c>:576-579</c>).
+    /// A ticked route reaches nothing on its own; the gate is on the master box above.
+    /// </summary>
+    private void OnHapticsRouteToggled(Haptics.HapticProviderRoute route, CheckBox box)
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _haptics.SetRouteEnabled(route, box.IsChecked == true);
         Refresh();
     }
 
@@ -1107,10 +1133,12 @@ public partial class StudioPage : UserControl
             SchedulerDaySat.IsChecked = scheduler.Saturday;
             SchedulerDaySun.IsChecked = scheduler.Sunday;
 
-            // ONE control, loaded from the DOCUMENT rather than from whatever the user just
-            // clicked — which is what makes a refused tick visible: the gate wrote nothing, so this
-            // puts the box back where the setting really is.
+            // Loaded from the DOCUMENT rather than from whatever the user just clicked — which is
+            // what makes a refused tick visible: the gate wrote nothing, so this puts the box back
+            // where the setting really is.
             HapticsEnableToggle.IsChecked = _haptics.Enabled;
+            HapticsLovenseToggle.IsChecked = _haptics.Preset.Current.LovenseEnabled;
+            HapticsButtplugToggle.IsChecked = _haptics.Preset.Current.ButtplugEnabled;
         }
         finally
         {

@@ -80,7 +80,7 @@ public class HapticsRowHeadlessTests
     }
 
     [AvaloniaFact]
-    public async Task TheHapticsRowOpensAPanelWithONEControl_AndTheCountIsTheFinding()
+    public async Task TheHapticsRowOpensAPanelWithTHREEControls_AndTheCountIsTheFinding()
     {
         var boot = await BootAsync();
         var window = boot.Window;
@@ -91,14 +91,77 @@ public class HapticsRowHeadlessTests
 
         // Upstream's haptics page is 1640 lines over a 9193-line service: two provider boxes with
         // their own URLs, an auto-connect box, a per-event routing table, a master cap and a DSP
-        // block (Views/Tabs/HapticsTabView.xaml, Services/Haptics/**). EVERY one of them configures
-        // a connection this build cannot make, so the panel carries the ONE control the premium gate
-        // guards and no other. Asserted as a SET so a second one cannot arrive unnoticed.
+        // block (Views/Tabs/HapticsTabView.xaml, Services/Haptics/**). The ones NOT here configure a
+        // mixer or an address this build has no implementation for, so each would be a control that
+        // decides nothing.
+        //
+        // THE TWO PROVIDER BOXES ARE HERE because they decide something: both routes have a client
+        // (HapticSinkFactory.AdmittedRoutes) and both flags default FALSE, which is upstream's own
+        // stored default (Models/HapticSettings.cs:769). Without them that default would be
+        // unreachable by design and the nothing-ticked refusal would name a checkbox nobody has.
+        // Still a SET, so a fourth control cannot arrive unnoticed - and the URL boxes beside
+        // upstream's are still absent, because no setting here honours a custom address.
         var interactive = panel.GetVisualDescendants().OfType<Control>()
             .Where(c => c is CheckBox or TextBox or Slider or ComboBox)
             .Select(c => c.Name)
             .ToList();
-        Assert.Equal(["HapticsEnableToggle"], interactive);
+        Assert.Equal(
+            ["HapticsEnableToggle", "HapticsLovenseToggle", "HapticsButtplugToggle"],
+            interactive);
+
+        await boot.Host.ShutdownAsync();
+    }
+
+    /// <summary>
+    /// <b>A provider box is REAL: it writes, it is not gated, and on its own it contacts nothing.</b>
+    ///
+    /// <para>This is the fact the two boxes were added for. The refusal a user reads when they have
+    /// ticked nothing names a checkbox, and until this packet that checkbox did not exist — so the
+    /// sentence sent people to look for a control the build did not have.</para>
+    ///
+    /// <para><b>Not gated</b> is upstream's shape rather than an oversight: its per-provider handler
+    /// writes and saves with no premium check (<c>MainWindow/MainWindow.Haptics.cs:580-595</c>) while
+    /// the gate sits on the master toggle (<c>:552-564</c>) — which is why the box below stays ticked
+    /// on a build whose entitlement authority is unconfigured, and the master box beside it does
+    /// not.</para>
+    ///
+    /// <para><b>And it opens nothing.</b> Ticking a route while the master toggle is off changes the
+    /// sink's route and asks no server anything: the participant's connect needs BOTH conjuncts,
+    /// which is upstream's own auto-connect guard (<c>App.xaml.cs:2176</c>, predicate
+    /// <c>:3580-3589</c>).</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task APROVIDERBoxWritesAndIsNOTGated_AndTickingItAloneContactsNOTHING()
+    {
+        var boot = await BootAsync();
+        var window = boot.Window;
+        OpenStudioAndHapticsRow(window);
+
+        var lovense = Descendant<CheckBox>(window, "HapticsLovenseToggle");
+        var buttplug = Descendant<CheckBox>(window, "HapticsButtplugToggle");
+        Assert.False(lovense.IsChecked);
+        Assert.False(buttplug.IsChecked);
+        Assert.Equal(HapticProviderRoute.None, boot.Haptics.Sink.Route);
+
+        Click(window, lovense);
+
+        // It STUCK - unlike the master box beside it, which the gate reverts.
+        Assert.True(lovense.IsChecked);
+        Assert.True(boot.Haptics.Preset.Current.LovenseEnabled);
+        Assert.Equal(HapticProviderRoute.Lovense, boot.Haptics.Sink.Route);
+
+        // The two are a SET, not a choice: ticking one never un-ticks the other, which is the exact
+        // defect upstream records at MainWindow.Haptics.cs:576-579.
+        Click(window, buttplug);
+        Assert.True(lovense.IsChecked);
+        Assert.True(buttplug.IsChecked);
+        Assert.True(boot.Haptics.Preset.Current.ButtplugEnabled);
+
+        // AND NOTHING WAS CONTACTED. The master toggle is still off - the gate refused it - so no
+        // server was asked anything, and the capability line still says so.
+        Assert.False(boot.Haptics.Enabled);
+        Assert.Equal(0, boot.Haptics.ConnectAttempts);
+        Assert.Null(boot.Haptics.LastObservation);
 
         await boot.Host.ShutdownAsync();
     }
@@ -168,8 +231,18 @@ public class HapticsRowHeadlessTests
         await boot.Host.ShutdownAsync();
     }
 
+    /// <summary>
+    /// <b>The capability line says NOTHING WAS ASKED, and never a missing device.</b>
+    ///
+    /// <para>It used to say the admitted-provider gap, because no route had a client. Both do now, so
+    /// on a fresh boot with the feature switched off the honest line is that a client is admitted and
+    /// nobody has asked it anything — which is also the evidence that the launch probe did not open a
+    /// socket. A server-unreachable line here would be a claim about a socket the build deliberately
+    /// did not open, and the admission gap would tell a user this build has no client when it has
+    /// two.</para>
+    /// </summary>
     [AvaloniaFact]
-    public async Task THEPANELSaysTheADMITTEDPROVIDERGap_AndNEVERNoDeviceFound()
+    public async Task THEPANELSaysNOTHINGWasASKED_AndNEVERNoDeviceFoundOrTheAdmissionGap()
     {
         var boot = await BootAsync();
         var window = boot.Window;
@@ -177,10 +250,13 @@ public class HapticsRowHeadlessTests
 
         var sink = Descendant<TextBlock>(window, "HapticsSinkState").Text!;
 
-        // Both routes, both transports, and the fact that both are clients of another program.
-        Assert.Contains("ws://127.0.0.1:12345", sink, StringComparison.Ordinal);
-        Assert.Contains("http://127.0.0.1:20010", sink, StringComparison.Ordinal);
-        Assert.Contains("SEPARATE SERVER PROCESS", sink, StringComparison.Ordinal);
+        Assert.Contains("a haptic client is admitted in this build", sink, StringComparison.Ordinal);
+        Assert.Contains("nothing has been asked of its server yet", sink, StringComparison.Ordinal);
+        // NOT the admission gap: this build has both clients.
+        Assert.DoesNotContain("this build admits no haptic provider client", sink, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no haptic provider client stands behind", sink, StringComparison.OrdinalIgnoreCase);
+        // NOT a claim about a server nobody contacted.
+        Assert.DoesNotContain("the haptic server did not answer", sink, StringComparison.OrdinalIgnoreCase);
         // And NOT upstream's device-refusal wording, which would send a user to plug in a toy that
         // was never the problem (ButtplugProvider.cs:135, LovenseProvider.cs:116).
         Assert.DoesNotContain("Connect your device in Intiface first", sink, StringComparison.OrdinalIgnoreCase);
@@ -225,19 +301,26 @@ public class HapticsRowHeadlessTests
 
         // The sentence that stops a landed capability being read as a working feature.
         //
-        // A later wave re-pointed this needle, and did NOT weaken it. D210 wired the limb, six
-        // effect sites command it, and "no effect sends anything" became FALSE on the page while
-        // the XML docs beside the code were kept current. What the page must say is where the send
-        // REALLY stops — the sink, not the modules — and it must no longer blame the modules.
+        // THIS NEEDLE HAS BEEN RE-POINTED TWICE, and neither time was it weakened. D210 wired the
+        // limb, so "no effect in this build sends" went false on the page while the XML docs beside
+        // the code were kept current; the replacement blamed the BUILD instead — "no provider route
+        // is admitted at all" — and admitting both routes made THAT false in turn. Each time a user
+        // was sent to wait for a release when the repair was on the screen in front of them. Both
+        // dead clauses are banned by name below, because the pattern is the defect.
         //
-        // The METHOD NAME moved with the assertion, and that is deliberate. That wave first kept the
-        // old name and justified it with "the floor pin is name-anchored", which is FALSE:
-        // check-floor.mjs:222 compares a COUNT, and matches names only for NotExecuted results
-        // (:231). This fact is not skipped, so renaming changes no pinned name and no total. A
-        // packet about present-tense claims going false does not get to leave a false one in a
-        // test name, or in the record that justified it.
-        Assert.Contains("no provider route is admitted", absence, StringComparison.OrdinalIgnoreCase);
+        // What the page must say now is where the send really stops, which is outside this program:
+        // a ticked provider box and a running server.
+        //
+        // The METHOD NAME moved with the assertion the first time, and that is deliberate. That wave
+        // first kept the old name and justified it with "the floor pin is name-anchored", which is
+        // FALSE: check-floor.mjs:222 compares a COUNT, and matches names only for NotExecuted
+        // results (:231). This fact is not skipped, so renaming changes no pinned name and no total.
+        Assert.Contains("tick a provider above", absence, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("command the haptic limb now", absence, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("no effect in this build sends", absence, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no provider route is admitted", absence, StringComparison.OrdinalIgnoreCase);
+        // And it still refuses to claim anything moved.
+        Assert.Contains("no run of this app has yet driven a real toy", absence, StringComparison.OrdinalIgnoreCase);
         // And the structural half of the same claim: this row is not an effect at all.
         Assert.DoesNotContain(window.Session.Engine.Effects,
             e => string.Equals(e.Id, "haptics", StringComparison.Ordinal));
