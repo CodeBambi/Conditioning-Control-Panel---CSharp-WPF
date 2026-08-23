@@ -464,16 +464,24 @@ public sealed class Win32InputPresence : IInputPresence
     {
         // _disposed FIRST, and it is the SAME guard every other path on this type already carries
         // (:121, :164, :327, :367, :484). Pump was the one path without it, so a disposed presence
-        // still dispatched whatever was queued on the calling thread - and PeekMessageW(hWnd 0)
-        // drains the WHOLE thread, not this presence, so what it dispatched belonged to somebody else.
-        if (_disposed || !OperatingSystem.IsWindows() || maxMessages <= 0)
+        // still dispatched whatever was queued on the calling thread.
+        //
+        // AND THE PEEK IS FILTERED TO _window. PeekMessageW(hWnd 0) drains the WHOLE CALLING THREAD,
+        // so this presence used to dispatch messages belonging to every other window a caller had up
+        // on that thread. The suite is the only caller (IInputPresence.Pump: "The product does not
+        // call this" - verified: no call site under client/src), and the suite is exactly where the
+        // breadth bites: RealDesktopWindowFloor puts a hidden window on every RealDesktopFacts
+        // thread, and that one extra window made this method's own disposal fact read 2 where it
+        // asserts 0. A presence drains the window it owns and nothing else; with no window there is
+        // nothing of ours queued, so the answer is zero rather than somebody else's mail.
+        if (_disposed || !OperatingSystem.IsWindows() || maxMessages <= 0 || _window == 0)
         {
             return 0;
         }
 
         var dispatched = 0;
         while (dispatched < maxMessages
-               && Win32InputInterop.PeekMessageW(out var msg, 0, 0, 0, Win32InputInterop.PmRemove))
+               && Win32InputInterop.PeekMessageW(out var msg, _window, 0, 0, Win32InputInterop.PmRemove))
         {
             Win32InputInterop.TranslateMessage(ref msg);
             Win32InputInterop.DispatchMessageW(ref msg);

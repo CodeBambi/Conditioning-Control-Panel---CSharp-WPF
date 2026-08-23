@@ -341,6 +341,14 @@ internal static class PointerWindowProbe
             (int)Math.Round((y - top) * 65535.0 / height));
     }
 
+    /// <summary>
+    /// Put one left-button-down into ONE named window's queue. No cursor, no <c>SendInput</c>, no
+    /// hit test and nothing timed: the message is ADDRESSED, so "which window's mail was it" is a
+    /// fact rather than a race, and "who drained it" can be asserted exactly.
+    /// </summary>
+    internal static bool PostLeftDown(nint window) =>
+        WindowsHost && window != 0 && PostMessageW(window, WmLbuttondown, 0, 0);
+
     /// <summary>Drain and dispatch up to <paramref name="max"/> of this thread's messages.</summary>
     internal static int Pump(int max)
     {
@@ -659,6 +667,8 @@ internal static class PointerWindowProbe
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetClassNameW(nint window, StringBuilder buffer, int max);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool PostMessageW(nint window, uint message, nint wParam, nint lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool PeekMessageW(out Msg msg, nint window, uint filterMin, uint filterMax, uint remove);
     [DllImport("user32.dll")] private static extern bool TranslateMessage(ref Msg msg);
