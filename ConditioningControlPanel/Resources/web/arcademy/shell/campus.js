@@ -222,19 +222,33 @@ const LOGO_BOX = Object.freeze({
   lost_and_found:  [251, 586, 158, 96],
   /* the Pool is a WIDE, SHORT building: a letterbox over the water */
   the_deep_end:    [349, 762, 242, 52],
-  /* wing rooms are half a corridor room. There is no clear band between the
-     sign and the name in 66 units of height, so their logo is a full-room
-     BACKPLATE instead and the stylesheet holds it well under the text (`.sm`). */
-  echo:            [1268, 434, 96, 58],
-  instant_recall:  [1268, 506, 96, 58],
-  anomaly:         [68, 368, 104, 84],
-  composure:       [68, 480, 104, 84],
+  /* NO WING ROOMS, and that is a ruling, not an omission. A wing room is
+   * 112x66 and already carries a 94-wide neon sign, a room name and an RM
+   * number; the first cut hung the logo behind all three as a faint backplate
+   * and the shots were unarguable - the plate turned the name into noise and
+   * the RM number vanished under the sign's glow. In a room that small THE
+   * GRADIENT IS THE IDENTITY (a canary room is Echo, a graphite one is
+   * Anomaly), so the wings keep the hue and give the words the space. */
 });
 
-/** Keyed logo PNGs. `<image href>` resolves against the DOCUMENT, and
- *  index.html sits one level above shell/ - so this path is document-relative
- *  while the preload probe below resolves the same file off import.meta.url. */
+/**
+ * THE ART BASE, resolved ONCE off this module - and it has to be, because a
+ * bare `art/campus/...` on an `<image href>` resolves against the DOCUMENT
+ * while the preload probe resolves against the MODULE. Those two agree only
+ * when the page happens to sit at the web root: mounted anywhere else (the
+ * verification rig serves the module under /arc/ and the page at /) the probe
+ * passed off the module base while every `<image>` 404'd, and nine rooms drew
+ * a broken-image glyph with `data-art` still saying "on". One base, both
+ * users, no way for them to disagree again.
+ */
 const LOGO_DIR = 'art/campus/';
+const ART_BASE = (function resolveArtBase() {
+  try { return new URL('../' + LOGO_DIR, import.meta.url).href; }
+  catch (e) { return LOGO_DIR; }        // no URL/import.meta (a DOM double): relative
+}());
+
+/** The keyed logo file for one class. */
+function logoUrl(key) { return ART_BASE + 'logo-' + key + '.png'; }
 
 /* ----------------------------------------------------------------------------
  * THE IDLE ATTRACT - tunables (Deck VI: demo, don't explain).
@@ -719,6 +733,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
      * to leave alone, and it does - update() rewrites `class`, never this. It
      * hands the room its three identity tokens in the stylesheet. */
     g.setAttribute('data-game', key);
+    /* A WING ROOM IS HALF A CORRIDOR ROOM and its sign, name and number stack
+     * inside 66 units. The stylesheet needs to know that to hold the sign's
+     * glow in (the bleed, not the geometry, was what drowned RM 202). */
+    if (spec.wing) g.setAttribute('data-wing', String(spec.wing));
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-gfloor'));
     /* the cabinet front: a second floor rect wearing the room's own gradient.
      * `fill` is a REFERENCE, not a hue - the stops are painted from CSS. This
@@ -734,9 +752,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     if (box) {
       const logo = svg('image', {
         x: box[0], y: box[1], width: box[2], height: box[3],
-        href: LOGO_DIR + 'logo-' + key + '.png',
+        href: logoUrl(key),
         preserveAspectRatio: 'xMidYMid meet',
-      }, 'campus-logo' + (spec.wing ? ' sm' : ''));
+      }, 'campus-logo');
       logo.setAttribute('pointer-events', 'none');
       g.appendChild(logo);
     }
@@ -944,7 +962,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       /* Resolved against THIS module the way loadFaceGeometry resolves its
        * json, so the file:// suites fail fast into the fallback instead of
        * hanging on a path that only exists behind the host's origin. */
-      probe.src = new URL('../' + LOGO_DIR + 'logo-' + first + '.png', import.meta.url).href;
+      probe.src = logoUrl(first);
     } catch (e) {
       artOff((e && e.message) || e);
     }

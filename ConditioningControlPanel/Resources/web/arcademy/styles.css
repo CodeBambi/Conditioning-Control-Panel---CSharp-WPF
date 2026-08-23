@@ -1044,19 +1044,39 @@ g.campus-room.dark .campus-gfloor { fill:color-mix(in srgb, var(--campus-sky), b
 .campus-logo { pointer-events:none; opacity:.16; transition:opacity .3s, filter .3s; }
 g.campus-room.open .campus-logo { opacity:1; }
 g.campus-room.retake .campus-logo { opacity:.8; }
-/* A DARK ROOM'S LOGO IS A SILHOUETTE - brightness(0) on a small, static node,
-   never on a live decode (trap 36). It is the shape of the class you have not
-   been dealt, which is curiosity; a missing logo would just be absence. */
-g.campus-room.dark .campus-logo { filter:brightness(0); opacity:.14; }
-/* `.sm` = a WING room, where the logo is a full-room backplate rather than a
-   plate in a clear band. It has to sit well under the name and the RM number
-   that are drawn over it, so every rung is held down. Listed after the mood
-   rules above because it has to outrank them. */
-.campus-logo.sm { opacity:.1; }
-g.campus-room.open .campus-logo.sm { opacity:.42; }
-g.campus-room.retake .campus-logo.sm { opacity:.3; }
-g.campus-room.dark .campus-logo.sm { filter:brightness(0); opacity:.1; }
+/* A DARK ROOM'S LOGO IS A GHOST, and it is a LIGHT one. The first cut said
+   `brightness(0)` - a black silhouette - which was right against the old
+   blueprint floor and self-defeating against the near-black glass this same
+   wave gave a powered-off cabinet: black on black rendered nothing, which is
+   the absence the treatment exists to avoid. Inverting to white at a tenth
+   reads as a shape behind dead glass. Still a static filter on a static node,
+   one raster, never over a live decode (trap 36). */
+g.campus-room.dark .campus-logo { filter:brightness(0) invert(1); opacity:.1; }
+/* NO `.sm` RUNG ANY MORE. The first cut hung a faint full-room backplate in
+   the wings; the shots killed it (the plate turned a 112x66 room's name into
+   noise and its RM number vanished), so campus.js simply mints no <image> for
+   a wing room and the gradient carries that identity instead. */
 .campus-stage[data-art="off"] .campus-logo { display:none; }
+
+/* THE PLATE READS OVER THE CARD. A room name drawn in chalk over a lit,
+   saturated cabinet front needs its own ground, so a lit room's labels get
+   `paint-order:stroke` - the dark stroke is painted UNDER the fill, which is a
+   halo rather than an outline. Two widths, because one that suits a 13.5px
+   name would swallow an 8.5px room number. Dark rooms keep the flat blueprint
+   label they always had. */
+g.campus-room.open .campus-rname,
+g.campus-room.retake .campus-rname,
+g.campus-room.open .campus-rsub,
+g.campus-room.retake .campus-rsub {
+  fill:var(--ink);
+  paint-order:stroke fill;
+  stroke:color-mix(in srgb, var(--campus-sky), black 45%);
+  stroke-linejoin:round;
+}
+g.campus-room.open .campus-rname,
+g.campus-room.retake .campus-rname { stroke-width:2.4; }
+g.campus-room.open .campus-rsub,
+g.campus-room.retake .campus-rsub { stroke-width:1.7; }
 
 /* rooms: mood classes written by campus.js update() */
 g.campus-room { cursor:pointer; transition:filter .25s; }
@@ -1093,20 +1113,37 @@ g.campus-room.open .campus-ping { animation:campus-pingring 2.6s cubic-bezier(.2
 /* neon signs - LIGHTS ON turned these into MARQUEES. Geometry is untouched
    (same rect, same text, same place); the sign text speaks --pix now and an
    extra rect on top carries the bulb chase. */
-.campus-neon rect { fill:color-mix(in srgb, var(--campus-sky), var(--pink) 10%); stroke:var(--pink); stroke-width:1; }
+/* DARK GLASS, not tinted glass. The plate used to be sky+10% pink, which was
+   fine over a blueprint room and hopeless over a lit cabinet front: the sign
+   has to be the darkest thing in a bright room for the bulbs and the letters
+   to be the brightest. The PINK is the tube (the stroke and the glow), never
+   the ground. */
+.campus-neon rect { fill:color-mix(in srgb, var(--campus-sky), black 55%); stroke:var(--pink); stroke-width:1; }
 .campus-neon text {
   /* --pix is a full-width 8x8 cell face: one glyph is ~1em of advance against
      mono's ~0.6em, so the size drops from 9px to 7px to keep roughly the old
      character budget inside the 94-unit sign (about 13 characters - "IN
      SESSION" is 10) and the tracking goes to zero, which pixel type wants. */
   font-family:var(--pix); font-size:7px; font-weight:400; letter-spacing:0;
-  fill:var(--pink); text-anchor:middle;
+  /* CHALK ON BLACK, not pink on black. At 7px a pixel face's one-unit strokes
+     land under a device pixel and anti-alias away most of their weight, so the
+     sign needs the highest-contrast fill it can get - pink lost the letters at
+     map distance (measured 5.5:1 against the plate; ink is ~14:1). The sign is
+     still unmistakably neon: the tube, the glow and the chase are all still
+     pink and gold around it. */
+  fill:var(--ink); text-anchor:middle;
 }
 .campus-neon { filter:drop-shadow(0 0 5px var(--pink)) drop-shadow(0 0 14px color-mix(in srgb, var(--pink), transparent 55%)); animation:campus-flicker 6s steps(1) infinite; }
-.campus-neon.v rect { stroke:var(--lav); fill:color-mix(in srgb, var(--campus-sky), var(--lav) 10%); }
+.campus-neon.v rect { stroke:var(--lav); fill:color-mix(in srgb, var(--campus-sky), black 55%); }
 .campus-neon.v text { fill:var(--lav); }
 .campus-neon.v { filter:drop-shadow(0 0 5px var(--lav)); animation:none; opacity:.95; }
 .campus-neon.off { opacity:0; animation:none; filter:none; }
+/* A WING SIGN GLOWS LESS. 94x16 of sign in a 112x66 room leaves ~10 units
+   between the plate and the room name, and the default 14px outer bloom walked
+   straight over both it and the RM number. Geometry is frozen, so the fix is
+   the bleed: one tight halo instead of two. */
+g.campus-room[data-wing] .campus-neon { filter:drop-shadow(0 0 2.5px var(--pink)); }
+g.campus-room[data-wing] .campus-neon.v { filter:drop-shadow(0 0 2.5px var(--lav)); }
 @keyframes campus-flicker {
   0%, 100% { opacity:1; } 7% { opacity:.5; } 8% { opacity:1; }
   52% { opacity:.8; } 54% { opacity:1; } 83% { opacity:.55; } 84% { opacity:1; }
@@ -1119,11 +1156,17 @@ g.campus-room.open .campus-ping { animation:campus-pingring 2.6s cubic-bezier(.2
    a bulb ticks like a filament instead of sliding like a gradient (brief §perf)
    and every open room shares this ONE animation. It rides only `open`: a retake
    keeps the calm lavender tube, and a dark room has no sign at all. */
-.campus-marquee {
+/* `rect.campus-marquee`, NOT `.campus-marquee` - and the extra type selector is
+   load-bearing, not tidiness. `.campus-neon rect` above is (0,1,1) and a bare
+   `.campus-marquee` is (0,1,0), so the bulb ring LOST and inherited the plate's
+   own fill plus a pink stroke: an opaque slab, painted after the text because
+   it is the last child, dropping "IN SESSION" to 15% of its colour. The sign
+   was unreadable in every shot and nothing about it looked like a fill bug. */
+rect.campus-marquee {
   fill:none; stroke:var(--gold); stroke-width:2.4; stroke-linecap:round;
   stroke-dasharray:0 11; opacity:0; pointer-events:none;
 }
-g.campus-room.open .campus-marquee {
+g.campus-room.open rect.campus-marquee {
   opacity:.85;
   animation:campus-chase .52s steps(4) infinite;
   filter:drop-shadow(0 0 3px color-mix(in srgb, var(--gold), transparent 40%));
@@ -1490,11 +1533,11 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
    scanlines at the middle of the breath, and the fountain's sparkle - which is
    a BURST, not a state - simply never fires. Both paths, exactly like the
    .arc-sign-chase pair further down. */
-html.arc-reduced g.campus-room.open .campus-marquee { animation:none; opacity:.85; }
+html.arc-reduced g.campus-room.open rect.campus-marquee { animation:none; opacity:.85; }
 html.arc-reduced g.campus-room.dark .campus-scan { animation:none; opacity:.09; }
 html.arc-reduced .campus-sparkle { animation:none; opacity:0; }
 @media (prefers-reduced-motion: reduce) {
-  g.campus-room.open .campus-marquee { animation:none; opacity:.85; }
+  g.campus-room.open rect.campus-marquee { animation:none; opacity:.85; }
   g.campus-room.dark .campus-scan { animation:none; opacity:.09; }
   .campus-sparkle { animation:none; opacity:0; }
 }
