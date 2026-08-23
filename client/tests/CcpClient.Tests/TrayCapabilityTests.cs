@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Tray;
 using Xunit;
@@ -360,4 +361,121 @@ public class TrayCapabilityTests
         Assert.False(TrayIconRequest.Default.ToolTipWasClamped);
         Assert.Equal("Conditioning Control Panel", TrayIconRequest.Default.ToolTip);
     }
+    /// <summary>
+    /// The right-click gesture must not cost this process the TOPMOST BAND.
+    ///
+    /// <para><b>This is a repaired defect, and it was invisible because it was an accident of test
+    /// order.</b> The gesture's only real Win32 call is <c>SetForegroundWindow</c> on the tray's
+    /// OWNER window, and in a headless-ish run that owner is HIDDEN. A hidden window cannot come
+    /// forward, so the call can only fail - and the failed attempt left this process unable to place
+    /// ANY window in the topmost band afterwards. Measured, not inferred: a subsequent
+    /// <c>SetWindowPos(HWND_TOPMOST)</c> returned TRUE and applied NOTHING, the extended-style
+    /// read-back identical before and after, thirty-two assertions running. Three
+    /// <c>PointerCoexistenceTests</c> facts failed whenever this class ran first and passed whenever
+    /// it did not.</para>
+    ///
+    /// <para><b>It is written as ONE fact for that reason.</b> The damage and the reading are in the
+    /// same method, so it reds on the defect rather than on an ordering it cannot control - and the
+    /// control below proves the band was reachable BEFORE the gesture, without which "topmost still
+    /// applies" would be equally true of a machine that never grants it.</para>
+    /// </summary>
+    [Fact]
+    public void TheRightClickGesture_LeavesTheProcessAbleToPlaceAWindowInTheTopmostBand()
+    {
+        Assert.SkipUnless(OverlayWindowProbe.WindowsHost, "the topmost band is a Win32 concept; this leg is Windows-only");
+
+        var control = TopmostProbeWindow.Create();
+        try
+        {
+            // THE CONTROL. Without it a green below could mean "the band was never reachable".
+            OverlayWindowProbe.RaiseTopmost(control.Handle);
+            Assert.True(
+                (OverlayWindowProbe.ExStyleOf(control.Handle) & OverlayWindowProbe.TopmostBit) != 0,
+                "the topmost band was already refused BEFORE this fact ran its own gesture. Two things produce "
+                + "that, and both are the defect this fact exists for rather than a bad machine: either an "
+                + "EARLIER tray gesture in this same process already spent the band (the collection runs several), "
+                + "or the guard on the foreground request has been removed. A machine that simply does not grant "
+                + "the band is ruled out by the real overlay taking it in this same process. "
+                + $"{OverlayWindowProbe.DescribeWindow(control.Handle)}");
+        }
+        finally
+        {
+            control.Dispose();
+        }
+
+        _ = TrayObservations.PlaceThenSyntheticRightClick();
+
+        var after = TopmostProbeWindow.Create();
+        try
+        {
+            OverlayWindowProbe.RaiseTopmost(after.Handle);
+            Assert.True(
+                (OverlayWindowProbe.ExStyleOf(after.Handle) & OverlayWindowProbe.TopmostBit) != 0,
+                "after the tray right-click gesture, SetWindowPos(HWND_TOPMOST) no longer places a window in the "
+                + "topmost band. The gesture asked a HIDDEN owner window to come forward, which cannot succeed, and "
+                + "the refused request costs this process the band for every later window - which is the overlay, "
+                + $"the glyph surface and the video surface: {OverlayWindowProbe.DescribeWindow(after.Handle)}");
+        }
+        finally
+        {
+            after.Dispose();
+        }
+    }
+}
+
+/// <summary>
+/// A throwaway top-level window, owned by this process, used ONLY to ask the OS whether the topmost
+/// band is currently grantable. Deliberately not the overlay's own window: the question is about the
+/// PROCESS's standing with the window manager, and borrowing a surface under test would make the
+/// reading depend on that surface's own correctness.
+/// </summary>
+internal sealed class TopmostProbeWindow : IDisposable
+{
+    private const uint WsPopup = 0x80000000;
+    private const uint WsExToolwindow = 0x00000080;
+    private const int SwShownoactivate = 4;
+
+    private TopmostProbeWindow(nint handle) => Handle = handle;
+
+    internal nint Handle { get; private set; }
+
+    internal static TopmostProbeWindow Create()
+    {
+        // "Static" is a stock system class, so no class registration and no window proc to keep
+        // alive - the window only has to exist and be top-level.
+        var handle = CreateWindowExW(
+            WsExToolwindow, "Static", "CcpTopmostProbe", WsPopup, 0, 0, 8, 8, 0, 0, 0, 0);
+        Assert.True(handle != 0, $"CreateWindowExW for the topmost probe returned NULL (last-error {Marshal.GetLastWin32Error()})");
+
+        // SHOWN, and without taking activation. A window that has never been shown does not take the
+        // topmost band on this OS - measured: the control leg reported "refused" against an unshown
+        // probe on a machine that grants the band perfectly well to the real overlay in the same
+        // process. An unshown probe would therefore fail for its own reason rather than the one it
+        // exists to detect, which is the worst kind of green-adjacent red. The real overlay is
+        // visible when it asserts topmost, so this matches it.
+        ShowWindow(handle, SwShownoactivate);
+        return new TopmostProbeWindow(handle);
+    }
+
+    public void Dispose()
+    {
+        if (Handle != 0)
+        {
+            DestroyWindow(Handle);
+            Handle = 0;
+        }
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint CreateWindowExW(
+        uint exStyle, string className, string windowName, uint style,
+        int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyWindow(nint window);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(nint window, int command);
 }

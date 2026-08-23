@@ -601,7 +601,15 @@ public sealed class Win32TrayPresence : ITrayPresence
             return;
         }
 
-        Win32TrayInterop.SetForegroundWindow(_ownerWindow);
+        // GUARDED ON VISIBILITY, and the guard is not defensive tidying. SetForegroundWindow on a
+        // HIDDEN window cannot succeed - there is nothing to bring forward - and the failed attempt
+        // leaves this process unable to place a window in the topmost band at all: measured, a
+        // subsequent SetWindowPos(HWND_TOPMOST) returns TRUE and applies NOTHING, with the
+        // extended-style read-back identical before and after, thirty-two times running.
+        if (Win32TrayInterop.IsWindowVisible(_ownerWindow))
+        {
+            Win32TrayInterop.SetForegroundWindow(_ownerWindow);
+        }
         var point = Win32TrayInterop.GetCursorPos(out var cursor) ? cursor : default;
 
         MenuTrackerInvocations++;

@@ -225,6 +225,12 @@ internal static class Win32TrayInterop
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetForegroundWindow(nint window);
 
+    /// <summary>Whether the OS reports the window visible. The foreground request above is gated on
+    /// it, because asking a hidden window to come forward cannot succeed and is not free.</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(nint window);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool GetCursorPos(out PointW point);
 
