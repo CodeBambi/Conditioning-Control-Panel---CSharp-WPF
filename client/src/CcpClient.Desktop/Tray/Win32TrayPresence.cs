@@ -601,11 +601,24 @@ public sealed class Win32TrayPresence : ITrayPresence
             return;
         }
 
-        // GUARDED ON VISIBILITY, and the guard is not defensive tidying. SetForegroundWindow on a
-        // HIDDEN window cannot succeed - there is nothing to bring forward - and the failed attempt
-        // leaves this process unable to place a window in the topmost band at all: measured, a
-        // subsequent SetWindowPos(HWND_TOPMOST) returns TRUE and applies NOTHING, with the
-        // extended-style read-back identical before and after, thirty-two times running.
+        // GUARDED ON VISIBILITY, and the guard is not defensive tidying.
+        //
+        // CORRECTED 2026-08-24, because the first version of this comment named the wrong cause,
+        // and a wrong cause is worse than no comment. It claimed the call "cannot succeed" on a
+        // hidden window and that the failed attempt costs this process the topmost band. Both
+        // halves are false, and both were measured: SetForegroundWindow on a HIDDEN window RETURNS
+        // TRUE, and on its own it costs nothing - the band is still reachable after three of them.
+        //
+        // What it actually does is worse than failing. It SUCCEEDS, and the foreground it moves is
+        // the user's: GetForegroundWindow() afterwards is this owner window, which has no pixels
+        // on screen. The user's next keystroke goes to a window they cannot see, with nothing to
+        // explain where their typing went - and this runs on an ordinary right-click of the tray
+        // icon. That is the defect, it is user-visible, and it is why the guard is here.
+        //
+        // Pinned by TrayCapabilityTests.TheRightClickGesture_NeverParksTheForegroundOnTheHidden-
+        // OwnerWindow, which asserts the CAUSE (the foreground is not this window) rather than a
+        // process-wide side effect. Asserting the return value would prove nothing: it is TRUE in
+        // both the guarded and the unguarded case.
         if (Win32TrayInterop.IsWindowVisible(_ownerWindow))
         {
             Win32TrayInterop.SetForegroundWindow(_ownerWindow);
