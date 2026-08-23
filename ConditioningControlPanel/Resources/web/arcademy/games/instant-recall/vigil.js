@@ -477,6 +477,20 @@ export function maxStopsFor(tier, budgetMs) {
   const open = openFor(k, b);
   return Math.max(1, 1 + Math.floor((hi - open) / gap));
 }
+/** A per-120s band entry, scaled to this class's budget and then held inside
+ *  STOPS_PER_MIN (on any budget the rate is asserted on): 9 x 1.5 rounds to 14
+ *  and 11 x 1.5 to 17, and 17 over 180s is 5.67 a minute, so the rate window
+ *  is the last word. A 120s class is untouched by the clamp. Never < 1. */
+export function scaleStops(perStandard, budgetMs) {
+  const b = Math.max(20000, Math.round(Number(budgetMs) || 120000));
+  let n = Math.round((Number(perStandard) || 1) * (b / 120000));
+  if (b >= 100000) {
+    const lo = Math.ceil(PLAYTEST.STOPS_PER_MIN.lo * b / 60000 - 1e-9);
+    const hi = Math.floor(PLAYTEST.STOPS_PER_MIN.hi * b / 60000 + 1e-9);
+    n = Math.max(lo, Math.min(hi, n));
+  }
+  return Math.max(1, n);
+}
 /** Stops per minute, the number the owner actually asked for. */
 export function stopsPerMinute(count, budgetMs) {
   const b = Math.max(1, Number(budgetMs) || 120000);
@@ -696,7 +710,13 @@ export function buildVigil(o = {}) {
   const qPer = PLAYTEST.Q_PER_STOP[tier];
   const band = PLAYTEST.STOPS_BAND[tier];
   const fit = maxStopsFor(tier, budgetMs);
-  const count = Math.max(1, Math.min(fit, pickFrom(band, roll('stop-count')) || band[0]));
+  /* THE BAND IS A RATE, NOT A COUNT. The table is written per 120s; the shell
+   * hands a MEATY class 180s (and a retake whatever the timetable says), and
+   * "five rounds a minute" has to hold on every one of them - a 10-stop deal
+   * over 180s is 3.3/min, which the field log caught on 2026-08-23. The pick
+   * is scaled AFTER the roll, so a 120s plan is byte-identical to before. */
+  const count = Math.max(1, Math.min(fit,
+    scaleStops(pickFrom(band, roll('stop-count')) || band[0], budgetMs)));
 
   const densityMult = densityMultFor(o.density);
   const densityCeil = clamp01(PLAYTEST.DENSITY_CEIL[tier] * densityMult);
@@ -1054,9 +1074,11 @@ export function assertPlan(p) {
   if (p.stops.length !== p.stopCount) bad.push('stopCount mismatch');
   /* THE CADENCE. The band is the deal; the fit clamp is the only thing allowed
    * to take a class below it, and only on a budget shorter than 120s. */
-  const band = PLAYTEST.STOPS_BAND[tier];
+  const band = PLAYTEST.STOPS_BAND[tier].map((n) => scaleStops(n, p.budgetMs));
   const fit = maxStopsFor(tier, p.budgetMs);
-  if (band.indexOf(p.stopCount) < 0 && p.stopCount !== Math.min(fit, band[0])) {
+  const bandLo = Math.min(fit, band[0]);
+  const bandHi = Math.min(fit, band[band.length - 1]);
+  if (p.stopCount < bandLo || p.stopCount > bandHi) {
     bad.push('tier ' + tier + ' stop count out of band: ' + p.stopCount);
   }
   if (p.stopCount > fit) bad.push('tier ' + tier + ' dealt more stops than the budget fits');
