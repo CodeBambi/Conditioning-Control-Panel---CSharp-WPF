@@ -58,9 +58,9 @@ public class PhraseBackupTests
         await lab.Backup.ExportAsync();
 
         var document = JsonDocument.Parse(lab.Picker.Saved!).RootElement;
-        // One instant read two ways, exactly as upstream does: DateTime.UtcNow for the envelope
-        // (PhraseBackupService.cs:75) and DateTime.Now for the file name (:53). At 01:30+02:00 the
-        // stamp is the PREVIOUS day in UTC while the name is the day the user thinks it is.
+        // One instant read two ways, exactly as upstream does: its UTC clock for the envelope
+        // (PhraseBackupService.cs:75) and its LOCAL clock for the file name (:53). At 01:30+02:00
+        // the stamp is the PREVIOUS day in UTC while the name is the day the user thinks it is.
         Assert.StartsWith("2026-08-23T23:30:00", document.GetProperty("exported_at").GetString());
         Assert.Equal("ccp-phrases-20260824.ccpphrases.json", lab.Picker.SuggestedFileName);
         Assert.Equal("Export Phrases", lab.Picker.SaveTitle);

@@ -54,7 +54,7 @@ public abstract record UserFileOpen
     /// <summary>
     /// The user chose a file and here is its text. <see cref="Text"/> is the ONLY string this
     /// seam ever hands back, and it is the file's CONTENT — pinned by
-    /// <c>PhraseBackupTests.NoOutcomeOfTheSeamCarriesAPathOrAFileName</c>.
+    /// <c>UserFilePickerTests.NoOutcomeOfTheSeamCarriesAPathOrAFileName</c>.
     /// </summary>
     public sealed record Opened(string Text) : UserFileOpen;
 
