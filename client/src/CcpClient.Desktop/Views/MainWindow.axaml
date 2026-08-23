@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:CcpClient.Desktop.Views"
         x:Class="CcpClient.Desktop.Views.MainWindow"
         Width="1100" Height="760"
         Title="CCP Client"
@@ -483,6 +484,25 @@
       </StackPanel>
     </Border>
 
-    <ContentControl x:Name="PageHost" />
+    <!-- The page host, and the toast surface floating over it.
+
+         WPF attaches its notification host to the top-right of MainWindow's RootGrid
+         (MainWindow/MainWindow.xaml:3217-3219, MainWindow.xaml.cs:2745) with the same 380 width
+         and the same 40/16 offsets. Here it is declared AFTER the page host and inside the same
+         Panel, so a toast reads on top of whatever page is mounted; it is inside the DockPanel's
+         fill slot rather than over the whole window, which keeps it off the rail and off the
+         session action bar - the two pieces of shell chrome a user is most likely to be reaching
+         for when a toast appears.
+
+         The host has NO Background, which is why the empty area around a toast does not eat
+         clicks on the page underneath (Services/Notifications/NotificationService.cs:16-18). -->
+    <Panel>
+      <ContentControl x:Name="PageHost" />
+      <views:ToastHost x:Name="ToastLayer"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Top"
+                       Margin="0,40,16,0"
+                       Width="380" />
+    </Panel>
   </DockPanel>
 </Window>

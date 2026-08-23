@@ -8,7 +8,7 @@
     Home page's bottom button row ("System", "App Info & Data" — §8.6); the port's rail has no
     Home door, so it carries its own System door (divergence §9 D2).
   -->
-  <ScrollViewer>
+  <ScrollViewer x:Name="SystemScroll" AutomationProperties.AutomationId="SystemScroll">
     <StackPanel Margin="20" Spacing="4">
       <TextBlock Classes="page-title" Text="System" />
       <TextBlock Classes="page-blurb" Text="Motion, startup trace and capability states" />
@@ -43,6 +43,70 @@
                      AutomationProperties.AutomationId="MotionLevelState"
                      TextWrapping="Wrap"
                      Text="" />
+        </StackPanel>
+      </Border>
+
+      <!--
+        PHRASE BACKUP (census #9). Upstream's home is App Settings -> Data
+        (Views/Controls/AppSettings/DataSettingsSection.xaml:101,:106, handlers at
+        MainWindow/MainWindow.PresetIO.cs:62 and :93); this port has no App Settings door, and the
+        System door is where that class of surface landed (§9 D2) - the same reasoning the Motion
+        control above it already carries.
+
+        EVERY STRING ON THIS MODULE COMES FROM PhraseBackupNotices, including the button captions,
+        so a unit fact checks what the user reads rather than a headless test having to mount a
+        window for it.
+      -->
+      <Border Classes="module" Margin="0,12,0,0">
+        <StackPanel Spacing="6">
+          <TextBlock x:Name="PhraseBackupTitle"
+                     Classes="module-title"
+                     AutomationProperties.AutomationId="PhraseBackupTitle" />
+          <TextBlock x:Name="PhraseBackupBlurb"
+                     Classes="page-blurb"
+                     AutomationProperties.AutomationId="PhraseBackupBlurb"
+                     TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="ExportPhrasesButton"
+                    Classes="module-action"
+                    HorizontalAlignment="Left"
+                    AutomationProperties.AutomationId="ExportPhrasesButton" />
+            <Button x:Name="ImportPhrasesButton"
+                    Classes="module-action"
+                    HorizontalAlignment="Left"
+                    AutomationProperties.AutomationId="ImportPhrasesButton" />
+          </StackPanel>
+
+          <!-- THE CONFIRMATION. An inline strip rather than a modal window, for the reason the
+               scripted-session confirmation already records (StudioPage.axaml:1898-1900): this
+               port has no dialog surface, and a whole new window class would be a bigger claim
+               than the ceremony needs. What the ceremony IS: the import is REFUSED until a
+               second, separate gesture confirms it - upstream's own order, which asks only after
+               the chosen file has already validated (MainWindow.PresetIO.cs:107-118). -->
+          <Border Classes="notice" x:Name="PhraseImportConfirmPanel" IsVisible="False">
+            <StackPanel Spacing="6">
+              <TextBlock x:Name="PhraseImportConfirmTitle"
+                         Classes="module-title"
+                         FontSize="14"
+                         AutomationProperties.AutomationId="PhraseImportConfirmTitle"
+                         TextWrapping="Wrap" />
+              <TextBlock x:Name="PhraseImportConfirmDetail"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         AutomationProperties.AutomationId="PhraseImportConfirmDetail"
+                         TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="PhraseImportAcceptButton"
+                        Classes="module-action"
+                        HorizontalAlignment="Left"
+                        AutomationProperties.AutomationId="PhraseImportAcceptButton" />
+                <Button x:Name="PhraseImportDeclineButton"
+                        Classes="module-action"
+                        HorizontalAlignment="Left"
+                        AutomationProperties.AutomationId="PhraseImportDeclineButton" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
         </StackPanel>
       </Border>
 

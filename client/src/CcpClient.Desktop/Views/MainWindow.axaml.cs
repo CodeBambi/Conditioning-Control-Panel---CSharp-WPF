@@ -139,7 +139,7 @@ public partial class MainWindow : Window
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
         _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon, Arcademy);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
-        _pages[ShellRoutes.System] = new SystemPage(host);
+        _pages[ShellRoutes.System] = new SystemPage(host, Session, ToastLayer);
 
         _doors[ShellRoutes.Studio] = DoorStudio;
         _doors[ShellRoutes.Companion] = DoorCompanion;
@@ -248,6 +248,14 @@ public partial class MainWindow : Window
 
     /// <summary>Demonstrator popup manager; public so tests drive the real wiring.</summary>
     public FeaturePopupManager Popups => _popups;
+
+    /// <summary>
+    /// The shell's ONE in-app toast surface (census #54/#83) — how this app says anything without
+    /// a modal. WPF has exactly one too, attached at the top-right of its root grid
+    /// (<c>MainWindow/MainWindow.xaml.cs:2745</c>); a page-local second one would put a refusal
+    /// somewhere the user has already navigated away from.
+    /// </summary>
+    public ToastHost Toasts => ToastLayer;
 
     /// <summary>The open companion window, if any; public so tests assert the real open path.</summary>
     public Features.Companion.CompanionWindow? Companion => _companion;
