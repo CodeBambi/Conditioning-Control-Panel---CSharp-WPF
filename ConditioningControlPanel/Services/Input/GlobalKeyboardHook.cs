@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
@@ -141,7 +141,14 @@ public class GlobalKeyboardHook : IDisposable
                     suppress = true;
 
                 if (suppress)
+                {
+                    // Possession tripwire. This runs inside a low-level hook callback, so it must stay
+                    // cheap: NotifyEscapeAttempt is a throttled dictionary bump plus a BeginInvoke onto
+                    // the UI thread, and it no-ops entirely when lockdown is not running.
+                    try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.SystemKey); }
+                    catch { /* never let the haunt break key suppression */ }
                     return (IntPtr)1;
+                }
             }
 
             try

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -271,14 +271,27 @@ namespace ConditioningControlPanel
             // takes the keys away for an hour.
             if (!TierGate.DemandPremium(RailFeatureName(PremiumFeature.Lockdown))) return;
             var minutes = _railLockdownMinutes;
-            var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode",
-                "- You will be LOCKED IN for " + minutes + " minutes\n" +
-                "- Strict Lock will be FORCED ON\n" +
-                "- Panic Key will be DISABLED\n" +
-                "- Alt+F4, Alt+Tab, Windows key, and Escape will be BLOCKED\n" +
-                "- You CANNOT close or minimize the application\n" +
-                "- The only escape is waiting for the timer to expire\n" +
-                "  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            // Same builder as BtnActivateLockdown_Click: the Safeties are toggles, so a dialog that
+            // promised a forced Strict Lock the user unticked would be the consent screen lying.
+            var cfg = App.Settings?.Current;
+            var warn = new System.Text.StringBuilder();
+            warn.Append("- You will be LOCKED IN for ").Append(minutes).Append(" minutes\n");
+            if (cfg?.LockdownForceStrictLock == true)
+                warn.Append("- Strict Lock will be FORCED ON\n");
+            if (cfg?.LockdownDisablePanicKey == true)
+                warn.Append("- Panic Key will be DISABLED\n");
+            if (cfg?.LockdownBlockSystemKeys == true)
+                warn.Append("- Alt+F4, Alt+Tab, the Windows key and Ctrl+Esc will be BLOCKED\n");
+            warn.Append("- You CANNOT close the application (minimizing still works)\n");
+            warn.Append("- The only escape is waiting for the timer to expire\n");
+            warn.Append("  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            if (cfg?.LockdownDoseKeeperEnabled == true)
+                warn.Append("\n- Nothing running? Lockdown starts the engine and picks features for you\n")
+                    .Append("  (and switches them back on if you turn them all off - one more each time)");
+            if (cfg?.LockdownPossessionEnabled == true)
+                warn.Append("\n- Possession is ON: the app's own UI will misbehave, on purpose.\n")
+                    .Append("  Ember glow = it was Lockdown, not a bug. Nothing you see is real damage.");
+            var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode", warn.ToString());
             if (!confirmed) return;
             App.Lockdown.Activate(TimeSpan.FromMinutes(minutes));
         }
@@ -293,6 +306,64 @@ namespace ConditioningControlPanel
             if (SettingsTab.TxtLockdownCountdown != null)
                 SettingsTab.TxtLockdownCountdown.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
             if (active) UpdateLockdownCountdown(App.Lockdown?.Remaining ?? TimeSpan.Zero);
+            WireLockdownChipNav(active);
+        }
+
+        /// <summary>The chip's own tooltip, cached the first time we swap it so the inactive card
+        /// gets its authored text back rather than a hard-coded copy of it.</summary>
+        private object? _lockdownChipToolTip;
+        private MouseButtonEventHandler? _lockdownChipNavHandler;
+
+        /// <summary>
+        /// While a lockdown runs, the Lockdown chip stops being a launcher and becomes a signpost:
+        /// clicking anywhere on the card body opens the Lockdown page, where the timer, the huge
+        /// Emergency Exit and the secret phrase all live. The +/- and "Lock in" controls are already
+        /// collapsed by SetLockdownActiveUi at that point, so nothing is being overridden - the card
+        /// is simply inert otherwise, and an inert card that shows a running countdown is exactly the
+        /// thing a user tries to click.
+        ///
+        /// <para>Wired from code rather than XAML so the chip markup (Views/Tabs/SettingsTabView.xaml)
+        /// stays owned by whoever owns the rail. PREVIEW-tunnelled so the handler runs whether or not
+        /// a child swallows the click.</para>
+        /// </summary>
+        private void WireLockdownChipNav(bool active)
+        {
+            try
+            {
+                var card = SettingsTab?.CardLockdown;
+                if (card == null) return;
+
+                if (_lockdownChipNavHandler != null)
+                {
+                    card.PreviewMouseLeftButtonDown -= _lockdownChipNavHandler;
+                    _lockdownChipNavHandler = null;
+                }
+
+                if (!active)
+                {
+                    card.Cursor = null;
+                    if (_lockdownChipToolTip != null) card.ToolTip = _lockdownChipToolTip;
+                    return;
+                }
+
+                _lockdownChipToolTip ??= card.ToolTip;
+                _lockdownChipNavHandler = (_, e) =>
+                {
+                    try
+                    {
+                        e.Handled = true;
+                        ShowTab("lockdown");
+                    }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "Lockdown: chip navigation failed"); }
+                };
+                card.PreviewMouseLeftButtonDown += _lockdownChipNavHandler;
+                card.Cursor = Cursors.Hand;
+                card.ToolTip = Localization.Loc.Get("lockdown_chip_active_tooltip");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: could not rewire the rail chip");
+            }
         }
 
         private void UpdateLockdownCountdown(TimeSpan ts)

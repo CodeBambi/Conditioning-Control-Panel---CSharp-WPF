@@ -110,6 +110,19 @@ internal sealed class ChaosWebViewHost : IDisposable
         /// <summary>Window title (shown on the taskbar/Alt-Tab in windowed mode).</summary>
         public string WindowTitle { get; init; } = "Conditioning Control Panel";
 
+        /// <summary>Windowed width in DIPs. Null (default) = the historic 85%-of-primary-screen
+        /// frame every existing caller was built on. Only consulted when the window is NOT
+        /// host-owned-fullscreen; the fullscreen path still covers the screen.</summary>
+        public double? WindowedWidth { get; init; }
+
+        /// <summary>Windowed height in DIPs. See <see cref="WindowedWidth"/>.</summary>
+        public double? WindowedHeight { get; init; }
+
+        /// <summary>true = centre the windowed frame on MainWindow rather than on the primary
+        /// screen. Falls back to the primary screen whenever main is missing, hidden, minimized or
+        /// has no arranged size yet, so it can never place a window off in the dark.</summary>
+        public bool CenterOnMainWindow { get; init; }
+
         /// <summary>true = glue this window ABOVE MainWindow via native (GWL_HWNDPARENT) ownership,
         /// so nothing the app does to main can bury the game surface. Set for the player-facing
         /// game windows (DtRH, Graded Intake, Bureau). See <see cref="AttachMainWindowGlue"/>.</summary>
@@ -219,9 +232,10 @@ internal sealed class ChaosWebViewHost : IDisposable
         }
         grid.Children.Add(_web);
 
-        // Default windowed size: 85% of the primary screen, centered.
-        _windowedW = SystemParameters.PrimaryScreenWidth * 0.85;
-        _windowedH = SystemParameters.PrimaryScreenHeight * 0.85;
+        // Default windowed size: 85% of the primary screen, centered. Options.WindowedWidth/Height
+        // override it for hosts that want a fixed small frame (the Emergency Exit's 960x640 card).
+        _windowedW = _opts.WindowedWidth is > 0 ? _opts.WindowedWidth.Value : SystemParameters.PrimaryScreenWidth * 0.85;
+        _windowedH = _opts.WindowedHeight is > 0 ? _opts.WindowedHeight.Value : SystemParameters.PrimaryScreenHeight * 0.85;
 
         _window = new Window
         {
@@ -293,8 +307,51 @@ internal sealed class ChaosWebViewHost : IDisposable
         double sw = SystemParameters.PrimaryScreenWidth, sh = SystemParameters.PrimaryScreenHeight;
         double w = Math.Min(_windowedW, sw), h = Math.Min(_windowedH, sh);
         _window.Width = w; _window.Height = h;
+
+        // Centre on MainWindow when the host asked for it AND main is actually a usable rectangle.
+        // Everything else keeps the historic primary-screen centring.
+        if (_opts.CenterOnMainWindow && TryCenterOnMainWindow(w, h)) return;
+
         _window.Left = Math.Max(0, (sw - w) / 2);
         _window.Top = Math.Max(0, (sh - h) / 2);
+    }
+
+    /// <summary>Place a w x h frame at the centre of MainWindow, clamped to the virtual desktop so a
+    /// main window sitting half off-screen cannot push this one out of reach. Returns false (and
+    /// touches nothing) when main is not a window we can measure, which is the caller's cue to fall
+    /// back to primary-screen centring.</summary>
+    private bool TryCenterOnMainWindow(double w, double h)
+    {
+        try
+        {
+            var main = Application.Current?.MainWindow;
+            if (_window == null || main == null || !main.IsVisible) return false;
+            if (main.WindowState == WindowState.Minimized) return false;
+
+            double mw = main.ActualWidth > 0 ? main.ActualWidth : main.Width;
+            double mh = main.ActualHeight > 0 ? main.ActualHeight : main.Height;
+            if (double.IsNaN(mw) || double.IsNaN(mh) || mw <= 0 || mh <= 0) return false;
+
+            double ml = main.Left, mt = main.Top;
+            if (double.IsNaN(ml) || double.IsNaN(mt)) return false;
+            if (main.WindowState == WindowState.Maximized) { ml = 0; mt = 0; mw = SystemParameters.PrimaryScreenWidth; mh = SystemParameters.PrimaryScreenHeight; }
+
+            double left = ml + (mw - w) / 2;
+            double top = mt + (mh - h) / 2;
+
+            double vl = SystemParameters.VirtualScreenLeft, vt = SystemParameters.VirtualScreenTop;
+            double vw = SystemParameters.VirtualScreenWidth, vh = SystemParameters.VirtualScreenHeight;
+            if (vw > 0 && vh > 0)
+            {
+                left = Math.Min(Math.Max(left, vl), vl + vw - w);
+                top = Math.Min(Math.Max(top, vt), vt + vh - h);
+            }
+
+            _window.Left = left;
+            _window.Top = top;
+            return true;
+        }
+        catch { return false; }
     }
 
     /// <summary>True while the window is borderless-fullscreen (host-owned, not the browser API).</summary>

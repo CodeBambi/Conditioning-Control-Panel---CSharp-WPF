@@ -1,0 +1,148 @@
+/* ============================================================================
+ * games/jigsaw.css - "rearrange the picture" (Emergency Exit minigame)
+ * Tokens from shared/theme.css only. Photosafe variants under .ee-photosafe.
+ * ==========================================================================*/
+
+.eejig {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center; gap: 26px;
+  width: 100%; height: 100%;
+}
+
+/* --- board ---------------------------------------------------------------- */
+.eejig-board {
+  position: relative; flex: 0 0 auto;
+  width: 460px; height: 460px;              /* JS sizes it to the stage */
+  border-radius: 12px;
+  background: var(--ee-bg-deep);
+  border: 1px solid var(--ee-crimson-soft);
+  box-shadow: 0 18px 60px rgba(0,0,0,.5), 0 0 0 6px rgba(37,37,66,.6);
+  overflow: visible;
+  touch-action: none;
+  transition: opacity .45s ease, box-shadow .4s ease;
+}
+.eejig-board.is-done {
+  box-shadow: 0 18px 60px rgba(0,0,0,.5), 0 0 0 6px rgba(37,37,66,.6), 0 0 34px var(--ee-ember-glow);
+}
+.eejig-board.is-dim { opacity: .3; }
+
+.eejig-tile {
+  position: absolute; left: 0; top: 0;
+  width: 140px; height: 140px;              /* JS sets real size */
+  border-radius: 8px;
+  background-color: var(--ee-card);
+  background-repeat: no-repeat;
+  background-size: 300% 300%;
+  cursor: grab;
+  touch-action: none;
+  box-shadow: 0 2px 10px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.05);
+  transition: transform .28s cubic-bezier(.2,.8,.25,1.15), box-shadow .25s ease, opacity .3s ease;
+  will-change: transform;
+  overflow: hidden;
+}
+.eejig-tile::after {                      /* subtle lens so flat gifs still read as tiles */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(160deg, rgba(255,255,255,.07), rgba(0,0,0,0) 45%, rgba(0,0,0,.18));
+}
+.eejig-tile.is-ok {                       /* the tell: thin ember outline on a correct tile */
+  box-shadow: 0 2px 10px rgba(0,0,0,.45), inset 0 0 0 2px var(--ee-ember), 0 0 10px var(--ee-ember-soft);
+}
+.eejig-tile.is-sel {
+  box-shadow: 0 2px 10px rgba(0,0,0,.45), inset 0 0 0 2px var(--ee-pink), 0 0 14px rgba(255,105,180,.45);
+}
+.eejig-tile.is-drag {
+  transition: none; cursor: grabbing; z-index: 20;
+  box-shadow: 0 18px 34px rgba(0,0,0,.6), inset 0 0 0 2px var(--ee-pink);
+}
+.eejig-tile.is-target {
+  box-shadow: 0 2px 10px rgba(0,0,0,.45), inset 0 0 0 3px var(--ee-pink);
+}
+.eejig-tile.is-hop { z-index: 10; }
+.eejig-tile.is-fall {
+  transition: transform .9s cubic-bezier(.5,0,.9,.4), opacity .9s ease;
+  opacity: .15; z-index: 30;
+}
+.eejig-board.is-done .eejig-tile { cursor: default; }
+
+/* --- glitch layer --------------------------------------------------------- */
+.eejig-static {
+  position: absolute; inset: -4px; z-index: 40; pointer-events: none;
+  border-radius: 14px; opacity: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.10) 0 2px, rgba(0,0,0,.28) 2px 3px, rgba(140,140,160,.22) 3px 5px),
+    repeating-linear-gradient(90deg, rgba(255,138,92,.10) 0 7px, rgba(0,0,0,.16) 7px 11px, rgba(220,20,60,.10) 11px 19px),
+    linear-gradient(180deg, rgba(40,40,60,.7), rgba(20,20,30,.8));
+  background-size: 100% 9px, 37px 100%, 100% 100%;
+  mix-blend-mode: screen;
+}
+.eejig-static.is-on { animation: eejig-static .42s steps(6, end) 1; }
+@keyframes eejig-static {
+  0%   { opacity: 0; background-position: 0 0, 0 0, 0 0; }
+  10%  { opacity: .85; background-position: 0 3px, 9px 0, 0 0; }
+  30%  { opacity: .7;  background-position: 0 -6px, -13px 0, 0 0; }
+  50%  { opacity: .9;  background-position: 0 4px, 21px 0, 0 0; }
+  70%  { opacity: .6;  background-position: 0 -2px, -5px 0, 0 0; }
+  90%  { opacity: .4;  background-position: 0 7px, 3px 0, 0 0; }
+  100% { opacity: 0;   background-position: 0 0, 0 0, 0 0; }
+}
+/* photosafe: no static - a soft ember veil that breathes once */
+.ee-photosafe .eejig-static {
+  background: radial-gradient(70% 70% at 50% 50%, var(--ee-ember-soft), rgba(255,138,92,0));
+  mix-blend-mode: normal;
+}
+.ee-photosafe .eejig-static.is-on { animation: eejig-static-soft .9s ease 1; }
+@keyframes eejig-static-soft { 0%, 100% { opacity: 0; } 50% { opacity: .7; } }
+.eejig-board.is-jit { animation: eejig-jit .32s steps(3, end) 1; }
+.ee-photosafe .eejig-board.is-jit { animation: none; }
+@keyframes eejig-jit {
+  0% { transform: translate(0,0); } 33% { transform: translate(-3px,2px); }
+  66% { transform: translate(3px,-1px); } 100% { transform: translate(0,0); }
+}
+
+/* --- side panel ----------------------------------------------------------- */
+.eejig-panel {
+  flex: 0 1 250px; min-width: 200px; max-width: 270px;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 18px 20px 16px;
+}
+.eejig-kicker {
+  margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--ee-crimson);
+}
+.eejig-title {
+  margin: 0; font-size: 24px; line-height: 1.1; font-weight: 900; letter-spacing: .03em;
+  text-transform: uppercase; color: var(--ee-text);
+}
+.eejig-sub { margin: 0; font-size: 13px; line-height: 1.4; color: var(--ee-dim); font-weight: 600; }
+.eejig-pips { display: grid; grid-template-columns: repeat(3, 18px); gap: 5px; margin: 4px 0 2px; }
+.eejig-pip {
+  width: 18px; height: 18px; border-radius: 4px;
+  background: var(--ee-bg-deep); border: 1px solid var(--ee-crimson-soft);
+  transition: background .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.eejig-pip.is-ok { background: var(--ee-ember); border-color: var(--ee-ember); box-shadow: 0 0 8px var(--ee-ember-soft); }
+.eejig-count { margin: 0; font-size: 13px; color: var(--ee-dim); }
+.eejig-count b { color: var(--ee-ember); font-size: 18px; font-variant-numeric: tabular-nums; }
+.eejig-legend {
+  display: flex; align-items: center; gap: 8px; margin: 0;
+  font-size: 12px; color: var(--ee-mute);
+}
+.eejig-legend i {
+  display: inline-block; width: 14px; height: 14px; border-radius: 3px;
+  background: var(--ee-card-2); box-shadow: inset 0 0 0 2px var(--ee-ember);
+}
+.eejig-fine { margin: auto 0 0; font-size: 11px; color: var(--ee-mute); line-height: 1.4; }
+.eejig-fine.is-warn { color: var(--ee-crimson); }
+
+/* tight window (800x560): panel shrinks, title smaller */
+@media (max-height: 600px), (max-width: 860px) {
+  .eejig { gap: 18px; }
+  .eejig-panel { padding: 10px 12px; gap: 8px; min-width: 170px; }
+  .eejig-title { font-size: 19px; }
+  .eejig-sub { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eejig-static.is-on, .eejig-board.is-jit { animation: none !important; }
+}

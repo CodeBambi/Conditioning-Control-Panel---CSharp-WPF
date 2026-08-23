@@ -57,6 +57,9 @@ namespace ConditioningControlPanel
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)
         {
             try { App.Bark?.NotifyUiAction("minimize"); } catch { }
+            // Minimizing during a lockdown stays ALLOWED (owner decision) - it just gets noticed.
+            // No-op outside lockdown, so no extra guard is needed here.
+            try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Minimize); } catch { }
             // Hide avatar tube BEFORE minimizing to prevent visual artifacts
             HideAvatarTube();
             WindowState = WindowState.Minimized;
@@ -125,6 +128,9 @@ namespace ConditioningControlPanel
             // Lockdown mode: block all close attempts
             if (App.Lockdown?.IsActive == true)
             {
+                // Possession tripwire: the refusal is old behaviour, the REACTION is new. Fired before
+                // the cancel so the haunt is already moving as the window refuses to go.
+                try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Close); } catch { }
                 e.Cancel = true;
                 return;
             }

@@ -587,6 +587,9 @@ namespace ConditioningControlPanel
         public static CatalogueService Catalogue { get; private set; } = null!;
         public static CatalogueLookupService CatalogueLookup { get; private set; } = null!;
         public static LockdownService Lockdown { get; private set; } = null!;
+        /// <summary>The haunted-UI layer that rides a running lockdown (Services/Possession/POSSESSION.md).</summary>
+        public static Services.Possession.PossessionDirector? Possession { get; private set; }
+        public static Services.Haptics.LockdownDoseKeeper? LockdownDose { get; private set; }
         public static MantraService Mantra { get; private set; } = null!;
         public static MantraVoiceService MantraVoice { get; private set; } = null!;
         public static MantraChantService MantraChant { get; private set; } = null!;
@@ -2314,6 +2317,21 @@ namespace ConditioningControlPanel
             // prior run that was killed mid-lockdown so the panic key isn't stuck off.
             LockdownService.RecoverIfNeeded();
             Lockdown = new LockdownService();
+            // Possession: the haunt that rides the lockdown timer. It only arms when a lockdown starts
+            // and LockdownPossessionEnabled is on, so constructing it here costs nothing.
+            Possession = new Services.Possession.PossessionDirector(Lockdown, Services.Possession.Effects.PossessionEffectCatalog.CreateAll());
+            Possession.Warden = new Services.Possession.Warden();
+            // Companion wave (POSSESSION.md): the ember tick / dip cues, and the one remembered charge a
+            // Full Doki lockdown leaves for the next launch. Both only subscribe; neither costs anything
+            // until a lockdown runs (or, for the charge, until the flag from the last one is spent).
+            Services.Possession.PossessionAudio.Install();
+            Services.Possession.PossessionRemember.Install();
+            // The Dose: a lockdown refuses to run empty (engine off -> started; nothing on -> the warden
+            // picks). Recovery first, so a killed lockdown's conscripted toggles go back off before the
+            // engine can ever read them.
+            Services.Haptics.LockdownDoseKeeper.RecoverIfNeeded();
+            LockdownDose = new Services.Haptics.LockdownDoseKeeper(Lockdown);
+            LockdownDose.Install();
             // Quest credit: each completed lockdown (Patreon-exclusive quest category).
             Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch { } };
 
@@ -2457,6 +2475,31 @@ namespace ConditioningControlPanel
                     ? e.Args[idx + 1]
                     : Path.Combine(AppContext.BaseDirectory, "logs", "door-shots");
                 Services.Dev.DoorShooter.Run(mainWindow, outDir);
+            }
+
+            // `--possession-preview [outDir]`: offscreen verification rig for the Possession layer -
+            // navigates to the Lockdown card, then applies EVERY effect in the catalog one at a time
+            // against a real target, four shots each (before / charge / live / undone) plus a report on
+            // whether Undo restored the control exactly. It NEVER activates LockdownService (no keyboard
+            // hook, no safeties): the rig runs unattended and a real lockdown is meant to be hard to
+            // escape. See Services/Dev/PossessionPreview.cs. Dead code in every normal launch.
+            if (e.Args.Contains("--possession-preview"))
+            {
+                var pidx = Array.IndexOf(e.Args, "--possession-preview");
+                var possDir = pidx >= 0 && pidx + 1 < e.Args.Length && !e.Args[pidx + 1].StartsWith("--")
+                    ? e.Args[pidx + 1]
+                    : Path.Combine(AppContext.BaseDirectory, "logs", "possession-preview");
+                Services.Dev.PossessionPreview.Run(mainWindow, possDir);
+            }
+
+            // `--emergency-exit-preview <game>`: open the REAL Emergency Exit window against the real
+            // page (labyrinth | password | jigsaw | captcha) with a synthetic init and NO lockdown, so
+            // the friction door can be verified without arming one. The host refuses to apply verdicts
+            // in preview mode - they are rolled and logged only. See Services/Dev/EmergencyExitPreview.cs.
+            // Dead code in every normal launch.
+            if (e.Args.Contains("--emergency-exit-preview"))
+            {
+                Services.Dev.EmergencyExitPreview.Run(mainWindow, Services.Dev.EmergencyExitPreview.ResolveGame(e.Args));
             }
 
             // `--overlay-host`: force the unified overlay host ON for this launch only (in-memory,
@@ -4513,6 +4556,11 @@ Application State:
             // never happened and the last class's grades/streak went with the process.
             try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch { }
 
+            // The Emergency Exit's friction door: a WebView2 process outliving the app is a leak, and
+            // Close() is safe from here - it has no state to flush and never touches the lockdown (any
+            // verdict was applied the moment it was rolled).
+            try { Services.EmergencyExit.EmergencyExitHostService.Close(); } catch { }
+
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it
             // wouldn't block process exit, but shut it down explicitly. No-op when the avatar shares the
@@ -4569,6 +4617,9 @@ Application State:
             Subliminal?.Dispose();
             Overlay?.Dispose();
             Compositor?.Dispose(); // after effect services so their layers deactivate first
+            // Before the window goes: Dispose runs the crash-safe UndoAll so no haunt is left painted on
+            // a control (or, worse, left mid-transform in a saved layout).
+            try { Possession?.Dispose(); } catch { }
             ScreenShake?.Dispose();
             try { Chaos?.ForceShutdown(); } catch { }
             // Standalone corner-GIF overlays are unowned topmost windows (#709) - close them here

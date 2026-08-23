@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -1441,6 +1441,133 @@ namespace ConditioningControlPanel
                 }
             }
             finally { _eggReturnValid = false; }
+        }
+
+        // ============================================================
+        // POSSESSION - the warden's movement API (Lockdown's haunted-UI layer)
+        // ============================================================
+        // Services/Possession/Warden.cs drives these. They reuse the egg's physical-px machinery but
+        // keep their OWN restore state on purpose: a bubble egg and a warden verb can otherwise
+        // overwrite each other's idea of "home" and the tube never finds its way back.
+
+        private bool _possWasAttached;
+        private RECT _possReturnRect;
+        private bool _possReturnValid;
+
+        /// <summary>True when the warden may move the tube: the same gates as the bubble egg (enabled,
+        /// visible, not hidden for fullscreen/chaos, live handle, not mid-conversation). The warden
+        /// layers its own appearance/stare cooldowns on top of this.</summary>
+        public bool CanPerformPossessionMove => CanPerformBubbleEgg;
+
+        /// <summary>Remember where the tube belongs, ONCE per verb. Both entry points call it, so a
+        /// knock's follow-up nudges cannot overwrite the real home with a nudged position.</summary>
+        private void CapturePossessionHome()
+        {
+            if (_possReturnValid || _possWasAttached) return;
+            _possWasAttached = _isAttached;
+            _possReturnValid = _tubeHandle != IntPtr.Zero && GetWindowRect(_tubeHandle, out _possReturnRect);
+        }
+
+        /// <summary>The tube's current bounds in PHYSICAL px - the space warden targets are computed in
+        /// (FrameworkElement.PointToScreen hands back device pixels, so no conversion is needed).
+        /// False when there is no live handle.</summary>
+        public bool TryGetTubeScreenRect(out System.Windows.Rect physicalRect)
+        {
+            physicalRect = System.Windows.Rect.Empty;
+            if (_tubeHandle == IntPtr.Zero || !GetWindowRect(_tubeHandle, out var r)) return false;
+            physicalRect = new System.Windows.Rect(
+                r.Left, r.Top, Math.Max(0, r.Right - r.Left), Math.Max(0, r.Bottom - r.Top));
+            return true;
+        }
+
+        /// <summary>Glide the tube to stand BESIDE a screen rect (physical px) without covering it -
+        /// the warden's knock. Mirrors GlideToBubbleAsync's side-picking and work-area clamping.</summary>
+        public async Task GlideToScreenRectAsync(System.Windows.Rect physicalRect, CancellationToken ct)
+        {
+            if (!Dispatcher.CheckAccess())
+            { await Dispatcher.InvokeAsync(() => GlideToScreenRectAsync(physicalRect, ct)).Task.Unwrap(); return; }
+
+            CapturePossessionHome();
+            if (_isAttached) Detach(silent: true);
+            ReassertTopmost();
+            if (_tubeHandle == IntPtr.Zero || !GetWindowRect(_tubeHandle, out var cur)) return;
+
+            int w = cur.Right - cur.Left, h = cur.Bottom - cur.Top;
+            double cx = physicalRect.X + physicalRect.Width / 2.0;
+            double cy = physicalRect.Y + physicalRect.Height / 2.0;
+            var screen = System.Windows.Forms.Screen.FromPoint(
+                new System.Drawing.Point((int)cx, (int)cy));
+            var wa = screen.WorkingArea;
+            const int gap = 20;
+            // Stand on whichever side of the target has more room: left of it when it hugs the right
+            // half of its screen, else to its right. The victim must stay readable while it misbehaves.
+            bool placeLeft = cx > wa.Left + wa.Width / 2.0;
+            int targetX = placeLeft ? (int)(physicalRect.X - gap - w) : (int)(physicalRect.Right + gap);
+            int targetY = (int)(cy - h / 2.0);
+            targetX = Math.Clamp(targetX, wa.Left, Math.Max(wa.Left, wa.Right - w));
+            targetY = Math.Clamp(targetY, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
+
+            await GlideToAsync(cur.Left, cur.Top, targetX, targetY, ct);
+        }
+
+        /// <summary>Glide the tube to an absolute PHYSICAL-px top-left. Used for the stare (window
+        /// centre), the knock's little nudges, and - with <paramref name="clampToWorkArea"/> false -
+        /// the R4 "leave", which deliberately parks the tube off the bottom edge of the frame.</summary>
+        public async Task GlideToScreenPointAsync(System.Windows.Point physicalTopLeft, CancellationToken ct,
+                                                  bool clampToWorkArea = true)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                await Dispatcher.InvokeAsync(
+                    () => GlideToScreenPointAsync(physicalTopLeft, ct, clampToWorkArea)).Task.Unwrap();
+                return;
+            }
+
+            CapturePossessionHome();
+            if (_isAttached) Detach(silent: true);
+            ReassertTopmost();
+            if (_tubeHandle == IntPtr.Zero || !GetWindowRect(_tubeHandle, out var cur)) return;
+
+            int targetX = (int)physicalTopLeft.X, targetY = (int)physicalTopLeft.Y;
+            if (clampToWorkArea)
+            {
+                int w = cur.Right - cur.Left, h = cur.Bottom - cur.Top;
+                var screen = System.Windows.Forms.Screen.FromPoint(
+                    new System.Drawing.Point(targetX, targetY));
+                var wa = screen.WorkingArea;
+                targetX = Math.Clamp(targetX, wa.Left, Math.Max(wa.Left, wa.Right - w));
+                targetY = Math.Clamp(targetY, wa.Top, Math.Max(wa.Top, wa.Bottom - h));
+            }
+
+            await GlideToAsync(cur.Left, cur.Top, targetX, targetY, ct);
+        }
+
+        /// <summary>Send the tube back to exactly where the warden found it - re-attach if it was
+        /// attached, else glide to the captured floating position. Safe to call twice: the second call
+        /// finds no capture and no-ops, which is what lets the reassembly and the knock's delayed
+        /// homeward leg both call it without fighting.</summary>
+        public async Task ReturnHomeAsync(CancellationToken ct)
+        {
+            if (!Dispatcher.CheckAccess())
+            { await Dispatcher.InvokeAsync(() => ReturnHomeAsync(ct)).Task.Unwrap(); return; }
+
+            if (!_possReturnValid && !_possWasAttached) return;
+            try
+            {
+                if (_possWasAttached)
+                {
+                    Attach(silent: true);   // UpdatePosition snaps it back to the parent
+                    return;
+                }
+                if (_tubeHandle != IntPtr.Zero && GetWindowRect(_tubeHandle, out var cur))
+                {
+                    // The homeward leg is deliberately uncancellable: a cancelled return would leave
+                    // the tube parked wherever the haunt dropped it, for good.
+                    await GlideToAsync(cur.Left, cur.Top, _possReturnRect.Left, _possReturnRect.Top,
+                                       CancellationToken.None);
+                }
+            }
+            finally { _possReturnValid = false; _possWasAttached = false; }
         }
 
         /// <summary>Lerp the window from one physical-px position to another over ~0.4s (SetWindowPos

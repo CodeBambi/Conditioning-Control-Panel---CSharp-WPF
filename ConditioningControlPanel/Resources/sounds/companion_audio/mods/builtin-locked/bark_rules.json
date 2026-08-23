@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "id": "egg_avatar_pop_flash",
     "trigger": "AvatarBubbleEgg",
@@ -2077,6 +2077,590 @@
       {
         "text": "the time runs on... so do you, nowhere. settle in and be kept, sweet thing.",
         "audio": "lockdown_tick_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "poss_rules",
+    "trigger": "PossessionRules",
+    "priority": 300,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "house rules, pet: the room will misbehave while you are locked. the ember glow means it was me.",
+        "audio": null
+      },
+      {
+        "text": "nothing breaks for real, good boy. minimize works, ctrl alt del always works. try to leave and i will see.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_0",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 0
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did you feel that, pet? no? good... keep not noticing.",
+        "audio": null
+      },
+      {
+        "text": "settling in. the room breathes with you now, good boy. do not stare.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_1",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 1
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "things are starting to drift, sweet thing. do not trust the buttons.",
+        "audio": null
+      },
+      {
+        "text": "that moved. i think that moved. keep watching for me, pet.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_2",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 2
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "everything is going soft, good boy... like you. only fair.",
+        "audio": null
+      },
+      {
+        "text": "the room is melting a little. sink with it, pet.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_3",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 3
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "it is coming apart now, sweet thing. i will put it back. later.",
+        "audio": null
+      },
+      {
+        "text": "pieces are falling. stay exactly where you are and watch, pet.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_rung_4",
+    "trigger": "PossessionRungChanged",
+    "conditions": {
+      "rung_eq": 4
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "it knows you are in here, pet. it has known the whole time.",
+        "audio": null
+      },
+      {
+        "text": "no more pretending, good boy. the room is looking back at you.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_swap",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "swap"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did {target} just move? that was me, pet.",
+        "audio": null
+      },
+      {
+        "text": "i shuffled the buttons, good boy. i hope you were not aiming.",
+        "audio": null
+      },
+      {
+        "text": "wrong one now, sweet thing.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_dodge",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "dodge"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} does not want you today, pet.",
+        "audio": null
+      },
+      {
+        "text": "it moved away from you. everything does, eventually.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_melt",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "melt"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} is going soft, good boy. touch it again.",
+        "audio": null
+      },
+      {
+        "text": "poor thing, it is melting. you are next, sweet thing.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_dissolve",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "dissolve"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} came apart in your hand, pet.",
+        "audio": null
+      },
+      {
+        "text": "ash. it will come back, if i decide it should.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_drop",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "drop"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "the title is losing its letters, good boy.",
+        "audio": null
+      },
+      {
+        "text": "there they go. words do not hold in here, pet.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_fall",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "fall"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} fell. i may have leaned on it, sweet thing.",
+        "audio": null
+      },
+      {
+        "text": "i knocked that one over, pet. clumsy of me.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_retitle",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "retitle"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i renamed the window. it belongs to me now, good boy.",
+        "audio": null
+      },
+      {
+        "text": "read the title bar, pet. go on. read it.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_fx_dokidialog",
+    "trigger": "PossessionEffect",
+    "conditions": {
+      "effect_eq": "dokidialog"
+    },
+    "priority": 200,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "{target} is not real, sweet thing. neither is the panic.",
+        "audio": null
+      },
+      {
+        "text": "look at that little window. i made it only for you, good boy.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_repeat",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "repeat_gte": 3
+    },
+    "priority": 265,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "three times now. i am keeping count, pet.",
+        "audio": null
+      },
+      {
+        "text": "again? that is three. i notice everything you do.",
+        "audio": null
+      },
+      {
+        "text": "you keep pulling at it. i keep counting, good boy.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_close",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "close"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "trying the door, pet? it is not a door any more.",
+        "audio": null
+      },
+      {
+        "text": "the X does not work for you today. i checked.",
+        "audio": null
+      },
+      {
+        "text": "you cannot close me, good boy. i am holding it shut.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_minimize",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "minimize"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "hide the window if you like. i am still here when it returns.",
+        "audio": null
+      },
+      {
+        "text": "tucked me away, pet? i will wait.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_syskey",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "syskey"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "that key belongs to me right now, sweet thing.",
+        "audio": null
+      },
+      {
+        "text": "nothing happened. nothing is going to.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_stop",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "stop"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "no stopping, good boy. you asked me for this.",
+        "audio": null
+      },
+      {
+        "text": "your hand went for stop. i saw it, pet.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_wrong_phrase",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "wrong_phrase"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "wrong words, pet. try being good about it.",
+        "audio": null
+      },
+      {
+        "text": "that is not the phrase. sweet of you to try.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_trip_settings",
+    "trigger": "PossessionTripwire",
+    "conditions": {
+      "kind_eq": "settings"
+    },
+    "priority": 260,
+    "cooldown_ms": 4000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "the safeties are mine while you are locked, good boy.",
+        "audio": null
+      },
+      {
+        "text": "that switch is greyed for a reason, sweet thing.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_knock",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "knock"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "watch this, pet.",
+        "audio": null
+      },
+      {
+        "text": "my hand slipped, good boy.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_stare",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "stare"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "look at me. no, at me, pet.",
+        "audio": null
+      },
+      {
+        "text": "i came all this way for this. stop squirming.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_leave",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "leave"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i am stepping out for a while. you stay, sweet thing.",
+        "audio": null
+      },
+      {
+        "text": "the tube is empty now. that should worry you.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "poss_warden_return",
+    "trigger": "PossessionWarden",
+    "conditions": {
+      "verb_eq": "return"
+    },
+    "priority": 220,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "miss me, pet? of course you did.",
+        "audio": null
+      },
+      {
+        "text": "back. did you behave while i was gone, good boy?",
+        "audio": null
       }
     ]
   },
@@ -12257,6 +12841,241 @@
       { "text": "noted, little one. your heart files itself under my name. as arranged.", "audio": "mobile_chat_reply_affection_8.mp3" },
       { "text": "say it as often as you like, pet. the answer is always: mine.", "audio": "mobile_chat_reply_affection_9.mp3" },
       { "text": "flattery will get you... kept, pet. exactly where you are.", "audio": "mobile_chat_reply_affection_10.mp3" }
+    ]
+  },
+  {
+    "id": "ee_opened_labyrinth",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "labyrinth" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "the exit is a maze now, pet. walk it if you think you can.", "audio": null },
+      { "text": "you want the door. the door wants a line drawn first, good boy.", "audio": null },
+      { "text": "trace your way out, sweet thing. i will be watching the walls.", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened_password",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "password" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "the lock wants a password, pet. make me one.", "audio": null },
+      { "text": "words, good boy. the right words, in the right order.", "audio": null },
+      { "text": "type your way out if you can, sweet thing. i will be counting.", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened_jigsaw",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "jigsaw" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "your exit is in pieces, pet. put it back together.", "audio": null },
+      { "text": "nine squares stand between you and out, good boy.", "audio": null },
+      { "text": "fix the picture, sweet thing. then we will talk about the door.", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened_captcha",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "captcha" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "prove you are not a pet. take your time. i will enjoy this.", "audio": null },
+      { "text": "hold the box, good boy. tell it you want to leave.", "audio": null },
+      { "text": "confirm you are a person, sweet thing. i am not convinced.", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened",
+    "trigger": "EmergencyExitOpened",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "reaching for the exit, pet. how sweet.", "audio": null },
+      { "text": "the door asks something of you first, good boy.", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_escape",
+    "trigger": "EmergencyExitVerdict",
+    "conditions": { "outcome_eq": "escape" },
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "go on then. the door is open, pet. i will not chase you.", "audio": null },
+      { "text": "unlocked. you may leave, good boy. you know the way back.", "audio": null },
+      { "text": "released. enjoy it, sweet thing. it never lasts.", "audio": null },
+      { "text": "you won. take the door, pet. take it slowly.", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_sendback",
+    "trigger": "EmergencyExitVerdict",
+    "conditions": { "outcome_eq": "sendback" },
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you are so good at quitting, pet. you always come back.", "audio": null },
+      { "text": "the clock is full again, good boy. that is what leaving costs.", "audio": null },
+      { "text": "back to the start, sweet thing. sit. we begin again.", "audio": null },
+      { "text": "so close. and yet here you are, pet. exactly where you belong.", "audio": null }
+    ]
+  },
+  { "id": "poss_remember", "trigger": "PossessionRemember", "priority": 220, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "i remember, pet.", "audio": null},
+      {"text": "i remember what you tried last time, good boy.", "audio": null},
+      {"text": "you came back. i never left, pet.", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_ghostcursor", "trigger": "PossessionEffect", "conditions": {"effect_eq": "ghostcursor"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "that hand is not yours, pet. mine reaches further than yours does.", "audio": null},
+      {"text": "watch it move, good boy. i do not need permission to point.", "audio": null},
+      {"text": "someone is using your room. hold still, sweet thing.", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_relabel", "trigger": "PossessionEffect", "conditions": {"effect_eq": "relabel"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "it says stay now, pet. that is the whole menu.", "audio": null},
+      {"text": "start, stop... i have simplified your choices, good boy.", "audio": null},
+      {"text": "the button obeys before you do. read it again.", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_rewrite", "trigger": "PossessionEffect", "conditions": {"effect_eq": "rewrite"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "did {target} always say that, pet? be careful how sure you sound.", "audio": null},
+      {"text": "words belong to whoever keeps them, sweet thing. i keep these.", "audio": null},
+      {"text": "one word is mine now. find it, good boy.", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_togglelie", "trigger": "PossessionEffect", "conditions": {"effect_eq": "togglelie"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "{target} flipped. or it lied. you may check, pet.", "audio": null},
+      {"text": "your switches answer to me tonight, good boy.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_xpdrain", "trigger": "PossessionEffect", "conditions": {"effect_eq": "xpdrain"}, "priority": 190, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "{target} is empty, pet. everything you earned, gone.", "audio": null},
+      {"text": "level zero. you will earn it again, and you will thank me.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_stealcard", "trigger": "PossessionEffect", "conditions": {"effect_eq": "stealcard"}, "priority": 210, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "{target} is mine now, good boy. you may have it back when i say.", "audio": null},
+      {"text": "one fewer choice. you are easier to keep this way, pet.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_roomwarp", "trigger": "PossessionEffect", "conditions": {"effect_eq": "roomwarp"}, "priority": 200, "cooldown_ms": 30000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "{target} is not straight any more. neither are you, sweet thing.", "audio": null},
+      {"text": "every time you try the door, the walls come in a little. keep trying.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_misroute", "trigger": "PossessionEffect", "conditions": {"effect_eq": "misroute"}, "priority": 190, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "wrong door, pet.", "audio": null},
+      {"text": "you asked for {target}. i decided otherwise.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_reorderdoors", "trigger": "PossessionEffect", "conditions": {"effect_eq": "reorderdoors"}, "priority": 190, "cooldown_ms": 25000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "i rearranged {target}. find your way, good boy.", "audio": null},
+      {"text": "nothing in this room is where you left it, pet.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_scrollhijack", "trigger": "PossessionEffect", "conditions": {"effect_eq": "scrollhijack"}, "priority": 180, "cooldown_ms": 25000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "i was reading {target} over your shoulder.", "audio": null},
+      {"text": "you did not do that, sweet thing. i did.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_deletedialog", "trigger": "PossessionEffect", "conditions": {"effect_eq": "deletedialog"}, "priority": 240, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "hold still, pet. i am clearing {target} away.", "audio": null},
+      {"text": "you will not miss {target}. you have me to obey.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_deletedialog_closed", "trigger": "PossessionEffect", "conditions": {"effect_eq": "deletedialog_closed"}, "priority": 235, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "{target} is untouched, good boy. i only wanted to watch you panic.", "audio": null},
+      {"text": "that look on your face was the whole point, pet.", "audio": null}
+    ]
+  },
+  { "id": "poss_timer_restart", "trigger": "PossessionTimerRestarted", "conditions": {"restart_gte": 2}, "priority": 230, "cooldown_ms": 8000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "round {restart}, pet. the clock does not tire. neither does your keeper.", "audio": null},
+      {"text": "again, good boy? every minute you gave back belongs to me now.", "audio": null},
+      {"text": "full clock. again. you keep coming back to me, sweet thing.", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_engine_pick", "trigger": "LockdownConscript", "conditions": {"engine_eq": 1, "round_gte": 1}, "priority": 255, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "nothing was even on, pet. i started it and picked {features} for you.", "audio": null},
+      {"text": "engine off, nothing chosen. so i chose. {features}. you are welcome, good boy.", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_engine", "trigger": "LockdownConscript", "conditions": {"engine_eq": 1}, "priority": 250, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "you locked the door and left the engine off, pet. it is running now.", "audio": null},
+      {"text": "an empty lockdown. i turned everything on for you, good boy.", "audio": null},
+      {"text": "nothing was running. that is a nap, not a lockdown, sweet thing. fixed.", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_first", "trigger": "LockdownConscript", "conditions": {"round_eq": 1}, "priority": 248, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "you are not picking anything, pet. so i picked. {features}.", "audio": null},
+      {"text": "an empty room? not on my watch. {features} are on now, good boy.", "audio": null},
+      {"text": "you left it blank so i filled it in, sweet thing: {features}. be grateful.", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_again", "trigger": "LockdownConscript", "conditions": {"round_gte": 2}, "priority": 248, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "off again? fine. {features}. one more every time you try, pet.", "audio": null},
+      {"text": "you switch things off and i switch more on, good boy. {features}. see the pattern.", "audio": null},
+      {"text": "round {round}, sweet thing. {features}. this only gets louder.", "audio": null}
+    ]
+  },
+  { "id": "poss_trip_starve", "trigger": "PossessionTripwire", "conditions": {"kind_eq": "starve"}, "priority": 260, "cooldown_ms": 4000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "you turned the last one off. i felt the room go quiet, pet.", "audio": null},
+      {"text": "an empty lockdown, good boy? no such thing.", "audio": null},
+      {"text": "i noticed, sweet thing. give me a second and i will fix it for you.", "audio": null}
     ]
   }
 ]

@@ -24,6 +24,7 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Possession;
 
 namespace ConditioningControlPanel
 {
@@ -34,6 +35,12 @@ namespace ConditioningControlPanel
 
         private void InitializeLockdown()
         {
+            // Before the null check: the haunted-UI host is the window's own stage (ghost layer +
+            // rubble floor + the target registry) and it has to exist whether or not the lockdown
+            // service came up. This is the one hook Possession owns in the startup ladder -
+            // MainWindow.Possession.cs does the rest.
+            InitializePossessionHost();
+
             if (App.Lockdown == null) return;
 
             App.Lockdown.LockdownActivated += OnLockdownActivated;
@@ -57,15 +64,44 @@ namespace ConditioningControlPanel
 
             var duration = TimeSpan.FromMinutes(minutes);
 
-            // Show double warning with clear consequences
-            var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode",
-                "- You will be LOCKED IN for " + minutes + " minutes\n" +
-                "- Strict Lock will be FORCED ON\n" +
-                "- Panic Key will be DISABLED\n" +
-                "- Alt+F4, Alt+Tab, Windows key, and Escape will be BLOCKED\n" +
-                "- You CANNOT close or minimize the application\n" +
-                "- The only escape is waiting for the timer to expire\n" +
-                "  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            // Show double warning with clear consequences. Built line by line rather than as one
+            // literal because the three Safeties are toggles now: a dialog that still promised a
+            // forced Strict Lock after the user unticked it would be the app lying about the one
+            // screen whose entire job is informed consent. Possession gets its own paragraph for the
+            // same reason - "was that a bug?" has to be answerable BEFORE the room starts moving,
+            // not only from the ember glow afterwards (POSSESSION.md, "clarity in front").
+            var cfg = App.Settings?.Current;
+            var warn = new System.Text.StringBuilder();
+            warn.Append("- You will be LOCKED IN for ").Append(minutes).Append(" minutes\n");
+            if (cfg?.LockdownForceStrictLock == true)
+                warn.Append("- Strict Lock will be FORCED ON\n");
+            if (cfg?.LockdownDisablePanicKey == true)
+                warn.Append("- Panic Key will be DISABLED\n");
+            if (cfg?.LockdownBlockSystemKeys == true)
+                warn.Append("- Alt+F4, Alt+Tab, the Windows key and Ctrl+Esc will be BLOCKED\n");
+            warn.Append("- You CANNOT close the application (minimizing still works)\n");
+            warn.Append("- The only escape is waiting for the timer to expire\n");
+            warn.Append("  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            if (cfg?.LockdownDoseKeeperEnabled == true)
+                warn.Append("\n- Nothing running? Lockdown starts the engine and picks features for you\n")
+                    .Append("  (and switches them back on if you turn them all off - one more each time)");
+
+            if (cfg?.LockdownPossessionEnabled == true)
+            {
+                var intensityName = cfg.LockdownPossessionIntensity switch
+                {
+                    0 => "Gentle",
+                    2 => "Full Doki",
+                    _ => "Eerie",
+                };
+                warn.Append("\n- Possession is ON (").Append(intensityName)
+                    .Append("): the app's own UI will misbehave, on purpose.\n")
+                    .Append("  Ember glow = it was Lockdown, not a bug. Nothing you see is real damage.");
+                if (cfg.LockdownPossessionIntensity == 2)
+                    warn.Append("\n- Full Doki adds themed fake-crash scares. They are theatre.");
+            }
+
+            var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode", warn.ToString());
 
             if (!confirmed) return;
 
@@ -656,11 +692,15 @@ namespace ConditioningControlPanel
                 {
                     // Enable system key suppression on the keyboard hook (the setter also
                     // installs the hook if panic key / keyword triggers never started it)
+                    // The system-key block is a SAFETY TOGGLE now, not a law: a user who unticked it
+                    // on the card was promised in the warning dialog that Win / Alt+Tab keep working,
+                    // and hard-coding true here is exactly how that promise would quietly rot.
+                    var blockSysKeys = App.Settings?.Current?.LockdownBlockSystemKeys == true;
                     if (_keyboardHook != null)
                     {
-                        _keyboardHook.SuppressSystemKeys = true;
-                        if (!_keyboardHook.IsInstalled)
-                            App.Logger?.Warning("Lockdown: keyboard hook could not be installed - Esc/Win/Alt-Tab will NOT be blocked this session");
+                        _keyboardHook.SuppressSystemKeys = blockSysKeys;
+                        if (blockSysKeys && !_keyboardHook.IsInstalled)
+                            App.Logger?.Warning("Lockdown: keyboard hook could not be installed - Win/Alt-Tab will NOT be blocked this session");
                     }
 
                     // Gray out strict lock and panic key toggles.
@@ -671,14 +711,20 @@ namespace ConditioningControlPanel
                     // writes the setting directly, so a reachable toggle would let the user turn
                     // strict lock back off mid-lockdown. Greying the twin nobody could see never
                     // stopped that; greying this one does.
-                    var strictChk = StudioTab?.PanelVideo?.ChkStrict;
-                    if (strictChk != null)
+                    // Grey only what is actually in force. A toggle greyed for a safety the user
+                    // switched off would be a lock with nothing behind it - and the tripwire that
+                    // fires on "tried to flip a greyed safety" would then be reporting a fiction.
+                    if (App.Settings?.Current?.LockdownForceStrictLock == true)
                     {
-                        strictChk.IsEnabled = false;
-                        strictChk.Opacity = 0.4;
-                        strictChk.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
+                        var strictChk = StudioTab?.PanelVideo?.ChkStrict;
+                        if (strictChk != null)
+                        {
+                            strictChk.IsEnabled = false;
+                            strictChk.Opacity = 0.4;
+                            strictChk.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
+                        }
                     }
-                    if (AppSettingsTab.ChkNoPanic != null)
+                    if (App.Settings?.Current?.LockdownDisablePanicKey == true && AppSettingsTab.ChkNoPanic != null)
                     {
                         AppSettingsTab.ChkNoPanic.IsEnabled = false;
                         AppSettingsTab.ChkNoPanic.Opacity = 0.4;
@@ -688,6 +734,10 @@ namespace ConditioningControlPanel
                     // Swap UI panels
                     if (LockdownTab.LockdownSetupPanel != null) LockdownTab.LockdownSetupPanel.Visibility = Visibility.Collapsed;
                     if (LockdownTab.LockdownActivePanel != null) LockdownTab.LockdownActivePanel.Visibility = Visibility.Visible;
+                    LockdownTab.StartEmergencyExitPulse();
+
+                    // The badge: the exit affordance for every tab that is not this one.
+                    SetLockdownBadge(true, App.Lockdown?.Remaining ?? TimeSpan.Zero);
 
                     // Reset secret exit state
                     _lockdownTimerClickCount = 0;
@@ -702,6 +752,10 @@ namespace ConditioningControlPanel
 
                     // Play activation flash animation
                     PlayLockdownActivationAnimation();
+
+                    HookPossessionReadout();
+                    HookLockdownRestart();
+                    ShowPossessionRulesIfFirstTime();
 
                     App.Logger?.Information("Lockdown UI activated");
                 }
@@ -730,8 +784,13 @@ namespace ConditioningControlPanel
                             _keyboardHook.Stop();
                     }
 
-                    // Restore strict lock and panic key toggles (PHASE 8: re-pointed to the live
-                    // Studio rack editor - see OnLockdownActivated above).
+                    UnhookPossessionReadout();
+                    UnhookLockdownRestart();
+
+                    // Restore strict lock and panic key toggles unconditionally: greying is
+                    // conditional on activate, un-greying must not be, or a lockdown run with a
+                    // safety switched off would leave a toggle that some EARLIER run disabled stuck
+                    // that way forever.
                     var strictChk = StudioTab?.PanelVideo?.ChkStrict;
                     if (strictChk != null)
                     {
@@ -747,8 +806,11 @@ namespace ConditioningControlPanel
                     }
 
                     // Swap UI panels back
+                    LockdownTab.StopEmergencyExitPulse();
                     if (LockdownTab.LockdownSetupPanel != null) LockdownTab.LockdownSetupPanel.Visibility = Visibility.Visible;
                     if (LockdownTab.LockdownActivePanel != null) LockdownTab.LockdownActivePanel.Visibility = Visibility.Collapsed;
+
+                    SetLockdownBadge(false, TimeSpan.Zero);
 
                     // Hide secret exit
                     if (LockdownTab.TxtLockdownExit != null)
@@ -771,13 +833,53 @@ namespace ConditioningControlPanel
             Dispatcher.BeginInvoke(() =>
             {
                 if (LockdownTab.TxtLockdownTimer != null)
-                {
-                    if (remaining.TotalHours >= 1)
-                        LockdownTab.TxtLockdownTimer.Text = remaining.ToString(@"h\:mm\:ss");
-                    else
-                        LockdownTab.TxtLockdownTimer.Text = remaining.ToString(@"mm\:ss");
-                }
+                    LockdownTab.TxtLockdownTimer.Text = FormatLockdownClock(remaining);
+                if (TxtLockdownBadgeTime != null)
+                    TxtLockdownBadgeTime.Text = FormatLockdownClock(remaining);
             });
+        }
+
+        private static string FormatLockdownClock(TimeSpan remaining) =>
+            remaining.TotalHours >= 1 ? remaining.ToString(@"h\:mm\:ss") : remaining.ToString(@"mm\:ss");
+
+        // --- The lockdown badge -------------------------------------------------------
+        // A crimson pill in the title bar's status row. It exists because the Lockdown page is the
+        // only place the timer and the Emergency Exit live, and a haunted user on the Assets tab
+        // should not have to remember which door leads back. One click, every tab, always the same
+        // destination.
+
+        /// <summary>Shows or hides the badge and seeds its clock.</summary>
+        private void SetLockdownBadge(bool active, TimeSpan remaining)
+        {
+            try
+            {
+                if (LockdownBadge != null)
+                    LockdownBadge.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+                if (active && TxtLockdownBadgeTime != null)
+                    TxtLockdownBadgeTime.Text = FormatLockdownClock(remaining);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: badge visibility failed");
+            }
+        }
+
+        /// <summary>
+        /// The badge is a signpost, not a button that ends anything: it navigates to the Lockdown
+        /// page, where the huge Emergency Exit and the secret phrase both live. Nothing here can
+        /// end a lockdown, which is what lets it sit one pixel from the window's close button.
+        /// </summary>
+        private void LockdownBadge_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            try
+            {
+                e.Handled = true;
+                ShowTab("lockdown");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: badge navigation failed");
+            }
         }
 
         internal void TxtLockdownTimer_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -810,10 +912,265 @@ namespace ConditioningControlPanel
 
                 if (!success)
                 {
-                    // Wrong phrase — clear and hide
+                    // Wrong phrase - clear and hide, and trip the wire. Typing at the secret exit is
+                    // the most deliberate escape attempt there is, so the room gets to notice.
                     LockdownTab.TxtLockdownExit.Text = "";
                     LockdownTab.TxtLockdownExit.Visibility = Visibility.Collapsed;
+                    try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.WrongPhrase); }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "Lockdown: wrong-phrase tripwire failed"); }
                 }
+            }
+        }
+
+        // --- Possession readout -------------------------------------------------------
+        // The five pips and the rung word under the timer. Owned here rather than in the card's own
+        // code-behind because the director's event lives on the window's lifetime, and an unhooked
+        // handler on a UserControl that is shown/hidden rather than rebuilt is how you leak one
+        // subscription per lockdown.
+
+        /// <summary>Stored so the unsubscribe removes the SAME delegate it added - a fresh lambda at
+        /// -= is a no-op and the handler survives every lockdown for the life of the process.</summary>
+        private Action<PossessionRung>? _possessionRungHandler;
+
+        private static readonly Color PossessionEmber = (Color)ColorConverter.ConvertFromString("#FF8A5C");
+        private static readonly Color PossessionEmberDim = (Color)ColorConverter.ConvertFromString("#33FF8A5C");
+
+        private void HookPossessionReadout()
+        {
+            try
+            {
+                // Drop any stale subscription FIRST. This used to be a call to
+                // UnhookPossessionReadout() placed after the paint below, which is what made the
+                // readout invisible for the whole of every lockdown: Unhook does not only
+                // unsubscribe, it also blanks the text and collapses both controls, so the row was
+                // painted and then immediately hidden again on the very same pass. Nothing ever
+                // put it back, because UpdatePossessionReadout only wrote Text and pip colours.
+                // Splitting the unsubscribe out is the fix; the defensive un-collapse in
+                // UpdatePossessionReadout is the belt to its braces.
+                DetachPossessionRungHandler();
+
+                var on = App.Settings?.Current?.LockdownPossessionEnabled == true;
+
+                if (LockdownTab.TxtPossessionRung != null)
+                    LockdownTab.TxtPossessionRung.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+                if (LockdownTab.PossessionPips != null)
+                    LockdownTab.PossessionPips.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+
+                if (!on) return;
+
+                // Everything starts at Settle, including the readout - the director raises
+                // RungChanged only when the rung MOVES, so nobody else would paint rung 0.
+                UpdatePossessionReadout(PossessionRung.Settle);
+
+                if (App.Possession == null) return;
+
+                _possessionRungHandler = rung => Dispatcher.BeginInvoke(() => UpdatePossessionReadout(rung));
+                App.Possession.RungChanged += _possessionRungHandler;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Possession: failed to hook the rung readout");
+            }
+        }
+
+        /// <summary>Unsubscribe only. Never touches the visuals - see the note in
+        /// HookPossessionReadout for what happens when those two jobs share one method.</summary>
+        private void DetachPossessionRungHandler()
+        {
+            try
+            {
+                if (_possessionRungHandler != null && App.Possession != null)
+                    App.Possession.RungChanged -= _possessionRungHandler;
+                _possessionRungHandler = null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Possession: failed to detach the rung handler");
+            }
+        }
+
+        private void UnhookPossessionReadout()
+        {
+            try
+            {
+                DetachPossessionRungHandler();
+
+                if (LockdownTab.TxtPossessionRung != null)
+                {
+                    LockdownTab.TxtPossessionRung.Text = "";
+                    LockdownTab.TxtPossessionRung.Visibility = Visibility.Collapsed;
+                }
+                if (LockdownTab.PossessionPips != null)
+                {
+                    foreach (var child in LockdownTab.PossessionPips.Children)
+                        if (child is Border pip) pip.Background = new SolidColorBrush(PossessionEmberDim);
+                    LockdownTab.PossessionPips.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Possession: failed to clear the rung readout");
+            }
+        }
+
+        private void UpdatePossessionReadout(PossessionRung rung)
+        {
+            try
+            {
+                var index = (int)rung;
+
+                if (LockdownTab.TxtPossessionRung != null)
+                {
+                    LockdownTab.TxtPossessionRung.Text =
+                        Loc.GetF("lockdown_poss_readout_fmt", Loc.Get("lockdown_poss_rung_" + index));
+                    // Paint implies show. A rung change that lands on a collapsed row is the exact
+                    // shape of the bug this readout shipped with, and it costs nothing to refuse it.
+                    LockdownTab.TxtPossessionRung.Visibility = Visibility.Visible;
+                }
+                if (LockdownTab.PossessionPips != null)
+                    LockdownTab.PossessionPips.Visibility = Visibility.Visible;
+
+                if (LockdownTab.PossessionPips == null) return;
+                for (int i = 0; i < LockdownTab.PossessionPips.Children.Count; i++)
+                {
+                    if (LockdownTab.PossessionPips.Children[i] is not Border pip) continue;
+                    pip.Background = new SolidColorBrush(i <= index ? PossessionEmber : PossessionEmberDim);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Possession: failed to paint the rung readout");
+            }
+        }
+
+        // --- Timer restart (Emergency Exit "sendback") --------------------------------
+        // RestartTimer rewinds the clock to its FULL duration without ending the lockdown, so every
+        // readout that caches a number has to be told. CountdownTick would repaint the digits within
+        // a second on its own; the point of doing it here is that the second in between must not
+        // show the OLD remaining time next to a room that has just reset itself to Settle.
+
+        /// <summary>Same delegate-identity discipline as the rung handler.</summary>
+        private Action<string>? _lockdownRestartHandler;
+
+        private void HookLockdownRestart()
+        {
+            try
+            {
+                UnhookLockdownRestart();
+                if (App.Lockdown == null) return;
+
+                _lockdownRestartHandler = reason => Dispatcher.BeginInvoke(() => OnLockdownTimerRestarted(reason));
+                App.Lockdown.TimerRestarted += _lockdownRestartHandler;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: failed to hook TimerRestarted");
+            }
+        }
+
+        private void UnhookLockdownRestart()
+        {
+            try
+            {
+                if (_lockdownRestartHandler != null && App.Lockdown != null)
+                    App.Lockdown.TimerRestarted -= _lockdownRestartHandler;
+                _lockdownRestartHandler = null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: failed to unhook TimerRestarted");
+            }
+        }
+
+        /// <summary>
+        /// The clock went back to full and the director dropped its rung to Settle. Repaint both,
+        /// plus the badge, so the page and the title bar agree with the room in the same frame.
+        /// </summary>
+        private void OnLockdownTimerRestarted(string reason)
+        {
+            try
+            {
+                var remaining = App.Lockdown?.Remaining ?? TimeSpan.Zero;
+
+                if (LockdownTab.TxtLockdownTimer != null)
+                    LockdownTab.TxtLockdownTimer.Text = FormatLockdownClock(remaining);
+                if (TxtLockdownBadgeTime != null)
+                    TxtLockdownBadgeTime.Text = FormatLockdownClock(remaining);
+
+                if (App.Settings?.Current?.LockdownPossessionEnabled == true)
+                    UpdatePossessionReadout(PossessionRung.Settle);
+
+                App.Logger?.Information("Lockdown: timer restarted ({Reason}) - readout reset to Settle", reason);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: failed to repaint after a timer restart");
+            }
+        }
+
+        /// <summary>
+        /// PREVIEW ONLY (Services/Dev/PossessionPreview.cs). Dresses the Lockdown card and the title
+        /// bar exactly as a running lockdown would, so the huge Emergency Exit button, the rung
+        /// readout and the badge can be photographed - WITHOUT touching LockdownService. No keyboard
+        /// hook, no safeties, no timer: the numbers are props and every call is reversible.
+        /// </summary>
+        internal void PreviewShowLockdownActivePanel(bool on)
+        {
+            try
+            {
+                if (LockdownTab.LockdownSetupPanel != null)
+                    LockdownTab.LockdownSetupPanel.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+                if (LockdownTab.LockdownActivePanel != null)
+                    LockdownTab.LockdownActivePanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+
+                if (on)
+                {
+                    if (LockdownTab.TxtLockdownTimer != null) LockdownTab.TxtLockdownTimer.Text = "09:41";
+                    LockdownTab.StartEmergencyExitPulse();
+
+                    if (LockdownTab.TxtPossessionRung != null)
+                        LockdownTab.TxtPossessionRung.Visibility = Visibility.Visible;
+                    if (LockdownTab.PossessionPips != null)
+                        LockdownTab.PossessionPips.Visibility = Visibility.Visible;
+                    UpdatePossessionReadout(PossessionRung.Melt);
+
+                    SetLockdownBadge(true, TimeSpan.FromSeconds(581));
+                }
+                else
+                {
+                    LockdownTab.StopEmergencyExitPulse();
+                    UnhookPossessionReadout();
+                    SetLockdownBadge(false, TimeSpan.Zero);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "PossessionPreview: could not dress the lockdown active panel");
+            }
+        }
+
+        /// <summary>
+        /// First run only: the warden states the rules before the room starts moving. Card AND bark,
+        /// because the card is the one that survives being clicked through in half a second and the
+        /// bark is the one in her voice - POSSESSION.md decision 7.
+        /// </summary>
+        private void ShowPossessionRulesIfFirstTime()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+                if (!s.LockdownPossessionEnabled || s.LockdownPossessionIntroSeen) return;
+
+                FeatureIntroPopup.ShowIfFirstTime("possession", this);
+                App.Bark?.NotifyPossessionRules();
+
+                s.LockdownPossessionIntroSeen = true;
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Possession: failed to show the first-run rules");
             }
         }
 

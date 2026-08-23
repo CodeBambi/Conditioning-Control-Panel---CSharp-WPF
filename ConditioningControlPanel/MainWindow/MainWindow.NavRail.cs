@@ -268,6 +268,7 @@ namespace ConditioningControlPanel
 
                 // Doors first: it seeds _navDoorLabelTexts, which the walk below reads.
                 CacheNavDoorRows();
+                HookNavDoorRerouteSeam();
                 CacheNavRailParts(NavSidebar);
 
                 // The medallion art is mod-aware from the first frame; MainWindow.xaml's literal
@@ -306,6 +307,68 @@ namespace ConditioningControlPanel
                 // broken - every door still navigates and still has its tooltip.
                 App.Logger?.Warning(ex, "InitializeNavRail failed; rail stays as authored (shut, icon-only)");
             }
+        }
+
+        // ============================== the reroute seam ==============================
+
+        /// <summary>
+        /// A single consultation point on the door-press path, for anything that wants to send a
+        /// click somewhere other than where it was aimed. Given the key of the door that was pressed
+        /// (its <c>Tag</c>, the same identity NavDoor_Click matches on), it returns the door or tab
+        /// key to open INSTEAD, or null to let the press through untouched.
+        ///
+        /// <para>Deliberately owner-agnostic and deliberately a bare delegate: the rail knows nothing
+        /// about who set it or why, and a hook that is null (the normal case, always) costs one null
+        /// check per press. Today Possession's "misroute" haunt is the only writer, and it clears
+        /// itself the moment it fires - whoever sets this owns clearing it, because a hook that
+        /// outlives its owner is a rail that misroutes forever.</para>
+        /// </summary>
+        internal static Func<string, string?>? PossessionReroute;
+
+        /// <summary>Arm the seam on every door header, once, from InitializeNavRail.</summary>
+        private void HookNavDoorRerouteSeam()
+        {
+            try
+            {
+                foreach (var door in NavDoorMap.Select(d => d.Door).Concat(NavLauncherDoors))
+                {
+                    var btn = NavDoorParts(door).Header;
+                    if (btn == null) continue;
+                    btn.PreviewMouseLeftButtonDown += NavDoor_PossessionReroute;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "HookNavDoorRerouteSeam failed; doors route normally"); }
+        }
+
+        /// <summary>
+        /// Preview, so handling it stops the Button ever raising Click: the door the user pressed
+        /// simply does not open, and we open the other one in its place. A returned key is matched
+        /// against NavDoorMap first (a door opens its default tab, exactly as NavDoor_Click would),
+        /// and treated as a tab key otherwise.
+        /// </summary>
+        private void NavDoor_PossessionReroute(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var hook = PossessionReroute;
+            if (hook == null) return;
+            if (sender is not FrameworkElement fe || fe.Tag is not string door) return;
+
+            string? to;
+            try { to = hook(door); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "NavDoor_PossessionReroute: hook threw; the press stands");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(to)) return;
+
+            e.Handled = true;
+            foreach (var d in NavDoorMap)
+            {
+                if (!string.Equals(d.Door, to, StringComparison.Ordinal)) continue;
+                ShowTab(d.DefaultTab);
+                return;
+            }
+            ShowTab(to!);
         }
 
         /// <summary>
