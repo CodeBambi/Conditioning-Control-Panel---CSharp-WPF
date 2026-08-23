@@ -57,7 +57,11 @@ provider/tagged.js THE TAGGED POOL: two piles, per-tag cursors, a seeded dry
                    re-serve, thin frozen at resolve / empty live (§3)
 shell/shell.js     screen router + THE class runner (ctx per §11) + THE SETUP
                    DOOR hook (§5: create -> setup() -> beginPlay)
-shell/splitflap.js departure-board reveal
+shell/splitflap.js departure-board reveal. The campus hangs it COLLAPSED behind a
+                   plaque (campus.js's .campus-boardtab - clock pulses until the
+                   first open of the day, store key boardOpenedDate); expanding
+                   rolls the flaps, which is why there is no "flip the board
+                   again" button any more
 shell/reportcard.js day summary + THE one share pipeline
 shell/settings.js  THE settings page (3 tiers) + SETTING_KEYS; `gameKey` scopes it to ONE
                    game group (the pause card's door) - argless = the full sheet
@@ -259,7 +263,8 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                EMI and a dismissed EMI are all silent no-ops, which is why every
                call site in shell.js is one unguarded line.
   widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
-               x affordance, the edge dock, and the bubble's `.bubble-left` flip.
+               x affordance, the edge dock, and the bubble's `.bubble-left` /
+               `.bubble-low` flips (right margin / top edge).
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
@@ -992,14 +997,20 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     identical with and without EMI. If you ever make the renderer a STATIC import of
     `shell.js`, one browser-only line in the renderer becomes a boot failure for the whole
     school.
-61. **THE BUBBLE HANGS OFF HER RIGHT EAR AND THE VIEWPORT IS NOT INFINITE.** `emi.css` puts
-    `.emi-bubble` at `right:-5%` with `max-width:104px`, i.e. a fixed pixel box whose right
-    edge hangs past hers - and the natural resting place for a dragged mascot is the bottom-right
-    corner, where the line would be cut off by the window. `widget.js` adds `.bubble-left`
-    to the root when `left + w * 1.55 > viewportWidth` (and there is room on the other
-    side) and `widget.css` mirrors the box and its tail. Clamping her further from the edge
-    instead was the wrong fix: it would have made the corner - the place players actually
-    park her - unreachable.
+61. **THE BUBBLE HANGS UP OFF HER RIGHT EAR AND THE VIEWPORT IS NOT INFINITE.** `emi.css`
+    anchors `.emi-bubble` at `left:58%; bottom:96%` with `width:max-content; max-width:104px`:
+    off the ear and RISING, so a long line grows into the sky instead of down across the
+    glass. Two half-bugs live in that one line of geometry: an earlier `right:-5%` anchor
+    laid the whole box straight over her face, and a left-edge anchor WITHOUT
+    `width:max-content` shrink-wraps an abs-pos box against the ~42% of containing block
+    that remains right of the anchor, wrapping every bark three characters per row.
+    The viewport flips: the natural resting place for a dragged mascot is the bottom-right
+    corner, where the line would be cut off by the window - `widget.js` adds `.bubble-left`
+    when `left + w * 1.55 > viewportWidth` (and there is room on the other side), and
+    `.bubble-low` when she is parked within 96px of the TOP edge (a rising bubble has no
+    sky there - it drops below the chin, tail up). `widget.css` mirrors box + tail for all
+    four corners. Clamping her further from the edges instead was the wrong fix: it would
+    have made the corners - the places players actually park her - unreachable.
 
 62. **THE BUBBLE'S FONT IS A PIXEL GRID, SO ITS BOX CANNOT BE A PERCENTAGE.** Press
     Start 2P is an 8x8 cell face: set it at a whole pixel size or the cells land
