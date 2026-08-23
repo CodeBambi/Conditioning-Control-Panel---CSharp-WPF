@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "upstreamVersion": "v6.8.3",
-    "merge": "fb89d087a",
-    "recorded": "2026-08-22",
-    "note": "Re-verified at the v6.8.1 -> v6.8.3 sync (74 upstream commits, merge fb89d087a). The six pre-existing trees are byte-count IDENTICAL to the previous baseline (dtrh 1542, fyp 8, goon 184, intake 2138, player 3, tunnel 9, vendor 9), so no disposition changed. ONE NEW TREE ARRIVED: arcademy, 88 files, served upstream by Services/Arcademy/ArcademyHostService.cs. It is recorded not-ported with a board row - this guard is exactly the instrument that caught it, which is the second time it has caught a new upstream product surface arriving silently (the first was web/goon/, 184 files, with the suite green). Previous baseline: v6.8.0 / merge db3e842f (2026-08-14). Guard: client/tests/CcpClient.Tests/UpstreamPayloadInventoryTests.cs. A tree not listed here FAILS the suite; a listed tree that no longer exists upstream FAILS the suite. fileCountAtBaseline is record data, not an assertion (in-tree count drift is pinned by the per-tree manifest tests)."
+    "upstreamVersion": "v6.8.4",
+    "merge": "6a8b4c724",
+    "recorded": "2026-08-23",
+    "note": "Re-verified at the v6.8.3 -> v6.8.4 sync (4 upstream commits, merge 6a8b4c724). The SEVEN pre-existing trees are file-count IDENTICAL to the previous baseline (dtrh 1542, fyp 8, goon 184, intake 2138, player 3, tunnel 9, vendor 9), so no disposition changed. ONE TREE GREW: arcademy 88 -> 91 files, all three additions in games/impulse-control/ (casino.js, pressure.js, trickster.js) from the Impulse Control House Rules wave. THE GUARD DID NOT CATCH THE GROWTH AND COULD NOT: fileCountAtBaseline is record data rather than an assertion, and a not-ported tree has no per-tree manifest test to pin it, so a tree the port does not serve can grow by any amount with the suite green. That blind spot is filed as its own board row rather than papered over here. Previous baseline: v6.8.3 / merge fb89d087a (2026-08-22). Guard: client/tests/CcpClient.Tests/UpstreamPayloadInventoryTests.cs. A tree not listed here FAILS the suite; a listed tree that no longer exists upstream FAILS the suite."
   },
   "trees": [
     {
       "name": "arcademy",
       "disposition": "not-ported",
-      "fileCountAtBaseline": 88,
-      "boardRow": "Decide the port's disposition for the Arcademy upstream surface [P1 OPEN]",
-      "note": "New at v6.8.3. Upstream Services/Arcademy/ArcademyHostService.cs and ArcademyMetaStore.cs render Resources/web/arcademy/ (a three.js campus shell: classes, ceremonies, report cards, split-flap board, keybinds, peek, audio). Zero references to 'arcademy' exist anywhere under client/ - the port has no host, no serving root and no payload glob for it. It also reaches the app-wide remote-media subsystem (FypOnlineCoordinator.For at ArcademyHostService.cs:1513), which is why the FYP census consumer set moved from 17 to 18 at this sync."
+      "fileCountAtBaseline": 91,
+      "boardRow": "Port the Arcademy upstream surface, decomposed into its eight slices [P1 OPEN]",
+      "note": "New at v6.8.3, GREW at v6.8.4 (88 -> 91). Upstream Services/Arcademy/ArcademyHostService.cs and ArcademyMetaStore.cs render Resources/web/arcademy/ (a three.js campus shell: classes, ceremonies, report cards, split-flap board, keybinds, peek, audio). Zero references to 'arcademy' exist anywhere under client/ - the port has no host, no serving root and no payload glob for it. It also reaches the app-wide remote-media subsystem (FypOnlineCoordinator.For at ArcademyHostService.cs:1513). THE DOOR IS SHUT UPSTREAM AS OF v6.8.4 and that is a porting constraint, not a detail: ArcademyHostService.DoorAvailable is a static readonly false, the Play card ships Visibility=Collapsed (Views/Tabs/PlayTabView.xaml:1312) and is re-asserted from DoorAvailable on every repaint (MainWindow/MainWindow.PlayTab.cs:106-112), and Launch() refuses on the door BEFORE the T2 bar (ArcademyHostService.cs:136-141). Upstream's stated reason is that Semester 1 landed ahead of its public reveal and 6.8.4 is an auth/stability patch. A HIDE, not a lockband, because a lockband advertises something the account could buy. Porting this surface VISIBLE would therefore ship a feature upstream is deliberately withholding."
     },
     {
       "name": "dtrh",
