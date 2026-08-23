@@ -31,7 +31,9 @@ import { makeRng } from '../core/rng.js';
 import { buildTimetable, dayAdd } from '../core/timetable.js';
 import { gradeClass, capsRaised } from '../core/grades.js';
 import { createStore } from '../core/store.js';
-import { loadGames, descriptors, tierFor, advance, suspendedStub } from '../games/registry.js';
+import {
+  loadGames, descriptors, tierFor, tierForPromotions, advance, suspendedStub, MAX_TIER,
+} from '../games/registry.js';
 import { createBoard } from './splitflap.js';
 import { createCampus, campusState } from './campus.js';
 import { createReportCard } from './reportcard.js';
@@ -45,6 +47,108 @@ const MEATY_MAX_SEC = 300;
 const QUICK_MAX_SEC = 180;
 /** How often the shell's own class clock repaints the time bar. */
 const CLOCK_TICK_MS = 250;
+
+/* ----------------------------------------------------------------------------
+ * DECK V - THE RAKE (house-rules.txt). Built ONCE here so all ten classes wear
+ * it, and bounded by Law VI end to end: nothing below blocks, delays or moves an
+ * exit, and the Esc ladder is untouched (escapeStep still walks exactly the
+ * rungs it walked before this landed - see trap 29's corollary).
+ *
+ *   the end card      one-more framing over the report card, never instead of it
+ *   streak jeopardy   what leaving actually costs, from the HOST-owned numbers
+ *   the sunk-cost bar cross-class progress toward the next tier promotion
+ *   the drop          a seeded ~1-in-6 surprise stamp. NO XP - C# owns XP.
+ *   losses disguised  a C still gets a beat (shell/ceremonies.js payoff)
+ * -------------------------------------------------------------------------- */
+
+/** ~1 in 6 classes mint a drop. Seeded per (UTC day, game) - see rollRakeDrop. */
+const RAKE_DROP_ODDS = 1 / 6;
+
+/** THE EASING EXPONENT. house-rules.txt asks for a bar that is "always slightly
+ *  more than half full by design of its easing curve": 0.5 ^ 0.72 = 0.606, so
+ *  one promotion of two READS as more than half without the number lying (the
+ *  label next to it always prints the honest "1 of 2"). */
+const RAKE_EASE = 0.72;
+
+/** The bonus archetypes a drop can mint. APPEND-ONLY: inserting a row would
+ *  re-deal every past seed. Names and lines are lexicon rows with English
+ *  fallbacks; nothing here is XP, a grade, or anything the ledger can see. */
+const RAKE_DROPS = Object.freeze([
+  Object.freeze({
+    id: 'gold_star',
+    nameKey: 'rake_drop_gold_star', name: 'Gold Star',
+    lineKey: 'rake_drop_line_gold_star',
+    line: 'Pinned to the board where everyone can see it.',
+  }),
+  Object.freeze({
+    id: 'hall_pass',
+    nameKey: 'rake_drop_hall_pass', name: 'Hall Pass',
+    lineKey: 'rake_drop_line_hall_pass',
+    line: 'Signed and dated. Good for exactly one wandering.',
+  }),
+  Object.freeze({
+    id: 'gold_seal',
+    nameKey: 'rake_drop_gold_seal', name: 'Gold Seal',
+    lineKey: 'rake_drop_line_gold_seal',
+    line: 'Pressed while the wax was still soft. It kept the shape.',
+  }),
+  Object.freeze({
+    id: 'merit_mark',
+    nameKey: 'rake_drop_merit_mark', name: 'Merit Mark',
+    lineKey: 'rake_drop_line_merit_mark',
+    line: 'Someone wrote your name in the good column tonight.',
+  }),
+]);
+
+/**
+ * The sunk-cost meter's fill curve. PURE and exported so the campus door card
+ * and the suite can read the same number the end card paints.
+ * @param {number} frac 0..1 honest fraction
+ * @returns {number} 0..1 eased fill (strictly greater than `frac` in between)
+ */
+export function easedFill(frac) {
+  const f = Math.max(0, Math.min(1, Number(frac) || 0));
+  if (f <= 0) return 0;
+  if (f >= 1) return 1;
+  return Math.pow(f, RAKE_EASE);
+}
+
+/** PROMOTIONS_PER_TIER is registry-private, so derive it from the one exported
+ *  fact (tier = 1 + floor(promotions / N)) instead of duplicating the constant -
+ *  a curve change there must not silently desync this bar. Memoised. */
+let promosPerTierMemo = 0;
+function promosPerTier() {
+  if (promosPerTierMemo) return promosPerTierMemo;
+  const base = tierForPromotions(0);
+  let n = 2;
+  for (let p = 1; p <= 64; p++) { if (tierForPromotions(p) > base) { n = p; break; } }
+  promosPerTierMemo = n;
+  return n;
+}
+
+/**
+ * Cross-class progress toward the next tier promotion, from a game's meta row.
+ * PURE - `shell.progressFor(gameKey)` is the same thing read off the store, and
+ * that is what the campus door card consumes.
+ * @param {Object} gameMeta  store.gameMeta(gameKey)
+ * @returns {{tier:number, nextTier:number, have:number, need:number,
+ *            frac:number, eased:number, top:boolean}}
+ */
+export function tierProgress(gameMeta) {
+  const meta = (gameMeta && typeof gameMeta === 'object') ? gameMeta : {};
+  const need = promosPerTier();
+  const tier = tierFor(meta);
+  const promotions = Math.max(0, Math.round(Number(meta.promotions) || 0));
+  if (tier >= MAX_TIER) {
+    return { tier, nextTier: MAX_TIER, have: need, need, frac: 1, eased: 1, top: true };
+  }
+  const have = need > 0 ? Math.max(0, Math.min(need, promotions % need)) : 0;
+  const frac = need > 0 ? have / need : 0;
+  return {
+    tier, nextTier: Math.min(MAX_TIER, tier + 1),
+    have, need, frac, eased: easedFill(frac), top: false,
+  };
+}
 
 /* ----------------------------------------------------------------------------
  * THE SPIRAL POOL
@@ -65,14 +169,38 @@ const SPIRAL_POOL = Object.freeze([
   ['sp6.gif', 34], ['sp7.gif', 26], ['sp1.gif', 9], ['sp2.webp', 9],
   ['sp4.webp', 9], ['sp3.gif', 8], ['sp5.gif', 5],
 ]);
-function pickSpiralUrl(seed) {
+/** THE LOOM: the player's own saved spirals ride `init.settings.loomSpirals` as
+ *  absolute `https://ccp.spirals/loom_<slug>.gif` urls (the host maps the same
+ *  folder DTRH exposes). They are APPENDED to the bundled pool at a mid weight,
+ *  so a player with no Loom gets byte-identical picks and a player with one
+ *  sees their own work in roughly a quarter of classes. Validated: string,
+ *  https:, capped, de-duplicated. */
+const LOOM_WEIGHT = 20;
+const LOOM_CAP = 24;
+function loomSpiralRows(settings) {
+  const out = [];
+  try {
+    const list = settings && Array.isArray(settings.loomSpirals) ? settings.loomSpirals : [];
+    const seen = new Set();
+    for (const u of list) {
+      if (typeof u !== 'string' || !/^https:\/\/ccp\.spirals\//.test(u) || seen.has(u)) continue;
+      seen.add(u);
+      out.push([u, LOOM_WEIGHT]);
+      if (out.length >= LOOM_CAP) break;
+    }
+  } catch (e) { /* a bad list is an empty list */ }
+  return out;
+}
+function pickSpiralUrl(seed, settings) {
   try {
     const roll = makeRng(String(seed == null ? '' : seed) + '|spiral');
+    const pool = SPIRAL_POOL.concat(loomSpiralRows(settings));
     let total = 0;
-    for (const row of SPIRAL_POOL) total += row[1];
+    for (const row of pool) total += row[1];
     let r = roll() * total;
-    let file = SPIRAL_POOL[0][0];
-    for (const row of SPIRAL_POOL) { r -= row[1]; if (r < 0) { file = row[0]; break; } }
+    let file = pool[0][0];
+    for (const row of pool) { r -= row[1]; if (r < 0) { file = row[0]; break; } }
+    if (/^https:\/\//.test(file)) return file;
     return new URL('../../dtrh/assets/bubbles/effects/spirals/' + file, import.meta.url).href;
   } catch (e) { return null; }
 }
@@ -203,6 +331,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let extrasBox = null;            // replay/report bar + yesterday strip container
   let settingsPage = null;
   let reportCard = null;
+  /** The Deck V one-more card. It sits OVER the report card, never instead of
+   *  it (see showEndCard) - `{root, destroy}` while live, null otherwise. */
+  let endCard = null;
   let active = null;               // the running class (see startClass)
   let suspendedGlobally = false;
   let destroyed = false;
@@ -470,6 +601,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   function showBoard(opts) {
     const silent = !!(opts && opts.silent);
+    // Leaving the report drops the one-more card with it (a card that outlived
+    // its screen would be a second, invisible Esc rung).
+    dismissEndCard();
 
     // FAST REPAINT: a live campus is patched, never rebuilt - tearing the stage
     // down on every meta echo would restart every ambient animation mid-frame.
@@ -521,6 +655,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         banner: timetable.banner,
         stats: campusStats(),
         reducedMotion,
+        // DECK V's sunk-cost meter, for the door card. Same numbers the end card
+        // paints (shell.progressFor is the public twin) - a door that promised a
+        // different fraction than the end card would be the one lie the rake
+        // cannot afford. Optional on the campus side: an older hub ignores it.
+        progressFor,
         on: {
           begin: (gameKey) => {
             const cls = timetable.classes.find((c) => c.gameKey === gameKey);
@@ -566,6 +705,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /* ============================ SCREEN: SETTINGS ======================== */
   function showSettings() {
     if (active) pauseClass(true);
+    dismissEndCard();
     screen = 'settings';
     clearScreen();
     renderTopbar();
@@ -597,7 +737,253 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       onDone: () => showBoard(),
     });
     dom.screen.appendChild(reportCard.root);
+    // THE END CARD OUTLIVES A REPORT REPAINT. onPayout re-renders the report on
+    // the same screen; without this the one-more card would vanish the instant
+    // the host paid out, which is the exact moment it is meant to be up.
+    if (endCard && endCard.root) dom.screen.appendChild(endCard.root);
     setStage('arc-report-on');
+  }
+
+  /* ============================ DECK V: THE RAKE ========================
+   * Everything below is ADDITIVE and bounded by Law VI. Read the three rules
+   * before touching it:
+   *   1. the report card is never replaced - the end card is an overlay on the
+   *      same screen, and the report's own Done button still works underneath;
+   *   2. nothing here handles Esc. escapeStep() below is byte-for-byte the
+   *      ladder it always was, so a suspend overlay still owns the key
+   *      (trap 29's corollary) and boot.js still gets its rung back;
+   *   3. no XP, ever. C# owns the XP table (trap 23) - a drop is a stamp and a
+   *      line of lexicon, nothing the ledger can see.
+   * ==================================================================== */
+
+  /**
+   * STREAK JEOPARDY. What leaving actually costs, in the HOST's own numbers
+   * (core/store.js reads them off `payout-result` / the blob snapshot; the page
+   * may not write them). Three honest answers and no fourth:
+   *   - today is NOT credited yet -> the streak goes cold
+   *   - today IS credited          -> say so; leaving costs nothing
+   *   - the numbers are unknown    -> say NOTHING (never invent jeopardy)
+   * @returns {?string}
+   */
+  function jeopardyLine() {
+    let s;
+    try { s = store.streak(); } catch (e) { return null; }
+    if (!s) return null;
+    const n = s.count | 0;
+    // A zero (or absent) streak is also the "we do not know" answer, and both
+    // deserve silence: a fake number here would be the shell lying about the
+    // one thing it does not own.
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const credited = (s.lastLocalDate && String(s.lastLocalDate) === localDate)
+      || (s.classesToday | 0) > 0;
+    const tpl = credited
+      ? t('rake_streak_credited', 'Attendance x{n} is banked for today already.')
+      : t('rake_streak_cold', 'Attendance x{n} goes cold if today ends here.');
+    return String(tpl).replace('{n}', String(n));
+  }
+
+  /** Say the jeopardy on the way out. Never blocks, never delays, never asks. */
+  function announceJeopardy() {
+    const line = jeopardyLine();
+    if (!line) return null;
+    say('leave-class jeopardy: ' + line);
+    try { shout(line); } catch (e) { /* a toast may never hold a door */ }
+    return line;
+  }
+
+  /**
+   * THE VARIABLE-RATIO DROP. Seeded per (UTC day, game) so a retake replays the
+   * same night and two players on the same day see the same board - Law V. The
+   * caller gates it: never on a retake, never on a free swim.
+   * @returns {?Object} one RAKE_DROPS row, or null
+   */
+  function rollRakeDrop(gameKey) {
+    try {
+      const roll = makeRng(utcDateSeed + '|rake-drop|' + String(gameKey));
+      if (roll() >= RAKE_DROP_ODDS) return null;
+      const i = Math.min(RAKE_DROPS.length - 1,
+        Math.max(0, Math.floor(roll() * RAKE_DROPS.length)));
+      return RAKE_DROPS[i];
+    } catch (e) { say('rake drop roll failed (skipped): ' + ((e && e.message) || e)); return null; }
+  }
+
+  /** Progress toward this game's next promotion (the campus reads this too). */
+  function progressFor(gameKey) {
+    try { return tierProgress(store.gameMeta(gameKey)); }
+    catch (e) { return tierProgress(null); }
+  }
+
+  /** Drop the one-more card. Idempotent; every screen change funnels here. */
+  function dismissEndCard() {
+    if (!endCard) return;
+    const card = endCard;
+    endCard = null;
+    try { card.destroy(); } catch (e) { /* noop */ }
+  }
+
+  /**
+   * THE ONE-MORE END CARD (house-rules Deck V + Deck VI).
+   *
+   * Retake is LIT, pulsing and pre-focused (Enter takes it); the way out is
+   * small and dim but LIVE, honest and in a fixed slot that never moves. The
+   * grade arrives as an OBJECT through the stamp ceremony - the shell never
+   * prints the letter as a bare string first (Deck VI, "grades as objects").
+   *
+   * @param {Object} o
+   * @param {Object} o.cls        the timetable class (what a retake replays)
+   * @param {Object} o.graded     core/grades.js result {grade, zen, capped}
+   * @param {boolean} o.isRetake  this run was already a replay
+   * @param {Array=} o.capped     the A-caps the rubric raised
+   */
+  function showEndCard({ cls, graded, isRetake, capped }) {
+    dismissEndCard();
+    if (!dom || !dom.screen || !cls) return null;
+
+    const gameKey = cls.gameKey;
+    const root = el('div', 'arc-endcard');
+    const card = el('div', 'arc-endcard-card');
+    root.appendChild(card);
+
+    card.appendChild(el('p', 'arc-kicker', t('rake_class_dismissed', 'Class dismissed')));
+
+    /* --- the grade, as a thing --- */
+    const gradeHost = el('div', 'arc-endcard-grade');
+    card.appendChild(gradeHost);
+    try {
+      ceremonies.gradeObject({
+        grade: graded && graded.grade,
+        zen: !!(graded && graded.zen),
+        target: gradeHost,
+        hold: 600000,               // it is the card's subject, not a flash
+      });
+    } catch (e) { say('end card grade object failed: ' + ((e && e.message) || e)); }
+
+    card.appendChild(el('h2', 'arc-h2', gameName(gameKey)));
+
+    /* --- LOSSES DISGUISED: a C, or a dropped hard gate, still gets a beat --- */
+    try {
+      const kind = ceremonies.payoff({
+        grade: graded && graded.grade,
+        zen: !!(graded && graded.zen),
+        capped,
+        target: gradeHost,
+      });
+      say('end card payoff (' + gameKey + '): ' + kind);
+    } catch (e) { say('end card payoff failed: ' + ((e && e.message) || e)); }
+
+    /* --- THE SUNK-COST METER --- */
+    const prog = progressFor(gameKey);
+    const meter = el('div', 'arc-rake-meter');
+    const fill = el('div', 'arc-rake-meter-fill');
+    meter.appendChild(fill);
+    try { meter.style.setProperty('--arc-p', prog.eased.toFixed(4)); } catch (e) { /* noop */ }
+    meter.setAttribute('role', 'img');
+    const meterText = prog.top
+      ? t('rake_top_of_class', 'Top of the class')
+      : String(t('rake_promo_progress', '{have} of {need} to {tier}'))
+        .replace('{have}', String(prog.have))
+        .replace('{need}', String(prog.need))
+        .replace('{tier}', tierLabel(prog.nextTier));
+    meter.setAttribute('aria-label', meterText);
+    card.appendChild(meter);
+    card.appendChild(el('p', 'arc-rake-meterlabel', meterText));
+
+    /* --- THE DROP. Never on a retake (the day already paid), never endless. --- */
+    const drop = isRetake ? null : rollRakeDrop(gameKey);
+    if (drop) {
+      const box = el('div', 'arc-endcard-drop');
+      const stampHost = el('div', 'arc-endcard-dropstamp');
+      box.appendChild(stampHost);
+      try {
+        ceremonies.stamp({
+          text: t(drop.nameKey, drop.name),
+          target: stampHost,
+          hold: 600000,
+        });
+      } catch (e) { say('drop stamp failed: ' + ((e && e.message) || e)); }
+      box.appendChild(el('p', 'arc-note', t(drop.lineKey, drop.line)));
+      card.appendChild(box);
+      say('rake drop minted for ' + gameKey + ': ' + drop.id + ' (no XP - C# owns that)');
+    }
+
+    /* --- THE BUTTONS. Order is fixed: the lit one first, then the two small
+     *     dim ones in a row that never re-orders and never re-flows. --- */
+    const actions = el('div', 'arc-endcard-actions');
+    const again = el('button', 'btn primary arc-retake', t('retake', 'Retake'));
+    again.type = 'button';
+    // Pre-focused. `autofocus` is the declarative half (a fresh node inserted
+    // into a live document does not always take focus() in every engine).
+    again.setAttribute('autofocus', '');
+    again.setAttribute('data-endcard-focus', '1');
+    again.addEventListener('click', () => doRetake());
+    actions.appendChild(again);
+
+    const exits = el('div', 'arc-endcard-exits');
+    // The report card is UNDER this overlay, so the way to it is one dim press
+    // - the card may sit on top of the report, never in place of it.
+    const toReport = el('button', 'btn ghost arc-endcard-small', t('report_card', 'Report Card'));
+    toReport.type = 'button';
+    toReport.addEventListener('click', () => dismissEndCard());
+    exits.appendChild(toReport);
+
+    const out = el('button', 'btn ghost arc-endcard-small', t('rake_back_to_campus', 'Back to campus'));
+    out.type = 'button';
+    out.addEventListener('click', () => { dismissEndCard(); showBoard(); });
+    exits.appendChild(out);
+    actions.appendChild(exits);
+    card.appendChild(actions);
+
+    /* --- the honest chip (trap 23). A retake is FREE, and the day keeps the
+     *     grade it already recorded - the card says so instead of implying the
+     *     replay is worth something it is not. --- */
+    card.appendChild(el('p', 'arc-note arc-endcard-chip',
+      t('rake_retake_chip', 'Free replay. It pays nothing, and today keeps your first grade.')));
+
+    /** Enter = one more. Esc is NOT touched: it walks boot.js's ladder exactly
+     *  as it did before this card existed. */
+    function onKey(e) {
+      if (!endCard || endCard.root !== root) return;
+      if (active) return;                       // never over a live class/suspend
+      const k = e && (e.key || e.code);
+      if (k !== 'Enter' && k !== 'NumpadEnter') return;
+      const tag = e && e.target && e.target.tagName ? String(e.target.tagName).toUpperCase() : '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      try { e.preventDefault(); } catch (e2) { /* noop */ }
+      doRetake();
+    }
+
+    /* ONE RETAKE PER CARD. A focused <button> answers Enter with a click of its
+     * own, so the keydown path and the click path can BOTH fire from one press -
+     * without this latch that press would start the class twice (the second
+     * start tearing down the first mid-frame). */
+    let taken = false;
+    function doRetake() {
+      if (taken) return;
+      taken = true;
+      dismissEndCard();
+      // A free swim never reaches this card, so this is always a real class.
+      try { startClass(cls); }
+      catch (e) { say('retake failed to start: ' + ((e && e.message) || e)); showBoard(); }
+    }
+
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('keydown', onKey);
+    }
+
+    endCard = {
+      root,
+      gameKey,
+      destroy() {
+        if (typeof window !== 'undefined' && window.removeEventListener) {
+          window.removeEventListener('keydown', onKey);
+        }
+        try { root.remove(); } catch (e) { /* noop */ }
+      },
+    };
+
+    dom.screen.appendChild(root);
+    try { if (typeof again.focus === 'function') again.focus(); } catch (e) { /* noop */ }
+    return endCard;
   }
 
   /* ============================ THE CLASS RUNNER ======================== */
@@ -797,6 +1183,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function startClass(cls, opts) {
     if (suspendedGlobally) { shout(t('class_suspended', 'Class Suspended')); return; }
+    dismissEndCard();
     if (active) teardownClass();
 
     const endless = !!(opts && opts.endless);
@@ -836,7 +1223,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * mid-fade. Never awaited, never preloaded here - the browser fetches it
      * when the first spiral wash actually mounts, and the CSS conic gradient
      * is still the fallback if it 404s. */
-    const classSpiral = pickSpiralUrl(seed);
+    const classSpiral = pickSpiralUrl(seed, src.settings);
     let engine;
     try {
       engine = createEngine({
@@ -1098,6 +1485,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       assists,
     };
     const graded = gradeClass(input);
+    // The A-caps the rubric RAISED, whether or not they moved the letter. The
+    // report card already prints these; the end card's payoff reads the same
+    // list so a dropped hard gate still gets its scaled-down beat even when the
+    // grade was under the cap anyway.
+    const capsList = capsRaised(input);
     const flavorXp = Math.max(0, Math.min(FLAVOR_XP_CAP, Math.round(Number(r.flavorXp) || 0)));
 
     // THE FIRST GRADE OF THE DAY IS THE ONE THAT COUNTS. A retake is a free
@@ -1113,7 +1505,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         grade: graded.grade,
         zen: graded.zen,
         composite: graded.composite,
-        capped: capsRaised(input),
+        capped: capsList,
         tier: gradeTier,
         xp: null,                   // filled by payout-result; C# owns the table
       };
@@ -1178,6 +1570,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     teardownClass();
     showReport();
+    // DECK V: the one-more card lands ON the report card - after `class-ended`,
+    // over the transcript, never in place of it. A free swim returned above and
+    // never gets here, which is also why a swim can never mint a drop.
+    try {
+      showEndCard({ cls, graded, isRetake, capped: capsList });
+    } catch (e) { say('end card failed (the report card still stands): ' + ((e && e.message) || e)); }
   }
 
   /* ---------------------- pause / suspend / teardown -------------------- */
@@ -1205,6 +1603,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         leave.addEventListener('click', () => showBoard());
         bar.appendChild(resume); bar.appendChild(leave);
         overlay.appendChild(bar);
+        /* DECK V - STREAK JEOPARDY. What "Leave class" actually costs, in the
+         * HOST's own attendance numbers. It is a LINE, not a gate: the button
+         * beside it is unchanged, un-delayed and still the first thing under
+         * your hand. Unknown numbers print nothing at all. */
+        const jeopardy = jeopardyLine();
+        if (jeopardy) {
+          overlay.appendChild(el('p', 'arc-note arc-jeopardy', jeopardy));
+        }
         overlay.appendChild(el('p', 'arc-note', 'Hold Esc to leave the Arcademy.'));
         active.root.appendChild(overlay);
         active.pauseEl = overlay;
@@ -1256,6 +1662,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       try { active.engine.suspend(!!on); } catch (e) { say('engine.suspend threw: ' + ((e && e.message) || e)); }
       try { active.peek.forceHide(); } catch (e) { /* noop */ }
       try { active.instance.suspend(!!on); } catch (e) { say('game.suspend threw: ' + ((e && e.message) || e)); }
+      // A LIFTED SUSPEND MUST NOT UN-PAUSE THE GAME. The class stays behind its
+      // pause card (see below) but a game's suspend(false) typically restarts its
+      // own loop - so re-assert the pause the card still shows (Misdirection and
+      // the Deep End both ran on behind the overlay before this line).
+      if (!on && active.paused) {
+        try { active.instance.pause(); } catch (e) { say('game.pause threw: ' + ((e && e.message) || e)); }
+      }
       if (on) {
         pauseClass(true);
         showSuspendedOverlay(reason === 'audio-only'
@@ -1367,12 +1780,30 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // own Resume / Leave class buttons remain the page-side way out.
       if (active && active.suspendEl) return true;
       if (active && !active.paused) { pauseClass(true); return true; }
-      if (active && active.paused) { showBoard(); return true; }
+      if (active && active.paused) {
+        // DECK V: say what it costs on the way past, then go. The rung itself
+        // is unchanged - same condition, same showBoard(), same `true`.
+        announceJeopardy();
+        showBoard();
+        return true;
+      }
       return false;
     },
 
     get screen() { return screen; },
     get inClass() { return !!active; },
+
+    /* ---------------------- DECK V, read-only seams ---------------------- */
+    /** Cross-class progress toward a game's next tier promotion (the sunk-cost
+     *  meter's numbers). `{tier, nextTier, have, need, frac, eased, top}` -
+     *  `eased` is the fill, `have`/`need` are the honest label. The campus door
+     *  card reads the same function through its `progressFor` option. */
+    progressFor,
+    /** What leaving right now would cost, or null when the shell does not know.
+     *  Sourced ONLY from the host-owned attendance numbers in the store. */
+    jeopardy() { return jeopardyLine(); },
+    /** The one-more card, while it is up (null otherwise). Test seam. */
+    get endCard() { return endCard; },
 
     /** Read-only provider diagnostics (local/remote pool sizes, placeholderFloor).
      *  The one window onto the asset seam: `placeholderFloor:true` means the host
@@ -1382,6 +1813,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      dismissEndCard();
       teardownClass();
       setStage(null);
       if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }

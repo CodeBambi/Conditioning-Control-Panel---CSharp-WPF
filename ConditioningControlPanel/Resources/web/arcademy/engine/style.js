@@ -145,6 +145,48 @@ export const STYLE_TEXT = `
   opacity:0;animation:ae-near 400ms ease-out forwards}
 @keyframes ae-near{0%{opacity:0}40%{opacity:var(--ae-alpha,.1)}100%{opacity:0}}
 
+/* ---- the lite rung: html.ae-lite ------------------------------------------
+   Set by whoever knows the frame budget (The Deep End's de_perf ladder today;
+   the engine never owns the class, it only reads it - the same seam
+   util.js's shared decoder budget uses). This is NOT reduced motion: the
+   effects still play, they just stop asking for the two things that cost a
+   weak machine a whole frame.
+     - a backdrop-filter is a full-screen read-back-and-blur, per frame, for as
+       long as the drain wash is up. The wash's own gradient carries the drain
+       on its own; only the blur goes.
+     - the spiral is a 150vmax square rotating forever: the biggest composited
+       layer the engine ever makes. It holds still instead of stopping, so a
+       held wash still reads as a wash. */
+.ae-lite .ae-wash-drain{backdrop-filter:none;-webkit-backdrop-filter:none}
+.ae-lite .ae-wash-spiral{animation:none}
+
+/* ---- the touch rung: html.ae-touch ----------------------------------------
+   Set the same way .ae-lite is (the game knows the device; the engine only
+   reads the class), but it is NOT a quality rung - it is a HARDWARE ceiling
+   that applies ON FULL TOO, and it stacks with lite rather than replacing it.
+   A phone pays for three things a desktop GPU eats for free, and WebKit pays
+   the most for all three:
+     - backdrop-filter, the full-screen read-back-and-blur, every frame the
+       drain wash is up. Its gradient already carries the drain; only the blur
+       goes, exactly as in lite.
+     - a BLEND SURFACE has to read what is under it before it can write, and
+       these four are FULL-SCREEN (the spiral is 150vmax, over twice the
+       viewport). On the near-black ground screen and plain alpha read almost
+       identically, so the tint stays and the read-back goes.
+     - a FILTER over a live decode is a whole GPU pass per decoded frame
+       (ae-burst-double lands on gif_burst nodes, which are <video> whenever
+       the pool hands back a webm), and ae-mosh's blur re-runs that pass every
+       frame of the swap. Both drop; datamosh keeps the transform-only shudder
+       so a swap still reads as a glitch.
+   The scanline roll is per-frame re-raster of a full-screen sheet
+   (background-position, the one pattern the perf trace named), so it holds
+   still on touch - the scanlines themselves stay. */
+.ae-touch .ae-wash-drain{backdrop-filter:none;-webkit-backdrop-filter:none}
+.ae-touch .ae-wash-pink,.ae-touch .ae-wash-spiral,.ae-touch .ae-wash-sublim,.ae-touch .ae-jackpot{mix-blend-mode:normal}
+.ae-touch .ae-crt-live{animation:none}
+.ae-touch .ae-burst-double{filter:none}
+.ae-touch .ae-glitch-datamosh{filter:none;animation:ae-shudder var(--ae-dur,600ms) steps(2,end) 1}
+
 /* ---- reduced motion: neutralise EVERY animation -------------------------- */
 @media (prefers-reduced-motion: reduce){
   .ae-layer *{animation-duration:.01ms !important;animation-iteration-count:1 !important;

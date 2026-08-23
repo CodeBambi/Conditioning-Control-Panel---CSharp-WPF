@@ -294,6 +294,118 @@ html.arc-reduced .g-dt-mq{opacity:.16}
 .arc-reduced .g-dt-row.solved::after{transform:scaleX(1)}
 .arc-reduced .g-dt-almostline{display:none}
 
+/* ---- THE CLASS RULES SHEET (Deck VI, Law IV: drawn, not told) ------------ */
+/* Three vignettes on a chalk-dusted card over the lesson wall. The sheet takes
+   NO pointer events - the keyboard under it is not bound yet and a stray click
+   must never count as "read" - and the GO button takes its own back. It sits at
+   z 9: above the room (1), the stage zone (4) and the HUD (5), and far below the
+   shell's suspend treatment (35), which must always be able to cover it. */
+.g-dt-howto{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;
+  width:min(520px,92vw);max-height:86vh;overflow:auto;pointer-events:none;
+  display:flex;flex-direction:column;gap:2px;padding:20px 22px 18px;border-radius:14px;
+  color:var(--ink,#F2EBDD);
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--navy,#1A1A2E), transparent 4%),
+    color-mix(in srgb, var(--ground,#14142B), transparent 2%));
+  border:1px solid var(--line,#3A3A5E);
+  box-shadow:0 28px 74px rgba(0,0,0,.58), 0 0 40px rgba(255,105,180,.10);
+  animation:g-dt-hw-in .34s ease-out 1}
+@keyframes g-dt-hw-in{from{opacity:0;transform:translate(-50%,-46%)}
+  to{opacity:1;transform:translate(-50%,-50%)}}
+.g-dt-hw-title{margin:0 0 8px;text-align:center;font-family:var(--disp,serif);
+  font-size:clamp(15px,2.3vmin,19px);letter-spacing:.22em;text-transform:uppercase;
+  color:var(--pink,#FF69B4);text-shadow:0 0 20px rgba(255,105,180,.45)}
+.g-dt-hw-row{display:flex;align-items:center;gap:16px;padding:11px 2px}
+.g-dt-hw-row + .g-dt-hw-row{border-top:1px dashed rgba(58,58,94,.6)}
+.g-dt-hw-fig{flex:0 0 auto;display:flex;align-items:center;gap:10px;pointer-events:none}
+.g-dt-hw-cap{margin:0;flex:1 1 auto;font-size:12.5px;line-height:1.5;color:var(--ink-dim,#B9B3CE)}
+
+/* the two mini letterboards: same tokens, same glyph badges as the real cells */
+.g-dt-hw-line{display:flex;gap:4px}
+.g-dt-hw-cell{position:relative;width:26px;height:26px;border-radius:4px;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--disp,serif);font-size:13px;line-height:1;
+  border:2px solid var(--line,#3A3A5E);color:var(--ink-faint,#8A84A8);
+  background:rgba(20,20,43,.5)}
+.g-dt-hw-cell.typed{border-color:var(--lav,#B8A6E8);color:var(--lav,#B8A6E8);
+  opacity:0;animation:g-dt-hw-type 3.4s ease-out infinite;
+  animation-delay:calc(var(--dt-hw-i,0) * .22s)}
+@keyframes g-dt-hw-type{0%{opacity:0;transform:translateY(-4px)}
+  9%,86%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(0)}}
+.g-dt-hw-cell.caret{border-color:var(--pink,#FF69B4);
+  animation:g-dt-hw-caret 1.1s steps(2) infinite}
+@keyframes g-dt-hw-caret{0%,49%{box-shadow:inset 0 -3px 0 var(--pink,#FF69B4)}
+  50%,100%{box-shadow:none}}
+.g-dt-hw-cell.hit{background:var(--dt-hit,#FF69B4);border-color:var(--dt-hit,#FF69B4);
+  color:var(--ground,#14142B)}
+.g-dt-hw-cell.near{background:var(--dt-near,#B8A6E8);border-color:var(--dt-near,#B8A6E8);
+  color:var(--ground,#14142B)}
+.g-dt-hw-cell.miss{background:var(--dt-miss,#3A3A5E);border-color:var(--dt-miss,#3A3A5E);
+  color:var(--ink-faint,#8A84A8)}
+.g-dt-hw-cell.hit::after,.g-dt-hw-cell.near::after,.g-dt-hw-cell.miss::after{
+  position:absolute;right:2px;bottom:0;font-size:8px;line-height:1;opacity:.85}
+.g-dt-hw-cell.hit::after{content:"\\2605"}
+.g-dt-hw-cell.near::after{content:"\\25D0"}
+.g-dt-hw-cell.miss::after{content:"\\2715";color:var(--ink-faint,#8A84A8)}
+.g-dt-hw-cell.flip{animation:g-dt-hw-flip 3.4s ease-in-out infinite;
+  animation-delay:calc(var(--dt-hw-i,0) * .3s)}
+@keyframes g-dt-hw-flip{0%,6%{transform:rotateX(90deg)}16%,88%{transform:rotateX(0)}
+  100%{transform:rotateX(90deg)}}
+
+/* the keycap that commits the row */
+.g-dt-hw-key{flex:0 0 auto;min-width:52px;text-align:center;padding:7px 10px;border-radius:7px;
+  font-family:var(--mono,monospace);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink,#F2EBDD);background:linear-gradient(180deg,var(--panel2,#2E2E55),#1A1A32);
+  border:1px solid var(--line,#3A3A5E);border-bottom-width:3px;
+  box-shadow:0 2px 0 rgba(0,0,0,.45);animation:g-dt-hw-press 3.4s ease-in-out infinite}
+.g-dt-hw-key.wide{min-width:74px}
+@keyframes g-dt-hw-press{0%,84%{transform:translateY(0)}
+  90%{transform:translateY(2px);box-shadow:0 0 0 rgba(0,0,0,.45)}100%{transform:translateY(0)}}
+
+/* the budget: six slabs, two spent, and the rung strip climbing beside them */
+.g-dt-hw-stack{display:flex;flex-direction:column;gap:3px}
+.g-dt-hw-slab{display:block;width:46px;height:7px;border-radius:2px;
+  border:1px solid rgba(58,58,94,.9);background:rgba(20,20,43,.55)}
+.g-dt-hw-slab.spent{background:var(--dt-miss,#3A3A5E);border-color:var(--dt-miss,#3A3A5E)}
+.g-dt-hw-slab.next{border-color:var(--pink,#FF69B4);
+  animation:g-dt-hw-nextrow 1.8s ease-in-out infinite}
+@keyframes g-dt-hw-nextrow{0%,100%{box-shadow:0 0 0 rgba(255,105,180,0)}
+  50%{box-shadow:0 0 10px rgba(255,105,180,.55)}}
+.g-dt-hw-rungs{display:flex;flex-direction:column-reverse;gap:3px}
+.g-dt-hw-rungs i{display:block;width:16px;height:6px;border-radius:2px;
+  background:var(--line,#3A3A5E)}
+.g-dt-hw-rungs i.on{background:var(--pink,#FF69B4);box-shadow:0 0 8px rgba(255,105,180,.65);
+  animation:g-dt-hw-climb 3.4s ease-in-out infinite;
+  animation-delay:calc(var(--dt-hw-i,0) * .5s)}
+@keyframes g-dt-hw-climb{0%,20%{opacity:.25}34%,88%{opacity:1}100%{opacity:.25}}
+
+/* the ONE live thing on the sheet, and the only way past it */
+.g-dt-hw-go{align-self:center;margin-top:8px;padding:9px 30px;cursor:pointer;
+  pointer-events:auto;border-radius:9px;font-family:var(--disp,serif);font-size:13px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--ground,#14142B);
+  background:linear-gradient(180deg,var(--pink,#FF69B4),var(--pink-deep,#D4488F));
+  border:1px solid var(--pink,#FF69B4);box-shadow:0 0 22px rgba(255,105,180,.4)}
+.g-dt-hw-go:hover{box-shadow:0 0 32px rgba(255,105,180,.6)}
+.g-dt-hw-go:focus-visible{outline:2px solid var(--gold,#F0C24B);outline-offset:2px}
+
+.arc-reduced .g-dt-howto,.arc-reduced .g-dt-hw-cell,.arc-reduced .g-dt-hw-key,
+.arc-reduced .g-dt-hw-slab,.arc-reduced .g-dt-hw-rungs i{animation:none !important}
+.arc-reduced .g-dt-hw-cell.typed{opacity:1}
+@media (prefers-reduced-motion: reduce){
+  .g-dt-howto,.g-dt-hw-cell,.g-dt-hw-key,.g-dt-hw-slab,.g-dt-hw-rungs i{animation:none !important}
+  .g-dt-hw-cell.typed{opacity:1}
+}
+@media (max-width:560px),(pointer:coarse){
+  .g-dt-howto{padding:16px 14px 14px;gap:0}
+  .g-dt-hw-row{gap:11px;padding:9px 0}
+  .g-dt-hw-cap{font-size:11.5px}
+  .g-dt-hw-cell{width:22px;height:22px;font-size:11px}
+}
+@media (max-height:560px){
+  .g-dt-hw-row{padding:7px 2px}
+  .g-dt-hw-title{margin-bottom:4px}
+}
+
 /* ---- coarse pointer / narrow: bigger tiles, full-width commit ----------- */
 @media (max-width:560px),(pointer:coarse){
   .g-dt{--dt-cell:clamp(34px,11vw,52px)}

@@ -29,6 +29,8 @@
  * ==========================================================================*/
 
 import { t, tierLabel, familyLabel } from '../core/lexicon.js';
+import { makeRng } from '../core/rng.js';
+import { OPEN_SEMESTERS, isOpenSemester } from '../games/registry.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -77,7 +79,131 @@ export const ROOMS = Object.freeze({
     descKey: 'campus_desc_the_deep_end',
     descEn: 'Sink tile into tile. The deeper you go, the harder the board is to read.',
   },
+  /* ---- EAST WING - Semester II ---------------------------------------------
+   * The wing hangs off the corridor's east end and its 20px alley (x 1240..1260)
+   * is the Pool's covered walk stood on its side: three rooms open on their WEST
+   * wall onto it. Three fields carry the difference, and nothing else moves:
+   *   `door` is the coordinate ALONG the wall - an x for a corridor room
+   *          (side n/s), a y for a wing room (side w/e);
+   *   `stop` pins the numbered badge in the wing alley, because the badge can no
+   *          longer stand in the Main Hall outside the door;
+   *   `via`  is the junction the route turns at - the polyline walks in off the
+   *          hall, touches the stop and walks back out.
+   * `neonX`/`neonY`/`nameY` pin the sign and the label INSIDE the room exactly
+   * the way the Pool pins its own (a wing room is small, so the label stack runs
+   * sign -> name -> room number instead of hanging off a corridor wall).
+   * THE SAFE BAND: the plan is `preserveAspectRatio slice`, so a window TALLER
+   * than 16:9 crops the LEFT AND RIGHT edges - 72 viewBox units a side at 16:10.
+   * The wings sit at those edges, so every wing room and every wing label is
+   * kept inside x 72..1368. Widen one and it clips on somebody's monitor. */
+  misdirection: {
+    rect: [1260, 358, 112, 66], side: 'w', door: 391, rm: '201', wing: 'east',
+    stop: [1250, 391], via: [1250, 470], neonX: 1316, neonY: 364, nameY: 398,
+    gameEn: 'Misdirection',
+    nameKey: 'campus_room_misdirection', nameEn: 'The Parlour',
+    descKey: 'campus_desc_misdirection',
+    descEn: 'Keep your eyes on the one that matters. It will not make that easy.',
+  },
+  echo: {
+    rect: [1260, 430, 112, 66], side: 'w', door: 463, rm: '202', wing: 'east',
+    stop: [1250, 463], via: [1250, 470], neonX: 1316, neonY: 436, nameY: 470,
+    gameEn: 'Echo',
+    nameKey: 'campus_room_echo', nameEn: 'Music Room',
+    descKey: 'campus_desc_echo',
+    descEn: 'It plays a line, you play it back. Then it adds one more, every time.',
+  },
+  instant_recall: {
+    rect: [1260, 502, 112, 66], side: 'w', door: 535, rm: '203', wing: 'east',
+    stop: [1250, 535], via: [1250, 470], neonX: 1316, neonY: 508, nameY: 542,
+    gameEn: 'Instant Recall',
+    nameKey: 'campus_room_instant_recall', nameEn: 'Lecture Hall',
+    descKey: 'campus_desc_instant_recall',
+    descEn: 'Watch the whole hour, then answer for it. You never hear it coming.',
+  },
+  /* ---- WEST WING - Semester III --------------------------------------------
+   * Same construction, mirrored: the alley is x 180..200 and the two rooms open
+   * on their EAST wall. Fewer, larger rooms - the slow end of the school. */
+  anomaly: {
+    rect: [60, 366, 120, 96], side: 'e', door: 414, rm: '301', wing: 'west',
+    stop: [190, 414], via: [190, 470], neonX: 120, neonY: 378, nameY: 424,
+    gameEn: 'Anomaly',
+    nameKey: 'campus_room_anomaly', nameEn: 'Darkroom',
+    descKey: 'campus_desc_anomaly',
+    descEn: 'Everything in here matches. One thing does not. Find it before it moves.',
+  },
+  composure: {
+    rect: [60, 478, 120, 96], side: 'e', door: 526, rm: '302', wing: 'west',
+    stop: [190, 526], via: [190, 470], neonX: 120, neonY: 490, nameY: 536,
+    gameEn: 'Composure',
+    nameKey: 'campus_room_composure', nameEn: 'The Studio',
+    descKey: 'campus_desc_composure',
+    descEn: 'Slide the picture back together while the room does its best to blur it.',
+  },
 });
+
+/* ----------------------------------------------------------------------------
+ * THE WINGS. A wing is a BLOCK, not a room: it owns a footprint, an alley and a
+ * mouth onto the Main Hall, and it holds the rooms whose `wing` names it. The
+ * tape comes off exactly when the wing's semester is in the registry's
+ * OPEN_SEMESTERS - one set, one truth, so the release gate that keeps a class
+ * out of the pool is the same one that keeps its wing sealed.
+ * -------------------------------------------------------------------------- */
+export const WINGS = Object.freeze({
+  east: {
+    semester: 2, roman: 'II', rect: [1240, 350, 160, 240],
+    alleyX: 1250, mouthX: 1240, labelX: 1316, labelY: 612, sealedTone: 'pink', din: 180,
+    nameKey: 'campus_east_wing', nameEn: 'East Wing',
+    sealedKey: 'campus_opens_semester_2', sealedEn: 'Opens Semester II',
+    sealedDescKey: 'campus_desc_east', sealedDescEn: 'You can hear hammering behind the tape.',
+    openDescKey: 'campus_desc_east_open',
+    openDescEn: 'The tape is down. Wet paint, three new doors, nobody at the desk.',
+  },
+  west: {
+    semester: 3, roman: 'III', rect: [40, 350, 160, 240],
+    alleyX: 190, mouthX: 200, labelX: 120, labelY: 612, sealedTone: 'dim', din: 210,
+    nameKey: 'campus_west_wing', nameEn: 'West Wing',
+    sealedKey: 'campus_semester_3', sealedEn: 'Semester III',
+    sealedDescKey: 'campus_desc_west', sealedDescEn: 'The boards are older here.',
+    openDescKey: 'campus_desc_west_open',
+    openDescEn: 'Older boards, deeper rooms. Nobody in here is in any hurry.',
+  },
+});
+
+/** The room keys that live in a wing, in floor order. Pure. */
+export function wingRoomKeys(wingId) {
+  return Object.keys(ROOMS).filter((k) => ROOMS[k].wing === wingId);
+}
+
+/** True when a wing's semester has opened (the tape comes off). Pure. */
+export function wingIsOpen(wingId) {
+  const w = WINGS[wingId];
+  return !!w && OPEN_SEMESTERS.has(w.semester);
+}
+
+/** Highest open semester - what the crest and the student ID call this term. */
+export function currentSemester() {
+  let n = 1;
+  try { OPEN_SEMESTERS.forEach((v) => { if (v > n) n = v; }); } catch (e) { /* noop */ }
+  return Math.max(1, Math.min(4, n));
+}
+
+const ROMAN = Object.freeze(['', 'I', 'II', 'III', 'IV']);
+
+/* ----------------------------------------------------------------------------
+ * THE IDLE ATTRACT - tunables (Deck VI: demo, don't explain).
+ * -------------------------------------------------------------------------- */
+export const ATTRACT_IDLE_MS = 25000;   // silence before the school starts showing off
+const ATTRACT_LEG_MS = 900;             // one ghost-cursor leg
+const ATTRACT_DWELL_MS = 1000;          // how long a room holds its glow
+const ATTRACT_LOOP_GAP_MS = 2600;       // dark beat before the show repeats
+const ATTRACT_TICK_MS = 50;             // cursor lerp tick (20fps - a hint, not a game)
+const ATTRACT_FLIP_MS = 70;             // one split-flap flip
+const ATTRACT_FLIPS = 8;                // flips before a sign has fully settled
+const ATTRACT_GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const ATTRACT_GLOW = 'brightness(1.3) saturate(1.12)';
+const ATTRACT_CURSOR_ALPHA = '0.55';
+/* The cursor sprite, drawn (never an emoji, never an image): 12x18 at the origin. */
+const ATTRACT_CURSOR_D = 'M0,0 L0,17 L4.2,13 L6.9,18.4 L9.6,17.1 L7,11.8 L12,11.6 Z';
 
 /* ----------------------------------------------------------------------------
  * PURE STATE MAPPER - what tonight looks like, per room.
@@ -181,10 +307,15 @@ function el(tag, cls, text) {
  * @param {Object} o.on           {begin(gameKey), freeSwim(gameKey), records(),
  *   registrar()} - freeSwim is only ever called for a room whose state carries
  *   an `endless` declaration (the shell reads the manifest, never the campus).
+ * @param {string=} o.dateSeed  init.utcDateSeed - the idle attract is seeded off
+ *   it so every player gets the SAME show tonight (trap 8: UTC seeds content).
+ *   Omitted, it falls back to today's UTC date.
+ * @param {number=} o.attractIdleMs  test seam; defaults to ATTRACT_IDLE_MS.
  * @param {Function=} o.log
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
-export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log } = {}) {
+export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
+  dateSeed, attractIdleMs } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   const name = typeof gameName === 'function' ? gameName : (k) => String(k);
@@ -293,17 +424,96 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   floors.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
   plan.appendChild(stag(floors, 60));
 
+  /* ------------------------------ wings ---------------------------------- */
+  /* Built BEFORE the rooms so the wing floor paints under them. Two states and
+   * nothing between: taped shut (the ghost plates tease the class names) or
+   * open (the alley is paved, the rooms are real). OPEN_SEMESTERS decides. */
+  function buildWing(id) {
+    const w = WINGS[id];
+    const open = wingIsOpen(id);
+    const [x, y, ww, wh] = w.rect;
+    const keys = wingRoomKeys(id);
+    const g = svg('g', null, open ? 'campus-wing' : 'campus-room locked');
+    g.appendChild(svg('rect', { x, y, width: ww, height: wh }, 'campus-gfloor' + (open ? '' : ' striped')));
+
+    if (open) {
+      /* the wing's own alley - the spur every room in here opens onto */
+      const ax = w.alleyX - 10;
+      g.appendChild(svg('rect', { x: ax, y, width: 20, height: wh }, 'campus-ghall'));
+      g.appendChild(svg('rect', { x: ax, y, width: 20, height: wh, fill: 'url(#campusPave)' }, 'campus-pave'));
+      /* TWO LINES, not one: "EAST WING · SEMESTER II" is 184px of tracked mono
+       * and would run off the cropped edge of the plan (see THE SAFE BAND). */
+      g.appendChild(svgText(w.labelX, w.labelY, 'campus-rsub', t(w.nameKey, w.nameEn).toUpperCase()));
+      g.appendChild(svgText(w.labelX, w.labelY + 15, 'campus-rsub tiny',
+        (t('semester', 'Semester') + ' ' + w.roman).toUpperCase()));
+      /* An open wing is scenery, not a door: the ROOMS take the clicks. It keeps
+       * its hover card so the alley still says where you are. */
+      attachTip(g, () => ({
+        name: t(w.nameKey, w.nameEn),
+        status: t('semester', 'Semester') + ' ' + w.roman,
+        desc: t(w.openDescKey, w.openDescEn),
+      }));
+      plan.appendChild(stag(g, w.din));
+      return g;
+    }
+
+    keys.forEach((key) => {
+      const spec = ROOMS[key];
+      const [rx, ry, rw, rh] = spec.rect;
+      g.appendChild(svg('rect', { x: rx + 12, y: ry + 8, width: rw - 24, height: rh - 16 }, 'campus-ghost'));
+      g.appendChild(svgText(rx + rw / 2, ry + rh / 2 + 4, 'campus-ghostt',
+        t('game_' + key, spec.gameEn || spec.nameEn).toUpperCase()));
+    });
+    const mx = w.mouthX;
+    g.appendChild(svg('line', { x1: mx, y1: 446, x2: mx, y2: 474 }, 'campus-tape2'));
+    g.appendChild(svg('line', { x1: mx - 7, y1: 452, x2: mx + 7, y2: 468 }, 'campus-tape'));
+    g.appendChild(svg('line', { x1: mx + 7, y1: 452, x2: mx - 7, y2: 468 }, 'campus-tape'));
+    g.appendChild(svgText(w.labelX, w.labelY, 'campus-rsub ' + w.sealedTone,
+      t(w.sealedKey, w.sealedEn).toUpperCase()));
+    const sealedCard = () => ({
+      name: t(w.nameKey, w.nameEn),
+      status: t(w.sealedKey, w.sealedEn),
+      desc: t(w.sealedDescKey, w.sealedDescEn),
+    });
+    attachTip(g, () => {
+      const d = sealedCard();
+      return { name: d.name, status: t('campus_sealed', 'Sealed') + ' — ' + d.status, desc: d.desc };
+    });
+    g.addEventListener('click', () => openFacilityCard(Object.assign(sealedCard(), { sealed: true })));
+    plan.appendChild(stag(g, w.din));
+    return g;
+  }
+  Object.keys(WINGS).forEach(buildWing);
+
   /* route (under rooms so door arcs stay crisp) + stop badges (over, added last) */
   routePath = svg('path', { d: '' }, 'campus-route');
   plan.appendChild(routePath);
 
   /* ------------------------------ rooms ---------------------------------- */
+  /* A door is the architect's symbol: a gap in the wall plus the leaf pivoting
+   * on one jamb. `spec.door` is the coordinate ALONG that wall - an x on the
+   * corridor's north (y 430) or south (y 510) wall, a y on a wing room's own
+   * west/east wall. A wing leaf swings INTO the room, because the wing alley is
+   * only 20 wide and a 24-unit swing would cross it. */
   function doorFor(spec) {
     const d = spec.door;
     if (spec.side === 'n') {
       return [
         svg('line', { x1: d - 12, y1: 430, x2: d + 12, y2: 430 }, 'campus-gap'),
         svg('path', { d: 'M' + (d + 12) + ',430 A24,24 0 0 1 ' + (d - 12) + ',454 L' + (d - 12) + ',430' }, 'campus-door'),
+      ];
+    }
+    if (spec.side === 'w' || spec.side === 'e') {
+      const r = spec.rect || [0, 0, 0, 0];
+      const west = spec.side === 'w';
+      const wx = west ? r[0] : r[0] + r[2];
+      const tip = west ? wx + 24 : wx - 24;
+      return [
+        svg('line', { x1: wx, y1: d - 12, x2: wx, y2: d + 12 }, 'campus-gap'),
+        svg('path', {
+          d: 'M' + wx + ',' + (d + 12) + ' A24,24 0 0 ' + (west ? 0 : 1)
+            + ' ' + tip + ',' + (d - 12) + ' L' + wx + ',' + (d - 12),
+        }, 'campus-door'),
       ];
     }
     return [
@@ -347,6 +557,25 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       // diving block on the west deck
       put(svg('rect', { x: 306, y: 774, width: 20, height: 14 }, 'campus-furnf'));
       put(svg('line', { x1: 326, y1: 774, x2: 326, y2: 788 }, 'campus-furn'));
+    } else if (key === 'misdirection') {
+      // three cups on a felt line, in the band between the sign and the name
+      put(svg('line', { x1: 1288, y1: 388, x2: 1344, y2: 388 }, 'campus-furn'));
+      [1298, 1316, 1334].forEach((cx) => put(svg('circle', { cx, cy: 384, r: 3.2 }, 'campus-furn')));
+    } else if (key === 'echo') {
+      // six pads in a row
+      [1292, 1302, 1312, 1322, 1332, 1342].forEach((x) => put(svg('rect', { x, y: 456, width: 6, height: 6 }, 'campus-furnf')));
+    } else if (key === 'instant_recall') {
+      // a four-frame strip
+      put(svg('rect', { x: 1288, y: 526, width: 56, height: 9 }, 'campus-furn'));
+      [1302, 1316, 1330].forEach((x) => put(svg('line', { x1: x, y1: 526, x2: x, y2: 535 }, 'campus-furn')));
+    } else if (key === 'anomaly') {
+      // a contact sheet: eight identical frames, one of them isn't
+      [398, 407].forEach((y) => [104, 114, 124, 134].forEach((x) => put(svg('rect', { x, y, width: 6, height: 6 }, 'campus-furnf'))));
+    } else if (key === 'composure') {
+      // a sliding frame, three across
+      put(svg('rect', { x: 102, y: 510, width: 36, height: 18 }, 'campus-furn'));
+      [114, 126].forEach((x) => put(svg('line', { x1: x, y1: 510, x2: x, y2: 528 }, 'campus-furn')));
+      put(svg('line', { x1: 102, y1: 519, x2: 138, y2: 519 }, 'campus-furn'));
     }
   }
 
@@ -357,20 +586,35 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-gfloor'));
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-lit'));
     furnitureFor(key, g);
-    const midY = y + h / 2 + (spec.side === 'n' ? 0 : 0);
-    const ping = svg('circle', { cx: spec.door, cy: midY, r: 12 }, 'campus-ping');
+    /* The sign's centre line: the door x for a corridor room, an explicit pin for
+     * a wing room whose `door` is a y. Unchanged for every Semester-1 room. */
+    const signX = spec.neonX != null ? spec.neonX : spec.door;
+    const ping = svg('circle', { cx: signX, cy: y + h / 2, r: 12 }, 'campus-ping');
     g.appendChild(ping);
     // A room bolted to the corridor derives its label row from `side`; a DETACHED
-    // building (the Pool) pins its own, because y + 46 would land in the lawn.
+    // building (the Pool) and a WING room pin their own, because y + 46 would land
+    // in the lawn or straight through the sign.
     const nameY = spec.nameY != null ? spec.nameY : (spec.side === 'n' ? y + 156 : y + 46);
-    g.appendChild(svgText(x + w / 2, nameY, 'campus-rname', t(spec.nameKey, spec.nameEn).toUpperCase()));
-    g.appendChild(svgText(x + w / 2, nameY + 18, 'campus-rsub',
-      (t('campus_rm', 'RM') + ' ' + spec.rm + ' · ' + name(key)).toUpperCase()));
+    const nameNode = svgText(x + w / 2, nameY, 'campus-rname', t(spec.nameKey, spec.nameEn).toUpperCase());
+    /* A wing room is half a corridor room wide, so its plate steps down a size.
+     * This is the ONE inline style the campus writes and it is a metric, never a
+     * colour - the .campus-rname rule (and every token in it) still applies. */
+    if (spec.wing) nameNode.setAttribute('style', 'font-size:11px');
+    g.appendChild(nameNode);
+    /* ...and its number row carries the ROOM NUMBER alone. "RM 203 · INSTANT
+     * RECALL" is 150px of text in a 112px room and would run straight off the
+     * cropped edge of the plan; the neon sign, the hover card, the door card and
+     * the hanging board all still name the class. */
+    g.appendChild(svgText(x + w / 2, nameY + (spec.wing ? 16 : 18),
+      spec.wing ? 'campus-rsub tiny' : 'campus-rsub',
+      (spec.wing
+        ? t('campus_rm', 'RM') + ' ' + spec.rm
+        : t('campus_rm', 'RM') + ' ' + spec.rm + ' · ' + name(key)).toUpperCase()));
     doorFor(spec).forEach((n) => g.appendChild(n));
     const neonY = spec.neonY != null ? spec.neonY : (spec.side === 'n' ? 398 : 694);
     const neon = svg('g', null, 'campus-neon');
-    const neonRect = svg('rect', { x: spec.door - 47, y: neonY, width: 94, height: 16, rx: 3 });
-    const neonText = svgText(spec.door, neonY + 11, null, '');
+    const neonRect = svg('rect', { x: signX - 47, y: neonY, width: 94, height: 16, rx: 3 });
+    const neonText = svgText(signX, neonY + 11, null, '');
     neon.appendChild(neonRect);
     neon.appendChild(neonText);
     g.appendChild(neon);
@@ -380,7 +624,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     plan.appendChild(g);
     return g;
   }
-  Object.keys(ROOMS).forEach((key, i) => stag(buildClassRoom(key), 250 + i * 110));
+  /* A CLOSED semester has no rooms at all - not dark ones. Its games are absent
+   * from the registry pool too (games/registry.js OPEN_SEMESTERS), so the two
+   * halves of the release gate can never disagree. */
+  Object.keys(ROOMS).filter(isOpenSemester)
+    .forEach((key, i) => stag(buildClassRoom(key), 250 + i * 110));
 
   /* ------------------------------ facilities ----------------------------- */
   function facility(rect, door, side, nameText, subText, onClick, tip) {
@@ -473,48 +721,15 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   plan.appendChild(svg('path', { d: 'M758,730 A38,38 0 0 1 720,768' }, 'campus-door'));
   plan.appendChild(svgText(720, 788, 'campus-rsub wide', t('campus_main_gate', 'Main Gate').toUpperCase()));
 
-  /* wings - Semesters II / III */
-  const east = svg('g', null, 'campus-room locked');
-  east.appendChild(svg('rect', { x: 1240, y: 350, width: 160, height: 240 }, 'campus-gfloor striped'));
-  [[368, 'game_misdirection', 'Misdirection'], [440, 'game_instant_recall', 'Instant Recall'], [512, 'game_echo', 'Echo']]
-    .forEach(([y, key, en]) => {
-      east.appendChild(svg('rect', { x: 1258, y, width: 124, height: 56 }, 'campus-ghost'));
-      east.appendChild(svgText(1320, y + 31, 'campus-ghostt', t(key, en).toUpperCase()));
-    });
-  east.appendChild(svg('line', { x1: 1240, y1: 446, x2: 1240, y2: 474 }, 'campus-tape2'));
-  east.appendChild(svg('line', { x1: 1233, y1: 452, x2: 1247, y2: 468 }, 'campus-tape'));
-  east.appendChild(svg('line', { x1: 1247, y1: 452, x2: 1233, y2: 468 }, 'campus-tape'));
-  east.appendChild(svgText(1320, 612, 'campus-rsub pink', t('campus_opens_semester_2', 'Opens Semester II').toUpperCase()));
-  attachTip(east, () => ({
-    name: t('campus_east_wing', 'East Wing'),
-    status: t('campus_sealed', 'Sealed') + ' — ' + t('campus_opens_semester_2', 'Opens Semester II'),
-    desc: t('campus_desc_east', 'You can hear hammering behind the tape.'),
-  }));
-  east.addEventListener('click', () => openFacilityCard({
-    name: t('campus_east_wing', 'East Wing'),
-    status: t('campus_opens_semester_2', 'Opens Semester II'),
-    desc: t('campus_desc_east', 'You can hear hammering behind the tape.'),
-    sealed: true,
-  }));
-  plan.appendChild(stag(east, 940));
-
-  const west = svg('g', null, 'campus-room locked');
-  west.appendChild(svg('rect', { x: 40, y: 350, width: 160, height: 240 }, 'campus-gfloor striped'));
-  [382, 418, 454, 490, 526, 562].forEach((y) => west.appendChild(svg('line', { x1: 52, y1: y, x2: 188, y2: y }, 'campus-furn')));
-  west.appendChild(svg('line', { x1: 196, y1: 440, x2: 204, y2: 480 }, 'campus-tape2'));
-  west.appendChild(svgText(120, 612, 'campus-rsub dim', t('campus_semester_3', 'Semester III').toUpperCase()));
-  attachTip(west, () => ({
-    name: t('campus_west_wing', 'West Wing'),
-    status: t('campus_sealed', 'Sealed') + ' — ' + t('campus_semester_3', 'Semester III'),
-    desc: t('campus_desc_west', 'The boards are older here.'),
-  }));
-  west.addEventListener('click', () => openFacilityCard({
-    name: t('campus_west_wing', 'West Wing'),
-    status: t('campus_semester_3', 'Semester III'),
-    desc: t('campus_desc_west', 'The boards are older here.'),
-    sealed: true,
-  }));
-  plan.appendChild(stag(west, 1020));
+  /* an OPEN wing's mouth: the corridor's end wall is cut away, same treatment as
+   * the corridor <-> entrance opening above. A sealed wing keeps its wall (and
+   * its tape). */
+  Object.keys(WINGS).forEach((id) => {
+    if (!wingIsOpen(id)) return;
+    const mx = WINGS[id].mouthX;
+    plan.appendChild(svg('line', { x1: mx, y1: 434, x2: mx, y2: 506 }, 'campus-gap'));
+    plan.appendChild(svg('line', { x1: mx, y1: 434, x2: mx, y2: 506, 'stroke-dasharray': '3 6' }, 'campus-opening'));
+  });
 
   /* stop badges live above everything in the plan */
   stopsLayer = svg('g', null, 'campus-stops');
@@ -549,8 +764,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const crest = el('div', 'campus-crest');
   const h1 = el('h1', null, t('arcademy', 'The Arcademy'));
   crest.appendChild(h1);
+  const termRoman = ROMAN[currentSemester()] || 'I';
   crest.appendChild(el('p', null,
-    (t('campus_night_sessions', 'Night Sessions') + ' · ' + t('semester', 'Semester') + ' I').toUpperCase()));
+    (t('campus_night_sessions', 'Night Sessions') + ' · ' + t('semester', 'Semester') + ' ' + termRoman).toUpperCase()));
   crest.appendChild(el('div', 'campus-crestrule'));
   root.appendChild(crest);
 
@@ -580,7 +796,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   idTop.appendChild(el('div', 'id-photo'));
   const idMeta = el('div');
   idMeta.appendChild(el('div', 'id-name', t('student', 'Student')));
-  idMeta.appendChild(el('div', 'id-no', (t('semester', 'Semester') + ' I').toUpperCase()));
+  idMeta.appendChild(el('div', 'id-no', (t('semester', 'Semester') + ' ' + termRoman).toUpperCase()));
   idTier = el('span', 'id-tier', '');
   idMeta.appendChild(idTier);
   idTop.appendChild(idMeta);
@@ -802,17 +1018,41 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   }
 
   /* ------------------------------ update --------------------------------- */
+  /** THE one truth for a room's neon sign. update() paints it and the idle
+   * attract's split-flap flutter settles back onto it, so a flutter can never
+   * strand a stale word on a sign. */
+  function neonLabel(key) {
+    const r = st.rooms[key] || {};
+    if (r.mood === 'open') return t('campus_in_session', 'In Session').toUpperCase();
+    if (r.mood === 'retake') return t('retake', 'Retake').toUpperCase();
+    return '';
+  }
+
+  /* Where tonight's numbered badge stands: in the corridor just inside the door
+   * for a room bolted to the hall, in the wing alley for a wing room (which
+   * pins its own `stop`, because the Main Hall is nowhere near its door). */
   function stopAnchor(key) {
-    const spec = ROOMS[key];
+    const spec = ROOMS[key] || {};
+    if (spec.stop) return spec.stop;
     return spec.side === 'n' ? [spec.door, 447] : [spec.door, 488];
+  }
+
+  /* The legs the route walks for one stop. A corridor room is one point on the
+   * hall's centre line - byte-identical to what this drew before. A wing room
+   * turns off at its junction, touches its door and comes back out, so the next
+   * leg still starts on the centre line instead of cutting through a wall. */
+  function routeLegs(key) {
+    const spec = ROOMS[key];
+    if (!spec) return [];
+    if (spec.via) return [spec.via, stopAnchor(key), spec.via];
+    return [[spec.door, 470]];
   }
 
   function routeFor(stops) {
     if (!stops.length) return '';
     let d = 'M720,908 L720,470';
     for (const s of stops) {
-      const [x] = stopAnchor(s.gameKey);
-      d += ' L' + x + ',470';
+      for (const leg of routeLegs(s.gameKey)) d += ' L' + leg[0] + ',' + leg[1];
     }
     return d;
   }
@@ -827,16 +1067,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       const r = st.rooms[key] || { mood: 'dark' };
       ref.g.setAttribute('class', 'campus-room'
         + (r.mood === 'open' ? ' open' : r.mood === 'retake' ? ' retake' : ' dark'));
-      if (r.mood === 'open') {
-        ref.neonText.textContent = t('campus_in_session', 'In Session').toUpperCase();
-        ref.neon.setAttribute('class', 'campus-neon');
-      } else if (r.mood === 'retake') {
-        ref.neonText.textContent = t('retake', 'Retake').toUpperCase();
-        ref.neon.setAttribute('class', 'campus-neon v');
-      } else {
-        ref.neonText.textContent = '';
-        ref.neon.setAttribute('class', 'campus-neon off');
-      }
+      ref.neonText.textContent = neonLabel(key);
+      ref.neon.setAttribute('class', 'campus-neon'
+        + (r.mood === 'open' ? '' : r.mood === 'retake' ? ' v' : ' off'));
     }
 
     /* stop badges + route */
@@ -874,6 +1107,232 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     }
   }
 
+  /* ==========================================================================
+   * THE IDLE ATTRACT - Deck VI, "demo, don't explain".
+   *
+   * After ATTRACT_IDLE_MS of silence on the campus screen the school shows you
+   * what to do instead of telling you: tonight's rooms light in ROUTE order, a
+   * drawn ghost cursor walks the route between the numbered stops, and one sign
+   * re-flaps like the departure board. Four laws it keeps:
+   *   - ANY input cancels it and re-arms the timer (Law II - and the cursor is
+   *     `pointer-events:none`, so it can never take a click that was meant for a
+   *     room);
+   *   - reducedMotion degrades to a STATIC glow: tonight's rooms simply light;
+   *   - it is SEEDED off the UTC date, so it is the same show for everyone
+   *     tonight and a reload replays it (trap 8: UTC seeds content);
+   *   - it writes no colour and no stylesheet: the glow is the hover filter the
+   *     stylesheet already transitions, and the cursor borrows two token-driven
+   *     classes for its fill and its outline.
+   * destroy() tears down every timer, every listener and the glow itself.
+   * ========================================================================*/
+  const idleMs = Math.max(50, Math.round(Number(attractIdleMs) || ATTRACT_IDLE_MS));
+  const attractTimers = new Set();
+  const glowing = new Set();
+  let attractOn = false;
+  let idleTimer = 0;
+  let cursorG = null;
+  let cursorAt = [720, 900];
+  let lastInput = 0;
+
+  function utcDaySeed() {
+    try { return new Date().toISOString().slice(0, 10); } catch (e) { return '1970-01-01'; }
+  }
+  const attractSeed = String(dateSeed || utcDaySeed());
+  let arng = makeRng('arcademy|campus|attract|' + attractSeed);
+
+  function attractAfter(ms, fn) {
+    if (typeof setTimeout !== 'function') return 0;
+    const id = setTimeout(() => { attractTimers.delete(id); if (attractOn) fn(); }, ms);
+    attractTimers.add(id);
+    return id;
+  }
+  function attractEvery(ms, fn) {
+    if (typeof setInterval !== 'function') return 0;
+    const id = setInterval(fn, ms);
+    attractTimers.add(id);
+    return id;
+  }
+  function attractStop(id) {
+    try { clearInterval(id); } catch (e) { /* noop */ }
+    attractTimers.delete(id);
+  }
+  function attractClearAll() {
+    attractTimers.forEach((id) => {
+      try { clearTimeout(id); } catch (e) { /* noop */ }
+      try { clearInterval(id); } catch (e) { /* noop */ }
+    });
+    attractTimers.clear();
+  }
+
+  /* The glow IS the hover look (styles.css already transitions filter on a
+   * room), which is the honest thing to demo: this is what hovering does. */
+  function glow(key, on) {
+    const ref = roomRefs[key];
+    if (!ref) return;
+    try { ref.g.style.setProperty('filter', on ? ATTRACT_GLOW : ''); } catch (e) { /* noop */ }
+    if (on) glowing.add(key); else glowing.delete(key);
+  }
+  function unglowAll() { Array.from(glowing).forEach((k) => glow(k, false)); }
+  function resettleSigns() {
+    for (const key of Object.keys(roomRefs)) {
+      try { roomRefs[key].neonText.textContent = neonLabel(key); } catch (e) { /* noop */ }
+    }
+  }
+
+  function ensureCursor() {
+    if (cursorG) return cursorG;
+    const g = svg('g', null, 'campus-ghostcursor');
+    g.appendChild(svg('path', { d: ATTRACT_CURSOR_D }, 'campus-clockpin'));  // fill: --ink
+    g.appendChild(svg('path', { d: ATTRACT_CURSOR_D }, 'campus-door'));      // stroke: --campus-line
+    g.setAttribute('pointer-events', 'none');
+    g.setAttribute('opacity', '0');
+    cursorG = g;
+    plan.appendChild(g);
+    return g;
+  }
+  function placeCursor(x, y) {
+    cursorAt = [x, y];
+    if (!cursorG) return;
+    const r1 = Math.round(x * 10) / 10;
+    const r2 = Math.round(y * 10) / 10;
+    try { cursorG.setAttribute('transform', 'translate(' + r1 + ',' + r2 + ')'); } catch (e) { /* noop */ }
+  }
+  function showCursor(on) {
+    if (!cursorG) return;
+    try { cursorG.setAttribute('opacity', on ? ATTRACT_CURSOR_ALPHA : '0'); } catch (e) { /* noop */ }
+  }
+  function glideCursor(to, ms, done) {
+    const from = cursorAt.slice();
+    const steps = Math.max(1, Math.round(ms / ATTRACT_TICK_MS));
+    let i = 0;
+    const id = attractEvery(ATTRACT_TICK_MS, () => {
+      if (!attractOn) { attractStop(id); return; }
+      i += 1;
+      const p = Math.min(1, i / steps);
+      const e = p * p * (3 - 2 * p);                 // smoothstep: a hand, not a machine
+      placeCursor(from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e);
+      if (p >= 1) { attractStop(id); done(); }
+    });
+    if (!id) { placeCursor(to[0], to[1]); done(); }  // no timers at all (headless): teleport
+  }
+
+  /** Split-flap settle: the left of the row lands first, the tail keeps spinning. */
+  function flapText(truth, k) {
+    const settled = Math.floor(truth.length * (k / ATTRACT_FLIPS));
+    let out = '';
+    for (let i = 0; i < truth.length; i++) {
+      const c = truth.charAt(i);
+      out += (i < settled || c === ' ')
+        ? c
+        : ATTRACT_GLYPHS.charAt(Math.floor(arng() * ATTRACT_GLYPHS.length));
+    }
+    return out;
+  }
+  function flutterSign(key, done) {
+    const ref = roomRefs[key];
+    const truth = ref ? neonLabel(key) : '';
+    if (!ref || !truth) { done(); return; }
+    let k = 0;
+    const id = attractEvery(ATTRACT_FLIP_MS, () => {
+      if (!attractOn) { attractStop(id); return; }
+      k += 1;
+      if (k >= ATTRACT_FLIPS) {
+        attractStop(id);
+        try { ref.neonText.textContent = neonLabel(key); } catch (e) { /* noop */ }
+        done();
+        return;
+      }
+      try { ref.neonText.textContent = flapText(truth, k); } catch (e) { /* noop */ }
+    });
+    if (!id) done();
+  }
+
+  /** Route order when there is a board; otherwise a short tour of the rooms. */
+  function attractOrder() {
+    const tonight = st.stops.map((s) => s.gameKey).filter((k) => roomRefs[k]);
+    return tonight.length ? tonight : Object.keys(roomRefs).slice(0, 3);
+  }
+
+  function playLeg(order, i, flutterKey) {
+    if (!attractOn) return;
+    if (i >= order.length) {
+      showCursor(false);
+      unglowAll();
+      attractAfter(ATTRACT_LOOP_GAP_MS, () => {
+        placeCursor(720, 900);
+        showCursor(true);
+        playLeg(order, 0, flutterKey);
+      });
+      return;
+    }
+    const key = order[i];
+    glideCursor(stopAnchor(key), ATTRACT_LEG_MS, () => {
+      if (!attractOn) return;
+      glow(key, true);
+      const onward = () => attractAfter(ATTRACT_DWELL_MS, () => {
+        glow(key, false);
+        playLeg(order, i + 1, flutterKey);
+      });
+      if (key === flutterKey) flutterSign(key, onward); else onward();
+    });
+  }
+
+  function startAttract() {
+    idleTimer = 0;
+    // A card in front of the plan means the player is mid-decision, not idle.
+    if (destroyed || attractOn || cardOpen) { armIdle(); return; }
+    const order = attractOrder();
+    if (!order.length) { armIdle(); return; }
+    attractOn = true;
+    arng = makeRng('arcademy|campus|attract|' + attractSeed);   // same show, every loop
+    if (reducedMotion) { order.forEach((k) => glow(k, true)); return; }
+    ensureCursor();
+    placeCursor(720, 900);                    // in through the Main Gate, like the route
+    showCursor(true);
+    playLeg(order, 0, order[Math.floor(arng() * order.length)] || order[0]);
+  }
+
+  function armIdle() {
+    if (destroyed) return;
+    if (idleTimer) { try { clearTimeout(idleTimer); } catch (e) { /* noop */ } }
+    idleTimer = (typeof setTimeout === 'function') ? setTimeout(startAttract, idleMs) : 0;
+  }
+
+  function cancelAttract(rearm) {
+    if (attractOn) {
+      attractOn = false;
+      attractClearAll();
+      unglowAll();
+      resettleSigns();
+      showCursor(false);
+    }
+    if (rearm !== false) armIdle();
+  }
+
+  /* ANY input cancels. pointermove floods, so a re-arm is throttled - but a
+   * RUNNING attract always yields on the very first event. */
+  function onInput() {
+    const now = (typeof Date !== 'undefined' && Date.now) ? Date.now() : 0;
+    if (attractOn) { lastInput = now; cancelAttract(true); return; }
+    if (now && now - lastInput < 400) return;
+    lastInput = now;
+    armIdle();
+  }
+
+  const INPUT_EVENTS = ['pointerdown', 'pointerup', 'pointermove', 'wheel', 'touchstart', 'keydown'];
+  try { INPUT_EVENTS.forEach((n) => root.addEventListener(n, onInput, true)); } catch (e) { /* noop */ }
+  /* keydown never reaches an unfocused <div>, so the document takes that one -
+   * guarded, because the headless DOM double's document is a plain object with
+   * no event target on it at all. */
+  let docBound = false;
+  try {
+    if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
+      document.addEventListener('keydown', onInput, true);
+      docBound = true;
+    }
+  } catch (e) { /* noop */ }
+  armIdle();
+
   /* ------------------------------ bell tick ------------------------------ */
   let bellTimer = 0;
   function tickBell() { try { bellText.textContent = bellLabel(bellSecondsLeft()); } catch (e) { /* noop */ } }
@@ -892,9 +1351,20 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     noteDescriptors,
     closeCard,
     openClassCard,
+    /** Test seam for the idle attract - never read by the shell. */
+    attractDiagnostics() {
+      return {
+        armed: !!idleTimer, running: attractOn, idleMs, seed: attractSeed,
+        glowing: glowing.size, cursor: !!cursorG, timers: attractTimers.size,
+      };
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      cancelAttract(false);
+      if (idleTimer) { try { clearTimeout(idleTimer); } catch (e) { /* noop */ } idleTimer = 0; }
+      try { INPUT_EVENTS.forEach((n) => root.removeEventListener(n, onInput, true)); } catch (e) { /* noop */ }
+      if (docBound) { try { document.removeEventListener('keydown', onInput, true); } catch (e) { /* noop */ } }
       if (bellTimer) { try { clearInterval(bellTimer); } catch (e) { /* noop */ } bellTimer = 0; }
       if (enterTimer) { try { clearTimeout(enterTimer); } catch (e) { /* noop */ } enterTimer = 0; }
       if (document.documentElement && document.documentElement.classList) {

@@ -346,6 +346,113 @@ html.arc-reduced .g-dv-kb .g-dv-card.locked .g-dv-face:not(.g-dv-glyph){animatio
   .g-dv-cell{min-height:64px}
   .g-dv-rack{display:none}
 }
+
+/* ---- THE CLASS RULES SHEET (Deck VI, Law IV: drawn, not told) ------------ */
+/* A lab card over the bench: three vignettes cut from the same slide chrome the
+   board uses. The sheet takes NO pointer events (the cards under it have not
+   dealt and a stray click must never count as "read"); the GO button takes its
+   own back and is the ONLY dismissal. z 9 keeps it above the lab (0) and the
+   HUD (3) and far below the shell's suspend treatment (35), which must always
+   be able to cover it. */
+.g-dv-howto{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;
+  width:min(520px,92vw);max-height:86vh;overflow:auto;pointer-events:none;
+  display:flex;flex-direction:column;gap:2px;padding:20px 22px 18px;border-radius:14px;
+  color:var(--ink,#F2EBDD);
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--navy,#1A1A2E), transparent 4%),
+    color-mix(in srgb, var(--ground,#14142B), transparent 2%));
+  border:1px solid var(--line,#3A3A5E);
+  box-shadow:0 28px 74px rgba(0,0,0,.58), 0 0 40px rgba(184,166,232,.12);
+  animation:g-dv-hw-in .34s ease-out 1}
+@keyframes g-dv-hw-in{from{opacity:0;transform:translate(-50%,-46%)}
+  to{opacity:1;transform:translate(-50%,-50%)}}
+.g-dv-hw-title{margin:0 0 8px;text-align:center;font-family:var(--disp,serif);
+  font-size:clamp(15px,2.3vmin,19px);letter-spacing:.22em;text-transform:uppercase;
+  color:var(--lav,#B8A6E8);text-shadow:0 0 20px rgba(184,166,232,.45)}
+.g-dv-hw-row{display:flex;align-items:center;gap:16px;padding:11px 2px}
+.g-dv-hw-row + .g-dv-hw-row{border-top:1px dashed rgba(58,58,94,.6)}
+.g-dv-hw-fig{flex:0 0 auto;display:flex;align-items:center;gap:9px;pointer-events:none}
+.g-dv-hw-cap{margin:0;flex:1 1 auto;font-size:12.5px;line-height:1.5;color:var(--ink-dim,#B9B3CE)}
+
+/* one mini slide: an etched back and a lightbox face, the board's two states */
+.g-dv-hw-line{display:flex;gap:5px;align-items:center;perspective:420px}
+.g-dv-hw-card{position:relative;display:block;width:28px;height:36px;border-radius:4px;
+  flex:0 0 auto;transform-style:preserve-3d}
+.g-dv-hw-back,.g-dv-hw-face{position:absolute;inset:0;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.g-dv-hw-back{border:1px solid rgba(184,166,232,.32);
+  background:linear-gradient(150deg, color-mix(in srgb, var(--panel2,#2E2E55), black 12%),
+    color-mix(in srgb, var(--navy,#1A1A2E), black 8%))}
+.g-dv-hw-face{transform:rotateY(180deg);font-size:14px;color:var(--ground,#14142B);
+  border:1px solid var(--lav,#B8A6E8);
+  background:radial-gradient(90% 90% at 50% 30%, #FFFFFF, var(--lav,#B8A6E8))}
+
+/* 1 - the pair: both turn, both match, both stay lit */
+.g-dv-hw-card.turn{animation:g-dv-hw-turn 3.6s ease-in-out infinite}
+.g-dv-hw-card.turn.b{animation-delay:.4s}
+@keyframes g-dv-hw-turn{0%,10%{transform:rotateY(0)}
+  26%,88%{transform:rotateY(180deg)}100%{transform:rotateY(0)}}
+.g-dv-hw-lock{display:block;width:16px;height:16px;border-radius:50%;flex:0 0 auto;
+  border:2px solid var(--pink,#FF69B4);opacity:0;
+  box-shadow:0 0 12px rgba(255,105,180,.6);
+  animation:g-dv-hw-lock 3.6s ease-out infinite}
+@keyframes g-dv-hw-lock{0%,40%{opacity:0;transform:scale(.5)}
+  50%{opacity:1;transform:scale(1)}88%{opacity:1}100%{opacity:0}}
+
+/* 2 - the swap: the tell (a 600ms shudder) always precedes the move */
+.g-dv-hw-card.tell{animation:g-dv-hw-tell 3.6s ease-in-out infinite}
+.g-dv-hw-card.tell.left{--dv-hw-d:33px}
+.g-dv-hw-card.tell.right{--dv-hw-d:-33px}
+@keyframes g-dv-hw-tell{
+  0%,24%{transform:translateX(0) rotate(0)}
+  28%{transform:translateX(0) rotate(-4deg)}
+  32%{transform:translateX(0) rotate(4deg)}
+  36%{transform:translateX(0) rotate(-3deg)}
+  40%{transform:translateX(0) rotate(0)}
+  62%,92%{transform:translateX(var(--dv-hw-d,0)) rotate(0)}
+  100%{transform:translateX(0) rotate(0)}}
+
+/* 3 - the re-deal: the whole board goes down and comes back, same pairs */
+.g-dv-hw-grid{position:relative;display:grid;grid-template-columns:repeat(3,1fr);perspective:420px;
+  gap:4px;padding:4px;border-radius:6px;overflow:hidden;
+  border:1px solid rgba(58,58,94,.75);background:rgba(20,20,43,.45)}
+.g-dv-hw-grid .g-dv-hw-card{width:22px;height:28px}
+.g-dv-hw-card.redeal{animation:g-dv-hw-redeal 3.6s ease-in-out infinite;
+  animation-delay:calc(var(--dv-hw-i,0) * .07s)}
+@keyframes g-dv-hw-redeal{0%,42%{opacity:1;transform:translateY(0) scale(1)}
+  52%{opacity:0;transform:translateY(7px) scale(.86)}
+  64%{opacity:1;transform:translateY(0) scale(1)}
+  100%{opacity:1;transform:translateY(0) scale(1)}}
+.g-dv-hw-sweep{position:absolute;left:-40%;top:0;bottom:0;width:36%;
+  background:linear-gradient(90deg, transparent, rgba(184,166,232,.4), transparent);
+  animation:g-dv-hw-sweep 3.6s ease-in-out infinite}
+@keyframes g-dv-hw-sweep{0%,40%{left:-40%}58%{left:104%}100%{left:104%}}
+
+/* the ONE live thing on the sheet, and the only way past it */
+.g-dv-hw-go{align-self:center;margin-top:8px;padding:9px 30px;cursor:pointer;
+  pointer-events:auto;border-radius:9px;font-family:var(--disp,serif);font-size:13px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--ground,#14142B);
+  background:linear-gradient(180deg,var(--lav,#B8A6E8),#7E6BC0);
+  border:1px solid var(--lav,#B8A6E8);box-shadow:0 0 22px rgba(184,166,232,.4)}
+.g-dv-hw-go:hover{box-shadow:0 0 32px rgba(184,166,232,.62)}
+.g-dv-hw-go:focus-visible{outline:2px solid var(--gold,#F0C24B);outline-offset:2px}
+
+html.arc-reduced .g-dv-howto,html.arc-reduced .g-dv-hw-card,
+html.arc-reduced .g-dv-hw-lock,html.arc-reduced .g-dv-hw-sweep{animation:none !important}
+html.arc-reduced .g-dv-hw-card.turn{transform:rotateY(180deg)}
+html.arc-reduced .g-dv-hw-lock{opacity:1}
+@media (prefers-reduced-motion: reduce){
+  .g-dv-howto,.g-dv-hw-card,.g-dv-hw-lock,.g-dv-hw-sweep{animation:none !important}
+  .g-dv-hw-card.turn{transform:rotateY(180deg)}
+  .g-dv-hw-lock{opacity:1}
+}
+@media (max-width:640px),(pointer:coarse){
+  .g-dv-howto{padding:16px 14px 14px}
+  .g-dv-hw-row{gap:11px;padding:9px 0}
+  .g-dv-hw-cap{font-size:11.5px}
+  .g-dv-hw-card{width:23px;height:30px}
+}
 `;
 
 /** Inject once per document. No-op headless (the DOM double has no head). */

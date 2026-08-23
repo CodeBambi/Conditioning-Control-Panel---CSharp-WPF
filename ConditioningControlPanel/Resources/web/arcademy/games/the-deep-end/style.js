@@ -66,10 +66,26 @@
  * cream. .g-de-depth chips share the same table.
  *
  * NOTHING IS EVER STILL (Law III): the backdrop breathes, caustics drift,
- * deep tiles shimmer, the marquee crawls. REDUCED MOTION twice over
+ * deep tiles glint, the marquee crawls. REDUCED MOTION twice over
  * (html.arc-reduced + the media query): only the slide transition survives.
  * .g-de-stage.suspended freezes every animation (animation-play-state) so A
  * can hold the pool's breath with the class.
+ *
+ * PASS 5 - THE DRIFT LAW + THE LITE RUNG (a Chromium trace: the GPU process's
+ * main thread at 79% of a core on a 3060 Ti, three roughly equal thirds - face
+ * render surfaces, full-screen re-raster, and 16 live 854x480 decodes).
+ *   PATTERNS DRIFT BY TRANSFORM, NEVER BY BACKGROUND-POSITION. A
+ *   background-position tween re-rasters the WHOLE layer every frame; a
+ *   transform is compositor-only. Every converted sheet is oversized by exactly
+ *   one tile period on its trailing edge and translated by exactly that period,
+ *   so the wrap lands on an identical pixel. Rays and vortex already rotated by
+ *   transform and were left alone.
+ *   A FACE IS FOUR BOXES AND THERE ARE 25 OF THEM: no isolation, no blend
+ *   mode, no filter on a <video>, and the ken-burns pan is for stills only.
+ *   .g-de-lite is the whole room one rung down (see the block near the bottom).
+ *   THE TOUCH RUNG (html.ae-touch) is NOT that ladder: it is a hardware
+ *   ceiling that applies on FULL too and stacks with lite. No blur over a
+ *   face, no blend surface, no backdrop-filter - see the block by the lite one.
  * ==========================================================================*/
 
 const STYLE_ID = 'g-de-style';
@@ -159,8 +175,26 @@ export const STYLE_TEXT = `
 /* ---- the backdrop: the casino's lighting rig (decoration only) ----------- */
 .g-de-backdrop{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
 .g-de-backdrop *{pointer-events:none}
+/* =========================== THE DRIFT LAW (pass 5, measured) ==============
+   PATTERNS DRIFT BY TRANSFORM, NEVER BY BACKGROUND-POSITION (compositor-only;
+   a background-position tween re-rasters the whole layer every frame).
+   These sheets are full-screen. A 'to{background-position:...}' keyframe on one
+   of them is a full-viewport repaint at 60Hz, and the trace found SIX of them
+   running at once - a third of the GPU process's main thread went on nothing
+   but re-painting gradients that had not changed shape.
+   The shape every converted layer takes:
+     - one background layer per pseudo (::before / ::after). Two layers with
+       different tile sizes and different directions cannot share one transform.
+     - the pseudo is oversized by exactly one tile period IN THE DIRECTION OF
+       TRAVEL ('inset: top right bottom left'), so the vacated edge is always
+       already covered. '.g-de-backdrop' has overflow:hidden and does the clip.
+     - the keyframe translates by exactly ONE TILE PERIOD, so the wrap at 100%
+       lands on an identical pixel and the loop is seamless. An 'alternate'
+       layer is exempt (it walks back the way it came).
+   Rays and vortex already rotate by transform; they are untouched.
+   ======================================================================== */
 /* every family layer ken-burns on its own box (scale+pan), the pattern drifts
-   on its ::before (background-position / rotation) - two motions, no fight */
+   on its ::before / ::after (transform) - two motions, no fight */
 .g-de-bd{position:absolute;inset:-8%;opacity:0;
   animation:g-de-kb var(--de-n-kb,28s) ease-in-out infinite alternate}
 .g-de-bd::before{content:"";position:absolute;inset:0}
@@ -173,19 +207,25 @@ export const STYLE_TEXT = `
   animation:g-de-breathe calc(var(--de-breath) * (1 + var(--de-calm) * .8)) ease-in-out infinite alternate}
 @keyframes g-de-breathe{from{opacity:.55;transform:scaleY(1)}to{opacity:1;transform:scaleY(1.08)}}
 
-/* bands: rippling light bands at the seed's tilt, two counter-drifting sheets */
+/* bands: rippling light bands at the seed's tilt, two counter-drifting sheets.
+   THE DRIFT LAW: one sheet per pseudo, each oversized by its own tile period on
+   the trailing edges and translated by exactly that period. */
 .g-de-bd-bands{opacity:var(--de-n-a-bands,0)}
-.g-de-bd-bands::before{
-  background:
-    repeating-linear-gradient(calc(var(--de-n-tilt,-18) * 1deg), transparent 0,
-      var(--de-la) calc(18px * var(--de-n-scale,1)), transparent calc(40px * var(--de-n-scale,1)),
-      transparent calc(64px * var(--de-n-scale,1))),
-    repeating-linear-gradient(calc(var(--de-n-tilt,-18) * 1deg + 7deg), transparent 0,
-      var(--de-lb) calc(26px * var(--de-n-scale,1)), transparent calc(54px * var(--de-n-scale,1)),
-      transparent calc(92px * var(--de-n-scale,1)));
-  background-size:220px 220px, 340px 340px;
-  animation:g-de-bands var(--de-drift) linear infinite}
-@keyframes g-de-bands{to{background-position:220px 160px, -340px 240px}}
+.g-de-bd-bands::after{content:"";position:absolute}
+.g-de-bd-bands::before{inset:-220px 0 0 -220px;
+  background:repeating-linear-gradient(calc(var(--de-n-tilt,-18) * 1deg), transparent 0,
+    var(--de-la) calc(18px * var(--de-n-scale,1)), transparent calc(40px * var(--de-n-scale,1)),
+    transparent calc(64px * var(--de-n-scale,1)));
+  background-size:220px 220px;
+  animation:g-de-bands-a var(--de-drift) linear infinite}
+@keyframes g-de-bands-a{from{transform:translate3d(0,0,0)}to{transform:translate3d(220px,220px,0)}}
+.g-de-bd-bands::after{inset:-340px -340px 0 0;
+  background:repeating-linear-gradient(calc(var(--de-n-tilt,-18) * 1deg + 7deg), transparent 0,
+    var(--de-lb) calc(26px * var(--de-n-scale,1)), transparent calc(54px * var(--de-n-scale,1)),
+    transparent calc(92px * var(--de-n-scale,1)));
+  background-size:340px 340px;
+  animation:g-de-bands-b var(--de-drift) linear infinite}
+@keyframes g-de-bands-b{from{transform:translate3d(0,0,0)}to{transform:translate3d(-340px,340px,0)}}
 
 /* rays: god-rays from the surface, swaying */
 .g-de-bd-rays{opacity:var(--de-n-a-rays,0)}
@@ -198,17 +238,22 @@ export const STYLE_TEXT = `
 @keyframes g-de-sway{from{transform:rotate(-2.5deg)}to{transform:rotate(2.5deg)}}
 
 /* lens: overlapping caustic nets - two ring fields a hair out of phase, so the
-   moire reads as light on a pool floor */
+   moire reads as light on a pool floor. Both sheets ALTERNATE, so they walk
+   back the way they came and the travel need not be a whole tile period. */
 .g-de-bd-lens{opacity:var(--de-n-a-lens,0)}
-.g-de-bd-lens::before{
-  background:
-    repeating-radial-gradient(circle at 30% 40%, transparent 0 calc(22px * var(--de-n-scale,1)),
-      var(--de-la) calc(24px * var(--de-n-scale,1)), transparent calc(28px * var(--de-n-scale,1))),
-    repeating-radial-gradient(circle at 70% 60%, transparent 0 calc(25px * var(--de-n-scale,1)),
-      var(--de-lb) calc(27px * var(--de-n-scale,1)), transparent calc(31px * var(--de-n-scale,1)));
-  background-size:300px 300px, 360px 360px;mix-blend-mode:screen;
-  animation:g-de-lens var(--de-drift) ease-in-out infinite alternate}
-@keyframes g-de-lens{to{background-position:60px 40px, -50px 70px}}
+.g-de-bd-lens::after{content:"";position:absolute}
+.g-de-bd-lens::before{inset:-40px 0 0 -60px;mix-blend-mode:screen;
+  background:repeating-radial-gradient(circle at 30% 40%, transparent 0 calc(22px * var(--de-n-scale,1)),
+    var(--de-la) calc(24px * var(--de-n-scale,1)), transparent calc(28px * var(--de-n-scale,1)));
+  background-size:300px 300px;
+  animation:g-de-lens-a var(--de-drift) ease-in-out infinite alternate}
+@keyframes g-de-lens-a{from{transform:translate3d(0,0,0)}to{transform:translate3d(60px,40px,0)}}
+.g-de-bd-lens::after{inset:-70px -50px 0 0;mix-blend-mode:screen;
+  background:repeating-radial-gradient(circle at 70% 60%, transparent 0 calc(25px * var(--de-n-scale,1)),
+    var(--de-lb) calc(27px * var(--de-n-scale,1)), transparent calc(31px * var(--de-n-scale,1)));
+  background-size:360px 360px;
+  animation:g-de-lens-b var(--de-drift) ease-in-out infinite alternate}
+@keyframes g-de-lens-b{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50px,70px,0)}}
 
 /* vortex: a slow turning whirl, masked to a soft disc, seed-signed spin */
 .g-de-bd-vortex{opacity:var(--de-n-a-vortex,0)}
@@ -220,15 +265,22 @@ export const STYLE_TEXT = `
   animation:g-de-spin calc(var(--de-drift) * 3) linear infinite}
 @keyframes g-de-spin{to{transform:rotate(calc(var(--de-n-spindir,1) * 360deg))}}
 
-/* motes: two drifting sheets of specks rising through the water */
+/* motes: two drifting sheets of specks rising through the water. The rise is
+   exactly one tile height per cycle (110px / 170px), which is what makes the
+   wrap invisible; the old few-pixel sideways drift is gone with the
+   background-position tween, and the two speeds still read as parallax. */
 .g-de-bd-motes{opacity:var(--de-n-a-motes,0)}
-.g-de-bd-motes::before{
-  background:
-    radial-gradient(circle, var(--de-la) 0 1.5px, transparent 2.5px),
-    radial-gradient(circle, var(--de-lb) 0 1px, transparent 2px);
-  background-size:90px 110px, 140px 170px;background-position:0 0, 40px 60px;
-  animation:g-de-motes calc(var(--de-drift) * 1.4) linear infinite}
-@keyframes g-de-motes{to{background-position:10px -110px, 60px -170px}}
+.g-de-bd-motes::after{content:"";position:absolute}
+.g-de-bd-motes::before{inset:0 0 -110px 0;
+  background:radial-gradient(circle, var(--de-la) 0 1.5px, transparent 2.5px);
+  background-size:90px 110px;
+  animation:g-de-motes-a calc(var(--de-drift) * 1.4) linear infinite}
+@keyframes g-de-motes-a{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-110px,0)}}
+.g-de-bd-motes::after{inset:0 0 -170px 0;
+  background:radial-gradient(circle, var(--de-lb) 0 1px, transparent 2px);
+  background-size:140px 170px;background-position:40px 60px;
+  animation:g-de-motes-b calc(var(--de-drift) * 1.9) linear infinite}
+@keyframes g-de-motes-b{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-170px,0)}}
 
 /* the dark: depth dims the room (newDeepest steps it), and a payout flash */
 .g-de-bd-dark{inset:0;opacity:calc(var(--de-n-depth,0) * .62);background:#000;animation:none}
@@ -417,9 +469,9 @@ export const STYLE_TEXT = `
 @keyframes g-de-traily{0%{opacity:0;transform:scaleY(.1)}35%{opacity:.75;transform:scaleY(1)}100%{opacity:0;transform:scaleY(1)}}
 .g-de-tile.is-sliding:not(.is-merged)::before{transform-origin:50% 50%}
 .g-de-tile.is-sliding-x:not(.is-merged):not(.is-silt)::before{
-  animation:g-de-sheen 5.5s ease-in-out infinite, g-de-deepbreath 2.6s ease-in-out infinite alternate, g-de-stretchx .32s cubic-bezier(.3,.7,.3,1) 1}
+  animation:g-de-deepbreath 2.6s ease-in-out infinite alternate, g-de-stretchx .32s cubic-bezier(.3,.7,.3,1) 1}
 .g-de-tile.is-sliding-y:not(.is-merged):not(.is-silt)::before{
-  animation:g-de-sheen 5.5s ease-in-out infinite, g-de-deepbreath 2.6s ease-in-out infinite alternate, g-de-stretchy .32s cubic-bezier(.3,.7,.3,1) 1}
+  animation:g-de-deepbreath 2.6s ease-in-out infinite alternate, g-de-stretchy .32s cubic-bezier(.3,.7,.3,1) 1}
 .g-de-tile.is-sliding-x.is-silt::before{animation:g-de-stretchx .32s cubic-bezier(.3,.7,.3,1) 1}
 .g-de-tile.is-sliding-y.is-silt::before{animation:g-de-stretchy .32s cubic-bezier(.3,.7,.3,1) 1}
 @keyframes g-de-stretchx{0%{transform:scale(1)}40%{transform:scale(1.07,.94)}78%{transform:scale(.965,1.03)}100%{transform:scale(1)}}
@@ -444,33 +496,58 @@ export const STYLE_TEXT = `
   box-shadow:0 13px 28px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.18),
     0 0 var(--de-t-glowr,0px) var(--de-t-glow,transparent)}
 
-/* ---- pass 2: MEDIA FACES ------------------------------------------------- */
-/* .g-de-face clips the media to the body (the tile itself stays overflow-
-   visible for the ripple and the trail); ::before darkens + vignettes by tier,
-   ::after tints in the tier hue (mix-blend-mode: color keeps the picture's
-   light and takes the tier's colour - the colour IS the clarity). index.js adds
-   .is-loaded once the <img> has a frame; until then the plain body shows. */
-.g-de-face{position:absolute;inset:0;z-index:0;border-radius:10px;overflow:hidden;isolation:isolate;
+/* ---- pass 2: MEDIA FACES (pass 5: composited cheap) ----------------------- */
+/* THE FACE COMPOSITING LAW (pass 5, measured). A face is FOUR boxes per tile
+   and there are up to 25 of them. Anything on a face that forces its own
+   render surface is paid 25x, every frame:
+     - 'isolation:isolate' made every face a surface for the sake of ONE blend.
+     - 'mix-blend-mode:color' on the tint made a SECOND one, and a blend surface
+       has to read back what is underneath it before it can write.
+     - 'filter:' on a <video> is a full GPU pass over a decoded 854x480 frame,
+       per tile, per frame - the single most expensive line in the file.
+   The trace put ~86 render surfaces on one board and a third of a GPU core on
+   compositing them. So: no isolation, no blend, no filter. The tint is now a
+   PLAIN ALPHA wash whose opacity is dialled per tier band, and the deep-tier
+   desaturate/darken is baked into the ::before wash gradient instead of being
+   computed from the picture. The colour still IS the clarity - it is just
+   painted over the picture instead of blended into it.
+   .g-de-face still clips the media to the body (border-radius + overflow is a
+   fast path, no surface of its own); the tile stays overflow-visible for the
+   ripple and the trail. index.js adds .is-loaded once the media has a frame. */
+.g-de-face{position:absolute;inset:0;z-index:0;border-radius:10px;overflow:hidden;
   pointer-events:none;opacity:0;transition:opacity .45s ease}
 .g-de-tile.is-loaded .g-de-face{opacity:1}
-.g-de-media{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;
-  animation:g-de-facekb 16s ease-in-out infinite alternate;animation-delay:calc(var(--de-kbp,0) * -16s)}
+.g-de-media{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+/* THE KEN-BURNS IS FOR STILLS ONLY. A <video> already moves; panning it as
+   well bought nothing and cost a composited transform on a live decode. The
+   selector is 'img.g-de-media' on purpose - it beats the bare class, so the
+   <video> swap in index.js drops the animation with no extra bookkeeping. */
+img.g-de-media{animation:g-de-facekb 16s ease-in-out infinite alternate;
+  animation-delay:calc(var(--de-kbp,0) * -16s)}
 @keyframes g-de-facekb{from{transform:scale(1) translate(0,0)}to{transform:scale(1.1) translate(-2%,1.5%)}}
 /* ::before is the WASH: the shallows (1-3) get a pale tier-coloured wash that
    LIGHTENS the picture toward surface light; from tier 4 down it is a dark
-   vignette that grows with depth. ::after re-hues whatever is left. */
+   vignette that grows with depth, and from tier 8 it carries the darkening the
+   <video> filter used to do. ::after is the flat tier tint over the top. */
 .g-de-face::before{content:"";position:absolute;inset:0;z-index:1;opacity:var(--de-f-vig,.55);
   background:var(--de-f-wash, linear-gradient(160deg, var(--de-t-bg,var(--lav)), var(--de-t-bg2,var(--lav))))}
-.g-de-face::after{content:"";position:absolute;inset:0;z-index:2;mix-blend-mode:color;opacity:var(--de-f-tint,.85);
+.g-de-face::after{content:"";position:absolute;inset:0;z-index:2;opacity:var(--de-f-tint,.45);
   background:linear-gradient(160deg, var(--de-t-bg,var(--lav)), var(--de-t-bg2,var(--lav)))}
-.g-de-stage [data-tier="4"],.g-de-stage [data-tier="5"],.g-de-stage [data-tier="6"]{--de-f-vig:.38;
+/* THE TINT LADDER. A 'color' blend at .85 kept the picture's luminance; a plain
+   alpha at .85 would erase it. These are the alphas that read as the same tier
+   hue while the picture survives - shallow tiles stay legible, deep tiles drown
+   on purpose, and the step between bands is what the eye reads as depth. */
+.g-de-stage [data-tier="4"],.g-de-stage [data-tier="5"],.g-de-stage [data-tier="6"]{--de-f-vig:.38;--de-f-tint:.40;
   --de-f-wash:radial-gradient(80% 80% at 50% 45%, transparent 40%, rgba(0,0,0,.9) 100%)}
-.g-de-stage [data-tier="7"],.g-de-stage [data-tier="8"],.g-de-stage [data-tier="9"]{--de-f-vig:.55;--de-f-tint:.9;
+.g-de-stage [data-tier="7"],.g-de-stage [data-tier="8"],.g-de-stage [data-tier="9"]{--de-f-vig:.55;--de-f-tint:.50;
   --de-f-wash:radial-gradient(80% 80% at 50% 45%, transparent 35%, rgba(0,0,0,.95) 100%)}
-.g-de-stage [data-tier="10"],.g-de-stage [data-tier="11"]{--de-f-vig:.72;--de-f-tint:.95;
-  --de-f-wash:radial-gradient(80% 80% at 50% 45%, rgba(0,0,0,.2) 30%, #000 100%)}
-.g-de-tile[data-tier="8"] .g-de-media,.g-de-tile[data-tier="9"] .g-de-media,
-.g-de-tile[data-tier="10"] .g-de-media,.g-de-tile[data-tier="11"] .g-de-media{filter:saturate(.35) brightness(.62)}
+/* 8-11 used to wear filter:saturate(.35) brightness(.62) ON THE <video>. The
+   same read, for free: a heavier vignette that starts opaque at the centre
+   instead of transparent, plus more tint over it. Grey and dark, no GPU pass. */
+.g-de-stage [data-tier="8"],.g-de-stage [data-tier="9"]{--de-f-vig:.68;--de-f-tint:.56;
+  --de-f-wash:radial-gradient(80% 80% at 50% 45%, rgba(0,0,0,.34) 28%, rgba(0,0,0,.97) 100%)}
+.g-de-stage [data-tier="10"],.g-de-stage [data-tier="11"]{--de-f-vig:.8;--de-f-tint:.62;
+  --de-f-wash:radial-gradient(80% 80% at 50% 45%, rgba(0,0,0,.5) 24%, #000 100%)}
 
 /* ---- the glyph: drawn, never typed ---------------------------------------- */
 /* The per-tier ring rules are generated above (glyphRules). The base box is a
@@ -518,11 +595,19 @@ ${glyphRules()}
   text-shadow:0 0 .1em #fff, 0 0 .35em #fff, 0 0 .7em var(--de-t-rim), 0 0 1.4em var(--de-t-glow), 0 0 2.4em var(--de-t-glow);
   animation:g-de-namepulse 1.6s ease-in-out infinite alternate}
 @keyframes g-de-namepulse{from{transform:scale(1);filter:brightness(1)}to{transform:scale(1.05);filter:brightness(1.35)}}
+/* THE DRIFT LAW, name-plate edition: the CRT bar used to sweep by tweening
+   background-position over a 300%-tall gradient. Translating it instead needs a
+   clipping box, and the only candidate is .g-de-name itself - which cannot take
+   overflow:hidden, because the tier-10/11 FX ladder IS its 2.4em text-shadow
+   bloom and a clip would eat it. (A wrapper element is out too: .g-de-name is
+   the trickster's one lie target and index.js repaints it with textContent,
+   which would delete any child.) So the bar holds still and BREATHES - opacity
+   is compositor-only, the raster happens once. */
 .g-de-tile[data-tier="10"] .g-de-name::after,.g-de-tile[data-tier="11"] .g-de-name::after{content:"";position:absolute;inset:0;
   pointer-events:none;border-radius:inherit;
   background:linear-gradient(to bottom, transparent 0 42%, rgba(255,255,255,.3) 50%, transparent 58% 100%);
-  background-size:100% 300%;animation:g-de-scan 2.4s linear infinite}
-@keyframes g-de-scan{from{background-position:0 0}to{background-position:0 100%}}
+  animation:g-de-scan 2.4s ease-in-out infinite}
+@keyframes g-de-scan{0%,100%{opacity:.12}50%{opacity:1}}
 /* a merge pops the new name in scale only - readable within the first frames */
 .g-de-tile.is-merged .g-de-name{animation:g-de-namepop .42s cubic-bezier(.2,1.3,.4,1) 1}
 @keyframes g-de-namepop{0%{transform:scale(1.22)}100%{transform:scale(1)}}
@@ -554,16 +639,22 @@ ${glyphRules()}
   --de-t-ink:var(--ink);--de-t-rim:var(--pink);--de-t-glow:color-mix(in srgb, var(--pink), transparent 45%);--de-t-glowr:26px}
 .g-de-stage [data-tier="11"]{--de-t-bg:color-mix(in srgb, var(--ground) 35%, black);--de-t-bg2:#000;
   --de-t-ink:var(--ink);--de-t-rim:var(--gold);--de-t-glow:color-mix(in srgb, var(--gold), transparent 40%);--de-t-glowr:30px}
-/* deep tiles shimmer: a sheen crawls the body (Law III, tiers 8+) */
+/* deep tiles carry a glint on the body (Law III, tiers 8+).
+   THE DRIFT LAW, tile edition: this used to be 'g-de-sheen', a
+   background-position crawl across a 260%-wide highlight. On a tile the raster
+   is small, but it ran on EVERY deep body and it ran forever, and there is no
+   box here that could clip a translating layer - the body IS a ::before, and a
+   pseudo cannot own a pseudo. So the glint is now FIXED and the motion comes
+   from the animations the deep tiles already had: the deepest tile breathes
+   (g-de-deepbreath, inherited from the base .is-deepest rule now that this one
+   no longer overrides 'animation'), the name runs its own tier FX, and the face
+   moves on its own. Adding a per-tile <i> just to keep a crawl that a loaded
+   face covers anyway would have spent render objects to save raster. */
 .g-de-tile[data-tier="8"]::before,.g-de-tile[data-tier="9"]::before,
 .g-de-tile[data-tier="10"]::before,.g-de-tile[data-tier="11"]::before{
   background-image:linear-gradient(115deg, transparent 30%, rgba(255,255,255,.09) 45%, transparent 60%),
     linear-gradient(160deg, var(--de-t-bg,var(--lav)), var(--de-t-bg2,var(--lav)));
-  background-size:260% 100%, 100% 100%;animation:g-de-sheen 5.5s ease-in-out infinite}
-.g-de-tile.is-deepest[data-tier="8"]::before,.g-de-tile.is-deepest[data-tier="9"]::before,
-.g-de-tile.is-deepest[data-tier="10"]::before,.g-de-tile.is-deepest[data-tier="11"]::before{
-  animation:g-de-sheen 5.5s ease-in-out infinite, g-de-deepbreath 2.6s ease-in-out infinite alternate}
-@keyframes g-de-sheen{0%{background-position:120% 0, 0 0}100%{background-position:-60% 0, 0 0}}
+  background-size:260% 100%, 100% 100%;background-position:38% 0, 0 0}
 
 /* ---- the shell's stamp, when index.js targets the bench ---------------------
    ceremonies.stamp({target: bench}) appends the stamp IN FLOW, which in a flex
@@ -628,25 +719,39 @@ ${glyphRules()}
 /* ---- CASINO (House Rules, Deck II) --------------------------------------- */
 /* THE MARQUEE: a bulb-chase frame around the BOARD (mounted in the bench,
    sized from --de-board so it hugs the square). Dots are gradients, the chase
-   is a background-position crawl - four thin bars. pointer-events:none is
+   was a background-position crawl - four thin bars. THE DRIFT LAW: the bar is
+   now a CLIP (overflow:hidden) and the dots live on its ::before, oversized by
+   one dot pitch on the trailing edge and translated by exactly that pitch, so
+   the chase is compositor-only and the wrap is invisible. pointer-events:none is
    LAW. Pace (--g-de-mqt) and presence (--g-de-mqa) ride the class heat from
    casino.js; the bell and the ceiling turn it gold. */
 .g-de-mq{position:absolute;left:50%;top:50%;z-index:0;pointer-events:none;
   width:calc(var(--de-board) + 26px);height:calc(var(--de-board) + 26px);
   transform:translate(-50%,-50%);border-radius:20px;
   opacity:var(--g-de-mqa,.26);transition:opacity .6s ease}
-.g-de-mq i{position:absolute;display:block;
+.g-de-mq i{position:absolute;display:block;overflow:hidden}
+.g-de-mq i::before{content:"";position:absolute;
   background-image:radial-gradient(circle, var(--de-n-mq,var(--lav)) 2px, transparent 3px)}
-.g-de-mq .mq-t,.g-de-mq .mq-b{left:0;right:0;height:7px;background-size:18px 7px;background-repeat:repeat-x}
-.g-de-mq .mq-l,.g-de-mq .mq-r{top:0;bottom:0;width:7px;background-size:7px 18px;background-repeat:repeat-y}
-.g-de-mq .mq-t{top:0;animation:g-de-mqx var(--g-de-mqt,2s) linear infinite var(--g-de-mqp,0s)}
-.g-de-mq .mq-r{right:0;animation:g-de-mqy var(--g-de-mqt,2s) linear infinite var(--g-de-mqp,0s)}
-.g-de-mq .mq-b{bottom:0;animation:g-de-mqxr var(--g-de-mqt,2s) linear infinite var(--g-de-mqp,0s)}
-.g-de-mq .mq-l{left:0;animation:g-de-mqyr var(--g-de-mqt,2s) linear infinite var(--g-de-mqp,0s)}
-@keyframes g-de-mqx{to{background-position-x:18px}}
-@keyframes g-de-mqxr{to{background-position-x:-18px}}
-@keyframes g-de-mqy{to{background-position-y:18px}}
-@keyframes g-de-mqyr{to{background-position-y:-18px}}
+.g-de-mq .mq-t,.g-de-mq .mq-b{left:0;right:0;height:7px}
+.g-de-mq .mq-l,.g-de-mq .mq-r{top:0;bottom:0;width:7px}
+/* the sheet is one dot pitch (18px) longer at BOTH ends: the phase shift of a
+   whole pitch is invisible, and the extra covers the vacated end all cycle */
+.g-de-mq .mq-t::before,.g-de-mq .mq-b::before{top:0;bottom:0;left:-18px;right:-18px;
+  background-size:18px 7px;background-repeat:repeat-x}
+.g-de-mq .mq-l::before,.g-de-mq .mq-r::before{left:0;right:0;top:-18px;bottom:-18px;
+  background-size:7px 18px;background-repeat:repeat-y}
+.g-de-mq .mq-t{top:0}
+.g-de-mq .mq-r{right:0}
+.g-de-mq .mq-b{bottom:0}
+.g-de-mq .mq-l{left:0}
+.g-de-mq .mq-t::before{animation:g-de-mqx var(--g-de-mqt,2s) linear infinite var(--g-de-mqp,0s)}
+.g-de-mq .mq-r::before{animation:g-de-mqy var(--g-de-mqt,2s) linear infinite var(--g-de-mqp,0s)}
+.g-de-mq .mq-b::before{animation:g-de-mqxr var(--g-de-mqt,2s) linear infinite var(--g-de-mqp,0s)}
+.g-de-mq .mq-l::before{animation:g-de-mqyr var(--g-de-mqt,2s) linear infinite var(--g-de-mqp,0s)}
+@keyframes g-de-mqx{from{transform:translate3d(0,0,0)}to{transform:translate3d(18px,0,0)}}
+@keyframes g-de-mqxr{from{transform:translate3d(0,0,0)}to{transform:translate3d(-18px,0,0)}}
+@keyframes g-de-mqy{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,18px,0)}}
+@keyframes g-de-mqyr{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-18px,0)}}
 .g-de-mq.g-de-mq-bell{--de-n-mq:var(--gold);filter:drop-shadow(0 0 6px rgba(240,194,75,.75))}
 .g-de-mq.g-de-mq-flash{animation:g-de-mqflash .6s ease-out 1}
 @keyframes g-de-mqflash{
@@ -778,6 +883,59 @@ ${glyphRules()}
    "never moved"), then the class drops and the 110ms slide carries it home. */
 .g-de-tile.g-de-lie{transition:opacity .22s ease,filter .22s ease}
 
+/* ---- pass 5: THE LITE RUNG (.g-de-lite on the stage) ---------------------
+   'de_perf' = lite, or 'auto' after the rAF probe demoted the class, or reduced
+   motion / motionLevel <= 1. index.js also puts '.ae-lite' on <html> so the
+   ENGINE's own sheet can lighten in the same breath. This is NOT reduced
+   motion: the room still moves, it just stops asking the raster and the video
+   decoder for things a weak machine cannot pay for.
+     - the backdrop pattern sheets hold still (each one is a full-screen layer)
+     - the tile faces stop panning (a composited transform per live media node)
+     - the deep-tier glint and the name scan hold still
+   Under a 4x CPU throttle even an all-stills board fell to 40fps, so the fix
+   has to be the WHOLE frame's budget, not just the videos. */
+.g-de-lite .g-de-bd-bands::before,.g-de-lite .g-de-bd-bands::after,
+.g-de-lite .g-de-bd-lens::before,.g-de-lite .g-de-bd-lens::after,
+.g-de-lite .g-de-bd-motes::before,.g-de-lite .g-de-bd-motes::after,
+.g-de-lite .g-de-bd-rays::before,.g-de-lite .g-de-bd-vortex::before,
+.g-de-lite .g-de-bd-veil::before{animation:none}
+.g-de-lite .g-de-bd{animation:none}
+.g-de-lite img.g-de-media{animation:none}
+.g-de-lite .g-de-tile .g-de-name::after{animation:none;opacity:.35}
+
+/* ---- pass 5: THE TOUCH RUNG (html.ae-touch) ------------------------------
+   index.js puts '.ae-touch' on <html> from the pointer, next to '.ae-lite',
+   and engine/style.js keeps its own half of it. This is NOT the lite rung and
+   it does not stack behind one: a phone on FULL still gets every cut here,
+   because these are not quality dials, they are things a mobile GPU - WebKit's
+   most of all - cannot pay for at ANY quality. There is no setting; the device
+   is the setting, so desktop is untouched to the byte.
+   What a phone actually pays for, in this sheet:
+     - A FILTER OVER A FACE IS A GPU PASS PER DECODED FRAME. A tile face is a
+       live <video> whenever the pool hands back a webm, and blur() over one is
+       the worst of them. The two blurs here both land in a WINDOW where the
+       board is already at its busiest - the dissolve at the end of a merge and
+       the whole-board resurface - so the hitch lands exactly on the beat the
+       player is watching. Both go to opacity, which is compositor-only. The
+       resurface KEEPS its brightness lift: one filter on a settling board is
+       affordable, a blur over up to 25 decodes is not.
+     - A BLEND SURFACE HAS TO READ WHAT IS UNDER IT before it can write, and
+       the caustic nets are full-screen. On the pool's near-black ground
+       'screen' and plain alpha read almost identically, so the light stays and
+       the read-back goes (the same trade the engine makes for its washes).
+     - BACKDROP-FILTER is the full-screen read-back-and-blur, every frame the
+       pressure glitch is up. The sheet's own tint already carries the read.
+   THE DRIFT LAW is untouched: every pattern here still travels by transform. */
+html.ae-touch .g-de-tile.is-gone{filter:none}
+html.ae-touch .g-de-stage[data-phase="resurface"] .g-de-tile{filter:brightness(1.5)}
+html.ae-touch .g-de-bd-lens::before,html.ae-touch .g-de-bd-lens::after{
+  mix-blend-mode:normal;opacity:.55}
+html.ae-touch .g-de-p-glitch.is-on{backdrop-filter:none;-webkit-backdrop-filter:none}
+/* the merge ceremony, transform/opacity only: the glyph still POPS, it just
+   stops asking for a brightness pass on the frame the new name lands. */
+html.ae-touch .g-de-tile.is-merged .g-de-glyph{animation:g-de-glyphpop-t .42s ease-out 1}
+@keyframes g-de-glyphpop-t{0%{transform:scale(1.25);opacity:.72}100%{transform:none;opacity:1}}
+
 /* ---- reduced motion: the mechanic survives, the motion does not ---------- */
 html.arc-reduced .g-de-stage *{animation:none !important}
 html.arc-reduced .g-de-stage{transition:none}
@@ -906,6 +1064,148 @@ html.arc-reduced .g-de-p-glitch.is-on{backdrop-filter:none;-webkit-backdrop-filt
 @media (prefers-reduced-motion: reduce){
   .g-de-p-pin.is-on{opacity:calc(var(--de-p-pa,.3) * .6)}
   .g-de-p-glitch.is-on{backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+
+/* ---- THE CLASS RULES SHEET (Deck VI, Law IV: drawn, not told) ------------ */
+/* Four vignettes over the dark water, cut from the same tile chrome the board
+   uses: because the sheet lives INSIDE .g-de-stage, every .g-de-hw-tile picks
+   up the depth palette from the shared [data-tier] block below - one place
+   owns the colour of a depth, here included. The sheet takes NO pointer events
+   (no key is bound and no dive is dealt while it is up, and a stray click must
+   never count as "read"); the GO button takes its own back and is the ONLY
+   dismissal. z 9 sits above the bench and the HUD and far below the shell's
+   suspend treatment (35), which must always be able to cover it. */
+.g-de-howto{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;
+  width:min(540px,92vw);max-height:86vh;overflow:auto;pointer-events:none;
+  display:flex;flex-direction:column;gap:2px;padding:20px 22px 18px;border-radius:14px;
+  color:var(--ink);
+  background:linear-gradient(180deg, rgba(12,14,34,.95), rgba(6,8,22,.97));
+  border:1px solid color-mix(in srgb, var(--lav), transparent 68%);
+  box-shadow:0 30px 80px rgba(0,0,0,.62), 0 0 44px rgba(184,166,232,.12);
+  animation:g-de-hw-in .34s ease-out 1}
+@keyframes g-de-hw-in{from{opacity:0;transform:translate(-50%,-46%)}
+  to{opacity:1;transform:translate(-50%,-50%)}}
+.g-de-hw-title{margin:0 0 8px;text-align:center;font-family:var(--disp);
+  font-size:clamp(15px,2.3vmin,19px);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--lav);text-shadow:0 0 22px rgba(184,166,232,.5)}
+.g-de-hw-row{display:flex;align-items:center;gap:16px;padding:10px 2px}
+.g-de-hw-row + .g-de-hw-row{border-top:1px dashed color-mix(in srgb, var(--line), transparent 35%)}
+.g-de-hw-fig{flex:0 0 auto;display:flex;align-items:center;gap:9px;pointer-events:none}
+.g-de-hw-cap{margin:0;flex:1 1 auto;font-size:12.5px;line-height:1.5;color:var(--ink-dim)}
+
+/* one mini tile: the board's own gradient, rim and numeral, at sheet scale */
+.g-de-hw-tile{position:relative;display:flex;align-items:center;justify-content:center;
+  width:26px;height:26px;border-radius:6px;flex:0 0 auto;
+  background:linear-gradient(160deg, var(--de-t-bg,var(--lav)), var(--de-t-bg2,var(--lav)));
+  border:1px solid color-mix(in srgb, var(--de-t-rim,var(--lav)), transparent 30%);
+  box-shadow:0 2px 8px rgba(0,0,0,.5), 0 0 var(--de-t-glowr,0px) var(--de-t-glow,transparent)}
+.g-de-hw-num{font-family:var(--disp);font-size:11px;line-height:1;
+  color:var(--de-t-ink,var(--ground))}
+
+/* 1 - the swipe: the pad points, the whole line slides the way it points */
+.g-de-hw-pad{position:relative;display:block;width:34px;height:34px;flex:0 0 auto}
+.g-de-hw-arrow{position:absolute;width:0;height:0;border:5px solid transparent}
+.g-de-hw-arrow.up{left:50%;top:0;margin-left:-5px;border-bottom-color:var(--lav)}
+.g-de-hw-arrow.down{left:50%;bottom:0;margin-left:-5px;border-top-color:var(--lav)}
+.g-de-hw-arrow.left{left:0;top:50%;margin-top:-5px;border-right-color:var(--lav)}
+.g-de-hw-arrow.right{right:0;top:50%;margin-top:-5px;border-left-color:var(--lav);
+  filter:drop-shadow(0 0 6px rgba(184,166,232,.9));
+  animation:g-de-hw-point 3.2s ease-in-out infinite}
+@keyframes g-de-hw-point{0%,14%{opacity:.45;transform:translateX(0)}
+  30%,74%{opacity:1;transform:translateX(3px)}100%{opacity:.45;transform:translateX(0)}}
+.g-de-hw-line{display:flex;gap:4px;padding:3px;border-radius:7px;
+  border:1px solid color-mix(in srgb, var(--line), transparent 30%);
+  background:rgba(6,10,26,.6);overflow:hidden}
+.g-de-hw-line.slide .g-de-hw-tile{animation:g-de-hw-slide 3.2s cubic-bezier(.22,.9,.3,1) infinite;
+  animation-delay:calc(var(--de-hw-i,0) * .05s)}
+@keyframes g-de-hw-slide{0%,18%{transform:translateX(0)}
+  40%,76%{transform:translateX(9px)}100%{transform:translateX(0)}}
+
+/* 2 - the merge: two equal tiles close, and one comes back a depth further */
+.g-de-hw-scene{position:relative;display:block;width:84px;height:34px;flex:0 0 auto}
+.g-de-hw-tile.mrg{position:absolute;top:4px}
+.g-de-hw-tile.mrg.a{left:2px;animation:g-de-hw-mrgA 3.2s ease-in-out infinite}
+.g-de-hw-tile.mrg.b{right:2px;animation:g-de-hw-mrgB 3.2s ease-in-out infinite}
+.g-de-hw-tile.mrg.out{left:50%;margin-left:-13px;opacity:0;
+  animation:g-de-hw-mrgOut 3.2s ease-out infinite}
+/* THE HAND-OFF IS SEAMLESS ON PURPOSE: at every instant either the two source
+   tiles or the merged one is on screen, so a still of this sheet (a headless
+   shot, a reduced-motion reader, a paused frame) is never a blank figure. */
+@keyframes g-de-hw-mrgA{0%,14%{transform:translateX(0);opacity:1}
+  40%,43%{transform:translateX(27px);opacity:1}
+  44%,71%{transform:translateX(27px);opacity:0}
+  71.5%,100%{transform:translateX(0);opacity:1}}
+@keyframes g-de-hw-mrgB{0%,14%{transform:translateX(0);opacity:1}
+  40%,43%{transform:translateX(-27px);opacity:1}
+  44%,71%{transform:translateX(-27px);opacity:0}
+  71.5%,100%{transform:translateX(0);opacity:1}}
+@keyframes g-de-hw-mrgOut{0%,43%{opacity:0;transform:scale(.7)}
+  50%{opacity:1;transform:scale(1.2)}58%,71%{opacity:1;transform:scale(1)}
+  71.5%,100%{opacity:0;transform:scale(1)}}
+
+/* 3 - the resurface: the jam drains, the gauge keeps the mark, water refills */
+.g-de-hw-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;padding:4px;
+  border-radius:7px;border:1px solid color-mix(in srgb, var(--line), transparent 30%);
+  background:rgba(6,10,26,.6)}
+.g-de-hw-tile.drain{width:22px;height:22px;
+  animation:g-de-hw-drain 3.6s ease-in-out infinite;
+  animation-delay:calc(var(--de-hw-i,0) * .08s)}
+@keyframes g-de-hw-drain{0%,34%{opacity:1;transform:translateY(0)}
+  50%{opacity:0;transform:translateY(9px)}
+  66%,100%{opacity:1;transform:translateY(0)}}
+.g-de-hw-gauge{position:relative;display:block;width:8px;height:34px;flex:0 0 auto;
+  border-radius:4px;overflow:hidden;background:rgba(184,166,232,.14);
+  border:1px solid color-mix(in srgb, var(--lav), transparent 65%)}
+.g-de-hw-gauge i{position:absolute;left:0;right:0;bottom:0;display:block;height:38%;
+  background:linear-gradient(180deg,var(--pink),var(--lav));
+  animation:g-de-hw-bank 3.6s ease-out infinite}
+@keyframes g-de-hw-bank{0%,34%{height:38%}52%{height:62%}100%{height:62%}}
+
+/* 4 - the ceiling: eleven rungs, and the one the ladder stops on */
+.g-de-hw-ladder{display:flex;flex-direction:column-reverse;gap:2px;flex:0 0 auto}
+.g-de-hw-ladder i{display:block;width:20px;height:4px;border-radius:2px;
+  background:color-mix(in srgb, var(--de-t-rim,var(--lav)), transparent 45%);
+  opacity:.3;animation:g-de-hw-rung 4s ease-in-out infinite;
+  animation-delay:calc(var(--de-hw-i,0) * .12s)}
+@keyframes g-de-hw-rung{0%,10%{opacity:.28}40%,86%{opacity:1}100%{opacity:.28}}
+.g-de-hw-ladder i.top{height:6px;box-shadow:0 0 10px var(--de-t-glow,var(--gold))}
+.g-de-hw-tile.ceil{width:30px;height:30px;
+  animation:g-de-hw-ceil 4s ease-in-out infinite}
+@keyframes g-de-hw-ceil{0%,40%{opacity:.25;transform:scale(.86)}
+  56%,86%{opacity:1;transform:scale(1)}100%{opacity:.25;transform:scale(.86)}}
+
+/* the ONE live thing on the sheet, and the only way past it */
+.g-de-hw-go{align-self:center;margin-top:8px;padding:9px 30px;cursor:pointer;
+  pointer-events:auto;border-radius:9px;font-family:var(--disp);font-size:13px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--ground);
+  background:linear-gradient(180deg,var(--lav),#6E5F9B);
+  border:1px solid var(--lav);box-shadow:0 0 22px rgba(184,166,232,.42)}
+.g-de-hw-go:hover{box-shadow:0 0 34px rgba(184,166,232,.64)}
+.g-de-hw-go:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+/* REDUCED MOTION: the sheet must still TEACH as a still, so the end states of
+   the four vignettes are pinned rather than left mid-keyframe. */
+html.arc-reduced .g-de-howto,html.arc-reduced .g-de-hw-tile,html.arc-reduced .g-de-hw-arrow,
+html.arc-reduced .g-de-hw-gauge i,html.arc-reduced .g-de-hw-ladder i{animation:none !important}
+html.arc-reduced .g-de-hw-tile.mrg.a,html.arc-reduced .g-de-hw-tile.mrg.b{opacity:0}
+html.arc-reduced .g-de-hw-tile.mrg.out{opacity:1}
+html.arc-reduced .g-de-hw-ladder i{opacity:1}
+@media (prefers-reduced-motion: reduce){
+  .g-de-howto,.g-de-hw-tile,.g-de-hw-arrow,.g-de-hw-gauge i,.g-de-hw-ladder i{animation:none !important}
+  .g-de-hw-tile.mrg.a,.g-de-hw-tile.mrg.b{opacity:0}
+  .g-de-hw-tile.mrg.out{opacity:1}
+  .g-de-hw-ladder i{opacity:1}
+}
+@media (max-width:640px),(pointer:coarse){
+  .g-de-howto{padding:16px 14px 14px}
+  .g-de-hw-row{gap:11px;padding:8px 0}
+  .g-de-hw-cap{font-size:11.5px}
+  .g-de-hw-tile{width:22px;height:22px}
+  .g-de-hw-num{font-size:10px}
+}
+@media (max-height:620px){
+  .g-de-hw-row{padding:6px 2px}
+  .g-de-hw-title{margin-bottom:4px}
 }
 `;
 

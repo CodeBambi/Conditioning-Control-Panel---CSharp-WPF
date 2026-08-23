@@ -57,6 +57,8 @@ shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
 games/registry.js  guarded allSettled registry + tier math + class_suspended stub
+                   + GAME_SEMESTER / OPEN_SEMESTERS (the release gate: a CLOSED semester's
+                   games are ABSENT from the pool, never stubs; isOpenSemester())
                    GAME_META here is the PARACHUTE: it must mirror each module's
                    own family/meaty/flagship/timeBudgetSec, because the timetable
                    reads a suspended class's descriptor too
@@ -81,10 +83,37 @@ games/<key>/index.js  one folder per game; games NEVER import each other
   the-deep-end/    2048 with trance-depth tiers (MEATY) - board/schedule/grade/lex/style/casino/trickster/pressure
                    the deepest tile is the heat dial; board/schedule/grade pure, casino+trickster+pressure decks
                    (pressure = the rung-by-rung CCP effects ladder + the Balatro board tremor/HUD juice)
+  -- Semesters II + III (2026-08-23; every class below ships ALL the House Rules decks from day one:
+     style (the look + the drawn class-rules sheet) / casino (THE FLOOR) / trickster (schedule-dealt
+     cards, budget 2/4/6/8 by tier) / pressure (THE SURGE, the CCP-effects ladder on the game's own
+     streak) + a lex.js <P>_LEX table; decks are dynamic-imported + null-safe so a broken deck never
+     takes the class down) --
+  misdirection/    the shell game (tracking, 120s)        - shuffle (PURE seeded plan + verifyRound = the
+                   TRACKABILITY INVARIANT: occlusion hides at most ONE link of a swap chain and every
+                   occlusion carries a tell) / grade / lex MD_LEX; keybinds pick1..pick5; md_stake_mode
+                   ask|bank|ride (greed scored UPWARD only, ride cap 5), md_shell_skin themed|minimal|contrast
+  echo/            the Simon ring (memory, 105s)          - sequence (PURE: warm start 3..6 off bestLen, decoy
+                   plan from tier 2 telegraphed) / grade / lex EC_LEX; keybinds pad1..pad6; six pads always live,
+                   the TIER restricts the alphabet; tones = engine audio_trigger 'pad' x pitch (+1 semitone per
+                   link, cap 7); a fail is NOT the class (new sequences until the bell); Encore once, auto
+  instant-recall/  the vigil (recall, 120s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
+                   GUARANTEE in the last 15s, layouts rows/mosaic/swirl, density sawtooth, plants, templates
+                   LAST_WORD/EFFECT/STING/TWO + MODE tier 4 <=10%) / montage (the stage + the L&F live-window
+                   discipline + createLedger = the TRUTH tail, aria-hidden) / grade / lex IR_LEX; ir_density
+  anomaly/         the odd-one-out grid (search, 90s)     - rounds (PURE: kinds/deltas at PERCEPTIBLE floors,
+                   relocations cap 2/round, drift) / grade / lex AN_LEX; the odd index lives in CLOSURE ONLY -
+                   never a DOM attr/class (suite asserts it); decks get a canMelt(i)/meltCandidates() oracle
+                   and nothing else; an_kinds all|gentle
+  composure/       the sliding picture (puzzle, 120s, MEATY) - board (PURE, seeded SOLVABLE scramble w/ parity)
+                   / solver (PURE baseline: optimal 3x3 IDA*, 4x4/5x5 BFS over tracked-tiles+gap - the greedy
+                   textbook solver deadlocked 1 board in 5) / grade (par from the solver) / lex CP_LEX;
+                   manifest.peek TRUE (the shell's hold-to-reveal = A-cap); cp_mode timed|zen (zen ends
+                   {zen:true} = 'pass'), cp_zen_grid; skill-floor rescue after 20s (solver hint + sGate false);
+                   locks are MARKERS never freezes (a frozen tile can make a board unsolvable)
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
-one of them** (200 rows as of Semester 1; `de_*` + the IC House Rules wave since - the count is a
+one of them** (672 rows as of Semesters II+III, 2026-08-23 - the count is a
 floor, never a contract: a scratch script diffs every `t('key'` / lexicon table against the C#
 table, see §7) or the shell renders raw keys for the settings
 page's `label_key` / `hint_key`. Impulse Control exports its table as data
@@ -151,10 +180,14 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
    no-repeat) and no-repeat *narrows* (3→2→1→off) instead of dying, so the board still
    refuses yesterday's class. Every constraint is also a seeded weight so the preference
    survives relaxation. `day.relaxed` and `day.noRepeatWindow` report what happened.
-6. ~~**A pool with exactly one meaty game cannot be meaty every day.**~~ **CLOSED by The Deep
-   End.** no-repeat outranks meaty, so with one meaty game the meaty slot filled ~1 day in 4.
-   With two (`lost_and_found` 120s + `the_deep_end` 300s) a dealt fortnight carries exactly one
-   meaty class on all 14 days. The arithmetic never changed — the pool grew.
+6. **A pool needs FOUR meaty games to deal one meaty class EVERY night.** no-repeat outranks
+   meaty. With the five-game pool no-repeat-3 was unsatisfiable and relaxed first, so two meaty
+   games (`lost_and_found`, `the_deep_end`) filled the slot nightly "for free". The TEN-game pool
+   re-opened it: no-repeat-3 binds again (`noRepeatWindow === 3` every day) and two meaty classes
+   cannot cover a 3-day window - measured 13/28 nights with two, 21/28 with three, **28/28 with four**
+   (`scratchpad/ttcheck/check.mjs`). So `instant_recall` and `composure` are meaty too (ruled
+   2026-08-23); the flag is a timetable fact, nothing in a module branches on it. A fifth meaty game
+   changes nothing; dropping to three silently loses a quarter of the nights.
 7. **The timetable's history is an epoch walk, not a recursion.** `EPOCH = '2026-08-01'`
    and the generator walks forward to the target date, memoised. That makes it a fixed
    point (day D-1 computed as history === day D-1 computed on its own — tested). **Moving
@@ -331,6 +364,114 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     every gif/flash burst for its hold, ease back). Before touching z-index for a "behind"
     report, inject a solid test box into `.ae-front` and PrintWindow the app - if the box is
     on top, it is alpha.
+
+36. **A WEB PAGE'S FRAME BUDGET IS SPENT ON THREE THINGS, AND NONE OF THEM IS "TOO MANY
+    NODES."** Chromium trace of The Deep End, full screen, 16 live video tiles, RTX 3060 Ti:
+    the GPU process's main thread at **79% of a core**, in three roughly equal thirds.
+    - **RENDER SURFACES.** ~86 per frame. `isolation:isolate` + a `mix-blend-mode` pseudo on
+      every tile face is two surfaces *per tile*, and a blend surface must read back what is
+      under it before it can write. A `filter:` on a `<video>` is worse still: a full GPU pass
+      over a decoded 854x480 frame, per tile, per frame. **Tint with plain alpha and bake a
+      "desaturate" into the wash gradient; never put a filter on a live decode.**
+    - **PER-FRAME RE-RASTER.** `@keyframes { to { background-position: … } }` re-rasters the
+      WHOLE layer every frame; six full-screen sheets doing it is a third of the budget on
+      gradients that never changed shape. **PATTERNS DRIFT BY TRANSFORM, NEVER BY
+      BACKGROUND-POSITION** (the law is written into `the-deep-end/style.js`): oversize the
+      sheet by exactly one tile period on its trailing edge and `translate` it by exactly that
+      period, so the wrap lands on an identical pixel. One background layer per pseudo - two
+      layers with different tile sizes cannot share one transform. Corollary: a *travelling*
+      highlight needs a clipping box, and a `::before` cannot own a `::before`, so a sweep on
+      a pseudo (the old `g-de-sheen`, `g-de-scan`) either grows a real element or becomes an
+      `opacity` breathe. Prefer the breathe; a per-tile node to save raster is a bad trade.
+    - **VIDEO DECODES.** Scrolller's SMALLEST rendition IS 854x480, so asking for a smaller
+      file is not a lever - the **decoder COUNT** is the only one. Faces are frozen per TIER,
+      so a cap counted in tiles is meaningless (17 tier-1 tiles = 1 file, 17 decodes). The
+      Deep End caps **distinct animated tiers** (`FACE_CAP` 6) and keeps the numerous shallow
+      tiers on stills (`SHALLOW_STILL_MAX_TIER` 3) - *the shallows are still, depth is alive*.
+      The ENGINE shares one budget of its own: `engine/util.js` `budgetedKind('loop')` counts
+      the `<video>` nodes `mediaEl` has minted and hands `gif_rain` / `gif_burst` a **still**
+      once `VIDEO_BUDGET` (6; 2 under `.ae-lite`) is spent. Anything that mints a decoration
+      video must come through `mediaEl` and leave through `timers.release`/`kill`, or the
+      count leaks and the budget closes for the session.
+    **AND A LADDER, NOT A SWITCH:** under a 4x CPU throttle even an all-stills board fell to
+    40fps, so the whole frame has to get cheaper, not just the videos. `de_perf`
+    (`auto|full|lite`) is the pattern: `lite` = `.g-de-lite` on the game's stage **and
+    `.ae-lite` on `document.documentElement`** (the one seam a game and the engine share -
+    the engine never owns that class, it only reads it), and **both come off on destroy or
+    the lobby inherits a lit-down room**. `auto` samples rAF deltas for ~3s after the board is
+    dealt, skips the first 500ms of first-frame cost, and demotes **once, downward only** - a
+    room that changes its own look twice is worse than a room that is simply lighter. With no
+    `requestAnimationFrame` (node, the DOM double) the probe must **stay full**: a missing
+    frame clock is not evidence of a slow machine.
+
+37. **A backtick inside a CSS comment inside a template-literal stylesheet kills the WHOLE
+    sheet.** `` /* `[data-tier]` */ `` in a `STYLE_TEXT` template ends the literal early; the page
+    dies with `ReferenceError: data is not defined` and `node --check` passes it - only a browser
+    load catches it. Three agents hit it in one day (IC stage, DE howto, MD decks). Never write a
+    backtick in a CSS comment in a `.js` stylesheet.
+38. **`applySuspend(false)` must re-assert the pause.** The shell leaves a lifted suspend behind
+    its pause card on purpose (the Resume button is the way back), but a game's `suspend(false)`
+    typically restarts its own loop - Misdirection and The Deep End both played on behind the
+    overlay. `applySuspend` now calls `instance.pause()` again when `active.paused` is set.
+39. **The spiral pool is bundled + THE LOOM.** `shell.js pickSpiralUrl(seed, settings)` appends
+    `init.settings.loomSpirals` (the host's `https://ccp.spirals/loom_<slug>.gif` list, same folder
+    DTRH exposes) at weight 20 each, cap 24, validated + de-duplicated. No Loom = byte-identical
+    picks. The host maps `ccp.spirals` for the Arcademy too (`ArcademyHostService` mappings).
+40. **`core/rng.js makeTaggedRoll` is per-tag mulberry32 now.** The first version hashed
+    `seed|tag|n` per call and the trailing counter barely avalanched through FNV-1a (~0.4%
+    near-equal consecutive pairs); every deck had worked around it with its own per-tag mulberry32.
+    Same contract (tags independent, replay exact), different stream - any golden value recorded
+    off the old stream (none were) would move.
+41. **"WebKit won't transition an unregistered custom property" is a MYTH - measure before you
+    rename.** The Deep End web teaser "teleported" tiles on an iPhone 13 Pro Max (2026-08-23) and the
+    first diagnosis was exactly that myth; registered `--cp-r/--cp-c` / `--md-x` twins were even
+    built and then reverted. The measurement (peer session, Playwright WebKit 26.5 + Chromium): all
+    four variants - unregistered var + `transition:transform`, `@property` var, transition on the
+    vars themselves, both - interpolate IDENTICALLY in both engines; on the live Deep End page WebKit
+    fires `transitionrun` on transform when `--r/--c` change (keyboard and touch) and a no-var
+    plain-transform control traced byte-identical. What reads as "the transition never fired" on a
+    phone is a 170ms transition receiving 1-3 FRAMES under load - cut per-frame cost (the
+    `html.ae-touch` rung: no blur over a live face, no blend surface, no backdrop-filter, video
+    budget 3 on coarse pointers) instead of renaming variables. What IS true: `@property` is
+    page-global, so a var name shared with mixed types (`--r` is a number here and an ANGLE in
+    misdirection/casino.js) can never be registered globally - if registration is ever genuinely
+    needed, use game-prefixed names.
+
+42. **A PHONE NEEDS THE CUTS ON *FULL*, AND THE SEAM IS `html.ae-touch`.** The owner's
+    iPhone 13 Pro Max skipped frames on slide/merge and skipped harder when effects fired -
+    on the LITE rung (web teaser, 2026-08-23). de_perf's full/lite ladder is a QUALITY
+    ladder and it cannot fix this, because two of the three costs are HARDWARE ceilings, not
+    frame budget: iOS caps concurrent hardware video decode SESSIONS (three or four before
+    VideoToolbox thrashes and every stream stutters at once), and WebKit charges several ms
+    a frame for a backdrop-filter or a full-screen blend surface that a desktop GPU eats for
+    free. So The Deep End probes the device once per class - `matchMedia('(pointer: coarse)')`
+    or `navigator.maxTouchPoints > 1` - and puts **`.ae-touch` on `<html>`**, the same
+    document-root seam `.ae-lite` uses (the game sets it, the engine only reads it, and
+    BOTH come off on destroy or the lobby inherits a phone's ceiling).
+    - It is **NOT a third rung**: it applies on FULL too, and `de_perf: full` does not opt
+      out of it. There is no setting and there must never be one - the device is the setting.
+    - It **composes with the rung in the PROTECTIVE direction, and the two dials point
+      opposite ways**: `faceCap` takes the **MIN** (`FACE_CAP` 6 / `_LITE` 3 / `_TOUCH` 4 -
+      fewer decoders wins) while `shallowStillMaxTier` takes the **MAX** (3 / 5 / 4 - more
+      of the numerous shallow tiers frozen wins). A `min` on the still-line would hand a lite
+      PHONE more animated tiers than a lite desktop. `engine/util.js videoBudget()` mins the
+      same way: 6 desktop, 3 touch, 2 lite, 2 touch+lite.
+    - `engine/style.js` `.ae-touch` drops what WebKit charges most for, on every rung: the
+      drain wash's backdrop-filter, `mix-blend-mode` on the four FULL-SCREEN washes (the
+      spiral is 150vmax - over twice the viewport of read-back), the scanline's
+      `background-position` roll (per-frame re-raster of a full-screen sheet), and the two
+      filters that can land over a live decode (`ae-burst-double` on a gif_burst <video>,
+      `ae-mosh`'s blur every frame of a swap). The Deep End's own `.ae-touch` block in
+      `games/the-deep-end/style.js` does the same on the game side: no blur on `.is-gone` /
+      resurface tiles (blur over a live face), the lens loses its blend surface, the glitch
+      payload loses backdrop-filter, the merge glyph pops by transform/opacity only.
+    - Low Power Mode caps rAF to 30fps and the auto probe demotes to lite on that. That is
+      CORRECT, not a bug: iOS Safari caps rAF to 60 even on ProMotion, so the PASS-5
+      thresholds (median 20ms / 25ms x 40%) mean the same thing on a phone as on a desktop.
+    - Caveat, accepted deliberately: a Windows touchscreen laptop reports
+      `maxTouchPoints: 10` with a fine pointer and therefore also gets the ceiling. It is
+      hardware-protective and cheap; do not "fix" it by dropping the maxTouchPoints probe,
+      which is the only signal a webview that answers no media query has.
 
 ## 5. The game module contract (short version)
 

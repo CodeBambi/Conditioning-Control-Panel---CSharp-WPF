@@ -19,7 +19,7 @@
 
 import { clamp01 } from '../core/caps.js';
 import { NODE_CAPS, washSpec, gifRainSpec, ambientSpec, driftSpec, bubbleSpec } from './curves.js';
-import { rand, hasDom, mediaEl } from './util.js';
+import { rand, hasDom, mediaEl, budgetedKind } from './util.js';
 import { createEscapeGuard } from './escape.js';
 
 /** ambient_field kinds ported from DTRH fieldFx AMBIENT_KINDS (DOM subset). */
@@ -253,7 +253,9 @@ export function createSustained(ctx) {
 
     function spawn() {
       if (live.rain >= spec.max) return;
-      const url = ctx.assetUrlSync(opts.assetKind || 'loop');
+      /* THE DECODER BUDGET (util.js): past it a 'loop' request is served a
+       * still, so the rain keeps its node count and drops its decode cost. */
+      const url = ctx.assetUrlSync(budgetedKind(opts.assetKind || 'loop'));
       const node = (url && mediaEl(url)) || document.createElement('div');   // <video> for a webm/mp4 loop
       node.className = 'ae-rain';
       node.style.setProperty('--ae-x', Math.round(rand(ctx.rng, 2, 88)) + '%');
