@@ -36,7 +36,7 @@ namespace CcpClient.Tests;
 /// physically dark monitor.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class GlyphAlphaDifferentialTests
+public class GlyphAlphaDifferentialTests : RealDesktopFacts
 {
     [Fact]
     public void BOTHSURFACESREALLYREACHEDTHEDESKTOP_OrEveryPixelBelowIsAReadingOfSomethingElse()

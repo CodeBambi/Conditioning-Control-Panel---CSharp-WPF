@@ -258,7 +258,7 @@ public class DesktopPreflightVerdictTests
 /// allowed to mean.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class DesktopPreflightTests(RealDesktopLease lease)
+public class DesktopPreflightTests(RealDesktopLease lease) : RealDesktopFacts
 {
     [Fact]
     public void ThePreflightReallyObservedTheDesktop_BeforeAnyRealDesktopFactRanAndOverASpanThatCoversTheCadence()

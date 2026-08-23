@@ -25,7 +25,7 @@ namespace CcpClient.Tests;
 /// named manual gate (record.md).</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class TrayCapabilityTests
+public class TrayCapabilityTests : RealDesktopFacts
 {
     [Fact]
     public void TheShellOracle_SaysNoForAnIconThatWasNeverPlaced()

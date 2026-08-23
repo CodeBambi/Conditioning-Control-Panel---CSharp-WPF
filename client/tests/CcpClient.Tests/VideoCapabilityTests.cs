@@ -19,7 +19,7 @@ namespace CcpClient.Tests;
 /// named manual gate and no automated step on any platform discharges it, Windows included.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class VideoCapabilityTests
+public class VideoCapabilityTests : RealDesktopFacts
 {
     private static VideoSurfaceObservations.Measurements Observed => VideoSurfaceObservations.Observed;
 

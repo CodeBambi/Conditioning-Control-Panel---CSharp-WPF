@@ -7,7 +7,7 @@ namespace CcpClient.Tests;
 /// and really let go afterwards. Both halves are measured rather than asserted about.
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class RealDesktopLeaseTests(RealDesktopLease lease)
+public class RealDesktopLeaseTests(RealDesktopLease lease) : RealDesktopFacts
 {
     [Fact]
     public void TheRealDesktopFacts_RunWhileThisProcessHoldsTheMachineWideLease()

@@ -22,7 +22,7 @@ namespace CcpClient.Tests;
 /// question the user was being asked.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class VideoOverlayCoexistenceTests
+public class VideoOverlayCoexistenceTests : RealDesktopFacts
 {
     private static VideoSurfaceObservations.CoexistenceRun Run => VideoSurfaceObservations.Coexistence;
 

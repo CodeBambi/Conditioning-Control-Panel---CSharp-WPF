@@ -46,6 +46,9 @@ public class RealDesktopCollectionGuardTests
     private const string CollectionName = "RealDesktopCollection";
     private const string MembershipAttribute = "[Collection(nameof(RealDesktopCollection))]";
 
+    /// <summary>The base whose constructor arms this thread's window floor. See RealDesktopFacts.</summary>
+    private const string FloorBaseClause = ": RealDesktopFacts";
+
     /// <summary>This guard, and the collection's own declaration, hold the tokens as text.</summary>
     private static readonly string[] ExemptFileNames =
     [
@@ -207,6 +210,60 @@ public class RealDesktopCollectionGuardTests
             + "exemption stays reviewed rather than inferred.");
         Assert.Equal(BoundControls.OrderBy(n => n, StringComparer.Ordinal),
             bound.Where(BoundControls.Contains).OrderBy(n => n, StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Membership in the collection and having a WINDOW FLOOR are the same thing, mechanically.
+    ///
+    /// <para>The floor is <see cref="ThreadStaticAttribute"/> because the revocation's trigger is
+    /// thread-scoped, so it has to be armed on the thread that RUNS the fact —
+    /// <see cref="RealDesktopFacts"/>'s constructor, which xunit calls on exactly that thread. It
+    /// used to be armed at two pointer call sites instead, and a fact that reached a band assertion
+    /// through any other probe was floored only by luck of the thread pool: adding fourteen
+    /// unrelated facts elsewhere in the assembly turned a green run into three reds. Convention
+    /// cannot hold that, so this makes it fail closed.</para>
+    /// </summary>
+    [Fact]
+    public void EveryClassInTheCollection_DerivesFromTheBaseThatPutsTheWindowFloorUp()
+    {
+        var files = UnitProjectSources();
+        var members = new List<string>();
+        var violations = new List<string>();
+
+        foreach (var (name, raw) in files)
+        {
+            if (ExemptFileNames.Contains(name, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            var code = StripComments(raw);
+            if (!code.Contains(MembershipAttribute, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            members.Add(name);
+            if (!code.Contains(FloorBaseClause, StringComparison.Ordinal))
+            {
+                violations.Add($"CcpClient.Tests/{name}: carries {MembershipAttribute} but does not declare "
+                    + $"'{FloorBaseClause}'. Every fact in this collection reaches the OS through the top-most "
+                    + "band, and a thread that reaches zero top-level windows after one of them was clicked "
+                    + "costs the WHOLE PROCESS that band with SetWindowPos returning TRUE and applying nothing. "
+                    + "The floor is thread-scoped, so it must be armed on the thread that runs the fact, which "
+                    + "is what the base constructor does. Deriving is the fix — never a retry, never a skip.");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
+
+        // The detector's own control. A walk that found NO members would satisfy the assertion above
+        // for the worst possible reason, and this guard has already been wrong about how many
+        // classes are in the collection once today.
+        Assert.True(members.Count >= BoundControls.Length,
+            $"the membership walk found {members.Count} file(s) carrying {MembershipAttribute}, fewer than the "
+            + $"{BoundControls.Length} broken-detector controls that must always be in it. The scan is not "
+            + "reading the collection at all, so the check above proves nothing");
     }
 
     [Fact]
