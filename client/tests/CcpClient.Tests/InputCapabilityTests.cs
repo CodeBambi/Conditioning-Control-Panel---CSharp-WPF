@@ -713,4 +713,122 @@ public class InputCapabilityTests : RealDesktopFacts
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new InputPromptRequest(new InputBounds(0, 0, 10, -4), content, _ => { }));
     }
+
+    [Fact]
+    public void ASecondPromptOverALiveCard_IsRefusedInType_AndTheFirstCardKeepsItsPlaceItsStateAndItsCallback()
+    {
+        // THE DEFECT. One presence, two modules, two threads: the Lock Card can pass its own
+        // IsPrompting guard on its paced clock (Effects/LockCardEffect.cs:351) and Prompt over a live
+        // Bubble Count question raised from the surface thread (Effects/BubbleCountEffect.cs:662),
+        // which overwrote the shared _content and _onKeystroke — so the first card's keystroke
+        // callback was simply gone and its question could never be answered.
+        var run = InputCaptureObservations.SingleTenancy;
+
+        Assert.True(run.FirstCardIsLive == run.MachineHasInteractiveDesktop,
+            "the FIRST card never went up, so nothing below is testing single tenancy: "
+            + InputCaptureObservations.Describe(run.FirstPromptState));
+        Assert.True(
+            (run.SecondPromptCode == InputReasonCodes.InputAlreadyPrompting) == run.MachineHasInteractiveDesktop,
+            $"a second Prompt over a live card answered '{run.SecondPromptCode}': "
+            + InputCaptureObservations.Describe(run.SecondPromptState));
+        Assert.True(run.StillPromptingAfterSecond == run.MachineHasInteractiveDesktop,
+            "the presence stopped reporting a card after refusing the second prompt, so the refusal disturbed the "
+            + "live card's state");
+        Assert.True(run.LastPromptUntouchedBySecond == run.MachineHasInteractiveDesktop,
+            "the refusal overwrote LastPrompt, which is what a panel renders for the card that is UP "
+            + "(Views/Pages/StudioPage.axaml.cs:1696) — a live card would read to the user as somebody else's "
+            + "refusal");
+
+        // THE OS's OWN READ that the assignment block never ran. _bounds is written in the same lock
+        // as _content and _onKeystroke, so a card still where the FIRST caller put it, and not where
+        // the second asked for it, is a block that did not execute — a stronger statement than any
+        // assertion about the returned state.
+        Assert.True(
+            (run.HitTestAtFirstCardsRectangle == run.Window && run.HitTestAtSecondCardsRectangle != run.Window)
+            == run.MachineHasInteractiveDesktop,
+            $"the window manager routes the first card's centre to 0x{run.HitTestAtFirstCardsRectangle:X} and the "
+            + $"refused prompt's rectangle to 0x{run.HitTestAtSecondCardsRectangle:X}, against the card "
+            + $"0x{run.Window:X}: the refused prompt moved the card, so it reached the assignment block");
+
+        Assert.True(run.KeyInjected == run.MachineHasInteractiveDesktop,
+            "SendInput was refused by the OS, so the delivery leg below is untested");
+        Assert.True(run.KeyReachedTheFirstCard == run.MachineHasInteractiveDesktop,
+            "a keystroke did not reach the FIRST caller's callback while its card was up. That callback is what "
+            + "the defect destroyed: the module that raised the card can no longer be answered");
+        Assert.False(run.SecondCallbackEverFired,
+            "the REFUSED caller's keystroke callback fired. It was never installed, and a module told 'no card was "
+            + "shown' must never be fed keys from somebody else's card");
+
+        // The other direction of the ledger, and it is the easy mistake: the loser must not hand back
+        // a claim it never took. A third prompt is refused for the same reason the second was.
+        Assert.True(
+            (run.ThirdPromptCode == InputReasonCodes.InputAlreadyPrompting) == run.MachineHasInteractiveDesktop,
+            $"a third Prompt over the same live card answered '{run.ThirdPromptCode}': the refused SECOND prompt "
+            + "released the live card's claim on its way out, so the card can be stolen by the caller after next");
+    }
+
+    [Fact]
+    public void APromptThatEndsWithNoCard_GivesTheClaimBack_SoOneRefusalCannotDisablePromptingForTheProcess()
+    {
+        // THE OBLIGATION THAT STAKING A CLAIM ON ENTRY CREATES, and unmet it is worse than the defect
+        // it closes: a refusal that kept the claim would make every later Prompt answer
+        // 'input-already-prompting' for the life of the process with no card anywhere on screen. A
+        // happy-path test never sees it.
+        var run = InputCaptureObservations.SingleTenancy;
+
+        Assert.True(run.LateRefusalCode != "none",
+            "the prompt at an impossible origin did NOT refuse, so this fact is not exercising a failure path at "
+            + "all: " + InputCaptureObservations.Describe(run.LateRefusalState));
+        Assert.False(run.PromptingAfterLateRefusal,
+            "the presence reports a card up after a refusal: "
+            + InputCaptureObservations.Describe(run.LateRefusalState));
+        Assert.NotEqual(InputReasonCodes.InputAlreadyPrompting, run.PromptAfterLateRefusalCode);
+        Assert.True((run.PromptAfterLateRefusalCode == "none") == run.MachineHasInteractiveDesktop,
+            $"the prompt after a REFUSED prompt answered '{run.PromptAfterLateRefusalCode}'. If that is "
+            + "'input-already-prompting' the failure path leaked the claim and this presence will never prompt "
+            + "again; anything else means the retry itself could not put a card up and the release is untested");
+
+        // The same ledger for the ordinary end of a card's life. Without a release there the FIRST
+        // SUCCESSFUL card would disable prompting for the process — the same damage, from the happy
+        // path. It is also the positive control for the refusal above: BUSY, not BROKEN.
+        Assert.NotEqual(InputReasonCodes.InputAlreadyPrompting, run.PromptAfterDismissCode);
+        Assert.True((run.PromptAfterDismissCode == "none") == run.MachineHasInteractiveDesktop,
+            $"the prompt after a dismissal answered '{run.PromptAfterDismissCode}': a card that came down did not "
+            + "give its claim back, so the presence is refusing with nothing on screen");
+    }
+
+    [Fact]
+    public void ConcurrentPromptsAdmitExactlyOne_WhichIsTheHalfAnUnsynchronisedGuardCannotDeliver()
+    {
+        // THE FACT THIS SLICE IS ABOUT, and the only one that separates an ATOMIC claim from the
+        // obvious fix. `if (_prompting) return refusal` at the top of Prompt passes every other fact
+        // in this file and leaves the defect open, because _prompting is not true until the
+        // confirmation read at the END of Prompt: everything between entering and there — the station
+        // read, the window creation, the placement, the paint read-back and the foreground ladder —
+        // is a window in which every thread sees false, proceeds, and overwrites.
+        //
+        // It has to be concurrent to see that. Outside a Prompt call the claim and _prompting are
+        // equal by construction, so no single-threaded caller can tell the two implementations apart,
+        // and the presence offers no re-entrancy hook for observing one in flight.
+        var run = InputCaptureObservations.SingleTenancy;
+
+        // NON-VACUITY FIRST, because the assertion below is satisfied by nothing happening, which is
+        // exactly what a machine with no interactive station produces.
+        Assert.True((run.RaceLiveCards == 1) == run.MachineHasInteractiveDesktop,
+            $"{run.RaceLiveCards} concurrent prompts put a card up on a machine whose interactive-desktop reading "
+            + $"is {run.MachineHasInteractiveDesktop}: {run.RaceOutcomes}. Zero means the assertion after this one "
+            + "passed while testing nothing; more than one means the presence is not single-tenant at all");
+
+        // THE INVARIANT, and it is about ADMISSIONS rather than about cards on screen: several
+        // admitted callers race on the presence's own _window field and all but one refuse
+        // themselves, so one card can be up and the theft have happened anyway. What an
+        // unsynchronised guard cannot do is admit only one caller.
+        Assert.True(run.RaceAdmitted == 1 || run.RaceLiveCards == 0,
+            $"{run.RaceAdmitted} concurrent Prompts got past the guard while a card ended up on screen: "
+            + $"{run.RaceOutcomes}. Only one window exists, so a second admission overwrote the first module's "
+            + "content and its keystroke callback while that module believed it was still asking. Read a red here "
+            + "two ways: the claim is not atomic, OR the first admitted prompt was refused by a contended desktop "
+            + "and released its claim before the next arrived, which is legitimate and visible in the outcomes "
+            + "above");
+    }
 }

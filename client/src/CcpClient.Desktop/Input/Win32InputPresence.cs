@@ -74,6 +74,44 @@ public sealed class Win32InputPresence : IInputPresence
     private nint _moduleHandle;
     private ushort _classAtom;
     private bool _prompting;
+
+    /// <summary>
+    /// The single-tenancy claim: 0 free, 1 a <see cref="Prompt"/> is IN FLIGHT or a card it put up
+    /// is still on screen. Read and written ONLY through <see cref="Interlocked"/>/
+    /// <see cref="Volatile"/>.
+    ///
+    /// <para><b>Why it is a second field rather than <c>_prompting</c>.</b> <c>_prompting</c> means
+    /// "the OS confirmed a card is on screen holding the input", and it is not true until the
+    /// confirmation read at the end of <see cref="Prompt"/> — so a guard that TESTED it would be
+    /// open for the whole width of a prompt: the station read, the window creation, the placement,
+    /// the paint read-back and the foreground ladder. Two threads would both see false and both
+    /// reach the overwrite. Setting <c>_prompting</c> early instead would close the window and break
+    /// its meaning: seven call sites read it as "a card is really up"
+    /// (<c>Effects/LockCardEffect.cs:305</c>, <c>:351</c>, <c>Effects/BubbleCountEffect.cs:393</c>,
+    /// <c>:573</c>, <c>:662</c>, <c>Views/Pages/StudioPage.axaml.cs:1696</c>, and
+    /// <see cref="Update"/>'s own gate).</para>
+    ///
+    /// <para><b>Why interlocked rather than <c>_gate</c>.</b> The claim's LIFETIME spans the whole
+    /// prompt, and <c>_gate</c> cannot: it is taken on NATIVE CALLBACK FRAMES by <c>Raise</c> and
+    /// <c>PaintInto</c>, so a claim held under <c>_gate</c> across the placement and the foreground
+    /// ladder would deadlock against the window's own message dispatch. A lock could only test-and-
+    /// set it, which is atomic but leaves the next reader free to widen the region into the
+    /// deadlock; a <c>CompareExchange</c> makes the test and the claim one instruction that no later
+    /// call site can get wrong, and it cannot be widened at all. It is also what this file already
+    /// reaches for when a field crosses threads without <c>_gate</c> (<c>_keystrokesSeen</c>,
+    /// <c>_callbackFaults</c>).</para>
+    ///
+    /// <para><b>What it does NOT make safe, stated where somebody would assume otherwise.</b> It
+    /// closes <see cref="Prompt"/> against <see cref="Prompt"/>, which is the collision two modules
+    /// on two threads actually produce. It does not make <see cref="Dismiss"/> or
+    /// <see cref="IDisposable.Dispose"/> safe to call from a second thread WHILE a prompt is in
+    /// flight: those release the claim on the way past, so a prompt still running would end believing
+    /// it holds one it no longer does. That interleaving is already outside this interface's stated
+    /// thread affinity, and hiding a window out from under an in-flight placement is not something a
+    /// claim could rescue anyway.</para>
+    /// </summary>
+    private int _promptClaim;
+
     private bool _disposed;
     private InputBounds _bounds;
     private InputPromptContent _content = new(string.Empty, string.Empty, string.Empty, string.Empty);
@@ -167,6 +205,64 @@ public sealed class Win32InputPresence : IInputPresence
                 "this input presence was disposed; its window is gone and it will never ask anything again");
         }
 
+        // ONE CARD AT A TIME, AND THE CLAIM IS STAKED HERE RATHER THAN TESTED HERE. This presence is
+        // shared by two modules that ask from two different threads — the Lock Card from its paced
+        // clock (Effects/LockCardEffect.cs:351) and Bubble Count from the surface thread
+        // (Effects/BubbleCountEffect.cs:630-633, :662) — so a caller-side IsPrompting test, and
+        // equally a re-read of _prompting here, only NARROWS the window in which both pass. This
+        // closes it: the test and the claim are the same instruction.
+        //
+        // Deliberately NOT recorded in LastPrompt, and for the same reason the disposed branch above
+        // is not: LastPrompt is what a panel renders for the card that IS up
+        // (Views/Pages/StudioPage.axaml.cs:1696), and overwriting a live card's state with somebody
+        // else's refusal is the same class of theft this refusal exists to prevent.
+        //
+        // The REFUSAL is exact; only the confirmed-on-screen number in it is best-effort. It is a
+        // plain read of _prompting, so it says "false" for a winner still inside its own prompt.
+        if (Interlocked.CompareExchange(ref _promptClaim, 1, 0) != 0)
+        {
+            return Unavailable(InputReasonCodes.InputAlreadyPrompting,
+                $"this presence is already committed to a card (confirmed-on-screen={_prompting}), so nothing was "
+                + "shown and nothing was overwritten: the live card keeps its own rectangle, its own content and "
+                + "its own keystroke callback, so the module that raised it can still be answered. One "
+                + "input-class interaction at a time, and this is BUSY rather than broken — the claim comes back "
+                + "when that card comes down");
+        }
+
+        var cardIsUp = false;
+        try
+        {
+            var outcome = PromptClaimed(request);
+
+            // THE RELEASE RULE, IN ONE LINE, AND IT IS A PROPERTY OF THE ANSWER RATHER THAN OF A
+            // FIELD. Available and Degraded are exactly the two states whose contract is "a card is
+            // on screen holding the input" (IInputPresence.Prompt); that card owns the claim until
+            // Dismiss or Dispose. EVERY other exit gives it back — every Unavailable below, and an
+            // exception out of a P/Invoke frame, which leaves cardIsUp false. A claim leaked on one
+            // refusal branch would refuse every later prompt for the life of the process with
+            // nothing on screen, which is strictly worse than the race it closes, so the rule is
+            // stated where it cannot be forgotten by a path added later.
+            cardIsUp = outcome is not CapabilityState.Unavailable;
+            return outcome;
+        }
+        finally
+        {
+            if (!cardIsUp)
+            {
+                Volatile.Write(ref _promptClaim, 0);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The whole of <see cref="Prompt"/> from the point the single-tenancy claim is held. Split out
+    /// so the release is one <c>finally</c> over every exit rather than a statement that any one of
+    /// the twelve paths out of the body could forget: the four refusals reached before a card can be
+    /// on screen, the six <see cref="RefuseAndWithdraw"/> refusals that take one back off it, and the
+    /// two — Degraded and Available — that keep the claim on purpose because a card really is up.
+    /// </summary>
+    private CapabilityState PromptClaimed(InputPromptRequest request)
+    {
         // Backend SELECTION by platform is permitted; capability AVAILABILITY by platform is not
         // (runtime-capability-contract §2 rule 2). This branch only refuses.
         if (!OperatingSystem.IsWindows())
@@ -390,6 +486,14 @@ public sealed class Win32InputPresence : IInputPresence
         }
 
         _prompting = false;
+
+        // THE CARD IS DOWN, SO THE NEXT MODULE MAY ASK — and this write is BEFORE the three
+        // read-back refusals below on purpose. Those say the OS did not honour the hide; keeping the
+        // claim there would leave the presence refusing forever on a desktop that had merely
+        // stuttered, and the same window is what the next Prompt re-places and re-paints. Without a
+        // release here at all, the FIRST successful card would disable prompting for the process.
+        Volatile.Write(ref _promptClaim, 0);
+
         var observation = ReadAndRemember();
 
         if (observation.WindowVisible)
@@ -500,6 +604,14 @@ public sealed class Win32InputPresence : IInputPresence
 
         _disposed = true;
         _prompting = false;
+
+        // Released even though nothing can prompt on a disposed presence again — the disposed check
+        // at the top of Prompt is what refuses, and it runs BEFORE the stake. This keeps the rule
+        // "the claim is held only while a card is up" true of every state this object can be in,
+        // rather than true of every state anyone currently looks at. Before the non-Windows return
+        // below, so a Linux-hosted instance leaves nothing held either.
+        Volatile.Write(ref _promptClaim, 0);
+
         lock (_gate)
         {
             _onKeystroke = null;
