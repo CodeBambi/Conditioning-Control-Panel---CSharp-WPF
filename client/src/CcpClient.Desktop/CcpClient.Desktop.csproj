@@ -102,6 +102,17 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <!-- The four built-in scripted sessions: the SEVENTH linked read-only glob, identical in shape
+         to the six above and the first one that is not a web payload. The .session.json files stay
+         OWNED by the legacy tree (ConditioningControlPanel/assets/sessions/), zero bytes are
+         forked, and they land beside the binary in sessions/ — where Session/ScriptedSession.cs
+         resolves them, the same one-code-path shape WPF uses for its own
+         (Services/Session/SessionFileService.cs:37-44, BaseDirectory/assets/sessions). -->
+    <Content Include="..\..\..\ConditioningControlPanel\assets\sessions\*.session.json">
+      <Link>sessions\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <!-- Product-owned overlay (served overlay-first; exactly ONE payload shadow:
          bridge.js = blob 13af3f4d + the §3.1 transport diff). -->
     <Content Include="Features\Dtrh\overlay\**\*">
