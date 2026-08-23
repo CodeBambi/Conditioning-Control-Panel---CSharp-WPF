@@ -268,6 +268,14 @@ internal static class PointerWindowProbe
             return false;
         }
 
+        // THE CLICK IS WHAT ARMS THE REVOCATION, so the floor goes up here and nowhere else.
+        // RealDesktopWindowFloor carries the measurement; the short version is that a thread which
+        // reaches ZERO top-level windows after one of them was clicked costs the WHOLE PROCESS the
+        // top-most band, permanently and silently. This call is idempotent and per-thread, and it
+        // sits at the INJECTION rather than at any one caller, so every present and future clicked
+        // window on whatever thread does the clicking is covered by construction.
+        RealDesktopWindowFloor.Ensure();
+
         var (nx, ny) = ToAbsolute(x, y);
 
         var inputs = new Input[3];
@@ -433,6 +441,12 @@ internal static class PointerWindowProbe
                 return null;
             }
 
+            // The floor goes up BEFORE the target is created, not after. A window can only take the
+            // top-most band when its thread ALREADY owned another window at the moment it was made
+            // (measured), so a scratch target that is the thread's first window loses its own point
+            // to whatever is maximised underneath - which is what the delivery oracle reads as "the
+            // probe could not inject".
+            RealDesktopWindowFloor.Ensure();
             var module = GetModuleHandleW(null);
             ScratchTarget? built = null;
 

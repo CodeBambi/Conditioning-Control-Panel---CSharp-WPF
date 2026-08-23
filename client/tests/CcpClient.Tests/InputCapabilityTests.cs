@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Input;
 using Xunit;
@@ -460,8 +461,57 @@ public class InputCapabilityTests
         Assert.Equal(InputReasonCodes.InputPresenceDisposed, ((CapabilityState.Unavailable)prompt).Reason.Code);
         Assert.False(presence.HoldsTheInput);
         Assert.False(presence.IsPrompting);
+
+        // A DISPOSED PUMP MUST DISPATCH NOTHING, and "nothing" is only a measurement if there was
+        // something to dispatch. This posts one message to THIS thread and then asks: an empty
+        // queue would satisfy the assertion below for reasons that have nothing to do with
+        // disposal, and it did — the fact used to read whatever else happened to be on the thread
+        // (a WM_TIMER, another component's window message) and reddened on a busy thread while
+        // passing on a quiet one. With the message posted, removing the _disposed guard from
+        // Win32InputPresence.Pump reds this every time instead of only sometimes.
+        var posted = PostOwnThreadMessage();
+
         Assert.Equal(0, presence.Pump(16));
+
+        // And take the posted message back off the queue, filtered to exactly the one posted, so
+        // this fact leaves the thread as it found it for whatever runs next on it.
+        if (posted)
+        {
+            Assert.True(DrainOwnThreadMessage(),
+                "the message this fact posted to its own thread was gone before it could be taken back — "
+                + "something else drained it, so the zero above was not this presence refusing to pump");
+        }
     }
+
+    private const uint ProbeMessage = 0x8000;   // WM_APP: never a system message, never anyone else's.
+    private const uint PmRemove = 0x0001;
+
+    private static bool PostOwnThreadMessage() =>
+        OperatingSystem.IsWindows() && PostThreadMessageW(GetCurrentThreadId(), ProbeMessage, 0, 0);
+
+    private static bool DrainOwnThreadMessage() =>
+        PeekMessageW(out _, 0, ProbeMessage, ProbeMessage, PmRemove);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProbeMsg
+    {
+        public nint Window;
+        public uint Message;
+        public nint WParam;
+        public nint LParam;
+        public uint Time;
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool PostThreadMessageW(uint threadId, uint message, nint wParam, nint lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool PeekMessageW(out ProbeMsg message, nint window, uint filterMin, uint filterMax, uint remove);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     [Fact]
     public void ACardOnNoDisplayAtAll_NeverClaimsAvailable_AndTheINKReadBackIsWhatCatchesIt()
