@@ -630,7 +630,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function renderTopbar() {
     if (!dom || !dom.topbar) return;
     const bar = dom.topbar;
-    bar.hidden = false;
+    // Stay retired while the night campus is up: the scene carries the bar's
+    // job diegetically (crest, ID card, bell, gear), and any store write mid-scene
+    // (attendance tick, EMI's voice ledger) lands here via store.onChange - the
+    // old unconditional unhide resurrected the bar OVER the campus and buried
+    // the hanging timetable plaque under it (owner screenshot, 0824).
+    bar.hidden = !!campus;
     bar.textContent = '';
     bar.appendChild(el('span', 'arc-title', t('arcademy', 'The Arcademy')));
     bar.appendChild(el('span', 'chip year', tierLabel(maxTier())));
