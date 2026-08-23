@@ -29,6 +29,12 @@ public class VideoOverlayCoexistenceTests
     [Fact]
     public void BothOtherCapabilitiesReallyWereUP_WithoutWhichEveryFactBelowTestsNothingHappening()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the run puts a REAL Win32 video surface beside a REAL layered overlay and a REAL card and asks "
+            + "the window manager which one owns a point. Off Windows none of the three exists "
+            + "(VideoPresenceFactory hands back UnsupportedVideoPresence and the overlay backend refuses in "
+            + "type), so there is no arbitration to observe");
+
         var run = Run;
         Assert.Equal(run.MachineHasInteractiveDesktop, run.OverlayPresented);
         Assert.Equal(run.MachineHasInteractiveDesktop, run.CardTookTheInput);
@@ -47,6 +53,12 @@ public class VideoOverlayCoexistenceTests
     [Fact]
     public void TheOverlayStillLetsThePointerTHROUGHAtAllThreeMoments_AndKeepsItsTransparentStyle()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the run puts a REAL Win32 video surface beside a REAL layered overlay and a REAL card and asks "
+            + "the window manager which one owns a point. Off Windows none of the three exists "
+            + "(VideoPresenceFactory hands back UnsupportedVideoPresence and the overlay backend refuses in "
+            + "type), so there is no arbitration to observe");
+
         var run = Run;
         foreach (var (moment, reading) in Moments(run))
         {
@@ -87,6 +99,12 @@ public class VideoOverlayCoexistenceTests
     [Fact]
     public void TheOverlayCapabilityStillEARNSAvailableAfterAVideoSurfaceHasComeAndGone()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the run puts a REAL Win32 video surface beside a REAL layered overlay and a REAL card and asks "
+            + "the window manager which one owns a point. Off Windows none of the three exists "
+            + "(VideoPresenceFactory hands back UnsupportedVideoPresence and the overlay backend refuses in "
+            + "type), so there is no arbitration to observe");
+
         var run = Run;
         Assert.Equal(
             run.MachineHasInteractiveDesktop,

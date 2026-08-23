@@ -248,6 +248,13 @@ public class InputCapabilityTests
     [Fact]
     public void DismissingThePrompt_TakesItDownAndGivesTheKeyboardBack()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle rig puts a REAL card on the desktop, takes the foreground and the system keyboard "
+            + "focus, and asks WindowFromPoint about it. Off Windows no card is created, the handle is 0, and "
+            + "a comparison against 0 answers about nothing; "
+            + "TheLinuxBranchRefusesHonestly_AndCarriesItsManualGateWithIt asserts the honest off-Windows "
+            + "answer on every platform");
+
         var run = InputCaptureObservations.Lifecycle;
 
         Assert.False(run.OsSeesWindowVisibleAfterDismiss,
@@ -420,10 +427,18 @@ public class InputCapabilityTests
         var update = presence.Update(new InputPromptContent("q", "1 of 1", string.Empty, "hint"));
         var dismiss = presence.Dismiss();
 
+        // NO SKIP: Win32InputPresence checks the MECHANISM before it checks whether anything is
+        // prompted, so off Windows both answers are input-mechanism-absent. Either way the property
+        // this fact exists for holds on every platform — asking a presence that has prompted nothing
+        // never reads as success — and asserting the platform's own code keeps it measured there.
+        var expected = OperatingSystem.IsWindows()
+            ? InputReasonCodes.InputNothingPrompted
+            : InputReasonCodes.InputMechanismAbsent;
+
         Assert.False(update is CapabilityState.Available);
-        Assert.Equal(InputReasonCodes.InputNothingPrompted, ((CapabilityState.Unavailable)update).Reason.Code);
+        Assert.Equal(expected, ((CapabilityState.Unavailable)update).Reason.Code);
         Assert.False(dismiss is CapabilityState.Available);
-        Assert.Equal(InputReasonCodes.InputNothingPrompted, ((CapabilityState.Unavailable)dismiss).Reason.Code);
+        Assert.Equal(expected, ((CapabilityState.Unavailable)dismiss).Reason.Code);
         Assert.False(presence.IsPrompting);
         Assert.False(presence.HoldsTheInput);
         Assert.Null(presence.LastPrompt);
@@ -451,6 +466,13 @@ public class InputCapabilityTests
     [Fact]
     public void ACardOnNoDisplayAtAll_NeverClaimsAvailable_AndTheINKReadBackIsWhatCatchesIt()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle rig puts a REAL card on the desktop, takes the foreground and the system keyboard "
+            + "focus, and asks WindowFromPoint about it. Off Windows no card is created, the handle is 0, and "
+            + "a comparison against 0 answers about nothing; "
+            + "TheLinuxBranchRefusesHonestly_AndCarriesItsManualGateWithIt asserts the honest off-Windows "
+            + "answer on every platform");
+
         // A card asked for at a rectangle no monitor covers. THE MEASUREMENT THAT SURPRISED THIS
         // PACKET: the window manager still routes that rectangle's centre to the window —
         // WindowFromPoint walks the window tree, not the monitors — so every capture check passes.
@@ -560,6 +582,13 @@ public class InputCapabilityTests
     [Fact]
     public void HoldingTheInputRequiresTheFOREGROUND_NotJustAFocusRead()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle rig puts a REAL card on the desktop, takes the foreground and the system keyboard "
+            + "focus, and asks WindowFromPoint about it. Off Windows no card is created, the handle is 0, and "
+            + "a comparison against 0 answers about nothing; "
+            + "TheLinuxBranchRefusesHonestly_AndCarriesItsManualGateWithIt asserts the honest off-Windows "
+            + "answer on every platform");
+
         // The mutation that survived the first sweep and is the sharpest of them: dropping the
         // FOREGROUND clause from HoldsTheInput. It is not redundant with the focus read, because
         // GetGUIThreadInfo(0).hwndFocus can name a window of the foreground thread that is NOT the

@@ -39,6 +39,11 @@ public class RealDesktopLeasePrimitiveTests
     [Fact]
     public void TheLease_IsExclusiveWhileHeld_AndHandsTheDesktopBackWhenItIsReleased()
     {
+        // NO PLATFORM BRANCH AND NO SKIP, deliberately: this fact is the one that FAILED on the first
+        // Linux run of this suite, where the second TryTake handed back a live FileStream because a
+        // share mode other than None maps to a SHARED advisory flock there. The assertion was right
+        // and the mechanism was missing; the mechanism is what changed (RealDesktopCollection.cs's
+        // lease remarks), so the same four assertions now have to hold on both platforms.
         var path = Path.Combine(Path.GetTempPath(), "ccp-sp107-lease-" + Guid.NewGuid().ToString("N"));
 
         var first = RealDesktopLease.TryTake(path);
@@ -50,6 +55,7 @@ public class RealDesktopLeasePrimitiveTests
         try
         {
             File.Delete(path);
+            File.Delete(RealDesktopLease.HolderPathFor(path)); // the identity sidecar goes too
         }
         catch (IOException)
         {

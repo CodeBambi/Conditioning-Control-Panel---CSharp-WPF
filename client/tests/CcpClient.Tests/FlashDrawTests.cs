@@ -202,9 +202,17 @@ public class FlashDrawTests
     {
         var run = FlashDrawObservations.Run;
 
-        Assert.Equal(OverlayReasonCodes.OverlayNothingPresented, run.PaintBeforePresentCode);
+        // NO SKIP: the backend checks the MECHANISM before it checks whether anything is presented,
+        // so off Windows both of these are overlay-mechanism-absent. The property the fact exists
+        // for — a paint that did not happen is a TYPED refusal and never a silent no-op — is exactly
+        // as true there, and the disposed answer is unchanged because disposal is checked first.
+        var nothingPresented = OperatingSystem.IsWindows()
+            ? OverlayReasonCodes.OverlayNothingPresented
+            : OverlayReasonCodes.OverlayMechanismAbsent;
+
+        Assert.Equal(nothingPresented, run.PaintBeforePresentCode);
         Assert.Equal(OverlayReasonCodes.OverlayPresenceDisposed, run.PaintAfterDisposeCode);
-        Assert.Equal(OverlayReasonCodes.OverlayNothingPresented, run.PaintAfterWithdrawCode);
+        Assert.Equal(nothingPresented, run.PaintAfterWithdrawCode);
         Assert.False(run.PaintAfterWithdrawClaimedAvailable);
     }
 
@@ -216,10 +224,15 @@ public class FlashDrawTests
         // of the wrong size would appear as a plausible picture rather than as a bug.
         var run = FlashDrawObservations.Run;
 
+        // Three machine classes, three honest codes, refusal in all of them: a Windows desktop
+        // reaches the size check, a Windows session with no desktop never presented anything, and a
+        // machine with no USER32 stops at the mechanism. What is never true anywhere is a stretch.
         Assert.Equal(
             run.MachineHasInteractiveDesktop
                 ? OverlayReasonCodes.OverlayFrameSizeMismatch
-                : OverlayReasonCodes.OverlayNothingPresented,
+                : OperatingSystem.IsWindows()
+                    ? OverlayReasonCodes.OverlayNothingPresented
+                    : OverlayReasonCodes.OverlayMechanismAbsent,
             run.WrongSizeFrameCode);
         Assert.False(run.WrongSizeFrameClaimedAvailable);
     }
@@ -238,6 +251,11 @@ public class FlashDrawTests
     [Fact]
     public void TheProductsOwnDecoder_SizesARealImageFileByWpfsGeometry()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the product's flash frame source decodes through GDI+ (gdiplus.dll), a Windows mechanism: "
+            + "GdiPlusRuntime.Available is false off Windows, every Render returns null, and this port has no "
+            + "Linux image decoder to measure instead");
+
         // A real .png on disk, decoded by the product's own frame source at the size WPF's
         // CalculateGeometry asks for (FlashService.cs:2292-2301) — decode-at-display-size, which is
         // what upstream does too.
@@ -262,6 +280,11 @@ public class FlashDrawTests
     [Fact]
     public void ATransparentImage_IsComposedOverBlack_AsWpfsFlashWindowDoes()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the product's flash frame source decodes through GDI+ (gdiplus.dll), a Windows mechanism: "
+            + "GdiPlusRuntime.Available is false off Windows, every Render returns null, and this port has no "
+            + "Linux image decoder to measure instead");
+
         // WPF's flash window background is Brushes.Black (FlashService.cs:1245) and the image sits
         // on it. This surface has ONE uniform alpha and no per-pixel alpha to give a transparent
         // PNG, so the black backing is what stops the desktop showing through in a shape nobody

@@ -330,8 +330,18 @@ public class CompanionViewModelTests
         await h.StartMemoryAsync();
         await SeedMemoryAsync(h, "locked turn");
 
-        // Hold the document open exclusively so the delete fails (AV-scanner/lock class).
-        using (var lockStream = new FileStream(h.MemoryFile, FileMode.Open, FileAccess.Read, FileShare.None))
+        // STAGING AN UNDELETABLE DOCUMENT IS PLATFORM WORK; THE FACT IS NOT. The product's branch has
+        // no platform in it — AiMemoryStore.Clear reports Failed whenever the document survives the
+        // delete, and a privacy operation that reported "cleared" over a surviving file would lie
+        // identically on either OS. What differs is only how a delete is MADE to fail, so the branch
+        // lives in the staging helper and this fact runs everywhere rather than resting in a skip.
+        var staging = StageAnUndeletableDocument(h.MemoryFile);
+        Assert.SkipWhen(staging is null,
+            "this process can unlink through a directory it cannot write (an effective-root or "
+            + "CAP_DAC_OVERRIDE process), so a delete that FAILS cannot be staged on this machine at all — "
+            + "and a fact that ran anyway would be asserting about a delete that succeeded");
+
+        using (staging)
         {
             h.Vm.RequestClearCommand.Execute(null);
             h.Vm.ConfirmClearCommand.Execute(null);
@@ -340,6 +350,63 @@ public class CompanionViewModelTests
 
         Assert.Contains("could not be deleted", h.Vm.ClearOutcomeText);
         Assert.True(File.Exists(h.MemoryFile)); // the document survived — the text told the truth
+    }
+
+    /// <summary>
+    /// Makes <paramref name="file"/> survive a <see cref="File.Delete(string)"/>, and hands back the
+    /// undo. Null means this machine cannot be made to refuse a delete at all.
+    ///
+    /// <para><b>Windows</b>: hold the document open with no sharing — the AV-scanner/lock class, and
+    /// the OS refuses the unlink outright.</para>
+    ///
+    /// <para><b>Unix</b>: an open handle refuses nothing. <c>unlink</c> consults the DIRECTORY's
+    /// write bit, not the file's, and .NET's <see cref="FileShare"/> maps to an ADVISORY
+    /// <c>flock</c> that a delete never consults — measured on this port's first Linux run, where
+    /// the same <see cref="FileShare.None"/> handle let the delete succeed and this whole branch
+    /// became unreachable. So the containing directory loses its write bit instead, and the staging
+    /// PROVES itself on a sentinel before the product is asked, because a process that can override
+    /// the bit would otherwise turn a real product fact into a false red.</para>
+    /// </summary>
+    private static IDisposable? StageAnUndeletableDocument(string file)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None);
+        }
+
+        var folder = Path.GetDirectoryName(file)!;
+        var sentinel = Path.Combine(folder, "delete-refusal-sentinel");
+        File.WriteAllText(sentinel, "written before the directory is closed, deleted to prove it is");
+
+        var restore = new UnixDirectoryMode(folder, File.GetUnixFileMode(folder));
+        File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            File.Delete(sentinel);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return restore; // the directory really does refuse a delete: the staging holds
+        }
+        catch (IOException)
+        {
+            return restore;
+        }
+
+        restore.Dispose();
+        return null;
+    }
+
+    /// <summary>Puts a directory's permissions back, on every path out of the fact.</summary>
+    private sealed class UnixDirectoryMode(string folder, UnixFileMode mode) : IDisposable
+    {
+        public void Dispose()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(folder, mode);
+            }
+        }
     }
 
     private static async Task SeedMemoryAsync(Harness h, string text)

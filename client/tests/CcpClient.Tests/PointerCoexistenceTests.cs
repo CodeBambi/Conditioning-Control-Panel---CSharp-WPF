@@ -56,6 +56,12 @@ public class PointerCoexistenceTests
     [Fact]
     public void TheOverlayStaysCLICKTHROUGH_AtAllFourMoments_IncludingDuringAMove()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "this reading is the Win32 window manager arbitrating between four REAL top-level windows (a hit "
+            + "test, a foreground read, a system keyboard-focus read). Off Windows none of them exists, every "
+            + "handle is 0, and a 0 == 0 comparison would answer YES about nothing; the machine-keyed facts in "
+            + "this class carry what CAN be said off Windows");
+
         var run = PointerSurfaceObservations.Coexistence;
 
         Assert.True(run.OverlayBefore.PointPassesThrough);
@@ -104,6 +110,12 @@ public class PointerCoexistenceTests
     [Fact]
     public void THECARDKEEPSTHEFOREGROUNDANDTHEKEYBOARD_ThroughAnOpenAMoveAndAClose()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "this reading is the Win32 window manager arbitrating between four REAL top-level windows (a hit "
+            + "test, a foreground read, a system keyboard-focus read). Off Windows none of them exists, every "
+            + "handle is 0, and a 0 == 0 comparison would answer YES about nothing; the machine-keyed facts in "
+            + "this class carry what CAN be said off Windows");
+
         // THE TRAP-2 FACT, and the one this capability could most plausibly break: the Lock Card
         // holds the two things the operating system lends to exactly one window at a time, and a
         // pointer target is placed, raised to the topmost band, and then MOVED repeatedly beside it.

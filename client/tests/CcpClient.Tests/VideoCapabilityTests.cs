@@ -30,6 +30,14 @@ public class VideoCapabilityTests
     [Fact]
     public void TheOperatingSystemOpensASynthesisedClipAndReportsItsOwnPictureSize()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
         Assert.True(
             m.OpenState is CapabilityState.Available,
@@ -51,6 +59,14 @@ public class VideoCapabilityTests
     [Fact]
     public void TheDecodedPictureComesBackTheRIGHTWAYUP_BecauseTheOperatingSystemHandsItBackBOTTOMUP()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
 
         // Measured, not assumed: Media Foundation reports MF_MT_DEFAULT_STRIDE = -1280 for this
@@ -80,7 +96,17 @@ public class VideoCapabilityTests
         var state = source.Open(path, out var clip);
         Assert.Null(clip);
         var unavailable = Assert.IsType<CapabilityState.Unavailable>(state);
-        Assert.Equal(VideoReasonCodes.VideoClipUnreadable, unavailable.Reason.Code);
+
+        // NO SKIP: asking for the WINDOWS decoder from a process that is not on Windows is a thing
+        // this suite does on purpose (VideoPresenceFactory.CreateClipSourceFor says so), and the
+        // answer there is the absent-mechanism refusal rather than a verdict about the file — the
+        // factory never hands out Media Foundation off Windows, so no file is ever read. Both codes
+        // are typed refusals and both are the truth about their platform.
+        Assert.Equal(
+            OperatingSystem.IsWindows()
+                ? VideoReasonCodes.VideoClipUnreadable
+                : VideoReasonCodes.VideoMechanismAbsent,
+            unavailable.Reason.Code);
 
         // The whole point of two families of code: a bad file must never be reported as a dead
         // surface, because the next clip in the pool may play perfectly.
@@ -96,12 +122,27 @@ public class VideoCapabilityTests
 
         Assert.Null(clip);
         var unavailable = Assert.IsType<CapabilityState.Unavailable>(state);
-        Assert.Equal(VideoReasonCodes.VideoClipUnreadable, unavailable.Reason.Code);
+
+        // Same platform pair as the fact above, and the same reason: off Windows nothing is opened
+        // because there is no decoder to open it with, which the refusal says in type.
+        Assert.Equal(
+            OperatingSystem.IsWindows()
+                ? VideoReasonCodes.VideoClipUnreadable
+                : VideoReasonCodes.VideoMechanismAbsent,
+            unavailable.Reason.Code);
     }
 
     [Fact]
     public void DecodedFramesAndFramesTheOperatingSystemHOLDS_AreTwoDifferentNumbers_AndBothAreReported()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
 
         // Three decoded pictures. On its own this proves a FILE is readable and nothing more — the
@@ -124,6 +165,14 @@ public class VideoCapabilityTests
     [Fact]
     public void TheOperatingSystemHoldsTheSurfaceAboveEveryOrdinaryWindow_AndNEVERMakesItTheForeground()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
         Assert.True(
             m.PresentState is CapabilityState.Available,
@@ -158,6 +207,14 @@ public class VideoCapabilityTests
     [Fact]
     public void TheOperatingSystemsOwnCopyOfTheSurfaceCarriesTheDECODEDPicture_OverABarItReadsBackEXACTLY()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
         Assert.NotEmpty(m.Frames);
 
@@ -186,6 +243,14 @@ public class VideoCapabilityTests
     [Fact]
     public void TheSurfacesOwnPixelsCHANGEBetweenTwoDifferentFrames_WhichNoCountOfDecodedBuffersCanShow()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
         Assert.True(m.Frames.Count >= 3, $"the fixture must present at least three frames; it presented {m.Frames.Count}");
 
@@ -209,6 +274,14 @@ public class VideoCapabilityTests
     [Fact]
     public void AFrameHandedOverTWICE_LeavesTheSurfaceUnchanged_AndIsStillALivePicture()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
 
         Assert.True(
@@ -230,6 +303,14 @@ public class VideoCapabilityTests
     [Fact]
     public void TheOperatingSystemsOwnRENDERINGOfTheWindow_MatchesThePortsCompositionPixelForPixel()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
         var area = VideoSurfaceObservations.SurfaceWidth * VideoSurfaceObservations.SurfaceHeight;
         Assert.NotEmpty(m.Frames);
@@ -247,6 +328,14 @@ public class VideoCapabilityTests
     [Fact]
     public void TheCOMPOSITEDDESKTOPCarriesTheDecodedPicture_AndItChangesFrameByFrame()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
 
         if (!m.DesktopCaptureIsLive)
@@ -279,6 +368,14 @@ public class VideoCapabilityTests
     [Fact]
     public void WithdrawTakesTheSurfaceDown_AndTheOperatingSystemAgrees()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
         Assert.True(
             m.WithdrawState is CapabilityState.Available,
@@ -293,6 +390,14 @@ public class VideoCapabilityTests
     [Fact]
     public void EveryRefusalIsTyped_AndNamesWHICHLinkOfTheChainFailed()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
         Assert.Equal(VideoReasonCodes.VideoNothingPresented, m.ShowBeforePresentCode);
         Assert.Equal(VideoReasonCodes.VideoNothingPresented, m.ShowAfterWithdrawCode);
@@ -303,6 +408,14 @@ public class VideoCapabilityTests
     [Fact]
     public void TheDisplayReadBackIsTheNECESSARYCondition_AndItIsAskedOfTheOperatingSystem()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var m = Observed;
         Assert.True(m.DisplayObservation.Asked);
         Assert.Equal(m.MachineHasInteractiveDesktop, m.DisplayObservation.WindowStationVisible);
@@ -372,6 +485,14 @@ public class VideoCapabilityTests
     [Fact]
     public void ASurfaceTAKESItsOwnPointBackFromAWindowPlacedOverIt_AndThatIsWhyOcclusionCannotBeStaged()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var edges = VideoSurfaceObservations.Edges;
 
         // MEASURED, and it is the reason this packet's occlusion refusal has no positive fact behind
@@ -395,6 +516,14 @@ public class VideoCapabilityTests
     [Fact]
     public void AWindowREADBACKIsAboutTheOperatingSystemsCopy_NOTAboutAnyMonitor_AndThatLimitIsMeasured()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var edges = VideoSurfaceObservations.Edges;
 
         // A surface at (-8000,-8000) — a rectangle NO MONITOR COVERS — still passes every window
@@ -413,6 +542,14 @@ public class VideoCapabilityTests
     [Fact]
     public void AFileWithNoVIDEOSTREAMSaysSO_RatherThanBlamingThePixelFormat()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the measured run decodes through Media Foundation and reads a REAL Win32 surface back out of "
+            + "the operating system; both are Windows mechanisms. Off Windows the factory hands back "
+            + "UnsupportedVideoClipSource and UnsupportedVideoPresence and nothing is attempted, which "
+            + "Linux_RefusesTyped_AndNamesTheSixStepGateIncludingTheOneWaylandCannotPass and "
+            + "Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows assert on "
+            + "every platform");
+
         var edges = VideoSurfaceObservations.Edges;
         Assert.Equal(VideoReasonCodes.VideoClipUnreadable, edges.AudioOnlyOpenCode);
 

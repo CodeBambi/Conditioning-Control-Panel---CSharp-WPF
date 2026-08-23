@@ -72,14 +72,31 @@ public sealed class RealDesktopCollection : ICollectionFixture<RealDesktopLease>
 /// lock-file-existence scheme in <c>with-slot.mjs</c>, which needs a reaper for exactly that
 /// case.</para>
 ///
-/// <para><b>The share mode is <see cref="FileShare.Read"/>, not <see cref="FileShare.None"/>, and
-/// that is the whole difference between CLAIMING to name the holder and naming it.</b> The holder
-/// opens for WRITE and writes its own process id into the file; a contender's write-open is refused
-/// because write sharing is not granted, and a contender's READ-open still succeeds, so it can say
-/// WHO has the desktop instead of asserting that somebody must. Under <c>FileShare.None</c> the
-/// file is unreadable while held and the failure message could only ever have been a guess — which
-/// is what the first draft of this class shipped, interpolating the CONTENDER's own pid next to a
-/// sentence asserting a peer existed.</para>
+/// <para><b>The share mode is <see cref="FileShare.None"/>, and on the first Linux run of this suite
+/// it was NOT, which is the whole reason this paragraph is here.</b> The earlier design opened the
+/// lease with <see cref="FileShare.Read"/> so a contender could still read the holder's pid out of
+/// it. On Windows that excludes: a second WRITE-open is refused because write sharing was not
+/// granted. <b>On Linux it excludes nothing.</b> .NET maps a share mode to an ADVISORY <c>flock</c>
+/// — <see cref="FileShare.None"/> to <c>LOCK_EX</c> and every other mode to <c>LOCK_SH</c> — so two
+/// runs asking for <see cref="FileShare.Read"/> both took a SHARED lock and both got a live
+/// <see cref="FileStream"/> back. Two processes would each have believed they held the one
+/// interactive desktop, which is precisely the defect the lease exists to prevent, silently, on the
+/// platform where nobody had looked yet.</para>
+///
+/// <para><b>So the exclusion and the identity are now two different files, because on Linux they
+/// cannot be the same one.</b> The lease file carries the LOCK and no bytes anybody reads; the
+/// holder's pid goes in a sidecar (<c>&lt;lease&gt;.holder</c>) that nothing holds open, so naming
+/// WHO has the desktop still works while the lease is held — under an exclusive lock the lease file
+/// itself is unreadable to a contender on BOTH platforms, and a failure message that could only
+/// guess is what the first draft of this class shipped, interpolating the CONTENDER's own pid next
+/// to a sentence asserting a peer existed.</para>
+///
+/// <para><b>And the exclusion is VERIFIED at construction rather than assumed.</b> A
+/// <c>flock</c> is advisory and not every filesystem implements one — .NET ignores
+/// <c>ENOTSUP</c>, which is exactly the shape of a lease that silently stops excluding (NFS, an SMB
+/// mount, DrvFs over <c>/mnt/c</c>). The constructor therefore asks for the lease a SECOND time
+/// while holding it and refuses loudly if that succeeds, so the next run to lose this mechanism
+/// finds out at the fixture instead of in whichever OS-level fact loses the race.</para>
 /// </summary>
 public sealed class RealDesktopLease : IDisposable
 {
@@ -103,6 +120,24 @@ public sealed class RealDesktopLease : IDisposable
             $"exclusive use of this machine's interactive desktop (lease file {path})",
             () => DescribeRefusal(path),
             TestWait.InjectedBudget);
+
+        // THE LEASE IS ASKED TO PROVE ITSELF, ONCE, WHILE IT IS HELD. A share mode is a promise the
+        // FILESYSTEM keeps, and on Unix it is an advisory flock that a filesystem may not implement
+        // at all (.NET ignores ENOTSUP, so the open just succeeds). A lease that has quietly stopped
+        // excluding looks exactly like a lease that works, until two runs share the desktop — the
+        // measured Linux failure. One extra open costs nothing and turns that into a refusal here.
+        if (TryTake(path, out _) is { } notExcluded)
+        {
+            notExcluded.Dispose();
+            throw new Xunit.Sdk.XunitException(
+                $"the machine-wide desktop lease at {path} was taken, and then taken AGAIN while it was held. "
+                + "The exclusion this collection rests on does not exist on this filesystem: a FileShare.None "
+                + "open maps to an advisory flock on Unix and .NET ignores ENOTSUP where the filesystem has no "
+                + "flock (NFS, SMB, WSL's DrvFs over /mnt/c). Two concurrent runs would BOTH believe they hold "
+                + "the interactive desktop, which is the exact contention this fixture exists to prevent. Run "
+                + "the suite from a filesystem that implements file locking, or give the lease a mechanism that "
+                + "does not rest on open semantics.");
+        }
 
         Preflight = DesktopPreflight.Observe();
         if (DesktopPreflight.Refusal(Preflight) is { } refusal)
@@ -141,10 +176,12 @@ public sealed class RealDesktopLease : IDisposable
         FileStream? stream = null;
         try
         {
-            stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
-            var identity = System.Text.Encoding.UTF8.GetBytes($"pid={Environment.ProcessId}");
-            stream.Write(identity, 0, identity.Length);
-            stream.Flush();
+            // FileShare.None is the EXCLUSION on both platforms: a denied second write-open on
+            // Windows, an exclusive flock on Unix. Every other share mode takes a SHARED flock there
+            // and excludes nothing (see the class remarks). The identity is written afterwards, to a
+            // sidecar, because this handle now makes the lease file unreadable to everyone else.
+            stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+            WriteHolder(path);
             refusal = null;
             return stream;
         }
@@ -164,15 +201,23 @@ public sealed class RealDesktopLease : IDisposable
         }
     }
 
+    /// <summary>The sidecar that names the holder. Never held open by anyone, which is what makes it
+    /// readable while the lease itself is locked shut.</summary>
+    public static string HolderPathFor(string leasePath) => leasePath + ".holder";
+
     /// <summary>
-    /// The holder's process id, read out of the lease file, or null when nothing readable is there.
-    /// It works WHILE the lease is held precisely because the holder grants read sharing.
+    /// The holder's process id, read out of the sidecar, or null when nothing readable is there.
+    /// It works WHILE the lease is held precisely because the sidecar is not the locked file.
     /// </summary>
     public static int? HolderProcessId(string path)
     {
         try
         {
-            using var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            // ReadWrite sharing on BOTH sides (here and in WriteHolder) so a read that lands in the
+            // same instant as a holder's write is answered rather than refused on Windows; a torn
+            // read simply fails to parse and comes back null, which is the same answer as no file.
+            using var reader = new FileStream(
+                HolderPathFor(path), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             var buffer = new byte[64];
             var read = reader.Read(buffer, 0, buffer.Length);
             var text = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
@@ -182,11 +227,33 @@ public sealed class RealDesktopLease : IDisposable
         }
         catch (IOException)
         {
+            // FileNotFoundException and DirectoryNotFoundException are IOExceptions: a lease nobody
+            // has taken yet has no sidecar, and "no readable holder" is the honest answer for it.
             return null;
         }
         catch (UnauthorizedAccessException)
         {
             return null;
+        }
+    }
+
+    /// <summary>Writes this process's id beside the lease it has just taken. Best effort by design:
+    /// the lease is already HELD by the time this runs, and an unnamed holder degrades a failure
+    /// message rather than the exclusion.</summary>
+    private static void WriteHolder(string path)
+    {
+        try
+        {
+            using var identity = new FileStream(
+                HolderPathFor(path), FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+            var bytes = System.Text.Encoding.UTF8.GetBytes($"pid={Environment.ProcessId}");
+            identity.Write(bytes, 0, bytes.Length);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 

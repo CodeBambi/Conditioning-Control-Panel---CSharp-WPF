@@ -269,10 +269,18 @@ public class OverlayCapabilityTests
     {
         var run = OverlayObservations.NothingPresented();
 
+        // NO SKIP: Win32OverlayPresence checks the MECHANISM before it checks whether anything is
+        // presented, so off Windows both answers are overlay-mechanism-absent. The claim this fact
+        // makes — asking a presence that has presented nothing NEVER reads as success — is true on
+        // every platform, and asserting each platform's own code is what keeps it measured there.
+        var nothingPresented = OperatingSystem.IsWindows()
+            ? OverlayReasonCodes.OverlayNothingPresented
+            : OverlayReasonCodes.OverlayMechanismAbsent;
+
         Assert.False(run.WithdrawClaimedAvailable);
-        Assert.Equal(OverlayReasonCodes.OverlayNothingPresented, run.WithdrawCode);
+        Assert.Equal(nothingPresented, run.WithdrawCode);
         Assert.False(run.ClickThroughClaimedAvailable);
-        Assert.Equal(OverlayReasonCodes.OverlayNothingPresented, run.ClickThroughCode);
+        Assert.Equal(nothingPresented, run.ClickThroughCode);
         Assert.False(run.DisposedPresentClaimedAvailable);
         Assert.Equal(OverlayReasonCodes.OverlayPresenceDisposed, run.DisposedPresentCode);
     }

@@ -141,6 +141,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void PresentEarnsAvailableONLYWhereTheMachineHasADesktop()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
 
         Assert.True(
@@ -154,6 +161,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void TheOSHoldsTheSurface_ItExists_IsVisible_AndCarriesExactlyTheRequestedRectangle()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
 
         Assert.Equal(run.MachineHasInteractiveDesktop, run.ExistsAfterPresent);
@@ -165,6 +179,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void THESURFACEHOLDSNOUNIFORMALPHA_WhichIsTheWholeDifferenceFromTheOverlay()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         // -1 means GetLayeredWindowAttributes returned FALSE. For the overlay that reading is the
         // GHOST and its capability refuses on it; here it is the CORRECT state and the refusal is
         // the other way round. Asserting it pins that these two capabilities really are driving
@@ -178,6 +199,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void TheExtendedStyleReadBackCarriesEveryBitThatWasWritten()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
 
         // WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOPMOST, then WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT.
@@ -189,6 +217,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void TheOSsOwnZOrderPutsTheSurfaceAboveEveryOrdinaryWindow()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
         Assert.Equal(run.MachineHasInteractiveDesktop, run.ZOrderAfterPresent.AboveEveryOrdinaryWindow);
     }
@@ -196,12 +231,26 @@ public class GlyphCapabilityTests
     [Fact]
     public void TheSurfaceNeverTakesTheForeground()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         Assert.False(GlyphSurfaceObservations.Lifecycle.ForegroundAfterPresent);
     }
 
     [Fact]
     public void TheWindowManagerRoutesThePointPASTIt_AndTOItWhenMomentarilyMadeOpaque()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         // Both legs, one run, same point. "The point does not route to this window" is also true of
         // a window that was never created, so the second leg is what makes the first non-vacuous.
         var run = GlyphSurfaceObservations.Lifecycle;
@@ -215,6 +264,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void THEOSSOWNCOPYOFTHESURFACECarriesTheFrame_AtEveryOpaqueInkPoint()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         // The capability's Available cannot be reached without this, and the ghost control above is
         // what makes it a fact rather than a formality.
         var run = GlyphSurfaceObservations.Lifecycle;
@@ -230,6 +286,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void AndTheTransparentQuadrantReadsBackAsNOTHING_WhichIsTheLIMITOfThisReadBack()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         // Asserted so the limit is pinned rather than confessed in prose: a fully transparent pixel
         // and an opaque BLACK pixel are the SAME value here. Nothing in a window read-back can
         // separate them; that separation is the differential run's, over a known background.
@@ -241,6 +304,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void PaintReplacesTheContent_AndTheOSsCopyREALLYCHANGED()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
 
         Assert.True(
@@ -259,6 +329,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void AMOVEIsOneCall_ItEarnsAvailableFromGetWindowRect_AndTheContentSurvivesIt()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         // The operation the overlay does not have, and the one D84 named as its closer.
         var run = GlyphSurfaceObservations.Lifecycle;
 
@@ -276,6 +353,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void AMoveThatWouldRESIZEIsRefused_BecauseTheLayeredSurfaceISTheFrame()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
         var refusal = Assert.IsType<CapabilityState.Unavailable>(run.ResizingMoveState);
         Assert.Equal(GlyphReasonCodes.GlyphGeometryRefused, refusal.Reason.Code);
@@ -284,6 +368,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void ANINKLESSFRAMEIsREFUSED_BecauseNothingCouldTellItFromAGhost()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         // The measurement behind this refusal is in the control above: an entirely transparent
         // composite reads back zero non-zero pixels, byte for byte what a never-composited window
         // reads. Claiming Available there would be claiming exactly the thing this packet forbids.
@@ -304,8 +395,17 @@ public class GlyphCapabilityTests
             new GlyphSurfaceRequest(new GlyphBounds(0, 0, 16, 16), 1.0, ClickThrough: true),
             GlyphFrame.Solid(16, 16, 255, 255, 255, 0));
 
+        // NO SKIP: the refusal is asserted on BOTH platforms, because both are real. Win32GlyphSurface
+        // checks the MECHANISM before the frame (the platform branch precedes the ink check), so off
+        // Windows the honest answer is glyph-mechanism-absent — still typed, still a refusal, still
+        // reached before any window could exist. Asserting the platform's own code keeps this fact
+        // measuring something everywhere rather than resting in allowedSkips.
         var refusal = Assert.IsType<CapabilityState.Unavailable>(state);
-        Assert.Equal(GlyphReasonCodes.GlyphFrameCarriesNoProvableInk, refusal.Reason.Code);
+        Assert.Equal(
+            OperatingSystem.IsWindows()
+                ? GlyphReasonCodes.GlyphFrameCarriesNoProvableInk
+                : GlyphReasonCodes.GlyphMechanismAbsent,
+            refusal.Reason.Code);
 
         // And nothing was created: the refusal happens BEFORE any window exists.
         Assert.Equal(0, surface.NativeHandles.Window);
@@ -315,6 +415,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void AMismatchedFrameIsRefusedRatherThanStretched()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
         var refusal = Assert.IsType<CapabilityState.Unavailable>(run.MismatchedFrameState);
         Assert.Equal(GlyphReasonCodes.GlyphFrameSizeMismatch, refusal.Reason.Code);
@@ -323,6 +430,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void WithdrawTakesItOffTheScreenAndOutOfTheHitTest_AndKeepsTheComposite()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
 
         Assert.True(
@@ -341,6 +455,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void PaintingAWithdrawnSurfaceIsRefused()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
         var refusal = Assert.IsType<CapabilityState.Unavailable>(run.PaintAfterWithdrawState);
         Assert.Equal(GlyphReasonCodes.GlyphNothingPresented, refusal.Reason.Code);
@@ -349,6 +470,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void DisposeLeavesNoTopLevelWindowBehind_AndNoTeardownDiagnostic()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
         Assert.False(run.ExistsAfterDispose);
         Assert.Null(run.TeardownDiagnostic);
@@ -537,17 +665,32 @@ public class GlyphCapabilityTests
             surface.Withdraw(),
         };
 
+        // NO SKIP, same reason as PRESENTALSOREFUSESANINKLESSFRAME_NotOnlyPaint: every one of the
+        // three entry points checks the MECHANISM before it checks whether anything is presented, so
+        // off Windows all three answer glyph-mechanism-absent. Both codes are refusals and both are
+        // true of their platform; what must never happen — on either — is a success.
+        var expected = OperatingSystem.IsWindows()
+            ? GlyphReasonCodes.GlyphNothingPresented
+            : GlyphReasonCodes.GlyphMechanismAbsent;
+
         Assert.Equal(3, states.Length);
         foreach (var state in states)
         {
             var refusal = Assert.IsType<CapabilityState.Unavailable>(state);
-            Assert.Equal(GlyphReasonCodes.GlyphNothingPresented, refusal.Reason.Code);
+            Assert.Equal(expected, refusal.Reason.Code);
         }
     }
 
     [Fact]
     public void PresentNAMESWhatItDoesNotClaim_TheTransparentPixelAndTheHumanEye()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         // The Available detail is read by the module panel and by a bug report. A claim that did not
         // carry its own limits would be the thing the packet calls the most easily faked property.
         var run = GlyphSurfaceObservations.Lifecycle;
@@ -563,6 +706,13 @@ public class GlyphCapabilityTests
     [Fact]
     public void AndTheMOVEsAvailableSaysExactlyWhatItDidNotReask()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the lifecycle run drives a REAL Win32 layered surface through USER32 "
+            + "(GlyphSurfaceObservations.Lifecycle), which exists on no other platform; the honest answer off "
+            + "Windows is the typed glyph-mechanism-absent refusal, asserted on EVERY platform by "
+            + "EveryUnsupportedPlatformRefusesInTYPE_OnEveryOperation and "
+            + "TheLinuxRefusalNamesTheROUTE_TheCOMPOSITOR_AndTheUndischargedGate");
+
         var run = GlyphSurfaceObservations.Lifecycle;
 
         Assert.Equal(
