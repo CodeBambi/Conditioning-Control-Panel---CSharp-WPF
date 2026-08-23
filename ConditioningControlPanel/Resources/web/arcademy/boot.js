@@ -112,6 +112,31 @@ function armBootDeadline() {
   }, BOOT_DEADLINE_MS);
 }
 
+/* ----------------------------------------------------------------------------
+ * THE SPLASH DISMISSAL. The loader doubles as the ~1.2s intro splash (see
+ * index.html): a boot that lands early WAITS OUT the beat instead of cutting
+ * it, a boot that lands late dismisses on arrival. `.is-done` plays the CSS
+ * exit (fade + zoom-through); the `hidden` attribute stays the ground truth a
+ * beat later. FAILURE PATHS NEVER WAIT - failBoot below still snaps
+ * `hidden = true` directly, so an error card is never delayed by a celebration.
+ * -------------------------------------------------------------------------- */
+const INTRO_MIN_MS = 1150;
+const INTRO_EXIT_MS = 320;
+const introT0 = Date.now();
+
+function dismissLoader() {
+  const el = dom.loader;
+  if (!el || el.hidden) return;
+  const wait = Math.max(0, INTRO_MIN_MS - (Date.now() - introT0));
+  setTimeout(() => {
+    try {
+      if (el.hidden) return;             // a failBoot got there first
+      el.classList.add('is-done');
+      setTimeout(() => { try { el.hidden = true; } catch (e) { /* noop */ } }, INTRO_EXIT_MS);
+    } catch (e) { try { el.hidden = true; } catch (e2) { /* noop */ } }
+  }, wait);
+}
+
 function failBoot(msg) {
   if (bootSettled) return;
   bootSettled = true;
@@ -146,7 +171,7 @@ async function start() {
     });
     bootSettled = true;
     clearTimeout(deadlineTimer);
-    if (dom.loader) dom.loader.hidden = true;
+    dismissLoader();
     log('shell live');
     // Replay the native state that landed while we were importing (see the
     // 'suspend' handler). After the shell exists so the class_suspended treatment

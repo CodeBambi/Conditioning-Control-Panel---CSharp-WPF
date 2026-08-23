@@ -46,10 +46,29 @@
     <!-- Transient shell chatter: Esc-ladder hints, "copied", suspend notices. -->
     <div id="arc-toast" class="arc-toast" role="status" aria-live="polite"></div>
 
-    <!-- Loader: covers the page until init arrives and the board is dealt. -->
+    <!-- Loader: covers the page until init arrives and the board is dealt.
+         Doubles as THE INTRO SPLASH (~1.2s): CRT power-on -> the wordmark THUD
+         (Feel Dept stamp punch) -> the pixel tail flies home -> checker rail
+         chase -> sparkle burst -> zoom-through exit. Pure CSS on a fixed
+         timeline, starts at t0 with no init needed; if boot runs long the tail
+         animations hold as an idle loop. boot.js's whole contract with this div
+         is unchanged: the `hidden` attribute, plus the `is-done` class that
+         plays the exit beat (failure paths snap `hidden` and skip the beat).
+         Reduced motion collapses it to a static card (styles.css). -->
     <div id="arc-loader" class="arc-loader">
-        <div class="arc-loader-ring" aria-hidden="true"></div>
-        <p>Opening <span class="arc-loader-name">The Arcademy</span>&#8230;</p>
+        <div class="arc-intro-burst" aria-hidden="true"></div>
+        <div class="arc-intro-stage" aria-hidden="true">
+            <span class="arc-intro-ring"></span>
+            <img class="arc-intro-mark" src="./art/arcademy-wordmark.png" alt="" draggable="false">
+            <span class="arc-intro-glint"></span>
+            <span class="arc-intro-bit"></span><span class="arc-intro-bit"></span><span class="arc-intro-bit"></span><span class="arc-intro-bit"></span><span class="arc-intro-bit"></span><span class="arc-intro-bit"></span><span class="arc-intro-bit"></span><span class="arc-intro-bit"></span><span class="arc-intro-bit"></span><span class="arc-intro-bit"></span>
+            <span class="arc-intro-spark"></span><span class="arc-intro-spark"></span><span class="arc-intro-spark"></span><span class="arc-intro-spark"></span><span class="arc-intro-spark"></span><span class="arc-intro-spark"></span>
+        </div>
+        <div class="arc-intro-rail" aria-hidden="true"></div>
+        <p class="arc-intro-caption">Opening <span class="arc-loader-name">The Arcademy</span>&#8230;</p>
+        <div class="arc-intro-scan" aria-hidden="true"></div>
+        <div class="arc-intro-flash" aria-hidden="true"></div>
+        <div class="arc-intro-crt" aria-hidden="true"></div>
     </div>
 
     <!-- Boot failure fallback (boot-error was posted; the host closes us). -->
