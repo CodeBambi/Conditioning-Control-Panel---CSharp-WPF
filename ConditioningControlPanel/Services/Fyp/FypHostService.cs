@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Linq;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Fyp.Online;
 
 namespace ConditioningControlPanel.Services.Fyp;
@@ -177,7 +178,17 @@ internal static class FypHostService
                         subs = n.Subs,
                         selected = s?.FypOnlineNiches?.Contains(n.Id) ?? false,
                     }),
-                    customSubs = s?.FypOnlineCustomSubs ?? new List<string>(),
+                    // Each custom sub rides with its last probe verdict so the page can paint
+                    // the verified pill (and its clip count) on first frame instead of
+                    // re-probing the whole list on every open. ok/videoCount are null when we
+                    // have never asked — "unknown", which the page renders differently from
+                    // a known-bad sub.
+                    customSubs = (s?.FypOnlineCustomSubs ?? new List<string>()).Select(name =>
+                    {
+                        RemoteSubVerdict? v = null;
+                        s?.FypOnlineSubVerdicts.TryGetValue(name, out v);
+                        return new { name, ok = (bool?)v?.Ok, videoCount = v?.VideoCount };
+                    }),
                 },
                 stats = LoadStats(),
             });
@@ -241,6 +252,11 @@ internal static class FypHostService
             case "need-remote":
             {
                 ServeRemoteBatch();
+                break;
+            }
+            case "probe-sub":
+            {
+                ProbeCustomSub((string?)o["sub"]);
                 break;
             }
             case "attention-hit":
@@ -372,6 +388,12 @@ internal static class FypHostService
                         s.FypOnlineCustomSubs = arr.Select(t => FypOnlineCoordinator.SanitizeSub((string?)t))
                             .Where(x => x != null).Select(x => x!)
                             .Distinct(StringComparer.OrdinalIgnoreCase).Take(20).ToList();
+                        // This is the page's REMOVE path (it posts the surviving list), so drop
+                        // the verdicts of whatever is gone — otherwise the store grows forever
+                        // with subs nobody kept, and re-adding one would paint a stale pill.
+                        var kept = new HashSet<string>(s.FypOnlineCustomSubs, StringComparer.OrdinalIgnoreCase);
+                        foreach (var gone in s.FypOnlineSubVerdicts.Keys.Where(k => !kept.Contains(k)).ToList())
+                            s.FypOnlineSubVerdicts.Remove(gone);
                         FypOnlineCoordinator.Fyp.ResetChannels();
                     }
                     break;
@@ -393,6 +415,10 @@ internal static class FypHostService
     // Nothing here may ever involve CC Labs servers — see planning/fyp-online/DESIGN.md.
 
     private static int _remoteFetchInFlight;   // 0/1 via Interlocked
+
+    /// <summary>Subs with a probe in the air; a second request for the same name is dropped
+    /// rather than queued (the page commits on Enter AND on blur).</summary>
+    private static readonly HashSet<string> _probesInFlight = new(StringComparer.OrdinalIgnoreCase);
 
     private static bool IsRemoteId(string? id) =>
         id != null && id.StartsWith("scrolller/", StringComparison.Ordinal);
@@ -444,23 +470,114 @@ internal static class FypHostService
         if (System.Threading.Interlocked.CompareExchange(ref _remoteFetchInFlight, 1, 0) != 0) return;
         try
         {
-            var (entries, error) = await FypOnlineCoordinator.Fyp
-                .FetchBatchAsync(System.Threading.CancellationToken.None).ConfigureAwait(false);
+            var batch = await FypOnlineCoordinator.Fyp
+                .FetchBatchDetailedAsync(System.Threading.CancellationToken.None).ConfigureAwait(false);
 
             var win = _host?.Window;
             if (win == null) return;   // feed closed while fetching
             await win.Dispatcher.InvokeAsync(() =>
             {
                 if (_host == null) return;
-                if (entries.Count > 0)
-                    _host.Post(new { type = "assets-append", assets = entries });
+                if (batch.Entries.Count > 0)
+                    _host.Post(new { type = "assets-append", assets = batch.Entries });
                 // Status goes out either way so the page can clear its loading state or
                 // show "offline" instead of an eternal spinner.
-                _host.Post(new { type = "online-status", ok = error == null, error, added = entries.Count });
+                //
+                // "added" is the FRESH count, not the raw page: the coordinator now filters
+                // ids this channel already served, and reporting the raw number was exactly
+                // what kept the page's dry backoff from ever arming (added:30, 0 new tiles,
+                // poll again in a second, forever).
+                _host.Post(new
+                {
+                    type = "online-status",
+                    ok = batch.Error == null,
+                    error = batch.Error,
+                    added = batch.Entries.Count,
+                    fresh = batch.Entries.Count,
+                    dry = batch.Dry,
+                    poolTotal = batch.PoolTotal,
+                });
             });
         }
         catch (Exception ex) { App.Logger?.Warning("FypHost: remote batch failed: {E}", ex.Message); }
         finally { System.Threading.Interlocked.Exchange(ref _remoteFetchInFlight, 0); }
+    }
+
+    /// <summary>
+    /// The page asked whether a typed subreddit is real ({type:'probe-sub', sub}). One cheap
+    /// upstream request, then {type:'sub-probe', sub, ok, videoCount, error} back — and, when
+    /// it resolves, the sub is committed here rather than by the page, so the settings list and
+    /// the verdict store can never disagree about what was verified.
+    ///
+    /// BRIGHT LINE (as with every fetch on this path): the probe goes straight from this
+    /// machine to the provider. Nothing routes through CC Labs infrastructure.
+    /// </summary>
+    private static async void ProbeCustomSub(string? rawSub)
+    {
+        var clean = FypOnlineCoordinator.SanitizeSub(rawSub);
+        if (clean == null)
+        {
+            // Echo the raw text back so the page can attach the error to the box the user is
+            // still looking at (it keyed its pending state on what it sent).
+            _host?.Post(new { type = "sub-probe", sub = rawSub ?? "", ok = false, videoCount = (int?)null, error = "invalid" });
+            return;
+        }
+
+        // Not single-flight overall (two different subs may probe at once — the source's own
+        // request gate serializes the traffic anyway), just per sub: a page that fires on both
+        // Enter and blur must not spend two requests, or race itself writing the verdict.
+        lock (_probesInFlight) { if (!_probesInFlight.Add(clean)) return; }
+        try
+        {
+            var probe = await System.Threading.Tasks.Task
+                .Run(() => FypOnlineCoordinator.ProbeSubAsync(clean, System.Threading.CancellationToken.None))
+                .ConfigureAwait(false);
+
+            var win = _host?.Window;
+            if (win == null) return;   // feed closed while probing
+            await win.Dispatcher.InvokeAsync(() =>
+            {
+                var s = App.Settings?.Current;
+                // A transport failure taught us nothing about the sub, so no verdict is written
+                // and nothing is committed — the page shows "could not check" and the user can
+                // try again. Every other outcome (found OR genuinely missing) is a real answer
+                // worth remembering for a week.
+                if (s != null && probe.Error == null)
+                {
+                    s.FypOnlineSubVerdicts[clean] = new RemoteSubVerdict
+                    {
+                        Ok = probe.Ok,
+                        VideoCount = probe.VideoCount,
+                        CheckedAtUtc = DateTime.UtcNow,
+                    };
+                    if (probe.Ok)
+                    {
+                        var subs = s.FypOnlineCustomSubs.ToList();
+                        if (!subs.Contains(clean, StringComparer.OrdinalIgnoreCase) && subs.Count < 20)
+                        {
+                            subs.Add(clean);
+                            s.FypOnlineCustomSubs = subs;
+                            // Every consumer's rotation, not just the feed's: the sub list is
+                            // app-wide (flashes, videos, intake, DTRH all resolve from it).
+                            FypOnlineCoordinator.ResetAllChannels();
+                            App.Logger?.Information("[FYP online] custom sub r/{Sub} verified ({N} videos) and added",
+                                clean, probe.VideoCount);
+                        }
+                    }
+                    App.Settings?.Save();
+                }
+                _host?.Post(new
+                {
+                    type = "sub-probe",
+                    sub = clean,
+                    ok = probe.Ok,
+                    videoCount = probe.VideoCount,
+                    error = probe.Error,
+                });
+            });
+        }
+        catch (Exception ex) { App.Logger?.Warning("FypHost: sub probe failed: {E}", ex.Message); }
+        finally { lock (_probesInFlight) _probesInFlight.Remove(clean); }
     }
 
     private static JObject? LoadStats()

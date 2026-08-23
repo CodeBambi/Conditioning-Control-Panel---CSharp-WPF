@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -95,27 +95,69 @@ internal static class ArcademyHostService
     /// already failed on this machine.</summary>
     public static bool BootFailedThisSession { get; private set; }
 
+    // ============================== the gate ==============================
+
+    /// <summary>
+    /// Single source of truth for "is there an Arcademy door". Everything that shows, hides or
+    /// opens the Arcademy asks this - the Play card's visibility in
+    /// <c>MainWindow.RefreshPlayCards</c> and the refusal at the top of <see cref="Launch"/>.
+    ///
+    /// <para><c>false</c> because the Arcademy is BUILT but not launched: Semester 1 landed on
+    /// main (PR #241) ahead of its public reveal, and 6.8.4 is an auth/stability patch that must
+    /// ship those fixes without also shipping an unannounced feature. A HIDE, not a lockband, for
+    /// the same reason Just Drop hides: a lockband advertises something the account could buy,
+    /// and a door we have not opened yet is not for sale.</para>
+    ///
+    /// <para>Flip to <c>true</c> to reveal it - that is the whole reveal. The T2 bar and the
+    /// AudioOnlySession rule below are untouched and still apply underneath it.</para>
+    /// </summary>
+    /// <remarks>static readonly, not const: a const would make the guard in <see cref="Launch"/>
+    /// compile-time unreachable (CS0162), exactly as JustDropService.Withheld documents.</remarks>
+    public static readonly bool DoorAvailable = false;
+    /// <summary>Whether the live instance was opened through the dev switch (recovery relaunch keeps it).</summary>
+    private static bool _devDoor;
+
     // ============================ launch / close ============================
 
     /// <summary>
     /// Open the Arcademy window. Idempotency FIRST (a live instance is only ever re-focused, so
     /// a window that is already open can always be brought back - even after AudioOnlySession was
     /// switched on mid-class, which suspends the class rather than closing the window), then the
-    /// gates for a FRESH launch, each failing closed: T2, then AudioOnlySession.
+    /// gates for a FRESH launch, each failing closed: the door, T2, then AudioOnlySession.
     /// </summary>
-    public static void Launch()
+    /// <summary>
+    /// The <c>--arcademy</c> dev switch. Bypasses ONLY the door (rule 2) so an unreleased build can be
+    /// play-tested from the command line; T2 and AudioOnlySession still apply underneath. Not
+    /// reachable from any UI - the switch is parsed once in App.OnStartup.
+    /// </summary>
+    public static void LaunchDev() => Launch(devDoor: true);
+
+    public static void Launch() => Launch(devDoor: false);
+
+    private static void Launch(bool devDoor)
     {
         // 1. Idempotent: never re-launch a live class, and never strand an open window behind a
         //    gate that only applies to opening a NEW one (the mid-class AudioOnlySession flip
         //    arrives as a `suspend` push - see OnSettingChangedInApp - and the window stays up).
         if (_host != null) { _host.FocusWeb(); return; }
 
-        // 2. The T2 bar. TierGate is the one truth for "may this account open that?" and it
+        // 2. The door itself. The card is collapsed while this is false so nothing in the UI can
+        //    reach here - but the handler is internal and the card is one XAML edit away from
+        //    visible, and the house rule is that the code path which actually opens the door has
+        //    to be the one that can say no (see the BtnStartArcademy_Click docs). Silent: there is
+        //    no announced feature to explain a refusal about yet.
+        if (!DoorAvailable && !devDoor)
+        {
+            App.Logger?.Information("ArcademyHost.Launch refused: the Arcademy door is not open yet (unreleased)");
+            return;
+        }
+
+        // 3. The T2 bar. TierGate is the one truth for "may this account open that?" and it
         //    fails closed while App.Patreon is null; DemandLab also raises the standard refusal
         //    toast with its "See tiers" action, which is the whole gate UX.
         if (!TierGate.DemandLab(ProductName)) return;
 
-        // 3. AudioOnlySession. Owner ruling: v1 SKIPS the Arcademy on audio-only days rather than
+        // 4. AudioOnlySession. Owner ruling: v1 SKIPS the Arcademy on audio-only days rather than
         //    substituting audio-capable classes; the attendance streak is preserved (frozen, not
         //    broken) because nothing was missed - the day simply had no visual classes in it.
         if (App.Settings?.Current?.AudioOnlySession == true)
@@ -124,6 +166,7 @@ internal static class ArcademyHostService
             return;
         }
 
+        _devDoor = devDoor;
         try
         {
             _exiting = false;
@@ -144,7 +187,13 @@ internal static class ArcademyHostService
                 ("ccp.assets", App.EffectiveAssetsPath, CoreWebView2HostResourceAccessKind.Allow),
                 // Downloaded audio packs (sfx/vo) mirror the ccp.game tree under their own origin.
                 ChaosWebViewHost.ContentMapping(),
+                // THE LOOM: the player's own saved spirals (the same folder DTRH exposes). The
+                // shell's spiral pool mixes them in via settings.loomSpirals; a missing folder
+                // is simply an empty list, so create it the way DtrhHostService does.
+                ("ccp.spirals", Chaos.DtrhLoomStore.SpiralsFolder, CoreWebView2HostResourceAccessKind.Allow),
             };
+            try { Directory.CreateDirectory(Chaos.DtrhLoomStore.SpiralsFolder); }
+            catch (Exception ex) { App.Logger?.Debug("ArcademyHost: spirals dir create failed: {E}", ex.Message); }
             // Creator mods: only the mod's arcademy subfolder is mapped, keeping the rest of its
             // resources off the page. Launch-time snapshot - switching the active mod needs a
             // relaunch, exactly like DTRH.
@@ -617,6 +666,14 @@ internal static class ArcademyHostService
         var bag = ParseJsonObject(s?.ArcademySettingsJson) ?? new JObject();
         try { bag["localAssets"] = BuildLocalAssets(); }
         catch (Exception ex) { App.Logger?.Debug("ArcademyHost.BuildSettingsBag: {E}", ex.Message); }
+        // The Loom's saved spirals, as ccp.spirals urls (the DTRH shape, verbatim). The page's
+        // spiral pool appends them to the bundled set; an empty list changes nothing.
+        try
+        {
+            bag["loomSpirals"] = new JArray(Chaos.DtrhLoomStore.List()
+                .Select(sp => (object)$"https://ccp.spirals/loom_{sp.Slug}.gif").ToArray());
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.BuildSettingsBag loom: {E}", ex.Message); }
         return bag;
     }
 
@@ -1039,6 +1096,377 @@ internal static class ArcademyHostService
         ["de_free_swim"] = "Free Swim",
         ["de_free_swim_hint"] = "No bell, no grade - swim until you surface.",
         ["de_surface"] = "Surface",
+        // ---- Impulse Control - House Rules wave (casino words + class-rules sheet)
+        ["ic_almost"] = "ALMOST",
+        ["ic_howto_drift"] = "A bubble you miss just drifts off the dish. Nothing is taken from you.",
+        ["ic_howto_go"] = "Start the drop",
+        ["ic_howto_pop"] = "A bubble lands in the dish. Pop it at once. The faster you are, the more it pays.",
+        ["ic_howto_title"] = "Class rules",
+        ["ic_howto_x"] = "A bubble wearing an X is a trap. Touch nothing until its ring runs out.",
+        ["ic_jackpot"] = "JACKPOT",
+        ["ic_just"] = "JUST",
+        ["ic_perfect_class"] = "Perfect class",
+        ["ic_record_ping"] = "record",
+        ["ic_royal"] = "ROYAL",
+        ["ic_streak_n"] = "chain {n}",
+        ["ic_tonight"] = "tonight only",
+        // ---- Semester II/III game + family rows (2026-08-23)
+        ["family_puzzle"] = "puzzle",
+        ["family_recall"] = "recall",
+        ["game_anomaly"] = "Anomaly",
+        ["game_composure"] = "Composure",
+        // ---- campus wings: Semester II/III rooms (2026-08-23)
+        ["campus_desc_anomaly"] = "Everything in here matches. One thing does not. Find it before it moves.",
+        ["campus_desc_composure"] = "Slide the picture back together while the room does its best to blur it.",
+        ["campus_desc_east_open"] = "The tape is down. Wet paint, three new doors, nobody at the desk.",
+        ["campus_desc_echo"] = "It plays a line, you play it back. Then it adds one more, every time.",
+        ["campus_desc_instant_recall"] = "Watch the whole hour, then answer for it. You never hear it coming.",
+        ["campus_desc_misdirection"] = "Keep your eyes on the one that matters. It will not make that easy.",
+        ["campus_desc_west_open"] = "Older boards, deeper rooms. Nobody in here is in any hurry.",
+        ["campus_room_anomaly"] = "Darkroom",
+        ["campus_room_composure"] = "The Studio",
+        ["campus_room_echo"] = "Music Room",
+        ["campus_room_instant_recall"] = "Lecture Hall",
+        ["campus_room_misdirection"] = "The Parlour",
+        // ---- shell Deck V THE RAKE (2026-08-23)
+        ["rake_back_to_campus"] = "Back to campus",
+        ["rake_class_dismissed"] = "Class dismissed",
+        ["rake_drop_gold_seal"] = "Gold Seal",
+        ["rake_drop_gold_star"] = "Gold Star",
+        ["rake_drop_hall_pass"] = "Hall Pass",
+        ["rake_drop_line_gold_seal"] = "Pressed while the wax was still soft. It kept the shape.",
+        ["rake_drop_line_gold_star"] = "Pinned to the board where everyone can see it.",
+        ["rake_drop_line_hall_pass"] = "Signed and dated. Good for exactly one wandering.",
+        ["rake_drop_line_merit_mark"] = "Someone wrote your name in the good column tonight.",
+        ["rake_drop_merit_mark"] = "Merit Mark",
+        ["rake_promo_progress"] = "{have} of {need} to {tier}",
+        ["rake_retake_chip"] = "Free replay. It pays nothing, and today keeps your first grade.",
+        ["rake_streak_cold"] = "Attendance x{n} goes cold if today ends here.",
+        ["rake_streak_credited"] = "Attendance x{n} is banked for today already.",
+        ["rake_top_of_class"] = "Top of the class",
+        // ---- Daily Trigger class-rules sheet (2026-08-23)
+        ["dt_howto_go"] = "Start homeroom",
+        ["dt_howto_marks"] = "Star: right letter, right place. Half: right letter, elsewhere. Cross: not in it.",
+        ["dt_howto_rows"] = "Six rows is the whole budget. Every wrong row turns the room up one notch.",
+        ["dt_howto_title"] = "Class rules",
+        ["dt_howto_type"] = "Type a word into the row, then Enter. One answer a day, the same for everyone.",
+        // ---- Deja Vu class-rules sheet (2026-08-23)
+        ["dv_howto_flip"] = "Turn two slides. A matching pair stays lit. Anything else turns back over.",
+        ["dv_howto_go"] = "Deal the board",
+        ["dv_howto_redeal"] = "Sometimes the whole board re-deals. Same pairs - only the seats change.",
+        ["dv_howto_swap"] = "The board only moves while nothing is face up, and it always shudders first.",
+        ["dv_howto_title"] = "Class rules",
+        // ---- The Deep End class-rules sheet + perf ladder (2026-08-23)
+        ["de_howto_ceiling"] = "The ladder ends at the eleventh depth. Reach it and the class holds you there.",
+        ["de_howto_go"] = "Into the water",
+        ["de_howto_merge"] = "Two matching tiles meet and sink one depth. The room gets heavier as you go.",
+        ["de_howto_resurface"] = "A locked board is not a loss. Your depth is banked and the water turns fresh.",
+        ["de_howto_swipe"] = "Swipe, or use the arrows. Every tile on the board slides that way at once.",
+        ["de_howto_title"] = "Class rules",
+        ["de_perf"] = "Performance",
+        ["de_perf_auto"] = "Auto",
+        ["de_perf_full"] = "Full",
+        ["de_perf_hint"] = "Auto watches the frame rate and drops to Lite. Lite: fewer live loops, calmer water.",
+        ["de_perf_lite"] = "Lite",
+        // ---- MISDIRECTION (md_) - games/misdirection/lex.js MD_LEX
+        ["md_almost"] = "ONE OFF",
+        ["md_almost_line"] = "One off. She was next door the whole time.",
+        ["md_auto_bank_line"] = "Banked for you.",
+        ["md_auto_ride_line"] = "Riding for you.",
+        ["md_bank"] = "Bank",
+        ["md_banked_line"] = "Banked. Nothing takes that back.",
+        ["md_bell_line"] = "The bell. Hands off the table.",
+        ["md_bell_warn"] = "Twenty seconds.",
+        ["md_blind_line"] = "The hand comes over the table.",
+        ["md_brief"] = "Watch the shell. Keep watching it. Then point at it.",
+        ["md_bust_line"] = "The pot goes back to the house. Your bank is untouched.",
+        ["md_chip_clock"] = "Time left",
+        ["md_chip_pot"] = "Pot",
+        ["md_chip_round"] = "Round",
+        ["md_chip_streak"] = "Streak",
+        ["md_end_banked"] = "Banked",
+        ["md_end_blind"] = "Called through a blackout",
+        ["md_end_clean"] = "You banked a round before your first miss.",
+        ["md_end_deepest"] = "Deepest ride banked",
+        ["md_end_latency"] = "Average pick",
+        ["md_end_no"] = "No",
+        ["md_end_picks"] = "Picks",
+        ["md_end_rounds"] = "Rounds",
+        ["md_end_streak"] = "Best streak",
+        ["md_end_title"] = "Table report",
+        ["md_end_yes"] = "Yes",
+        ["md_hit_line"] = "Right where you said she was.",
+        ["md_howto_go"] = "Open the table",
+        ["md_howto_keys"] = "Keys {keys} pick a shell.",
+        ["md_howto_pick"] = "Point at the shell you followed. Four seconds, every round.",
+        ["md_howto_shuffle"] = "They slide and trade places. The room will do its best to blind you.",
+        ["md_howto_stake"] = "Right? Bank the pot, or ride it double into a dirtier shuffle.",
+        ["md_howto_title"] = "Class rules",
+        ["md_howto_watch"] = "One shell lifts. What is under it is the only thing you are tracking.",
+        ["md_jackpot"] = "JACKPOT",
+        ["md_key_pick1"] = "Pick the first shell",
+        ["md_key_pick2"] = "Pick the second shell",
+        ["md_key_pick3"] = "Pick the third shell",
+        ["md_key_pick4"] = "Pick the fourth shell",
+        ["md_key_pick5"] = "Pick the fifth shell",
+        ["md_miss_line"] = "Empty. The true lid comes up.",
+        ["md_near_miss"] = "SO CLOSE",
+        ["md_pick_line"] = "Where is she?",
+        ["md_remedial_line"] = "Slow round. Clean shuffle, full pot.",
+        ["md_retake"] = "Retake",
+        ["md_reveal_line"] = "There she is.",
+        ["md_ride"] = "Ride",
+        ["md_ride_cap_line"] = "Five deep. The house pays out and the table resets.",
+        ["md_ride_line"] = "Riding. The table gets dirtier.",
+        ["md_royal"] = "ROYAL",
+        ["md_scholarship"] = "SCHOLARSHIP ROUND",
+        ["md_shell_aria"] = "Shell {n}",
+        ["md_shell_noun"] = "Shell",
+        ["md_shell_skin"] = "Shell skin",
+        ["md_shell_skin_contrast"] = "High contrast",
+        ["md_shell_skin_hint"] = "Themed shells, plain shapes, or high-contrast rims that stay readable.",
+        ["md_shell_skin_minimal"] = "Minimal",
+        ["md_shell_skin_themed"] = "Themed",
+        ["md_shuffle_line"] = "Eyes on her.",
+        ["md_stake_line"] = "Bank it, or ride it double or nothing?",
+        ["md_stake_mode"] = "Stake prompt",
+        ["md_stake_mode_ask"] = "Ask",
+        ["md_stake_mode_bank"] = "Always bank",
+        ["md_stake_mode_hint"] = "Ask after every win, or always bank / always ride without the prompt.",
+        ["md_stake_mode_ride"] = "Always ride",
+        ["md_stamp_bank"] = "BANKED",
+        ["md_stamp_bell"] = "BELL",
+        ["md_stamp_blind"] = "EYES OPEN",
+        ["md_timeout_line"] = "Too slow. The lid comes up anyway.",
+        ["md_trick_feint"] = "Nothing moved that time",
+        ["md_trick_hint"] = "This one. Surely.",
+        ["md_trick_melt"] = "The lids run like wax",
+        ["md_trick_seen"] = "Did you see that?",
+        ["md_voided_line"] = "That round is off the books. Your bank is safe.",
+        // ---- ECHO (ec_) - games/echo/lex.js EC_LEX
+        ["ec_brief"] = "Sit down. Listen first.",
+        ["ec_chip_best"] = "Longest echo",
+        ["ec_chip_clock"] = "Time left",
+        ["ec_chip_len"] = "Sequence length",
+        ["ec_chip_streak"] = "Streak",
+        ["ec_decoy_tell"] = "Not this one",
+        ["ec_end_accuracy"] = "Accuracy",
+        ["ec_end_best"] = "Longest echo",
+        ["ec_end_decoys"] = "Decoys resisted",
+        ["ec_end_encore"] = "Encore used",
+        ["ec_end_line"] = "The room keeps the length. You keep the tune.",
+        ["ec_end_no"] = "No",
+        ["ec_end_record"] = "A new personal best",
+        ["ec_end_sequences"] = "Sequences held",
+        ["ec_end_streak"] = "Best run of pads",
+        ["ec_end_tempo"] = "Tempo held",
+        ["ec_end_title"] = "Class dismissed",
+        ["ec_end_yes"] = "Yes",
+        ["ec_howto_decoy"] = "A pad may light out of turn. Leave that one alone.",
+        ["ec_howto_go"] = "Begin",
+        ["ec_howto_repeat"] = "Then repeat it back, in order, by tap or by key.",
+        ["ec_howto_title"] = "Class rules",
+        ["ec_howto_watch"] = "The pads play a sequence. Watch it. Listen to it.",
+        ["ec_jackpot"] = "Perfect pitch",
+        ["ec_key_pad1"] = "Pad 1",
+        ["ec_key_pad2"] = "Pad 2",
+        ["ec_key_pad3"] = "Pad 3",
+        ["ec_key_pad4"] = "Pad 4",
+        ["ec_key_pad5"] = "Pad 5",
+        ["ec_key_pad6"] = "Pad 6",
+        ["ec_msg_bell_warn"] = "Last of the class.",
+        ["ec_msg_clear"] = "Clean. One longer now.",
+        ["ec_msg_decoy_warn"] = "One of them lies tonight. Do not echo it.",
+        ["ec_msg_encore"] = "Again. Slower this time.",
+        ["ec_msg_encore_clear"] = "Held. Keep going.",
+        ["ec_msg_encore_fail"] = "Gone. A new one, then.",
+        ["ec_msg_fail"] = "Broken. Listen again.",
+        ["ec_msg_input"] = "Your turn.",
+        ["ec_msg_near"] = "One short of it.",
+        ["ec_msg_new"] = "A new one, then.",
+        ["ec_msg_resisted"] = "You let it pass. Good.",
+        ["ec_msg_silent"] = "No sound tonight. Watch the light.",
+        ["ec_msg_timeout"] = "Too slow. Listen again.",
+        ["ec_msg_watch"] = "Watch.",
+        ["ec_near_miss"] = "So nearly",
+        ["ec_pad_aria"] = "Pad {n}",
+        ["ec_pad_words"] = "Pad faces",
+        ["ec_pad_words_hint"] = "Pads wear a word from your pool, or a plain glyph only.",
+        ["ec_retake"] = "Retake",
+        ["ec_ring_aria"] = "The pads",
+        ["ec_royal"] = "The whole melody",
+        ["ec_taunt_ghost"] = "This one. Surely this one.",
+        ["ec_taunt_label"] = "Read it again. Or do not.",
+        ["ec_taunt_slow"] = "Slower than you were.",
+        ["ec_taunt_stall"] = "Still there?",
+        // ---- INSTANT RECALL (ir_) - games/instant-recall/lex.js IR_LEX
+        ["ir_almost"] = "ALMOST",
+        ["ir_answer_hint"] = "Tap an answer, or press 1-4.",
+        ["ir_answer_hint3"] = "Tap an answer, or press 1-3.",
+        ["ir_bell_warn"] = "Last stretch.",
+        ["ir_brief"] = "Watch. It stops without warning and asks what you just saw.",
+        ["ir_brief_bell"] = "Watch. A bell warns you before every stop.",
+        ["ir_chip_clock"] = "Time left",
+        ["ir_chip_density"] = "Density",
+        ["ir_chip_stops"] = "Stops",
+        ["ir_correct"] = "VERIFIED",
+        ["ir_corrected"] = "Corrected memory.",
+        ["ir_density"] = "Montage density",
+        ["ir_density_hint"] = "How thick the stream gets between stops. Calm eases the ceiling, dense rides it.",
+        ["ir_end_accuracy"] = "Accuracy",
+        ["ir_end_latency"] = "Average answer",
+        ["ir_end_line"] = "The stream never stopped. Only you did.",
+        ["ir_end_none"] = "None",
+        ["ir_end_plants"] = "Baits dodged",
+        ["ir_end_stops"] = "Stops answered",
+        ["ir_end_streak"] = "Best run",
+        ["ir_end_timeouts"] = "Blanked",
+        ["ir_end_title"] = "Vigil over",
+        ["ir_fx_ambient_field"] = "Grain",
+        ["ir_fx_bubble_field"] = "Bubbles",
+        ["ir_fx_crt"] = "Scanlines",
+        ["ir_fx_flash_burst"] = "Flash",
+        ["ir_fx_gif_burst"] = "Burst",
+        ["ir_fx_gif_rain"] = "Rain",
+        ["ir_fx_glitch_swap"] = "Glitch",
+        ["ir_fx_row_drift"] = "Drift",
+        ["ir_fx_wash"] = "Wash",
+        ["ir_gotcha"] = "That one flashed while the screen was FROZEN.",
+        ["ir_hear"] = "Hear it",
+        ["ir_howto_1"] = "A montage plays. Triggers fire over it.",
+        ["ir_howto_2"] = "Without warning, everything freezes.",
+        ["ir_howto_3"] = "Answer what just happened.",
+        ["ir_howto_bell"] = "A bell warns you first. For now.",
+        ["ir_howto_go"] = "GO",
+        ["ir_howto_nobell"] = "No bell. It just stops.",
+        ["ir_howto_title"] = "The vigil",
+        ["ir_jackpot"] = "Photographic Memory",
+        ["ir_layout_mosaic"] = "Mosaic",
+        ["ir_layout_rows"] = "Rows",
+        ["ir_layout_swirl"] = "Swirl",
+        ["ir_near"] = "So close. That one flashed, but earlier.",
+        ["ir_nobell_debrief"] = "That one had no bell. From Year 3, none of them do.",
+        ["ir_q_last_effect"] = "What was the last effect?",
+        ["ir_q_last_sting"] = "Which sting just played?",
+        ["ir_q_last_two"] = "The last two words, in order?",
+        ["ir_q_last_word"] = "What was the last word to flash?",
+        ["ir_q_mode"] = "Which layout were you watching?",
+        ["ir_resisted"] = "RESISTED",
+        ["ir_resume"] = "Resume. Denser now.",
+        ["ir_royal"] = "ROYAL",
+        ["ir_sting_blip"] = "Tick",
+        ["ir_sting_bump"] = "Thud",
+        ["ir_sting_glitch"] = "Static",
+        ["ir_sting_pop"] = "Pop",
+        ["ir_sting_sting"] = "Chime",
+        ["ir_stop_incoming"] = "Stop incoming.",
+        ["ir_stop_now"] = "FREEZE.",
+        ["ir_timeout"] = "BLANKED",
+        ["ir_truth"] = "It really did.",
+        ["ir_vigil_hint"] = "Eyes up. Nothing to click until it freezes.",
+        ["ir_voided"] = "Stop voided. The vigil goes on.",
+        ["ir_wrong"] = "MISSED",
+        // ---- ANOMALY (an_) - games/anomaly/lex.js AN_LEX
+        ["an_almost"] = "ALMOST",
+        ["an_bell"] = "Time.",
+        ["an_breather"] = "Breathe. This one is easy.",
+        ["an_brief"] = "One tile is not like the others. Find it before the round runs out.",
+        ["an_chip_clock"] = "Time left",
+        ["an_chip_round"] = "Round",
+        ["an_chip_streak"] = "Streak",
+        ["an_end_accuracy"] = "First-tap accuracy",
+        ["an_end_found"] = "Found",
+        ["an_end_kind"] = "Hardest to see",
+        ["an_end_line"] = "Global changes are noise. Only local difference is true.",
+        ["an_end_median"] = "Median find",
+        ["an_end_none"] = "None",
+        ["an_end_rounds"] = "Rounds offered",
+        ["an_end_streak"] = "Longest streak",
+        ["an_end_title"] = "Eyes up",
+        ["an_end_tracked"] = "Tracked after a shift",
+        ["an_fast"] = "FAST",
+        ["an_found"] = "Found.",
+        ["an_found_fast"] = "Fast.",
+        ["an_howto_find"] = "One is not. Tap it. The first tap is the one that counts.",
+        ["an_howto_go"] = "Open your eyes",
+        ["an_howto_lie"] = "The room tints, drifts and glitches every tile at once. That is noise.",
+        ["an_howto_same"] = "Every tile is the same loop, playing in step.",
+        ["an_howto_title"] = "Class rules",
+        ["an_jackpot"] = "Sharp eyes.",
+        ["an_kind_blur"] = "focus",
+        ["an_kind_bright"] = "light",
+        ["an_kind_frame"] = "timing",
+        ["an_kind_hue"] = "colour",
+        ["an_kind_mirror"] = "mirrored",
+        ["an_kind_rotate"] = "tilt",
+        ["an_kind_scale"] = "size",
+        ["an_kind_speed"] = "speed",
+        ["an_kinds"] = "Difference kinds",
+        ["an_kinds_hint"] = "Gentle keeps colour, mirror and size only. Mirror is always in the pool.",
+        ["an_moved"] = "It moved.",
+        ["an_play_hint"] = "Tap the odd tile.",
+        ["an_refund"] = "+1s",
+        ["an_reveal"] = "It was here.",
+        ["an_royal"] = "ROYAL",
+        ["an_stamp_bell"] = "Bell",
+        ["an_stamp_found"] = "Found",
+        ["an_streak_lit"] = "Five straight. The frame is lit.",
+        ["an_timeout"] = "Gone. Next grid.",
+        ["an_trick_melt"] = "The frame runs like wax",
+        ["an_trick_seen"] = "Did you see that?",
+        ["an_wrong"] = "Not that one. That tile is out.",
+        // ---- COMPOSURE (cp_) - games/composure/lex.js CP_LEX
+        ["cp_backtrack_line"] = "Back where it was. Breathe.",
+        ["cp_bell_line"] = "The bell. Hands off the board.",
+        ["cp_bell_warn"] = "Twenty seconds.",
+        ["cp_brief"] = "One picture, cut apart and still moving. Put it back together.",
+        ["cp_brief_zen"] = "No clock tonight. Slide until it is whole again.",
+        ["cp_chip_calm"] = "Composure",
+        ["cp_chip_clock"] = "Time left",
+        ["cp_chip_locked"] = "Pieces home",
+        ["cp_chip_moves"] = "Moves",
+        ["cp_end_assists"] = "Assists",
+        ["cp_end_backtracks"] = "Backtracks",
+        ["cp_end_best"] = "Best solve",
+        ["cp_end_best_first"] = "Your first finished picture on this board.",
+        ["cp_end_best_line"] = "Your standing mark on this board. Beat it next class.",
+        ["cp_end_locked"] = "Pieces home",
+        ["cp_end_moves"] = "Moves",
+        ["cp_end_no"] = "No",
+        ["cp_end_par"] = "Baseline",
+        ["cp_end_solved"] = "Solved",
+        ["cp_end_thrash"] = "Panic moves",
+        ["cp_end_time"] = "Time",
+        ["cp_end_title"] = "Composure report",
+        ["cp_end_title_zen"] = "Zen board",
+        ["cp_end_yes"] = "Yes",
+        ["cp_finish"] = "Finish",
+        ["cp_howto_go"] = "Start the picture",
+        ["cp_howto_lock"] = "A piece that reaches its own place locks with a snap. It can still be slid.",
+        ["cp_howto_slide"] = "Tap a piece beside the gap and it slides in. Arrows, WASD and swipes do the same.",
+        ["cp_howto_title"] = "Class rules",
+        ["cp_howto_wash"] = "The room will bury the board. Keep sliding - the picture underneath never moved.",
+        ["cp_jackpot"] = "JACKPOT",
+        ["cp_lock_line"] = "That one is home.",
+        ["cp_mode"] = "Mode",
+        ["cp_mode_hint"] = "Timed is one graded class. Zen is untimed, gentle, and always a pass.",
+        ["cp_near_miss"] = "SO CLOSE",
+        ["cp_peek_ref"] = "The finished picture",
+        ["cp_play_hint"] = "Tap a piece beside the gap. Arrows, WASD or swipe.",
+        ["cp_rescue_line"] = "Take the lit piece. The grade eases; the class does not end.",
+        ["cp_retake"] = "Retake",
+        ["cp_solved_line"] = "Whole. Watch it play.",
+        ["cp_stamp_assist"] = "ASSIST",
+        ["cp_stamp_bell"] = "BELL",
+        ["cp_stamp_lock"] = "HOME",
+        ["cp_stamp_solved"] = "COMPOSED",
+        ["cp_trick_melt"] = "One of them is running.",
+        ["cp_trick_preview"] = "Did it move?",
+        ["cp_trick_seen"] = "That is not where that piece is.",
+        ["cp_wash_line"] = "Keep sliding. The board is still exactly where you left it.",
+        ["cp_zen_done"] = "Whole, in your own time.",
+        ["cp_zen_grid"] = "Zen board",
+        ["cp_zen_grid_hint"] = "Zen only. A timed class plays the board your year has earned.",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via
@@ -1912,7 +2340,7 @@ internal static class ArcademyHostService
             if (retry)
             {
                 _relaunchedOnce = true;
-                Launch();
+                Launch(devDoor: _devDoor);
             }
         });
     }

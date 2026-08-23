@@ -2592,7 +2592,7 @@ namespace ConditioningControlPanel
             // bypassing the Play strip. Launch() applies the same T2 + AudioOnlySession gates the
             // card's click does, so this skips the UI and nothing else.
             if (e.Args.Contains("--arcademy"))
-                Services.Arcademy.ArcademyHostService.Launch();
+                Services.Arcademy.ArcademyHostService.LaunchDev();
 
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait

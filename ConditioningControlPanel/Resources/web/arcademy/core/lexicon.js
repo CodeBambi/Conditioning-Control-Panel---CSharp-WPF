@@ -56,6 +56,7 @@ export const DEFAULT_LEXICON = Object.freeze({
   /* families (timetable chips) */
   family_word: 'word', family_memory: 'memory', family_search: 'search',
   family_tracking: 'tracking', family_reflex: 'reflex', family_comfort: 'comfort',
+  family_recall: 'recall', family_puzzle: 'puzzle',
 
   /* verbs / chrome */
   peek: 'Peek',
@@ -96,6 +97,17 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_desc_impulse_control: 'Hands on the desk. Move only when told - the room will lie to you.',
   campus_desc_lost_and_found: 'Things went missing in a wall of moving pictures. Find them before they move again.',
   campus_desc_the_deep_end: 'Sink tile into tile. The deeper you go, the harder the board is to read.',
+  /* Semesters II / III (2026-08-23) */
+  campus_room_misdirection: 'The Parlour',
+  campus_room_echo: 'Music Room',
+  campus_room_instant_recall: 'Lecture Hall',
+  campus_room_anomaly: 'Darkroom',
+  campus_room_composure: 'The Studio',
+  campus_desc_misdirection: 'Keep your eyes on the one that matters. It will not make that easy.',
+  campus_desc_echo: 'It plays a line, you play it back. Then it adds one more, every time.',
+  campus_desc_instant_recall: 'Watch the whole hour, then answer for it. You never hear it coming.',
+  campus_desc_anomaly: 'Everything in here matches. One thing does not. Find it before it moves.',
+  campus_desc_composure: 'Slide the picture back together while the room does its best to blur it.',
   campus_records: 'Records',
   campus_desc_records: 'Report card, attendance ledger, grades. Your whole term, in ink.',
   campus_registrar: 'Registrar',
@@ -113,6 +125,8 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_east_wing: 'East Wing',
   campus_west_wing: 'West Wing',
   campus_desc_east: 'You can hear hammering behind the tape.',
+  campus_desc_east_open: 'The tape is down. Wet paint, three new doors, nobody at the desk.',
+  campus_desc_west_open: 'Older boards, deeper rooms. Nobody in here is in any hurry.',
   campus_desc_west: 'The boards are older here.',
   campus_sealed: 'Sealed',
   campus_opens_semester_2: 'Opens Semester II',

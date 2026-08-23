@@ -350,6 +350,12 @@ public class BouncingTextService : IDisposable
     {
         if (!_isRunning) return;
 
+        // A display/DPI change is settling: every frame this writes to N layered surfaces, and the
+        // synchronous surface rebuild WPF runs during the transition can only complete when those
+        // surfaces go quiet (the mixed-DPI drag hang). Freeze for the ~1s storm; the baseline reset
+        // below already handles the resulting dt gap as a stall.
+        if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
+
         // Delta time from the composition clock. Establish a baseline on the first
         // frame, ignore duplicate callbacks, and clamp after a stall so the text
         // never teleports across the screen.

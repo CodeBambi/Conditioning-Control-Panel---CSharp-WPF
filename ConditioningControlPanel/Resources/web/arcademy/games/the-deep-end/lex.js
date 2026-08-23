@@ -90,6 +90,21 @@ export const DE_LEX = Object.freeze({
   de_tile_faces_plain: 'Plain',
   de_stuck_hint: 'Nothing is locked. The lit edges still move.',
 
+  /* ---- pass 5: the performance ladder (manifest.settings de_perf) ------- */
+  de_perf: 'Performance',
+  de_perf_hint: 'Auto watches the frame rate and drops to Lite. Lite: fewer live loops, calmer water.',
+  de_perf_auto: 'Auto',
+  de_perf_full: 'Full',
+  de_perf_lite: 'Lite',
+
+  /* ---- the class rules sheet (drawn; these only caption it) ------------- */
+  de_howto_title: 'Class rules',
+  de_howto_swipe: 'Swipe, or use the arrows. Every tile on the board slides that way at once.',
+  de_howto_merge: 'Two matching tiles meet and sink one depth. The room gets heavier as you go.',
+  de_howto_resurface: 'A locked board is not a loss. Your depth is banked and the water turns fresh.',
+  de_howto_ceiling: 'The ladder ends at the eleventh depth. Reach it and the class holds you there.',
+  de_howto_go: 'Into the water',
+
   /* ---- pass 2: FREE SWIM (endless, untimed, ungraded) ------------------- */
   de_free_swim: 'Free Swim',
   de_free_swim_hint: 'No bell, no grade - swim until you surface.',

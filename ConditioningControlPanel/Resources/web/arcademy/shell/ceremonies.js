@@ -27,6 +27,13 @@ function el(tag, cls, text) {
   return n;
 }
 
+/* HOUSE RULES additions (Deck V / Deck VI, shell level so all ten classes get
+ * them): `gradeObject({grade,...})` mints the grade as a physical stamp instead
+ * of a bare letter string, and `payoff({grade, capped, ...})` guarantees that a
+ * C - or a class that dropped a hard gate - still gets a scaled-down beat rather
+ * than silence. Both ride the same delegate-to-the-engine floor as everything
+ * above them. */
+
 /**
  * @param {Object} o
  * @param {Object=} o.engine        the Distraction Engine facade (may be null)
@@ -132,6 +139,68 @@ export function createCeremonies({ engine, layer, reducedMotion, log } = {}) {
         target: o.target,
       });
       return true;
+    },
+
+    /* ---------------------------------------------------------------------
+     * DECK VI - GRADES AS OBJECTS. The grade arrives as a physical thing, never
+     * as a bare letter printed into a <span>: it is minted through the stamp
+     * ceremony above (so the engine gets first refusal, exactly like every other
+     * beat) and only then dressed with its grade class. Callers hand this an
+     * OBJECT - {grade, zen, target} - which is the whole point: nothing upstream
+     * gets to render the letter itself first.
+     * @returns {HTMLElement|null} the stamp node
+     * ------------------------------------------------------------------- */
+    gradeObject({ grade, zen, target, hold, label } = {}) {
+      const raw = String(grade == null ? '' : grade);
+      const g = raw.toLowerCase();
+      const text = label != null ? String(label)
+        : (g === 'pass' || zen === true ? 'PASS' : raw.toUpperCase());
+      // 'a' and 'pass' wear the pink seal, everything else the gold one - the
+      // stamp primitive's only two tones, unchanged.
+      const node = api.stamp({
+        text, target, hold,
+        tone: (g === 'a' || g === 'pass') ? 'pink' : undefined,
+      });
+      if (!node) return null;
+      try {
+        if (node.classList) {
+          node.classList.add('arc-gradeobj');
+          if (g) node.classList.add('g-' + g.replace(/[^a-z]/g, ''));
+        }
+        if (node.setAttribute) {
+          node.setAttribute('role', 'img');
+          node.setAttribute('aria-label', text);
+          node.setAttribute('data-grade', g);
+        }
+      } catch (e) { /* a decoration must never be the thing that throws */ }
+      return node;
+    },
+
+    /* ---------------------------------------------------------------------
+     * DECK V - LOSSES DISGUISED. Every finished class pays SOMETHING. A top
+     * grade gets the jackpot, the middle gets its stamp, and a C (or any class
+     * that dropped a hard gate) gets a scaled-down near-miss beat instead of
+     * silence - because silence is where people stand up. Never returns false:
+     * the worst case is the CSS stamp floor.
+     * @returns {'jackpot'|'near_miss'|'stamp'} which beat was played
+     * ------------------------------------------------------------------- */
+    payoff({ grade, zen, gated, capped, target, text, scale } = {}) {
+      const g = String(grade || '').toLowerCase();
+      const capList = Array.isArray(capped) ? capped.map((c) => String(c)) : [];
+      const failedGate = !!gated || capList.some((c) => c.indexOf('hard') >= 0);
+      const opts = { target, scale: scale == null ? 1 : scale };
+      if (!failedGate && (g === 's' || g === 'a')) {
+        api.reward('jackpot', Object.assign({ text: text || 'JACKPOT' }, opts));
+        return 'jackpot';
+      }
+      if (g === 'c' || failedGate) {
+        // Scaled DOWN, never off: half the spectacle, all of the acknowledgement.
+        api.reward('near_miss', Object.assign({ text: text || 'SO CLOSE' },
+          opts, { scale: scale == null ? 0.5 : scale }));
+        return 'near_miss';
+      }
+      api.stamp({ text: text || (g === 'pass' || zen === true ? 'PASS' : 'MARKED'), target });
+      return 'stamp';
     },
 
     /** How many segments the meter has - games must not hardcode 8 or 12. */

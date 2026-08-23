@@ -37,8 +37,12 @@
  * board.js untouched). FACES - every tile wears the player's own media
  * (.g-de-face > img.g-de-media), ONE url per tier dealt lazily on the tier's
  * first appearance and frozen for the class; the setting `de_tile_faces`
- * (media | still | plain) and reduced motion / motionLevel <= 1 pick stills;
- * past FACE_CAP animated faces a new tier is dealt a still. A numeral badge
+ * (media | still | plain) and reduced motion / motionLevel <= 1 pick stills.
+ * PASS 5 re-dialled the budget: THE SHALLOWS ARE STILL, DEPTH IS ALIVE -
+ * tiers 1..SHALLOW_STILL_MAX_TIER (the numerous ones) always wear a still, a
+ * loop is dealt only from the next tier down, and only until FACE_CAP
+ * DISTINCT ANIMATED TIERS are live (tiers, not tiles: the url is frozen per
+ * tier, so every tile of a tier is a decode of the same file). A numeral badge
  * (.g-de-num) carries the tier number - numbers are not words.
  *
  * PASS 3 (owner's second playtest): THE HAND - a press on the board is now a
@@ -54,6 +58,33 @@
  * lock releases (never inside the releasing callback), and dropped whenever the
  * board is not the player's any more (pause, suspend, resurface, new dive,
  * bell, end, destroy). Fast play now flows instead of hitching.
+ *
+ * PASS 5 (the Chromium trace: GPU main thread at 79% of a core on a 3060 Ti
+ * with 16 live video tiles): THE PERF LADDER. `de_perf` = auto | full | lite.
+ * `lite` puts .g-de-lite on the stage and .ae-lite on <html> (style.js and
+ * engine/style.js read both), halves the animated-tier cap, stills the
+ * shallows five deep, stops the face ken-burns, freezes the backdrop pattern
+ * drift and drops the engine's shared video budget to 2. `auto` runs the class
+ * FULL, samples rAF deltas for ~3s once the board is dealt and demotes ONCE if
+ * the median frame is over 20ms (or a quarter of frames over 25ms) - it never
+ * promotes back mid-class, because a room that changes its own look twice is
+ * worse than a room that is simply lighter. Reduced motion / motionLevel <= 1
+ * is lite from the first frame. With no requestAnimationFrame (the headless
+ * double) the probe never runs and the class stays FULL.
+ *
+ * PASS 6 (the owner's iPhone 13 Pro Max on the web teaser): THE TOUCH RUNG,
+ * which is NOT a third quality level - it is a hardware ceiling laid over
+ * whichever rung the class resolved to, and it applies on FULL too. A coarse
+ * pointer (or more than one touch point) puts `.ae-touch` on <html> for the
+ * life of the class: four animated tiers instead of six, stills four deep
+ * instead of three, three engine decoration videos instead of six, and
+ * engine/style.js drops the backdrop-filter, the full-screen blend surfaces,
+ * the scanline re-raster and the filters that sit over a live decode. iOS caps
+ * concurrent hardware decode sessions and WebKit charges real milliseconds for
+ * a blend or a blur, so none of that is a preference the player should have to
+ * find - there is no setting, the device is the setting. It composes with the
+ * rung in the PROTECTIVE direction (cap = min, still-line = max), so a phone on
+ * lite is still lite. It comes off on destroy, exactly like `.ae-lite`.
  *
  * PASS 4 (the owner's third note): THE PRESSURE - the CCP effects ladder and
  * the Balatro tremor live in pressure.js, DECK III. This file owns none of
@@ -111,6 +142,10 @@ import { compositeFor, hardGates, flavorXp } from './grade.js';
 import { DE_LEX } from './lex.js';
 import { makeTaggedRoll } from '../../core/rng.js';
 
+/** A url the <img> element cannot show (a webm/mp4 loop). Mirrors engine/util.js
+ *  VIDEO_URL_RE; games never import the engine, so the two-line rule is repeated. */
+const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
+
 const GAME_KEY = 'the_deep_end';
 
 const KEY_DIRS = Object.freeze({
@@ -131,6 +166,9 @@ const BUMP_CLASSES = Object.freeze(['g-de-bump-up', 'g-de-bump-down', 'g-de-bump
 /** Pass 3 - THE HAND: at most one of these rides the board at a time. */
 const GRAB_CLASSES = Object.freeze(['g-de-grab-up', 'g-de-grab-down', 'g-de-grab-left', 'g-de-grab-right']);
 const FACE_MODES = Object.freeze(['media', 'still', 'plain']);
+/** PASS 5 - the perf ladder. `auto` is the default and the only value that
+ *  may change its mind mid-class (once, downward). */
+const PERF_MODES = Object.freeze(['auto', 'full', 'lite']);
 
 /**
  * PURE, LOCAL: would a slide in `dir` move anything? Reads board.tiles and
@@ -251,6 +289,13 @@ export default {
         key: 'de_tile_faces', kind: 'enum', values: FACE_MODES.slice(), default: 'media',
         label_key: 'de_tile_faces', hint_key: 'de_tile_faces_hint',
       },
+      /* PASS 5 - THE PERF LADDER. `values`, never `options` (CLAUDE.md trap 21:
+       * an `options` array renders NO row at all and the setting is stuck on
+       * its default forever). `auto` first, so an untouched install probes. */
+      {
+        key: 'de_perf', kind: 'enum', values: PERF_MODES.slice(), default: 'auto',
+        label_key: 'de_perf', hint_key: 'de_perf_hint',
+      },
     ],
     peek: false,
     /* FREE SWIM: the campus door card gains a second, secondary button and the
@@ -337,6 +382,13 @@ export default {
     let faceLogged = false;
     let capLogged = false;
     let stuckShown = false;
+    /* pass 5 - THE PERF LADDER */
+    let perfSetting = 'auto';              // de_perf: auto | full | lite
+    let perf = 'full';                     // the RESOLVED level this class runs at
+    let perfReason = '';                   // why (diagnostics + the log line)
+    let perfProbeDone = false;             // the probe fires once per class
+    let perfLogged = false;
+    let touch = false;                     // pass 6: a touch device, on any rung
     let stuckHints = 0;
     let slides = 0;
     let bumps = 0;
@@ -503,6 +555,9 @@ export default {
       const root = ctx.root;
       root.textContent = '';
       stage = el('div', 'g-de-stage');
+      /* pass 5: the level is resolved before any node exists, so the stage is
+         born lit-down rather than flipping a frame after the deal. */
+      if (perf === 'lite') stage.classList.add('g-de-lite');
       stage.setAttribute('data-phase', 'briefing');
       stage.setAttribute('data-size', String(n));
       if (reduced) stage.setAttribute('data-reduced', '1');
@@ -593,14 +648,7 @@ export default {
         if (facesMode !== 'plain' && !tile.silt) {
           const face = el('span', 'g-de-face');
           const img = el('img', 'g-de-media');
-          try {
-            img.setAttribute('alt', '');
-            img.setAttribute('draggable', 'false');
-            img.decoding = 'async';
-            img.draggable = false;
-            img.addEventListener('load', () => { if (!dead) node.classList.add('is-loaded'); });
-            img.addEventListener('error', () => { if (!dead) faceBroken(node); });
-          } catch (e) { /* the double has no img semantics; fine */ }
+          armMedia(img, node, false);
           face.appendChild(img);
           node.appendChild(face);
           // seeded-enough desync of the ken-burns phase: the id is the spawn order
@@ -634,12 +682,191 @@ export default {
       const face = childOf(node, 'g-de-face');
       return face ? childOf(face, 'g-de-media') : null;
     }
+    /** Wire a face's media node: is-loaded once it has a frame, faceBroken on
+     *  error. A <video> (a webm/mp4 loop - the only animated shape a remote
+     *  provider serves) is muted / looping / inline and nudged to play. */
+    function armMedia(img, node, video) {
+      if (!img) return;
+      try {
+        img.setAttribute('alt', '');
+        img.setAttribute('draggable', 'false');
+        img.draggable = false;
+        if (video) {
+          img.muted = true; img.loop = true; img.autoplay = true; img.playsInline = true;
+          img.setAttribute('muted', ''); img.setAttribute('loop', ''); img.setAttribute('autoplay', '');
+          img.setAttribute('playsinline', ''); img.setAttribute('preload', 'auto');
+          img.addEventListener('loadeddata', () => {
+            if (dead) return;
+            node.classList.add('is-loaded');
+            try { const p = img.play(); if (p && typeof p.catch === 'function') p.catch(() => {}); } catch (e) { /* ignore */ }
+          });
+        } else {
+          img.decoding = 'async';
+          img.addEventListener('load', () => { if (!dead) node.classList.add('is-loaded'); });
+        }
+        img.addEventListener('error', () => { if (!dead) faceBroken(node); });
+      } catch (e) { /* the double has no img semantics; fine */ }
+    }
+    /** The media node that can SHOW this url: the face's <img>, swapped for a
+     *  <video> when the tier's url is a webm/mp4 loop (and back for a still).
+     *  Same class, same place in the face; the listeners are re-armed. */
+    function mediaNodeFor(node, url) {
+      const face = childOf(node, 'g-de-face');
+      if (!face) return null;
+      const cur = childOf(face, 'g-de-media');
+      const wantVideo = VIDEO_URL_RE.test(String(url || ''));
+      const isVideo = !!(cur && String(cur.tagName || '').toUpperCase() === 'VIDEO');
+      if (cur && wantVideo === isVideo) return cur;
+      const next = el(wantVideo ? 'video' : 'img', 'g-de-media');
+      armMedia(next, node, wantVideo);
+      try {
+        if (cur && typeof face.replaceChild === 'function') face.replaceChild(next, cur);
+        else face.appendChild(next);
+      } catch (e) { try { face.appendChild(next); } catch (e2) { /* ignore */ } }
+      return next;
+    }
 
-    /* ---- faces (pass 2): one url per tier, dealt lazily, frozen ----------- */
-    /** How many live tiles wear an animated face right now. */
+    /* ==================================================================== *
+     * PASS 5 - THE PERF LADDER (de_perf: auto | full | lite)
+     *
+     * ONE resolved level per class, and `auto` may lower it exactly once. The
+     * level is expressed in TWO places at once: `.g-de-lite` on the stage (this
+     * game's own stylesheet reads it) and `.ae-lite` on <html> (the ENGINE's
+     * stylesheet and its shared video budget read that one - a game may not
+     * reach into the engine, but the document root is common ground). Both come
+     * off on destroy, or the lobby inherits a lit-down room.
+     * ==================================================================== */
+    /**
+     * PASS 6 - THE TOUCH RUNG, which is not a rung at all: it is a HARDWARE
+     * ceiling laid over whichever rung the class resolved to. iOS caps
+     * concurrent hardware decode sessions (three or four in practice), and
+     * WebKit charges a phone several ms a frame for a backdrop-filter or a
+     * full-screen blend surface, so those cuts are owed even on FULL - they are
+     * orthogonal to the full/lite quality ladder and are never user-facing
+     * (there is no setting; the device is the setting). Same seam as lite:
+     * `.ae-touch` on <html>, which engine/style.js and engine/util.js's shared
+     * decoder budget read, plus this game's own stylesheet.
+     */
+    function probeTouch() {
+      try {
+        if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+          const m = window.matchMedia('(pointer: coarse)');
+          if (m && m.matches) return true;
+        }
+      } catch (e) { /* ignore */ }
+      try {
+        if (typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints) > 1) return true;
+      } catch (e) { /* ignore */ }
+      return false;
+    }
+    function setTouchClass(on) {
+      /* <html> ONLY: the stage's own look hangs off `html.ae-touch .g-de-*` in
+         style.js, so there is no second class to keep in sync here. */
+      try {
+        const html = typeof document !== 'undefined' ? document.documentElement : null;
+        if (html && html.classList) html.classList[on ? 'add' : 'remove']('ae-touch');
+      } catch (e) { /* ignore */ }
+    }
+    /** The animated-tier cap and the still-shallows line: the resolved rung
+     *  COMPOSED with the touch ceiling, always in the PROTECTIVE direction. The
+     *  two dials point opposite ways - a cap wants the MIN (fewer decoders) and
+     *  a still-shallows LINE wants the MAX (more of the numerous tiers frozen)
+     *  - so a touch phone on lite keeps lite's 3 loops and lite's five-deep
+     *  shallows, and never trades one of them back for the touch number. */
+    function faceCap() {
+      const rung = perf === 'lite' ? PLAYTEST.FACE_CAP_LITE : PLAYTEST.FACE_CAP;
+      return touch ? Math.min(rung, PLAYTEST.FACE_CAP_TOUCH) : rung;
+    }
+    function shallowStillMaxTier() {
+      const rung = perf === 'lite' ? PLAYTEST.SHALLOW_STILL_MAX_TIER_LITE : PLAYTEST.SHALLOW_STILL_MAX_TIER;
+      return touch ? Math.max(rung, PLAYTEST.SHALLOW_STILL_MAX_TIER_TOUCH) : rung;
+    }
+    /** Read the setting. Anything that is not one of the three is `auto` - the
+     *  host clamps its OWN knobs, but a per-game bag is stored verbatim, so a
+     *  hand-edited blob really can arrive as 42, '' or null. */
+    function perfFromSetting(v) {
+      if (typeof v !== 'string') return 'auto';    // an array stringifies to its one item; a setting is a string
+      const want = v.trim().toLowerCase();
+      return PERF_MODES.includes(want) ? want : 'auto';
+    }
+    function setLiteClass(on) {
+      try { if (stage) stage.classList[on ? 'add' : 'remove']('g-de-lite'); } catch (e) { /* ignore */ }
+      try {
+        const html = typeof document !== 'undefined' ? document.documentElement : null;
+        if (html && html.classList) html.classList[on ? 'add' : 'remove']('ae-lite');
+      } catch (e) { /* ignore */ }
+    }
+    /** Resolve to a level. DOWNWARD ONLY: once lite, lite for the class. */
+    function applyPerf(level, reason) {
+      const want = level === 'lite' ? 'lite' : 'full';
+      if (perf === 'lite' && want === 'full') return;      // never re-promote mid-class
+      perf = want;
+      perfReason = String(reason || '');
+      setLiteClass(perf === 'lite');
+      if (!perfLogged || perf === 'lite') {
+        perfLogged = true;
+        say('perf: ' + perf + (perfReason ? ' (' + perfReason + ')' : ''));
+      }
+    }
+    /**
+     * THE AUTO PROBE. Sample rAF deltas once the board is dealt, skip the
+     * warm-up (style injection and the first decodes land there and would
+     * demote a machine that is actually fine), then judge the MEDIAN and the
+     * slow-frame share. Robustness rules, in the order they cost time:
+     *   - no requestAnimationFrame at all (node, the DOM double) -> stay FULL,
+     *     silently. A missing clock is not evidence of a slow machine.
+     *   - a hidden tab does not paint, so every delta is garbage: abandon the
+     *     probe rather than demote, and never restart it (once per class).
+     *   - a paused/suspended class is the same story (a mandatory video owns
+     *     the screen); abandon.
+     */
+    function startPerfProbe() {
+      if (perfProbeDone || perfSetting !== 'auto' || perf === 'lite') return;
+      const raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+        ? (fn) => window.requestAnimationFrame(fn) : null;
+      if (!raf) { perfProbeDone = true; perfReason = 'auto: no rAF, stayed full'; return; }
+      const deltas = [];
+      let t0 = 0;
+      let last = 0;
+      const hidden = () => { try { return typeof document !== 'undefined' && document.hidden === true; } catch (e) { return false; } };
+      const step = (now) => {
+        if (dead || ended || perfProbeDone) return;
+        if (paused || hidden()) { perfProbeDone = true; perfReason = 'auto: probe abandoned (not painting)'; return; }
+        const t = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+        if (!t0) { t0 = t; last = t; raf(step); return; }
+        const dt = t - last;
+        last = t;
+        if (t - t0 >= PLAYTEST.PERF_WARMUP_MS) deltas.push(dt);
+        if (t - t0 < PLAYTEST.PERF_WARMUP_MS + PLAYTEST.PERF_SAMPLE_MS) { raf(step); return; }
+        perfProbeDone = true;
+        judgePerf(deltas);
+      };
+      raf(step);
+    }
+    /** The verdict on a delta sample (its own function so the harness can drive
+     *  it without a real frame clock). */
+    function judgePerf(deltas) {
+      const n = deltas.length;
+      if (n < PLAYTEST.PERF_MIN_FRAMES) { perfReason = 'auto: ' + n + ' frames sampled, stayed full'; return; }
+      const sorted = deltas.slice().sort((a, b) => a - b);
+      const median = sorted[Math.floor(n / 2)];
+      let slow = 0;
+      for (const d of deltas) if (d > PLAYTEST.PERF_SLOW_MS) slow += 1;
+      const share = slow / n;
+      if (median > PLAYTEST.PERF_MEDIAN_MS || share > PLAYTEST.PERF_SLOW_SHARE) {
+        applyPerf('lite', 'median ' + Math.round(median) + 'ms, ' + Math.round(share * 100) + '% slow');
+        return;
+      }
+      perfReason = 'auto: full (median ' + Math.round(median) + 'ms, ' + Math.round(share * 100) + '% slow)';
+    }
+
+    /* ---- faces (pass 2, re-dialled by pass 5): one url per tier, frozen ---- */
+    /** How many DISTINCT TIERS have been dealt an animated face. Tiles are the
+     *  wrong unit: a tier's url is frozen for the class, so ten tier-4 tiles are
+     *  ten decoders of ONE file and only a NEW tier buys a new decode. */
     function animatedFaces() {
       let k = 0;
-      for (const tile of board.tiles) { const f = faceUrls.get(tile.tier); if (f && !f.broken && f.kind === 'loop') k += 1; }
+      for (const f of faceUrls.values()) if (f && !f.broken && f.kind === 'loop') k += 1;
       return k;
     }
     /** The tier's face, dealing one on the tier's first appearance. null = no
@@ -650,16 +877,27 @@ export default {
       if (have) return have.broken ? null : have;
       if (!pool || typeof pool.next !== 'function') return null;
       let kind = faceKind;
-      if (kind === 'loop' && animatedFaces() >= PLAYTEST.FACE_CAP) {
+      if (kind === 'loop' && tier <= shallowStillMaxTier()) {
+        /* THE SHALLOWS ARE STILL, DEPTH IS ALIVE. Tiers 1-3 are most of every
+         * board; giving them the loops spent the whole decoder budget on the
+         * tiles nobody is looking at. */
         kind = 'still';
-        if (!capLogged) { capLogged = true; say('faces: ' + PLAYTEST.FACE_CAP + ' animated faces on the board - new tiers wear stills'); }
+      } else if (kind === 'loop' && animatedFaces() >= faceCap()) {
+        kind = 'still';
+        if (!capLogged) { capLogged = true; say('faces: ' + faceCap() + ' animated tiers live - new tiers wear stills'); }
       }
       let url = null;
       try { const got = pool.next(kind); url = got && got.url ? String(got.url) : null; } catch (e) { url = null; }
       if (!url) return null;
       const face = { url, kind };
       faceUrls.set(tier, face);
-      if (!faceLogged) { faceLogged = true; say('faces: ' + kind + ' (' + facesMode + ', motion ' + motionLevelOf() + (reduced ? ', reduced' : '') + ')'); }
+      if (!faceLogged) {
+        faceLogged = true;
+        /* the CLASS's policy, not this one deal: faceKind is what a tier past
+           the shallows gets, and the two numbers are the pass-5 budget. */
+        say('faces: ' + faceKind + ' (' + facesMode + ', motion ' + motionLevelOf() + (reduced ? ', reduced' : '')
+          + ', still to tier ' + shallowStillMaxTier() + ', cap ' + faceCap() + ')');
+      }
       return face;
     }
     /** Dress (or re-dress after a merge) a tile with its tier's face. Never
@@ -681,7 +919,8 @@ export default {
       }
       node.setAttribute('data-face', String(tier));
       node.classList.remove('is-loaded');
-      try { img.src = face.url; } catch (e) { /* ignore */ }
+      const media = mediaNodeFor(node, face.url) || img;
+      try { media.src = face.url; } catch (e) { /* ignore */ }
     }
     /** A url that failed: this tier goes plain for the rest of the class (no retry storm). */
     function faceBroken(node) {
@@ -1558,6 +1797,152 @@ export default {
         .catch((e) => say('asset claim failed - plain faces, currents fall back to the engine pool: ' + ((e && e.message) || e)));
     }
 
+    /* ---- the class rules sheet (Deck VI, Law IV: drawn, not told) --------- */
+    /**
+     * Four vignettes in this pool's own language: the swipe that moves the
+     * whole board at once, two matching tiles meeting and sinking one depth,
+     * the locked board banking its depth and refilling, and the eleventh rung
+     * where the ladder simply stops. Every figure is CSS on the same tile
+     * chrome the board uses (the drawn ring glyph included), so the sheet costs
+     * no media and reads at any size.
+     */
+    let howtoEl = null;
+
+    /** Tiers this player has already had the rules sheet for (persisted). */
+    function howtoSeenTiers() {
+      try {
+        const m = (ctx.store && typeof ctx.store.gameMeta === 'function')
+          ? (ctx.store.gameMeta(GAME_KEY) || {}) : {};
+        return Array.isArray(m.howtoTiers) ? m.howtoTiers.slice() : [];
+      } catch (e) { return []; }
+    }
+
+    function hideHowto() {
+      if (howtoEl) { try { howtoEl.remove(); } catch (e) { /* noop */ } }
+      howtoEl = null;
+    }
+
+    function buildHowto(onGo) {
+      const sheet = el('div', 'g-de-howto');
+      sheet.appendChild(el('h2', 'g-de-hw-title', t('de_howto_title', DE_LEX.de_howto_title)));
+
+      const row = (build, caption) => {
+        const r = el('div', 'g-de-hw-row');
+        const fig = el('span', 'g-de-hw-fig');
+        fig.setAttribute('aria-hidden', 'true');
+        try { build(fig); } catch (e) { /* a caption alone still teaches */ }
+        r.appendChild(fig);
+        r.appendChild(el('p', 'g-de-hw-cap', caption));
+        sheet.appendChild(r);
+        return r;
+      };
+
+      /** A mini tile wearing a depth tier - the same data-tier the board uses,
+       *  so the palette and the drawn rings come from the one place. */
+      const tile = (cls, tierN) => {
+        const n2 = el('span', 'g-de-hw-tile' + (cls ? ' ' + cls : ''));
+        n2.setAttribute('data-tier', String(tierN == null ? 1 : tierN));
+        n2.appendChild(el('span', 'g-de-hw-num', String(tierN == null ? 1 : tierN)));
+        return n2;
+      };
+
+      /* 1 - THE SWIPE. Four arrows around a board whose whole row slides. */
+      row((fig) => {
+        const pad = el('span', 'g-de-hw-pad');
+        for (const d of ['up', 'right', 'down', 'left']) pad.appendChild(el('i', 'g-de-hw-arrow ' + d));
+        fig.appendChild(pad);
+        const line = el('span', 'g-de-hw-line slide');
+        for (let i = 0; i < 3; i++) {
+          const n2 = tile(null, i + 1);
+          n2.style.setProperty('--de-hw-i', String(i));
+          line.appendChild(n2);
+        }
+        fig.appendChild(line);
+      }, t('de_howto_swipe', DE_LEX.de_howto_swipe));
+
+      /* 2 - THE MERGE. Two equal tiles close on each other and come back as
+         one, a depth further down; the water darkens behind them. */
+      row((fig) => {
+        const scene = el('span', 'g-de-hw-scene');
+        scene.appendChild(tile('mrg a', 4));
+        scene.appendChild(tile('mrg b', 4));
+        scene.appendChild(tile('mrg out', 5));
+        fig.appendChild(scene);
+      }, t('de_howto_merge', DE_LEX.de_howto_merge));
+
+      /* 3 - THE RESURFACE. A jammed board drains and refills; the mark it
+         reached is banked on the gauge beside it. */
+      row((fig) => {
+        const grid4 = el('span', 'g-de-hw-grid');
+        for (let i = 0; i < 4; i++) {
+          const n2 = tile('drain', 2 + (i % 3));
+          n2.style.setProperty('--de-hw-i', String(i));
+          grid4.appendChild(n2);
+        }
+        fig.appendChild(grid4);
+        const gauge = el('span', 'g-de-hw-gauge');
+        gauge.appendChild(el('i'));
+        fig.appendChild(gauge);
+      }, t('de_howto_resurface', DE_LEX.de_howto_resurface));
+
+      /* 4 - THE CEILING. The ladder, and the rung it stops on. */
+      row((fig) => {
+        const ladder = el('span', 'g-de-hw-ladder');
+        for (let i = 1; i <= 11; i++) {
+          const rung = el('i', i === 11 ? 'top' : null);
+          rung.setAttribute('data-tier', String(i));
+          rung.style.setProperty('--de-hw-i', String(i - 1));
+          ladder.appendChild(rung);
+        }
+        fig.appendChild(ladder);
+        fig.appendChild(tile('ceil', 11));
+      }, t('de_howto_ceiling', DE_LEX.de_howto_ceiling));
+
+      const go = el('button', 'g-de-hw-go', t('de_howto_go', DE_LEX.de_howto_go));
+      go.setAttribute('type', 'button');
+      try { go.type = 'button'; } catch (e) { /* the DOM double has no button semantics */ }
+      go.addEventListener('click', () => { try { onGo(); } catch (e) { say('howto go: ' + ((e && e.message) || e)); } });
+      sheet.appendChild(go);
+      try { if (typeof go.focus === 'function') go.focus(); } catch (e) { /* noop */ }
+      return sheet;
+    }
+
+    /**
+     * Policy is the shell's "Skip class tutorials" contract: by default the
+     * sheet shows EVERY class; with the skip on, the pool still explains itself
+     * ONCE per grade tier. Dismissal is the sheet's own button and nothing
+     * else - every arrow key and the whole board are verbs here, so a key
+     * shortcut would be a move played against a board that has not dealt.
+     */
+    function howto(onDone) {
+      if (ctx.hideTutorial === true && howtoSeenTiers().indexOf(tier) >= 0) { onDone(); return; }
+      if (ctx.dev === true && spec && spec.devSkipHowto === true) { onDone(); return; }
+      if (!stage) { onDone(); return; }
+      const tierNow = tier;
+      let done = false;
+      let sheet = null;
+      try {
+        sheet = buildHowto(() => {
+          if (done || dead || ended) return;
+          done = true;
+          try {
+            const seen = howtoSeenTiers();
+            if (seen.indexOf(tierNow) < 0) {
+              seen.push(tierNow);
+              if (ctx.store && typeof ctx.store.mergeGameMeta === 'function') {
+                ctx.store.mergeGameMeta(GAME_KEY, { howtoTiers: seen });
+              }
+            }
+          } catch (e) { /* best effort - the sheet just shows again next time */ }
+          hideHowto();
+          onDone();
+        });
+      } catch (e) { say('rules sheet refused: ' + ((e && e.message) || e)); sheet = null; }
+      if (!sheet) { onDone(); return; }
+      howtoEl = sheet;
+      stage.appendChild(sheet);
+    }
+
     /* ==================================================================== *
      * THE MODULE INSTANCE
      * ==================================================================== */
@@ -1588,6 +1973,26 @@ export default {
           if (devDeepest) say('DEV: opening every dive at tier ' + devDeepest);
         }
         reduced = probeReduced(ctx);
+        /* PASS 5 - THE PERF LADDER, resolved BEFORE the first node: the stage,
+         * the face budget and the engine's video budget all read it. `full` is
+         * an explicit opt-out and is honoured even under reduced motion (the
+         * player asked for the room); `auto` is the only value that probes. */
+        perfSetting = perfFromSetting(ctx.settings ? ctx.settings.de_perf : 'auto');
+        perf = 'full';
+        perfReason = '';
+        perfProbeDone = false;
+        perfLogged = false;
+        setLiteClass(false);
+        /* PASS 6 - THE TOUCH RUNG: detected ONCE per class, before any node
+         * exists, and independent of de_perf. A phone's decoder ceiling is not
+         * a quality preference, so `full` does not opt out of it. */
+        touch = probeTouch();
+        setTouchClass(touch);
+        if (perfSetting === 'lite') applyPerf('lite', 'setting');
+        else if (perfSetting === 'auto' && (reduced || motionLevelOf() <= 1)) applyPerf('lite', 'reduced motion');
+        else applyPerf('full', perfSetting === 'full' ? 'setting' : 'auto: probing');
+        if (touch) say('touch device: html.ae-touch armed - faces ' + faceCap()
+          + ' animated tiers, stills to tier ' + shallowStillMaxTier() + ' (iOS decoder ceiling)');
         n = sizeFromSetting(ctx.settings ? ctx.settings.de_board_size : '4x4');
         {
           const want = String(ctx.settings && ctx.settings.de_tile_faces != null ? ctx.settings.de_tile_faces : 'media').trim().toLowerCase();
@@ -1669,37 +2074,48 @@ export default {
           });
         } catch (e) { pressure = null; say('pressure refused: ' + ((e && e.message) || e)); }
 
-        bindInput();
         claimAssets();
-        newDive();
-        startClock();
-        stallTimer = every(PLAYTEST.STALL_TICK_MS, () => {
-          if (ended || busy) return;
-          stallMs += PLAYTEST.STALL_TICK_MS;
-          deck('trickster', 'stalled', stallMs);
-          // STUCK: one pulse per stall, then silence until the next move
-          if (!stuckShown && stallMs >= PLAYTEST.STUCK_MS && board && !isLocked(board)) {
-            stuckShown = true;
-            stuckHint();
-          }
-        });
 
-        /* the briefing: one line, then the water opens */
-        if (endless) msg('de_brief_free', DE_LEX.de_brief_free);
-        else msg('de_brief', DE_LEX.de_brief);
-        after(reduced ? PLAYTEST.BRIEF_MS_REDUCED : PLAYTEST.BRIEF_MS, () => {
-          setPhase(basePhase());
-          msg('de_play_hint', DE_LEX.de_play_hint);
-          deck('casino', 'start');
-          deck('pressure', 'start');
-          deck('trickster', 'start');
-          openAmbience();
-          // the water opens: from here a press against the lock is REMEMBERED
-          // (the briefing itself is not a lock the player was playing against,
-          // so nothing it swallowed drains into the first dive)
-          opened = true;
-          busy = false;
-        });
+        /* THE SHEET FIRST (Deck VI), then the briefing, then the water
+           opens. Nothing that measures the player runs until GO: no key
+           is bound, no dive is dealt and the clock has not started, so a
+           class read at leisure grades exactly like one that skipped the
+           sheet. */
+        const beginClass = () => {
+          if (dead || ended) return;
+          bindInput();
+          newDive();
+          startPerfProbe();                    // the board is dealt: start counting frames
+          startClock();
+          stallTimer = every(PLAYTEST.STALL_TICK_MS, () => {
+            if (ended || busy) return;
+            stallMs += PLAYTEST.STALL_TICK_MS;
+            deck('trickster', 'stalled', stallMs);
+            // STUCK: one pulse per stall, then silence until the next move
+            if (!stuckShown && stallMs >= PLAYTEST.STUCK_MS && board && !isLocked(board)) {
+              stuckShown = true;
+              stuckHint();
+            }
+          });
+
+          /* the briefing: one line, then the water opens */
+          if (endless) msg('de_brief_free', DE_LEX.de_brief_free);
+          else msg('de_brief', DE_LEX.de_brief);
+          after(reduced ? PLAYTEST.BRIEF_MS_REDUCED : PLAYTEST.BRIEF_MS, () => {
+            setPhase(basePhase());
+            msg('de_play_hint', DE_LEX.de_play_hint);
+            deck('casino', 'start');
+            deck('pressure', 'start');
+            deck('trickster', 'start');
+            openAmbience();
+            // the water opens: from here a press against the lock is REMEMBERED
+            // (the briefing itself is not a lock the player was playing against,
+            // so nothing it swallowed drains into the first dive)
+            opened = true;
+            busy = false;
+          });
+        };
+        howto(beginClass);
 
         liveClass = instance;
         lastReport = null;
@@ -1734,6 +2150,10 @@ export default {
 
       destroy() {
         dead = true;
+        hideHowto();
+        perfProbeDone = true;                // any in-flight rAF step is a no-op now
+        setLiteClass(false);                 // .ae-lite is on <html>: it outlives us unless we take it off
+        setTouchClass(false);                // and so does .ae-touch - same seam, same cleanup
         clearQueue();
         clearGrab();
         opened = false;
@@ -1766,6 +2186,9 @@ export default {
       surface() { onSurface(); },
       /** The TRUE chip text - what the trickster restores after a lie. */
       chipText(which) { return chipText(which); },
+      /** Pass 5: hand the auto probe a frame sample directly (the harness has no
+       *  frame clock, and a real 3s sample is not a unit test). */
+      perfJudge(deltas) { perfProbeDone = true; judgePerf(Array.isArray(deltas) ? deltas : []); return perf; },
       /** Re-sync every tile element to the model after the harness staged a board. */
       resync() {
         if (!board) return;
@@ -1795,7 +2218,13 @@ export default {
           exhaleUsed, exhalePending, exhaleOn, bellOn, ceilingReached, survived,
           jackpots, currents, subFlashes, shimmers, strains, stallMs, currentHeat, driftOn,
           endless, surfaced, ceilingCelebrated, surfaceBtn, secLeft: secLeft(), clockTruth: clockText(),
-          facesMode, faceKind, faces: faceUrls.size, animatedFaces: board ? animatedFaces() : 0,
+          facesMode, faceKind, faces: faceUrls.size, animatedFaces: animatedFaces(),
+          /* pass 5 - THE PERF LADDER */
+          perf, perfReason, perfSetting, perfProbeDone,
+          faceCap: faceCap(), shallowStillMaxTier: shallowStillMaxTier(),
+          lite: !!(stage && stage.classList && stage.classList.contains('g-de-lite')),
+          /* pass 6 - THE TOUCH RUNG (composed with the rung above, not a rung) */
+          touch,
           slides, bumps, stuckHints, stuckShown,
           /* pass 3 - THE HAND + THE QUEUE */
           held: !!grab,

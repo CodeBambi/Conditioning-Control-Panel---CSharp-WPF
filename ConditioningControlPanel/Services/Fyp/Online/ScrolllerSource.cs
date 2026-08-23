@@ -130,6 +130,43 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
     }
 
     /// <summary>
+    /// Existence + size check for one subreddit, using the SAME query the fetch path uses so a
+    /// name that probes green cannot fail to resolve a second later. <c>limit:1</c> because the
+    /// items are thrown away — only <c>videoCount</c> and "did getSubreddit come back null"
+    /// matter. A null <c>getSubreddit</c> is not an error: it is the API saying "no such sub",
+    /// and the picker must show that as a soft "not found", never as "we are offline".
+    /// </summary>
+    public async Task<SubProbe> ProbeSubAsync(string sub, CancellationToken ct)
+    {
+        var variables = new JObject
+        {
+            ["url"] = "/r/" + sub,
+            ["iterator"] = JValue.CreateNull(),
+            ["sortBy"] = "RANDOM",
+            ["filter"] = "VIDEO",
+            ["limit"] = 1,
+        };
+
+        var data = await RequestGraphQlAsync(SubredditQuery, variables, ct).ConfigureAwait(false);
+        // Transport / HTTP / GraphQL failure: we learned nothing about the sub, so the caller
+        // must not persist a verdict from this.
+        if (data == null) return new SubProbe { Ok = false, Error = "offline" };
+
+        var node = data["getSubreddit"];
+        if (node == null || node.Type == JTokenType.Null)
+        {
+            App.Logger?.Debug("[FYP online] probe r/{Sub}: not on scrolller", sub);
+            return new SubProbe { Ok = false };
+        }
+
+        int? videos = (int?)node["videoCount"];
+        App.Logger?.Debug("[FYP online] probe r/{Sub}: ok, {N} videos", sub, videos);
+        // videoCount 0 is still Ok — the sub exists and has stills; the picker says so rather
+        // than pretending the sub is missing.
+        return new SubProbe { Ok = true, VideoCount = videos };
+    }
+
+    /// <summary>
     /// Which scrolller filter this request asks for, or null when nothing the caller can
     /// render is left alive on the channel. Mutates the channel's rotation bit exactly the
     /// way the video path always has.

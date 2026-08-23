@@ -17,6 +17,15 @@
              borrow one ✕ button would cost far more than it saves. Both keys are read from
              code-behind via AssetsTab.TryFindResource, so they stay in the UserControl's own
              dictionary rather than a local Grid.Resources (Known Issues #4). -->
+        <!-- The one "verified" orange, shared verbatim with the web pickers (#F0A04B, locked
+             2026-08-23). It lives here rather than in Resources/Theme because nothing outside
+             this panel has a verified subreddit to paint: a theme key with exactly one reader
+             is a key everyone has to keep in their head for nothing. -->
+        <SolidColorBrush x:Key="RemoteSubVerifiedBrush" Color="#FFF0A04B"/>
+        <!-- Soft coral for the inline sub errors. NOT DangerBrush (#E53935): that red is the
+             app's destructive-action alarm, and "we could not find that sub" is a hint, not an
+             alarm. Same reasoning as the web picker's .option-status.error. -->
+        <SolidColorBrush x:Key="RemoteSubErrorBrush" Color="#FFFF8A80"/>
         <Style x:Key="RemoteChipBorder" TargetType="Border">
             <Setter Property="CornerRadius" Value="13"/>
             <Setter Property="Padding" Value="12,5"/>
@@ -144,6 +153,14 @@
                                TextWrapping="Wrap" Margin="0,0,0,6"/>
                     <WrapPanel x:Name="RemoteNicheChips" x:FieldModifier="internal"/>
 
+                    <!-- One grey, collapsed line per CHECKED niche, listing the subreddits it
+                         actually resolves to. A WrapPanel cannot host a full-width row, so this
+                         is a sibling StackPanel rather than another chip. Filled by
+                         RefreshRemoteMediaPicker / RemoteNicheChip_Changed; expansion state is
+                         session-only (MainWindow._remoteNicheExpanded) - a disclosure triangle
+                         is not worth a settings key. -->
+                    <StackPanel x:Name="RemoteNicheSubs" x:FieldModifier="internal" Margin="0,2,0,0"/>
+
                     <!-- Custom subreddits -->
                     <TextBlock Text="{loc:Str label_remote_custom_subs}" Style="{StaticResource SettingLabel}"
                                FontSize="12" Margin="0,6,0,4"/>
@@ -156,6 +173,12 @@
                                 Style="{StaticResource SmallPinkButton}" Padding="10,4" FontSize="11"
                                 Margin="6,0,0,0"/>
                     </StackPanel>
+                    <!-- Inline, non-blocking. This replaced a modal MessageBox: a typo in a
+                         subreddit name does not deserve a dialog, and the probe result (not
+                         found / offline) has nowhere else to land. -->
+                    <TextBlock x:Name="TxtRemoteSubError" x:FieldModifier="internal"
+                               Foreground="{StaticResource RemoteSubErrorBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,0,0,6" Visibility="Collapsed"/>
                     <WrapPanel x:Name="RemoteCustomSubChips" x:FieldModifier="internal"/>
                 </StackPanel>
             </StackPanel>

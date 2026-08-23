@@ -1303,8 +1303,13 @@
                      ImageSource is the failure mode this wall already knows about. When the art
                      lands it can become a full card in a zone whose Columns count is revisited.
                      Same launch posture as the DtRH hero: the band below is decoration and
-                     ArcademyHostService.Launch does the refusing (T2, then AudioOnlySession). -->
-                <Grid x:Name="SlotArcademy" x:FieldModifier="internal" Margin="0,0,0,10">
+                     ArcademyHostService.Launch does the refusing (the door, T2, AudioOnlySession).
+
+                     Visibility=Collapsed by DEFAULT, exactly like SlotJustDrop above: Semester 1
+                     is merged but unannounced, so 6.8.4 ships it dark. RefreshPlayCards re-asserts
+                     this from ArcademyHostService.DoorAvailable on every repaint; the default here
+                     is what keeps the card hidden in the frames before that first runs. -->
+                <Grid x:Name="SlotArcademy" x:FieldModifier="internal" Margin="0,0,0,10" Visibility="Collapsed">
                     <Border Style="{StaticResource PlayCardT2}" Padding="0" MinHeight="118">
                         <Grid>
                             <Grid>
