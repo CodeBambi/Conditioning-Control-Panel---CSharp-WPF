@@ -15,7 +15,7 @@ namespace CcpClient.Tests;
 /// is an operating-system read-back.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class BubbleCountCapabilityTests
+public class BubbleCountCapabilityTests : RealDesktopFacts
 {
     private static BubbleCountObservations.PaintedRun Run => BubbleCountObservations.Painted;
 

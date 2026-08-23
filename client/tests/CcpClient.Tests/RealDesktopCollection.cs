@@ -1261,3 +1261,35 @@ internal static class RealDesktopWindowFloor
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern nint DispatchMessageW(ref FloorMsg message);
 }
+
+/// <summary>
+/// <b>The base every <see cref="RealDesktopCollection"/> class derives from, and it exists for one
+/// line: its constructor puts this thread's window floor up.</b>
+///
+/// <para><b>Why a base class and not the collection fixture.</b> The fixture was tried and
+/// MEASURED WRONG. <see cref="RealDesktopWindowFloor"/> is <see cref="ThreadStaticAttribute"/>
+/// because the revocation's TRIGGER is thread-scoped even though its LOSS is process-wide, and a
+/// collection fixture is constructed once, on whatever thread xunit happened to build it on — which
+/// is not the thread that runs the facts. A floor held on another thread does not protect: measured
+/// directly, a clicked window destroyed with a floor alive on a DIFFERENT thread still costs the
+/// band, and the same floor on the SAME thread does not. xunit constructs the test CLASS on the
+/// thread that will run the test, so this is the one hook that is always on the right thread.</para>
+///
+/// <para><b>Why not the two arming call sites this replaced.</b> The floor used to go up only in
+/// <c>PointerWindowProbe.InjectClickAt</c> and <c>ScratchTarget.Create</c> — both POINTER paths. A
+/// fact that reaches a band assertion through a different probe never touched either: source, not
+/// supposition, <c>PointerSurfaceObservations.RunCoexistence</c>'s first act is
+/// <c>new Win32OverlayPresence()</c> and <c>Present</c>, with no scratch target and no injected
+/// click anywhere in it. Whether its thread happened to be floored was then decided by which pool
+/// thread xunit handed that lazy — so adding fourteen unrelated facts elsewhere in the assembly was
+/// enough to turn a green assembly into three reds, which is exactly what a merge did.</para>
+///
+/// <para><b>What it costs.</b> One hidden, zero-sized, never-shown window per thread that runs a
+/// real-desktop fact, and after the first construction on a thread it is one <c>IsWindow</c> check.
+/// Membership is not a convention: <see cref="RealDesktopCollectionGuardTests"/> fails when a class
+/// carries the collection attribute without deriving from this.</para>
+/// </summary>
+public abstract class RealDesktopFacts
+{
+    protected RealDesktopFacts() => RealDesktopWindowFloor.Ensure();
+}

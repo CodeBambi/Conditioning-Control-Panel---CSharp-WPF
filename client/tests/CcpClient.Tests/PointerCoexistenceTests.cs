@@ -22,7 +22,7 @@ namespace CcpClient.Tests;
 /// the new operation.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class PointerCoexistenceTests
+public class PointerCoexistenceTests : RealDesktopFacts
 {
     [Fact]
     public void ALLFOURSurfacesReallyReachedTheDesktop_OrEveryReadingBelowIsATestOfNothingHappening()

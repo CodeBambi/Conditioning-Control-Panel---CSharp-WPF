@@ -42,7 +42,7 @@ namespace CcpClient.Tests;
 /// </list>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class GlyphCoexistenceTests
+public class GlyphCoexistenceTests : RealDesktopFacts
 {
     [Fact]
     public void ALLFIVESurfacesReallyReachedTheDesktop_OrEveryReadingBelowIsATestOfNothingHappening()

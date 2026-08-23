@@ -15,7 +15,7 @@ namespace CcpClient.Tests;
 /// differently.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class GlyphCapabilityTests
+public class GlyphCapabilityTests : RealDesktopFacts
 {
     // ------------------------------------------------------- the instrument itself
 

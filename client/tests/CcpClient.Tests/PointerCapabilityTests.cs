@@ -36,7 +36,7 @@ namespace CcpClient.Tests;
 /// <c>presentation-verified</c> is untouched.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class PointerCapabilityTests
+public class PointerCapabilityTests : RealDesktopFacts
 {
     [Fact]
     public void TheDeliveryOracle_CanSeeAClickArriveAtAWindowItBuiltItself_OrNoFactBelowMeansAnything()

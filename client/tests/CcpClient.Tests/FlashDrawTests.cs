@@ -25,7 +25,7 @@ namespace CcpClient.Tests;
 /// D56) and the facts below assert that the refusal is complete.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class FlashDrawTests
+public class FlashDrawTests : RealDesktopFacts
 {
     // ---------------------------------------------------------------------------------
     //  the instruments, and their controls

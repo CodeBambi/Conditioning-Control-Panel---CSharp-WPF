@@ -30,7 +30,7 @@ namespace CcpClient.Tests;
 /// desktop can take it. And every part of Linux.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class InputCapabilityTests
+public class InputCapabilityTests : RealDesktopFacts
 {
     [Fact]
     public void TheDeliveryOracle_CanSeeAKeystrokeArrive_AndCanSeeItNotArrive()

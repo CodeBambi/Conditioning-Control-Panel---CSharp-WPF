@@ -20,7 +20,7 @@ namespace CcpClient.Tests;
 /// would be measuring the card.</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class InputOverlayCoexistenceTests
+public class InputOverlayCoexistenceTests : RealDesktopFacts
 {
     [Fact]
     public void TheCardReallyTookTheForeground_WhichIsWhatMakesTheRestOfThisFileATest()

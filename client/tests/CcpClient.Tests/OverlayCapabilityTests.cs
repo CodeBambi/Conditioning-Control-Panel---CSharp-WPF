@@ -33,7 +33,7 @@ namespace CcpClient.Tests;
 /// (this packet's record.md).</para>
 /// </summary>
 [Collection(nameof(RealDesktopCollection))]
-public class OverlayCapabilityTests
+public class OverlayCapabilityTests : RealDesktopFacts
 {
     /// <summary>
     /// A stripped WS_EX_TOPMOST must be re-asserted, and a stripped WS_EX_LAYERED must still refuse.
