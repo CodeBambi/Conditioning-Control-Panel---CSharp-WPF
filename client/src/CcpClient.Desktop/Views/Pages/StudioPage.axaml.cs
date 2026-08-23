@@ -79,6 +79,16 @@ public partial class StudioPage : UserControl
     private readonly VisualsDials _visuals;
     private readonly SessionScheduler _scheduler;
     private readonly Haptics.HapticParticipant _haptics;
+
+    /// <summary>The one scripted session, reached off the composed participant — never a second
+    /// one built here, for the reason <c>MainWindow</c> gives about the engine: two runs would
+    /// borrow the user's dials twice and give them back once.</summary>
+    private readonly ScriptedSessionRun _scripted;
+
+    private readonly List<(RadioButton Row, ScriptedSession Session)> _scriptedRows = [];
+    private ScriptedSession? _scriptedSelection;
+    private ScriptedConfirmIntent _scriptedConfirm;
+    private string? _scriptedRefusal;
     private bool _syncing;
 
     /// <param name="loom">The one Loom launch path.</param>
@@ -148,6 +158,7 @@ public partial class StudioPage : UserControl
         RowVisuals.IsCheckedChanged += (_, _) => ApplySelection();
         RowScheduler.IsCheckedChanged += (_, _) => ApplySelection();
         RowHaptics.IsCheckedChanged += (_, _) => ApplySelection();
+        RowScriptedSession.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
         // not on the dot: the dot is 8px and the gesture belongs to the whole entry (:658-659).
@@ -334,6 +345,26 @@ public partial class StudioPage : UserControl
         _bubbleCount.Resolved += _ => Refresh();
 
         LoomButton.Click += (_, _) => loom.Launch();
+
+        // THE SCRIPTED SESSION. The rack is built once, from the four files beside the binary:
+        // this build has no editor and no import, so the SET cannot change while the app runs, and
+        // upstream's repaint-on-every-change (MainWindow/MainWindow.SessionIO.cs:212) has nothing
+        // here to react to. The moment one of those arrives, this becomes a repaint.
+        _scripted = session.Scripted;
+        BuildScriptedSessionRack();
+        ScriptedSessionStartButton.Click += (_, _) => OnScriptedStartClicked();
+        ScriptedSessionConfirmButton.Click += (_, _) => OnScriptedConfirmClicked();
+        ScriptedSessionCancelButton.Click += (_, _) => OnScriptedCancelClicked();
+
+        // The run's three notifications arrive already marshalled (it was composed with the
+        // session's EffectSignal), so these handlers touch controls directly like every other
+        // handler on this page. PhaseChanged fires for phase 0 at START, which is what paints the
+        // first readout without this page owning a clock of its own.
+        _scripted.ProgressUpdated += _ => RenderScriptedSession();
+        _scripted.PhaseChanged += (_, _) => RenderScriptedSession();
+        // An ending session hands the dials back, so the panels above have to re-read them: that
+        // is the whole visible half of the restore, and it is the same repaint a quick-toggle does.
+        _scripted.Ended += _ => OnSessionChanged();
 
         LoadDialsFromPreset();
         Refresh();
@@ -539,6 +570,8 @@ public partial class StudioPage : UserControl
         var visualsOpen = RowVisuals.IsChecked == true;
         var schedulerOpen = RowScheduler.IsChecked == true;
         var hapticsOpen = RowHaptics.IsChecked == true;
+        var scriptedOpen = RowScriptedSession.IsChecked == true;
+        ScriptedSessionModulePanel.IsVisible = scriptedOpen;
         SchedulerModulePanel.IsVisible = schedulerOpen;
         HapticsModulePanel.IsVisible = hapticsOpen;
         VisualsModulePanel.IsVisible = visualsOpen;
@@ -556,7 +589,343 @@ public partial class StudioPage : UserControl
         LockCardModulePanel.IsVisible = lockCardOpen;
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
             && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen
-            && !bubblePopOpen && !bouncingTextOpen && !visualsOpen && !schedulerOpen && !hapticsOpen;
+            && !bubblePopOpen && !bouncingTextOpen && !visualsOpen && !schedulerOpen && !hapticsOpen
+            && !scriptedOpen;
+    }
+
+    // =====================================================================================
+    //  THE SCRIPTED SESSION RACK
+    // =====================================================================================
+
+    /// <summary>Which question the confirmation strip is asking. Explicit rather than derived from
+    /// <see cref="ScriptedSessionRun.Running"/> at click time, because a session can END between
+    /// the strip going up and the button being pressed, and a strip that silently changed its mind
+    /// from "stop this?" to "start that?" would act on a gesture nobody made.</summary>
+    private enum ScriptedConfirmIntent
+    {
+        /// <summary>Nothing is being asked; the strip is not on screen.</summary>
+        None,
+
+        /// <summary>Upstream's start confirmation (<c>MainWindow.Presets.cs:1465-1476</c>).</summary>
+        Start,
+
+        /// <summary>Upstream's stop confirmation (<c>MainWindow.Presets.cs:1893-1906</c>).</summary>
+        Stop,
+    }
+
+    /// <summary>
+    /// One row per shipped session, from the files themselves — upstream's
+    /// <c>RepaintSessionRack</c> / <c>BuildSessionRackRow</c>
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:212-232</c>, <c>:377-556</c>).
+    ///
+    /// <para><b>What a row carries is upstream's row minus two cells.</b> Upstream's is: difficulty
+    /// stripe, icon, name, the description's first line, a difficulty pill, the duration, the XP
+    /// reward, a provenance badge and four hover actions. The stripe, icon, name, blurb, difficulty
+    /// and duration are all here. The XP cell is refused (see
+    /// <see cref="SessionRackNotices.RowMeta"/> — nothing in this build awards it), and the
+    /// provenance badge and the four actions belong to custom, imported and editable sessions,
+    /// which this build does not have: every row here is built-in, so a badge saying so on all four
+    /// would carry no information, and an edit or delete button would be a control that cannot act.
+    /// </para>
+    ///
+    /// <para>The empty case is upstream's too (<c>:238-260</c>): a line where the rows would be,
+    /// never a blank panel. It is reachable — the four files are content beside the binary and a
+    /// published tree missing them is a degraded install rather than a crash
+    /// (<see cref="ScriptedSession.ReadFolder"/>).</para>
+    /// </summary>
+    private void BuildScriptedSessionRack()
+    {
+        var sessions = ScriptedSession.ReadBuiltIns();
+        if (sessions.Count == 0)
+        {
+            ScriptedSessionRackPanel.Children.Add(new TextBlock
+            {
+                Name = "ScriptedSessionRackEmpty",
+                Text = "No sessions are installed. The four built-in sessions ship beside the "
+                    + "app, in its sessions folder.",
+                Foreground = new SolidColorBrush(Color.Parse("#FFE8E0EE")),
+                Opacity = 0.7,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                [Avalonia.Automation.AutomationProperties.AutomationIdProperty] =
+                    "ScriptedSessionRackEmpty",
+            });
+            return;
+        }
+
+        foreach (var session in sessions)
+        {
+            var row = BuildScriptedSessionRow(session);
+            _scriptedRows.Add((row, session));
+            ScriptedSessionRackPanel.Children.Add(row);
+        }
+    }
+
+    /// <summary>
+    /// One rack row. A <see cref="RadioButton"/> in the page's own rack livery, which is what makes
+    /// selection the control's own <c>:checked</c> state and its keyboard activation the control's
+    /// own — the same reasoning the module rows above carry, and upstream's own row is a selectable
+    /// card too (<c>MainWindow.SessionIO.cs:381-397</c>).
+    /// </summary>
+    private RadioButton BuildScriptedSessionRow(ScriptedSession session)
+    {
+        var icon = new TextBlock
+        {
+            Text = SessionRackNotices.RowIcon(session),
+            FontSize = 13,
+            Width = 22,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        var name = new TextBlock
+        {
+            Text = session.Name,
+            FontSize = 12,
+            FontWeight = FontWeight.SemiBold,
+            MaxWidth = 150,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Avalonia.Thickness(4, 0, 0, 0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        var blurb = new TextBlock
+        {
+            Text = SessionRackNotices.RowBlurb(session),
+            FontSize = 11,
+            Opacity = 0.6,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Avalonia.Thickness(10, 0, 0, 0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        var meta = new TextBlock
+        {
+            Text = SessionRackNotices.RowMeta(session),
+            FontSize = 11,
+            Opacity = 0.8,
+            TextAlignment = TextAlignment.Right,
+            Margin = new Avalonia.Thickness(10, 0, 10, 0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [Avalonia.Automation.AutomationProperties.AutomationIdProperty] =
+                "SessionMeta" + PascalId(session.Id),
+        };
+
+        // THE DIFFICULTY STRIPE, in upstream's own colours (Resources/Theme/Colors.xaml:191-197)
+        // and for upstream's own stated reason: it is "the one part of the row you can read at a
+        // glance while scrolling" (MainWindow.SessionIO.cs:421-422). It sits at the row's TRAILING
+        // edge rather than its leading one, because the leading edge of a rack row in this port is
+        // already the selection marker (RadioButton.rack-row:checked, MainWindow.axaml:101-104) and
+        // two 3-4 DIP bars on the same edge would be one bar the user cannot decode.
+        var stripe = new Border
+        {
+            Name = "SessionStripe" + PascalId(session.Id),
+            Width = 4,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch,
+            Background = new SolidColorBrush(
+                Color.Parse(SessionRackNotices.DifficultyStripe(session.Difficulty))),
+        };
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto,Auto") };
+        Grid.SetColumn(icon, 0);
+        Grid.SetColumn(name, 1);
+        Grid.SetColumn(blurb, 2);
+        Grid.SetColumn(meta, 3);
+        Grid.SetColumn(stripe, 4);
+        grid.Children.Add(icon);
+        grid.Children.Add(name);
+        grid.Children.Add(blurb);
+        grid.Children.Add(meta);
+        grid.Children.Add(stripe);
+
+        var row = new RadioButton
+        {
+            Name = "SessionRow" + PascalId(session.Id),
+            GroupName = "scripted-sessions",
+            Content = grid,
+            [Avalonia.Automation.AutomationProperties.AutomationIdProperty] =
+                "SessionRow" + PascalId(session.Id),
+            [Avalonia.Automation.AutomationProperties.NameProperty] = session.Name,
+        };
+        row.Classes.Add("rack-row");
+
+        // Upstream puts the WHOLE authored description on the row's tooltip, because the blurb cell
+        // is one ellipsised line of it (MainWindow.SessionIO.cs:474-477).
+        ToolTip.SetTip(row, session.Description);
+        row.IsCheckedChanged += (_, _) => OnScriptedRowChecked();
+        return row;
+    }
+
+    /// <summary>A session id as a control name: <c>good_girls_dont_cum</c> ->
+    /// <c>GoodGirlsDontCum</c>. Upstream keys its rows on the raw id (<c>Tag</c>,
+    /// <c>MainWindow.SessionIO.cs:371-373</c>); a control name cannot carry an underscore-cased id
+    /// and stay conventional, and the headed harness addresses these rows by name.</summary>
+    private static string PascalId(string id) =>
+        string.Concat(
+            id.Split('_', StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
+
+    /// <summary>
+    /// A row was picked. Upstream's <c>SelectSession</c> repaints the rack and enables the actions
+    /// that act on a selection (<c>MainWindow.SessionIO.cs</c>, cited from
+    /// <c>Views/Tabs/PresetsTabView.xaml:920-923</c>); here selection is the control's own state,
+    /// so all this has to do is remember which one and repaint the panel.
+    ///
+    /// <para>A new pick ABANDONS an unanswered confirmation: the strip names a session by name, and
+    /// leaving it up over a different selection is how a user ends up starting something they did
+    /// not read.</para>
+    /// </summary>
+    private void OnScriptedRowChecked()
+    {
+        var picked = _scriptedRows.Find(entry => entry.Row.IsChecked == true);
+        _scriptedSelection = picked.Session;
+        _scriptedRefusal = null;
+        if (_scriptedConfirm == ScriptedConfirmIntent.Start)
+        {
+            _scriptedConfirm = ScriptedConfirmIntent.None;
+        }
+
+        RenderScriptedSession();
+    }
+
+    /// <summary>
+    /// The one button, and the branch upstream comments in its own words: "The button doubles as
+    /// Start/Stop — state dictates which path to run. This also makes us resilient to any
+    /// stale/duplicate Click subscriptions" (<c>MainWindow/MainWindow.Presets.cs:1455-1459</c>).
+    ///
+    /// <para>Then upstream's two refusals, in upstream's order: nothing selected, or a session that
+    /// is not available (<c>:1463</c>). Upstream returns in silence; this says which guard
+    /// refused, because a button that does nothing and explains nothing is indistinguishable from
+    /// one that is broken.</para>
+    /// </summary>
+    private void OnScriptedStartClicked()
+    {
+        if (_scripted.Running)
+        {
+            _scriptedConfirm = ScriptedConfirmIntent.Stop;
+            RenderScriptedSession();
+            return;
+        }
+
+        if (_scriptedSelection is null)
+        {
+            _scriptedRefusal = SessionRackNotices.NothingSelected;
+            RenderScriptedSession();
+            return;
+        }
+
+        if (!_scriptedSelection.IsAvailable)
+        {
+            _scriptedRefusal = SessionRackNotices.NotAvailable;
+            RenderScriptedSession();
+            return;
+        }
+
+        _scriptedRefusal = null;
+        _scriptedConfirm = ScriptedConfirmIntent.Start;
+        RenderScriptedSession();
+    }
+
+    /// <summary>
+    /// The confirmation was answered YES — upstream's <c>if (confirmed) StartSession(...)</c>
+    /// (<c>:1472-1476</c>) and <c>if (confirmed) StopSession(completed: false)</c>
+    /// (<c>:1903-1906</c>).
+    ///
+    /// <para>The intent is read and cleared FIRST, so a strip that is answered twice (a double
+    /// click, a duplicated subscription — the thing upstream's doubling comment is about) can only
+    /// act once.</para>
+    /// </summary>
+    private void OnScriptedConfirmClicked()
+    {
+        var intent = _scriptedConfirm;
+        _scriptedConfirm = ScriptedConfirmIntent.None;
+        switch (intent)
+        {
+            case ScriptedConfirmIntent.Start when _scriptedSelection is { IsAvailable: true } pick:
+                // Upstream starts the ordinary engine on the way in (:1511-1514); the run does
+                // that itself, in the order its own doc gives, so there is nothing to do here but
+                // ask. A false return means one was already running, which the strip cannot mean.
+                _scripted.Start(pick);
+                break;
+            case ScriptedConfirmIntent.Stop:
+                _scripted.Stop();
+                break;
+            default:
+                break;
+        }
+
+        // The start applied the session's dials to every document above, and the stop gave the
+        // user's back: either way the panels on this page are now showing stale numbers.
+        OnSessionChanged();
+    }
+
+    /// <summary>The confirmation was answered NO. Upstream's dialog simply returns
+    /// (<c>:1472</c>, <c>:1903</c>) — nothing starts, nothing stops.</summary>
+    private void OnScriptedCancelClicked()
+    {
+        _scriptedConfirm = ScriptedConfirmIntent.None;
+        RenderScriptedSession();
+    }
+
+    /// <summary>
+    /// The whole scripted panel, repainted from ONE clock reading.
+    ///
+    /// <para><b>One reading, not three.</b> <see cref="ScriptedSessionRun.ReadProgress"/> exists
+    /// for exactly this: elapsed, remaining and percent taken together, so the button's countdown
+    /// and the line under it cannot disagree by the second it took to ask twice — which is what
+    /// upstream's own event args do (<c>Services/Session/SessionEngine.cs:520-524</c>).</para>
+    /// </summary>
+    private void RenderScriptedSession()
+    {
+        var running = _scripted.Running;
+        var live = _scripted.Current;
+        var progress = _scripted.ReadProgress();
+
+        // A stop confirmation outlives nothing: if the session ended while the strip was up (it
+        // reached its own duration), there is no longer anything to stop and the question goes.
+        if (_scriptedConfirm == ScriptedConfirmIntent.Stop && !running)
+        {
+            _scriptedConfirm = ScriptedConfirmIntent.None;
+        }
+
+        var caption = running
+            ? SessionRackNotices.StopButtonRunning(progress)
+            : SessionRackNotices.StartButtonIdle;
+        ScriptedSessionStartButton.Content = caption;
+        ScriptedSessionStartButton.SetValue(
+            Avalonia.Automation.AutomationProperties.NameProperty, caption);
+        ScriptedSessionStartButton.Classes.Set("running", running);
+
+        ScriptedSessionConfirmPanel.IsVisible = _scriptedConfirm != ScriptedConfirmIntent.None;
+        if (_scriptedConfirm == ScriptedConfirmIntent.Start && _scriptedSelection is { } pick)
+        {
+            ScriptedSessionConfirmTitle.Text = SessionRackNotices.StartConfirmTitle(pick);
+            ScriptedSessionConfirmDetail.Text = SessionRackNotices.StartConfirmDuration(pick);
+            ScriptedSessionConfirmPromise.Text = SessionRackNotices.SettingsPromise;
+            ScriptedSessionConfirmQuestion.Text = SessionRackNotices.ReadyToBegin;
+            ScriptedSessionConfirmButton.Content = SessionRackNotices.ConfirmStart;
+            ScriptedSessionCancelButton.Content = SessionRackNotices.CancelStart;
+        }
+        else if (_scriptedConfirm == ScriptedConfirmIntent.Stop && live is { } stopping)
+        {
+            ScriptedSessionConfirmTitle.Text = SessionRackNotices.StopConfirmTitle;
+            ScriptedSessionConfirmDetail.Text = SessionRackNotices.StopConfirmSubject(stopping);
+            ScriptedSessionConfirmPromise.Text = SessionRackNotices.StopConfirmTiming(progress);
+            ScriptedSessionConfirmQuestion.Text = SessionRackNotices.StopConfirmQuestion;
+            ScriptedSessionConfirmButton.Content = SessionRackNotices.ConfirmStop;
+            ScriptedSessionCancelButton.Content = SessionRackNotices.CancelStop;
+        }
+
+        ScriptedSessionConfirmButton.SetValue(
+            Avalonia.Automation.AutomationProperties.NameProperty,
+            ScriptedSessionConfirmButton.Content as string ?? string.Empty);
+        ScriptedSessionCancelButton.SetValue(
+            Avalonia.Automation.AutomationProperties.NameProperty,
+            ScriptedSessionCancelButton.Content as string ?? string.Empty);
+
+        ScriptedSessionPhaseState.Text = running && live is { } current
+            ? SessionRackNotices.PhaseLine(current, _scripted.CurrentPhase, _scripted.CurrentPhaseIndex)
+            : _scriptedRefusal ?? SessionRackNotices.IdleLine(_scriptedSelection);
+        ScriptedSessionProgressState.Text = running
+            ? SessionRackNotices.ProgressLine(progress)
+            : string.Empty;
+        ScriptedSessionAbsenceState.Text = SessionRackNotices.Absences;
     }
 
     /// <summary>
@@ -1364,6 +1733,11 @@ public partial class StudioPage : UserControl
         var (presses, refused) = _bubblePop.Delivery;
         BubblePopDeliveryState.Text = PointerPanelNotices.DescribeDelivery(presses, refused);
         BubblePopCapabilityState.Text = PointerPanelNotices.DescribeCapability(_bubblePop.LastPlacement);
+
+        // Last, and from this page's ONE repaint entry rather than from a clock of its own: a
+        // scripted session moves on its own tick, but every other thing that repaints this page can
+        // also change what its readout should say (its start armed every module above).
+        RenderScriptedSession();
     }
 
     /// <summary>
