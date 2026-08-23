@@ -412,7 +412,6 @@ public sealed class PopQuizEffect : PacedSessionEffect<PopQuizFiring>
         var ask = firing.Ask;
         lock (Gate)
         {
-            CancelFollowUp();
             _ask = ask;
             _lastGrant = null;
             _lastResolution = PopQuizResolution.None;
@@ -559,8 +558,24 @@ public sealed class PopQuizEffect : PacedSessionEffect<PopQuizFiring>
         Interlocked.Exchange(ref _followUp, timer)?.Dispose();
     }
 
-    /// <summary>Drop whichever of the two delays is outstanding. Lock-free and idempotent — the
-    /// Bubble Count <c>CancelSafety</c> shape (<c>Effects/BubbleCountEffect.cs:820</c>).</summary>
+    /// <summary>
+    /// Drop the outstanding delay, or dispose the handle of the one that has just been spent —
+    /// the Bubble Count <c>CancelSafety</c> shape (<c>Effects/BubbleCountEffect.cs:820</c>),
+    /// lock-free and idempotent.
+    ///
+    /// <para><b>It is called from <see cref="Resolve"/> and NOWHERE ELSE, and that is a
+    /// deliberate narrowing rather than an oversight.</b> Every path a card can end on goes
+    /// through <see cref="Resolve"/> — answered, skipped, refused, withdrawn — so a copy in
+    /// <see cref="Deliver"/> or <see cref="OnDisarmed"/> can never be the call that does the
+    /// work. Both were written, and a mutation sweep proved neither could be made to fail:
+    /// deleting either left every fact green. Unprovable defence is code nobody can maintain,
+    /// so it is gone and the one call that IS load-bearing is pinned
+    /// (<c>AStopDropsTheCardsPendingDelay…</c>).</para>
+    ///
+    /// <para>It also disposes a SPENT handle, which is not tidying: a fired one-shot is still an
+    /// undisposed OS timer, the leak <see cref="PacedSessionEffect{TFiring}"/> already records
+    /// for its own pending firing.</para>
+    /// </summary>
     private void CancelFollowUp() => Interlocked.Exchange(ref _followUp, null)?.Dispose();
 
     private void Resolve(PopQuizAsk ask, PopQuizResolution resolution)
@@ -600,8 +615,6 @@ public sealed class PopQuizEffect : PacedSessionEffect<PopQuizFiring>
     /// </summary>
     protected override void OnDisarmed()
     {
-        CancelFollowUp();
-
         var ask = Ask;
         if (ask is null)
         {
