@@ -1,7 +1,7 @@
 namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
-/// The intake niche (IntakeNiche.cs:23-59 + the host-side bank clamp,
+/// The intake niche (Services/Quiz/IntakeNiche.cs:23-59 + the host-side bank clamp,
 /// IntakeHostService.cs:674-702). Greenfield has NO mod system (the mod-system row is
 /// unfiled), so the active-mod mapping is a TYPED SEAM defaulting to the WPF last-resort
 /// <see cref="Fallback"/> — recorded DISTINCTLY from the bank clamp (pre-approach consult

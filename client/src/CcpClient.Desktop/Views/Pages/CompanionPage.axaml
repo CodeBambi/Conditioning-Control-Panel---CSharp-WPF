@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="CcpClient.Desktop.Views.Pages.CompanionPage">
   <!--
-    wpf-surface-reachability.md §5 recorded the port's front-surface "Open companion" button as
+    wpf-surface-reachability.md §5 @ 7527243e7 recorded the port's front-surface "Open companion" button as
     a DIVERGENCE, because WPF's dashboard companion element NAVIGATES to a page
     (Views/Tabs/SettingsTabView.xaml:1864-1887) and the explicit control lives on that page's
     hero card (CompanionHeroCard.xaml:606-616). Moving the button behind this door restores the

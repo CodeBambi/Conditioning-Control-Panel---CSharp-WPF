@@ -83,7 +83,7 @@ public class NavigationShellHeadlessTests
     public async Task ColdStart_NoArguments_DoorThenRowThenButton_ReachesTheLoomHost()
     {
         // THE ROW'S POINT: a landed surface reachable by a real user gesture, with no CLI flag.
-        // Route verified live against v6.8.1 (wpf-surface-reachability.md §8.4):
+        // Route verified live against v6.8.1 (wpf-surface-reachability.md §8.4 @ 7527243e7):
         // DoorStudio -> rack row "Spiral Overlay" -> "THE LOOM — weave your own spiral".
         var (host, window) = await BootAsync();
         var presented = CaptureLoomPresentations(window);

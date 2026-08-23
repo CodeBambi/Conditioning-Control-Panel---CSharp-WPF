@@ -13,7 +13,7 @@ namespace CcpClient.Desktop.Tray;
 /// <c>_hasShownFirstMinimizeNotification</c> at <c>:23</c>). So a user whose first minimize of the
 /// session is a DTRH launch does get a balloon, the comment notwithstanding. The port reproduces
 /// the CODE: <see cref="FirstMinimize"/> carries WPF's exact title, text and 2000 ms timeout, and
-/// <c>ShellTray</c> latches it the same way. Recorded as wpf-surface-reachability.md §10 D20.</para>
+/// <c>ShellTray</c> latches it the same way. Recorded as wpf-surface-reachability.md §10 D20 @ 7527243e7.</para>
 /// </summary>
 public sealed class TrayNotification
 {

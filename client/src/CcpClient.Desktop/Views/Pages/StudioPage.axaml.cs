@@ -16,7 +16,7 @@ namespace CcpClient.Desktop.Views.Pages;
 /// <summary>
 /// The Studio rack.
 ///
-/// <para>Hop 2 of the Loom route (wpf-surface-reachability.md §4, §8.4 verified live):
+/// <para>Hop 2 of the Loom route (wpf-surface-reachability.md §4, §8.4 @ 7527243e7 verified live):
 /// rack row <c>Spiral Overlay</c> -> module panel -> <c>THE LOOM — weave your own spiral</c>
 /// -> <see cref="LoomLaunch"/>. A row selects a module and opens NO window
 /// (<c>MainWindow.Presets.cs:976-978,1009</c> — "Navigation tiles still navigate to the ONE

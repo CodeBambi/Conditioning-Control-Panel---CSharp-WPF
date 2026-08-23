@@ -65,11 +65,11 @@ namespace CcpClient.Desktop.Features.Goon;
 /// suite instead of 415-ing silently in front of a player.</para>
 ///
 /// <para><b>The bridge inbox exists because the §4 class requires one, and is unused here.</b>
-/// The goon page's own bridge speaks <c>window.chrome.webview</c> only (<c>bridge.js:45-47</c>,
+/// The goon page's own bridge speaks <c>window.chrome.webview</c> only (<c>goon/bridge.js:45-47</c>,
 /// <c>:65-67</c>, <c>:93-95</c>) — it has no §3.3 long-poll transport — so the <c>/bridge/</c>
 /// route sits idle (token unguessable, route-class logged only). That is also why the Linux
 /// NativeWebDialog path is NOT admitted for goon: a dialog would run the page STANDALONE, where
-/// it synthesizes its own <c>init</c> (the <c>!isHosted</c> branch at <c>bridge.js:473</c>) and would silently ignore this
+/// it synthesizes its own <c>init</c> (the <c>!isHosted</c> branch at <c>goon/bridge.js:473</c>) and would silently ignore this
 /// host's caps — including every door refusal. Linux gets the typed honest-unsupported surface.</para>
 /// </summary>
 public sealed class GoonParticipant : IDisposable

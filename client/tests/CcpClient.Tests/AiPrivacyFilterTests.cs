@@ -134,7 +134,7 @@ public class AiPrivacyFilterTests
         Assert.Equal("Some Page", AiPrivacyFilters.SanitizeTitleForWire("Some Page"));
     }
 
-    // ---- F3: unsanctioned-link strip (WPF AiTextHygiene.cs:217-260, strip half only) ----
+    // ---- F3: unsanctioned-link strip (WPF Services/AIService/AiTextHygiene.cs:217-260, strip half only) ----
 
     [Fact]
     public void StripUnsanctionedLinks_RemovesSentenceCarryingInventedUrl()
@@ -160,7 +160,7 @@ public class AiPrivacyFilterTests
     public void StripUnsanctionedLinks_GluedWordSentence_WholeSentenceGoes()
     {
         // The model glues the next word onto the link; no URL-shaped pattern can split it,
-        // so the WHOLE sentence goes (WPF doc, AiTextHygiene.cs:202-212).
+        // so the WHOLE sentence goes (WPF doc, Services/AIService/AiTextHygiene.cs:202-212).
         Assert.Equal(
             "Sure thing!",
             AiPrivacyFilters.StripUnsanctionedLinks("Sure thing! Watch https://x.com/aK60cLet's get moving"));

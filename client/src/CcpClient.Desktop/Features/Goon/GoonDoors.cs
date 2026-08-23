@@ -81,7 +81,7 @@ public static class GoonDoors
             "Hosting a duel is not in this build.",
             "This build has no outbound network connection of any kind: no duel server client, "
             + "no signaling, no peer connection. Nothing here is waiting on a payment or a sign-in.",
-            "goon-game-census.md §6.1 / wpf-surface-reachability.md D243 — the port's first "
+            "goon-game-census.md §6.1 / wpf-surface-reachability.md D243 @ 7527243e7 — the port's first "
             + "outbound network boundary is an owner decision that has not been made.",
             "The page dims Host and says \"hosting is a supporter perk\" (ui/strings.js:41, "
             + "ui/screens/title.js:71-84). That is upstream's tier-2 gate, and it is false here: "
@@ -91,7 +91,7 @@ public static class GoonDoors
             "Joining a duel is not in this build.",
             "The same missing piece as Host: there is no server to ask for a room and no way to "
             + "reach another player's machine. Joining is free upstream; here it is absent.",
-            "goon-game-census.md §6.1 / wpf-surface-reachability.md D243 — one owner decision "
+            "goon-game-census.md §6.1 / wpf-surface-reachability.md D243 @ 7527243e7 — one owner decision "
             + "covers both doors.",
             "The page can only report a network, server or account fault (ui/sheets.js:116-170) "
             + "— \"could not reach the server\", \"warming up\", \"signed out\". All three blame "
@@ -112,7 +112,7 @@ public static class GoonDoors
             + "ask you. On neither has a real browser prompt ever been refused here: the deny is proved "
             + "against a test double, and the run that would show it is a headed one nobody has made "
             + "(D250).",
-            "goon-game-census.md §6.3 / wpf-surface-reachability.md D244. capability-inventory.md:69 "
+            "goon-game-census.md §6.3 / wpf-surface-reachability.md D244 @ 7527243e7. capability-inventory.md:69 "
             + "ends \"Audio capture is never opened.\" — a PROHIBITION, not an open question; what is "
             + "undecided is only its scope, because it sits inside 'Webcam, face, and gaze tracking' "
             + "(:66) in a bullet about frames and biometric derivatives. Either way :70 gates a "
@@ -127,7 +127,7 @@ public static class GoonDoors
             "There is no compression queue and no peer channel to send over, so nothing is "
             + "prepared for sending and nothing can leave. Your media is listed for this "
             + "machine's own page and goes nowhere else.",
-            "goon-game-census.md §6.2 / wpf-surface-reachability.md D248 — user media reaching "
+            "goon-game-census.md §6.2 / wpf-surface-reachability.md D248 @ 7527243e7 — user media reaching "
             + "another person is an owner decision.",
             "Upstream's standalone card — \"compression lives in the app … this page is running "
             + "in a plain browser\" (ui/strings.js:751-752) — is NOT shown here. It sits behind "
@@ -160,7 +160,7 @@ public static class GoonDoors
     /// asks tier 1, and <b>voice notes ride the same cap</b> (<c>ui/screens/voice.js:125</c>,
     /// <c>ui/screens/lobby.js:403</c>), so BOTH doors gate it.</item>
     /// <item><c>assetCache</c> — not a C#-host field at all; taken from the standalone shape
-    /// (<c>bridge.js:420</c>) because this build attaches no cache bridge (upstream:
+    /// (<c>goon/bridge.js:420</c>) because this build attaches no cache bridge (upstream:
     /// <c>GoonHostService.cs:383</c>). Here: is the media-setup door refused?</item>
     /// </list>
     /// </summary>
@@ -205,9 +205,9 @@ public static class GoonDoors
 
 /// <summary>
 /// The <c>init</c> frame's <c>caps</c> block — eight members, exactly the seven at
-/// <c>GoonHostService.cs:333-339</c> plus <c>assetCache</c> from <c>bridge.js:420</c>.
+/// <c>GoonHostService.cs:333-339</c> plus <c>assetCache</c> from <c>goon/bridge.js:420</c>.
 /// <c>solo</c> is deliberately NOT here: it is a frame-ROOT field beside <c>type</c> and
-/// <c>protocol</c> (<c>bridge.js:388-391</c>, read at <c>boot.js:323</c> as <c>m.solo</c>),
+/// <c>protocol</c> (<c>goon/bridge.js:388-391</c>, read at <c>boot.js:323</c> as <c>m.solo</c>),
 /// and putting it in caps would invent a shape in the one packet whose rule is
 /// transcribe-never-invent.
 /// </summary>

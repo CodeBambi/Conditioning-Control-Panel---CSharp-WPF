@@ -44,7 +44,7 @@ namespace CcpClient.Tests;
 /// <para><b>What this does NOT prove.</b> Not that the classifier is CORRECT: only that its
 /// fixtured facts execute and hold, on this machine's <c>node</c>, on every floor run. It does not
 /// widen what the detector can see (the corpus and token-class limits recorded at
-/// <c>wpf-surface-reachability.md</c> D260 are untouched), and it does not turn the review list into
+/// <c>wpf-surface-reachability.md</c> D260 @ 7527243e7 are untouched), and it does not turn the review list into
 /// a red test on the real tree (<c>detect.mjs:13-14</c>). No UI is involved, so it proves nothing
 /// about rendering, interaction, focus, audio or animation. It is observed on Windows only.</para>
 /// </summary>

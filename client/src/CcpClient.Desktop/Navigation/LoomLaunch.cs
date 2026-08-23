@@ -18,7 +18,7 @@ namespace CcpClient.Desktop.Navigation;
 ///   <item><c>:30-77</c> — there is NO entitlement check anywhere on this path, and the rack
 ///   entry carries no tier (<c>Views/Tabs/StudioTabView.xaml.cs:490</c>, default
 ///   <c>tier = 0</c> at <c>:548</c>). The port reproduces the CODE, per
-///   wpf-surface-reachability.md §7 ambiguity 3.</item>
+///   wpf-surface-reachability.md §7 @ 7527243e7 ambiguity 3.</item>
 ///   <item><c>:36-38</c> — the spirals folder is created before navigating. That already lives
 ///   inside <see cref="DtrhLoomWindow"/> (<c>DtrhLoomWindow.axaml.cs:71-74</c>), so this
 ///   launcher owns nothing but create / present / refocus.</item>
@@ -61,7 +61,7 @@ public sealed class LoomLaunch
 
     /// <summary>
     /// Open the Loom studio, or refocus the one already open. No gate, no setup step, no
-    /// picker: WPF's click goes straight to <c>Launch()</c> (wpf-surface-reachability.md §4).
+    /// picker: WPF's click goes straight to <c>Launch()</c> (wpf-surface-reachability.md §4 @ 7527243e7).
     /// </summary>
     public void Launch()
     {

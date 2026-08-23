@@ -51,9 +51,9 @@ Dispositions: **RETAINED** (full row in §4) · **CROSS-REF** (behavior owned by
 | `Services/Flash/FlashService.cs:2901` `FlashWindow` (pooled flash overlay) | overlay-clickthrough skill scope; no board row authored yet |
 | `Services/Subliminal/BouncingTextService.cs:554` `BouncingTextWindow` | overlay-clickthrough skill scope; no board row authored yet |
 | `Windows/TutorialOverlay.xaml` (owned spotlight overlay, `ShowActivated=false`, re-front logic `TutorialOverlay.xaml.cs`) | overlay-clickthrough skill scope (region-input/Z-order policy); no board row authored yet |
-| Ad-hoc overlays (16): `OverlayService.cs:990` (tint), `:1507` (spiral), `:1585`, `:1973`; `SubliminalService.cs:928`; `SessionEngine.cs:1367` (corner GIF); `KeywordHighlightService.cs:110`; `GazeDebugCursorService.cs:127`; `AttentionCheckService.cs:327`; `BlinkTrainerService.cs:662`; `BubbleCountService.cs:355`; `BubbleService.cs:2099` (interactive bubbles — mixed interactive/passive region policy); `BubbleCountWindow.xaml.cs:1097`; `ChaosBackdropService.cs:178`; `MainWindow.Enhancements.cs:2204` (pink flash), `:2312` | overlay-clickthrough skill scope; no board row authored yet |
+| Ad-hoc overlays (16): `OverlayService.cs:990` (tint), `:1507` (spiral), `:1585`, `:1973`; `SubliminalService.cs:928`; `Services/Session/SessionEngine.cs:1367` (corner GIF); `KeywordHighlightService.cs:110`; `GazeDebugCursorService.cs:127`; `AttentionCheckService.cs:327`; `BlinkTrainerService.cs:662`; `BubbleCountService.cs:355`; `BubbleService.cs:2099` (interactive bubbles — mixed interactive/passive region policy); `BubbleCountWindow.xaml.cs:1097`; `ChaosBackdropService.cs:178`; `MainWindow.Enhancements.cs:2204` (pink flash), `:2312` | overlay-clickthrough skill scope; no board row authored yet |
 
-(`ChaosTunnelService.cs:182` was removed from the list above on 2026-08-12: it is NOT a click-through overlay — it is the opaque below-Topmost game backdrop, promoted to retained row W-80 in §4.7.)
+(`Chaos/ChaosTunnelService.cs:182` was removed from the list above on 2026-08-12: it is NOT a click-through overlay — it is the opaque below-Topmost game backdrop, promoted to retained row W-80 in §4.7.)
 
 ### 2.2 Excluded surfaces (4) + 1 non-window note
 

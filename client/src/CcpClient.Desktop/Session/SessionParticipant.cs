@@ -457,7 +457,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // in GAMES & CARDS because that is where the rack puts it — Bubble Pop, Bubble Count, Lock
         // Card, Bouncing Text (StudioTabView.xaml.cs:499-505) — and upstream's StartEngine offers no
         // competing order for it: the ambient game is started by the dashboard card's own toggle and
-        // by SessionEngine (Services/SessionEngine.cs:444), not from StartEngine's effect sequence.
+        // by SessionEngine (Services/Session/SessionEngine.cs:444), not from StartEngine's effect sequence.
         // So there is no D90-style disagreement here and the rack's order stands unopposed. Its surface is
         // its OWN — no other row places a clickable target — and that is not the single-tenancy
         // shortcut an earlier review's §2.3 F5 warned about: the capability is keyed from birth, every operation

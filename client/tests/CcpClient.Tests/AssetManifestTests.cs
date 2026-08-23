@@ -160,7 +160,9 @@ public class AssetManifestTests
     [Fact]
     public void CopiedDirection_CaseDrift_IsNamedFailure()
     {
-        // ext4 vs NTFS drift protection (asset-manifest.md §3): a differently-cased on-disk file must
+        // ext4 vs NTFS drift protection (asset-manifest.md, two-direction validation rule 3 - that
+        // document numbers its RULES and not its headings, so a bare §3 named nothing): a
+        // differently-cased on-disk file must
         // fail the ordinal walk even though File.Exists would tolerate it on NTFS.
         var root = Path.Combine(Path.GetTempPath(), "ccp-sp023-manifest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "PAYLOAD"));

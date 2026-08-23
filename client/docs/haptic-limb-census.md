@@ -1,6 +1,6 @@
 # The haptic limb, censused — every upstream command site, mapped to a port trigger point
 
-Companion to `client/docs/wpf-surface-reachability.md` D202-D206 (the divergences).
+Companion to `client/docs/wpf-surface-reachability.md` D202 @ 7527243e7 through D206 @ 7527243e7 (the divergences).
 The method, reconciliation, and priced vocabulary menu are stated here. **No product code was
 written for this document**; `client/src/**` was outside its scope.
 
@@ -30,7 +30,7 @@ The previous counts were **8**, then **13**, then **14**. Every correction came 
 search, never from reading the same lines harder — §5 reconciles all four numbers line by line.
 
 **T3 fails on every single one of the ten mappable sites, for the same reason**: this build's
-persisted haptic state is one boolean (`Haptics/HapticSettingsDocument.cs:47`, `Enabled`), and every
+persisted haptic state is one boolean (`Haptics/HapticSettingsDocument.cs:49`, `Enabled`), and every
 upstream site sends an intensity, a shape, a duration, a mode or a priority that has nowhere to come
 from. That is the vocabulary gap, and pricing it is the record's §6. **This document does not choose
 it.**
@@ -280,7 +280,7 @@ phrase is shown by this port.
 | claim | where | verdict against this census |
 |---|---|---|
 | **8 sites in three modules**, citing `Services/SubliminalService.cs:230` | the haptics plan §5, three source comments, D202's first draft | **wrong twice**: the path has no `Subliminal/` directory segment and the file drives four sites, not one |
-| **13 sites**, three files | `client/docs/wpf-surface-reachability.md` D202, `Haptics/IHapticSink.cs:276-281` | **correct for the three files it names, under a rule that excluded FunScript.** Misses three files' worth of sites |
+| **13 sites**, three files | `client/docs/wpf-surface-reachability.md` D202 @ 7527243e7, `Haptics/IHapticSink.cs:276-281` | **correct for the three files it names, under a rule that excluded FunScript.** Misses three files' worth of sites |
 | **14 sites**, adding `VideoService.Browser.cs:452` | this packet's brief | **correct as far as it goes.** Still misses `BouncingTextService.cs:515` and `VideoService.Browser.cs:453` |
 | **18 sites** | this census | derived from the bytes by §2 |
 | **21 sites** | **this packet's own committed plan**, `plan.md:140-141` | what the census's helper clause would yield if the plan's opposite clause governed instead. It does not, and §2.1 says why and lists the five lines that move |

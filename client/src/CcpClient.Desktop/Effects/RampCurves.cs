@@ -67,20 +67,20 @@ public static class RampCurves
         switch (curve)
         {
             case RampCurve.EaseIn:
-                // Slow start, strong finish (RampCurves.cs:53).
+                // Slow start, strong finish (Helpers/RampCurves.cs:53).
                 return p * p * p;
 
             case RampCurve.EaseOut:
-                // Fast start, gentle finish (RampCurves.cs:56-58).
+                // Fast start, gentle finish (Helpers/RampCurves.cs:56-58).
                 var inv = 1.0 - p;
                 return 1.0 - (inv * inv * inv);
 
             case RampCurve.SCurve:
-                // Smoothstep (RampCurves.cs:61-62).
+                // Smoothstep (Helpers/RampCurves.cs:61-62).
                 return p * p * (3.0 - (2.0 * p));
 
             case RampCurve.Exponential:
-                // Very back-loaded (RampCurves.cs:65-67). k is upstream's, and it is what decides
+                // Very back-loaded (Helpers/RampCurves.cs:65-67). k is upstream's, and it is what decides
                 // how late the surge lands, so it is a constant with a citation rather than a knob.
                 const double k = 3.0;
                 return (Math.Exp(k * p) - 1.0) / (Math.Exp(k) - 1.0);

@@ -122,10 +122,12 @@
 //   A per-CITATION `CITATION-DRIFT` class (a span that contained a needle at the endpoint and
 //   contains none now) was implemented and measured at the inventory's own previous baseline
 //   42286638. It emitted FOUR rows and ALL FOUR were false: GradedRunAwards.cs:95,
-//   trainer-card-census.md:180 and wpf-surface-reachability.md:1467/:1491 all cite
+//   trainer-card-census.md:180 and wpf-surface-reachability.md:1467 @ 7527243e7 /:1491 all cite
 //   IntakeHostService.cs:418-420, which today is exactly the `held_back` comment they mean
 //   (:1467 is D223, quoting :418-420 as a RECORDED historical mis-citation, which is a
-//   different reason for the same verdict). They fire only because the emit needle happened
+//   different reason for the same verdict). Those two reachability lines are cited AS OF THAT
+//   COMMIT: 1bdf998e4 later cut the document from 1,906 lines to 95, so the measurement above
+//   is only reproducible against 7527243e7. They fire only because the emit needle happened
 //   to sit at :419 at that endpoint. A 100% false-positive rate is the shape line 13 forbids
 //   by name, so the class is CUT, not softened. The consequence, stated rather than hidden:
 //   this mode issues a per-SUBJECT verdict and names the shift; re-basing the citations is
@@ -361,7 +363,7 @@ function tokensWithProvenance(text) {
   return tokens;
 }
 
-function walkFiles(dir, keep, out = []) {
+export function walkFiles(dir, keep, out = []) {
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -378,7 +380,7 @@ function walkFiles(dir, keep, out = []) {
   return out;
 }
 
-function indexByBasename(relPaths) {
+export function indexByBasename(relPaths) {
   const index = new Map();
   for (const rel of relPaths) {
     const base = rel.slice(rel.lastIndexOf("/") + 1);

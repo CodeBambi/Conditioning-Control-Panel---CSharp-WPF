@@ -172,7 +172,7 @@ public class LaunchFaultTextTests
             Assert.False(
                 normalized.Contains("\n\n", StringComparison.Ordinal),
                 $"{name} contains a BLANK LINE. That wedges the Avalonia 12.1.1 layout pass on the lock/fault "
-                + "plates (measured at wpf-surface-reachability.md §13 D43): the press that raises the "
+                + "plates (measured at wpf-surface-reachability.md §13 D43 @ 7527243e7): the press that raises the "
                 + "band never returns, so the app and this suite HANG rather than fail. Use a single newline");
 
             // A leading or trailing line break is the same empty line at an edge. Applied only to

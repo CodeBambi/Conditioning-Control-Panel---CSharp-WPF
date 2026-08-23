@@ -45,7 +45,7 @@ public sealed record DtrhHarnessOptions(
 /// door for a free user (<c>Services/TierGate.cs:90-91</c>; <c>MainWindow.Lab.cs:225-227</c>).
 /// <see cref="DtrhGate"/> implements the tier term only, because the port has no
 /// <c>DailyFreeService</c> to implement the other — divergence and close condition at
-/// wpf-surface-reachability.md §10 D24. Quoting the keyed call while describing unkeyed
+/// wpf-surface-reachability.md §10 D24 @ 7527243e7. Quoting the keyed call while describing unkeyed
 /// semantics is how that fact stayed invisible through a whole first submission.</para>
 ///
 /// <para><b>The card is never disabled.</b> WPF's lock band is <c>IsHitTestVisible="False"</c>
@@ -64,7 +64,7 @@ public sealed record DtrhHarnessOptions(
 /// that has nothing to do with the menu: Avalonia 12.1.1's <c>Window.Hide()</c> hides every window
 /// OWNED by the hidden one, and this coordinator owns the descent
 /// (<c>DtrhLaunchCoordinator.cs:167</c>). Hiding the shell would hide the game. See
-/// <see cref="Tray.ShellTray"/> and wpf-surface-reachability.md §12 D35. What a user gets is a
+/// <see cref="Tray.ShellTray"/> and wpf-surface-reachability.md §12 D35 @ 7527243e7. What a user gets is a
 /// minimized shell with its taskbar button, plus a real tray icon whose menu restores it — three
 /// ways back where WPF has two.</para>
 ///
@@ -73,11 +73,11 @@ public sealed record DtrhHarnessOptions(
 /// (<c>MainWindow/MainWindow.Lab.cs:266-271</c>). Earlier the port caught only around
 /// <c>ResolveAsync</c> and the page fired the launch as a discarded task, so a throw from the
 /// descent became an UNOBSERVED task exception — collected by the panic hook at some later GC
-/// (<c>Program.cs:313</c>) and invisible on screen. <see cref="Faulted"/> is the fix, and it is
+/// (<c>CcpClient.Desktop/Program.cs:313</c>) and invisible on screen. <see cref="Faulted"/> is the fix, and it is
 /// deliberately not a fourth <see cref="DtrhGateDecision"/>: what the user sees for a fault wears
 /// its own livery and its own words, because a refusal band that also meant "the app broke" would
 /// teach a user that a broken app and an unknown subscription are one event
-/// (wpf-surface-reachability.md §13 D41).</para>
+/// (wpf-surface-reachability.md §13 D41 @ 7527243e7).</para>
 /// </summary>
 public sealed class DtrhLaunch
 {

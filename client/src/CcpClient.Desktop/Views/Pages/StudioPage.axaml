@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="CcpClient.Desktop.Views.Pages.StudioPage">
   <!--
-    The Studio rack (wpf-surface-reachability.md §8.3, observed live at v6.8.1): grouped rows
+    The Studio rack (wpf-surface-reachability.md §8.3 @ 7527243e7, observed live at v6.8.1): grouped rows
     down the left, one panel on the right, left-click a row to open its panel. WPF has four
     groups and fifteen rows; the port now has ALL FOUR GROUPS and TEN rows, and all ten are
     real effects. Five of WPF's rows are still unported — Visuals, Bubble Pop, Bouncing Text,

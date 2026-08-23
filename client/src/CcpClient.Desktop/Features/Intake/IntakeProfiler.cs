@@ -6,7 +6,7 @@ namespace CcpClient.Desktop.Features.Intake;
 /// line cites below). DETERMINISTIC: no RNG, no clock, no I/O. Same trajectory in ⇒ same
 /// profile out.
 ///
-/// The atom (measured by WPF against the shipped banks, IntakeProfiler.cs:74-101):
+/// The atom (measured by WPF against the shipped banks, Services/Quiz/IntakeProfiler.cs:74-101):
 /// endorsement is BINARY — <c>endorse = correct ? 1 : 0</c> ("correct" = took the bank's
 /// compliant option); <c>axis = Σ(heat·endorse) / Σ(heat)</c> over the axis's own items.
 /// Index-lean partial credit was measured and rejected (circe shuffles the compliant
@@ -14,7 +14,7 @@ namespace CcpClient.Desktop.Features.Intake;
 /// not endorsement). A5 scores the REFUSAL rate (invert) on the confession cluster at
 /// heat ≥ 3.
 ///
-/// Axis coverage is structurally bank-dependent (IntakeProfiler.cs:105-123): A4 is
+/// Axis coverage is structurally bank-dependent (Services/Quiz/IntakeProfiler.cs:105-123): A4 is
 /// always under-sampled on drone (zero A4 prompts) and circe (all heat &lt; 2); A1 is
 /// thin on sissy/circe; A5 exists only in sissy/circe. Under-sampled ⇒ 0.5 + flag, and
 /// callers fall back to the tier baseline rather than acting on noise.
@@ -80,7 +80,7 @@ public static class IntakeProfiler
     };
 
     /// <summary>One profile axis: a 0..1 score plus the evidence behind it
-    /// (IntakeAxis, IntakeProfiler.cs:10-31).</summary>
+    /// (IntakeAxis, Services/Quiz/IntakeProfiler.cs:10-31).</summary>
     public sealed record Axis
     {
         /// <summary>0..1. Exactly 0.5 and <see cref="UnderSampled"/> when the run served too
@@ -97,7 +97,7 @@ public static class IntakeProfiler
         public static Axis Neutral(int n) => new() { Value = 0.5, ItemCount = n, UnderSampled = true };
     }
 
-    /// <summary>Five-axis read of a completed run (IntakeProfile, IntakeProfiler.cs:33-57).</summary>
+    /// <summary>Five-axis read of a completed run (IntakeProfile, Services/Quiz/IntakeProfiler.cs:33-57).</summary>
     public sealed record Profile
     {
         /// <summary>A1 — emptiness / sinking / going blank.</summary>

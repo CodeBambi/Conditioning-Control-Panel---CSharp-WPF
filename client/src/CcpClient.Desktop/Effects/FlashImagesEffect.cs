@@ -59,7 +59,7 @@ public sealed class FlashImagesEffect : PacedSessionEffect<FlashFiring>
     public const string EffectId = "flash";
 
     /// <summary>The row's label as the shipping app shows it (<c>StudioTabView.xaml.cs:484</c>,
-    /// confirmed in the live v6.8.1 rack survey — <c>wpf-surface-reachability.md</c> §8.3).</summary>
+    /// confirmed in the live v6.8.1 rack survey — <c>wpf-surface-reachability.md</c> §8.3 @ 7527243e7).</summary>
     public const string DisplayTitle = "Flash Images";
 
     private readonly IFlashImagePool _pool;

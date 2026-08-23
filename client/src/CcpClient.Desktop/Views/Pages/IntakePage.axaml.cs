@@ -4,7 +4,7 @@ using CcpClient.Desktop.Features.Intake;
 namespace CcpClient.Desktop.Views.Pages;
 
 /// <summary>
-/// Hop 2 of the Graded Intake route (wpf-surface-reachability.md §11): rail door
+/// Hop 2 of the Graded Intake route (wpf-surface-reachability.md §11 @ 7527243e7): rail door
 /// <c>Graded Intake</c> -> this page -> <c>Begin Intake</c> -> <see cref="IntakeLaunch"/> ->
 /// the weekly-pass gate. The door navigates and opens nothing
 /// (<c>MainWindow/MainWindow.TabNavigation.cs:947</c> is a bare <c>ShowTab</c>); the button here

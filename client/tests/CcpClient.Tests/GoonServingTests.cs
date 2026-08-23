@@ -164,7 +164,7 @@ public sealed class GoonServingTests : IDisposable
         Assert.Equal(200, boot.Status);
         Assert.True(boot.Bytes.Length > 100_000, $"boot.js came back {boot.Bytes.Length} bytes — the body did not stream");
         Assert.Equal(OnDisk("boot.js").Length, boot.Bytes.Length);
-        // bridge.js is boot.js's transport import — no bridge, no handshake (bridge.js:106).
+        // bridge.js is boot.js's transport import — no bridge, no handshake (goon/bridge.js:106).
         Assert.Contains("export function announceReady()", Text(await BytesOf(Route("bridge.js"))), StringComparison.Ordinal);
     }
 
@@ -572,7 +572,7 @@ public sealed class GoonServingTests : IDisposable
     /// <summary>
     /// The §3.3 bridge inbox is present on this origin because the §4 class requires one, and the
     /// goon page never uses it (its bridge speaks <c>window.chrome.webview</c> only —
-    /// <c>bridge.js:45-47</c>). "Unused" and "unguarded" are different facts: the route is
+    /// <c>goon/bridge.js:45-47</c>). "Unused" and "unguarded" are different facts: the route is
     /// token-guarded, and a wrong token is refused with a FIXED route class so the token that was
     /// presented can never reach a log (§4.8).
     /// </summary>

@@ -103,7 +103,7 @@ public sealed class TrayMenu
             throw new ArgumentException(
                 $"a tray menu must carry exactly one restore item and this one carries {restores}. The icon exists to "
                 + "be a way back to a window; a menu that cannot restore it rebuilds the hazard the port refused to ship "
-                + "(wpf-surface-reachability.md §10 D20)",
+                + "(wpf-surface-reachability.md §10 D20 @ 7527243e7)",
                 nameof(items));
         }
 

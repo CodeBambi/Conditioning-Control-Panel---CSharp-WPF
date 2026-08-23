@@ -29,12 +29,12 @@ namespace CcpClient.Desktop.Features.Goon;
 /// <see cref="BuildNetPostResult"/> — that method is the port's "no network" enforcement
 /// point, not a convenience.</para>
 ///
-/// <para><b>9 IN (page→host):</b> <c>ready</c> (<c>:42</c>; sent at <c>bridge.js:106</c>),
-/// <c>log</c> (<c>:42</c>; <c>bridge.js:98-102</c>), <c>heartbeat {t,paint,vis}</c> and
+/// <para><b>9 IN (page→host):</b> <c>ready</c> (<c>:42</c>; sent at <c>goon/bridge.js:106</c>),
+/// <c>log</c> (<c>:42</c>; <c>goon/bridge.js:98-102</c>), <c>heartbeat {t,paint,vis}</c> and
 /// <c>pong</c> and <c>boot-error</c> and <c>fullscreen-set</c> (<c>:43</c>;
-/// <c>boot.js:2605-2612</c>, <c>:377</c>, <c>bridge.js:109</c>, <c>boot.js:2508-2511</c>),
+/// <c>boot.js:2605-2612</c>, <c>:377</c>, <c>goon/bridge.js:109</c>, <c>boot.js:2508-2511</c>),
 /// <c>exit</c> / <c>exit-done</c> (<c>:44</c>; <c>boot.js:2448</c>, <c>:2464</c>), and
-/// <c>net-post {id,path,body}</c> (<c>:47</c>; <c>bridge.js:169-179</c>).</para>
+/// <c>net-post {id,path,body}</c> (<c>:47</c>; <c>goon/bridge.js:169-179</c>).</para>
 ///
 /// <para><b>Out of vocabulary for THIS host (typed, tolerated, never acted on):</b> the
 /// transfer-cache family (<c>GoonHostService.cs:48-49</c>), the received-inbox family
@@ -47,7 +47,7 @@ namespace CcpClient.Desktop.Features.Goon;
 public static class GoonProtocol
 {
     /// <summary>The protocol version this host speaks: <c>GoonHostService.cs:60</c>
-    /// (<c>private const int Protocol = 1</c>) and <c>bridge.js:30</c>
+    /// (<c>private const int Protocol = 1</c>) and <c>goon/bridge.js:30</c>
     /// (<c>export const PROTOCOL = 1</c>).</summary>
     public const int Version = 1;
 
@@ -94,11 +94,11 @@ public static class GoonProtocol
 
     /// <summary>
     /// The <c>init</c> frame, transcribed field-for-field from the two upstream copies:
-    /// <c>GoonHostService.cs:311-354</c> (the host's) and <c>bridge.js:387-470</c> (the page's
+    /// <c>GoonHostService.cs:311-354</c> (the host's) and <c>goon/bridge.js:387-470</c> (the page's
     /// own synthesized one). Deltas, each deliberate and each recorded as a divergence:
     ///
     /// <list type="bullet">
-    /// <item><c>solo: true</c> — a frame-ROOT field (<c>bridge.js:391</c>, read as <c>m.solo</c>
+    /// <item><c>solo: true</c> — a frame-ROOT field (<c>goon/bridge.js:391</c>, read as <c>m.solo</c>
     /// at <c>boot.js:323</c>), which the C# host does not send at all. This build is
     /// practice-only, so it carries the standalone default. D256.</item>
     /// <item><c>net.serverBase</c> empty and <c>net.authToken</c> empty — upstream sends the
@@ -107,7 +107,7 @@ public static class GoonProtocol
     /// <item><c>net.viaHost: true</c> (<c>:329</c>) — kept TRUE deliberately. Hosted, it routes
     /// every server call the page makes into <c>net-post</c>, which this host refuses
     /// in-process; the alternative (<c>false</c>) makes the page issue a real <c>fetch()</c>
-    /// itself (<c>bridge.js:181-192</c>). True is the only setting under which no page→server
+    /// itself (<c>goon/bridge.js:181-192</c>). True is the only setting under which no page→server
     /// traffic exists at all. D252.</item>
     /// <item><c>discord</c> absent — upstream builds a block at <c>:353</c>. No Discord here.
     /// D257.</item>
@@ -205,12 +205,12 @@ public static class GoonProtocol
 
     /// <summary>
     /// <b>THE "NO NETWORK" ENFORCEMENT POINT.</b> Every server call the page can make arrives
-    /// here as a <c>net-post</c> frame (<c>bridge.js:169-179</c>, because <c>init</c> sets
+    /// here as a <c>net-post</c> frame (<c>goon/bridge.js:169-179</c>, because <c>init</c> sets
     /// <c>viaHost:true</c>), and this host answers it locally, immediately, and refuses. No
     /// socket is opened, no path is proxied, no header is attached, no token is read.
     ///
     /// <para><b>Immediately matters.</b> Unanswered, the page's promise sits on
-    /// <c>NET_TIMEOUT_MS = 45000</c> (<c>bridge.js:126</c>) and then resolves <c>status 0</c>,
+    /// <c>NET_TIMEOUT_MS = 45000</c> (<c>goon/bridge.js:126</c>) and then resolves <c>status 0</c>,
     /// which <c>net/signaling.js:506-510</c> maps to "could not reach the server". A 45-second
     /// spinner ending in a false sentence is the exact failure this packet forbids.</para>
     ///
@@ -254,7 +254,7 @@ public static class GoonProtocol
 
         /// <summary><c>GoonContracts.cs:297</c> — <c>ToyCap = 0.7</c>, "can only LOWER the
         /// receiver's own cap", reaching the frame at <c>GoonHostService.cs:344</c>. (The page's
-        /// standalone frame sends 0 at <c>bridge.js:445</c>; the HOST's value is 0.7 and this is
+        /// standalone frame sends 0 at <c>goon/bridge.js:445</c>; the HOST's value is 0.7 and this is
         /// a host.)</summary>
         public const double ToyCap = 0.7;
 
@@ -270,10 +270,10 @@ public static class GoonProtocol
     {
         private GoonPageMessage() { }
 
-        /// <summary>Boot completed; the host flushes init + manifest (<c>bridge.js:106</c>).</summary>
+        /// <summary>Boot completed; the host flushes init + manifest (<c>goon/bridge.js:106</c>).</summary>
         public sealed record Ready(int Protocol) : GoonPageMessage;
 
-        /// <summary>Tunnelled page log, 400-char clamped page-side (<c>bridge.js:98-102</c>).</summary>
+        /// <summary>Tunnelled page log, 400-char clamped page-side (<c>goon/bridge.js:98-102</c>).</summary>
         public sealed record Log(string? Msg) : GoonPageMessage;
 
         /// <summary><c>{t, paint?, vis}</c> — <c>paint</c> is OMITTED, not zeroed, on a host
@@ -285,7 +285,7 @@ public static class GoonProtocol
         /// anyway, because a frame that arrives must never be dropped silently.</summary>
         public sealed record Pong(double T) : GoonPageMessage;
 
-        /// <summary>A fatal page boot failure (<c>bridge.js:109</c>).</summary>
+        /// <summary>A fatal page boot failure (<c>goon/bridge.js:109</c>).</summary>
         public sealed record BootError(string? Msg) : GoonPageMessage;
 
         /// <summary>F11, page-side (<c>boot.js:2508-2511</c>). Fullscreen is host-owned on
@@ -299,7 +299,7 @@ public static class GoonProtocol
         /// <summary>The page is finished; the window may go (<c>boot.js:2464</c>).</summary>
         public sealed record ExitDone : GoonPageMessage;
 
-        /// <summary>A server call (<c>bridge.js:178</c>). Refused in-process — see
+        /// <summary>A server call (<c>goon/bridge.js:178</c>). Refused in-process — see
         /// <see cref="BuildNetPostResult"/>. <c>Path</c> is carried for the transcript only and
         /// is never dereferenced, fetched or forwarded.</summary>
         public sealed record NetPost(string Id, string? Path) : GoonPageMessage;

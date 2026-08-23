@@ -53,7 +53,7 @@ public abstract record IntakePassDecision
 /// week" would be a claim about the install that nobody could lift. That is the entitlement capability's
 /// three-way distinction applied to a second surface: entitled / not entitled / could not tell,
 /// with "could not tell" refusing out loud in its own words and never wearing the other
-/// refusal's clothes. Divergence and close condition at wpf-surface-reachability.md §11 D26.</para>
+/// refusal's clothes. Divergence and close condition at wpf-surface-reachability.md §11 D26 @ 7527243e7.</para>
 /// </summary>
 public static class IntakePassGate
 {

@@ -23,7 +23,8 @@ excludes only generated-byte patterns, records declined symlinks, and cross-chec
 
 ### 1.1 The row makes six claims. All six were tested; none was inherited
 
-`client/docs/task-board.md:109`.
+The Trainer Card row of `client/docs/task-board.md` (cited without a line: the board is rewritten
+every wave, so a line number into it is a citation with an expiry date).
 
 ### 1.2 Four of five directory counts are EXACTLY RIGHT — as *delta* counts
 
@@ -157,13 +158,14 @@ is the linked read-only csproj glob that already serves `dtrh`, `intake`, `tunne
 ## 3. Behaviour map — every row cites both sides and carries a platform cell
 
 Vocabulary closed: `COVERED`, `PARTIAL`, `GAP`, `OWNER-GATED`. Essentiality is decided against the
-noun phrases the owner wrote at `client/docs/task-board.md:109`, not re-derived per row. An anchor
+noun phrases the owner wrote in the Trainer Card row of `client/docs/task-board.md`, not re-derived
+per row. An anchor
 must **expose the required primitive** at an opened `client/src/**` line; a shipped page of the same
 kind is not an anchor.
 
 | # | Owner's phrase | WPF evidence (opened) | Required primitive | Port anchor | Label | Platform |
 |---|---|---|---|---|---|---|
-| B1 | Profile rebuilt as a Trainer Card | `MainWindow/MainWindow.ProfileCard.cs` (337 lines) + `Views/Tabs/DiscordTabView.xaml` (1077) | A page that renders a portrait, a name, a level and a stat block from local state | `client/src/CcpClient.Desktop/Views/Pages/SystemPage.axaml.cs` — a real shipped page bound to live state | **PARTIAL on the shipped page precedent** — missing member: **there is no progression model to render.** No XP, level, streak or rank exists anywhere in `client/src` | Windows: unproven — gate: a headed capture of the page. **Linux: unproven** — no WSL distro on this machine (`client/memories/port-status.md:89-93`) |
+| B1 | Profile rebuilt as a Trainer Card | `MainWindow/MainWindow.ProfileCard.cs` (337 lines) + `Views/Tabs/DiscordTabView.xaml` (1077) | A page that renders a portrait, a name, a level and a stat block from local state | `client/src/CcpClient.Desktop/Views/Pages/SystemPage.axaml.cs` — a real shipped page bound to live state | **PARTIAL on the shipped page precedent** — missing member: **there is no progression model to render.** No XP, level, streak or rank exists anywhere in `client/src` | Windows: unproven — gate: a headed capture of the page. **Linux: unproven** — no WSL distro on this machine (`client/memories/port-status.md:89-93 @ a8d32c219`) |
 | B2 | 12 hand-made scene banners (3 per mod, card-sized) | `Resources/banners/` = 12 PNG (walk); `MainWindow.ProfileCard.cs` selects one | Show one of twelve fixed images behind the card, chosen by active mod | `client/src/CcpClient.Desktop/CcpClient.Desktop.csproj:50-51` (`dtrh` payload glob) — the linked-read-only mechanism, already shipped four times | **COVERED by the payload-link precedent** — the cheapest item in the inventory | Windows: unproven — gate: headed capture. Linux: unproven — same gate on X11/Wayland |
 | B3 | wardrobe of 60 adornments with a full editor + click-to-pin | `Dialogs/ProfileCustomizeDialog.xaml.cs:88` `BuildPins()`, `:356-370` pin tiles capped at `ProfileCosmetics.MaxPinnedAchievements` (`Models/ProfileCosmetics.cs:83` = 4); `Services/Profile/WardrobeCatalog.cs` (431) | Place, move and remove image adornments on a portrait, and pin up to four badges | `none` — nothing in `client/src` composes user-placed layers over an image, and nothing takes a drag-and-drop | **GAP: a layered image compositor with hit-testable, user-placed items** — (a) primitive: per-item placement + z-order + drag; (b) WPF uses a `Canvas` with `WardrobeStageGeometry` normalised coordinates (`Services/Profile/WardrobeStageGeometry.cs`, 131 lines); (c) the port would have to build the stage, the geometry mapping and the editor | Windows: unproven. Linux: unproven — identical gap on both, no OS interop involved |
 | B4 | earn-it-to-wear-it (wardrobe pieces, guild avatars and badges unlock through achievements) | `Services/Profile/WardrobeCatalog.cs:181-194` `IsUnlockedForCurrentUser` — `RequiredAchievementId` (`:41-43`) then `App.Achievements?.Progress.IsUnlocked(gate)`, **fail-OPEN**: *"gating must never brick the picker"* (`:178-179`) | A predicate that hides an item until a named achievement is earned | `none` — the port has **no achievement subsystem at all** | **GAP: an achievement ledger** — (a) primitive: a persisted set of earned ids with an `IsUnlocked(id)` predicate; (b) WPF uses `AchievementService` (1130 lines) over `%APPDATA%/ConditioningControlPanel/achievements.json` (`Services/Progression/AchievementService.cs:70-74`); (c) the port would have to build the ledger, and 63 of 79 wardrobe items depend on it | Windows: unproven. Linux: unproven — pure logic + a file, so the gap is identical on both |
@@ -417,7 +419,7 @@ contract. **Q2 and Q3 are the gated pair**, and they are what §7.1 is about.
 - **No headed evidence of any kind.** No window was shown, no frame composited, no pixel compared.
   Every claim above is a claim about *source*.
 - **Linux is unproven for every row without exception.** `wsl.exe --list --verbose` reports no
-  installed distributions on this machine (`client/memories/port-status.md:89-93`), so every Linux
+  installed distributions on this machine (`client/memories/port-status.md:89-93 @ a8d32c219`), so every Linux
   cell is a named gate, never a discharge. Windows is unproven for every row too — nothing here was
   executed on either OS.
 - **The `honor_roll` duplicate-category defect (§5.2) is reasoning over source, not a reproduction.**

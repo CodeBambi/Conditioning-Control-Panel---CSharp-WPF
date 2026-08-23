@@ -14,7 +14,7 @@
 // test that runs and passes is green.
 // Exit 0 = floor met. Exit 1 = any violation (each prints a loud named reason).
 //
-// Never sets CCP_DATA_ROOT (port-workflow.md:204 — a process-wide override makes the
+// Never sets CCP_DATA_ROOT (port-workflow.md:103 — a process-wide override makes the
 // data-root pin skip and the floor goes blind). Never writes inside the worktree: the TRX
 // path targets os.tmpdir(); *.trx / TestResults/ are gitignored and the merge-time dirty
 // check tolerates nothing.

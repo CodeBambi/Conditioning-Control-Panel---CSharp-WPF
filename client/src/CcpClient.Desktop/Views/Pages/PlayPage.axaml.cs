@@ -5,7 +5,7 @@ using CcpClient.Desktop.Features.Goon;
 namespace CcpClient.Desktop.Views.Pages;
 
 /// <summary>
-/// Hop 2 of the DTRH route (wpf-surface-reachability.md §3): rail door <c>Play</c> -> this
+/// Hop 2 of the DTRH route (wpf-surface-reachability.md §3 @ 7527243e7): rail door <c>Play</c> -> this
 /// page -> <c>FALL IN</c> / <c>Quick Drop</c> -> <see cref="DtrhLaunch"/>. The door navigates
 /// and opens nothing; the two buttons here are the port's only DTRH launchers, which is WPF's
 /// one-entry rule (<c>MainWindow/MainWindow.Presets.cs:1007</c>) and matches WPF's own count:

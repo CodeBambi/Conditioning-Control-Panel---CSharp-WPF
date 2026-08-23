@@ -84,7 +84,7 @@ public partial class ProcessEnvCollectionGuardTests
     /// Direct entry points INTO the data root. Naming one of these is reading the process
     /// environment: CompositionRoot.cs:108 and :127 are the two reads, and every other name
     /// here routes through DefaultSettingsPath() (DtrhProfileLock.cs:32-33/:37,
-    /// ChaosTunnelService.cs:54-55). Held as class-level literals on purpose — the local
+    /// Chaos/ChaosTunnelService.cs:54-55). Held as class-level literals on purpose — the local
     /// sanitizer blanks string literals, so this guard never reports itself, and no
     /// env-predicate shape lands in a [Fact] body (the detector surface).
     /// </summary>

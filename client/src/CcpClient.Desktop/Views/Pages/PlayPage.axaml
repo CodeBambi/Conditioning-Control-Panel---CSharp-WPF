@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="CcpClient.Desktop.Views.Pages.PlayPage">
   <!--
-    The Play page and its DTRH hero card (wpf-surface-reachability.md §3 and §8.5; source at
+    The Play page and its DTRH hero card (wpf-surface-reachability.md §3 @ 7527243e7 and §8.5; source at
     Views/Tabs/PlayTabView.xaml). Hop 2 of the port's flagship route: the rail door NAVIGATES
     here, and the one window-opening button lives on this page — WPF's one-entry rule
     (MainWindow/MainWindow.Presets.cs:1007,1036).
@@ -141,7 +141,7 @@
              with MessageBoxImage.Warning (MainWindow/MainWindow.Lab.cs:266-271, and the identical
              catch on Quick Start at :333-338). The port had no such surface at all: PlayPage fired
              `_ = dtrh.FallInAsync();` and a throw from the descent became an unobserved task
-             exception — logged by the panic hook at some later GC (Program.cs:313) and never shown.
+             exception — logged by the panic hook at some later GC (CcpClient.Desktop/Program.cs:313) and never shown.
 
              WHY A BAND AND NOT A DIALOG. The port has no dialog service, so a modal here would be
              a new window class whose every user-visible property (modality, activation, focus

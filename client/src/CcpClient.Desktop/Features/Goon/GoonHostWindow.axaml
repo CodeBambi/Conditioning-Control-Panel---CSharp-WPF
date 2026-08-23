@@ -8,9 +8,9 @@
   <!--
     Goon practice host shell (the landed IntakeHostWindow pattern). The embedded
     NativeWebView is the WINDOWS surface (WebView2). The Linux NativeWebDialog path is NOT
-    ADMITTED: the goon page's bridge speaks window.chrome.webview only (bridge.js:45-47,
+    ADMITTED: the goon page's bridge speaks window.chrome.webview only (goon/bridge.js:45-47,
     :65-67, :93-95), so a dialog would run the page STANDALONE — it would synthesize its own
-    init (bridge.js:473) and silently ignore every one of this host's door refusals. Where the
+    init (goon/bridge.js:473) and silently ignore every one of this host's door refusals. Where the
     embedded capability is not Available the honest surface shows: typed, never a substitute.
 
     THE REFUSAL RAIL on the right is not decoration and is not dismissible. Four of the title

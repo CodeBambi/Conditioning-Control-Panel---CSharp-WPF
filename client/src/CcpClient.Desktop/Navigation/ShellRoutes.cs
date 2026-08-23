@@ -3,7 +3,7 @@ namespace CcpClient.Desktop.Navigation;
 /// <summary>
 /// The declared rail. FIVE doors, and the count is the point: WPF v6.8.1's rail carries six
 /// TOP-LEVEL doors (<c>DoorHome</c>, <c>DoorStudio</c>, <c>DoorCompanion</c>, <c>DoorPlay</c>,
-/// <c>DoorYou</c>, <c>DoorLibrary</c> — wpf-surface-reachability.md §8.1) plus a sub-entry under
+/// <c>DoorYou</c>, <c>DoorLibrary</c> — wpf-surface-reachability.md §8.1 @ 7527243e7) plus a sub-entry under
 /// each, and the port declares only the doors whose destination actually works today. A door
 /// that navigates to an empty room is the same unreachability the shell exists to end, so Home /
 /// You / Library / The Spiral are ABSENT rather than dead. WPF's own doctrine for a door that is
@@ -68,6 +68,6 @@ public static class ShellRoutes
     ];
 
     /// <summary>The door the shell opens on. WPF opens on Home; the port has no Home surface,
-    /// so it opens on the rack (divergence recorded in wpf-surface-reachability.md §9).</summary>
+    /// so it opens on the rack (divergence recorded in wpf-surface-reachability.md §9 @ 7527243e7).</summary>
     public const string Default = Studio;
 }
