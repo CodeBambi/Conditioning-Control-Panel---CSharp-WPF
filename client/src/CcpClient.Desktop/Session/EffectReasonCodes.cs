@@ -122,6 +122,13 @@ public static class EffectReasonCodes
     /// <para><b>It is also the dot's negative control.</b> A ramp holding no dial has taken nothing
     /// and owes nothing back, so <see cref="EffectDotState.Live"/> would be a claim about a module
     /// the user cannot observe by any means.</para>
+    ///
+    /// <para><b>Amended 2026-08-24: this code now has TWO causes and the prose above described
+    /// only one.</b> The second is that every link STANDS DOWN because a scripted session is
+    /// running and is already driving those dials itself. The operational state is identical —
+    /// no dial is held, so the code is right and the dot is right — but the SENTENCE the user
+    /// reads branches on the real cause, because "you have linked nothing" would be false and
+    /// would send them to tick a box that is already ticked.</para>
     /// </summary>
     public const string RampNoLinkedDial = "ramp-no-linked-dial";
 
