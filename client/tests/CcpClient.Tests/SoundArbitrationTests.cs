@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using CcpClient.Desktop.Audio;
 using Xunit;
 
@@ -1415,6 +1415,27 @@ public sealed class SoundArbitrationTests
             // a bound.
             var (thread, done, threadThrown) = StartCreate(h.Factory);
             thread.Start();
+
+            // THE DETERMINISTIC SIGNAL, and the reason this fact used to flake under load with
+            // "Expected 2, Actual 1" on the ConstructCount assertion below. Create queues its
+            // construction on the THREAD POOL and then waits a WALL-CLOCK budget for it
+            // (AudioSeams.cs, OrphanSafePlayerFactory.Create: Task.Run, then task.Wait(_budget)).
+            // On a loaded machine the pool can take longer than the budget to dispatch that work
+            // item, so the caller abandons a construction the fake has never been entered for and
+            // ConstructCount reads short — measured, not theorised: with the pool deliberately
+            // starved this fact reported constructs=1 (and constructs=0 with it starved harder)
+            // while the ARBITRATION was simultaneously perfect at abandonmentLines=2,
+            // outstanding=2, capRefusalLines=1 and the third caller's typed cap refusal in hand.
+            // The flake was therefore the fact measuring the thread pool's dispatch latency, never
+            // the bound. The first two callers are held here until their construction has
+            // DEMONSTRABLY entered the fake; the third is not, because a refused create queues
+            // nothing at all — which is the very claim being made about it.
+            if (i < 2)
+            {
+                TestWait.UntilSync(() => Volatile.Read(ref h.ConstructCount) == i + 1,
+                    $"caller {i}'s construction entered the fake", () => h.State());
+            }
+
             TestWait.UntilSync(() => done.IsSet, $"caller {i} reached its typed outcome", () => h.State());
             thread.Join();
             thrown.Add(threadThrown());

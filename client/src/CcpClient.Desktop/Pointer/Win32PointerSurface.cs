@@ -289,18 +289,52 @@ public sealed class Win32PointerSurface : IPointerSurface
     /// <inheritdoc/>
     public int Pump(int max)
     {
-        if (!OperatingSystem.IsWindows())
+        if (!OperatingSystem.IsWindows() || max <= 0)
         {
             return 0;
         }
 
+        // FILTERED TO THIS SURFACE'S OWN WINDOWS, one PeekMessageW per target, and the filter is the
+        // load-bearing part. PeekMessageW(hWnd 0) drains the WHOLE CALLING THREAD, and in the
+        // product that thread is Avalonia's UI thread: CompositionRoot builds SessionParticipant
+        // (Lifecycle/CompositionRoot.cs:263), which builds BubblePopSurfacePresenter.ForProduct with
+        // a dispatch that is Dispatcher.UIThread.Post (Session/SessionParticipant.cs:213-219, :269),
+        // and StepOnce calls this from inside it (Effects/BubblePopSurfacePresenter.cs:374). An
+        // unfiltered drain there pulls Avalonia's own window messages out of Avalonia's loop and
+        // dispatches them from inside a bubble step - a reentrancy and ordering hazard rather than
+        // lost messages, since DispatchMessageW still reaches the right WndProc. In the suite the
+        // same drain eats the harness's per-thread floor window and whatever scratch windows a fact
+        // has up; RealDesktopWindowFloor already had to filter ITS drain for exactly this reason
+        // (RealDesktopCollection.cs). A surface drains what it owns and nothing else.
+        //
+        // Round-robin rather than window-by-window so one busy target cannot spend the whole budget
+        // while another target's press waits for the next step. The handles are snapshotted because
+        // dispatching a press can close a target from inside the callback.
+        var windows = _byWindow.Keys.ToArray();
         var dispatched = 0;
-        while (dispatched < max && Win32PointerInterop.PeekMessageW(out var msg, 0, 0, 0, Win32PointerInterop.PmRemove))
+        bool any;
+        do
         {
-            Win32PointerInterop.TranslateMessage(ref msg);
-            Win32PointerInterop.DispatchMessageW(ref msg);
-            dispatched++;
+            any = false;
+            foreach (var window in windows)
+            {
+                if (dispatched >= max)
+                {
+                    return dispatched;
+                }
+
+                if (!Win32PointerInterop.PeekMessageW(out var msg, window, 0, 0, Win32PointerInterop.PmRemove))
+                {
+                    continue;
+                }
+
+                Win32PointerInterop.TranslateMessage(ref msg);
+                Win32PointerInterop.DispatchMessageW(ref msg);
+                dispatched++;
+                any = true;
+            }
         }
+        while (any);
 
         return dispatched;
     }

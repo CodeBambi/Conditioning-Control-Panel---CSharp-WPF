@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Capabilities;
+﻿using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Pointer;
 using Xunit;
@@ -669,6 +669,186 @@ public class PointerCapabilityTests : RealDesktopFacts
         Assert.False((whole with { ForegroundBefore = 3, ForegroundAfter = 9 }).ForegroundUndisturbed);
 
         Assert.True(whole.ForegroundUndisturbed);
+    }
+
+    /// <summary>
+    /// <b>The pump drains THIS surface and nothing else on the thread.</b>
+    ///
+    /// <para><c>Pump</c> used to call <c>PeekMessageW(hWnd 0)</c>, which is not "my windows" — it is
+    /// THE WHOLE CALLING THREAD. In the product that thread is Avalonia's UI thread:
+    /// <c>CompositionRoot.cs:263</c> builds <c>SessionParticipant</c>, which builds
+    /// <c>BubblePopSurfacePresenter.ForProduct</c> with a dispatch that is
+    /// <c>Dispatcher.UIThread.Post</c> (<c>Session/SessionParticipant.cs:213-219</c>, <c>:269</c>),
+    /// and <c>StepOnce</c> pumps from inside it (<c>Effects/BubblePopSurfacePresenter.cs:374</c>).
+    /// So the invariant those two methods leaned on — "this thread owns nothing but mine" — was
+    /// FALSE in the product, and false in this suite too, where
+    /// <c>RealDesktopWindowFloor</c> puts a hidden window on every fact's thread.</para>
+    ///
+    /// <para><b>Why this is deterministic and not a timing fact.</b> Nothing is injected and nothing
+    /// is waited for: one <c>WM_LBUTTONDOWN</c> is POSTED to the surface's own target and one to a
+    /// window the surface does not own. Both are in their queues before the pump runs, so "who
+    /// drained which" is decided entirely by the filter.</para>
+    ///
+    /// <para><b>Both halves are load-bearing.</b> A pump that drained nothing at all would satisfy
+    /// the second clause, so the first — the surface still sees its OWN press — is asserted beside
+    /// it; and a pump that merely SWALLOWED the foreign message without dispatching it would satisfy
+    /// the second too, so the third clause takes that message afterwards through the probe's own
+    /// unfiltered drain and proves it was still there to be taken.</para>
+    /// </summary>
+    [Fact]
+    public void ThePumpDrainsThisSurfacesOwnTargets_AndLeavesEveryOtherWindowOnTheThreadUntouched()
+    {
+        var machine = PointerWindowProbe.MachineHasInteractiveDesktop;
+        var (screenWidth, screenHeight) = PointerWindowProbe.PrimarySize;
+
+        using var surface = new Win32PointerSurface();
+        var bounds = new PointerBounds(
+            Math.Max(0, (screenWidth / 2) - 240),
+            Math.Max(0, (screenHeight / 2) + 40),
+            PointerSurfaceObservations.TargetSide,
+            PointerSurfaceObservations.TargetSide);
+
+        var openState = surface.Open(new PointerTargetRequest(bounds, 0x00201020, 0x00E0C0FF), out var target);
+        var ownWindow = surface.NativeHandlesFor(target).Window;
+
+        // A window on the SAME THREAD that this surface does not own, and which counts what reaches
+        // its procedure. Placed clear of the target so nothing about z-order or hit testing enters.
+        using var foreign = PointerWindowProbe.ScratchTarget.Create(
+            bounds.X + (PointerSurfaceObservations.TargetSide * 2),
+            bounds.Y,
+            PointerSurfaceObservations.TargetSide,
+            PointerSurfaceObservations.TargetSide);
+        var foreignWindow = foreign?.Window ?? 0;
+
+        var ownPosted = PointerWindowProbe.PostLeftDown(ownWindow);
+        var foreignPosted = PointerWindowProbe.PostLeftDown(foreignWindow);
+
+        var dispatched = surface.Pump(64);
+        var ownPresses = surface.PressesSeen;
+        var foreignDuringSurfacePump = foreign?.Downs ?? 0;
+
+        // The probe's OWN drain is deliberately unfiltered: it is the thread's real owner here, and
+        // it is what proves the foreign message was left rather than eaten.
+        PointerWindowProbe.Pump(64);
+        var foreignAfterOwnPump = foreign?.Downs ?? 0;
+
+        Assert.True(machine == (ownWindow != 0),
+            $"the surface did not place a target to pump for: {PointerSurfaceObservations.Describe(openState)}. "
+            + "Every reading below would then be about a surface with no windows, which drains nothing for "
+            + "reasons that have nothing to do with the filter");
+        Assert.True(machine == ownPosted && machine == foreignPosted,
+            $"PostMessage placed own={ownPosted} foreign={foreignPosted}; a message that never reached a queue "
+            + "cannot show who drains it");
+
+        // ---- it STILL drains its own ----
+        Assert.Equal(machine ? 1 : 0, ownPresses);
+        Assert.True(machine == (dispatched > 0),
+            "the surface's pump dispatched nothing at all, so 'it left the foreign window alone' is the trivial "
+            + "truth about a pump that does nothing");
+
+        // ---- and it takes nobody else's ----
+        Assert.True(
+            foreignDuringSurfacePump == 0,
+            $"the surface's pump dispatched {foreignDuringSurfacePump} message(s) into a window it does not own. "
+            + "PeekMessageW is draining the whole calling thread again, which in the product is Avalonia's UI "
+            + "thread");
+
+        // ---- and it did not silently swallow it either ----
+        Assert.Equal(machine ? 1 : 0, foreignAfterOwnPump);
+    }
+
+    /// <summary>
+    /// <b>The same invariant, pinned where a desktop is not required to see it break.</b>
+    ///
+    /// <para>The fact above is the real one, but it is machine-keyed: on Linux, and on any Windows
+    /// session with no interactive desktop, no target is placed and its clauses degenerate to
+    /// <c>0 == 0</c>. This one reads the two <c>Pump</c> bodies as TEXT and asserts the window
+    /// argument of their <c>PeekMessageW</c> call is not the literal <c>0</c> — the exact character
+    /// that turns "drain my windows" into "drain the whole calling thread". It holds on every
+    /// platform, in every session, and it is the thing that was missing when a single added hidden
+    /// window changed what these methods swallowed and nobody had asserted the difference.</para>
+    ///
+    /// <para><b><c>Win32InputPresence</c> is here even though the product does not call its pump</b>
+    /// (<c>IInputPresence.Pump</c> says so, and it is true — there is no call site under
+    /// <c>client/src</c>). The suite calls it, with the harness's own floor window and live scratch
+    /// rigs on the same thread, so the breadth was never harmless: it is what made this method's
+    /// disposal fact read 2 where it asserts 0. Same defect, same pin.</para>
+    ///
+    /// <para><b>Honesty.</b> This is LEXICAL. It cannot see a filter that is a variable holding
+    /// zero, and it says nothing about whether the handle chosen is the right one — that is what the
+    /// fact above measures against a real window manager.</para>
+    /// </summary>
+    [Fact]
+    public void NeitherPumpFiltersOnHwndZero_WhichWouldDrainTheWholeCallingThreadAgain()
+    {
+        // The call token is interop-QUALIFIED so the scan lands on the call and not on the prose
+        // above it, which names the bare API on purpose.
+        (string[] Parts, string Signature, string Call)[] pumps =
+        [
+            (["client", "src", "CcpClient.Desktop", "Pointer", "Win32PointerSurface.cs"],
+                "public int Pump(int max)", "Win32PointerInterop.PeekMessageW("),
+            (["client", "src", "CcpClient.Desktop", "Input", "Win32InputPresence.cs"],
+                "public int Pump(int maxMessages)", "Win32InputInterop.PeekMessageW("),
+        ];
+
+        // TOP-LEVEL, before the loop: BOTH pumps are covered, and an empty or trimmed table is a
+        // red rather than a fact that quietly asserts nothing (the vacuous-shape class).
+        Assert.Equal(2, pumps.Length);
+
+        var root = FindRepoRoot();
+        foreach (var (parts, signature, call) in pumps)
+        {
+            var path = Path.Combine([root, .. parts]);
+            var source = File.ReadAllText(path);
+
+            var start = source.IndexOf(signature, StringComparison.Ordinal);
+            Assert.True(start >= 0,
+                $"{string.Join('/', parts)} no longer declares '{signature}', so this guard is reading nothing "
+                + "and the invariant it pins is unpinned. Retarget it rather than deleting it");
+
+            var end = source.IndexOf("\n    }", start, StringComparison.Ordinal);
+            Assert.True(end > start, $"could not find the end of {signature} in {string.Join('/', parts)}");
+            var body = source[start..end];
+
+            var callAt = body.IndexOf(call, StringComparison.Ordinal);
+            Assert.True(callAt >= 0,
+                $"{signature} in {string.Join('/', parts)} no longer calls {call}); this guard is a detector "
+                + "of nothing until it is retargeted at whatever drains the queue now");
+
+            var argsFrom = callAt + call.Length;
+            var argsTo = body.IndexOf(')', argsFrom);
+            var args = body[argsFrom..argsTo].Split(',');
+
+            Assert.True(args.Length == 5,
+                $"PeekMessageW in {string.Join('/', parts)} was called with {args.Length} arguments, not 5; the "
+                + "window argument is no longer the second one and this guard would be reading the wrong thing");
+            Assert.True(args[1].Trim() != "0",
+                $"{signature} in {string.Join('/', parts)} passes hWnd 0 to PeekMessageW. That is not 'this "
+                + "object's windows' — it removes, translates and dispatches EVERY message queued for ANY window "
+                + "on the calling thread. In the product that thread is Avalonia's UI thread "
+                + "(CompositionRoot.cs:263 -> SessionParticipant.cs:269 -> BubblePopSurfacePresenter.cs:374, "
+                + "dispatched through Dispatcher.UIThread.Post), and in this suite it is a thread carrying the "
+                + "harness's floor window and whatever scratch rigs a fact has up");
+        }
+    }
+
+    private static string FindRepoRoot()
+    {
+        string[] anchor = ["client", "CcpClient.sln"];
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine([dir.FullName, .. anchor])))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException(
+            $"repo root not found walking up from {AppContext.BaseDirectory} (anchor: client/CcpClient.sln) — "
+            + "the pump-filter guard refuses to skip");
     }
 
     private static PointerTargetObservation Full() => new(
