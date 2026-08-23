@@ -16,7 +16,8 @@ namespace CcpClient.Desktop.Session;
 ///
 /// <para><b>The file format is upstream's <c>SessionDefinition</c></b>
 /// (<c>Models/SessionDefinition.cs:21-57</c>), read with upstream's serializer options —
-/// camelCase names and camelCase string enums (<c>Services/Session/SessionFileService.cs:16-22</c>).
+/// camelCase names and camelCase string enums
+/// (<c>Services/Session/SessionFileService.cs:16-22</c>).
 /// The port keeps ONE type where upstream has two: <c>SessionDefinition</c> (the file) and
 /// <c>Session</c> (the runtime, <c>Models/Session.cs:19</c>) differ only in that
 /// <c>ToSession()</c> DROPS <c>VibeSummary</c> and <c>ImagePath</c>
@@ -26,17 +27,20 @@ namespace CcpClient.Desktop.Session;
 /// also has a <c>StartMinute</c>/<c>EndMinute</c> pair per feature and a <c>TimelineEvents</c>
 /// list (<c>Models/Session.cs:822-935</c>, <c>:53</c>); none of the four built-ins writes them, the
 /// editor that does is not ported, and the members that read them (<c>CheckDelayedFeatures</c>,
-/// <c>SessionEngine.cs:663</c>) are not in this slice. They are not dropped: anything unmodelled
+/// <c>Services/Session/SessionEngine.cs:663</c>) are not in this slice. They are not dropped:
+/// anything unmodelled
 /// lands in <see cref="ExtensionData"/> and is preserved, which is the persistence contract's §6
 /// rule and the only reason a later slice can add them without a schema story.</para>
 /// </summary>
 public sealed class ScriptedSession
 {
-    /// <summary>Upstream's extension for these files (<c>SessionFileService.cs:128</c>, <c>:209</c>).</summary>
+    /// <summary>Upstream's extension for these files (<c>SessionFileService.cs:128</c>,
+    /// <c>:209</c>).</summary>
     public const string FileExtension = ".session.json";
 
     /// <summary>
-    /// Upstream's serializer options, verbatim (<c>Services/Session/SessionFileService.cs:16-22</c>).
+    /// Upstream's serializer options, verbatim
+    /// (<c>Services/Session/SessionFileService.cs:16-22</c>).
     /// The naming policy and the camelCase enum converter are what make <c>"difficulty": "easy"</c>
     /// and <c>"cornerGifPosition": "bottomLeft"</c> bind at all.
     /// </summary>
@@ -103,7 +107,8 @@ public sealed class ScriptedSession
     /// <summary>The dials this session imposes while it runs (<c>:54</c>).</summary>
     public ScriptedSessionSettings Settings { get; set; } = new();
 
-    /// <summary>The named phases, in file order (<c>:57</c>, <c>Models/Session.cs:47</c>).</summary>
+    /// <summary>The named phases, in file order (<c>:57</c>,
+    /// <c>Models/Session.cs:47</c>).</summary>
     public List<ScriptedSessionPhase> Phases { get; set; } = [];
 
     /// <summary>Unknown-member preservation (persistence contract §6).</summary>
@@ -147,7 +152,8 @@ public sealed class ScriptedSession
 
     /// <summary>
     /// Every readable session in a folder, ordered by file name so the rack a later slice draws is
-    /// the same on every machine (upstream enumerates with <c>Directory.GetFiles</c>, whose order is
+    /// the same on every machine (upstream enumerates with <c>Directory.GetFiles</c>, whose order
+    /// is
     /// the file system's). An absent folder is an empty list, never a throw: the shipped files are
     /// content beside the binary and a published tree missing them is a degraded install, not a
     /// crash.
@@ -210,8 +216,10 @@ public enum ScriptedCornerPosition
 /// One named phase on the session's timeline (<c>Models/Session.cs:949-954</c>).
 ///
 /// <para>A phase carries NO settings of its own — it is a label plus the minute it begins, and the
-/// engine's only use of it is to decide which one is current (<c>SessionEngine.cs:540-562</c>).
-/// Everything that changes over the session's length is a ramp on <see cref="ScriptedSessionSettings"/>,
+/// engine's only use of it is to decide which one is current
+/// (<c>Services/Session/SessionEngine.cs:540-562</c>).
+/// Everything that changes over the session's length is a ramp on <see
+/// cref="ScriptedSessionSettings"/>,
 /// not a property of the phase.</para>
 /// </summary>
 public sealed class ScriptedSessionPhase
@@ -304,7 +312,7 @@ public sealed class ScriptedSessionSettings
     public int SubliminalOpacity { get; set; } = 80;
 
     /// <summary>Session-specific phrase pool; empty means "leave the user's pool alone"
-    /// (<c>:843</c>, and the guard at <c>SessionEngine.cs:1187</c>).</summary>
+    /// (<c>:843</c>, and the guard at <c>Services/Session/SessionEngine.cs:1187</c>).</summary>
     public List<string> SubliminalPhrases { get; set; } = [];
 
     // ---- Audio (:846-850) ----
@@ -342,13 +350,15 @@ public sealed class ScriptedSessionSettings
     public bool PinkFilterEnabled { get; set; }
 
     /// <summary>Upstream <c>PinkFilterStartMinute</c> (<c>:863</c>): a non-zero value means the
-    /// filter is OFF at t=0 and a delayed start turns it on (<c>SessionEngine.cs:1283-1292</c>).</summary>
+    /// filter is OFF at t=0 and a delayed start turns it on
+    /// (<c>Services/Session/SessionEngine.cs:1283-1292</c>).</summary>
     public int PinkFilterStartMinute { get; set; }
 
     /// <summary>Upstream <c>PinkFilterStartOpacity</c>, default 10 (<c>:865</c>).</summary>
     public int PinkFilterStartOpacity { get; set; } = 10;
 
-    /// <summary>Upstream <c>PinkFilterEndOpacity</c> (<c>:866</c>) — the ramp's destination.</summary>
+    /// <summary>Upstream <c>PinkFilterEndOpacity</c> (<c>:866</c>) — the ramp's
+    /// destination.</summary>
     public int PinkFilterEndOpacity { get; set; } = 10;
 
     // ---- Spiral (:869-873) ----
@@ -419,7 +429,7 @@ public sealed class ScriptedSessionSettings
     public bool MandatoryVideosEnabled { get; set; }
 
     /// <summary>Upstream <c>VideosPerHour</c> (<c>:900</c>): null means "leave the user's rate"
-    /// (<c>SessionEngine.cs:1341-1344</c>).</summary>
+    /// (<c>Services/Session/SessionEngine.cs:1341-1344</c>).</summary>
     public int? VideosPerHour { get; set; }
 
     /// <summary>Upstream <c>LockCardEnabled</c>.</summary>

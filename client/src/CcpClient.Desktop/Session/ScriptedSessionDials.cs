@@ -8,12 +8,13 @@ namespace CcpClient.Desktop.Session;
 /// The user's dials, as a scripted session borrows them: <b>capture, replace, give back</b>.
 ///
 /// <para>This is upstream's <c>SaveCurrentSettings</c> / <c>ApplySessionSettings</c> /
-/// <c>RestoreSettings</c> trio (<c>Services/Session/SessionEngine.cs:864-923</c>, <c>:1145-1443</c>,
+/// <c>RestoreSettings</c> trio (<c>Services/Session/SessionEngine.cs:864-923</c>,
+/// <c>:1145-1443</c>,
 /// <c>:1445-1557</c>) against the port's documents instead of one global <c>AppSettings</c>. The
 /// promise it keeps is the one the confirm dialog makes in so many words — "Your current settings
 /// will be temporarily replaced. They will be restored when the session ends."
 /// (<c>MainWindow/MainWindow.Presets.cs:1467-1470</c>) — and it is the reason the snapshot is taken
-/// BEFORE anything is applied (<c>SessionEngine.cs:172-183</c>).</para>
+/// BEFORE anything is applied (<c>Services/Session/SessionEngine.cs:172-183</c>).</para>
 ///
 /// <para><b>The snapshot is the document, serialized.</b> Upstream copies field by field into a
 /// spare <c>AppSettings</c> and hand-copies every one of them back, which is how a member gets
@@ -30,7 +31,8 @@ namespace CcpClient.Desktop.Session;
 /// dial no module reads would be the storage form of a greyed-out control.</para>
 ///
 /// <para><b>Apply does not write to disk; Restore does.</b> Upstream saves mid-session
-/// (<c>SessionEngine.cs:262</c>), so a crash during an upstream session leaves the SESSION's dials
+/// (<c>Services/Session/SessionEngine.cs:262</c>), so a crash during an upstream session leaves the
+/// SESSION's dials
 /// persisted and the user's lost. Here the mutations are marked dirty and left in memory, and the
 /// restore's <c>Replace</c> is what enqueues a write — so an interrupted session gives the user's
 /// own settings back rather than the session's. A recorded divergence, in the user's favour. One
@@ -140,7 +142,8 @@ public sealed class ScriptedSessionDials
     /// already in flight. The task is deliberately not awaited, which is the port's established
     /// shape for a save on a state transition (<see cref="SessionEngine.Start"/>).</para>
     /// </summary>
-    /// <exception cref="ArgumentException">The snapshot did not come from a compatible instance.</exception>
+    /// <exception cref="ArgumentException">The snapshot did not come from a compatible
+    /// instance.</exception>
     public void Restore(ScriptedSessionDialSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);

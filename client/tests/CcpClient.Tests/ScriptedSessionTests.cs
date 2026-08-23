@@ -12,14 +12,16 @@ namespace CcpClient.Tests;
 /// with named phases that runs on top of the ordinary engine. Slice 1: the persisted model, phases
 /// on a clock, START/STOP with the settings snapshot, and the clock-jump guard.
 ///
-/// <para><b>Not one wall-clock wait, and not one real clock.</b> Both clocks and the tick timer come
+/// <para><b>Not one wall-clock wait, and not one real clock.</b> Both clocks and the tick timer
+/// come
 /// from an injected <see cref="IScriptedClock"/> driven by hand, which is the only way the guard's
 /// subject — a wall clock that jumps while a monotonic one does not — can exist at all.</para>
 ///
 /// <para><b>No double stands in for the engine or the stores.</b> A real
 /// <see cref="SessionEngine"/> over real <see cref="PersistenceStore{TModel}"/> documents in a temp
 /// directory, for the reason <c>SchedulerModuleTests</c> gives: a double diverges from the product
-/// exactly where the defect lives. The settings round-trip is asserted on the FILES, byte for byte.</para>
+/// exactly where the defect lives. The settings round-trip is asserted on the FILES, byte for
+/// byte.</para>
 /// </summary>
 public class ScriptedSessionTests
 {
@@ -145,7 +147,7 @@ public class ScriptedSessionTests
     }
 
     // =====================================================================================
-    //  THE CLOCK-JUMP GUARD (upstream SessionEngine.cs:96-115, issue #369)
+    //  THE CLOCK-JUMP GUARD (upstream Services/Session/SessionEngine.cs:96-115, issue #369)
     // =====================================================================================
 
     [Fact]
@@ -205,7 +207,7 @@ public class ScriptedSessionTests
     public async Task AWallClockThatJUMPSBACKWARD_DoesNotBalloonTheTimeRemaining()
     {
         // Upstream's own worked example of the defect: "149 minutes left" on a 30-minute session
-        // (SessionEngine.cs:101-102).
+        // (Services/Session/SessionEngine.cs:101-102).
         await using var rig = await Rig.StartAsync();
         rig.Run.Start(Built("morning_drift"));
         rig.Clock.Advance(TimeSpan.FromMinutes(12));
@@ -252,7 +254,8 @@ public class ScriptedSessionTests
 
         Assert.True(rig.Run.Start(session));
 
-        // Upstream announces phase 0 at START, before any tick (SessionEngine.cs:264-267).
+        // Upstream announces phase 0 at START, before any tick
+        // (Services/Session/SessionEngine.cs:264-267).
         Assert.Equal([(0, "Settling In")], rig.Phases);
         Assert.Equal("Settling In", rig.Run.CurrentPhase!.Name);
         Assert.Equal(TimeSpan.FromMinutes(30), rig.Run.Remaining);
@@ -278,7 +281,8 @@ public class ScriptedSessionTests
     [Fact]
     public async Task APhaseMovesBACK_WhenASmallDriftIsCorrected()
     {
-        // Upstream compares the new index with "!=" and not ">" (SessionEngine.cs:556), so a phase
+        // Upstream compares the new index with "!=" and not ">"
+        // (Services/Session/SessionEngine.cs:556), so a phase
         // is what the CLOCK says and not a ratchet. The path that reaches it is narrow and real: a
         // wall clock 29 s ahead is INSIDE the guard's tolerance, so it is trusted, and a correction
         // that pulls those 29 s back moves the session across a phase boundary in reverse.
@@ -370,7 +374,8 @@ public class ScriptedSessionTests
             ["GOOD GIRL", "BAMBI SLEEP", "BIMBO DOLL", "PRIMPED AND PAMPERED", "GIGGLETIME"],
             rig.Subliminal.Current.ActivePhrases());
         // The user's own phrase is still in the pool, switched off — upstream disables rather than
-        // deletes (SessionEngine.cs:1191-1194), which is what makes the restore give a POOL back.
+        // deletes (Services/Session/SessionEngine.cs:1191-1194), which is what makes the restore
+        // give a POOL back.
         Assert.False(rig.Subliminal.Current.Phrases["MINE ONLY"]);
 
         Assert.True(rig.BouncingText.Current.Enabled);
@@ -508,7 +513,8 @@ public class ScriptedSessionTests
 
         rig.Run.Stop();
 
-        // Upstream leaves the engine running after a session ends (SessionEngine.cs:287-425 stops
+        // Upstream leaves the engine running after a session ends
+        // (Services/Session/SessionEngine.cs:287-425 stops
         // no engine); the port re-arms it so the restored dials are what runs.
         Assert.True(rig.Engine.Running);
         Assert.Equal([12, 7], rig.Effect.ArmedWith);
@@ -891,7 +897,8 @@ public class ScriptedSessionTests
             return new CancelHandle(this, entry);
         }
 
-        /// <summary>Time passes, honestly: both clocks move and whatever became due fires.</summary>
+        /// <summary>Time passes, honestly: both clocks move and whatever became due
+        /// fires.</summary>
         public void Advance(TimeSpan by)
         {
             lock (_timers)

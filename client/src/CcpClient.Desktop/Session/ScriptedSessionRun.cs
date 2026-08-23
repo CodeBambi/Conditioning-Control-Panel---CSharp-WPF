@@ -11,7 +11,8 @@ namespace CcpClient.Desktop.Session;
 /// rather than half-built: the session editor, the rack UI and its repaint, the Session Complete
 /// recap and history, the media log, pause and its XP penalty, the XP award itself, the Gamer-Girl
 /// corner-GIF window, scheduled bubble bursts, the ±3 min randomized ramp starts, the per-tick
-/// ramping values (<c>UpdateRampingValues</c>, <c>SessionEngine.cs:564</c>) and the delayed feature
+/// ramping values (<c>UpdateRampingValues</c>, <c>Services/Session/SessionEngine.cs:564</c>) and
+/// the delayed feature
 /// starts (<c>CheckDelayedFeatures</c>, <c>:663</c>).
 /// </para>
 ///
@@ -20,7 +21,8 @@ namespace CcpClient.Desktop.Session;
 /// session starts the engine if it is not already running
 /// (<c>MainWindow/MainWindow.Presets.cs:1509-1512</c>). Ending one does NOT stop it — upstream's
 /// <c>StopSession</c> restores the settings and leaves the engine running
-/// (<c>SessionEngine.cs:287-425</c>) — so the port re-arms it instead, which is the port's
+/// (<c>Services/Session/SessionEngine.cs:287-425</c>) — so the port re-arms it instead, which is
+/// the port's
 /// equivalent of upstream's per-feature "stop the service, start the service" inside
 /// <c>ApplySessionSettings</c> (<c>:1263</c>, <c>:1167-1171</c>). It has to: upstream's services
 /// re-read <c>AppSettings</c> live, and this port's modules read their dials when they ARM.</para>
@@ -90,7 +92,8 @@ public sealed class ScriptedSessionRun
     }
 
     /// <summary>A phase became current: the phase and its index. Upstream's <c>PhaseChanged</c>
-    /// (<c>SessionEngine.cs:24</c>), raised for phase 0 at START as upstream raises it
+    /// (<c>Services/Session/SessionEngine.cs:24</c>), raised for phase 0 at START as upstream
+    /// raises it
     /// (<c>:264-267</c>).</summary>
     public event Action<ScriptedSessionPhase, int>? PhaseChanged;
 
@@ -99,11 +102,14 @@ public sealed class ScriptedSessionRun
     public event Action<ScriptedSessionProgress>? ProgressUpdated;
 
     /// <summary>The session ended, by completion or by a stop. Upstream splits this into
-    /// <c>SessionStopped</c> and <c>SessionCompleted</c> (<c>:26-28</c>); the port carries one event
-    /// with the flag on it, because every consumer of either needs to know which happened.</summary>
+    /// <c>SessionStopped</c> and <c>SessionCompleted</c> (<c>:26-28</c>); the port carries one
+    /// event
+    /// with the flag on it, because every consumer of either needs to know which
+    /// happened.</summary>
     public event Action<ScriptedSessionOutcome>? Ended;
 
-    /// <summary>Upstream's <c>IsRunning</c> (<c>SessionEngine.cs:81</c>).</summary>
+    /// <summary>Upstream's <c>IsRunning</c>
+    /// (<c>Services/Session/SessionEngine.cs:81</c>).</summary>
     public bool Running
     {
         get { lock (_gate) { return _running; } }
@@ -138,7 +144,8 @@ public sealed class ScriptedSessionRun
 
     /// <summary>
     /// How long this session has really been running — upstream's <c>ElapsedTime</c>
-    /// (<c>SessionEngine.cs:92-116</c>), <b>including its clock-jump guard</b>. Zero when nothing
+    /// (<c>Services/Session/SessionEngine.cs:92-116</c>), <b>including its clock-jump guard</b>.
+    /// Zero when nothing
     /// runs (<c>:95</c>). See <see cref="Reconcile"/> for the rule and
     /// <see cref="ReadElapsed"/> for which clock a given reading came from.
     /// </summary>
@@ -199,7 +206,8 @@ public sealed class ScriptedSessionRun
 
     /// <summary>
     /// <see cref="Elapsed"/> with the working shown: both clocks' readings and whether the guard
-    /// took the monotonic one. It is a pure read — asking twice cannot change an answer or a count —
+    /// took the monotonic one. It is a pure read — asking twice cannot change an answer or a count
+    /// —
     /// and it is what a fact asserts against instead of inferring the guard from a number that
     /// happens to match.
     /// </summary>
@@ -207,7 +215,8 @@ public sealed class ScriptedSessionRun
 
     /// <summary>
     /// The three numbers a session's readout shows, taken together from one clock reading —
-    /// upstream's <c>SessionProgressEventArgs</c> (<c>SessionEngine.cs:1994-2006</c>), which is
+    /// upstream's <c>SessionProgressEventArgs</c>
+    /// (<c>Services/Session/SessionEngine.cs:1994-2006</c>), which is
     /// built from one <c>ElapsedTime</c> read for the same reason.
     /// </summary>
     public ScriptedSessionProgress ReadProgress()
@@ -226,8 +235,9 @@ public sealed class ScriptedSessionRun
     }
 
     /// <summary>
-    /// START, in upstream's order (<c>SessionEngine.cs:148-270</c>,
-    /// <c>MainWindow/MainWindow.Presets.cs:1509-1512</c>): snapshot the user's dials BEFORE anything
+    /// START, in upstream's order (<c>Services/Session/SessionEngine.cs:148-270</c>,
+    /// <c>MainWindow/MainWindow.Presets.cs:1509-1512</c>): snapshot the user's dials BEFORE
+    /// anything
     /// is touched (<c>:173</c>), impose the session's (<c>:183</c>), take both clock readings
     /// (<c>:167-168</c>), put the tick on the clock (<c>:222-227</c>), and announce phase 0
     /// (<c>:264-267</c>).
@@ -285,14 +295,17 @@ public sealed class ScriptedSessionRun
     }
 
     /// <summary>
-    /// STOP, in upstream's order (<c>SessionEngine.cs:287-425</c>): the final elapsed time is read
+    /// STOP, in upstream's order (<c>Services/Session/SessionEngine.cs:287-425</c>): the final
+    /// elapsed time is read
     /// BEFORE the running flag clears, because the flag is what makes
     /// <see cref="Elapsed"/> report zero (<c>:291-293</c> — upstream comments the same trap); the
-    /// tick comes off the clock (<c>:309-313</c>); the user's dials come back (<c>:347</c>); and the
+    /// tick comes off the clock (<c>:309-313</c>); the user's dials come back (<c>:347</c>); and
+    /// the
     /// end is announced.
     /// </summary>
     /// <param name="completed">The session reached its duration. Upstream's
-    /// <c>StopSession(completed:)</c> (<c>:287</c>), which is what separates a finished session from
+    /// <c>StopSession(completed:)</c> (<c>:287</c>), which is what separates a finished session
+    /// from
     /// an abandoned one.</param>
     /// <returns>False when nothing was running.</returns>
     public bool Stop(bool completed = false)
@@ -338,9 +351,11 @@ public sealed class ScriptedSessionRun
     }
 
     /// <summary>
-    /// One tick — upstream's <c>MainTimer_Tick</c> (<c>SessionEngine.cs:504-537</c>), in its order:
+    /// One tick — upstream's <c>MainTimer_Tick</c>
+    /// (<c>Services/Session/SessionEngine.cs:504-537</c>), in its order:
     /// refuse when nothing runs (<c>:506</c>), end the session the moment elapsed reaches the
-    /// duration and do nothing else that tick (<c>:512-517</c>), publish the readout (<c>:520-524</c>),
+    /// duration and do nothing else that tick (<c>:512-517</c>), publish the readout
+    /// (<c>:520-524</c>),
     /// then move the phase (<c>:527</c>).
     ///
     /// <para>Public because it is the decision, and the clock is only how it is delivered — the
@@ -373,10 +388,13 @@ public sealed class ScriptedSessionRun
 
     /// <summary>
     /// Which phase is current — upstream's <c>CheckPhaseTransition</c>
-    /// (<c>SessionEngine.cs:540-562</c>): scan from the LAST phase back and take the first whose
-    /// start minute has passed, falling back to phase 0. The comparison against the current index is
+    /// (<c>Services/Session/SessionEngine.cs:540-562</c>): scan from the LAST phase back and take
+    /// the first whose
+    /// start minute has passed, falling back to phase 0. The comparison against the current index
+    /// is
     /// upstream's <c>!=</c> and not <c>&gt;</c>, so a phase can also move BACK — which is exactly
-    /// what happens on the tick after the clock-jump guard corrects a wall clock that had run ahead.
+    /// what happens on the tick after the clock-jump guard corrects a wall clock that had run
+    /// ahead.
     /// </summary>
     private void CheckPhaseTransition(ScriptedSession session, double elapsedMinutes)
     {
@@ -447,12 +465,14 @@ public sealed class ScriptedSessionRun
     /// <summary>
     /// A tick comes due. The next one goes on the clock BEFORE the decision runs — upstream's
     /// repeating <c>DispatcherTimer</c> re-arms itself whatever the tick body does
-    /// (<c>SessionEngine.cs:222-227</c>), and a decision that threw would otherwise end the session's
+    /// (<c>Services/Session/SessionEngine.cs:222-227</c>), and a decision that threw would
+    /// otherwise end the session's
     /// clock in silence. A tick that stops the session cancels the newly armed one on its way down.
     /// </summary>
     private void OnDue(ScheduledFire token)
     {
-        // CompareExchange, not Exchange: clear the slot only if it still holds THIS tick. A callback
+        // CompareExchange, not Exchange: clear the slot only if it still holds THIS tick. A
+        // callback
         // from a superseded or cancelled schedule does nothing at all (the identity rule).
         if (Interlocked.CompareExchange(ref _pending, null, token) != token)
         {
@@ -487,7 +507,8 @@ public sealed class ScriptedSessionRun
 /// <param name="Wall">The wall clock's elapsed span since the session started.</param>
 /// <param name="Monotonic">The monotonic clock's elapsed span since the session started.</param>
 /// <param name="UsedMonotonic">True when the two disagreed by more than
-/// <see cref="ScriptedSessionRun.ClockJumpToleranceSeconds"/> and the monotonic reading won.</param>
+/// <see cref="ScriptedSessionRun.ClockJumpToleranceSeconds"/> and the monotonic reading
+/// won.</param>
 public readonly record struct ScriptedElapsedReading(
     TimeSpan Elapsed, TimeSpan Wall, TimeSpan Monotonic, bool UsedMonotonic)
 {
@@ -509,6 +530,7 @@ public readonly record struct ScriptedSessionProgress(
 /// this slice.</summary>
 /// <param name="Session">The session that ended.</param>
 /// <param name="Elapsed">Its final elapsed time, read before the running flag cleared.</param>
-/// <param name="Completed">True when it reached its duration; false when it was stopped early.</param>
+/// <param name="Completed">True when it reached its duration; false when it was stopped
+/// early.</param>
 public sealed record ScriptedSessionOutcome(
     ScriptedSession Session, TimeSpan Elapsed, bool Completed);

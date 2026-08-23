@@ -21,7 +21,8 @@ namespace CcpClient.Desktop.Session;
 /// unifying them later would be a refactor with no behaviour in it.</para>
 ///
 /// <para><b>The wall clock here is UTC, and upstream's is local</b> (<c>DateTime.Now</c>,
-/// <c>SessionEngine.cs:96</c>). A recorded, deliberate divergence with the same reasoning the
+/// <c>Services/Session/SessionEngine.cs:96</c>). A recorded, deliberate divergence with the same
+/// reasoning the
 /// scheduler's seam gives (<c>Scheduling/ScheduleClock.cs:14-20</c>): at a daylight-saving
 /// transition a local reading jumps an hour, and upstream's session survives that only BECAUSE the
 /// jump guard catches it. Reading UTC means the DST hour is not a jump at all, so the session's
@@ -31,13 +32,15 @@ namespace CcpClient.Desktop.Session;
 /// </summary>
 public interface IScriptedClock
 {
-    /// <summary>The wall clock — upstream's <c>DateTime.Now</c> (<c>SessionEngine.cs:96</c>), in
+    /// <summary>The wall clock — upstream's <c>DateTime.Now</c>
+    /// (<c>Services/Session/SessionEngine.cs:96</c>), in
     /// UTC. It can jump; that is the point.</summary>
     DateTimeOffset Now { get; }
 
     /// <summary>
     /// A monotonic reading — upstream's <c>_wallClockStopwatch.Elapsed</c>
-    /// (<c>SessionEngine.cs:98</c>). Only DIFFERENCES between two readings are meaningful; the
+    /// (<c>Services/Session/SessionEngine.cs:98</c>). Only DIFFERENCES between two readings are
+    /// meaningful; the
     /// origin is arbitrary, exactly as a <see cref="Stopwatch"/>'s is.
     /// </summary>
     TimeSpan Monotonic { get; }

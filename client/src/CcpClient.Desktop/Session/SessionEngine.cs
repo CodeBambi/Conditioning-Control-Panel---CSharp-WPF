@@ -28,6 +28,14 @@ namespace CcpClient.Desktop.Session;
 /// carries an <see cref="Lifecycle.AsyncOperationOwner"/> and the work stops because that
 /// generation is cancelled. So "stop really stops" is a property of the operation registry,
 /// provable by draining it, not of a boolean here.</para>
+///
+/// <para><b>Amended:</b> the "not ported" above is now half true, and the half that changed is
+/// named rather than quietly dropped. <see cref="ScriptedSessionRun"/> is slice 1 of that other
+/// feature — the persisted model, phases on a clock, START/STOP with the settings snapshot, and
+/// the clock-jump guard — and it OWNS this class from outside rather than living in it: still no
+/// XP, no phases and no duration anywhere below this line. Its rack, its editor, its recap, its
+/// pause penalty and its XP award remain unported, and nothing in the composition root constructs
+/// one yet, so no surface can start a scripted session in this build.</para>
 /// </summary>
 public sealed class SessionEngine
 {
