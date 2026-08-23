@@ -24,7 +24,8 @@ This file is the *implementation* companion: what the pieces are, where the trap
 | media | `provider/` (parallel agent) | a game fetching anything itself |
 | sound | `shell/audio.js` | the engine, a game, or C# owning an Audio node |
 
-Screen router: **split-flap board → class → report card** (+ settings, which is a screen).
+Screen router: **split-flap board → class → report card** (+ settings and the Records
+Office, which are screens).
 `boot.js` owns the bridge handshake and the Esc ladder's outer rungs; `shell.js` owns the
 inner rungs.
 
@@ -56,6 +57,15 @@ shell/ceremonies.js stamp / 10-segment meter / reward beats (engine-delegated)
 shell/exits.js     THE WAY OUT: the campus pill + its confirm, the sticky exit
                    bar, and the casino arrow SIGN. Every back/leave/done in the
                    school is minted here (games borrow it through ctx.exits)
+shell/punchcard.js THE CARD: cardFace() (ten holes, data-game = the crest seam,
+                   punches only FORWARD) + thud() + holesLine(). Shared by the
+                   ceremony and the Records wall so a card is ONE object
+shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
+                   AND the stamp ceremony (day one = two punches, daily = one,
+                   the tenth = the unlock beat)
+shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-card
+                   stamp docket, and a link to the report card (never a second
+                   share pipeline - trap 13)
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
@@ -163,6 +173,15 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     `payout-result` carries the streak. The whole-blob `meta` snapshot is pushed as well.
   - `complete:true` IS the permanent unlock: the shell offers Begin on that room every night
     through the same door path as `devDoor`. Nothing host-side gates which room may start.
+  - **The SHELL half** (2026-08-23): `core/store.js` lists the key in `HOST_OWNED_KEYS` and
+    exposes `store.punchCard(gameKey)` / `store.unlockedGames()`, both of which RE-DERIVE
+    `punches`, `house`, `complete` and `enrolled` off the two fields that are actually earned -
+    the same self-heal `ArcademyPunchCards.Normalize` does in C#, so a denormalized blob can
+    never draw a hole the host does not hold. `shell.js` turns that into `campusState.unlocked`
+    (a map, beside `devPass`) and into `needsEnrollment()`; `shell/enrollment.js` runs both
+    beats; `boot.js` routes `punchcard-result` to `shell.onPunchCard`. The page's ONLY
+    outbound frame about a card is `enrollment-done` - there is deliberately no "punch" verb
+    it could send.
 - **`meta` arrives in TWO shapes** — `{key, value}` (the reply to a meta-command) and
   `{rev, state}` (the snapshot the host pushes after crediting attendance). Handle both; a
   handler that requires `key` silently drops the authoritative streak.
@@ -528,6 +547,36 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     live - that overlay carries its own Leave class and a second door on top of it is
     the exact race trap 29 was written about.
 
+46. **NEVER FEATURE-TEST A DOM COLLECTION WITH `Array.isArray`.** The enrollment
+    intro re-labels its own CTA between cards, and the label lives INSIDE the sign
+    (`signExit` replaces the button's text with three children: `.arc-sign-lamps`,
+    `.arc-sign-arrow`, `.arc-sign-label`), so writing `btn.textContent` deletes the
+    whole arrow board and leaves a plain slab. The guard that walked the children to
+    find the label span read `Array.isArray(btn.children)` - and the headless DOM
+    double hands back a real **Array** while a browser hands back an
+    **HTMLCollection**, so the suite went green and Chromium rendered a bare button
+    (caught in a capture, 2026-08-23). Walk `node.children` by index; it is iterable
+    in both worlds and `Array.isArray` is true in neither that matters.
+47. **THE CEREMONY MUST OUTLIVE A REPORT REPAINT, AND `clearScreen()` IS NOT WHERE
+    IT DIES.** The punch card mounts ON the report card (which itself sits under the
+    Deck V one-more card), and `onPayout` re-renders that report on the same screen
+    the instant the host pays out - which is the exact moment the card is meant to be
+    up. Dropping it in `clearScreen()` therefore deleted it a frame after it appeared.
+    It is dropped beside `dismissEndCard()` at every REAL screen change instead
+    (`showBoard` / `showSettings` / `showRecords` / `startClass`) and `showReport()`
+    re-seats it last, after the end card - byte-for-byte the treatment the end card
+    already had, for byte-for-byte the same reason.
+48. **A CEREMONY FOR A HOLE THAT WAS NOT PUNCHED IS THE ONE LIE THIS SCREEN CANNOT
+    TELL.** `punchcard-result` is posted on BOTH mint paths even when `minted:false`
+    (a same-day retake, a full card, a class the host declined to stamp), so the shell
+    can tell "nothing happened" apart from "the host never answered" - and it shows
+    NOTHING for the first. The daily path also arms a 4s timeout: a host that never
+    answers (an older build, a dropped frame) simply means no card beat this run, and
+    the report card behind it is untouched. The ceremony always animates TO
+    `card.punches` (already the post-mint total) and `punchTo()` refuses to walk a card
+    backwards, so a race between its own schedule and the host's answer can only ever
+    add holes.
+
 ## 5. The game module contract (short version)
 
 ```js
@@ -597,10 +646,26 @@ must never grow a test seam that ships. Cases opt in through an `overrideCalenda
 other case still sees the shipping five-game pool and the seeded boards it asserts against.
 Remember `clearTimetableCache()` between boots (trap 25).
 
-Last full run: **144 assertions, 0 failures** (timetable 27, grades 23, shell 45,
-bridge+boot 15, **e2e seams 14**, **host fixes 20**), against the live `engine/` + `provider/`
-modules (the note line in the shell run says which). The four game suites (`games-dt`,
-`games-lf`, `games-dv`, `games-ic`) drive the REAL games and run green alongside it.
+Last full run: **264 assertions, 0 failures** (timetable 27, grades 23, shell 48,
+bridge+boot 15, **e2e seams 14**, campus 23, **host fixes 20**, time bar + free swim 15,
+rake 44, **punch cards 35**), against the live `engine/` + `provider/` modules (the note line
+in the shell run says which). The four game suites (`games-dt`, `games-lf`, `games-dv`,
+`games-ic`) drive the REAL games and run green alongside it.
+
+`test-punchcard.mjs` (2026-08-23) is the punch-card half: the store's refusal + self-heal,
+the 96-char cap on every one of the 30 flavour rows AND their verbatim presence in the C#
+table, the intro showing once and never again, the ceremony on all three shapes (daily,
+enrollment, `justUnlocked`) plus the no-op silence, the door CTA order, and the Records
+Office populated and empty. **A boot with no `punchCards` in `init.meta` now opens with an
+enrollment intro**, so the older suites seed an already-enrolled school in their `fakeInit`
+- a first night is `test-punchcard.mjs`'s subject, not theirs.
+
+**Browser pass, not just node.** The suites drive a DOM double, which cannot see a CSS rule
+that does not parse, a module that throws on evaluation, or trap 46. The recipe: serve the
+web root over plain http, install `window.chrome.webview` through Playwright's
+`addInitScript` (bridge.js captures the transport at module scope, so it must exist before
+the first import), post a realistic `init`, then screenshot and read `document.styleSheets`
+back. It caught trap 46 and two duplicated-copy layout bugs the node run could not.
 
 `test-hostfixes.mjs` covers the two seams that are not JavaScript. It **parses the real
 `styles.css`** and evaluates the `[hidden]` cascade for every element the shell toggles
@@ -657,6 +722,18 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
   snapshot. The page still needs no new code: it already honours the frame. (The gate properties
   themselves — `ShouldDeferInterruptions` / `ShouldDeferNewVideo` — are polls, and polling a
   class's freeze state would be worse than not having it, which is why the event is the hook.)
+- **The punch cards ship on a CSS floor; the art batch is still open** (PUNCHCARD §7). Every
+  graphic on a card is a `--pc-*-src` custom property in the PUNCH CARDS section of
+  `styles.css` that currently resolves to `none`, and the rules under it draw the whole thing
+  out of gradients - so the batch landing is ONE edit to that token block plus ten
+  `.arc-pc[data-game="<key>"] { --pc-crest-src: url(...) }` lines that are already written out
+  as the asset map. **No text may ever be baked into those images** (lexicon law): the class
+  name, the count and every line are rendered live over the top. Files belong in
+  `Resources/web/arcademy/art/punchcard/`.
+- **The server mirror is a separate PR** (PUNCHCARD §5, CCP-Server). Nothing in this folder
+  talks to it or ever will: the page is offline and the HOST does the pull-at-launch /
+  push-after-mutation. What the page gets for free when it lands is a restored card
+  suppressing a repeat enrollment - `enrolledAt` is the only flag and it arrives in the blob.
 - **Nothing consumes `arcademy-fx`.** The engine narrates every primitive on that event and
   only `arcademy-log` is read (by `boot.js`). It is the obvious hook for a future telemetry
   or "what did the engine just do" debug overlay.

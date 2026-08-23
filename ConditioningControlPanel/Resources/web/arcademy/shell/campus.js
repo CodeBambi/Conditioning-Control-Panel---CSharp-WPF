@@ -220,14 +220,22 @@ const ATTRACT_CURSOR_D = 'M0,0 L0,17 L4.2,13 L6.9,18.4 L9.6,17.1 L7,11.8 L12,11.
  * @param {Object=} o.endless  gameKey -> {labelKey, hintKey} for every game that
  *   declares `manifest.endless`. The shell computes it (the campus never reads a
  *   manifest); a room without an entry simply shows no Free Swim button.
+ * @param {Object=} o.unlocked  gameKey -> true for every room whose PUNCH CARD is
+ *   full (PUNCHCARD.md §2.3). An unlocked room offers Begin every night, board or
+ *   no board - the one door of the three a player can actually earn, and the
+ *   reason the CTA order is `scheduled -> unlocked -> devPass -> not tonight`.
+ *   Like `endless` it is a property of the ROOM, not of tonight, so it rides
+ *   every room in the map rather than only the dealt ones.
  * @returns {{rooms:Object, stops:Array<{gameKey:string,n:number}>, allDone:boolean}}
  *   rooms[gameKey] = { scheduled, period (1-based, 0 = not tonight), done,
- *                      grade, mood:'open'|'retake'|'dark', timeLabel, endless }
+ *                      grade, mood:'open'|'retake'|'dark', timeLabel, endless,
+ *                      unlocked }
  */
-export function campusState({ classes, records, suspended, endless, devPass } = {}) {
+export function campusState({ classes, records, suspended, endless, devPass, unlocked } = {}) {
   const list = Array.isArray(classes) ? classes : [];
   const recs = records || {};
   const ends = (endless && typeof endless === 'object') ? endless : {};
+  const locks = (unlocked && typeof unlocked === 'object') ? unlocked : {};
   const rooms = Object.create(null);
   for (const key of Object.keys(ROOMS)) {
     rooms[key] = {
@@ -236,8 +244,16 @@ export function campusState({ classes, records, suspended, endless, devPass } = 
       // for every room so a class that is not on the board (or is already done)
       // still offers its free swim.
       endless: (ends[key] && typeof ends[key] === 'object') ? ends[key] : null,
+      // A FULL CARD IS A PERMANENT DOOR. Same reasoning as `endless` above: it
+      // belongs to the room forever, not to tonight's deal.
+      unlocked: locks[key] === true,
     };
   }
+  // AN UNLOCKED ROOM IS NEVER DARK. It is not "in session" (that is what the
+  // board deals) but it is open, and a map that painted it the same black as a
+  // room you cannot enter would be lying about the thing you spent ten nights
+  // earning. The dealt rooms below still overwrite this with their own mood.
+  for (const key of Object.keys(rooms)) if (rooms[key].unlocked) rooms[key].mood = 'open';
   const stops = [];
   let done = 0;
   list.forEach((c, i) => {
@@ -654,12 +670,15 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   /* Records (report card) - north-east */
   const recordsG = facility([940, 210, 280, 220], 1080, 'n',
     t('campus_records', 'Records'),
-    t('report_card', 'Report Card') + ' · ' + t('attendance', 'Attendance'),
+    // THE OFFICE, not just the report card: the punch-card wall lives here now
+    // (PUNCHCARD §6) and the door plate should say so before it is opened.
+    t('punchcard', 'Punch Card') + ' · ' + t('report_card', 'Report Card'),
     () => { if (handlers.records) handlers.records(); },
     () => ({
       name: t('campus_records', 'Records'),
       status: t('report_card', 'Report Card'),
       desc: t('campus_desc_records', 'Report card, attendance ledger, grades. Your whole term, in ink.'),
+      // (the desc row is unchanged on purpose - it already describes the office)
     }));
   [228, 262, 296, 330].forEach((y) => recordsG.appendChild(svg('rect', { x: 1196, y, width: 14, height: 26 }, 'campus-furnf')));
   recordsG.appendChild(svg('rect', { x: 1044, y: 264, width: 66, height: 24 }, 'campus-furnf'));
@@ -862,7 +881,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   function statusLine(key) {
     const r = st.rooms[key] || {};
-    if (!r.scheduled) return t('campus_not_tonight', 'Not tonight');
+    if (!r.scheduled) {
+      return r.unlocked
+        ? t('campus_unlocked', 'Unlocked - open every night')
+        : t('campus_not_tonight', 'Not tonight');
+    }
     const period = t('period', 'Period') + ' ' + r.period + (r.timeLabel ? ' · ' + r.timeLabel : '');
     if (r.done) return t('retake', 'Retake') + ' — ' + period;
     return t('campus_in_session', 'In Session') + ' — ' + period;
@@ -978,8 +1001,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     if (r.family) chip(familyLabel(r.family));
     if (r.timeBudgetSec) chip(r.timeBudgetSec + 's');
     if (r.homeroom) chip(t('homeroom', 'Homeroom'));
-    ccStamp.textContent = r.done ? String(r.grade).toUpperCase() : '';
-    ccStamp.classList[r.done ? 'remove' : 'add']('off');
+    ccStamp.textContent = r.done ? String(r.grade).toUpperCase()
+      : (r.unlocked ? t('punchcard_unlocked_chip', 'Unlocked') : '');
+    ccStamp.classList[(r.done || r.unlocked) ? 'remove' : 'add']('off');
+    ccStamp.classList[(!r.done && r.unlocked) ? 'add' : 'remove']('cc-stamp-unlocked');
     ccXp.textContent = r.done
       ? t('campus_xp_retake', 'Retakes pay no XP - pride only.')
       : (r.scheduled ? t('campus_xp_first', 'First pass of the day pays XP.') : '');
@@ -990,6 +1015,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     } else if (r.scheduled) {
       ccGo.textContent = (r.done ? t('retake', 'Retake') : t('begin_class', 'Begin')).toUpperCase();
       ccGo.disabled = false;
+      cardAction = () => { if (handlers.begin) handlers.begin(key); };
+    } else if (r.unlocked) {
+      /* THE EARNED DOOR (PUNCHCARD §2.3). Ten holes closed the card and the
+       * card IS the key: this room offers a full graded Begin every night from
+       * now on, off the board or on it, through the same path the dev pass
+       * uses. It ranks ABOVE the dev pass on purpose - when both are true the
+       * player should be told which one they earned. */
+      ccGo.textContent = t('begin_class', 'Begin').toUpperCase();
+      ccGo.disabled = false;
+      ccXp.textContent = t('campus_unlocked_hint',
+        'Card complete. This room opens every night, board or no board.');
       cardAction = () => { if (handlers.begin) handlers.begin(key); };
     } else if (st.devPass) {
       /* THE DEV DOOR. Off the board but the host opened the building with the
@@ -1036,6 +1072,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * strand a stale word on a sign. */
   function neonLabel(key) {
     const r = st.rooms[key] || {};
+    // AN UNLOCKED ROOM IS OPEN, NOT IN SESSION. Only the board puts a class in
+    // session; a full punch card lights the room every other night, and a sign
+    // that said IN SESSION off the board would be the map lying about the deal.
+    if (!r.scheduled && r.unlocked) return t('campus_unlocked_sign', 'Open').toUpperCase();
     if (r.mood === 'open') return t('campus_in_session', 'In Session').toUpperCase();
     if (r.mood === 'retake') return t('retake', 'Retake').toUpperCase();
     return '';
