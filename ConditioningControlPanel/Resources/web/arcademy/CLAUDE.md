@@ -108,6 +108,13 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    media - the old gif faces are now the opt-in, not the look
   instant-recall/  the vigil (recall, 120s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
                    GUARANTEE in the last 15s, density sawtooth, plants, templates LAST_WORD/EFFECT/STING/TWO,
+                   THE CADENCE (owner 2026-08-23, "about 5 rounds per minute"): 9-11 stops a 120s class at
+                   EVERY tier, ONE question each - tier moves the window (6/6/5/4s) and the template pool,
+                   never the rate. MIN_GAP_MS is DERIVED, not tasted: window + VERDICT_MS + DEAL_BEAT_MS +
+                   FRESH_MS + slop, so even a fully blanked stop leaves >= 4s of live wall, and seedDues
+                   pulls the two earliest dues in so that wall always SAYS >= 2 things - a question can
+                   never re-ask the entry the last one was about. grade.js's S gate + timeout ceiling are
+                   ratios of the class's own length now (floor(n * 0.12)), not absolute counts,
                    + THE EFFECT POOL: ten CCP effects under CCP's own names, 4/6/8/10 by tier, and ONE seeded
                    dealer that enforces MIN_SEPARATION_MS 700 between any two starts) / montage (THE WALL: one
                    full-bleed grid solved from the stage aspect, two faces per tile, seeded dwells, ONE interval

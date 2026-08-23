@@ -14,6 +14,10 @@
  *   the wall -> effect emissions on the density sawtooth, every one of them
  *               written to the LEDGER (the truth tail) with what the engine
  *               ACTUALLY did. THE WALL'S OWN SWAPS ARE NEVER LEDGER ENTRIES.
+ *   (five of those a minute now - vigil.js THE CADENCE. The gap between two
+ *    stops is DERIVED from the freeze it has to outlast, so however long the
+ *    player takes there are always >= 4s of live wall and >= 2 fresh ledger
+ *    entries before the next freeze: a question always has something new.)
  *   stop     -> the wall freezes MID-SWAP (the class clock keeps running), quiz
  *               card, 6s/5s/4s window by tier, answer by tap or number key
  *   verdict  -> the truth replay proves it ("it really did flash that"), then
@@ -113,7 +117,7 @@
 import { IR_LEX } from './lex.js';
 import {
   buildVigil, assertPlan, densityAt, heatFor, cadenceMs, nextEmission, resolveTemplate,
-  densityMultFor, PLAYTEST, POOL_KEYS, POOL_BY_KEY, PULSE_MS, STINGS,
+  densityMultFor, seedDues, PLAYTEST, POOL_KEYS, POOL_BY_KEY, PULSE_MS, STINGS,
 } from './vigil.js';
 import { createMontage, createLedger, hideTruthNode } from './montage.js';
 import { compositeFor, hardGates, flavorXp } from './grade.js';
@@ -702,15 +706,15 @@ export default {
       ringAt[key] = i + 1;
       return ch.variants[i % ch.variants.length];
     }
-    /** Re-seed every pool key's due time from the current band. */
+    /** Re-seed every pool key's due time from the current band. THE FRESH-TAIL
+     *  GUARANTEE lives in vigil.js `seedDues` (pure, so the suite can walk every
+     *  tier x density x band): the wall always says at least two things inside
+     *  the fresh window the min gap reserves. */
     function seedDealer() {
       if (!plan) return;
-      for (const key of plan.pool) {
-        if (ringAt[key] == null) ringAt[key] = 0;
-        /* the first due of a segment is a FRACTION of the cadence so the wall
-         * does not go quiet for a full period every time a stop resolves */
-        due[key] = elapsedMs + Math.round(cadenceMs(key, band, nextJitter(key)) * (0.25 + 0.75 * nextJitter(key)));
-      }
+      for (const key of plan.pool) if (ringAt[key] == null) ringAt[key] = 0;
+      const seeded = seedDues(plan.pool, elapsedMs, band, nextJitter);
+      for (const key of plan.pool) due[key] = seeded[key];
     }
     function armDealer() {
       if (!plan || dead || ended) return;
@@ -884,7 +888,7 @@ export default {
         /* SYNTHESIS #2: the taste of the twist is DEBRIEFED, once. */
         after(1200, () => { if (live) msg('ir_nobell_debrief', IR_LEX.ir_nobell_debrief); });
       }
-      after(240, () => { if (live) dealQuestion(0); });
+      after(PLAYTEST.DEAL_BEAT_MS, () => { if (live) dealQuestion(0); });
     }
 
     /* ---- what the tail can be asked ------------------------------------ */
