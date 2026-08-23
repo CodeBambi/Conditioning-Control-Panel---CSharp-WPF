@@ -31,14 +31,53 @@ namespace CcpClient.Desktop.Effects;
 /// </summary>
 public sealed class OverlaySurfaceSet : IDisposable
 {
+    /// <summary>
+    /// How often the band is CHECKED while anything is up — the period of WPF's overlay reconcile
+    /// loop (<c>Services/Notifications/OverlayService.cs:682</c>, whose own comment reads
+    /// "6 x 500ms = 3 seconds of continuous loss").
+    ///
+    /// <para>Deliberately not the same thing as the topmost cadence. That one is WPF's periodic
+    /// UNCONDITIONAL kick, every tenth tick of this loop (<c>:713-716</c>); this one is the
+    /// conditional half, and it is conditional on a read-back rather than on anything this process
+    /// remembers doing.</para>
+    /// </summary>
+    public static readonly TimeSpan ReconcileCadence = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>WPF rebuilds after six consecutive losing ticks — three seconds of CONTINUOUS loss
+    /// (<c>OverlayService.cs:681-682</c>). One tick that regains the band resets the count
+    /// (<c>:706-708</c>), so a flicker never spends a rebuild.</summary>
+    public const int LossTicksBeforeRebuild = 6;
+
+    /// <summary>
+    /// WPF's <c>MaxRecreateAttempts</c> (<c>OverlayService.cs:212</c>), and the reason this loop
+    /// cannot spin.
+    ///
+    /// <para><b>A rebuild loop that cannot tell "refused" from "lost" would re-assert forever
+    /// something the OS is declining to grant.</b> The port has measured that exact refusal:
+    /// <c>SetWindowPos(HWND_TOPMOST)</c> returns TRUE and the window still does not carry
+    /// <c>WS_EX_TOPMOST</c> when the process holds no <c>SetForegroundWindow</c> permission
+    /// (<c>Overlay/Win32OverlayPresence.cs:504-517</c>, and the hidden window a test thread keeps
+    /// alive to avoid it — <c>tests/CcpClient.Tests/RealDesktopCollection.cs</c>,
+    /// <c>RealDesktopWindowFloor</c>). Detection here is a READ-BACK of the extended style and never
+    /// a return value, and the escalation is capped: after this many rebuilds that did not win the
+    /// band back, the loop stops rebuilding and goes on re-asserting cheaply — upstream's own
+    /// backoff, added for its layered-surface freeze cluster (<c>:206-212</c>, <c>:698-704</c>).</para>
+    /// </summary>
+    public const int MaxRebuildAttempts = 3;
+
     private readonly ISessionClock _clock;
     private readonly Action<Action> _dispatch;
     private readonly Func<IOverlayPresence> _presenceFactory;
     private readonly int _maxSurfaces;
     private readonly TimeSpan? _topmostCadence;
+    private readonly Action? _rebuild;
+    private readonly Func<IOverlayPresence, bool?> _topmostHeld;
     private readonly List<Slot> _slots = [];
 
     private IDisposable? _cadence;
+    private IDisposable? _reconcile;
+    private int _lossTicks;
+    private int _rebuildAttempts;
 
     /// <param name="clock">The session clock: per-surface lifetimes and the topmost cadence ride it,
     /// so a test drives both without a wall-clock wait.</param>
@@ -49,12 +88,30 @@ public sealed class OverlaySurfaceSet : IDisposable
     /// <param name="maxSurfaces">How many surfaces may be on screen at once.</param>
     /// <param name="topmostCadence">How often to re-assert the topmost band while anything is up,
     /// or null for a module whose surfaces are too short-lived for the band to be contested.</param>
+    /// <param name="rebuild">What to do when the band has been lost for
+    /// <see cref="LossTicksBeforeRebuild"/> consecutive ticks: put the surface up again from
+    /// scratch. Null disables the whole reconcile loop, which is right for a module whose surfaces
+    /// live for seconds — upstream rebuilds only its PERSISTENT overlays
+    /// (<c>OverlayService.cs:692-695</c>) and leaves the flash windows to their own re-raise
+    /// (<c>Services/Flash/FlashService.cs:206-243</c>).
+    ///
+    /// <para>It is a callback rather than something this class does itself because a rebuild is a
+    /// re-PLACE, and only the consumer still holds what to place: the tint's colour, the spiral's
+    /// path and frame index. A frame buffer certainly cannot be kept here — the spiral's is reused
+    /// and is valid only until its next render (<see cref="ISpiralAnimation"/>).</para></param>
+    /// <param name="topmostHeld">Asks the OS whether one presence's window still carries the topmost
+    /// bit: true held, false lost, null "there is nothing here that can be asked". Defaults to
+    /// <see cref="TopmostHeldByOs"/>. A seam, because it is the one input to the rebuild rule that no
+    /// test could otherwise drive, and because a null answer must stay distinguishable from a loss —
+    /// a build with no window to read never rebuilds anything.</param>
     public OverlaySurfaceSet(
         ISessionClock clock,
         Action<Action> dispatch,
         Func<IOverlayPresence> presenceFactory,
         int maxSurfaces,
-        TimeSpan? topmostCadence)
+        TimeSpan? topmostCadence,
+        Action? rebuild = null,
+        Func<IOverlayPresence, bool?>? topmostHeld = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(dispatch);
@@ -65,6 +122,40 @@ public sealed class OverlaySurfaceSet : IDisposable
         _presenceFactory = presenceFactory;
         _maxSurfaces = maxSurfaces;
         _topmostCadence = topmostCadence;
+        _rebuild = rebuild;
+        _topmostHeld = topmostHeld ?? TopmostHeldByOs;
+    }
+
+    /// <summary>
+    /// The product read-back: <c>GetWindowLongPtrW(GWL_EXSTYLE) &amp; WS_EX_TOPMOST</c> on the window
+    /// the presence owns — the OS's own answer, asked fresh, about a claim the OS keeps
+    /// re-adjudicating.
+    ///
+    /// <para><b>It is not <c>SetWindowPos</c>'s return value, and that distinction is the whole
+    /// point.</b> That call returns TRUE while quietly declining to apply the style when this process
+    /// lacks foreground permission (<c>Win32OverlayPresence.cs:504-517</c>). A loop that believed the
+    /// return value would re-assert forever and never learn anything.</para>
+    ///
+    /// <para>Null — never false — where there is no window to ask about: a non-Windows build, a
+    /// presence that is not the Win32 backend, or one whose window is not up. "Nothing to ask" is not
+    /// "the band was lost", and only the second may cost a rebuild.</para>
+    /// </summary>
+    public static bool? TopmostHeldByOs(IOverlayPresence presence)
+    {
+        ArgumentNullException.ThrowIfNull(presence);
+        if (!OperatingSystem.IsWindows() || presence is not Win32OverlayPresence win32)
+        {
+            return null;
+        }
+
+        var window = win32.NativeHandles.Window;
+        if (window == 0)
+        {
+            return null;
+        }
+
+        var exStyle = (uint)Win32OverlayInterop.GetWindowLongPtrW(window, Win32OverlayInterop.GwlExstyle);
+        return (exStyle & Win32OverlayInterop.WsExTopmost) != 0;
     }
 
     /// <summary>True once <see cref="Dispose"/> has run; every caller checks it before doing work.</summary>
@@ -102,6 +193,19 @@ public sealed class OverlaySurfaceSet : IDisposable
 
     /// <summary>The last withdrawal outcome, verbatim.</summary>
     public CapabilityState? LastWithdraw { get; private set; }
+
+    /// <summary>How many consecutive reconcile ticks have found the band lost. Zero whenever the OS
+    /// last said it was held. Diagnostics and facts; never a claim about a screen.</summary>
+    public int TopmostLossTicks => _lossTicks;
+
+    /// <summary>Rebuilds this set has asked its consumer for since it was constructed.</summary>
+    public int RebuildsRequested { get; private set; }
+
+    /// <summary>Times the rule came due and did NOT rebuild because
+    /// <see cref="MaxRebuildAttempts"/> rebuilds had already failed to win the band back — the
+    /// backed-off state, where a refusal is being lived with rather than fought (upstream's own
+    /// answer, <c>OverlayService.cs:698-704</c>).</summary>
+    public int RebuildsBackedOff { get; private set; }
 
     /// <summary>The rectangles currently occupied, for a caller that places around them.</summary>
     public List<OverlayBounds> LiveRects()
@@ -193,6 +297,7 @@ public sealed class OverlaySurfaceSet : IDisposable
             ? _clock.Schedule(span, () => _dispatch(() => Retire(slot)))
             : null;
         EnsureCadence();
+        EnsureReconcile();
         return true;
     }
 
@@ -290,6 +395,10 @@ public sealed class OverlaySurfaceSet : IDisposable
 
         _cadence?.Dispose();
         _cadence = null;
+        _reconcile?.Dispose();
+        _reconcile = null;
+        _lossTicks = 0;
+        _rebuildAttempts = 0;
     }
 
     public void Dispose()
@@ -342,6 +451,111 @@ public sealed class OverlaySurfaceSet : IDisposable
         {
             EnsureCadence();
         }
+    }
+
+    /// <summary>
+    /// The conditional half of WPF's reconcile loop (<c>OverlayService.cs:678-708</c>), armed only
+    /// for a module that supplied a rebuild and only while a surface is up — so a stopped session
+    /// leaves no timer behind, exactly as the topmost cadence does.
+    /// </summary>
+    private void EnsureReconcile()
+    {
+        if (_rebuild is null || _reconcile is not null || Disposed || LiveSurfaces == 0)
+        {
+            return;
+        }
+
+        _reconcile = _clock.Schedule(ReconcileCadence, () => _dispatch(OnReconcile));
+    }
+
+    /// <summary>
+    /// One reconcile tick, in WPF's own order (<c>OverlayService.cs:678-708</c>): ask the OS which
+    /// live surfaces still carry the topmost bit, re-assert the ones that do not, and count the
+    /// tick. Six consecutive losing ticks — three seconds — escalate to a rebuild, and a single
+    /// tick that finds the band held resets both the streak and the rebuild budget.
+    ///
+    /// <para><b>The escalation is bounded on purpose.</b> See <see cref="MaxRebuildAttempts"/>:
+    /// past it the surface is left up and merely re-asserted, because a band this process is being
+    /// REFUSED cannot be won by tearing the window down again, and tearing it down every three
+    /// seconds for the rest of the session is worse than the loss.</para>
+    ///
+    /// <para><b>What is not ported:</b> upstream's third arm, which skips the rebuild while a
+    /// display-topology change is settling (<c>:684-691</c>). It defers to a monitor/DPI
+    /// coordinator this port does not have; without one the honest behaviour is the ordinary rule,
+    /// whose cap already stops the churn that arm exists to avoid.</para>
+    /// </summary>
+    private void OnReconcile()
+    {
+        _reconcile = null;
+        if (Disposed)
+        {
+            return;
+        }
+
+        var live = 0;
+        var lost = false;
+        for (var i = 0; i < _slots.Count; i++)
+        {
+            if (!_slots[i].Live)
+            {
+                continue;
+            }
+
+            live++;
+
+            // Null is "nothing here can be asked", never "lost": a build with no readable window
+            // must not spend rebuilds on a band it cannot even observe.
+            if (_topmostHeld(_slots[i].Presence) is false)
+            {
+                lost = true;
+
+                // Upstream's non-forced pass re-pins exactly the windows whose read-back lost the
+                // bit (OverlayService.cs:2864-2880). The cheap self-heal comes first; escalation is
+                // only for a loss that survives it.
+                _slots[i].Presence.Reassert();
+            }
+        }
+
+        if (live == 0)
+        {
+            _lossTicks = 0;
+            _rebuildAttempts = 0;
+            return;
+        }
+
+        if (!lost)
+        {
+            // "topmost regained — allow recreation to help again on a future loss" (:706-708).
+            _lossTicks = 0;
+            _rebuildAttempts = 0;
+            EnsureReconcile();
+            return;
+        }
+
+        _lossTicks++;
+        if (_lossTicks >= LossTicksBeforeRebuild)
+        {
+            _lossTicks = 0;
+            if (_rebuildAttempts < MaxRebuildAttempts)
+            {
+                _rebuildAttempts++;
+                RebuildsRequested++;
+                _rebuild!();
+            }
+            else
+            {
+                RebuildsBackedOff++;
+                for (var i = 0; i < _slots.Count; i++)
+                {
+                    if (_slots[i].Live)
+                    {
+                        _slots[i].Presence.Reassert();
+                    }
+                }
+            }
+        }
+
+        EnsureReconcile();
     }
 
     /// <summary>One pooled surface: its presence, whether it is up, where, and until when.</summary>

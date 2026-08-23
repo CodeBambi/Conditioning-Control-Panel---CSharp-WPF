@@ -82,11 +82,12 @@ public class PinkFilterSurfacePresenterTests
 
         rig.Presenter.Engage(Tint);
 
-        // ONE timer on the clock, and it is the topmost cadence — not a lifetime. A paced module's
+        // TWO timers on the clock, and neither is a lifetime: the 5 s topmost cadence and the 500 ms
+        // reconcile that watches for sustained band loss (OverlaySurfaceSet). A paced module's
         // placement arms a retirement here; this one must not, and a very large TimeSpan would not
         // be the same thing: it would be a timer that exists, that a stop has to cancel, and that
         // fires in some later session.
-        Assert.Equal(1, rig.Clock.PendingCount);
+        Assert.Equal(2, rig.Clock.PendingCount);
 
         rig.Clock.Advance(TimeSpan.FromHours(4));
 

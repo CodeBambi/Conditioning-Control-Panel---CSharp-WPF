@@ -100,6 +100,7 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
     private OverlayBounds _openBounds;
     private IDisposable? _advance;
     private bool _lastFrameHeld;
+    private SpiralPresentation? _engaged;
 
     /// <param name="clock">The session clock. It carries the topmost cadence AND the frame advance,
     /// and nothing else; the MODULE has no clock at all.</param>
@@ -107,12 +108,15 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
     /// <param name="presenceFactory">Builds the overlay presence, lazily, on the surface thread.</param>
     /// <param name="frames">The decoder seam. A build that cannot decode is an ordinary outcome.</param>
     /// <param name="display">Where the spiral may go; null when the OS reports no display.</param>
+    /// <param name="topmostHeld">The topmost read-back the rebuild rule is conditioned on; null
+    /// takes the product one (<see cref="OverlaySurfaceSet.TopmostHeldByOs"/>).</param>
     public SpiralSurfacePresenter(
         ISessionClock clock,
         Action<Action> dispatch,
         Func<IOverlayPresence> presenceFactory,
         ISpiralFrameSource frames,
-        Func<OverlayBounds?> display)
+        Func<OverlayBounds?> display,
+        Func<IOverlayPresence, bool?>? topmostHeld = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(dispatch);
@@ -123,7 +127,9 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
         _frames = frames;
         _display = display;
         _surfaces = new OverlaySurfaceSet(
-            clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence);
+            clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence,
+            rebuild: Rebuild,
+            topmostHeld: topmostHeld);
     }
 
     /// <summary>The product composition: the real overlay backend for this platform, the GDI+
@@ -179,6 +185,14 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
 
     /// <summary>Which frame of the clip is believed to be up. WPF's <c>_currentGifFrameIndex</c>.</summary>
     public int FrameIndex { get; private set; }
+
+    /// <summary>Rebuilds this presenter has been asked for after sustained topmost loss.
+    /// Diagnostics and facts; never a claim about a screen.</summary>
+    public int Rebuilds => _surfaces.RebuildsRequested;
+
+    /// <summary>Times the rebuild rule came due and was already backed off
+    /// (<see cref="OverlaySurfaceSet.MaxRebuildAttempts"/>).</summary>
+    public int RebuildsBackedOff => _surfaces.RebuildsBackedOff;
 
     /// <summary>The spiral file currently open, or null when none is. What the module asked for,
     /// not what the screen holds.</summary>
@@ -254,6 +268,7 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
         // Its frames change; its presence does not expire.
         var placed = _surfaces.Place(_slot, request, frame, lifetime: null);
         _lastFrameHeld = placed;
+        _engaged = placed ? presentation : null;
         if (placed)
         {
             FramesShown++;
@@ -263,12 +278,31 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
         return Outcome(placed);
     }
 
+    /// <summary>
+    /// Put the spiral back after three seconds of sustained topmost loss — WPF's
+    /// <c>RecreateOverlays</c> arm (<c>Services/Notifications/OverlayService.cs:692-695</c>), which
+    /// recreates the spiral window along with the tint's.
+    ///
+    /// <para>The clip is NOT re-opened: <see cref="EnsureAnimation"/> keeps the open decoder when
+    /// the path and geometry are unchanged, so a rebuild re-presents the same window and re-paints
+    /// the frame the animation is already on. A rebuild that re-decoded the file would restart the
+    /// spin from frame zero, which the user would see.</para>
+    /// </summary>
+    private void Rebuild()
+    {
+        if (_openPath is { } path && _engaged is { } presentation && Showing)
+        {
+            Engage(path, presentation);
+        }
+    }
+
     /// <inheritdoc/>
     public void Withdraw()
     {
         _advance?.Dispose();
         _advance = null;
         _lastFrameHeld = false;
+        _engaged = null;
         FrameIndex = 0;
         _surfaces.HideAll();
         CloseAnimation();

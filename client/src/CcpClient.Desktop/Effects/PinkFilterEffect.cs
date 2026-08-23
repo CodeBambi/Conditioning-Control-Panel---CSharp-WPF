@@ -36,11 +36,18 @@ namespace CcpClient.Desktop.Effects;
 /// <para><b>What is NOT ported</b>, and is recorded rather than stubbed: the timed and sustained
 /// holds that let autonomy, remote control and the Deeper engine own the tint for a while
 /// (<c>Services/Notifications/OverlayService.cs:900-965</c>), <c>PulseOverlays</c> (<c>:461-500</c>),
-/// the recreate-the-windows fallback after three seconds of sustained topmost loss
-/// (<c>:2597-2622</c>), the per-effect monitor target and multi-monitor placement
+/// the per-effect monitor target and multi-monitor placement
 /// (<c>:1149-1157</c>), the compositor layer route, and the mod retint in the colour chain
 /// (<c>:685</c> — the port has no mod system to ask). Each is a subsystem this port does not have;
 /// a silent no-op would make the module look complete.</para>
+///
+/// <para><b>What used to be on that list and no longer is:</b> the recreate-the-windows fallback
+/// after three seconds of sustained topmost loss (<c>:678-708</c>). Without it a tint that lost the
+/// always-on-top band stayed gone for the rest of the run. It is now
+/// <see cref="OverlaySurfaceSet"/>'s reconcile loop, conditioned on the OS's own extended-style
+/// read-back rather than on any call this process made, and capped at
+/// <see cref="OverlaySurfaceSet.MaxRebuildAttempts"/> so a band the OS is REFUSING is lived with
+/// instead of fought forever.</para>
 /// </summary>
 public sealed class PinkFilterEffect : OwnedSessionEffect
 {
