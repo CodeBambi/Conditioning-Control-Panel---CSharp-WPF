@@ -557,6 +557,161 @@ public class IntensityRampEffectTests
     }
 
     // ---------------------------------------------------------------------------------
+    //  the stand-down while a SCRIPTED session runs (MainWindow/MainWindow.StartStop.cs:492)
+    // ---------------------------------------------------------------------------------
+
+    [Fact]
+    public void StandingDownIsAboutWRITES_TheCadenceAndTheClimbAndTheCUSTODYAllCarryOn()
+    {
+        // Upstream computes progress and the multiplier ABOVE its guard and unconditionally
+        // (:495-503), keeps the five base values it captured at StartRampTimer (:420-424), and only
+        // skips the three visual WRITES (:509, :515, :523). So a wholesale "the ramp is off during a
+        // session" would be a different feature: the ramp that comes back when the session ends
+        // would be a ramp that had not been running.
+        var active = false;
+        var rig = Rig.Create(scriptedSessionActive: () => active);
+        rig.Enable();
+        rig.Link(rig.Spiral);
+        rig.Preset.Mutate(p =>
+        {
+            p.DurationMinutes = 10;
+            p.Multiplier = 3.0;
+            p.Curve = RampCurve.Linear;
+        });
+
+        rig.Ramp.Arm();
+        rig.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(12, rig.Spiral.Value);
+        Assert.Equal([SpiralOverlayEffect.EffectId], rig.Ramp.HeldDials);
+
+        active = true;
+        var writes = rig.Spiral.Writes;
+        rig.Clock.Advance(TimeSpan.FromMinutes(4));
+
+        // Not one write in four minutes of ticks — and the ramp is still a running machine that
+        // still owes this dial back.
+        Assert.Equal(writes, rig.Spiral.Writes);
+        Assert.Equal(12, rig.Spiral.Value);
+        Assert.Equal([SpiralOverlayEffect.EffectId], rig.Ramp.HeldDials);
+        Assert.Equal(10, rig.Ramp.BaseValueFor(SpiralOverlayEffect.EffectId));
+        Assert.Equal(EffectDotState.Live, rig.Ramp.Dot);
+
+        // The climb kept its own place while it stood down: 5/10 linear is multiplier 2.0, which is
+        // where the dial resumes rather than where it left off.
+        Assert.Equal(0.5, rig.Ramp.Progress, 6);
+        Assert.Equal(2.0, rig.Ramp.CurrentMultiplier, 6);
+
+        active = false;
+        rig.Clock.Advance(TimeSpan.FromSeconds(2));
+        Assert.Equal(20, rig.Spiral.Value);
+
+        // And the base it gives back is the USER's 10, never the session's anything.
+        rig.Ramp.Disarm();
+        Assert.Equal(10, rig.Spiral.Value);
+    }
+
+    [Fact]
+    public void ADialLinkedWHILEASessionRunsIsNotCaptured_BecauseTheValueThereIsTheSESSIONS()
+    {
+        // THE ONE PLACE THIS PORT MUST BE STRICTER THAN UPSTREAM. Upstream captures all five bases
+        // once, at StartRampTimer (:420-424), from the user's own settings before any session
+        // exists. This port captures a base the first time a dial is LINKED (D97), so a tick during
+        // a session would capture the SESSION's imposed opacity as if the user had chosen it — and
+        // hand that back at STOP. That is upstream's #471/#476 defect, and the stand-down skips the
+        // dial WHOLE (no read, no capture, no write) rather than only its write.
+        var active = true;
+        var rig = Rig.Create(scriptedSessionActive: () => active);
+        rig.Enable();
+        rig.Preset.Mutate(p =>
+        {
+            p.DurationMinutes = 10;
+            p.Multiplier = 3.0;
+        });
+
+        rig.Ramp.Arm();
+
+        // The session has imposed its own value on the dial, and the user ticks the link now.
+        rig.Spiral.Set(80);
+        rig.Link(rig.Spiral);
+        rig.Clock.Advance(TimeSpan.FromMinutes(2));
+
+        Assert.Empty(rig.Ramp.HeldDials);
+        Assert.Null(rig.Ramp.BaseValueFor(SpiralOverlayEffect.EffectId));
+        Assert.Equal(80, rig.Spiral.Value);
+        Assert.Equal(0, rig.Spiral.Writes);
+
+        // A stop mid-session therefore hands NOTHING back — the session's own restore owns that
+        // dial — and the value the ramp would otherwise have frozen into the user's document is
+        // never in its custody at all.
+        rig.Ramp.Disarm();
+        Assert.Equal(80, rig.Spiral.Value);
+    }
+
+    [Fact]
+    public void TheRefusalNamesTheSESSIONRatherThanClaimingNothingIsLinked()
+    {
+        // Both causes land on ramp-no-linked-dial because the operational state is the same — no
+        // dial is held — but the sentence a user is shown must not say "you linked nothing" to
+        // someone who linked two things and is watching a session drive both.
+        var active = true;
+        var rig = Rig.Create(scriptedSessionActive: () => active);
+        rig.Enable();
+        rig.Link(rig.Spiral);
+        rig.Link(rig.Pink);
+
+        var standingDown = Assert.IsType<CapabilityState.Degraded>(rig.Ramp.Arm());
+        Assert.Equal(EffectReasonCodes.RampNoLinkedDial, standingDown.Reason.Code);
+        Assert.Contains("scripted session owns the dials", standingDown.Reason.Detail, StringComparison.Ordinal);
+        Assert.Equal(EffectDotState.Armed, rig.Ramp.Dot);
+
+        // The other cause keeps its own sentence: nothing linked, no session anywhere.
+        var nothingLinked = Rig.Create();
+        nothingLinked.Enable();
+        var idle = Assert.IsType<CapabilityState.Degraded>(nothingLinked.Ramp.Arm());
+        Assert.Equal(EffectReasonCodes.RampNoLinkedDial, idle.Reason.Code);
+        Assert.Contains("no effect is linked", idle.Reason.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARampThatFINISHESDuringASessionEndsNothing_AndStopsTheEngineOnTheFirstTickAfterIt()
+    {
+        // The FOURTH guarded site (:549) and the one the board row did not name. Upstream states
+        // the reason at :544-548: a shorter ramp calling StopEngine() here "tore down the manual
+        // services but left the preset timer counting down (#444)". The port's own Completed
+        // handler is literally Engine.Stop() (Session/SessionParticipant.cs).
+        var active = true;
+        var completions = 0;
+        var rig = Rig.Create(scriptedSessionActive: () => active);
+        rig.Enable();
+        rig.Link(rig.Spiral);
+        rig.Preset.Mutate(p =>
+        {
+            p.DurationMinutes = 10;
+            p.Multiplier = 2.0;
+            p.EndSessionOnComplete = true;
+        });
+        rig.Ramp.Completed += () => completions++;
+
+        rig.Ramp.Arm();
+        rig.Clock.Advance(TimeSpan.FromMinutes(30));
+
+        // Full progress, three times over, and not one stop while the session holds the floor.
+        Assert.Equal(1.0, rig.Ramp.Progress, 6);
+        Assert.Equal(0, completions);
+
+        // AND IT IS NOT LATCHED. Upstream has no "already announced" flag and re-tests the whole
+        // condition every tick, so the stop it owed arrives on the first tick after the session
+        // lets go rather than never.
+        active = false;
+        rig.Clock.Advance(IntensityRampEffect.TickInterval);
+        Assert.Equal(1, completions);
+
+        // Once, though — the announcement latches for real once it is allowed to happen.
+        rig.Clock.Advance(TimeSpan.FromMinutes(10));
+        Assert.Equal(1, completions);
+    }
+
+    // ---------------------------------------------------------------------------------
     //  the structural claim: no surface, and not paced
     // ---------------------------------------------------------------------------------
 
@@ -626,7 +781,10 @@ public class IntensityRampEffectTests
         /// (AppSettings.cs:3733,3737).</summary>
         public FakeDial Pink { get; }
 
-        public static Rig Create(IReadOnlyList<IIntensityDial>? dials = null, Action<Action>? dispatch = null)
+        public static Rig Create(
+            IReadOnlyList<IIntensityDial>? dials = null,
+            Action<Action>? dispatch = null,
+            Func<bool>? scriptedSessionActive = null)
         {
             var registry = new OperationRegistry();
             var boundary = new UiDispatchBoundary();
@@ -648,7 +806,8 @@ public class IntensityRampEffectTests
                 clock,
                 preset,
                 dials ?? [spiral, pink],
-                dispatch ?? (action => action()));
+                dispatch ?? (action => action()),
+                scriptedSessionActive ?? (static () => false));
 
             return new Rig(ramp, preset, clock, spiral, pink);
         }

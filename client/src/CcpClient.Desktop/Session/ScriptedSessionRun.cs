@@ -316,10 +316,39 @@ public sealed class ScriptedSessionRun
     /// (<c>:150-153</c>); the port answers as <see cref="SessionEngine.Start"/> does, because the
     /// outcome — you cannot start a second one — is the same and every other START in this port
     /// reports it this way.</para>
+    ///
+    /// <para><b>THE ENGINE IS STOPPED BEFORE THE SNAPSHOT, and that ordering is the snapshot's
+    /// correctness rather than tidiness.</b> The manual engine's Intensity Ramp holds BORROWED
+    /// copies of the very opacities a session imposes — the user's spiral, pink and flash values —
+    /// and hands them back at disarm (<c>Effects/IntensityRampEffect.ReleaseWork</c>, WPF's
+    /// <c>StopRampTimer</c>, <c>MainWindow/MainWindow.StartStop.cs:439-481</c>). Snapshotting first
+    /// captured the RAMPED value as if the user had chosen it and then let the disarm's restore
+    /// land on top of the session's freshly applied dials, so the session ran on the user's
+    /// opacity and the user got the ramp's back — permanently, since the restore is what
+    /// <c>Stop</c> writes. Upstream never meets this because its session does not stop the manual
+    /// engine at all (<c>Services/Session/SessionEngine.cs:148-270</c> touches neither
+    /// <c>StartEngine</c> nor <c>StopEngine</c>) and its ramp bases are captured once, before any
+    /// session, at <c>:420-424</c>. Handing the borrowed dials back first is how this port reaches
+    /// upstream's outcome: the snapshot is the user's own value, and the session keeps the dials it
+    /// just imposed.</para>
     /// </summary>
     public bool Start(ScriptedSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
+
+        // The refusal comes first, because the line below really does stop the engine: a second
+        // START must disturb nothing at all (upstream's throw at :150-153 disturbs nothing either).
+        if (Running)
+        {
+            return false;
+        }
+
+        // Outside the lock: the engine raises its own notifications, and holding this gate across
+        // another component's event is how two locks become one deadlock.
+        if (_engine.Running)
+        {
+            _engine.Stop();
+        }
 
         ScriptedSessionPhase? firstPhase;
         lock (_gate)
@@ -350,13 +379,7 @@ public sealed class ScriptedSessionRun
             Arm(TickInterval);
         }
 
-        // Outside the lock: the engine raises its own notifications, and holding this gate across
-        // another component's event is how two locks become one deadlock.
-        if (_engine.Running)
-        {
-            _engine.Stop();
-        }
-
+        // Outside the lock, for the reason stated above the stop.
         _engine.Start();
 
         if (firstPhase is { } phase)

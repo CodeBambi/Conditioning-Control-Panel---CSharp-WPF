@@ -58,20 +58,20 @@ namespace CcpClient.Desktop.Effects;
 /// <c>IOverlaySurface</c>, no presenter and no frame source, and it must never be given one: an
 /// overlay held by a module that never paints is worse than none at all.</para>
 ///
-/// <para><b>What is NOT ported</b>, and is recorded rather than stubbed: the three of WPF's five
-/// links whose dial does not exist in this port (flash opacity, master volume, subliminal volume —
-/// see <see cref="IntensityRampPresetDocument"/>); the tray notification that accompanies the
-/// auto-stop (<c>MainWindow.StartStop.cs:552</c>, outside this packet's File Scope); and the
-/// <c>!sessionActive</c> guard that makes the visual links stand down while a SCRIPTED preset
-/// session runs (<c>:490,507,513,521</c>) — that condition is constantly false here and the links
-/// are always live.</para>
+/// <para><b>What is NOT ported</b>, and is recorded rather than stubbed: the two of WPF's five
+/// links whose dial does not exist in this port (master volume and subliminal volume — see
+/// <see cref="IntensityRampPresetDocument"/>), and the tray notification that accompanies the
+/// auto-stop (<c>MainWindow.StartStop.cs:554</c>, outside that packet's File Scope).</para>
 ///
-/// <para><b>Amended:</b> "the port has no scripted session" was true when this was written and is
-/// now too strong. <see cref="Session.ScriptedSessionRun"/> is its runtime core. The SENTENCE
-/// above still holds, for a different and weaker reason: nothing in the composition root
-/// constructs one, so no surface can start a scripted session in this build, and nothing wires
-/// this effect's stand-down to a session that is running. When a surface does start one, this
-/// guard is owed and is NOT written yet.</para>
+/// <para><b>THE STAND-DOWN IS NOW PORTED, and the amendment that deferred it has expired.</b> The
+/// original text said the <c>!sessionActive</c> guard's condition "is constantly false here"; the
+/// first amendment weakened that to "nothing in the composition root constructs a
+/// <see cref="Session.ScriptedSessionRun"/>". Both premises are gone — the Studio rack starts one
+/// — so the guard is written. It is upstream's, per-link and read once per tick from
+/// <c>_sessionEngine?.IsRunning == true</c> (<c>MainWindow/MainWindow.StartStop.cs:492</c>, where
+/// <c>_sessionEngine</c> is the SCRIPTED engine, <c>Services/Session/SessionEngine.cs:81</c>).
+/// See <see cref="StandsDownDuringSession"/> for WHICH links stand down and which deliberately do
+/// not, and <see cref="Advance"/> for the one port-side strengthening the guard needs.</para>
 /// </summary>
 public sealed class IntensityRampEffect : OwnedSessionEffect
 {
@@ -96,6 +96,7 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     private readonly PersistenceStore<IntensityRampPresetDocument> _preset;
     private readonly IReadOnlyList<IIntensityDial> _dials;
     private readonly Action<Action> _dispatch;
+    private readonly Func<bool> _scriptedSessionActive;
 
     /// <summary>
     /// A LEAF lock over this module's own fields, and it is deliberately not
@@ -130,23 +131,34 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// <param name="dispatch">Where work that touches another module's LIVE state is run — WPF's own
     /// <c>Dispatcher.Invoke</c> around the tick's writes (<c>MainWindow.StartStop.cs:504</c>). The
     /// persisted half of a dial move does not go through here; see <see cref="IIntensityDial"/>.</param>
+    /// <param name="scriptedSessionActive">Whether a SCRIPTED session is on the clock right now —
+    /// WPF's <c>_sessionEngine?.IsRunning == true</c>
+    /// (<c>MainWindow/MainWindow.StartStop.cs:492</c>). It is a predicate rather than a reference
+    /// for the same reason upstream reads it through a nullable field: this module must not know
+    /// what a session IS, and in this port's composition the run is built long after the ramp
+    /// (<see cref="SessionParticipant"/>). It is REQUIRED, with no "never" default, because a
+    /// default of "no session is running" is exactly the silent wrong answer this guard exists to
+    /// stop.</param>
     public IntensityRampEffect(
         AsyncOperationOwner owner,
         EffectSignal signal,
         ISessionClock clock,
         PersistenceStore<IntensityRampPresetDocument> preset,
         IReadOnlyList<IIntensityDial> dials,
-        Action<Action> dispatch)
+        Action<Action> dispatch,
+        Func<bool> scriptedSessionActive)
         : base(owner, signal, "intensity-ramp")
     {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(preset);
         ArgumentNullException.ThrowIfNull(dials);
         ArgumentNullException.ThrowIfNull(dispatch);
+        ArgumentNullException.ThrowIfNull(scriptedSessionActive);
         _clock = clock;
         _preset = preset;
         _dials = dials;
         _dispatch = dispatch;
+        _scriptedSessionActive = scriptedSessionActive;
     }
 
     /// <summary>Raised once per engagement when the ramp reaches full progress and the user asked
@@ -295,18 +307,28 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
         Advance(generation, raiseChanged: false);
         EnsureTick(generation);
 
+        var preset = _preset.Current;
         var held = HeldDials.Count;
         if (held == 0)
         {
+            // The SUMMARY is true either way — the ramp holds nothing, so nothing climbs — but the
+            // reason detail must not say "you linked nothing" to a user who linked three things and
+            // is watching a session drive all three. The CODE stays ramp-no-linked-dial: it names
+            // the operational state (no dial is held) and both causes land in it. Its declaration
+            // in Session/EffectReasonCodes.cs still describes only the first cause; that file is
+            // outside this packet's File Scope and the gap is reported rather than widened into.
             return new CapabilityState.Degraded(
                 "the ramp is engaged and holds no dial, so nothing will climb",
                 new CapabilityReason(
                     EffectReasonCodes.RampNoLinkedDial,
-                    "no effect is linked to the intensity ramp, so it will run for the whole session and "
-                    + "change nothing"));
+                    _scriptedSessionActive() && AnyLinkStandsDown(preset)
+                        ? "a scripted session owns the dials the intensity ramp is linked to, so the ramp "
+                          + "stands down and leaves them to the session "
+                          + "(MainWindow/MainWindow.StartStop.cs:509,515,523)"
+                        : "no effect is linked to the intensity ramp, so it will run for the whole session "
+                          + "and change nothing"));
         }
 
-        var preset = _preset.Current;
         if (preset.Multiplier <= IntensityRampPresetDocument.MinMultiplier)
         {
             return new CapabilityState.Degraded(
@@ -423,6 +445,23 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
     /// value that has not changed is the same cost that makes a 60 Hz module unportable (D84). The
     /// user-visible outcome is identical and the port does it about twenty times an hour instead of
     /// eighteen hundred. Recorded as D96.</para>
+    ///
+    /// <para><b>THE STAND-DOWN, and the one place this port has to be STRICTER than upstream.</b>
+    /// Upstream skips only the WRITE (<c>MainWindow/MainWindow.StartStop.cs:509,515,523</c>): its
+    /// five base values were captured once at <c>StartRampTimer</c> (<c>:420-424</c>), from the
+    /// user's own settings, before any session could exist, and are never re-captured. This port
+    /// captures a base the first time a dial is LINKED (D97, below), so a tick that ran during a
+    /// session would capture the SESSION's imposed opacity as if the user had chosen it — and hand
+    /// that back to the user at STOP. That is upstream's own #471/#476 defect, in the one place the
+    /// port could still reproduce it. <b>So a standing-down dial is skipped whole: no read, no
+    /// capture, no write</b>, which is upstream's observable outcome (the session owns the dial)
+    /// arrived at through the port's own capture rule.</para>
+    ///
+    /// <para>Everything else keeps running, exactly as upstream's does: the cadence stays on the
+    /// clock, progress and the multiplier keep climbing off the raw elapsed (<c>:495-503</c>, which
+    /// upstream computes ABOVE its guard and unconditionally), custody taken before the session is
+    /// kept, and <see cref="ReleaseWork"/> still owes every held dial back. Standing down is about
+    /// WRITES, not about stopping.</para>
     /// </summary>
     private void Advance(int generation, bool raiseChanged)
     {
@@ -432,11 +471,15 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
             return;
         }
 
+        // Read ONCE per tick, where upstream reads it (:492), so every branch below — the dial loop
+        // and the completion check — decides on the same answer even if a session ends mid-tick.
+        var sessionActive = _scriptedSessionActive();
+
         var preset = _preset.Current;
         var linked = new List<(IIntensityDial Dial, int Reading)>(_dials.Count);
         foreach (var dial in _dials)
         {
-            if (IsLinked(preset, dial.Id))
+            if (IsLinked(preset, dial.Id) && !(sessionActive && StandsDownDuringSession(dial.Id)))
             {
                 linked.Add((dial, dial.Read()));
             }
@@ -499,8 +542,16 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
         // Upstream tests COMPLETION on the raw linear progress, not the eased value, and says why in
         // as many words at :494-496: "the completion check below still uses the raw linear progress
         // so the ramp ends at its configured duration regardless of curve".
+        // THE FOURTH GUARDED SITE (:549), and upstream says why in as many words at :544-548: a
+        // shorter ramp calling StopEngine() here "tore down the manual services but left the preset
+        // timer counting down (#444)". The port's Completed handler is literally Engine.Stop()
+        // (SessionParticipant), so the same defect is one raise away.
+        //
+        // It is deliberately NOT latched while suppressed: upstream re-tests this condition on
+        // every tick and has no "already announced" flag, so a ramp that reached full progress
+        // during a session ends the manual engine on the FIRST tick after the session lets go.
         var announce = false;
-        if (progress >= 1.0 && preset.EndSessionOnComplete)
+        if (progress >= 1.0 && preset.EndSessionOnComplete && !sessionActive)
         {
             lock (_hold)
             {
@@ -538,6 +589,56 @@ public sealed class IntensityRampEffect : OwnedSessionEffect
         // by a switch that does not exist on any panel.
         _ => false,
     };
+
+    /// <summary>
+    /// <b>Which links stand down while a scripted session runs — and the guard is PER-LINK, not
+    /// wholesale.</b>
+    ///
+    /// <para>Upstream writes <c>!sessionActive</c> into three of its five link branches and
+    /// deliberately into neither of the other two: flash opacity
+    /// (<c>MainWindow/MainWindow.StartStop.cs:509</c>), spiral opacity (<c>:515</c>) and pink
+    /// filter opacity (<c>:523</c>) stand down; <b>master volume (<c>:529</c>) and subliminal
+    /// volume (<c>:537</c>) keep ramping right through a session</b>. That asymmetry is not an
+    /// oversight and the reason is checkable in upstream's own session code: a scripted session
+    /// imposes exactly those three opacities and then drives them itself
+    /// (<c>Services/Session/SessionEngine.cs:196-198</c> initialises <c>_currentFlashOpacity</c>,
+    /// <c>_currentPinkOpacity</c> and <c>_currentSpiralOpacity</c>; <c>UpdateRampingValues</c> at
+    /// <c>:564-661</c> climbs them), and it imposes NO volume at all. So the rule is "the ramp
+    /// yields the dials a session is already driving", and the two audio links have no second
+    /// driver to fight with — upstream's own words at <c>:490-491</c>: "sessions have their own
+    /// built-in ramping … prevents the two systems from fighting and causing values to jump
+    /// around".</para>
+    ///
+    /// <para>The port's three dials happen to be exactly upstream's three guarded links, so today
+    /// every dial here stands down. It is still written per-link rather than as a wholesale
+    /// "the ramp is off during a session", because the difference is real and load-bearing the day
+    /// this port gains a master-volume dial: a wholesale guard would silently stop a link upstream
+    /// keeps live. An id this build does not recognise does not stand down, for the same reason it
+    /// is not linked — it cannot be driven, so it has nothing to yield.</para>
+    /// </summary>
+    private static bool StandsDownDuringSession(string dialId) => dialId switch
+    {
+        FlashImagesEffect.EffectId => true,
+        SpiralOverlayEffect.EffectId => true,
+        PinkFilterEffect.EffectId => true,
+        _ => false,
+    };
+
+    /// <summary>A composed dial the user HAS linked and that is standing down right now — the
+    /// difference between "you linked nothing" and "what you linked belongs to the running
+    /// session", which is what <see cref="Engage"/>'s refusal has to say out loud.</summary>
+    private bool AnyLinkStandsDown(IntensityRampPresetDocument preset)
+    {
+        foreach (var dial in _dials)
+        {
+            if (IsLinked(preset, dial.Id) && StandsDownDuringSession(dial.Id))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private IIntensityDial? DialFor(string id)
     {
