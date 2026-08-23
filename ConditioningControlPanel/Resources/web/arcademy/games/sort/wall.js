@@ -80,6 +80,31 @@ export function layout(stageW, stageH, cols) {
   return best;
 }
 
+/**
+ * Columns for a wall that has to show THIS MANY tiles at once, near square.
+ * layout() solves the empty stage; it does not know how many cards landed, so a
+ * long class overruns the bottom of the room once the tiles are honestly square
+ * (nine columns of 176px squares is five rows, and a 120s class lands far more
+ * than forty-five). The bell is the one moment every tile has to be on stage at
+ * once, so bleed() re-solves with the count in hand. Never returns FEWER columns
+ * than it was handed: the mosaic may tighten to fit, never re-inflate.
+ */
+export function colsForCount(stageW, stageH, count, floor) {
+  const w = Math.max(1, num(stageW, 1280));
+  const h = Math.max(1, num(stageH, 720));
+  const n = Math.max(1, Math.round(num(count, 1)));
+  const min = Math.max(0, Math.round(num(floor, 0)));
+  let best = null;
+  let bestErr = Infinity;
+  for (const c of WALL.COLS) {
+    if (c < min) continue;
+    const rows = Math.max(1, Math.ceil(n / c));
+    const err = Math.abs(Math.log(((w / c) / (h / rows)) || 1));
+    if (err < bestErr) { bestErr = err; best = c; }
+  }
+  return best == null ? Math.max(min, WALL.COLS[WALL.COLS.length - 1]) : best;
+}
+
 function el(tag, cls) {
   try {
     if (typeof document === 'undefined' || !document.createElement) return null;
@@ -251,6 +276,15 @@ export function createWall(o = {}) {
     bleed(on) {
       bleeding = on !== false;
       visible = bleeding ? true : visible;
+      /* EVERY TILE IS ON STAGE FOR THE HOLD, and still square. */
+      if (bleeding && landed > 0) {
+        const s = stageOf();
+        const next = colsForCount(s.w, s.h, Math.min(landed, WALL.CAP), cols);
+        if (next !== cols) {
+          cols = next;
+          if (root && root.style) { try { root.style.setProperty('--sort-wall-cols', String(cols)); } catch (e) { /* noop */ } }
+        }
+      }
       if (root && root.classList) {
         if (bleeding) { root.classList.add('is-on'); root.classList.add('is-bleed'); }
         else root.classList.remove('is-bleed');
@@ -274,4 +308,4 @@ export function createWall(o = {}) {
   return api;
 }
 
-export default { WALL, createWall, wallVisible, layout, fromRungFor };
+export default { WALL, createWall, wallVisible, layout, colsForCount, fromRungFor };
