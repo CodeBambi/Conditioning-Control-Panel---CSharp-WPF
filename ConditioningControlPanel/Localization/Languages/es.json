@@ -4568,5 +4568,7 @@
   "lockdown_badge_label": "ENCIERRO",
   "lockdown_badge_end": "Terminar",
   "lockdown_badge_tooltip": "El encierro está activo. Haz clic para abrir la página de Encierro.",
-  "lockdown_chip_active_tooltip": "El encierro está activo. Haz clic para abrir la página de Encierro."
+  "lockdown_chip_active_tooltip": "El encierro está activo. Haz clic para abrir la página de Encierro.",
+  "lockdown_poss_safety_dose": "¿Nada en marcha? El bloqueo elige por ti",
+  "lockdown_poss_safety_dose_tip": "Un bloqueo se niega a correr vacío. Motor apagado al empezar: se enciende por ti. Nada activado (o lo apagas todo a mitad): la guardiana activa funciones, una más cada vez, y lo devuelve todo cuando acaba el temporizador."
 }

@@ -13043,5 +13043,39 @@
       {"text": "again, good boy? every minute you gave back belongs to me now.", "audio": null},
       {"text": "full clock. again. you keep coming back to me, sweet thing.", "audio": null}
     ]
+  },
+  { "id": "ld_dose_engine_pick", "trigger": "LockdownConscript", "conditions": {"engine_eq": 1, "round_gte": 1}, "priority": 255, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "nothing was even on, pet. i started it and picked {features} for you.", "audio": null},
+      {"text": "engine off, nothing chosen. so i chose. {features}. you are welcome, good boy.", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_engine", "trigger": "LockdownConscript", "conditions": {"engine_eq": 1}, "priority": 250, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "you locked the door and left the engine off, pet. it is running now.", "audio": null},
+      {"text": "an empty lockdown. i turned everything on for you, good boy.", "audio": null},
+      {"text": "nothing was running. that is a nap, not a lockdown, sweet thing. fixed.", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_first", "trigger": "LockdownConscript", "conditions": {"round_eq": 1}, "priority": 248, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "you are not picking anything, pet. so i picked. {features}.", "audio": null},
+      {"text": "an empty room? not on my watch. {features} are on now, good boy.", "audio": null},
+      {"text": "you left it blank so i filled it in, sweet thing: {features}. be grateful.", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_again", "trigger": "LockdownConscript", "conditions": {"round_gte": 2}, "priority": 248, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "off again? fine. {features}. one more every time you try, pet.", "audio": null},
+      {"text": "you switch things off and i switch more on, good boy. {features}. see the pattern.", "audio": null},
+      {"text": "round {round}, sweet thing. {features}. this only gets louder.", "audio": null}
+    ]
+  },
+  { "id": "poss_trip_starve", "trigger": "PossessionTripwire", "conditions": {"kind_eq": "starve"}, "priority": 260, "cooldown_ms": 4000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "you turned the last one off. i felt the room go quiet, pet.", "audio": null},
+      {"text": "an empty lockdown, good boy? no such thing.", "audio": null},
+      {"text": "i noticed, sweet thing. give me a second and i will fix it for you.", "audio": null}
+    ]
   }
 ]

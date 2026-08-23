@@ -4576,5 +4576,7 @@
   "lockdown_badge_label": "CONFINAMENTO",
   "lockdown_badge_end": "Encerrar",
   "lockdown_badge_tooltip": "O confinamento está ativo. Clique para abrir a página de Confinamento.",
-  "lockdown_chip_active_tooltip": "O confinamento está ativo. Clique para abrir a página de Confinamento."
+  "lockdown_chip_active_tooltip": "O confinamento está ativo. Clique para abrir a página de Confinamento.",
+  "lockdown_poss_safety_dose": "Nada rodando? O Lockdown escolhe por você",
+  "lockdown_poss_safety_dose_tip": "Um lockdown se recusa a rodar vazio. Motor desligado no início: ele é ligado por você. Nada ativado (ou você desliga tudo no meio): a guardiã liga recursos, um a mais a cada vez, e devolve tudo quando o tempo acaba."
 }

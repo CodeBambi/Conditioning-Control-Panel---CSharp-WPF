@@ -35,6 +35,7 @@ public static class EscapeKinds
     public const string WrongPhrase = "wrong_phrase"; // a wrong secret phrase typed into the timer box
     public const string Settings = "settings";        // trying to flip a greyed safety toggle
     public const string EmergencyExit = "emergency_exit"; // pressed the big Emergency Exit button (minigame launched)
+    public const string Starve = "starve";                // switched the LAST running feature off mid-lockdown (the dose went empty)
 }
 
 /// <summary>One escape attempt. Repeat = how many times THIS kind fired during this lockdown (1-based);
@@ -169,4 +170,5 @@ public static class PossessionBarkTriggers
     public const string Rules = "PossessionRules";               // first-run: the warden states the rules
     public const string TimerRestarted = "PossessionTimerRestarted"; // ctx: reason, restart (count) - Emergency Exit sent them back in
     public const string Remember = "PossessionRemember";             // next launch after a Full Doki lockdown: "I remember."
+    public const string Conscript = "LockdownConscript";             // ctx: features (display names), round, engine (1 = the engine was started for them) - the Dose (LockdownDoseKeeper)
 }

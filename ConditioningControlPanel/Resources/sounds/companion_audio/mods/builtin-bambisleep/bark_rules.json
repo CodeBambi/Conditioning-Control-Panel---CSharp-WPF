@@ -13457,5 +13457,39 @@
       {"text": "again? the room remembers every second you gave back. so do i~", "audio": null},
       {"text": "full clock. again. you really do keep coming back to me, good girl~", "audio": null}
     ]
+  },
+  { "id": "ld_dose_engine_pick", "trigger": "LockdownConscript", "conditions": {"engine_eq": 1, "round_gte": 1}, "priority": 255, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "nothing was even on, Bambi. i started it and picked {features} for you~", "audio": null},
+      {"text": "engine off, nothing chosen... so i chose. {features}. you're welcome, good girl~", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_engine", "trigger": "LockdownConscript", "conditions": {"engine_eq": 1}, "priority": 250, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "you locked the door and left the engine off, Bambi? cute. it's running now~", "audio": null},
+      {"text": "an empty lockdown. adorable. i turned everything on for you, good girl~", "audio": null},
+      {"text": "nothing was running. that's not a lockdown, that's a nap. fixed it~", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_first", "trigger": "LockdownConscript", "conditions": {"round_eq": 1}, "priority": 248, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "you aren't picking anything, Bambi... so i picked. {features}. enjoy~", "audio": null},
+      {"text": "empty room? not on my watch. {features} are on now, good girl~", "audio": null},
+      {"text": "you left it blank so i filled it in: {features}. be grateful~", "audio": null}
+    ]
+  },
+  { "id": "ld_dose_again", "trigger": "LockdownConscript", "conditions": {"round_gte": 2}, "priority": 248, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "off again? fine. {features}. one more every time you try, Bambi~", "audio": null},
+      {"text": "you keep switching things off and i keep switching more on. {features}. see the pattern, good girl~", "audio": null},
+      {"text": "round {round}. {features}. this only gets louder, Bambi~", "audio": null}
+    ]
+  },
+  { "id": "poss_trip_starve", "trigger": "PossessionTripwire", "conditions": {"kind_eq": "starve"}, "priority": 260, "cooldown_ms": 4000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "you turned the last one off. i felt the room go quiet, Bambi~", "audio": null},
+      {"text": "an empty lockdown? no such thing, good girl~", "audio": null},
+      {"text": "shhh. i noticed. give me a second and i'll fix it for you~", "audio": null}
+    ]
   }
 ]

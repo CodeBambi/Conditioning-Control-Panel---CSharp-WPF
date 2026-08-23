@@ -349,6 +349,21 @@
                                                           Checked="ChkLockdownSafety_Changed" Unchecked="ChkLockdownSafety_Changed"/>
                                             </Grid>
 
+                                            <Grid Height="28" Background="Transparent"
+                                                  ToolTip="{loc:Str lockdown_poss_safety_dose_tip}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{loc:Str lockdown_poss_safety_dose}" FontSize="11.5"
+                                                           Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkLockdownDose" x:FieldModifier="internal"
+                                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                          poss:Possession.Role="Toggle" poss:Possession.Name="the dose safety"
+                                                          Checked="ChkLockdownSafety_Changed" Unchecked="ChkLockdownSafety_Changed"/>
+                                            </Grid>
+
                                             <TextBlock Text="{loc:Str lockdown_poss_safeties_note}" FontSize="10.5"
                                                        Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"
                                                        Opacity="0.85" Margin="0,2,0,0"/>

@@ -932,6 +932,15 @@ public sealed class PossessionDirector : IDisposable
         PulseAll(1.0);
     }
 
+    /// <summary>Window-edge ember pulse on every attached host, for OTHER lockdown layers that did
+    /// something the room should own (the Dose keeper switching a feature back on). No-op unless
+    /// haunting - when Possession is off the warden line alone carries the attribution.</summary>
+    public void PulseEdges(double strength)
+    {
+        if (_disposed || !IsHaunting) return;
+        try { PulseAll(Math.Clamp(strength, 0.0, 1.0)); } catch { }
+    }
+
     private void PulseAll(double strength)
     {
         foreach (var h in _hosts)

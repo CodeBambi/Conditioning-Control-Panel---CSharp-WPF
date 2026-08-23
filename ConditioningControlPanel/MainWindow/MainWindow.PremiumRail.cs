@@ -271,14 +271,27 @@ namespace ConditioningControlPanel
             // takes the keys away for an hour.
             if (!TierGate.DemandPremium(RailFeatureName(PremiumFeature.Lockdown))) return;
             var minutes = _railLockdownMinutes;
-            var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode",
-                "- You will be LOCKED IN for " + minutes + " minutes\n" +
-                "- Strict Lock will be FORCED ON\n" +
-                "- Panic Key will be DISABLED\n" +
-                "- Alt+F4, Alt+Tab, Windows key, and Escape will be BLOCKED\n" +
-                "- You CANNOT close or minimize the application\n" +
-                "- The only escape is waiting for the timer to expire\n" +
-                "  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            // Same builder as BtnActivateLockdown_Click: the Safeties are toggles, so a dialog that
+            // promised a forced Strict Lock the user unticked would be the consent screen lying.
+            var cfg = App.Settings?.Current;
+            var warn = new System.Text.StringBuilder();
+            warn.Append("- You will be LOCKED IN for ").Append(minutes).Append(" minutes\n");
+            if (cfg?.LockdownForceStrictLock == true)
+                warn.Append("- Strict Lock will be FORCED ON\n");
+            if (cfg?.LockdownDisablePanicKey == true)
+                warn.Append("- Panic Key will be DISABLED\n");
+            if (cfg?.LockdownBlockSystemKeys == true)
+                warn.Append("- Alt+F4, Alt+Tab, the Windows key and Ctrl+Esc will be BLOCKED\n");
+            warn.Append("- You CANNOT close the application (minimizing still works)\n");
+            warn.Append("- The only escape is waiting for the timer to expire\n");
+            warn.Append("  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            if (cfg?.LockdownDoseKeeperEnabled == true)
+                warn.Append("\n- Nothing running? Lockdown starts the engine and picks features for you\n")
+                    .Append("  (and switches them back on if you turn them all off - one more each time)");
+            if (cfg?.LockdownPossessionEnabled == true)
+                warn.Append("\n- Possession is ON: the app's own UI will misbehave, on purpose.\n")
+                    .Append("  Ember glow = it was Lockdown, not a bug. Nothing you see is real damage.");
+            var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode", warn.ToString());
             if (!confirmed) return;
             App.Lockdown.Activate(TimeSpan.FromMinutes(minutes));
         }

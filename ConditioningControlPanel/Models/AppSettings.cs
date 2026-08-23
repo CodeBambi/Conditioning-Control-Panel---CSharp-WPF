@@ -2889,6 +2889,18 @@ namespace ConditioningControlPanel.Models
             set { _lockdownBlockSystemKeys = value; OnPropertyChanged(); }
         }
 
+        // The Dose (Services/Haptics/LockdownDoseKeeper.cs): a lockdown refuses to run EMPTY. If the
+        // engine is off when the lockdown starts it is started for the user; if every feature is
+        // off (at the start, or because they were all switched off mid-lockdown) the warden picks
+        // some and turns them on, one more each time, and gives everything back at the end. A
+        // Safeties toggle on the Lockdown card, listed in the warning dialog like the other three.
+        private bool _lockdownDoseKeeperEnabled = true;
+        public bool LockdownDoseKeeperEnabled
+        {
+            get => _lockdownDoseKeeperEnabled;
+            set { _lockdownDoseKeeperEnabled = value; OnPropertyChanged(); }
+        }
+
         private bool _lockdownPossessionEnabled = true;
         public bool LockdownPossessionEnabled
         {

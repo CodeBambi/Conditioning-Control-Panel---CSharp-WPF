@@ -50,6 +50,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 ChkLockdownStrict.IsChecked = s.LockdownForceStrictLock;
                 ChkLockdownNoPanic.IsChecked = s.LockdownDisablePanicKey;
                 ChkLockdownSysKeys.IsChecked = s.LockdownBlockSystemKeys;
+                ChkLockdownDose.IsChecked = s.LockdownDoseKeeperEnabled;
 
                 ApplyIntensityPills(s.LockdownPossessionIntensity);
                 ApplyPossessionEnabledLook(s.LockdownPossessionEnabled);
@@ -184,6 +185,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 s.LockdownForceStrictLock = ChkLockdownStrict.IsChecked == true;
                 s.LockdownDisablePanicKey = ChkLockdownNoPanic.IsChecked == true;
                 s.LockdownBlockSystemKeys = ChkLockdownSysKeys.IsChecked == true;
+                s.LockdownDoseKeeperEnabled = ChkLockdownDose.IsChecked == true;
                 App.Settings?.Save();
             }
             catch (Exception ex)

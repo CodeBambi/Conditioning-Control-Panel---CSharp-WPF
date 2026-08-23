@@ -175,7 +175,8 @@ speak. Replace the probe with a direct call when it lands.
 
 `LockdownService.NotifyEscapeAttempt(kind)` raises `EscapeAttempted(EscapeAttempt)` with per-kind
 repeat counts. Kinds: `close`, `minimize` (allowed - it still trips), `syskey` (throttled 1 / 2 s),
-`stop`, `wrong_phrase`, `settings`. Reaction scales with (rung, repeat):
+`stop`, `wrong_phrase`, `settings`, `emergency_exit` (the big button), `starve` (the user switched the
+LAST running feature off - raised by the Dose keeper, see below). Reaction scales with (rung, repeat):
 
 - repeat 1: EdgePulse(0.5) + tripwire bark naming the attempt.
 - repeat 2: EdgePulse(0.8) + 120 ms ember blink (SKIPPED when photosafe -> slow pulse instead) +
@@ -212,6 +213,7 @@ crash-recovery / dispose (no awaits needed - synchronous reset path).
 | `LockdownWardenEnabled` (bool) | true | companion roams / knocks / stares |
 | `LockdownPhotosafe` (bool) | false | no blinks / strobes / hard shakes; charge = static tint |
 | `LockdownPossessionIntroSeen` (bool) | false | first-run rules card shown |
+| `LockdownDoseKeeperEnabled` (bool) | true | Safety: a lockdown refuses to run empty (the Dose, below) |
 
 All with `[JsonProperty]`-style persistence like their neighbours (auto-save via OnPropertyChanged).
 
@@ -219,7 +221,8 @@ All with `[JsonProperty]`-style persistence like their neighbours (auto-save via
 
 New triggers (see `PossessionBarkTriggers`): `PossessionRungChanged` (ctx `rung`),
 `PossessionEffect` (ctx `effect`, `target`), `PossessionTripwire` (ctx `kind`, `repeat`, `total`),
-`PossessionWarden` (ctx `verb`), `PossessionRules` (first run). Rules go in all three packs
+`PossessionWarden` (ctx `verb`), `PossessionRules` (first run), `PossessionTimerRestarted` (ctx `reason`,
+`restart`), `PossessionRemember`, `LockdownConscript` (ctx `features`, `round`, `engine` - the Dose). Rules go in all three packs
 (`Resources/sounds/companion_audio/mods/<mod>/bark_rules.json`) as TEXT-ONLY variants (audio null is
 fine - BarkService.ResolveBarkAudio returns null and the bubble still shows). Voice per mod: read the
 pack's existing `lockdown_on/off/tick` lines and match them. Lines must NAME the thing when the
@@ -379,3 +382,37 @@ the intended dBFS, non-silent, zero at both boundaries, decaying, deterministic,
 Note for whoever touches the rig next: `PossessionPreview.Order` is a hand-written id list, so
 `glitchportrait` will not appear in a report until it is added there - and it needs a tube, which the
 rig does not photograph.
+
+## The Dose - a lockdown refuses to run empty (`Services/Haptics/LockdownDoseKeeper.cs`)
+
+Owner play-test 2026-08-23: "I can start lockdown without the engine on, making it moot, or turn off all
+the features with the engine on." The keeper is the answer, in the warden's voice: *you aren't picking
+anything, so I pick.*
+
+- **Activation**: engine off -> started for the user ~2 s after Activate (the dialog and the card's
+  active-panel swap settle first). Nothing switched on -> a dose is conscripted first.
+- **While locked** (every CountdownTick): engine stopped (session ended, ramp finished, scheduler
+  window closed, remote Stop) -> restarted after a 4 s grace. Dose empty -> the moment it goes empty
+  is a tripwire (`EscapeKinds.Starve`, so Possession answers it like the X), then after a grace of
+  6 / 4 / 2 s (shrinks per round) the warden switches features back ON: 2 the first round, +1 per
+  round, 4 max. Order: what the user had on at activation (shuffled), then the starter pool (flash,
+  subliminal, spiral, pink filter, bouncing text, bubbles), then from round 2 the escalation pool
+  (mandatory video - only when the videos folder has files). Tier 2 features (mind wipe, lock card,
+  bubble count, brain drain) COUNT as a dose but are never picked; so do audio-only / whispers /
+  corner gif / takeover.
+- **A running session owns the dose** (`MainWindow.IsSessionFeatureLockActive`) - the keeper stands
+  down until it ends.
+- **Deactivation gives everything back**: flipped toggles return to their pre-lockdown value, an
+  engine the keeper started is stopped. `%LOCALAPPDATA%/ConditioningControlPanel/lockdown-dose.json`
+  carries the flipped keys across a crash; `LockdownDoseKeeper.RecoverIfNeeded()` (App startup, right
+  after `LockdownService.RecoverIfNeeded`) switches them back off.
+- Every flip goes through `MainWindow.SetWallFeature(key, on)` - the same seam the wall cards use, so
+  the service actually starts/stops and the rings repaint. The keeper never touches values,
+  frequencies, volumes or any safety control. It pulses the ember edges (`PossessionDirector.PulseEdges`)
+  when Possession is haunting; otherwise the bark alone carries the attribution.
+- Barks (3 packs): `ld_dose_engine` / `ld_dose_engine_pick` (engine started [+ picks]),
+  `ld_dose_first` (round 1), `ld_dose_again` (round 2+, `{round}`), `poss_trip_starve`. `{features}` is
+  the joined display list ("Flash and Subliminals").
+- Off switch: `LockdownDoseKeeperEnabled` (Safeties row "Nothing running? Lockdown picks for you"),
+  listed in both activation dialogs like the other safeties. Pure half tested in
+  `Tests/.../LockdownDoseKeeperTests.cs`.

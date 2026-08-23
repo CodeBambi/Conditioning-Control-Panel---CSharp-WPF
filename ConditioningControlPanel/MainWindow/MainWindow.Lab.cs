@@ -82,6 +82,9 @@ namespace ConditioningControlPanel
             warn.Append("- You CANNOT close the application (minimizing still works)\n");
             warn.Append("- The only escape is waiting for the timer to expire\n");
             warn.Append("  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+            if (cfg?.LockdownDoseKeeperEnabled == true)
+                warn.Append("\n- Nothing running? Lockdown starts the engine and picks features for you\n")
+                    .Append("  (and switches them back on if you turn them all off - one more each time)");
 
             if (cfg?.LockdownPossessionEnabled == true)
             {

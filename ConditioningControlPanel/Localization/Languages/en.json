@@ -5122,5 +5122,7 @@
   "lockdown_badge_label": "LOCKDOWN",
   "lockdown_badge_end": "End",
   "lockdown_badge_tooltip": "Lockdown is running. Click to open the Lockdown page.",
-  "lockdown_chip_active_tooltip": "Lockdown is running. Click to open the Lockdown page."
+  "lockdown_chip_active_tooltip": "Lockdown is running. Click to open the Lockdown page.",
+  "lockdown_poss_safety_dose": "Nothing running? Lockdown picks for you",
+  "lockdown_poss_safety_dose_tip": "A lockdown refuses to run empty. Engine off when it starts: the engine is started for you. Nothing switched on (or you switch everything off mid-lockdown): the warden turns features on, one more each time, and gives them all back when the timer ends."
 }

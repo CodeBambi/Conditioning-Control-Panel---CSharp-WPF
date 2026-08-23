@@ -4577,5 +4577,7 @@
   "lockdown_badge_label": "CONFINEMENT",
   "lockdown_badge_end": "Terminer",
   "lockdown_badge_tooltip": "Le confinement est en cours. Clique pour ouvrir la page Confinement.",
-  "lockdown_chip_active_tooltip": "Le confinement est en cours. Clique pour ouvrir la page Confinement."
+  "lockdown_chip_active_tooltip": "Le confinement est en cours. Clique pour ouvrir la page Confinement.",
+  "lockdown_poss_safety_dose": "Rien ne tourne ? Le verrouillage choisit pour toi",
+  "lockdown_poss_safety_dose_tip": "Un verrouillage refuse de tourner à vide. Moteur éteint au départ : il est lancé pour toi. Rien d'activé (ou tu coupes tout en cours de route) : la gardienne active des fonctions, une de plus à chaque fois, et rend tout à la fin du minuteur."
 }

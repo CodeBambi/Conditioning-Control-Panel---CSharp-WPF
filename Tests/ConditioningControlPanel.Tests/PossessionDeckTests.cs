@@ -98,11 +98,11 @@ public class PossessionDeckTests
     // ---------------------------------------------------------------------------------------------
 
     [Theory]
-    [InlineData(PossessionRung.Settle, 1)]
-    [InlineData(PossessionRung.Drift, 1)]
-    [InlineData(PossessionRung.Melt, 2)]
-    [InlineData(PossessionRung.Collapse, 3)]
-    [InlineData(PossessionRung.ItKnows, 3)]
+    [InlineData(PossessionRung.Settle, 2)]
+    [InlineData(PossessionRung.Drift, 2)]
+    [InlineData(PossessionRung.Melt, 3)]
+    [InlineData(PossessionRung.Collapse, 4)]
+    [InlineData(PossessionRung.ItKnows, 4)]
     public void MaxLive_TightensEarly_LoosensLate(PossessionRung rung, int expected)
         => Assert.Equal(expected, PossessionDeck.MaxLive(rung));
 
@@ -110,12 +110,14 @@ public class PossessionDeckTests
     //  Cadence
     // ---------------------------------------------------------------------------------------------
 
+    // Wave 2 (density) ladder - POSSESSION.md "The ladder". These five rows ARE the feature's pace;
+    // the owner play-test that produced them called the wave-1 numbers "not dense, not impressive".
     [Theory]
-    [InlineData(PossessionRung.Settle, 60, 90)]
-    [InlineData(PossessionRung.Drift, 30, 45)]
-    [InlineData(PossessionRung.Melt, 20, 30)]
-    [InlineData(PossessionRung.Collapse, 12, 20)]
-    [InlineData(PossessionRung.ItKnows, 8, 15)]
+    [InlineData(PossessionRung.Settle, 20, 30)]
+    [InlineData(PossessionRung.Drift, 12, 18)]
+    [InlineData(PossessionRung.Melt, 8, 12)]
+    [InlineData(PossessionRung.Collapse, 5, 8)]
+    [InlineData(PossessionRung.ItKnows, 4, 6)]
     public void NextDelay_EerieBaseRanges(PossessionRung rung, double min, double max)
     {
         Assert.Equal(min, PossessionDeck.NextDelay(rung, PossessionIntensity.Eerie, new StubRandom(0.0)).TotalSeconds, 3);
@@ -129,9 +131,9 @@ public class PossessionDeckTests
         var gentle = PossessionDeck.NextDelay(PossessionRung.Melt, PossessionIntensity.Gentle, new StubRandom(0.0)).TotalSeconds;
         var doki = PossessionDeck.NextDelay(PossessionRung.Melt, PossessionIntensity.FullDoki, new StubRandom(0.0)).TotalSeconds;
 
-        Assert.Equal(20, eerie, 3);
-        Assert.Equal(40, gentle, 3);      // double the wait
-        Assert.Equal(16, doki, 3);        // 0.8x
+        Assert.Equal(8, eerie, 3);
+        Assert.Equal(16, gentle, 3);      // double the wait
+        Assert.Equal(6.4, doki, 3);       // 0.8x
     }
 
     [Fact]
@@ -141,26 +143,30 @@ public class PossessionDeckTests
         for (int i = 0; i < 500; i++)
         {
             var d = PossessionDeck.NextDelay(PossessionRung.Collapse, PossessionIntensity.Eerie, rng).TotalSeconds;
-            Assert.InRange(d, 12, 20);
+            Assert.InRange(d, 5, 8);
         }
     }
 
     [Fact]
-    public void FirstDelay_NeverSoonerThan45Seconds()
+    public void FirstDelay_NeverSoonerThanTheFirstWait()
     {
-        // R4 Full Doki rolls 6.4s at the low end - the room still gets its 45s to settle.
+        // R4 Full Doki rolls 3.2s at the low end - the room still gets its 20s to settle.
         var first = PossessionDeck.FirstDelay(PossessionRung.ItKnows, PossessionIntensity.FullDoki, new StubRandom(0.0));
-        Assert.Equal(45, first.TotalSeconds, 3);
+        Assert.Equal(20, first.TotalSeconds, 3);
         Assert.Equal(PossessionDeck.FirstWait, first);
     }
 
     [Fact]
     public void FirstDelay_KeepsTheLongerCadenceWhenItIsLonger()
     {
-        // R0 Eerie is already 60s+, so the 45s floor must not shorten it.
-        var first = PossessionDeck.FirstDelay(PossessionRung.Settle, PossessionIntensity.Eerie, new StubRandom(0.0));
-        Assert.Equal(60, first.TotalSeconds, 3);
+        // R0 Gentle is 40s+, so the 20s floor must not shorten it.
+        var first = PossessionDeck.FirstDelay(PossessionRung.Settle, PossessionIntensity.Gentle, new StubRandom(0.0));
+        Assert.Equal(40, first.TotalSeconds, 3);
     }
+
+    [Fact]
+    public void TargetCooldown_IsTheWave2FortyFive()
+        => Assert.Equal(45, PossessionDeck.TargetCooldown.TotalSeconds, 3);
 
     // ---------------------------------------------------------------------------------------------
     //  Weighting
@@ -347,5 +353,114 @@ public class PossessionDeckTests
             Assert.NotNull(pick);
             Assert.Equal(2, pick!.Value.EffectIndex);
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    //  Proximity (wave 2, A5) - "the haunt happens where you are looking"
+    // ---------------------------------------------------------------------------------------------
+
+    private static readonly (double X, double Y)[] Centres =
+    {
+        (100, 100),   // 0: on the cursor
+        (150, 120),   // 1: near
+        (900, 700),   // 2: far
+        (100, 260),   // 3: 160px straight down - exactly on the radius, which counts
+    };
+
+    [Fact]
+    public void WithinRadius_KeepsTheNearOnes_AndIsInclusiveAtTheEdge()
+    {
+        var hits = PossessionDeck.WithinRadius(Centres, 100, 100, PossessionDeck.ProximityRadius);
+        Assert.Equal(new[] { 0, 1, 3 }, hits);
+    }
+
+    [Fact]
+    public void WithinRadius_SurvivesGarbage()
+    {
+        var centres = new[] { (double.NaN, 0.0), (0.0, double.NaN), (10.0, 10.0) };
+        Assert.Equal(new[] { 2 }, PossessionDeck.WithinRadius(centres, 0, 0, 100));
+        Assert.Empty(PossessionDeck.WithinRadius(centres, double.NaN, 0, 100));
+        Assert.Empty(PossessionDeck.WithinRadius(null!, 0, 0, 100));
+        Assert.Empty(PossessionDeck.WithinRadius(centres, 0, 0, 0));
+    }
+
+    [Fact]
+    public void ShouldUseProximity_IsAboutHalf()
+    {
+        Assert.True(PossessionDeck.ShouldUseProximity(new StubRandom(0.0)));
+        Assert.False(PossessionDeck.ShouldUseProximity(new StubRandom(0.5)));
+        Assert.False(PossessionDeck.ShouldUseProximity(new StubRandom(0.99)));
+    }
+
+    [Fact]
+    public void Pick_WithNearList_StaysInsideIt()
+    {
+        var effects = new[] { Effect("nudge", roles: new[] { PossessionRole.Button }) };
+        var targets = new[]
+        {
+            Target("far-a"), Target("far-b"), Target("near-a"), Target("near-b"),
+        };
+
+        // Only the last two are near; whatever the rng rolls, the victim must be one of them.
+        for (int seed = 0; seed < 40; seed++)
+        {
+            var pick = PossessionDeck.Pick(effects, targets, PossessionRung.Settle, PossessionIntensity.Eerie,
+                                           false, null, new Random(seed), new[] { 2, 3 });
+            Assert.NotNull(pick);
+            Assert.InRange(pick!.Value.TargetIndex, 2, 3);
+        }
+    }
+
+    [Fact]
+    public void Pick_FallsBackToTheFullPool_WhenNothingNearMayRun()
+    {
+        var effects = new[] { Effect("nudge", roles: new[] { PossessionRole.Button }) };
+        var targets = new[]
+        {
+            Target("far-a"),
+            Target("near-live", live: true),      // near, but already possessed
+            Target("near-cool", cooldown: true),  // near, but cooling down
+        };
+
+        var pick = PossessionDeck.Pick(effects, targets, PossessionRung.Settle, PossessionIntensity.Eerie,
+                                       false, null, new Random(7), new[] { 1, 2 });
+        Assert.NotNull(pick);
+        Assert.Equal(0, pick!.Value.TargetIndex);   // fell back to the far one rather than doing nothing
+    }
+
+    [Fact]
+    public void Pick_ProximityRound_SkipsTargetlessEffects()
+    {
+        // A title effect has no coordinates, so it cannot be "near the cursor"; a proximity round that
+        // let it win would quietly turn half the picks into window effects.
+        var effects = new[]
+        {
+            Effect("crack", weight: 100),                                       // targetless, heavy
+            Effect("nudge", weight: 1, roles: new[] { PossessionRole.Button }),
+        };
+        var targets = new[] { Target("far"), Target("near-a"), Target("near-b") };
+
+        for (int seed = 0; seed < 25; seed++)
+        {
+            var pick = PossessionDeck.Pick(effects, targets, PossessionRung.Settle, PossessionIntensity.Eerie,
+                                           false, null, new Random(seed), new[] { 1, 2 });
+            Assert.NotNull(pick);
+            Assert.Equal(1, pick!.Value.EffectIndex);
+            Assert.InRange(pick.Value.TargetIndex, 1, 2);
+        }
+    }
+
+    [Fact]
+    public void Pick_NearListOfOne_IsIgnored()
+    {
+        // One candidate is not a neighbourhood; the deck treats it as no hint at all so the pick keeps
+        // its full spread rather than hammering the single control under the cursor.
+        var effects = new[] { Effect("crack", weight: 5) };   // targetless: only reachable unrestricted
+        var targets = new[] { Target("a"), Target("b") };
+
+        var pick = PossessionDeck.Pick(effects, targets, PossessionRung.Settle, PossessionIntensity.Eerie,
+                                       false, null, new Random(3), new[] { 1 });
+        Assert.NotNull(pick);
+        Assert.Equal(-1, pick!.Value.TargetIndex);
     }
 }

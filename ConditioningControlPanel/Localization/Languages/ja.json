@@ -4568,5 +4568,7 @@
   "lockdown_badge_label": "ロックダウン",
   "lockdown_badge_end": "終了",
   "lockdown_badge_tooltip": "ロックダウン中です。クリックするとロックダウンのページを開きます。",
-  "lockdown_chip_active_tooltip": "ロックダウン中です。クリックするとロックダウンのページを開きます。"
+  "lockdown_chip_active_tooltip": "ロックダウン中です。クリックするとロックダウンのページを開きます。",
+  "lockdown_poss_safety_dose": "何も動いていない？ロックダウンが代わりに選ぶ",
+  "lockdown_poss_safety_dose_tip": "ロックダウンは空のままでは動きません。開始時にエンジンが止まっていれば代わりに起動します。何もオンでなければ（途中で全部オフにしても）、看守が機能をオンにし、毎回ひとつずつ増やし、タイマーが終わると全部元に戻します。"
 }

@@ -4575,5 +4575,7 @@
   "lockdown_badge_label": "락다운",
   "lockdown_badge_end": "종료",
   "lockdown_badge_tooltip": "락다운이 진행 중입니다. 클릭하면 락다운 페이지가 열립니다.",
-  "lockdown_chip_active_tooltip": "락다운이 진행 중입니다. 클릭하면 락다운 페이지가 열립니다."
+  "lockdown_chip_active_tooltip": "락다운이 진행 중입니다. 클릭하면 락다운 페이지가 열립니다.",
+  "lockdown_poss_safety_dose": "아무것도 안 켜져 있나요? 락다운이 대신 고릅니다",
+  "lockdown_poss_safety_dose_tip": "락다운은 비어 있는 채로 돌아가지 않습니다. 시작할 때 엔진이 꺼져 있으면 대신 켜 줍니다. 아무 기능도 켜져 있지 않으면(도중에 전부 끄더라도) 간수가 기능을 켜고, 매번 하나씩 더 켜며, 타이머가 끝나면 전부 원래대로 돌려놓습니다."
 }

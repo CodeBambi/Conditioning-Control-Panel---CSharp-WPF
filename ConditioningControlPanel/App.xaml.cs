@@ -589,6 +589,7 @@ namespace ConditioningControlPanel
         public static LockdownService Lockdown { get; private set; } = null!;
         /// <summary>The haunted-UI layer that rides a running lockdown (Services/Possession/POSSESSION.md).</summary>
         public static Services.Possession.PossessionDirector? Possession { get; private set; }
+        public static Services.Haptics.LockdownDoseKeeper? LockdownDose { get; private set; }
         public static MantraService Mantra { get; private set; } = null!;
         public static MantraVoiceService MantraVoice { get; private set; } = null!;
         public static MantraChantService MantraChant { get; private set; } = null!;
@@ -2325,6 +2326,12 @@ namespace ConditioningControlPanel
             // until a lockdown runs (or, for the charge, until the flag from the last one is spent).
             Services.Possession.PossessionAudio.Install();
             Services.Possession.PossessionRemember.Install();
+            // The Dose: a lockdown refuses to run empty (engine off -> started; nothing on -> the warden
+            // picks). Recovery first, so a killed lockdown's conscripted toggles go back off before the
+            // engine can ever read them.
+            Services.Haptics.LockdownDoseKeeper.RecoverIfNeeded();
+            LockdownDose = new Services.Haptics.LockdownDoseKeeper(Lockdown);
+            LockdownDose.Install();
             // Quest credit: each completed lockdown (Patreon-exclusive quest category).
             Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch { } };
 

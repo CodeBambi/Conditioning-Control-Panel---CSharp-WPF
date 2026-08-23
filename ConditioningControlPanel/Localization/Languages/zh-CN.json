@@ -5035,5 +5035,7 @@
   "lockdown_badge_label": "封锁",
   "lockdown_badge_end": "结束",
   "lockdown_badge_tooltip": "封锁进行中。点击可打开封锁页面。",
-  "lockdown_chip_active_tooltip": "封锁进行中。点击可打开封锁页面。"
+  "lockdown_chip_active_tooltip": "封锁进行中。点击可打开封锁页面。",
+  "lockdown_poss_safety_dose": "什么都没开？封锁替你选",
+  "lockdown_poss_safety_dose_tip": "封锁不会空转。开始时引擎没开：替你启动。什么功能都没开（或你中途全部关掉）：看守会替你打开功能，每次多一个，计时结束时全部还原。"
 }

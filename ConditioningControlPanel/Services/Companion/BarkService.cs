@@ -92,6 +92,9 @@ namespace ConditioningControlPanel.Services
                 // text-only and carry their own cooldowns.
                 EmergencyExitOpenedTrigger,
                 EmergencyExitVerdictTrigger,
+                // The Dose: "you aren't picking anything, so I pick" has to be SAID the moment the
+                // feature lights up, or it reads as the app flipping switches on its own.
+                Services.Possession.PossessionBarkTriggers.Conscript,
             };
 
         /// <summary>The huge button was pressed and a minigame opened. ctx: game, attempt.</summary>
@@ -106,7 +109,8 @@ namespace ConditioningControlPanel.Services
             || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Warden, StringComparison.OrdinalIgnoreCase)
             || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.RungChanged, StringComparison.OrdinalIgnoreCase)
             || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.TimerRestarted, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Remember, StringComparison.OrdinalIgnoreCase);
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Remember, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Conscript, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>Sibling of <see cref="IsPossessionAttribution"/> for the Emergency Exit. Same
         /// contract, same reason: both rules are authored text-only (audio null), so they can never
@@ -398,6 +402,12 @@ namespace ConditioningControlPanel.Services
         /// <summary>Next launch after a Full Doki lockdown: one line, "I remember." (PossessionRemember).</summary>
         public bool NotifyPossessionRemember() =>
             Raise(Possession.PossessionBarkTriggers.Remember, guaranteed: true);
+
+        /// <summary>The Dose (Services/Haptics/LockdownDoseKeeper.cs): the lockdown switched features on
+        /// because nothing was running. ctx: features ("Flash and Subliminals"), round (1-based, 0 when
+        /// only the engine was started), engine (1 = the engine itself was started for them).</summary>
+        public void NotifyLockdownConscript(string features, int round, bool engineStarted) =>
+            Raise(Possession.PossessionBarkTriggers.Conscript, c => { c.Set("features", string.IsNullOrWhiteSpace(features) ? "something" : features); c.Set("round", (double)round); c.Set("engine", engineStarted ? 1.0 : 0.0); });
 
         // ---- Emergency Exit (the friction door of Lockdown; Services/EmergencyExit/EMERGENCY_EXIT.md) ----
         // Text-only rules in every pack, matched per game via the ctx `game` field (game_eq) the same
