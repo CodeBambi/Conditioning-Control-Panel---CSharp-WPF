@@ -716,7 +716,11 @@ public class ScriptedSessionTests
         await using var rig = await Rig.StartAsync();
         rig.WriteTheUsersDials(); // the user's own pink filter: on, 25 %
         await rig.SaveEverything();
-        var before = rig.ReadEveryDocument();
+
+        // Everything EXCEPT the one document a running session really does write — see the long
+        // note below the ramp. It is excluded from the reading rather than from the comparison,
+        // because on Windows it cannot be read at all while its write is in flight.
+        var before = rig.ReadEveryDocument(except: SessionPresetDocument.FileName);
 
         rig.Run.Start(Built("morning_drift")); // pink 0 %→15 % from minute 10 of 30
 
@@ -730,10 +734,43 @@ public class ScriptedSessionTests
         // ...and the climb past it reaches the parked value and NOTHING else.
         Assert.Equal(0, rig.PinkFilter.Current.OpacityPercent);
 
-        // No clean stop, no restore: this is the kill. Nothing this session has done has reached
-        // the user's file, so the 25 % they chose is still what is on disk.
-        Assert.Equal(before, rig.ReadEveryDocument());
+        // No clean stop, no restore: this is the kill, and what is on disk now is what the user
+        // would find. ONE document is excluded from the comparison, named, and excluded for a
+        // reason that was measured rather than assumed.
+        //
+        // session_preset.json IS written while a session runs: SessionEngine.Start() saves its own
+        // preset when it arms (Session/SessionEngine.cs:150) — after the dials have already been
+        // imposed — and a delayed start reaches the same store again through QuickToggle (:243).
+        // Both are fire-and-forget, and PersistenceStore.WriteOnce serializes the model at WRITE
+        // time rather than at call time (Persistence/PersistenceStore.cs:488-494), so a comparison
+        // that includes that file is a claim about a write still in flight. At dbe320f01 this fact
+        // failed 2 runs in 5 on Linux and never once on Windows, always on that one document, with
+        // session_pinkfilter.json reading the user's 25 in BOTH halves of the failure.
+        //
+        // Nor is it merely dropped from the comparison: it is never READ, because a file whose
+        // write is in flight cannot be opened on Windows at all (measured — a sharing violation
+        // inside the atomic rename, twice in a row).
+        //
+        // Its content is deliberately NOT asserted here instead: every barrier this store offers
+        // for ordering a read after that write is itself a WRITE of the same session values
+        // (SaveImmediate, persistence contract §4 rule 5), so an assertion on that file would pin
+        // the test's own write — measured, by deleting both product saves and watching such an
+        // assertion still pass. It is the one exception ScriptedSessionDials' remarks already
+        // record, and the fact that bounds it is WhenTheSessionEnds_TheUsersOwnSettingsComeBack…,
+        // which finds it byte-identical again after a clean stop.
+        //
+        // The other eleven documents need no barrier at all, and that is a property of the code
+        // rather than of the timing: :150 and :243 are the ONLY saves anything a running session
+        // touches enqueues (Dials.Restore's Replace at :415 runs at STOP), and every dial write on
+        // the eleven goes through Mutate (:223-231), which marks dirty and writes nothing.
         Assert.Equal(25, rig.PersistedInt(PinkFilterPresetDocument.FileName, "opacityPercent"));
+
+        // The store still holds the session's pink mutations UNWRITTEN — a completed write would
+        // have cleared the dirty flag (:498-504). This is what reds if a delayed start, or a ramp,
+        // ever starts persisting that document.
+        Assert.True(rig.PinkFilter.IsDirty);
+
+        Assert.Equal(before, rig.ReadEveryDocument(except: SessionPresetDocument.FileName));
     }
 
     [Fact]
@@ -1199,10 +1236,22 @@ public class ScriptedSessionTests
             }
         }
 
-        /// <summary>Every document's bytes, by file name, in a fixed order.</summary>
-        public IReadOnlyList<(string File, string Json)> ReadEveryDocument() =>
+        /// <summary>
+        /// Every document's bytes, by file name, in a fixed order.
+        ///
+        /// <para><paramref name="except"/> is not filtered out of the RESULT — it is never OPENED.
+        /// A document the product may be writing right now cannot be read at all on Windows: the
+        /// atomic write renames a temp file over the target (Persistence/PersistenceStore.cs:124,
+        /// <c>AtomicWriteHooks.Rename</c>), and a read that lands inside that rename fails with
+        /// "the process cannot access the file … because it is being used by another process".
+        /// Measured, twice in a row, before this parameter existed. A retry would be a wall-clock
+        /// poll and would hide the very thing the caller is asking about, so the answer is to not
+        /// read a file with a live writer.</para>
+        /// </summary>
+        public IReadOnlyList<(string File, string Json)> ReadEveryDocument(string? except = null) =>
         [
             .. System.IO.Directory.GetFiles(Directory, "*.json")
+                .Where(path => !string.Equals(Path.GetFileName(path), except, StringComparison.Ordinal))
                 .OrderBy(Path.GetFileName, StringComparer.Ordinal)
                 .Select(path => (File: Path.GetFileName(path), Json: File.ReadAllText(path))),
         ];
