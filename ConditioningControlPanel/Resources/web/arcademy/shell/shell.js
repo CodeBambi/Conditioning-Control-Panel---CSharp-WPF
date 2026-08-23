@@ -337,6 +337,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let active = null;               // the running class (see startClass)
   let suspendedGlobally = false;
   let destroyed = false;
+  // Host opened the building through the dev switch (`--arcademy`). Unlocks
+  // Begin on every campus door regardless of the seed; never true for players.
+  const devPass = src.devDoor === true;
 
   /* ---------------------- registry + timetable -------------------------- */
   const games = await loadGames(say);
@@ -525,6 +528,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       classes: timetable.classes,
       records,
       suspended: suspendedGlobally,
+      devPass,
       // Free Swim is a property of the GAME, not of tonight's board: a room the
       // timetable never dealt can still be swum, so the map covers every
       // registered game and campusState keeps the ones that have a room.
@@ -663,7 +667,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         on: {
           begin: (gameKey) => {
             const cls = timetable.classes.find((c) => c.gameKey === gameKey);
-            if (cls) startClass(cls);
+            if (cls) { startClass(cls); return; }
+            // THE DEV DOOR: a room off tonight's board still opens when the host
+            // came in through `--arcademy`. Graded + timed like a dealt class,
+            // built from the registry descriptor (freeSwimClass's parachute).
+            if (devPass) {
+              say('dev pass: ' + gameKey + ' is off the board - graded run anyway');
+              startClass(freeSwimClass(gameKey));
+            }
           },
           freeSwim: (gameKey) => startFreeSwim(gameKey),
           records: () => showReport(),

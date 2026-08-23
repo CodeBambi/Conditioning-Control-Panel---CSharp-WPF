@@ -592,6 +592,9 @@ internal static class ArcademyHostService
             // handles the panic key itself - that stays app-side.
             panicKeyEnabled = s?.PanicKeyEnabled ?? true,
             panicKey = s?.PanicKey ?? "Escape",
+            // The dev switch (`--arcademy`) is projected so the campus can offer Begin on rooms
+            // the seed did not deal tonight (shell: devPass). Always false on a player launch.
+            devDoor = _devDoor,
         };
     }
 
@@ -872,6 +875,8 @@ internal static class ArcademyHostService
         ["campus_semester_3"] = "Semester III",
         ["campus_in_session"] = "In Session",
         ["campus_not_tonight"] = "Not tonight",
+        ["campus_dev_pass"] = "Dev pass · Begin",
+        ["campus_dev_pass_hint"] = "Dev pass: off tonight's board, graded anyway.",
         ["campus_next_bell"] = "Next Bell",
         ["campus_step_inside"] = "Step inside",
         ["campus_xp_first"] = "First pass of the day pays XP.",

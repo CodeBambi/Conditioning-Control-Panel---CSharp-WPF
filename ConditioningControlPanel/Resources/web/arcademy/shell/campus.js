@@ -213,6 +213,10 @@ const ATTRACT_CURSOR_D = 'M0,0 L0,17 L4.2,13 L6.9,18.4 L9.6,17.1 L7,11.8 L12,11.
  * @param {Array}  o.classes   timetable.classes ({gameKey, timeLabel, ...})
  * @param {Object} o.records   gameKey -> {grade} | null  (today's rows)
  * @param {boolean=} o.suspended  global suspend (mandatory video etc.)
+ * @param {boolean=} o.devPass   the host opened the DEV DOOR (`--arcademy`):
+ *   every room's door card offers Begin even off tonight's board, so an
+ *   unreleased class can be play-tested without waiting for the seed to deal
+ *   it. Graded like any class; never set on a player build.
  * @param {Object=} o.endless  gameKey -> {labelKey, hintKey} for every game that
  *   declares `manifest.endless`. The shell computes it (the campus never reads a
  *   manifest); a room without an entry simply shows no Free Swim button.
@@ -220,7 +224,7 @@ const ATTRACT_CURSOR_D = 'M0,0 L0,17 L4.2,13 L6.9,18.4 L9.6,17.1 L7,11.8 L12,11.
  *   rooms[gameKey] = { scheduled, period (1-based, 0 = not tonight), done,
  *                      grade, mood:'open'|'retake'|'dark', timeLabel, endless }
  */
-export function campusState({ classes, records, suspended, endless } = {}) {
+export function campusState({ classes, records, suspended, endless, devPass } = {}) {
   const list = Array.isArray(classes) ? classes : [];
   const recs = records || {};
   const ends = (endless && typeof endless === 'object') ? endless : {};
@@ -253,6 +257,7 @@ export function campusState({ classes, records, suspended, endless } = {}) {
     rooms,
     stops,
     suspended: !!suspended,
+    devPass: !!devPass,
     allDone: list.length > 0 && done === list.length,
   };
 }
@@ -985,6 +990,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     } else if (r.scheduled) {
       ccGo.textContent = (r.done ? t('retake', 'Retake') : t('begin_class', 'Begin')).toUpperCase();
       ccGo.disabled = false;
+      cardAction = () => { if (handlers.begin) handlers.begin(key); };
+    } else if (st.devPass) {
+      /* THE DEV DOOR. Off the board but the host opened the building with the
+       * dev switch: Begin anyway (the shell runs it as a graded, timed class
+       * built from the registry descriptor). Not a player path. */
+      ccGo.textContent = t('campus_dev_pass', 'Dev pass · Begin').toUpperCase();
+      ccGo.disabled = false;
+      ccXp.textContent = t('campus_dev_pass_hint', "Dev pass: off tonight's board, graded anyway.");
       cardAction = () => { if (handlers.begin) handlers.begin(key); };
     } else {
       ccGo.textContent = t('campus_not_tonight', 'Not tonight').toUpperCase();
