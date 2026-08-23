@@ -792,14 +792,222 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 }
 .arc-loader p, .arc-nope p { color:var(--ink-dim); margin:0; }
 .arc-loader-name { font-family:var(--disp); letter-spacing:.1em; color:var(--ink); }
-.arc-loader-ring {
-  width:34px; height:34px; border-radius:50%;
-  border:3px solid var(--line); border-top-color:var(--pink);
-  animation:arc-spin 1s linear infinite;
-}
-@keyframes arc-spin { to { transform:rotate(360deg); } }
 .arc-nope h1 { font-family:var(--disp); font-size:24px; letter-spacing:.06em; margin:0; }
 .arc-nope-hint { font-size:12px; color:var(--ink-faint); }
+
+/* ============================================================================
+ * THE INTRO SPLASH (the loader's decoration - see index.html for the beat map).
+ * One ~3s fixed CSS timeline, Feel Dept vocabulary throughout: CRT power-on
+ * (0-.5s) -> the wordmark THUD w/ chromatic settle (.3-.64s) -> marquee ray
+ * burst + shockwave ring (.5s) -> the pixel tail flies home (.55-1.95s) -> GLINT
+ * sweep (.9s) -> checker rail deals in steps (.55-2.25s) -> SPARKLE BURST + flash
+ * (2.35-2.65s) -> boot.js adds `.is-done` = zoom-through exit. Past 3.1s the
+ * tail animations settle into an idle hold (BREATH + rail chase) for slow
+ * boots. Every hue is a token; the wordmark art carries its own.
+ * ==========================================================================*/
+.arc-loader {
+  gap:24px; overflow:hidden;
+  background:color-mix(in srgb, var(--ground), black 34%);
+}
+.arc-loader.is-done { opacity:0; transition:opacity .26s ease-in .04s; pointer-events:none; }
+.arc-loader.is-done .arc-intro-stage {
+  animation:none; transform:scale(1.07); transition:transform .3s ease-in;
+}
+.arc-loader.is-done .arc-intro-rail,
+.arc-loader.is-done .arc-intro-caption { opacity:0; transition:opacity .16s ease-in; }
+
+/* ---- the marquee ray burst: slow-turning spokes behind the wordmark ------ */
+.arc-intro-burst {
+  position:absolute; left:50%; top:50%; width:150vmax; height:150vmax;
+  margin:-75vmax 0 0 -75vmax; border-radius:50%; opacity:0; z-index:0;
+  background:repeating-conic-gradient(from 0deg,
+    color-mix(in srgb, var(--pink) 55%, transparent) 0deg 11deg,
+    transparent 11deg 30deg);
+  -webkit-mask:radial-gradient(circle, #000 0%, transparent 62%);
+  mask:radial-gradient(circle, #000 0%, transparent 62%);
+  animation:arc-intro-burst-in .6s ease-out .5s both,
+            arc-intro-burst-turn 18s linear .5s infinite;
+}
+@keyframes arc-intro-burst-in { from { opacity:0; } to { opacity:.085; } }
+@keyframes arc-intro-burst-turn { to { transform:rotate(360deg); } }
+
+/* ---- the stage: the wordmark + everything that hangs off it -------------- */
+.arc-intro-stage {
+  position:relative; z-index:1; width:min(600px, 76vw);
+  animation:arc-intro-stage-in .12s ease-out .08s both,
+            arc-intro-shiver .3s linear .61s,
+            arc-intro-pop .22s ease-out 2.38s,
+            arc-intro-breath 2.8s ease-in-out 3.1s infinite alternate;
+}
+@keyframes arc-intro-stage-in { from { opacity:0; } to { opacity:1; } }
+@keyframes arc-intro-shiver {
+  0%,100% { transform:translate(0,0); }
+  20% { transform:translate(2px,-1px); } 40% { transform:translate(-2px,1px); }
+  60% { transform:translate(1.5px,1px); } 80% { transform:translate(-1px,-1px); }
+}
+@keyframes arc-intro-pop { 0% { transform:scale(1); } 35% { transform:scale(1.035); } 100% { transform:scale(1); } }
+@keyframes arc-intro-breath { from { transform:scale(1); } to { transform:scale(1.014); } }
+
+/* THE THUD: the stamp punch (340ms, the canonized overshoot curve) with a
+   chromatic-fringe settle - the tube snapping into focus. */
+.arc-intro-mark {
+  display:block; width:100%; height:auto; user-select:none; -webkit-user-drag:none;
+  animation:arc-intro-thud .34s cubic-bezier(.2,1.5,.4,1) .3s both;
+}
+@keyframes arc-intro-thud {
+  0% { transform:scale(2.05); opacity:0;
+       filter:drop-shadow(-5px 0 0 rgba(255,60,130,.85)) drop-shadow(5px 0 0 rgba(90,220,255,.85)) brightness(1.7); }
+  45% { opacity:1; }
+  75% { filter:drop-shadow(-2px 0 0 rgba(255,60,130,.4)) drop-shadow(2px 0 0 rgba(90,220,255,.4)) brightness(1.15); }
+  100% { transform:scale(1); opacity:1;
+       filter:drop-shadow(0 0 0 rgba(255,60,130,0)) drop-shadow(0 0 0 rgba(90,220,255,0)) brightness(1); }
+}
+
+/* the shockwave ring the thud kicks out */
+.arc-intro-ring {
+  position:absolute; left:50%; top:50%; width:88%; height:74%;
+  transform:translate(-50%,-50%); border-radius:50%;
+  border:2px solid color-mix(in srgb, var(--pink) 80%, white 20%);
+  box-shadow:0 0 18px color-mix(in srgb, var(--pink) 45%, transparent);
+  opacity:0; pointer-events:none;
+  animation:arc-intro-ringout .5s ease-out .62s;
+}
+@keyframes arc-intro-ringout {
+  0% { opacity:.85; transform:translate(-50%,-50%) scale(.55); }
+  100% { opacity:0; transform:translate(-50%,-50%) scale(1.55); }
+}
+
+/* GLINT: one light band across the letters, masked to the art itself */
+.arc-intro-glint {
+  position:absolute; inset:0; pointer-events:none; opacity:0;
+  -webkit-mask:url('./art/arcademy-wordmark.png') center / contain no-repeat;
+  mask:url('./art/arcademy-wordmark.png') center / contain no-repeat;
+  background:linear-gradient(115deg, transparent 38%, rgba(255,255,255,.85) 50%, transparent 62%);
+  background-size:260% 100%; background-position:120% 0;
+  animation:arc-intro-glint .55s ease-in-out .9s;
+}
+@keyframes arc-intro-glint {
+  0% { opacity:1; background-position:120% 0; }
+  100% { opacity:1; background-position:-120% 0; }
+}
+
+/* THE PIXEL TAIL: the wordmark's own dissolve blocks flying home onto the Y.
+   Start offsets/timing are per-bit custom props; they land and STAY. */
+.arc-intro-bit {
+  position:absolute; z-index:2; opacity:0; pointer-events:none;
+  width:var(--s,9px); height:var(--s,9px); background:var(--c,var(--pink));
+  box-shadow:0 0 8px color-mix(in srgb, var(--c,var(--pink)) 55%, transparent);
+  animation:arc-intro-bit-in .32s cubic-bezier(.2,1.1,.4,1) var(--d,.55s) both;
+}
+@keyframes arc-intro-bit-in {
+  0% { opacity:0; transform:translate(var(--fx,60px), var(--fy,-60px)) rotate(120deg); }
+  60% { opacity:1; }
+  100% { opacity:1; transform:translate(0,0) rotate(0deg); }
+}
+.arc-intro-bit:nth-of-type(1)  { --s:13px; --c:var(--pink);      right:-3%;  top:-14%; --fx:90px;  --fy:-70px; --d:.55s; }
+.arc-intro-bit:nth-of-type(2)  { --s:9px;  --c:var(--gold);      right:2%;   top:-6%;  --fx:70px;  --fy:-90px; --d:.67s; }
+.arc-intro-bit:nth-of-type(3)  { --s:7px;  --c:var(--pink-deep); right:-6%;  top:6%;   --fx:110px; --fy:-30px; --d:.79s; }
+.arc-intro-bit:nth-of-type(4)  { --s:11px; --c:var(--gold);      right:-1%;  top:-22%; --fx:50px;  --fy:-110px;--d:.91s; }
+.arc-intro-bit:nth-of-type(5)  { --s:6px;  --c:var(--pink);      right:6%;   top:-16%; --fx:120px; --fy:-60px; --d:1.03s; }
+.arc-intro-bit:nth-of-type(6)  { --s:8px;  --c:var(--pink);      right:-8%;  top:-4%;  --fx:80px;  --fy:20px;  --d:1.15s; }
+.arc-intro-bit:nth-of-type(7)  { --s:6px;  --c:var(--gold);      right:9%;   top:-24%; --fx:40px;  --fy:-80px; --d:1.27s; }
+.arc-intro-bit:nth-of-type(8)  { --s:10px; --c:var(--pink-deep); right:-5%;  top:-28%; --fx:100px; --fy:-100px;--d:1.39s; }
+.arc-intro-bit:nth-of-type(9)  { --s:5px;  --c:var(--gold);      right:12%;  top:-10%; --fx:60px;  --fy:-40px; --d:1.51s; }
+.arc-intro-bit:nth-of-type(10) { --s:7px;  --c:var(--pink);      right:-10%; top:-18%; --fx:130px; --fy:-80px; --d:1.63s; }
+
+/* SPARKLE BURST: six stars pop around the mark as the beat lands */
+.arc-intro-spark {
+  position:absolute; z-index:3; opacity:0; pointer-events:none;
+  font-size:var(--s,15px); line-height:1; color:var(--c,var(--gold));
+  text-shadow:0 0 10px color-mix(in srgb, var(--c,var(--gold)) 70%, transparent);
+  animation:arc-intro-spark-pop .28s ease-out var(--d,.95s);
+}
+.arc-intro-spark::before { content:'\2726'; }
+@keyframes arc-intro-spark-pop {
+  0% { opacity:0; transform:scale(.2) rotate(-30deg); }
+  45% { opacity:1; transform:scale(1.25) rotate(10deg); }
+  100% { opacity:0; transform:scale(.6) rotate(25deg); }
+}
+.arc-intro-spark:nth-of-type(1) { left:-4%;  top:8%;   --s:18px; --c:var(--gold); --d:2.35s; }
+.arc-intro-spark:nth-of-type(2) { right:-3%; top:64%;  --s:14px; --c:var(--pink); --d:2.4s; }
+.arc-intro-spark:nth-of-type(3) { left:14%;  top:-18%; --s:12px; --c:var(--pink); --d:2.45s; }
+.arc-intro-spark:nth-of-type(4) { right:16%; top:-12%; --s:16px; --c:var(--gold); --d:2.5s; }
+.arc-intro-spark:nth-of-type(5) { left:-7%;  top:58%;  --s:12px; --c:var(--gold); --d:2.55s; }
+.arc-intro-spark:nth-of-type(6) { right:-8%; top:22%;  --s:13px; --c:var(--pink); --d:2.6s; }
+
+/* ---- the checker rail: the loading bar in the wordmark's own trim -------- */
+.arc-intro-rail {
+  position:relative; z-index:1; width:min(320px, 46vw); height:10px;
+  border-radius:3px; overflow:hidden;
+  background:repeating-linear-gradient(90deg,
+    var(--pink) 0 8px, var(--flap-well) 8px 12px,
+    var(--gold) 12px 20px, var(--flap-well) 20px 24px);
+  transform-origin:left center;
+  animation:arc-intro-rail-deal 1.7s steps(11, end) .55s both,
+            arc-intro-rail-chase .7s linear 2.3s infinite;
+}
+.arc-intro-rail::before, .arc-intro-rail::after {
+  content:''; position:absolute; top:50%; width:14px; height:14px;
+  margin-top:-7px; border-radius:50%; background:var(--gold);
+  border:2px solid color-mix(in srgb, var(--gold), black 35%); box-sizing:border-box;
+}
+.arc-intro-rail::before { left:-4px; }
+.arc-intro-rail::after { right:-4px; }
+@keyframes arc-intro-rail-deal { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+@keyframes arc-intro-rail-chase { from { background-position:0 0; } to { background-position:24px 0; } }
+
+/* ---- caption: campus micro-label seasoning (--pix wants absolute px) ----- */
+.arc-intro-caption {
+  position:relative; z-index:1;
+  font-family:var(--pix); font-size:9px; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--ink-faint);
+  animation:arc-intro-caption-in .3s ease-out .8s both;
+}
+.arc-intro-caption .arc-loader-name { font-family:inherit; color:var(--pink); letter-spacing:inherit; }
+@keyframes arc-intro-caption-in { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
+
+/* ---- full-frame layers --------------------------------------------------- */
+.arc-intro-scan {
+  position:absolute; inset:0; z-index:4; pointer-events:none; opacity:.4;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,.2) 0 1px, transparent 1px 3px);
+}
+.arc-intro-flash {
+  position:absolute; inset:0; z-index:5; pointer-events:none; opacity:0;
+  background:radial-gradient(circle at 50% 46%,
+    rgba(255,241,250,.95), color-mix(in srgb, var(--pink) 40%, transparent) 55%, transparent 78%);
+  animation:arc-intro-flash .22s ease-out 2.38s;
+}
+@keyframes arc-intro-flash { 0% { opacity:0; } 30% { opacity:.6; } 100% { opacity:0; } }
+
+/* CRT power-on: black tube, one hot scanline blooming open, then gone */
+.arc-intro-crt {
+  position:absolute; inset:0; z-index:6; pointer-events:none; background:#000;
+  animation:arc-intro-crt-off .24s ease-in .3s forwards;
+}
+.arc-intro-crt::before {
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(180deg, transparent 44%,
+    rgba(255,214,240,.95) 49%, #fff 50%, rgba(255,214,240,.95) 51%, transparent 56%);
+  transform:scaleY(.012); filter:blur(.4px);
+  animation:arc-intro-crt-line .38s cubic-bezier(.3,0,.2,1) both;
+}
+@keyframes arc-intro-crt-line {
+  0% { transform:scaleY(.012) scaleX(.1); opacity:1; }
+  40% { transform:scaleY(.012) scaleX(1); opacity:1; }
+  100% { transform:scaleY(1) scaleX(1); opacity:.9; }
+}
+@keyframes arc-intro-crt-off { from { opacity:1; } to { opacity:0; visibility:hidden; } }
+
+/* ---- reduced motion: a still card, no beat, instant exit ----------------- */
+@media (prefers-reduced-motion: reduce) {
+  .arc-loader, .arc-loader * { animation:none !important; transition:none !important; }
+  .arc-intro-crt, .arc-intro-flash, .arc-intro-burst,
+  .arc-intro-glint, .arc-intro-spark, .arc-intro-ring { display:none; }
+  /* the bits' fly-in owned their opacity (`both` from 0); parked, they are a
+     static part of the composition, not a beat */
+  .arc-intro-bit { opacity:1; transform:none; }
+  .arc-loader.is-done { opacity:0; }
+}
 
 .arc-esc-hint {
   position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
@@ -1284,13 +1492,16 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   background:repeating-linear-gradient(var(--campus-line-dim) 0 6px, var(--campus-hall) 6px 10px);
   box-shadow:0 0 6px rgba(0,0,0,.5);
 }
+/* The sway is on the GROUP (plaque + board + foot rock as one hung object). */
+.campus-boardsway {
+  animation:campus-sway 7s ease-in-out infinite alternate;
+  transform-origin:50% -40px;
+}
 .campus-board {
   background:linear-gradient(180deg, var(--navy), color-mix(in srgb, var(--navy), black 25%));
   border:var(--hairline); border-radius:10px;
   box-shadow:0 18px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.07);
   padding:10px 14px 8px;
-  animation:campus-sway 7s ease-in-out infinite alternate;
-  transform-origin:50% -40px;
 }
 @keyframes campus-sway { from { transform:rotate(-.4deg); } to { transform:rotate(.4deg); } }
 /* compact flaps inside the hanging board (the full-size ones are for the plain
@@ -1313,6 +1524,56 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
 .campus-boardfoot .reportcard { margin-top:6px; padding-top:6px; gap:7px; }
 .campus-boardfoot .rcell { font-size:10.5px; padding:3px 7px; }
 .campus-boardfoot .grade { font-size:12px; min-width:20px; height:20px; }
+
+/* ---- the plaque: the collapsed timetable -------------------------------
+   What hangs from the chains until the player opens the board. The clock
+   pulses while the timetable has not been opened yet TODAY (campus.js wears
+   `.pulse` off the shell's store read); opening rolls the flaps, so this
+   plaque replaced the old "flip the board again" button outright. */
+.campus-boardtab {
+  display:flex; align-items:center; gap:8px;
+  margin:0 auto; width:max-content;
+  background:linear-gradient(180deg, var(--navy), color-mix(in srgb, var(--navy), black 25%));
+  border:var(--hairline); border-radius:9px;
+  box-shadow:0 14px 34px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07);
+  padding:7px 14px;
+  color:var(--ink-dim); cursor:pointer;
+  font:600 10.5px/1 var(--mono); letter-spacing:.14em;
+}
+.campus-boardtab:hover { color:var(--ink); border-color:var(--pink-deep); }
+.campus-boardtab:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+.campus-boardtab .tclock { font-size:14px; line-height:1; }
+.campus-boardtab .tchev { color:var(--ink-faint); font-size:9px; transition:transform .2s ease; }
+.campus-boardtab.pulse .tclock {
+  animation:campus-clockpulse 1.4s ease-in-out infinite;
+  filter:drop-shadow(0 0 6px var(--pink));
+}
+@keyframes campus-clockpulse {
+  0%, 100% { transform:scale(1); }
+  50% { transform:scale(1.35); }
+}
+/* Expanded: the plaque becomes the board's header bar (click again to fold). */
+.campus-boardwrap:not(.collapsed) .campus-boardtab {
+  border-radius:9px 9px 0 0; border-bottom:0;
+  box-shadow:none;
+  width:100%; justify-content:center; box-sizing:border-box;
+  padding:6px 14px 5px;
+}
+.campus-boardwrap:not(.collapsed) .campus-boardtab .tchev { transform:rotate(180deg); }
+.campus-boardwrap.collapsed .campus-board,
+.campus-boardwrap.collapsed .campus-boardfoot { display:none; }
+.campus-boardwrap:not(.collapsed) .campus-board {
+  border-radius:0 0 10px 10px; border-top:0;
+  animation:campus-boardunfold .32s ease-out;
+}
+@keyframes campus-boardunfold {
+  from { opacity:0; transform:translateY(-10px); }
+  to { opacity:1; transform:translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .campus-boardsway, .campus-boardtab.pulse .tclock,
+  .campus-boardwrap:not(.collapsed) .campus-board { animation:none; }
+}
 
 /* ---- crest (top-left) / top-right cluster / hint ---- */
 .campus-crest {
