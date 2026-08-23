@@ -711,6 +711,11 @@ export default {
       go.addEventListener('click', () => {
         if (done || dead) return;
         done = true;
+        /* THE START PRESS (W2 chrome). This one button both dismisses the rules
+         * sheet and starts the vigil, so it gets the school's start cue and NOT
+         * a second page-turn `slide` over the top of it - the sheet is one
+         * page and there is no page to turn. */
+        tick('lift', 0.5, { pitch: 1 });
         rememberHowto();
         hideHowto();
         onDone();
@@ -1899,6 +1904,32 @@ export default {
      * the stop: it scores as a miss for that question, the vigil resumes at
      * once, and the class is never failed by it (friction, never lockout).
      * ==================================================================== */
+    /* THE REFUSED INPUT (W2 chrome vocabulary). A poke at the slip that is not
+     * an answer - a wrong-phase key, a press on the card's dead space - was
+     * SILENT: the escape guard counted the player's impatience and the room
+     * never said "not that". The House Book's answer to a dead input is a muted
+     * `bump`, THROTTLED so a mashed key cannot machine-gun it. A press that
+     * LANDS on an option (or on its Hear button, which lives inside one) is not
+     * a refusal at all, so it never bumps - only the guard counts it. */
+    const CHROME_BUMP_MS = 250;
+    let lastBumpAt = 0;
+    function bumpRefused() {
+      const now = Date.now();
+      if (now - lastBumpAt < CHROME_BUMP_MS) return;
+      lastBumpAt = now;
+      tick('bump', 0.3, { pitch: 1 });
+    }
+    /** Did this press land inside one of the live option buttons? */
+    function onOptionNode(node) {
+      let n = node;
+      let guard = 0;
+      while (n && guard < 8) {
+        if (optEls.indexOf(n) >= 0) return true;
+        try { n = n.parentNode; } catch (e) { return false; }
+        guard += 1;
+      }
+      return false;
+    }
     function guardPoke() {
       if (!live || !live.question) return;
       if (elapsedMs - guardSince > PLAYTEST.ESCAPE_MS) { guardHits = 0; guardSince = elapsedMs; }
@@ -1930,9 +1961,13 @@ export default {
         }
       }
       /* anything else, while a card is up, is impatience */
+      bumpRefused();
       guardPoke();
     }
-    function onStagePointer() { guardPoke(); }
+    function onStagePointer(e) {
+      if (!onOptionNode(e && (e.target || e.currentTarget))) bumpRefused();
+      guardPoke();
+    }
     function bindInput() {
       try { if (typeof window !== 'undefined') window.addEventListener('keydown', onKeyDown); }
       catch (e) { say('keydown bind failed: ' + ((e && e.message) || e)); }
@@ -2005,7 +2040,9 @@ export default {
       clearChannels();
       stopWindow();
       stopAmbience();
-      if (montage) { montage.stopGovernor(); montage.stop(); montage.freeze(true); }
+      /* the bell's freeze is HOUSEKEEPING, not a stop: no shutter (the debrief
+       * slide is the beat here, and two cues on one frame is a smear). */
+      if (montage) { montage.stopGovernor(); montage.stop(); montage.freeze(true, { silent: true }); }
       deck('trickster', 'stop');
       deck('casino', 'dimOut');
       deck('casino', 'stop');
@@ -2070,6 +2107,11 @@ export default {
       if (!endEl) return;
       endEl.textContent = '';
       endEl.hidden = false;
+      /* THE DEBRIEF (W2 chrome). Every row is appended in THIS frame and the
+       * card fades in as one object (.g-ir-end / g-ir-endin), so there is no
+       * visual stagger for a blip ladder to ride: the House Book's answer to an
+       * unstaggered debrief is ONE `slide`, on the same beat as the fade. */
+      tick('slide', 0.35, { pitch: 1 });
       endEl.appendChild(el('h3', 'g-ir-end-title', t('ir_end_title', IR_LEX.ir_end_title)));
       const row = (k, v, cls) => {
         const r = el('div', 'g-ir-end-row' + (cls ? ' ' + cls : ''));
@@ -2168,6 +2210,10 @@ export default {
               return q && q.options[i] ? q.options[i].label : '';
             },
             windowLeft: () => (live ? live.windowLeft : 0),
+            /* THE CUE ROAD (W2 sec 2). The deck never gets the engine - it gets
+             * this class's own clamped helper, so every cue it asks for lands
+             * under the tier's audio ceiling ({0.32,0.38,0.44,0.50}). */
+            cue: (name, level, extra) => tick(name, level, extra),
             announce: (text, ms) => {
               if (!msgEl || !text) return;
               msgEl.textContent = String(text);
@@ -2224,6 +2270,12 @@ export default {
         ledger = createLedger({ node: ledgerEl });
         montage = createMontage({
           mount: montageEl,
+          /* THE SHUTTER'S ROAD (W2 sec 2). montage.js gets no engine - it gets
+           * this class's own clamped helper, the way impulse-control hands
+           * render.js its `sting`. It is used for exactly ONE beat: the freeze.
+           * It is not a ledger verb and it fires no POOL primitive, so neither
+           * of the wall's two inherited laws is touched. */
+          cue: (name, level, extra) => tick(name, level, extra),
           seed, tier, reduced,
           coarse: !!(ctx.platform && ctx.platform.isTouch),
           lite: !!(ctx.motion && Number(ctx.motion.motionLevel) <= 1),

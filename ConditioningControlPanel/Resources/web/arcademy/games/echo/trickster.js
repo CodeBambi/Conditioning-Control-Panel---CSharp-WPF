@@ -324,6 +324,23 @@ export function createEcTrickster(o) {
   let destroyed = false;
   let stopped = false;
   let paused = false;
+
+  /* ---- THE CUE ROAD (W2 sec 2/sec 3) ------------------------------------------
+   * This deck asks the engine for nothing and never holds an audio node: it
+   * gets index.js's OWN clamped helper as `opts.cue`, so every cue it asks for
+   * lands under this tier's audio ceiling exactly like a pad tone does.
+   * THE DECOUPLE (sec 3, owner ruling): `sounds()` deliberately does NOT read
+   * capsOk - bgIntensity 0 is the player's VISUAL exit (Law VI) and may not
+   * mute the school. Every cue site below still sits on its own visual beat,
+   * so a class whose lights are off never reaches one anyway - which is the
+   * honest answer, not a second gate. */
+  const cueFn = typeof opts.cue === 'function' ? opts.cue : null;
+  const sounds = () => armedBase && !destroyed && !stopped;
+  function cue(name, level, extra) {
+    if (!cueFn || !sounds()) return;
+    try { cueFn(name, level, extra); } catch (e) { /* a refused cue is not an error */ }
+  }
+
   function after(ms, fn) {
     if (!armed || destroyed) return 0;
     let id = 0;
@@ -494,6 +511,11 @@ export function createEcTrickster(o) {
   }
   function endFlick() {
     if (!flickChip) return;
+    /* THE STATIC POP. This file's own header has promised it since Semester II
+     * ("then corrects with a static pop", and Law III's "the flicker pops") and
+     * there was never a cue behind it. `decoy` is the school's bit-crushed
+     * noise for a lie folding - fired on the SAME beat the number snaps back. */
+    cue('decoy', 0.35);
     setCls(flickChip, 'g-ec-tk-flick', false);
     try {
       /* stand down if a real repaint already landed */
@@ -669,6 +691,11 @@ export function createEcTrickster(o) {
       if (lurePad < 0) {
         lurePad = wrongNeighbour(duePad(), livePads().length || 6, roll('lure'));
         fired.lure += 1;
+        /* THE LURE. The header calls it "the near miss the casino stages" and
+         * Law III says "the ghost pulses on the lure" - one `near` tease as the
+         * ghost stops trailing and leans on a WRONG pad. Once per lure, not
+         * per tick: this branch only runs while lurePad is unset. */
+        cue('near', 0.35);
         if (announce && roll('ghost-taunt') < T.GHOST_TAUNT_CHANCE) {
           try { announce(say_t('ec_taunt_ghost', 'This one. Surely this one.'), 1400); } catch (e) { /* ignore */ }
         }

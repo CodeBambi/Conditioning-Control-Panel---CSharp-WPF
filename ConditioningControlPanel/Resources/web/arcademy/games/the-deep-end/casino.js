@@ -20,7 +20,11 @@
  *   MARQUEE CHASE   a bulb-chase frame hugging the board. Crawls at low heat,
  *                   spins up with the depth line, goes gold and frantic for the
  *                   bell and the ceiling, and sighs out - never cuts - on a
- *                   dim-out.
+ *                   dim-out. W2: the frame LIGHTING (a `chime`) and the SIGH
+ *                   (a pitched-down `slide`) are this deck's own two cues -
+ *                   requested through opts.cue, which is the game's clamped
+ *                   helper. Every other beat here is already voiced by
+ *                   index.js on the same frame and stays its.
  *   PAYOUT LIGHT    a merge pays light scaled by its chain link: the marquee
  *                   flashes, the water pulses, bubbles rise from the tile. A
  *                   new deepest tier pulses heavier and steps the whole room
@@ -180,6 +184,10 @@ function gridOf(tile) {
  * @param {Object}   o.timers    {after(ms,fn)->id, every?, clear|cancel(id)}
  * @param {boolean}  o.reduced   reduced motion
  * @param {boolean}  o.capsOk    false when bgIntensity is capped to 0
+ * @param {Function=} o.cue       cue(name, level, extra) - the GAME's clamped
+ *                                audio helper (index.js `tick`). The deck asks;
+ *                                it never holds an audio node and never raises
+ *                                the tier's ceiling.
  * @param {Function=} o.log
  */
 export function createDeCasino(o) {
@@ -188,6 +196,12 @@ export function createDeCasino(o) {
   const reduced = !!opts.reduced;
   const armed = !!opts.capsOk && !!opts.stage && !!opts.bench && !!opts.backdrop
     && !!opts.timers && typeof opts.timers.after === 'function' && typeof document !== 'undefined';
+  /* W2 - THE CUE ROAD, AND THE DECOUPLE. `armed` folds capsOk in, and
+     bgIntensity 0 is the player's VISUAL exit (Law VI) - it is not a request
+     for a silent school. So sound gates on `destroyed` alone: the rig may be
+     dark and still sigh. Nothing below this line ever raises a level. */
+  const cue = typeof opts.cue === 'function' ? opts.cue : () => {};
+  const sounds = () => !destroyed;
 
   /* timers: the game's registry (pause-aware) + a local set so destroy() can
      drop every one of ours without knowing the registry's shape. The
@@ -217,6 +231,7 @@ export function createDeCasino(o) {
 
   let destroyed = false;
   let started = false;
+  let startCued = false;         // W2: the frame lights ONCE, armed or not
   let mq = null;
   let cs = null;                 // the overlay in the bench
   const layers = {};             // backdrop family layers by name
@@ -588,7 +603,13 @@ export function createDeCasino(o) {
   return {
     /** Dress the pool + light the frame. Call when play arms. */
     start() {
-      if (!armed || destroyed) { say('casino: disarmed'); return; }
+      if (destroyed) return;
+      /* THE FRAME LIGHTS: the marquee's bulb-chase comes up as the water
+         opens. One clean bell, once - `startCued` guards a second call, and
+         the cue sits ABOVE the armed gate so a capped-background class still
+         hears the room open. */
+      if (!startCued) { startCued = true; cue('chime', 0.3); }
+      if (!armed) { say('casino: disarmed'); return; }
       if (started) return;
       started = true;
       mountBackdrop();
@@ -764,6 +785,10 @@ export function createDeCasino(o) {
 
     /** The bell took the board: the rig sighs out instead of cutting. */
     dimOut() {
+      /* THE SIGH. The header has promised for two passes that this frame
+         "sighs out - never cuts": a `slide` pitched DOWN is that sigh, the
+         same whoosh the board's moves use, falling instead of travelling. */
+      if (sounds()) cue('slide', 0.3, { pitch: 0.8 });
       outOn = true;
       bellOn = false;
       royalOn = false;
@@ -818,7 +843,7 @@ export function createDeCasino(o) {
     /** Diagnostics for the harness; not part of the module contract. */
     diagnostics() {
       return {
-        armed, started, marquee: !!mq, overlay: !!cs, layers: Object.keys(layers).length,
+        armed, started, startCued, marquee: !!mq, overlay: !!cs, layers: Object.keys(layers).length,
         bell: bellOn, calm: calmOn, royal: royalOn, out: outOn,
         heat: lastHeat, stop: stopIx, bubbles, leaning: leaning.length, identity,
         wall: !!wall, benchLeaning, slides, bumps,

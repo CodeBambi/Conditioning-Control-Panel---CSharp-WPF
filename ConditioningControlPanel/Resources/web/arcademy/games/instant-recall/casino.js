@@ -345,8 +345,13 @@ export function createIrCasino(o) {
 
   /* ---- the engine, counted ------------------------------------------------ */
   const counts = { cues: 0, jackpots: 0, nearMisses: 0, floods: 0, words: 0, bells: 0, levers: 0, reels: 0, peaks: 0 };
+  /* THE DECOUPLE (W2 sec 3, owner ruling: a visual dial must not mute the room).
+   * Every LIGHT below stays behind armed(); the cue road gates on everything
+   * EXCEPT capsOk, because bgIntensity 0 is the player's visual exit (Law VI),
+   * not a mute. The road itself is untouched - this is only its gate. */
+  const sounds = () => armedBase && !destroyed;
   function cue(name, level, extra) {
-    if (!armed()) return;
+    if (!sounds()) return;
     counts.cues++;
     try {
       if (typeof eng.fire === 'function') eng.fire('audio_trigger', Object.assign({ name, level }, extra || {}));

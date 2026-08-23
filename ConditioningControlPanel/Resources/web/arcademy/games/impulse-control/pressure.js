@@ -58,7 +58,9 @@
  *   V   seeded        - per-tag mulberry32 off seed+'|ic-pressure|<tag>',
  *       append-only; no Math.random.
  *   VI  exits sacred  - capsOk false (bgIntensity 0) = zero fires, zero
- *       tremor; reduced motion = no tremor (the engine gates its own kinds);
+ *       tremor; the rung CUE is decoupled from it on purpose (W2) - a visual
+ *       dial must not mute the school, and the cue is clamped either way;
+ *       reduced motion = no tremor (the engine gates its own kinds);
  *       pause() halts the rAF and drops transient timers; destroy() restores
  *       the translate and stops every sustain with a fade.
  *   VII lexicon       - this file renders no text.
@@ -297,8 +299,17 @@ export function createIcPressure(o) {
     count('stop:' + kind);
     try { if (typeof eng.stop === 'function') eng.stop(kind); } catch (e) { /* noop */ }
   }
+  /**
+   * W2 - THE DECOUPLE (spec 3). This cue used to gate on `armed()`, which
+   * folds capsOk in - so a player who turned bgIntensity to 0 lost the SURGE's
+   * only announcement along with its light. bgIntensity is the VISUAL exit
+   * (Law VI), never a request for a silent school. Sound now rides the rest of
+   * the gate (armedBase / destroyed / stopped); every visual fire above is
+   * untouched and still capsOk-gated, and the level is still clamped to this
+   * tier's audio ceiling with the same per-rung pitch ratchet.
+   */
   function cue(name, rung) {
-    if (!armed() || !name) return;
+    if (!armedBase || destroyed || stopped || !name) return;
     const level = Math.min(audioCeil, P.CUE_LEVEL_BASE + rung * P.CUE_LEVEL_STEP);
     count('cue');
     try {

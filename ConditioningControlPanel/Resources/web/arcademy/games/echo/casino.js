@@ -360,8 +360,13 @@ export function createEcCasino(o) {
 
   /* ---- the engine, counted ------------------------------------------------ */
   const counts = { cues: 0, jackpots: 0, nearMisses: 0, pulses: 0, words: 0, remixSteps: 0, resisted: 0 };
+  /* THE DECOUPLE (W2 sec 3, owner ruling: a visual dial must not mute the room).
+   * Every LIGHT below stays behind armed(); the cue road gates on everything
+   * EXCEPT capsOk, because bgIntensity 0 is the player's visual exit (Law VI),
+   * not a mute. */
+  const sounds = () => armedBase && !destroyed;
   function cue(name, level, extra) {
-    if (!armed()) return;
+    if (!sounds()) return;
     counts.cues++;
     const lv = Math.min(audioCeil, Math.max(0, Number(level) || 0));
     try {

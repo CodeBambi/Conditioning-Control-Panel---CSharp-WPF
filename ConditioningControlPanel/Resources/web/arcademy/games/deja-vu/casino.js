@@ -79,6 +79,10 @@ function clamp01(v) { const n = Number(v) || 0; return n < 0 ? 0 : n > 1 ? 1 : n
  * @param {Object}   o.timers    {after(ms,fn)->id, cancel(id)}
  * @param {boolean}  o.reduced   reduced motion
  * @param {boolean}  o.capsOk    false when bgIntensity is capped to 0
+ * @param {Function=} o.cue     the GAME's clamped audio helper, cue(name, level, extra).
+ *                              THE CUE ROAD (W2): deliberately NOT part of armed() -
+ *                              bgIntensity 0 is the player's VISUAL exit (Law VI), and a
+ *                              visual dial must not mute the school. See sounds() below.
  * @param {Function=} o.log
  */
 export function createDvCasino(o) {
@@ -88,6 +92,11 @@ export function createDvCasino(o) {
   const reduced = !!opts.reduced;
   const armed = !!opts.capsOk && !!opts.stage && !!opts.bench && !!timers
     && typeof document !== 'undefined';
+  /* THE DECOUPLE (W2): the deck's own audio gate. It shares everything with
+   * armed() EXCEPT capsOk - the marquee can be dark and the frame still sighs.
+   * Every cue site tests sounds(); no visual site does. */
+  const cue = typeof opts.cue === 'function' ? opts.cue : () => {};
+  const sounds = () => !destroyed;
 
   const seedBase = String(opts.seed || 'dv') + '|dv-casino|';
   const streams = new Map();
@@ -229,6 +238,10 @@ export function createDvCasino(o) {
 
     /** The bell took the board: the frame sighs out instead of cutting. */
     dimOut() {
+      // ...and it is heard, not just seen: a slide pitched DOWN is the sigh.
+      // Fires before the visual work so it lands on the same frame, and it is
+      // outside the capsOk gate on purpose - a dark marquee still exhales.
+      if (sounds()) cue('slide', 0.3, { pitch: 0.8 });
       bellOn = false;
       if (mq && mq.classList) {
         mq.classList.remove('g-dv-mq-bell', 'g-dv-mq-flash');

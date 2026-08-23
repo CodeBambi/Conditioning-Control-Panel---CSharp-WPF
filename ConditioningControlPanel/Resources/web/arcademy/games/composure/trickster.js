@@ -313,6 +313,8 @@ export function worstSlide(tiles, blank, pick) {
  * @param {Object|Function} o.preview  the .g-cp-preview lie layer (or () => it)
  * @param {Function} o.tiles       () => HTMLElement[] (live tiles)
  * @param {Function=} o.announce   (text, ms) => void (optional proctor line)
+ * @param {Function=} o.cue        CORE's own clamped cue(name, level, extra) - THE DECK'S
+ *                                 ONLY VOICE. No deck ever holds an audio node (House Book).
  * @param {Object=}  o.engine      CORE's deckEngine (fire used for glitch_swap on the lie layer)
  * @param {Function=} o.t          ctx.lexicon (optional; English fallbacks here)
  * @param {number=}  o.budgetSec   class budget (else stats().budgetSec, else 120)
@@ -326,8 +328,27 @@ export function createCpTrickster(o) {
   const t = typeof opts.t === 'function' ? opts.t : (k, f) => (f == null ? k : f);
   const tier = clampTier(opts.tier);
   const reduced = !!opts.reduced;
-  const armed = !!opts.capsOk && !!opts.timers && typeof opts.timers.after === 'function'
+  const armedBase = !!opts.timers && typeof opts.timers.after === 'function'
     && typeof document !== 'undefined';
+  /** VISUALS: capsOk false is the player's exit and this deck stays dark. */
+  const armed = armedBase && !!opts.capsOk;
+  /* THE DECK'S VOICE (W2). The header has promised since Semester II that the
+   * stat flicker "corrects itself with a static pop"; it was mute. The road is
+   * CORE's own clamped helper, handed down at the construction site - this
+   * file never touches an audio node and never fires the engine for sound
+   * (House Book: shell/audio.js is the one audio owner). The gate excludes
+   * capsOk on purpose: a capped bgIntensity is a VISUAL exit (Law VI), not an
+   * audio one. It is still true that a dark deck deals no cards and so makes
+   * no sound - every beat this deck owns IS a picture; the road is split so a
+   * later game-called beat cannot be muted by a visual dial. */
+  const cueFn = typeof opts.cue === 'function' ? opts.cue : () => {};
+  const sounds = () => armedBase && !destroyed;
+  let cues = 0;
+  function cue(name, level, extra) {
+    if (!name || !sounds()) return;
+    cues += 1;
+    try { cueFn(name, level, extra || {}); } catch (e) { /* a refused cue is not an error */ }
+  }
   const isHalted = typeof opts.isHalted === 'function' ? opts.isHalted : () => false;
   const stats = typeof opts.stats === 'function' ? opts.stats : () => null;
   const chipEl = typeof opts.chipEl === 'function' ? opts.chipEl : () => null;
@@ -647,6 +668,9 @@ export function createCpTrickster(o) {
     if (!reduced && chip.classList) chip.classList.add('g-cp-statlie');
     fired.flicker += 1;
     after(T.FLICKER_MS, () => {
+      /* THE STATIC POP: the self-correction is the beat - the count snapping
+       * back to the truth is what the header promised out loud. */
+      cue('decoy', 0.35);
       try { if (chip.classList) chip.classList.remove('g-cp-statlie'); } catch (e) { /* ignore */ }
       const now = chipText('moves');
       if (now != null) { try { chip.textContent = now; } catch (e) { /* ignore */ } }
@@ -728,6 +752,9 @@ export function createCpTrickster(o) {
     try { pick.el.classList.add('g-cp-melt'); } catch (e) { return; }
     melted = pick.el;
     fired.melt += 1;
+    /* one loose tile starts to run: a slide dropped a whole tone (the same
+     * sigh the darkroom's wax wears - one school, one vocabulary) */
+    cue('slide', 0.28, { pitch: 0.8 });
     if (announce && !meltAnnounced && !reduced) {
       meltAnnounced = true;
       try { announce(say_t('cp_trick_melt', 'One of them is running.'), 2000); } catch (e) { /* ignore */ }
@@ -855,7 +882,7 @@ export function createCpTrickster(o) {
     /** Diagnostics for the harness; not part of the module contract. */
     diagnostics() {
       return {
-        armed, tier, started, deals: deals.slice(), fired: Object.assign({}, fired),
+        armed, sounds: sounds(), cues, tier, started, deals: deals.slice(), fired: Object.assign({}, fired),
         previewArmed, previewOn, previewVariant, ghostsLive: ghosts.length, solvedPlayed,
         melted: !!melted, ghost: !!ghost, lastWorst, washOn: washIsOn,
         clock: { armed: clockArmed, lies: clockLies, budget: budgetSeen, observer: !!clockObs },

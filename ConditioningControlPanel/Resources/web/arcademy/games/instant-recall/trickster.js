@@ -281,7 +281,8 @@ export function createIrTrickster(o) {
     if (typeof opts.capsOk === 'function') { try { return !!opts.capsOk(); } catch (e) { return false; } }
     return opts.capsOk !== false;
   }
-  const armed = capsOkNow() && !!opts.timers && typeof opts.timers.after === 'function' && typeof document !== 'undefined';
+  const soundsBase = !!opts.timers && typeof opts.timers.after === 'function' && typeof document !== 'undefined';
+  const armed = capsOkNow() && soundsBase;
 
   /* ---- timers: the game's registry + a local set ---------------------- */
   const live = new Set();
@@ -289,6 +290,21 @@ export function createIrTrickster(o) {
   const cancelFn = opts.timers && (opts.timers.clear || opts.timers.cancel);
   let destroyed = false;
   let stopped = false;
+
+  /* ---- THE CUE ROAD (W2 sec 2/sec 3) ----------------------------------------
+   * This deck asks the engine for nothing and holds no audio node: CORE hands
+   * down its OWN clamped helper as `opts.cue`, so every cue lands under this
+   * tier's ceiling ({0.32,0.38,0.44,0.50}). THE DECOUPLE (sec 3, owner ruling):
+   * `sounds()` deliberately does NOT read capsOk - bgIntensity 0 is the
+   * player's VISUAL exit (Law VI) and may not mute the school. Each cue site
+   * below still sits on its own visual beat, so a class with the lights off
+   * simply never reaches one; that is the honest answer, not a second gate. */
+  const cueFn = typeof opts.cue === 'function' ? opts.cue : null;
+  const sounds = () => soundsBase && !destroyed && !stopped;
+  function cue(name, level, extra) {
+    if (!cueFn || !sounds()) return;
+    try { cueFn(name, level, extra); } catch (e) { /* a refused cue is not an error */ }
+  }
   function after(ms, fn) {
     if (!armed || destroyed) return 0;
     let id = 0;
@@ -432,6 +448,13 @@ export function createIrTrickster(o) {
   }
   function restoreFlick() {
     if (!flickChip) return;
+    /* THE STATIC POP. This file's header has promised it since Semester II
+     * ("then 'corrects' with a static pop") and there was never a cue behind
+     * it. `decoy` is the school's bit-crushed noise for a lie folding, on the
+     * SAME beat the chip snaps back to truth. Always in the VIGIL, never on a
+     * live slip - dealFlicker() refuses a stop - so it can never colour an
+     * answer window. */
+    cue('decoy', 0.35);
     setCls(flickChip, 'g-ir-tk-flick', false);
     try {
       // stand down if a real repaint already landed under the lie
@@ -645,7 +668,16 @@ export function createIrTrickster(o) {
     if (stalled) {
       const p = lurePoint();
       if (p) { gx += (p.x - gx) * K.GHOST_LERP; gy += (p.y - gy) * K.GHOST_LERP; }
-      if (ghostMode !== 'lure') { fired.lure++; ghostMode = 'lure'; }
+      if (ghostMode !== 'lure') {
+        fired.lure++;
+        ghostMode = 'lure';
+        /* THE LURE. Law III above says "the ghost pulses on the lure" - one
+         * `near` tease as it stops trailing and leans toward the option the
+         * house prefers. Once per lure, not per 8Hz tick: this branch only
+         * runs on the mode change. A one-shot ping carries no answer, so it
+         * is honest over a live slip. */
+        cue('near', 0.35);
+      }
       setCls(ghostEl, 'is-on', true);
       setCls(ghostEl, 'is-lure', true);
     } else {

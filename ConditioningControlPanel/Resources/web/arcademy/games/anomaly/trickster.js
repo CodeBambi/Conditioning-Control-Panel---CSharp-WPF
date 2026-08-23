@@ -292,6 +292,8 @@ function rectOf(node) {
  * @param {Object=}   o.assets     {next(kind)} CORE's live pool reader (getStill fallback)
  * @param {Function=} o.chromeEls  () => HTMLElement[] (HUD chrome the flicker may wear; else the chips)
  * @param {Function=} o.announce   (text, ms) => void (the proctor line)
+ * @param {Function=} o.cue        CORE's own clamped cue(name, level, extra) - THE DECK'S
+ *                                 ONLY VOICE. No deck ever holds an audio node (House Book).
  * @param {number=}  o.budgetSec   class budget (default 90)
  * @param {boolean=} o.coarse      coarse pointer (no ghost)
  * @param {Function=} o.log
@@ -330,6 +332,21 @@ export function createAnTrickster(o) {
   const armedBase = !!opts.timers && typeof opts.timers.after === 'function' && typeof document !== 'undefined';
   let destroyed = false;
   const armed = () => armedBase && !destroyed && capsOk();
+  /* THE DECK'S VOICE (W2). Three of this deck's cards were described in the
+   * header as making a SOUND ("corrects itself with a static pop") and every
+   * one of them was mute since Semester II. The road is CORE's own clamped
+   * helper, handed down at the construction site - this file never touches an
+   * audio node and never fires the engine itself (House Book: shell/audio.js
+   * is the one audio owner). The gate deliberately excludes capsOk: a capped
+   * bgIntensity is the player's VISUAL exit (Law VI), not an audio one. */
+  const cueFn = typeof opts.cue === 'function' ? opts.cue : () => {};
+  const sounds = () => armedBase && !destroyed;
+  let cues = 0;
+  function cue(name, level, extra) {
+    if (!name || !sounds()) return;
+    cues++;
+    try { cueFn(name, level, extra || {}); } catch (e) { /* a refused cue is not an error */ }
+  }
 
   /* timers: the game's registry + a local set */
   const live = new Set();
@@ -479,6 +496,9 @@ export function createAnTrickster(o) {
     if (!reduced) setCls(chip, 'g-an-tk-flick', true);
     fired.flicker++;
     after(T.FLICKER_MS, () => {
+      /* THE STATIC POP: the self-correction is the beat, not the lie - the
+       * number snapping back to the truth is what the header promised. */
+      cue('decoy', 0.35);
       setCls(chip, 'g-an-tk-flick', false);
       const now = chipText(which);
       if (now != null) { try { chip.textContent = now; } catch (e) { /* ignore */ } }
@@ -567,6 +587,9 @@ export function createAnTrickster(o) {
     if (img) { img.alt = ''; try { img.setAttribute('draggable', 'false'); } catch (e) { /* noop */ } img.src = url; node.appendChild(img); }
     host.appendChild(node);
     fired.chrome++;
+    /* one beat of someone else's memory over the chrome: a glitch, and the
+     * same recipe CORE fires when the anomaly itself relocates */
+    cue('glitch', 0.3);
     after(T.CHROME_MS, () => { try { node.remove(); } catch (e) { /* ignore */ } });
     if (announce && roll('seen') < T.SEEN_TAUNT_CHANCE) { try { announce(tt('an_trick_seen', 'Did you see that?'), 1600); } catch (e) { /* noop */ } }
     say('trickster: chrome flicker');
@@ -613,6 +636,8 @@ export function createAnTrickster(o) {
     if (typeof wax.offsetWidth === 'number') void wax.offsetWidth;
     setCls(wax, 'on', true);
     fired.melt++;
+    /* the wax sheet slides down the frame: a slide dropped a whole tone */
+    cue('slide', 0.28, { pitch: 0.8 });
     /* THE FOLLOW: a melt dealt into a new-sheet transition measured a moving
        frame (rig 2026-08-23: the wax sat between two tiles). Six more reads of
        ONE tile over the melt's life keep the wax on the frame - reads, never
@@ -833,7 +858,7 @@ export function createAnTrickster(o) {
     },
     diagnostics() {
       return {
-        armed: armed(), tier, deals: deals.slice(), fired: Object.assign({}, fired), folded: Object.assign({}, folded),
+        armed: armed(), sounds: sounds(), cues, tier, deals: deals.slice(), fired: Object.assign({}, fired), folded: Object.assign({}, folded),
         melted: !!wax, ghost: !!ghost, ghostSeen, meltVeto: meltArmed, stage: !!stageEl,
         clock: { armed: clockArmed, lies: clockLies, budget: budgetSeen, observer: !!clockObs },
         lexiconUsed: Array.from(lexiconUsed), lexicon: AN_TRICKSTER_LEX.slice(), layer: !!layer, liveTimers: live.size,

@@ -52,6 +52,18 @@ const BANDS = Object.freeze({
 });
 const BAND_ORDER = Object.freeze(['S', 'A', 'B', 'C']);
 
+/** THE TIER AUDIO CEILING (House Book): every cue homeroom requests is clamped
+ *  to its grade tier's ceiling, indexed by gradeTier-1. The clamp lives inside
+ *  tick() so no call site - this file's, ladder.js's, casino.js's or
+ *  trickster.js's - can route around it. Same discipline as
+ *  games/anomaly/index.js cue() against plan.audioCeil. */
+const AUDIO_CEIL = Object.freeze([0.45, 0.6, 0.75, 0.9]);
+
+/** A refused press (a letter into a full row, a backspace over an empty one, a
+ *  key while the ceremony holds the room) answers with ONE muted bump, and a
+ *  mashed keyboard must not machine-gun it. */
+const BUMP_MIN_MS = 250;
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -199,12 +211,42 @@ export default {
       try { return ctx.engine ? ctx.engine.fire(kind, opts || {}) : null; }
       catch (e) { say('fire(' + kind + ') failed: ' + ((e && e.message) || e)); return null; }
     }
+    /**
+     * THE ONE ROAD. Every cue - homeroom's own, and every deck's - lands here
+     * and is clamped to the grade tier's audio ceiling, so a level is never
+     * louder than the year allows. The third argument takes either a bare
+     * pitch (every call site that predates W2) or an `extra` object, which is
+     * the shape the decks are handed as opts.cue.
+     */
     function tick(name, level, pitch) {
-      const o = { name, level: level == null ? 0.3 : level, bus: 'fx' };
+      const extra = (pitch && typeof pitch === 'object') ? pitch : null;
+      const p = extra ? extra.pitch : pitch;
+      const o = Object.assign({ bus: 'fx' }, extra || {});
+      o.name = name;
+      const ceil = AUDIO_CEIL[tier - 1] || AUDIO_CEIL[0];
+      o.level = Math.min(ceil, level == null ? 0.3 : level);
       // the chime ladder climbs in PITCH, not tempo (shell/audio.js seam)
-      if (Number.isFinite(pitch)) o.pitch = Math.max(0.5, Math.min(2, pitch));
+      if (Number.isFinite(p)) o.pitch = Math.max(0.5, Math.min(2, p));
+      else delete o.pitch;
       fx('audio_trigger', o);
     }
+    /** The refused-input bump, throttled (BUMP_MIN_MS). */
+    let lastBumpAt = 0;
+    function refused() {
+      const now = Date.now();
+      if (now - lastBumpAt < BUMP_MIN_MS) return;
+      lastBumpAt = now;
+      tick('bump', 0.3);
+    }
+    /**
+     * blocked() bundles four very different states and only ONE of them is a
+     * refusal we own. Mid-reveal the room is genuinely saying no. Paused and
+     * suspended belong to the shell (its own pause/resume cues, W1) and a key
+     * there must not knock; `finished` is the report card walking in; and
+     * while the ceremony is up EVERY key is a verb - it skips - so answering
+     * it with a refusal would call a working button broken.
+     */
+    function refusedByRoom() { if (revealing) refused(); }
     function beat(garnish) {
       try { if (ctx.engine && ctx.engine.beat) ctx.engine.beat({ garnish: !!garnish }); }
       catch (e) { say('beat failed: ' + ((e && e.message) || e)); }
@@ -402,9 +444,11 @@ export default {
     }
 
     function addLetter(ch) {
-      if (blocked()) return;
+      // A key pressed into a held room (ceremony / reveal / pause) or into a
+      // row that is already full is a REFUSED press, not a silent one.
+      if (blocked()) { refusedByRoom(); return; }
       const i = nextEmpty();
-      if (i < 0) return;
+      if (i < 0) { refused(); return; }
       cur[i] = String(ch || '').toLowerCase();
       tick('blip', 0.18);
       msg('');
@@ -412,11 +456,15 @@ export default {
     }
 
     function backspace() {
-      if (blocked()) return;
+      if (blocked()) { refusedByRoom(); return; }
+      let took = false;
       for (let i = cur.length - 1; i >= 0; i--) {
         if (i === hintIndex && hintLetter) continue;
-        if (cur[i]) { cur[i] = ''; break; }
+        if (cur[i]) { cur[i] = ''; took = true; break; }
       }
+      // A backspace over an empty row used to answer with a BRIGHT tick for a
+      // letter it never deleted. Nothing moved: it is a refusal.
+      if (!took) { refused(); return; }
       tick('blip', 0.12);
       paintCurrentRow();
     }
@@ -453,7 +501,7 @@ export default {
     }
 
     function commit() {
-      if (blocked()) return;
+      if (blocked()) { refusedByRoom(); return; }
       const guess = cur.join('');
       if (guess.length !== entry.letters || cur.some((c) => !c)) { reject(REJECT.SHORT); return; }
       const acc = isAcceptable(guess, entry);
@@ -870,7 +918,13 @@ export default {
 
       const go = el('button', 'g-dt-hw-go', t('dt_howto_go', 'Start homeroom'));
       go.type = 'button';
-      go.addEventListener('click', () => { try { onGo(); } catch (e) { say('howto go: ' + ((e && e.message) || e)); } });
+      go.addEventListener('click', () => {
+        // THE START PRESS. This one button dismisses the sheet AND opens
+        // homeroom, so it wears the school's start cue, not a page-turn
+        // slide - the sheet is a single page and has no turns.
+        tick('lift', 0.5);
+        try { onGo(); } catch (e) { say('howto go: ' + ((e && e.message) || e)); }
+      });
       sheet.appendChild(go);
       try { if (typeof go.focus === 'function') go.focus(); } catch (e) { /* noop */ }
       return sheet;
@@ -958,6 +1012,7 @@ export default {
           log: say,
           reduced,
           roll,
+          cue: tick,                     // THE CUE ROAD - clamped by the game
           pollution: pollutionWords(dateUtc, 12, entry.answer),
           targets: {
             keyRows: () => keyNodes.slice(),
@@ -975,6 +1030,7 @@ export default {
           slab, wrap,
           timers: deckTimers,
           reduced, capsOk,
+          cue: tick,                     // THE CUE ROAD - clamped, never capsOk-gated
           log: say,
         });
         trickster = createDtTrickster({
@@ -983,6 +1039,7 @@ export default {
           budgetSec: Number(spec.timeBudgetSec) || 90,
           timers: deckTimers,
           reduced, capsOk,
+          cue: tick,                     // THE CUE ROAD - clamped, never capsOk-gated
           getRung: () => (ladder ? ladder.rung : 0),
           isHalted: blocked,
           stats: () => ({
