@@ -84,7 +84,17 @@ because hand-maintained counts are the exact failure the citation-regenerate wor
 
 Three port citations into upstream localization resolve to the wrong lines
 (`Localization/Languages/en.json:3394`, `:4704`, `:4705`, cited by `Haptics/HapticGate.cs:89` and
-`Features/Dtrh/DtrhGate.cs:45`), as does `Features/Goon/GoonProtocol.cs:122`'s `UpdateService.cs:319`.
+`Features/Dtrh/DtrhGate.cs:45`). Re-verified while writing this: `msg_haptic_feedback_patreon_only`
+is at `:3403`, nine lines off, and `:4704-4705` land on achievement text rather than the tier and
+upgrade strings the citation names.
+
+**A FOURTH ONE I NAMED HERE WAS MY OWN MISREADING, AND IT IS RETRACTED.** I listed
+`Features/Goon/GoonProtocol.cs:122`'s `UpdateService.AppVersion (:319)` as rot. It is correct as
+written: that `:319` is a BARE CONTINUATION of the enclosing `GoonHostService.cs` context the same
+doc-comment establishes at `:318` and `:347`, and `GoonHostService.cs:319` reads
+`appVersion = UpdateService.AppVersion,` exactly. I read the bare `:319` as pointing at
+`UpdateService.cs` and did not check the enclosing context before writing it down - which is the
+same failure mode this section is about, committed while documenting it.
 **All four were already wrong at the v6.8.3 baseline** - checked with `git show <base>:<file>` rather
 than assumed - so they belong to the existing citation-inventory and uncited-reference rows, not to
 this sync. Recording the check matters as much as the finding: a sync that claims credit for
