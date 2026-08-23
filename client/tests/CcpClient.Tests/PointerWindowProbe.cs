@@ -268,6 +268,14 @@ internal static class PointerWindowProbe
             return false;
         }
 
+        // THE CLICK IS WHAT ARMS THE REVOCATION, so the floor goes up here and nowhere else.
+        // RealDesktopWindowFloor carries the measurement; the short version is that a thread which
+        // reaches ZERO top-level windows after one of them was clicked costs the WHOLE PROCESS the
+        // top-most band, permanently and silently. This call is idempotent and per-thread, and it
+        // sits at the INJECTION rather than at any one caller, so every present and future clicked
+        // window on whatever thread does the clicking is covered by construction.
+        RealDesktopWindowFloor.Ensure();
+
         var (nx, ny) = ToAbsolute(x, y);
 
         var inputs = new Input[3];

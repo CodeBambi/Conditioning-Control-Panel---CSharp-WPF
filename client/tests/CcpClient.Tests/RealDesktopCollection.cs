@@ -1080,3 +1080,104 @@ public static class DesktopPreflight
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
 }
+
+/// <summary>
+/// <b>One hidden, never-shown window per thread that injects a click, because a thread which
+/// reaches ZERO top-level windows after one of them was clicked costs the WHOLE PROCESS the
+/// top-most band — silently, and for good.</b>
+///
+/// <para><b>The rule, measured rather than reasoned.</b>
+/// <see href="https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowpos">
+/// <c>SetWindowPos</c></see> states the dependency outright: <i>"To use SetWindowPos to bring a
+/// window to the top, the process that owns the window must have SetForegroundWindow
+/// permission."</i> When that permission is absent, <c>SetWindowPos(HWND_TOPMOST)</c> RETURNS TRUE
+/// AND APPLIES NOTHING — no error and no last-error, which is why the product's own bounded
+/// re-assertion loop (<c>Overlay/Win32OverlayPresence.cs:504-546</c>) cannot recover from it: it is
+/// a refusal, not a race. <c>SetForegroundWindow</c>'s remarks list the conditions that grant the
+/// permission, and on a machine whose <c>ForegroundLockTimeout</c> is large the "time-out has
+/// expired" escape never fires.</para>
+///
+/// <para><b>What was measured, outside this suite, in about sixty lines of P/Invoke.</b>
+/// (1) Create a <c>WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW</c> pop-up, destroy it: the band survives.
+/// (2) Create it, <c>SendInput</c> a click at it, destroy it: the band is gone and stays gone.
+/// (3) Keep ANY other top-level window alive on the SAME THREAD across that destruction —
+/// including a hidden, never-shown, zero-sized one: the band survives.
+/// (4) A floor window held on a DIFFERENT thread does NOT help, which is why this is
+/// <see cref="ThreadStaticAttribute"/> and not a fixture-lifetime singleton: the trigger is scoped
+/// to the thread that owned the clicked window.
+/// (5) Once triggered the loss is PROCESS-WIDE — a different, never-poisoned thread is refused
+/// too — so one unprotected click poisons every later real-desktop fact in the run.</para>
+///
+/// <para><b>How the suite reached that state.</b> <c>PointerSurfaceObservations.RunDelivery</c>
+/// injects clicks into its own scratch targets and then disposes them; whichever target is disposed
+/// LAST takes its thread to zero windows, and every real-desktop fact afterwards is measured
+/// against a process that can no longer place a window in the top-most band. Bisected to that
+/// method by instrumenting seventeen points inside it: the band is held at every checkpoint in the
+/// body and lost at the <c>using</c> disposals, on whichever scratch target is disposed last —
+/// reversing the disposal order moves the loss to the other one.</para>
+///
+/// <para><b>Why this is not a paper-over.</b> It does not weaken a fact, retry one, or repair the
+/// permission after the fact. Repairing it with a teardown <c>SetForegroundWindow</c> would work
+/// and would be WRONG: that masks the revocation instead of not causing it, and would hide the next
+/// real regression of this class. What this does instead is make the test process REPRESENTATIVE of
+/// the product — the shipping app always owns at least one top-level window, the Avalonia main
+/// window or <c>Tray/Win32TrayPresence.cs</c>'s hidden owner window, so it can never walk itself to
+/// zero. The harness was entering a state the product cannot enter, and then reporting the
+/// consequences as product failures.</para>
+///
+/// <para><b>Why it cannot perturb what the collection measures.</b> The window is zero-sized, is
+/// never shown, is never raised and never joins the top-most band: it can win no hit test, own no
+/// point, occlude nothing, and it is absent from every <c>IsWindowVisible</c> enumeration this
+/// suite performs — including <see cref="DesktopPreflight"/>'s sentinel arbitration, which resolves
+/// owners with <c>WindowFromPoint</c> and so can never name a window that covers no pixel. It is
+/// <c>WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE</c>, so it is absent from the taskbar and Alt-Tab and can
+/// never take activation from the surfaces under test.</para>
+///
+/// <para><b>Named limits.</b> It is armed at <c>PointerWindowProbe.InjectClickAt</c>, the only
+/// place in this suite that injects a click; a future probe that synthesises input by some other
+/// route must call <see cref="Ensure"/> itself, and nothing mechanical enforces that yet. The
+/// window is never destroyed: it dies with its thread or with the process, because
+/// <c>DestroyWindow</c> is refused from any thread but the owning one, and a floor that could be
+/// torn down early would be a floor that is not a floor. Whether the same revocation is armed by
+/// injected KEYSTROKES rather than clicks is untested — <c>InputWindowProbe</c>'s facts take the
+/// foreground outright, so they hold the permission by a different route.</para>
+/// </summary>
+internal static class RealDesktopWindowFloor
+{
+    private const uint WsPopup = 0x80000000;
+    private const uint WsExToolwindow = 0x00000080;
+    private const uint WsExNoactivate = 0x08000000;
+
+    [ThreadStatic]
+    private static nint _floor;
+
+    /// <summary>
+    /// Idempotent, per-thread, and cheap enough to sit on the injection path: after the first call
+    /// on a thread it is one <c>IsWindow</c> check.
+    /// </summary>
+    internal static void Ensure()
+    {
+        if (!OperatingSystem.IsWindows() || (_floor != 0 && IsWindow(_floor)))
+        {
+            return;
+        }
+
+        // "Static" is a stock system class, so there is no class to register and no window procedure
+        // to keep alive. Zero-sized and NEVER shown: it has to be countable, not visible.
+        _floor = CreateWindowExW(
+            WsExToolwindow | WsExNoactivate, "Static", "CcpRealDesktopWindowFloor", WsPopup,
+            0, 0, 0, 0, 0, 0, 0, 0);
+    }
+
+    /// <summary>This thread's floor handle, or 0 where none is up. Read by the collection's own
+    /// control so a floor that silently stopped being created cannot pass unnoticed.</summary>
+    internal static nint Window => _floor;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint CreateWindowExW(
+        uint exStyle, string className, string windowName, uint style,
+        int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(nint window);
+}
