@@ -64,32 +64,57 @@ public static class SpiralLibrary
             return configuredPath;
         }
 
-        var folder = Folder(assetsRoot);
+        var candidates = ListFolder(Folder(assetsRoot));
+        return candidates.Count > 0 ? candidates[0] : null;
+    }
+
+    /// <summary>
+    /// Everything the library holds, in the order the picker offers it and the order
+    /// <see cref="Resolve"/> falls back through — upstream's own <c>RefreshLibrary</c> enumeration
+    /// (<c>Features/SpiralFeatureControl.xaml.cs:253-278</c>), which is where its SPIRAL LIBRARY
+    /// card's cards come from.
+    ///
+    /// <para><b>Ordinal, so the choice is the same on every machine and in every run.</b> WPF's
+    /// enumeration order feeds a randomiser and therefore does not matter upstream; here it is both
+    /// the picker's order AND, for a user who has picked nothing, the choice itself — so it is
+    /// pinned rather than left to the file system. (Upstream sorts by file name
+    /// case-insensitively at <c>:262</c>; ordinal on the full path is this port's existing rule and
+    /// is kept, because changing it would change which spiral an unconfigured install draws.)</para>
+    ///
+    /// <para><b>Never throws</b>, for the same reason <see cref="Resolve"/> does not: a folder that
+    /// cannot be read is the same outcome as a folder with nothing in it, which is what WPF's own
+    /// <c>try { … } catch { }</c> around its enumeration says (<c>:280-283</c>). An empty list is an
+    /// ordinary first-run state, not an error.</para>
+    /// </summary>
+    /// <param name="spiralsFolder">The library folder — <see cref="Folder"/>'s answer, which is
+    /// also what <c>SessionParticipant.SpiralsFolder</c> already hands the panel, so the picker and
+    /// the panel's own library line cannot end up looking at two different places.</param>
+    public static IReadOnlyList<string> ListFolder(string spiralsFolder)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(spiralsFolder);
+
         try
         {
-            if (!Directory.Exists(folder))
+            if (!Directory.Exists(spiralsFolder))
             {
-                return null;
+                return [];
             }
 
-            // Ordinal, so the choice is the same on every machine and in every run. WPF's
-            // enumeration order feeds a randomiser and therefore does not matter upstream; here it
-            // IS the choice, so it is pinned rather than left to the file system.
-            var candidates = Directory.GetFiles(folder)
-                .Where(static file => Extensions.Contains(
-                    Path.GetExtension(file), StringComparer.OrdinalIgnoreCase))
-                .Order(StringComparer.Ordinal)
-                .ToList();
-
-            return candidates.Count > 0 ? candidates[0] : null;
+            return
+            [
+                .. Directory.GetFiles(spiralsFolder)
+                    .Where(static file => Extensions.Contains(
+                        Path.GetExtension(file), StringComparer.OrdinalIgnoreCase))
+                    .Order(StringComparer.Ordinal),
+            ];
         }
         catch (IOException)
         {
-            return null;
+            return [];
         }
         catch (UnauthorizedAccessException)
         {
-            return null;
+            return [];
         }
     }
 }

@@ -112,6 +112,15 @@ public partial class StudioPage : UserControl
     /// </summary>
     private readonly IReadOnlyList<Control> _sessionOwned;
 
+    /// <summary>
+    /// The library files the spiral picker is currently offering, index-aligned with its items
+    /// after the leading "library default" entry. Rebuilt by the Refresh button and on every load,
+    /// never cached across one — the folder is the user's and can change under the app, which is
+    /// why upstream has a Refresh button at all
+    /// (<c>Features/SpiralFeatureControl.xaml:180</c>).
+    /// </summary>
+    private IReadOnlyList<string> _spiralLibrary = [];
+
     private readonly List<(RadioButton Row, ScriptedSession Session)> _scriptedRows = [];
     private ScriptedSession? _scriptedSelection;
     private ScriptedConfirmIntent _scriptedConfirm;
@@ -328,6 +337,17 @@ public partial class StudioPage : UserControl
         RampLinkFlashToggle.IsCheckedChanged += (_, _) =>
             OnRampSwitch(RampLinkFlashToggle, _ramp.Preset.LinkFlashOpacity, _ramp.SetLinkFlashOpacity);
         RampCurvePicker.SelectionChanged += (_, _) => OnRampCurvePicked();
+
+        // THE TWO PICKERS. Both were backends with nothing in front of them: SpiralLibrary resolved
+        // a file nobody could choose, and PinkFilterColour parsed a hex string nobody could write.
+        // The tint's items never change, so they are built once here; the spiral's are the contents
+        // of a folder and are rebuilt whenever the user asks or the dials reload.
+        PinkFilterTintPicker.ItemsSource =
+            StudioPickerNotices.TintPalette.Select(entry => entry.Label).ToList();
+        PinkFilterTintPicker.SelectionChanged += (_, _) => OnTintPicked();
+        PinkFilterTintResetButton.Click += (_, _) => OnTintReset();
+        SpiralPicker.SelectionChanged += (_, _) => OnSpiralPicked();
+        SpiralRefreshButton.Click += (_, _) => OnSpiralLibraryRefreshed();
 
         OnSliderMoved(FlashFrequencySlider, OnFrequencyMoved);
         OnSliderMoved(FlashImagesSlider, OnImagesPerFlashMoved);
@@ -600,6 +620,106 @@ public partial class StudioPage : UserControl
     /// -&gt; <c>UpdateSpiralOpacity</c>). The re-apply goes through the module rather than the
     /// surface so the arm state and the dot move with it.
     /// </summary>
+    /// <summary>
+    /// Fill the spiral picker from the folder and select what the document says is in force.
+    ///
+    /// <para>Item 0 is always "let the library choose" — the empty path — and every later item is
+    /// one file, so the selected index maps to <see cref="_spiralLibrary"/> minus one. A configured
+    /// path whose file is no longer there falls back to item 0, which is exactly what
+    /// <see cref="SpiralLibrary.Resolve"/> does with the same string
+    /// (<c>Services/Notifications/OverlayService.cs:302-304</c>): the picker must not claim a file
+    /// the module would not draw.</para>
+    /// </summary>
+    private void LoadSpiralPicker(string configuredPath)
+    {
+        _spiralLibrary = SpiralLibrary.ListFolder(_session.SpiralsFolder);
+
+        var items = new List<string> { StudioPickerNotices.SpiralLibraryDefault };
+        items.AddRange(_spiralLibrary.Select(StudioPickerNotices.SpiralLabel));
+        SpiralPicker.ItemsSource = items;
+
+        var index = string.IsNullOrWhiteSpace(configuredPath)
+            ? -1
+            : _spiralLibrary.ToList().FindIndex(
+                path => string.Equals(path, configuredPath, StringComparison.Ordinal));
+        SpiralPicker.SelectedIndex = index < 0 ? 0 : index + 1;
+    }
+
+    /// <summary>
+    /// The user picked a spiral. Upstream's <c>SelectSpiral</c> writes the path, saves and
+    /// reconciles the live overlay (<c>Features/SpiralFeatureControl.xaml.cs:378-400</c>); the
+    /// module owns the first and third of those and this owns the save, exactly as the opacity
+    /// slider beside it does.
+    /// </summary>
+    private void OnSpiralPicked()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var index = SpiralPicker.SelectedIndex;
+        var path = index >= 1 && index - 1 < _spiralLibrary.Count ? _spiralLibrary[index - 1] : string.Empty;
+        _spiral.SetSpiralPath(path);
+        _ = _session.SpiralPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// Upstream's <c>⟳ Refresh</c> (<c>Features/SpiralFeatureControl.xaml:176-184</c> -&gt;
+    /// <c>RefreshLibrary()</c>): re-read the folder, because the user just dropped a file into it.
+    /// It changes no dial — the selection is re-derived from the document, so a file that vanished
+    /// while the app was running is reflected here rather than silently kept.
+    /// </summary>
+    private void OnSpiralLibraryRefreshed()
+    {
+        _syncing = true;
+        try
+        {
+            LoadSpiralPicker(_session.SpiralPreset.Current.Path);
+        }
+        finally
+        {
+            _syncing = false;
+        }
+
+        Refresh();
+    }
+
+    /// <summary>
+    /// The user picked a tint. Upstream's <c>BtnChooseColor_Click</c> without the Win32 dialog
+    /// (<c>Features/PinkFilterFeatureControl.xaml.cs:176-193</c>): write the hex, save, re-tint what
+    /// is on screen. Palette entry 0 carries the empty string, so picking "Hot pink (the default)"
+    /// and pressing Reset land on the same stored value — which is upstream's, where the two
+    /// handlers also differ only in the string they write.
+    /// </summary>
+    private void OnTintPicked()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var index = SafePickerIndex(PinkFilterTintPicker.SelectedIndex, StudioPickerNotices.TintPalette.Count);
+        _pinkFilter.SetTintColour(StudioPickerNotices.TintPalette[index].Hex);
+        _ = _session.PinkFilterPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// Upstream's <c>BtnResetColor_Click</c> (<c>:195-202</c>): the empty string, which is stored
+    /// as "use the default tint". It drives the PICKER rather than the document directly, so the
+    /// control and the setting cannot disagree about what just happened — the same reason the
+    /// scheduler's boxes reload from the document rather than from the click.
+    /// </summary>
+    private void OnTintReset() => PinkFilterTintPicker.SelectedIndex = 0;
+
+    /// <summary>A <see cref="ComboBox"/> with nothing selected reports -1, which no palette has an
+    /// entry for; the default is entry 0, for the reason
+    /// <see cref="StudioPickerNotices.TintIndexOf"/> gives.</summary>
+    private static int SafePickerIndex(int index, int count) =>
+        index >= 0 && index < count ? index : 0;
+
     private void OnSpiralOpacityMoved()
     {
         if (_syncing)
@@ -1609,6 +1729,8 @@ public partial class StudioPage : UserControl
             var spiral = _session.SpiralPreset.Current;
             SpiralEnableToggle.IsChecked = spiral.Enabled;
             SpiralOpacitySlider.Value = spiral.OpacityPercent;
+            LoadSpiralPicker(spiral.Path);
+            PinkFilterTintPicker.SelectedIndex = StudioPickerNotices.TintIndexOf(pink.Colour);
 
             var bouncing = _session.BouncingTextPreset.Current;
             BouncingTextEnableToggle.IsChecked = bouncing.Enabled;

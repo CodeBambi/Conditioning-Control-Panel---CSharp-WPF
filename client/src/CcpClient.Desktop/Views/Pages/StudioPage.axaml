@@ -901,6 +901,33 @@
                        Text="" />
           </Grid>
 
+          <!-- THE SPIRAL LIBRARY PICKER — upstream's SPIRAL LIBRARY card
+               (Features/SpiralFeatureControl.xaml:151-199, .xaml.cs:253-400), which is a picker and
+               not a dial and is therefore NOT session-locked: upstream leaves it unmarked, and this
+               port's scripted session never writes SpiralPath either.
+
+               A NAMED LIST rather than upstream's wall of thumbnail cards. The port bundles no art
+               (D86), so every entry is a file the USER dropped in and named; a preview pane is
+               still absent and still recorded. Refresh is upstream's own button (:180) and it is
+               owed for upstream's own reason: the folder can change while the app is running. There
+               is no "Open folder" and no file dialog — this picker only ever offers what the
+               library already holds. -->
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Spiral" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      x:Name="SpiralPicker"
+                      HorizontalAlignment="Stretch"
+                      AutomationProperties.AutomationId="SpiralPicker"
+                      AutomationProperties.Name="Spiral" />
+            <Button Grid.Row="0" Grid.Column="2"
+                    x:Name="SpiralRefreshButton"
+                    Classes="module-action"
+                    Margin="8,0,0,0"
+                    AutomationProperties.AutomationId="SpiralRefreshButton"
+                    AutomationProperties.Name="Refresh the spiral library"
+                    Content="Refresh" />
+          </Grid>
+
           <Border Classes="notice">
             <StackPanel Spacing="4">
               <TextBlock x:Name="SpiralLiveState"
@@ -969,6 +996,27 @@
                        Classes="dial-value"
                        AutomationProperties.AutomationId="PinkFilterOpacityValue"
                        Text="" />
+          </Grid>
+
+          <!-- THE TINT PICKER — upstream's colour row (Features/PinkFilterFeatureControl.xaml:90-107),
+               and NOT session-locked, because upstream leaves both of its buttons unmarked: a
+               session prescribes the filter's opacity, never its colour. Reset writes the empty
+               string upstream writes, which is what "use the default tint" is stored as. The
+               palette is bounded and StudioPickerNotices says why. -->
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Tint colour" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      x:Name="PinkFilterTintPicker"
+                      HorizontalAlignment="Stretch"
+                      AutomationProperties.AutomationId="PinkFilterTintPicker"
+                      AutomationProperties.Name="Tint colour" />
+            <Button Grid.Row="0" Grid.Column="2"
+                    x:Name="PinkFilterTintResetButton"
+                    Classes="module-action"
+                    Margin="8,0,0,0"
+                    AutomationProperties.AutomationId="PinkFilterTintResetButton"
+                    AutomationProperties.Name="Reset the tint colour"
+                    Content="Reset" />
           </Grid>
 
           <Border Classes="notice">
