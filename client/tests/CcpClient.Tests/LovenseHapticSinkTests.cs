@@ -224,7 +224,8 @@ public sealed class LovenseHapticSinkTests : IDisposable
     {
         // A port nothing is listening on. Bound and released, so the refusal is a real connection
         // refusal rather than a guess at an unused number.
-        var dead = HapticToyServer.ReserveAndReleasePort();
+        using var held = HapticToyServer.HoldFreePort();
+        var dead = HapticToyServer.UrlFor(held);
         using var sink = new LovenseHapticSink(_ => { }, dead, LovenseHapticSink.LovenseMode.Lan);
 
         var connect = await sink.ConnectAsync(TestContext.Current.CancellationToken);

@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Net;
 using System.Text;
 
@@ -70,30 +71,59 @@ internal sealed class HapticToyServer : IDisposable
         get { lock (_requests) { return [.. _requests.Select(r => r.Body + r.Query)]; } }
     }
 
-    /// <summary>Binds a loopback port and lets it go, so a refusal fact refuses against a port that
-    /// is genuinely free rather than one guessed to be.</summary>
-    public static string ReserveAndReleasePort()
+    /// <summary>
+    /// A loopback port that is HELD, not released — so a refusal fact refuses against a port nothing
+    /// can be listening on, and nothing else can take it mid-fact.
+    ///
+    /// <para><b>This replaces a reserve-then-release that was a real race and was caught being one.</b>
+    /// Binding a port, closing it, and then connecting leaves a window in which ANOTHER process can take
+    /// that exact port — and two concurrent runs of this suite on one machine do exactly that. Observed:
+    /// the no-server refusal fact went Degraded instead of Unavailable, because by the time it connected,
+    /// somebody else was listening on the port it had just let go.</para>
+    ///
+    /// <para>The socket is bound with <c>ExclusiveAddressUse</c> and <b>never listened on</b>. A TCP
+    /// connect to a bound-but-not-listening port is REFUSED, which is the condition the fact wants, and
+    /// holding the bind is what makes it stay true for the whole fact rather than for an instant.</para>
+    /// </summary>
+    public sealed class HeldPort : IDisposable
     {
-        var listener = new HttpListener();
-        for (var attempt = 0; attempt < 20; attempt++)
+        private readonly Socket _socket;
+
+        internal HeldPort(Socket socket, int port)
         {
-            var port = Random.Shared.Next(49152, 65535);
+            _socket = socket;
+            Port = port;
+        }
+
+        public int Port { get; }
+
+        public void Dispose() => _socket.Dispose();
+    }
+
+    /// <summary>Bind a loopback port and HOLD it, without ever listening on it.</summary>
+    public static HeldPort HoldFreePort()
+    {
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             try
             {
-                listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-                listener.Start();
-                listener.Stop();
-                listener.Close();
-                return $"http://127.0.0.1:{port}";
+                socket.ExclusiveAddressUse = true;
+                socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+                var port = ((IPEndPoint)socket.LocalEndPoint!).Port;
+                return new HeldPort(socket, port);
             }
-            catch (HttpListenerException)
+            catch (SocketException)
             {
-                listener.Prefixes.Clear();
+                socket.Dispose();
             }
         }
 
-        throw new InvalidOperationException("HapticToyServer: no loopback port available to reserve");
+        throw new InvalidOperationException("no loopback port could be bound and held");
     }
+
+    /// <summary>The held port as a http url, for a fact that wants one.</summary>
+    public static string UrlFor(HeldPort held) => $"http://127.0.0.1:{held.Port}";
 
     private async Task ServeLoop()
     {

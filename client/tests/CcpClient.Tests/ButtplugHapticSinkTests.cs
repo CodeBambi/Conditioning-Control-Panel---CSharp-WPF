@@ -159,7 +159,8 @@ public sealed class ButtplugHapticSinkTests
     [Fact]
     public async Task NoServerAnswering_IsATypedRefusalNamingTheSeparateProgram()
     {
-        using var sink = new ButtplugHapticSink(_ => { }, ButtplugToyServer.ReserveAndReleaseUrl());
+        using var held = ButtplugToyServer.HoldFreePort();
+        using var sink = new ButtplugHapticSink(_ => { }, ButtplugToyServer.UrlFor(held));
 
         var connect = await sink.ConnectAsync(TestContext.Current.CancellationToken);
 
