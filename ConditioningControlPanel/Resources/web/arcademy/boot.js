@@ -200,7 +200,7 @@ bridge.on('payout-result', guard('payout-result', (m) => {
 bridge.on('punchcard-result', guard('punchcard-result', (m) => {
   if (shell) shell.onPunchCard(m);
   log('punch card: ' + m.gameKey + ' ' + (m.reason || '?')
-    + (m.minted ? ' +1' : ' (no-op)')
+    + (m.minted ? ' +' + m.minted : ' (no-op)')
     + (m.justUnlocked ? ' UNLOCKED' : ''));
 }));
 bridge.on('suspend', guard('suspend', (m) => {

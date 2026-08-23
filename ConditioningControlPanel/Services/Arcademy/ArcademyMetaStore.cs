@@ -34,7 +34,8 @@ internal sealed class ArcademyMetaStore
     /// <summary>Host-owned: consecutive local days with at least one completed class.</summary>
     public const string StreakKey = "streak";
 
-    /// <summary>Host-owned: lifetime count of local days where all 3 classes were completed.</summary>
+    /// <summary>Host-owned: lifetime count of local days where all 4 classes were completed
+    /// (<see cref="ClassesPerDay"/> - the timetable deals four since 2026-08-23).</summary>
     public const string PerfectKey = "perfectAttendance";
 
     /// <summary>Host-owned: game keys completed on <see cref="AttendanceKey"/>'s day.</summary>
@@ -45,14 +46,14 @@ internal sealed class ArcademyMetaStore
     public const string XpPaidKey = "xpPaidDays";
 
     /// <summary>Host-owned: the punch cards, <c>{ "&lt;gameKey&gt;": {punches, dates, enrolledAt,
-    /// house, complete, unlockedAt} }</c> — ten holes per class, the tenth a permanent unlock
+    /// sDates, house, complete, unlockedAt} }</c> — ten holes per class, the tenth a permanent unlock
     /// (PUNCHCARD.md §2.1). Minted here for the same reason the streak is: a card is worth a
     /// standing Begin on a room the seed did not deal, so a stale page must not be able to write
     /// one. The math itself lives in <see cref="ArcademyPunchCards"/>.</summary>
     public const string PunchCardsKey = "punchCards";
 
     /// <summary>Classes in a day — the timetable's fixed size (GROUND-RULES §4).</summary>
-    private const int ClassesPerDay = 3;
+    private const int ClassesPerDay = 4;
 
     /// <summary>UTC days of XP ledger kept. Older days can no longer be replayed into (the page
     /// only ever ends a class on today's seed), so keeping them would just grow the blob.</summary>
@@ -231,7 +232,10 @@ internal sealed class ArcademyMetaStore
             {
                 today.Add(gameKey);
                 // The perfect-attendance credit fires on the transition INTO a full day, so a
-                // fourth completion (a retake) can never award it twice.
+                // FIFTH completion (a retake, now that a day is four classes) can never award it
+                // twice. ClassesPerDay is the timetable's CLASSES_PER_DAY - the two are the same
+                // ruling and a mismatch would either strand perfect attendance forever (too high)
+                // or hand it out early (too low).
                 if (today.Count == ClassesPerDay)
                 {
                     perfect += 1;
@@ -253,35 +257,41 @@ internal sealed class ArcademyMetaStore
     ///
     /// <para>Idempotent per (local day, game), and a no-op once the card is full. See
     /// <see cref="ArcademyPunchCards.Stamp"/> for the day-one interlock.</para>
+    ///
+    /// <para>AN S DAY IS WORTH TWO HOLES (owner ruling 2026-08-23). <paramref name="gradedS"/> is
+    /// the host's own read of the grade off the same <c>class-ended</c> frame; the page never gets
+    /// to say. Idempotence is unchanged, so a retake that grades S mints nothing at all.</para>
     /// </summary>
     /// <returns>Null when there is no game key to stamp; otherwise the outcome, carrying a CLONE
     /// of the card so the caller can put it straight on a frame.</returns>
-    public ArcademyPunchCards.PunchMint? StampPunchCard(string? gameKey, string localDate)
+    public ArcademyPunchCards.PunchMint? StampPunchCard(string? gameKey, string localDate,
+        bool gradedS = false)
     {
         if (string.IsNullOrWhiteSpace(gameKey)) return null;
         lock (_lock)
         {
-            var mint = ArcademyPunchCards.Stamp(Cards(), gameKey, localDate);
+            var mint = ArcademyPunchCards.Stamp(Cards(), gameKey, localDate, gradedS);
             if (mint.Minted)
             {
                 Touch();
-                App.Logger?.Information("ArcademyMetaStore: punch card '{Key}' stamped for {Date} ({N}/{Holes}){Unlock}",
-                    gameKey, localDate, (int?)mint.Card[ArcademyPunchCards.PunchesField] ?? 0,
+                App.Logger?.Information("ArcademyMetaStore: punch card '{Key}' stamped for {Date} (+{Got}, {N}/{Holes}){Unlock}",
+                    gameKey, localDate, mint.Punches,
+                    (int?)mint.Card[ArcademyPunchCards.PunchesField] ?? 0,
                     ArcademyPunchCards.Holes, mint.JustUnlocked ? " - ROOM UNLOCKED" : "");
             }
             return new ArcademyPunchCards.PunchMint(
-                mint.Minted, mint.JustUnlocked, (JObject)mint.Card.DeepClone());
+                mint.Minted, mint.Punches, mint.JustUnlocked, (JObject)mint.Card.DeepClone());
         }
     }
 
     /// <summary>
-    /// The first-run mint for <paramref name="gameKey"/>: the enrollment punch plus the
-    /// on-the-house punch, two holes, once ever (PUNCHCARD §4). Driven by the page's
+    /// The first-run mint for <paramref name="gameKey"/>: the enrollment punch, the on-the-house
+    /// punch and the sign-on punch — three holes, once ever (PUNCHCARD §4). Driven by the page's
     /// <c>enrollment-done</c> frame, which the shell posts at the end of the enrollment ceremony.
     ///
     /// <para>Validated here rather than trusted: the frame carries only a game key, and every
     /// number on the card is derived from what this store already holds. Repeat frames are
-    /// no-ops, and today's daily stamp is superseded so the day can never net three.</para>
+    /// no-ops, and today's daily stamp is superseded so the day can never net four.</para>
     /// </summary>
     public ArcademyPunchCards.PunchMint? EnrollPunchCard(string? gameKey, string localDate)
     {
@@ -292,11 +302,11 @@ internal sealed class ArcademyMetaStore
             if (mint.Minted)
             {
                 Touch();
-                App.Logger?.Information("ArcademyMetaStore: enrolled in '{Key}' on {Date} - 2 punches",
-                    gameKey, localDate);
+                App.Logger?.Information("ArcademyMetaStore: enrolled in '{Key}' on {Date} - {N} punches",
+                    gameKey, localDate, mint.Punches);
             }
             return new ArcademyPunchCards.PunchMint(
-                mint.Minted, mint.JustUnlocked, (JObject)mint.Card.DeepClone());
+                mint.Minted, mint.Punches, mint.JustUnlocked, (JObject)mint.Card.DeepClone());
         }
     }
 
