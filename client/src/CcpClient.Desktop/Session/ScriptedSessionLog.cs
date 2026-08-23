@@ -311,10 +311,18 @@ public sealed class ScriptedSessionLogStore
     public IReadOnlyList<ScriptedSessionLog> LoadRecent() =>
         [.. Files().Take(MaxRetainedLogs).Select(Read).OfType<ScriptedSessionLog>()];
 
-    /// <summary>Upstream's <c>SanitizeId</c>, verbatim (<c>:276-286</c>): an empty id becomes
-    /// <c>session</c> and every character the platform forbids in a file name becomes an
-    /// underscore. It is the reason a session id can never write outside
-    /// <see cref="Folder"/>.</summary>
+    /// <summary>
+    /// Upstream's <c>SanitizeId</c> (<c>:276-286</c>): an empty id becomes <c>session</c> and every
+    /// forbidden character becomes an underscore. It is the reason a session id — data out of a
+    /// file — can never choose where its log is written.
+    ///
+    /// <para><b>The forbidden set is the WINDOWS one on both platforms</b>
+    /// (<see cref="PortablePath.InvalidFileNameChars"/>) where upstream calls
+    /// <c>Path.GetInvalidFileNameChars()</c>. Upstream ran on Windows only, so its answer was
+    /// always the Windows answer; <c>Path</c>'s is NUL and <c>/</c> on Linux, which would let a
+    /// backslash through into a file name and give the same session two different log names on the
+    /// two platforms.</para>
+    /// </summary>
     private static string SanitizeId(string id)
     {
         if (string.IsNullOrEmpty(id))
@@ -322,7 +330,7 @@ public sealed class ScriptedSessionLogStore
             return "session";
         }
 
-        var invalid = Path.GetInvalidFileNameChars();
+        var invalid = PortablePath.InvalidFileNameChars;
         var chars = id.ToCharArray();
         for (var i = 0; i < chars.Length; i++)
         {

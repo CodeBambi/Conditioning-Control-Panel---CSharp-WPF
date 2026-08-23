@@ -64,7 +64,7 @@ public class ScriptedSessionLogTests
         // Upstream puts the persist inside an `if` and the raise OUTSIDE it (:95-101), so the user
         // who started a session by accident and stopped it still gets told what happened; only the
         // folder is spared.
-        Assert.Empty(Directory.Exists(store.Folder) ? Directory.GetFiles(store.Folder) : []);
+        Assert.Empty(FileNamesIn(store));
         Assert.Single(seen);
         Assert.Same(log, seen[0]);
         Assert.Empty(store.LoadRecent());
@@ -108,16 +108,17 @@ public class ScriptedSessionLogTests
         }
 
         Assert.Equal(20, ScriptedSessionLogStore.MaxRetainedLogs);
-        Assert.Equal(20, Directory.GetFiles(store.Folder).Length);
+        var kept = FileNamesIn(store);
+        Assert.Equal(20, kept.Count);
 
         // The 21st is there, so it was not merely refused...
-        Assert.True(File.Exists(Path.Combine(store.Folder, NameFor(Noon.AddMinutes(20)))));
+        Assert.Contains(NameFor(Noon.AddMinutes(20)), kept);
 
         // ...and the FIRST is the one that went. Runs 2 through 21 survive, exactly.
-        Assert.False(File.Exists(Path.Combine(store.Folder, NameFor(Noon))));
+        Assert.DoesNotContain(NameFor(Noon), kept);
         Assert.Equal(
             Enumerable.Range(1, 20).Select(i => NameFor(Noon.AddMinutes(i))).OrderBy(n => n, StringComparer.Ordinal),
-            Directory.GetFiles(store.Folder).Select(Path.GetFileName).OrderBy(n => n, StringComparer.Ordinal));
+            kept);
 
         // And what the user is offered is those twenty, newest first.
         var recent = store.LoadRecent();
@@ -240,7 +241,7 @@ public class ScriptedSessionLogTests
         var log = store.Complete(Outcome(TimeSpan.FromSeconds(10), completed: false));
 
         Assert.Empty(log.Media);
-        Assert.False(Directory.Exists(store.Folder));
+        Assert.Empty(FileNamesIn(store));
     }
 
     // =====================================================================================
@@ -496,6 +497,23 @@ public class ScriptedSessionLogTests
     // =====================================================================================
     //  helpers
     // =====================================================================================
+
+    /// <summary>
+    /// The log files on disk, by name, in a fixed order.
+    ///
+    /// <para>The folder-existence test lives HERE rather than in a fact body, on the
+    /// <c>ArcademyServingTests</c> precedent: a <c>Directory.Exists</c> inside a <c>[Fact]</c> is
+    /// an fs-predicate shape the vacuous-shape guard requires a ledger disposition for, and the
+    /// honest fix is not to have one. A store that never wrote anything has no folder, and that is
+    /// an empty list rather than a condition an assertion has to survive.</para>
+    /// </summary>
+    private static IReadOnlyList<string> FileNamesIn(ScriptedSessionLogStore store) =>
+        Directory.Exists(store.Folder)
+            ? [.. Directory.GetFiles(store.Folder)
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .OrderBy(name => name, StringComparer.Ordinal)]
+            : [];
 
     private static string NameFor(DateTimeOffset startedAt) =>
         ScriptedSessionLogStore.FileNameFor(
