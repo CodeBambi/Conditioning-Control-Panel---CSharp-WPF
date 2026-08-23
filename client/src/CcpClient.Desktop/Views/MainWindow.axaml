@@ -416,7 +416,7 @@
     <!-- Diagnostic footer: the layout probe (now measuring the rail's doors, which is
          what the headed harness drives) and the current route. Content-free, UIA-readable on
          Windows, logged once on first layout so it is stderr-readable on Linux. -->
-    <Border DockPanel.Dock="Bottom" Classes="footer">
+    <Border x:Name="DiagnosticFooter" DockPanel.Dock="Bottom" Classes="footer">
       <StackPanel Spacing="2">
         <TextBlock x:Name="RouteProbeText" Classes="diagnostic" Text="route: pending" />
         <TextBlock x:Name="LayoutProbeText" Classes="diagnostic" Text="layout-probe: pending" />

@@ -43,6 +43,14 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // THE DIAGNOSTIC FOOTER IS INSTRUMENTATION AND A USER HAS NO USE FOR IT. It carries the
+        // route and the rail layout probe, and it used to render unconditionally on every page —
+        // caught by a headed capture, because no fact here asserts on whether somebody should be
+        // LOOKING at the probe. The channel stays: it is still built, still UIA-readable, and
+        // still logged once on first layout, which is the only evidence the Linux leg has on a
+        // platform where every capture comes back black. Only the rendering is gated.
+        DiagnosticFooter.IsVisible = DiagnosticFooterPolicy.Rendered;
+
         _host = host;
         Loom = new LoomLaunch(host, this);
         // The shell's duck/restore and the ONE tray owner. Built here because the two
