@@ -3,27 +3,31 @@
  *
  * THE LECTURE HALL AT NIGHT. The class root is a full-viewport stage: a dark
  * hall, rows of empty seats sketched along the bottom, one projector beam
- * falling from above onto THE SCREEN - and the screen IS the montage. Nothing
- * here decorates a tile: the montage is CORE's live window (many animated
- * tiles) and the PERF LAW for this class is absolute - no filter, no animation,
- * no per-frame paint on `.g-ir-tile` or its media. Everything that breathes
- * lives on chrome: the beam, the dust, the seats, the frame, the slip.
+ * falling from above onto THE SCREEN - and the screen IS the wall, a full-bleed
+ * mosaic of the player's own media that keeps changing itself. Nothing here
+ * decorates a tile's MEDIA: the wall is CORE's live window (many animated
+ * tiles) and the PERF LAW for this class is absolute - no filter, no per-frame
+ * paint on `.g-ir-tile` or `.g-ir-media`. The one animation a tile is allowed
+ * is the SWAP (opacity, and a transform on the face, for ~620ms, at most four
+ * tiles at a time), because the wall turning itself over IS the class.
+ * Everything else that breathes lives on chrome: the beam, the dust, the seats,
+ * the frame, the slip.
  *
  * Composition, exactly the DOM contract (CORE builds, this file styles):
  *
- *   .g-ir-stage[data-phase=briefing|vigil|stop|verdict|ended]
- *               [data-layout=rows|mosaic|swirl]   absolute inset:0, explicit
- *               ground, padded under the shell's proctor strip
+ *   .g-ir-stage[data-phase=briefing|vigil|stop|verdict|ended][data-layout=wall]
+ *               absolute inset:0, explicit ground, padded under the shell's
+ *               proctor strip
  *   .g-ir-backdrop   the hall (pointer-events:none, z 0) - the casino hangs its
  *                    beam / dust / seat layers here
  *   .g-ir-hud        three chips: clock, stops, density (the density chip is a
  *                    METER: it reads --ir-density 0..1 when CORE paints it,
  *                    and degrades to a plain chip when it does not)
- *   .g-ir-montage    THE SCREEN: flex:1, the lit rectangle; children are rows
- *                    (.g-ir-row > .g-ir-tile > .g-ir-face > .g-ir-media) or a
- *                    .g-ir-mosaic grid or a .g-ir-swirl field (montage.js writes
- *                    --ir-ang / --ir-rad / --ir-orbit; this file owns the swirl
- *                    transform, with CSS trig - no JS moves a tile, ever)
+ *   .g-ir-montage    THE SCREEN: flex:1, the lit rectangle, holding ONE
+ *                    .g-ir-wall grid (--ir-cols / --ir-rows, solved from the
+ *                    stage aspect by montage.js) of .g-ir-tile > TWO .g-ir-face
+ *                    layers > .g-ir-media. `.is-swapping` + data-swap on the
+ *                    tile and `.is-in` / `.is-out` on the faces drive the turn.
  *   .g-ir-ledger     the truth tail - VISUALLY hidden, aria-hidden (CORE)
  *   .g-ir-stop       THE EXAM SLIP: a paper card that arrives from the desk
  *                    while the screen holds its breath; .g-ir-q the question,
@@ -33,16 +37,20 @@
  *   .g-ir-msg / .g-ir-flashwell / .g-ir-end   proctor line, engine anchor, the
  *                    end card (title + k/v rows, DE's shape)
  *   .g-ir-howto      the drawn class-rules sheet (Deck VI, Law IV): three
- *                    vignettes (the screen flickers / the freeze and the slip /
- *                    the four keycaps) and ONE live button, .g-ir-go - all
- *                    CORE class names (.g-ir-howto-*), art = pure CSS pseudos
+ *                    vignettes (THE WALL, with a drawn flash / spiral / bubble
+ *                    over it / THE FREEZE and the slip / THE PICK, four
+ *                    keycaps) and ONE live button, .g-ir-go - all CORE class
+ *                    names (.g-ir-howto-*), art = pure CSS on empty boxes
  *
- * THE FREEZE IS A HELD BREATH. [data-phase="stop"]: the montage's own opacity
- * drops (no filter - a composited opacity on the container is free), the
- * hall's veil (.g-ir-veil, a sibling of the screen, not a filter) darkens, the
- * beam narrows, the slip slides up with a paper tilt. [data-phase="verdict"]
- * keeps the slip and lets the picked option settle. Resume releases all of it
- * on the same transitions, so the breath goes out as it came in.
+ * THE FREEZE IS A HELD BREATH, AND IT LANDS MID-SWAP. [data-phase="stop"]: the
+ * wall's own opacity drops (no filter - a composited opacity on the container
+ * is free), `.g-ir-montage.is-frozen *` PAUSES every swap animation exactly
+ * where it was (which is why the turn is a keyframe and not a transition - a
+ * transition cannot be paused), the hall's veil (.g-ir-veil, a sibling of the
+ * screen, not a filter) darkens, the beam narrows, the slip slides up with a
+ * paper tilt. [data-phase="verdict"] keeps the slip and lets the picked option
+ * settle. Resume releases all of it on the same transitions, so the breath goes
+ * out as it came in - and the half-finished swaps finish where they stopped.
  *
  * REDUCED MOTION twice over (html.arc-reduced + the media query): every
  * keyframe dies, transitions survive (a fade is not motion).
@@ -68,13 +76,13 @@ export const STYLE_TEXT = `
 
 /* ---- the stage: the whole window is the hall ------------------------------ */
 .g-ir-stage{position:absolute;inset:0;overflow:hidden;display:flex;flex-direction:column;
-  align-items:center;gap:8px;padding:72px 18px 14px;color:var(--ink);
+  align-items:center;gap:8px;padding:64px 12px 12px;color:var(--ink);
   --ir-hue-a:var(--ir-n-hue-a,292);
   --ir-hue-b:var(--ir-n-hue-b,330);
   --ir-la:hsla(var(--ir-hue-a),55%,70%,.18);
   --ir-lb:hsla(var(--ir-hue-b),70%,68%,.14);
   --ir-breath:var(--ir-n-breath,9s);
-  --ir-screen-w:min(100%, 1120px);
+  --ir-screen-w:min(100%, 1480px);
   background:
     radial-gradient(80% 46% at 50% 0%, var(--ir-la), transparent 70%),
     radial-gradient(120% 40% at 50% 108%, var(--ir-lb), transparent 64%),
@@ -126,43 +134,55 @@ export const STYLE_TEXT = `
 .g-ir-density::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:calc(var(--ir-density) * 100%);
   background:linear-gradient(90deg, var(--lav), var(--pink));opacity:.8;transition:width .6s ease}
 
-/* ---- THE SCREEN: the montage is the lit rectangle --------------------------- */
+/* ---- THE SCREEN: the WALL is the lit rectangle ------------------------------ */
 .g-ir-montage{position:relative;z-index:1;flex:1;min-height:0;width:var(--ir-screen-w);
-  display:flex;flex-direction:column;gap:6px;padding:6px;border-radius:14px;overflow:hidden;
-  background:color-mix(in srgb, var(--ground), black 30%);
+  display:flex;flex-direction:column;padding:4px;border-radius:12px;overflow:hidden;
+  background:#0b0a16;
   border:1px solid color-mix(in srgb, var(--lav), transparent 72%);
   box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 24px 60px rgba(0,0,0,.55),
     0 0 60px hsla(var(--ir-hue-b),80%,70%,.12);
   opacity:1;transition:opacity .55s ease, box-shadow .8s ease}
-/* the screen's own vignette + scanline whisper - on the CONTAINER's pseudo, never a tile */
+/* the screen's own vignette - on the CONTAINER's pseudo, never a tile */
 .g-ir-montage::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;border-radius:inherit;
-  background:radial-gradient(120% 90% at 50% 50%, transparent 62%, rgba(0,0,0,.45) 100%)}
-/* ROWS: montage.js builds .g-ir-row (odd rows .g-ir-rev) > .g-ir-tile; the
-   engine's row_drift writes the row transform, so this file never does */
-.g-ir-row{position:relative;display:flex;gap:6px;flex:1 1 0;min-height:0;will-change:transform}
-.g-ir-row.g-ir-rev{flex-direction:row-reverse}
-/* MOSAIC: a grid solved from --ir-cols (montage.js) */
-.g-ir-mosaic{position:relative;flex:1;min-height:0;display:grid;gap:6px;
-  grid-template-columns:repeat(var(--ir-cols,6), minmax(0,1fr));grid-auto-rows:minmax(0,1fr)}
-/* SWIRL: montage.js writes --ir-ang (deg) / --ir-rad (% of the half-screen) /
-   --ir-orbit (0 centre .. 1 rim) on every tile; THIS FILE owns the transform.
-   Positioned with CSS trig so no JS ever moves a tile; the wheel wash behind
-   (engine, held by CORE) is the motion. Tiles shrink toward the centre. */
-.g-ir-swirl{position:relative;flex:1;min-height:0;overflow:hidden;--ir-swirl-tile:clamp(64px, 13%, 160px)}
-.g-ir-swirl .g-ir-tile{position:absolute;flex:none;
-  left:calc(50% + cos(var(--ir-ang,0deg)) * var(--ir-rad,50%) * .5);
-  top:calc(50% + sin(var(--ir-ang,0deg)) * var(--ir-rad,50%) * .5);
-  width:calc(var(--ir-swirl-tile) * (.55 + .55 * var(--ir-orbit,.5)));aspect-ratio:1;height:auto;
-  transform:translate(-50%,-50%) rotate(calc(var(--ir-ang,0deg) * .08))}
-.g-ir-tile{position:relative;flex:1 1 0;min-width:0;min-height:0;border-radius:8px;overflow:hidden;
-  background:color-mix(in srgb, var(--panel), black 40%);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
-/* the face + the media fill the tile; NO filter, NO animation, NO transition
-   on any of the three (PERF LAW). .g-ir-face is the engine's only legal target. */
-.g-ir-face{position:absolute;inset:0;overflow:hidden;border-radius:inherit}
+  background:radial-gradient(120% 90% at 50% 50%, transparent 66%, rgba(0,0,0,.42) 100%)}
+
+/* THE WALL: one grid, solved from the stage's aspect by montage.js and written
+   onto --ir-cols / --ir-rows. Hairline gaps, small radii, cover fits - the FYP
+   feed's own vocabulary (Resources/web/fyp/fyp.css). Tiles fill edge to edge. */
+.g-ir-wall{position:relative;flex:1;min-height:0;display:grid;gap:3px;
+  grid-template-columns:repeat(var(--ir-cols,4), minmax(0,1fr));
+  grid-template-rows:repeat(var(--ir-rows,3), minmax(0,1fr))}
+.g-ir-tile{position:relative;min-width:0;min-height:0;border-radius:6px;overflow:hidden;
+  background:#0d0d18;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+/* THE SWAP. Each tile owns TWO faces and turns itself over on its own seeded
+   dwell; montage.js paints the back face, flips .is-in / .is-out and hangs
+   data-swap on the tile. The turn is a KEYFRAME, never a transition, because
+   the freeze has to be able to land in the MIDDLE of one (a transition cannot
+   be paused; an animation can - see .is-frozen below). No filter anywhere near
+   a face: it may hold a live decode (PERF LAW, web CLAUDE.md trap 36). */
+.g-ir-face{position:absolute;inset:0;overflow:hidden;border-radius:inherit;opacity:1;z-index:1}
+.g-ir-face.is-out{opacity:0;z-index:0}
+.g-ir-face.is-in{opacity:1;z-index:2}
+.g-ir-tile.is-swapping .g-ir-face.is-in{animation:g-ir-in var(--ir-swap,620ms) cubic-bezier(.3,.7,.3,1) both}
+.g-ir-tile.is-swapping .g-ir-face.is-out{animation:g-ir-out var(--ir-swap,620ms) cubic-bezier(.3,.7,.3,1) both}
+@keyframes g-ir-in{from{opacity:0}to{opacity:1}}
+@keyframes g-ir-out{from{opacity:1}to{opacity:0}}
+.g-ir-tile[data-swap="rise"].is-swapping .g-ir-face.is-in{animation-name:g-ir-in-rise}
+.g-ir-tile[data-swap="rise"].is-swapping .g-ir-face.is-out{animation-name:g-ir-out-rise}
+@keyframes g-ir-in-rise{from{opacity:0;transform:translateY(22%)}to{opacity:1;transform:translateY(0)}}
+@keyframes g-ir-out-rise{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-16%)}}
+.g-ir-tile[data-swap="slide"].is-swapping .g-ir-face.is-in{animation-name:g-ir-in-slide}
+.g-ir-tile[data-swap="slide"].is-swapping .g-ir-face.is-out{animation-name:g-ir-out-slide}
+@keyframes g-ir-in-slide{from{opacity:0;transform:translateX(24%)}to{opacity:1;transform:translateX(0)}}
+@keyframes g-ir-out-slide{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(-18%)}}
 .g-ir-tile img,.g-ir-tile video,.g-ir-media{display:block;position:absolute;inset:0;width:100%;height:100%;
   object-fit:cover;pointer-events:none}
+/* THE FREEZE IS MID-SWAP. Pausing the animation (never cancelling it) leaves
+   both faces exactly where the eye last saw them - that stillness IS the
+   mechanic, and it is why the swap is an animation in the first place. */
 .g-ir-montage.is-frozen{opacity:.42}
+.g-ir-montage.is-frozen *{animation-play-state:paused !important}
 
 /* the truth tail: in the tree for the harness, never on the glass */
 .g-ir-ledger{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);
@@ -231,7 +251,45 @@ export const STYLE_TEXT = `
   background:rgba(184,166,232,.35);border:1px solid rgba(90,60,140,.35)}
 .g-ir-hear:hover{background:rgba(184,166,232,.55)}
 .g-ir-hear:focus-visible{outline:2px solid var(--pink);outline-offset:1px}
-.g-ir-opt img,.g-ir-opt video{display:block;width:44px;height:44px;object-fit:cover;border-radius:6px;pointer-events:none}
+/* the 44px thumb rule is for a TEXT option's little icon only - scoped away
+   from the media options below, which are the whole point of their card */
+.g-ir-opt:not(.g-ir-opt-media) img,.g-ir-opt:not(.g-ir-opt-media) video{display:block;width:44px;height:44px;object-fit:cover;border-radius:6px;pointer-events:none}
+/* ---- MEDIA OPTIONS: the card asks with pictures ---------------------------
+   SPIRAL / WALL_PICK / WALL_TWICE / WALL_GONE render a preview instead of a
+   label. There is deliberately NO .g-ir-opt-t inside one, which is how the
+   trickster's Unreliable Label folds on these cards - it has no text surface to
+   lie on. Never a filter and never a blend on a face: a preview can hold a live
+   decode (PERF LAW, web CLAUDE.md trap 36). */
+.g-ir-stop[data-kind="media"]{width:min(720px,94%)}
+.g-ir-opt-media{align-items:stretch;flex-direction:column;gap:6px;padding:10px 10px 8px;min-height:0}
+.g-ir-opt-media .g-ir-opt-n{top:8px;margin-top:0}
+.g-ir-opt-face{position:relative;width:100%;aspect-ratio:16/10;max-height:22vh;border-radius:6px;overflow:hidden;
+  background:#0b0a16;border:1px solid rgba(60,40,90,.35);pointer-events:none}
+.g-ir-opt-face img,.g-ir-opt-face video,.g-ir-opt-face .g-ir-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+/* a spiral preview is the asset AS SHIPPED - square, unspun, uncoloured. The
+   wash showed it screen-blended and turning; the arm shape and the palette are
+   what the player actually recalls, so that is what the option shows. */
+.g-ir-opt-face[data-media="spiral"]{aspect-ratio:1/1;width:clamp(84px,14vh,132px);max-height:none;margin:0 auto;
+  background:#0b0716;border:2px solid rgba(184,166,232,.55)}
+.g-ir-opt-media.is-true .g-ir-opt-face{box-shadow:0 0 0 3px rgba(240,194,75,.8)}
+.g-ir-opt-media.is-wrong .g-ir-opt-face{opacity:.55}
+/* WALL_SEEN's single face: the thing being asked about, above two text options */
+.g-ir-q-face{position:relative;z-index:1;width:min(360px,100%);aspect-ratio:16/10;max-height:24vh;margin:0 auto;
+  border-radius:6px;overflow:hidden;background:#0b0a16;border:1px solid rgba(60,40,90,.35)}
+.g-ir-q-face img,.g-ir-q-face video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+/* THE PROOF: the tiles that really wore the answer, ringed at the verdict */
+.g-ir-tile.is-truth{box-shadow:0 0 0 3px var(--gold),0 0 22px rgba(240,194,75,.7);z-index:3}
+/* THE SHROUD: a wall question's answer is ON the wall, so the wall goes out
+   while the card is up and comes back for the verdict (which IS the proof) */
+.g-ir-stage[data-shroud="1"] .g-ir-montage{opacity:.03;transition-duration:.25s}
+/* a phrase option can be a whole sentence (Echo's lesson): clamp, never cut */
+.g-ir-opt-t{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere}
+.g-ir-stop[data-family="HEARD"] .g-ir-opt{font-size:clamp(12px,1.6vmin,14px)}
+@media (pointer: coarse){
+  .g-ir-opt-face{max-height:18vh}
+  .g-ir-opt-face[data-media="spiral"]{width:clamp(68px,12vh,108px)}
+}
+html.ae-touch .g-ir-opt-face{max-height:18vh}
 .g-ir-opt.is-picked,.g-ir-opt[aria-pressed="true"]{background:linear-gradient(180deg, rgba(255,105,180,.28), rgba(255,105,180,.12));
   border-color:rgba(212,72,143,.6)}
 .g-ir-opt.is-true,.g-ir-opt.is-correct,.g-ir-opt.is-truth,.g-ir-opt[data-verdict="correct"]{
@@ -272,8 +330,23 @@ export const STYLE_TEXT = `
   max-width:90%;z-index:3;text-align:center}
 
 /* ---- proctor line + end card ---------------------------------------------- */
-.g-ir-flashwell{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:6}
+.g-ir-flashwell{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:6;
+  opacity:1;transition:opacity .18s ease}
 .g-ir-flashwell *{pointer-events:none}
+/* ---- THE SUB WORD, LEGIBLE (owner: "the text on the sub is pretty faded") --
+   NOT an intensity raise - the node's opacity is still the engine's --ae-alpha
+   and the CEILING RULE is untouched. What this buys is CONTRAST: a plain rgba
+   plate under the letters, a hard outline, and a size that reads across a
+   bright moving wall. GAME-LOCAL by construction (the nodes land in our own
+   .g-ir-flashwell / .g-ir-stop, both under .g-ir-stage), so no other class
+   inherits it. No filter, no blend - the wall behind is a live decode. */
+.g-ir-stage .ae-sub-word{font-size:clamp(36px,6.5vw,84px);line-height:1.05;white-space:normal;
+  max-width:min(72vw,16ch);text-align:center;text-wrap:balance;padding:.14em .5em;border-radius:.16em;
+  color:#fff;letter-spacing:.08em;
+  background:rgba(10,6,22,.78);
+  box-shadow:0 0 0 2px rgba(255,105,180,.38),0 16px 44px rgba(0,0,0,.55);
+  text-shadow:0 0 2px #000,0 0 2px #000,0 2px 0 rgba(0,0,0,.65),0 0 18px var(--ae-pink)}
+.g-ir-stage .ae-sub-stamp{border-width:3px}
 .g-ir-msg{position:relative;z-index:2;margin:0;min-height:1.4em;text-align:center;
   font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
   color:var(--ink-dim);transition:opacity .3s ease}
@@ -308,7 +381,8 @@ export const STYLE_TEXT = `
 
 /* ----------------------------------------------------- THE CLASS RULES SHEET */
 /* Deck VI, Law IV: drawn, not told. CORE mounts .g-ir-howto > .g-ir-howto-title,
-   .g-ir-howto-row > 3x .g-ir-howto-card (> .g-ir-howto-art[data-art] + .g-ir-howto-cap),
+   .g-ir-howto-row > 3x .g-ir-howto-card (> .g-ir-howto-art[data-art=wall|freeze|answer],
+   which may hold .g-ir-howto-ico[data-ico=flash|spiral|bubble] + .g-ir-howto-cap),
    .g-ir-howto-note, .g-ir-go. Every vignette is PURE CSS on the empty art box -
    no image, no text, nothing to translate. The sheet takes NO pointer events;
    only the GO button re-enables them for itself. */
@@ -330,18 +404,35 @@ export const STYLE_TEXT = `
 .g-ir-howto-art{position:relative;width:100%;aspect-ratio:5/3;border-radius:8px;overflow:hidden;
   background:#0c0b1c;border:1px solid rgba(184,166,232,.35);box-shadow:0 0 14px rgba(184,166,232,.18)}
 .g-ir-howto-art::before,.g-ir-howto-art::after{content:"";position:absolute;pointer-events:none}
-/* 1 - the stream: six tiles breathing on their own beat, a flash popping over them */
-.g-ir-howto-art[data-art="stream"]::before,.g-ir-howto-art[data-art="freeze"]::before{inset:8px 10px;
+/* 1 - THE WALL: a grid of tiles, one of them mid-turn, with three of the pool's
+   own icons drawn over it (a flash, a spiral, a bubble - CORE mounts them as
+   .g-ir-howto-ico[data-ico], the only nodes inside an art box) */
+.g-ir-howto-art[data-art="wall"]::before,.g-ir-howto-art[data-art="freeze"]::before{inset:6px 7px;
   background:linear-gradient(135deg, var(--pink), var(--lav) 55%, var(--gold));
-  -webkit-mask:linear-gradient(#000 0 0) 0 0/31% 46% space;mask:linear-gradient(#000 0 0) 0 0/31% 46% space;
+  -webkit-mask:linear-gradient(#000 0 0) 0 0/23% 31% space;mask:linear-gradient(#000 0 0) 0 0/23% 31% space;
   animation:g-ir-hw-blink 2.4s ease-in-out infinite}
 @keyframes g-ir-hw-blink{0%,100%{opacity:.45}50%{opacity:.95}}
-.g-ir-howto-art[data-art="stream"]::after{left:50%;top:50%;width:46%;height:28%;transform:translate(-50%,-50%) scale(.8);border-radius:4px;
-  background:linear-gradient(90deg, transparent, rgba(255,255,255,.95) 20% 80%, transparent);
-  -webkit-mask:repeating-linear-gradient(90deg, #000 0 9%, transparent 9% 13%);mask:repeating-linear-gradient(90deg, #000 0 9%, transparent 9% 13%);
-  box-shadow:0 0 16px var(--pink);opacity:0;animation:g-ir-hw-word 2.4s ease-out infinite}
-@keyframes g-ir-hw-word{0%,62%{opacity:0;transform:translate(-50%,-50%) scale(.8)}68%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}
-  80%{opacity:1}90%,100%{opacity:0}}
+/* the tile that is mid-swap: one cell crossfading on its own beat */
+.g-ir-howto-art[data-art="wall"]::after{left:31%;top:36%;width:23%;height:31%;border-radius:2px;
+  background:linear-gradient(200deg, #fff, var(--lav));box-shadow:0 0 12px rgba(255,255,255,.5);
+  animation:g-ir-hw-turn 2.4s ease-in-out infinite}
+@keyframes g-ir-hw-turn{0%,40%{opacity:0}52%{opacity:.95}88%{opacity:.95}100%{opacity:0}}
+.g-ir-howto-ico{position:absolute;display:block;pointer-events:none;z-index:2}
+.g-ir-howto-ico[data-ico="flash"]{left:9%;bottom:14%;width:26%;height:22%;border-radius:3px;
+  background:linear-gradient(180deg, #fff, #ffd9ee);box-shadow:0 0 16px rgba(255,255,255,.9);
+  animation:g-ir-hw-flash 2.4s ease-out infinite}
+@keyframes g-ir-hw-flash{0%,58%{opacity:0;transform:scale(.82)}64%{opacity:1;transform:scale(1.06)}
+  80%{opacity:1;transform:scale(1)}90%,100%{opacity:0;transform:scale(1)}}
+.g-ir-howto-ico[data-ico="spiral"]{right:8%;top:12%;width:24%;aspect-ratio:1;border-radius:50%;
+  background:conic-gradient(from 0deg, var(--pink), var(--lav) 42%, rgba(255,255,255,.05) 72%, var(--pink));
+  -webkit-mask:radial-gradient(circle, #000 60%, transparent 65%);mask:radial-gradient(circle, #000 60%, transparent 65%);
+  animation:g-ir-hw-spin 4s linear infinite}
+@keyframes g-ir-hw-spin{to{transform:rotate(360deg)}}
+.g-ir-howto-ico[data-ico="bubble"]{right:13%;bottom:11%;width:19%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 34% 30%, rgba(255,255,255,.85), rgba(255,105,180,.35) 48%,
+    rgba(184,166,232,.18) 72%, transparent 78%);
+  animation:g-ir-hw-float 3.2s ease-in-out infinite alternate}
+@keyframes g-ir-hw-float{from{transform:translateY(8%)}to{transform:translateY(-16%)}}
 /* 2 - the freeze: the tiles go dark and a slip rises from the desk */
 .g-ir-howto-art[data-art="freeze"]::before{animation:g-ir-hw-dim 3s ease-in-out infinite}
 @keyframes g-ir-hw-dim{0%,35%{opacity:.9}50%,100%{opacity:.25}}
@@ -377,16 +468,27 @@ export const STYLE_TEXT = `
 @keyframes g-ir-hw-gopulse{50%{box-shadow:0 0 34px rgba(255,105,180,.85), 0 6px 16px rgba(0,0,0,.45)}}
 @media (max-width: 560px){.g-ir-howto-row{grid-template-columns:1fr}.g-ir-howto-art{max-width:220px;margin:0 auto}}
 
-/* ---- reduced motion (both gates): keyframes die, transitions survive ------- */
+/* ---- reduced motion (both gates): keyframes die, transitions survive -------
+   ONE exception, and it is deliberate: the wall's face swap survives as a PLAIN
+   CROSSFADE. A fade is not motion (this file's own doctrine), and Law III says
+   the wall is never still - killing the swap outright would make every turn a
+   hard cut, which is more jarring than the fade, not less. montage.js already
+   forces the 'fade' style and a longer dwell on this rung. */
 html.arc-reduced .g-ir-stage *{animation:none !important}
+html.arc-reduced .g-ir-tile.is-swapping .g-ir-face.is-in{animation:g-ir-in var(--ir-swap,900ms) linear both !important}
+html.arc-reduced .g-ir-tile.is-swapping .g-ir-face.is-out{animation:g-ir-out var(--ir-swap,900ms) linear both !important}
 html.arc-reduced .g-ir-howto-art::before,html.arc-reduced .g-ir-howto-art::after{animation:none !important;opacity:1}
 html.arc-reduced .g-ir-howto-art[data-art="freeze"]::after{transform:translate(-50%,6%) rotate(-1deg)}
-html.arc-reduced .g-ir-howto-art[data-art="stream"]::after{transform:translate(-50%,-50%)}
+html.arc-reduced .g-ir-howto-art[data-art="wall"]::after{opacity:.95}
+html.arc-reduced .g-ir-howto-ico{animation:none !important;opacity:1}
 @media (prefers-reduced-motion: reduce){
   .g-ir-stage *{animation:none !important}
+  .g-ir-tile.is-swapping .g-ir-face.is-in{animation:g-ir-in var(--ir-swap,900ms) linear both !important}
+  .g-ir-tile.is-swapping .g-ir-face.is-out{animation:g-ir-out var(--ir-swap,900ms) linear both !important}
   .g-ir-howto-art::before,.g-ir-howto-art::after{animation:none !important;opacity:1}
   .g-ir-howto-art[data-art="freeze"]::after{transform:translate(-50%,6%) rotate(-1deg)}
-  .g-ir-howto-art[data-art="stream"]::after{transform:translate(-50%,-50%)}
+  .g-ir-howto-art[data-art="wall"]::after{opacity:.95}
+  .g-ir-howto-ico{animation:none !important;opacity:1}
 }
 /* touch: bigger options, no hover lift */
 @media (pointer: coarse){

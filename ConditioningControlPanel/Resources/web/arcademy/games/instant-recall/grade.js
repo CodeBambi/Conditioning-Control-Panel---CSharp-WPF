@@ -37,6 +37,16 @@
  *                                             S: a corrected stop was still not
  *                                             fully correct, so sGate stays down.
  *
+ * BOTH OF THOSE WERE WRITTEN FOR A 2-4 STOP CLASS AND ARE NOW RATIOS (the
+ * five-a-minute cadence, 2026-08-23). A gate counted in absolute stops does not
+ * mean the same thing at ten stops as at two: "every stop fully correct" over
+ * ten questions is a different ask from over two, and one blanked question in
+ * ten capping the whole class at B punishes a fumble rather than a lapse. So
+ * both allowances are `floor(n * 0.12)` of the class's OWN size - which is 0 at
+ * 2-8 (the dossier's literal rule, unchanged for any short class) and exactly 1
+ * at 9-16. The gates still tighten with the class, they just no longer tighten
+ * because the class got longer.
+ *
  * FLAVOUR XP: a small tick per bait dodged plus one per clean stop, cap 15
  * (the shell clamps at 15 too - BUILD-CONTRACT §8). Never composite.
  * ==========================================================================*/
@@ -51,8 +61,15 @@ export const GRADE = Object.freeze({
   LAT_FAST: 0.35,     // at or under -> full marks
   LAT_SLOW: 0.95,     // at or over  -> nothing
 
-  /** Any timed-out question clamps the class here (just under the A threshold). */
+  /** Any timed-out question clamps the class here (just under the A threshold),
+   *  once the class's own allowance is spent. */
   TIMEOUT_CEIL: 0.74,
+  /** The fraction of a class's stops that may miss and still open the S gate,
+   *  and the fraction of its questions that may blank before the B ceiling
+   *  falls. Floored, so a 2-8 stop class gets 0 (the original rule verbatim)
+   *  and a 9-16 stop class gets exactly 1. */
+  S_MISS_FRACTION: 0.12,
+  TIMEOUT_ALLOWANCE_FRACTION: 0.12,
   /** An escape-guard-voided question: C for that question, never zero. */
   VOID_CREDIT: 0.4,
 
@@ -62,6 +79,17 @@ export const GRADE = Object.freeze({
 });
 
 export function clamp01(v) { const n = Number(v); return !Number.isFinite(n) ? 0 : n < 0 ? 0 : n > 1 ? 1 : n; }
+
+/** How many stops a class of this size may miss and still open the S gate. */
+export function allowedMisses(totalStops) {
+  const n = Math.max(0, Math.round(Number(totalStops) || 0));
+  return Math.floor(n * GRADE.S_MISS_FRACTION);
+}
+/** How many questions a class of this size may blank before the B ceiling. */
+export function allowedBlanks(totalQuestions) {
+  const n = Math.max(0, Math.round(Number(totalQuestions) || 0));
+  return Math.floor(n * GRADE.TIMEOUT_ALLOWANCE_FRACTION);
+}
 
 /**
  * @param {Object} i
@@ -127,7 +155,8 @@ export function compositeFor(i = {}) {
 
   let composite = clamp01(raw);
   let capped = false;
-  if (timeouts > 0 && composite > GRADE.TIMEOUT_CEIL) { composite = GRADE.TIMEOUT_CEIL; capped = true; }
+  const blanksOk = allowedBlanks(qs.length);
+  if (timeouts > blanksOk && composite > GRADE.TIMEOUT_CEIL) { composite = GRADE.TIMEOUT_CEIL; capped = true; }
 
   return {
     composite,
@@ -140,14 +169,17 @@ export function compositeFor(i = {}) {
 }
 
 /**
- * Declared gates. The dossier's S rule: every stop fully correct at the class's
- * tier. A class with no stops (impossible under the final-stop guarantee, but
+ * Declared gates. The dossier's S rule scaled to the class's own length: a
+ * clean sheet, less `allowedMisses()` - 0 for any class of 8 stops or fewer
+ * (the original rule, verbatim), 1 for the 9-11 stop classes the cadence now
+ * deals. A class with no stops (impossible under the final-stop guarantee, but
  * the gate must still answer) cannot earn an S.
  */
 export function hardGates(stops) {
   const list = Array.isArray(stops) ? stops : [];
-  const clean = list.length > 0 && list.every((s) => s && s.fullyCorrect && !s.voided);
-  return { sGate: clean };
+  if (!list.length) return { sGate: false };
+  const missed = list.filter((s) => !s || !s.fullyCorrect || s.voided).length;
+  return { sGate: missed <= allowedMisses(list.length) };
 }
 
 /** A tick per bait dodged plus one per clean stop, cap 15. */
@@ -157,4 +189,4 @@ export function flavorXp(plantsResisted, cleanStops) {
   return Math.min(GRADE.FLAVOR_CAP, p * GRADE.FLAVOR_PER_PLANT + c * GRADE.FLAVOR_PER_CLEAN_STOP);
 }
 
-export default { compositeFor, hardGates, flavorXp, GRADE };
+export default { compositeFor, hardGates, flavorXp, allowedMisses, allowedBlanks, GRADE };

@@ -65,6 +65,13 @@ export const STYLE_TEXT = `
 .ae-burst-clickable{pointer-events:auto;cursor:pointer}
 .ae-burst-double{filter:saturate(1.3) contrast(1.1)}
 .ae-burst-ring{border:2px solid var(--ae-pink)}
+/* FULL BLEED (additive): one node over the WHOLE layer - CCP's fullscreen GIF.
+   No transform of its own (so the scale keyframe cannot shrink it off the
+   edges) and object-fit:cover so a portrait loop still fills a landscape stage. */
+.ae-burst-cover{left:0;top:0;width:100%;height:100%;border-radius:0;transform:none;
+  object-fit:cover;box-shadow:none;animation-name:ae-burst-cover-in}
+@keyframes ae-burst-cover-in{0%{opacity:0}14%{opacity:var(--ae-alpha,.75)}
+  76%{opacity:var(--ae-alpha,.75)}100%{opacity:0}}
 @keyframes ae-burst-in{0%{opacity:0;transform:translate(-50%,-50%) rotate(var(--ae-rot,0deg)) scale(.72)}
   18%{opacity:var(--ae-alpha,.75)}72%{opacity:var(--ae-alpha,.75)}
   100%{opacity:0;transform:translate(-50%,-50%) rotate(var(--ae-rot,0deg)) scale(1.06)}}

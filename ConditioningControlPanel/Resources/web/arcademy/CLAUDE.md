@@ -96,10 +96,82 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    plan from tier 2 telegraphed) / grade / lex EC_LEX; keybinds pad1..pad6; six pads always live,
                    the TIER restricts the alphabet; tones = engine audio_trigger 'pad' x pitch (+1 semitone per
                    link, cap 7); a fail is NOT the class (new sequences until the bell); Encore once, auto
+                   THE TURN IS EXPLICIT (owner verdict 2026-08-23): `.g-ec-phase` (a banner, data-p
+                   ready|listen|yours|miss|clear|over) + `.g-ec-steps` (one dot per sequence step,
+                   data-fill off|on|bad) + the LISTEN LOCK (--ec-sat drop + not-allowed on the ring
+                   while the room plays) + a HAND-OFF beat (its own chime, one pulse per pad). Both
+                   tells are text/attribute, so motionLevel 0 loses nothing. Pad states grew `wrong`
+                   (red + shake) and `reveal` (the answer, held REVEAL_MS under a "this one" halo).
+                   THE PADS ARE THE BUBBLES: each is bound (seeded, no duplicates) to ONE trigger
+                   from `init.triggers`, wears its PHRASE as the face, and plays that trigger's
+                   whisper clip faintly UNDER its note. `ec_pad_words` = words (default) | glyphs |
+                   media - the old gif faces are now the opt-in, not the look.
+                   ROUND 2 (same owner pass): the face is VEILED - frosted until you hover / press /
+                   focus it, and unveiled for the beat a pad is lit, so LISTEN also reads the phrase
+                   out to you. The frost is `color:transparent` + a text-shadow of the same letters,
+                   NEVER `filter:` (trap 36 - a filter mints a surface per pad over a live lamp).
+                   The hand is RE-DEALT every round (`dealRound`): the hues, the glyphs and the
+                   hitboxes never move (Law II), only the words, seeded off `seed|ec-words|<cycle>`
+                   so a retake deals the same hands; a pool larger than six is walked whole before
+                   any word repeats. A trigger's clip plays on only `CLIP_CHANCE` (0.25) of beats -
+                   the roll is SEEDED and always consumed (a roll that lands while a clip is still in
+                   the air is spent, not layered), so the whisper pattern is a function of the seed,
+                   not the wall clock. THE FIT: one size for the whole ring (`--ec-word-px`), the
+                   largest that wraps every dealt phrase into three lines AND spells every word
+                   whole; measured with a hidden 100px RULER (`.g-ec-ruler`) because a centred word
+                   box reports `scrollWidth === clientWidth` even while the word hangs out of it
   instant-recall/  the vigil (recall, 120s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
-                   GUARANTEE in the last 15s, layouts rows/mosaic/swirl, density sawtooth, plants, templates
-                   LAST_WORD/EFFECT/STING/TWO + MODE tier 4 <=10%) / montage (the stage + the L&F live-window
-                   discipline + createLedger = the TRUTH tail, aria-hidden) / grade / lex IR_LEX; ir_density
+                   GUARANTEE in the last 15s, density sawtooth, plants, templates LAST_WORD/EFFECT/STING/TWO,
+                   THE CADENCE (owner 2026-08-23, "about 5 rounds per minute"): 9-11 stops a 120s class at
+                   EVERY tier, ONE question each - tier moves the window (6/6/5/4s) and the template pool,
+                   never the rate. MIN_GAP_MS is DERIVED, not tasted: window + VERDICT_MS + DEAL_BEAT_MS +
+                   FRESH_MS + slop, so even a fully blanked stop leaves >= 4s of live wall, and seedDues
+                   pulls the two earliest dues in so that wall always SAYS >= 2 things - a question can
+                   never re-ask the entry the last one was about. grade.js's S gate + timeout ceiling are
+                   ratios of the class's own length now (floor(n * 0.12)), not absolute counts,
+                   + THE EFFECT POOL: ten CCP effects under CCP's own names, 4/6/8/10 by tier, and ONE seeded
+                   dealer that enforces MIN_SEPARATION_MS 700 between any two starts) / montage (THE WALL: one
+                   full-bleed grid solved from the stage aspect, two faces per tile, seeded dwells, ONE interval
+                   driver + the L&F live-window discipline + createLedger = the TRUTH tail, aria-hidden) /
+                   grade / lex IR_LEX; ir_density
+                   THE MOSAIC REWORK (owner ruling 2026-08-23, "a mosaic like the FYP... the effects should be
+                   those they can recognise"): the rows/mosaic/swirl layouts, the MODE template and the
+                   engine-kind option names (`Wash`, `Scanlines`, `Drift`) are GONE. A LAST_EFFECT option is a
+                   POOL KEY (`ir_fx_flash` "Flash image", `ir_fx_corner_gif` "Corner GIF", `ir_fx_brain_drain`
+                   "Brain Drain" ...), never an engine kind - which is what keeps corner_gif vs fullscreen_gif
+                   (both `gif_burst`) and spiral/pink/brain_drain (all `wash`) four distinct honest answers.
+                   TWO LAWS THE DECKS INHERIT: a tile swap NEVER writes a ledger entry (the wall is the room),
+                   and NO deck may fire a POOL primitive - pressure.js dresses with crt / ambient_field /
+                   glitch_swap only, and casino.js passes `garnish:false` to `ceremony('jackpot')` because the
+                   forced `drain|spiral` garnish would otherwise be a real Spiral the ledger never saw.
+                   THE VARIETY REWORK (owner ruling 2026-08-23, "seems to ask me only about the subliminals
+                   that played"): TEN question families - LAST_WORD / LAST_EFFECT / WALL_PICK / SPIRAL (t1),
+                   LAST_STING or HEARD / WALL_SEEN / WALL_TWICE (t2), LAST_TWO / WALL_GONE (t3). The dealt
+                   variety was always real; the RESOLUTION collapsed, for two reasons that are both gone:
+                   `DISTRACTOR_EXCLUDE` (LAST_EFFECT's decoys were the tier pool minus the last five
+                   emissions, and a tier-1 pool is FOUR keys, so it was almost never instantiable) is replaced
+                   by the per-tier `TAIL_DISTRACTORS` allowance - a thing that fired EARLIER is the
+                   recency-error decoy `ir_near` was written for, not an ambiguity, because "the LAST one" is
+                   unique by the 700ms rule; and `resolveTemplate` is HISTORY-AWARE (it picks the family the
+                   class has asked LEAST, never the one the last question resolved to) instead of walking a
+                   fixed FALLBACK_ORDER that always landed on LAST_WORD.
+                   THE DEAL IS PERMUTATION ROUNDS, not a weighted ban: round r is a seeded permutation of the
+                   surviving pool, the stops walk round 0 then 1..., and a round whose first entry equals the
+                   last dealt swaps its first two. Coverage is structural (floor/ceil(n/k) each, never twice
+                   in a row) and `assertPlan` re-checks it. Families whose MATERIAL does not exist are dropped
+                   at PLAN time (`templateDrops`: wordCount<4, clipCount, spiralCount<4, wallOk) - a family
+                   the plan deals and then always falls out of is the bug this replaced. LAST_STING and HEARD
+                   are ONE-OF-TWO: clips in the mix -> HEARD (the phrase is the content, NO re-listen button);
+                   no clips -> LAST_STING. Media families render `.g-ir-opt-media` previews with no
+                   `.g-ir-opt-t`, which is how the trickster's Unreliable Label folds on them.
+                   THREE TIMING RULES the new families need: THE CUE (`seedDues(..., wantKey)` pulls the next
+                   stop's own channel in to `CUE_LEAD_MS`), THE QUIET (`nextEmission(..., stopAtMs)` refuses to
+                   start a channel inside `PRE_STOP_QUIET_MS`, so the last entry was fully PERCEIVED), THE
+                   QUENCH (trap 44). THE WALL BOOK = one frozen `montage.snapshot()` per stop, cap 16, and
+                   every WALL_* answer is DOM truth read there - never the plan, never the plant request.
+                   Sub words are HELD, not brightened: `fire('sub_flash', {holdMs: SUB_HOLD_MS[tier]})` plus a
+                   game-local plate on `.g-ir-stage .ae-sub-word` (the alpha is still the engine's clamped
+                   channel); `CADENCE.subliminal.min` 1000 -> 1400 so two held words cannot overlap.
   anomaly/         the odd-one-out grid (search, 90s)     - rounds (PURE: kinds/deltas at PERCEPTIBLE floors,
                    relocations cap 2/round, drift) / grade / lex AN_LEX; the odd index lives in CLOSURE ONLY -
                    never a DOM attr/class (suite asserts it); decks get a canMelt(i)/meltCandidates() oracle
@@ -148,6 +220,37 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   handler that requires `key` silently drops the authoritative streak.
 - **Board size** is a per-game setting under a derived key, `<gameKey>_board_size`
   (`shell/settings.js` `boardSizeKey()`), also surfaced to games as `ctx.settings.boardSize`.
+- **`init.triggers` is `init.words` WITH THE AUDIO** (2026-08-23, Echo's pads). Shape:
+  `[{text: string, audio: string|null}]`, projected top-level beside `words` and passed
+  through to games as `ctx.triggers`. Four things are load-bearing:
+  - **It is the SAME draw as `words`, in the SAME order.** `BuildInit` shuffles the enabled
+    `SubliminalPool` ONCE and hands the list to both, so `triggers[i].text === words[i]`.
+    Two `BuildWords()` calls would reshuffle and silently desynchronise a page that reads
+    one and indexes the other. `words` itself is unchanged - every other class still reads it.
+  - **`audio` is a url on one of two new origins**, resolved by the same rules
+    `SubliminalService.FindLinkedAudio` / `KeywordTriggerService.FindLinkedAudio` use
+    (case/apostrophe filename variants, then a case-insensitive scan; the active mod wins):
+    `ccp.modaudio` -> the mod's `resources/sounds/flashes_audio`, else `ccp.subaudio` ->
+    `Resources/sub_audio`. **Both are mapped `Allow`, not `Deny`, and that is deliberate:**
+    `shell/audio.js` routes the clip's media element through the WebAudio bus graph, and a
+    CORS-tainted stream cannot feed a `MediaElementSource` - it would fall back to raw
+    element volume and slip the mixer's mute/level laws.
+  - **It is gated TWICE on the whisper mute.** With `SubAudioAudible` false the host writes
+    `audio: null` on every row AND the page refuses to fire a clip (`ctx.audioAudible`).
+    Neither side alone opens the tap; a phrase whose file cannot be read is a text row,
+    never a missing row.
+  - **A host that predates the field is fine**: a game falls back to `words` and gets text
+    faces with no clips. An empty pool is a contract, not a failure, exactly like `words`.
+- **`arcademy-sfx` takes an optional `url` (a CLIP)** alongside `name`. `engine/oneshots.js`
+  `audio_trigger` passes `url` / `key` / `maxMs` / `fadeMs` straight through the way it
+  already passes `pitch`, and `shell/audio.js` plays the url from an `HTMLAudioElement`
+  routed through the requested bus, so mute, master, bus level and ducking all still apply.
+  `key` is a VOICE SLOT (a re-fire on the same key cuts the one still playing - Echo keys
+  per pad so a fast sequence cannot pile six whispers up), `maxMs` truncates with a fade
+  (default 1200), and `CLIP_GAIN` gives a clip the same headroom a recipe gets from its own
+  `gain`, so a clip at level L is never louder than an oscillator at level L. The `name` is
+  still sent and is the FALLBACK: a host that cannot decode the url plays the recipe rather
+  than going silent.
 - **`shell/audio.js` accepts an optional `pitch`** on the `arcademy-sfx` detail (0.5-2,
   default 1). It multiplies every frequency in the recipe - oscillator sweep, arpeggio step,
   noise band, stamp thunk - and deliberately NOT the duration, so a pitch ratchet climbs
@@ -472,6 +575,48 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
       `maxTouchPoints: 10` with a fine pointer and therefore also gets the ceiling. It is
       hardware-protective and cheap; do not "fix" it by dropping the maxTouchPoints probe,
       which is the only signal a webview that answers no media query has.
+
+43. **`fullBleed` IS THE ONE ADDITIVE ENGINE OPTION INSTANT RECALL ADDED (2026-08-23).**
+    `engine/oneshots.js` `fire('flash_burst'|'gif_burst', { fullBleed: true })` forces `count:1`,
+    adds the class `ae-burst-cover` (`inset:0`, `object-fit:cover`, no transform, no radius) and
+    zeroes `--ae-rot`; the handle answers `fullBleed`. It exists because "fullscreen GIF" is one of
+    CCP's OWN named effects and the pool needs it to be visibly different from the corner GIF - which
+    needs no engine change at all, because `count:1` plus `x`/`y` (viewport percentages, the layer is
+    fixed on `#arc-fx`) is already a placement seam. **Opt-in and count-forcing: a caller that never
+    passes the field sees byte-identical behaviour**, which is the bar every engine addition has to
+    clear. Alpha still comes from the clamped channel - `fullBleed` changes the SHAPE of a burst,
+    never its ceiling, so THE CEILING RULE is untouched.
+
+44. **THE ANSWER CAN STILL BE ON SCREEN WHEN THE CARD IS UP - THAT IS WHAT THE QUENCH IS
+    FOR (Instant Recall, 2026-08-23).** `#arc-fx` is `position:fixed; z-index:40` over the
+    WHOLE page, and a held effect outlives the freeze: a spiral / pink / drain wash holds
+    2.4s, a corner GIF 2s, a bubble field 3.4s (and `clearChannels()` deletes the pulse timer
+    that would have stopped it). For the old LAST_EFFECT that gave the answer away some of
+    the time; for a SPIRAL or a WALL card it would give it away EVERY time - the thing you are
+    being asked to remember is still playing over the slip. So `beginStop()` clears the air
+    BEFORE the card: cancel every live burst handle (a ring of 6), `stop('bubble_field')` /
+    `stop('gif_rain')`, step the three washes down to alpha 0.01 (**never `stop('wash')` -
+    trap 33**), one `fire('audio_trigger', {name:'stop_clips'})` to cut a whisper clip
+    mid-word, and blank the game's own `.g-ir-flashwell` so a still-fading sub word cannot sit
+    on the slip. **None of it writes a ledger entry** - a silence is not an emission, and the
+    truth of what happened is already written. The wall itself is hidden a second way, by
+    attribute rather than by effect: `.g-ir-stage[data-shroud="1"]` while a WALL card is up,
+    `"0"` at the verdict (the wall IS the proof, with the truth tiles ringed), removed at the
+    resume. If you ever add a new held primitive to the pool, it must join the quench in the
+    same commit or the class starts handing out answers.
+45. **A SPIRAL LOOK-ALIKE IS ANOTHER ASSET, NEVER A CSS VARIANT OF THE ONE YOU SAW.** The
+    owner asked for "three generated ones, similar to that one". Five of the seven bundled
+    spirals are mirror- and/or rotation-symmetric (sp1/sp7 concentric rings, sp5/sp6 heart
+    tunnels, sp3 a kaleidoscope), so `scaleX(-1)` and any `rotate()` produce an option
+    IDENTICAL to the truth - input honesty broken, and the card has two right answers.
+    `hue-rotate` is a no-op on the two monochrome sets, `invert` on rings is a phase-swap of
+    the same animation, and a recolour makes "the canonically-coloured tile" the tell after
+    two classes. Recolouring the EMITTED wash is worse still: it is a 150vmax `filter:` over a
+    live decode, per frame (trap 36). So `spirals.js` draws a SET of four different spirals
+    the engine could equally have shown, kin-first (rings<->rings, hearts<->hearts,
+    Loom<->Loom), and the decoys are the other three of that set. The preview is the asset AS
+    SHIPPED - square, unspun, uncoloured - because arm shape and palette are what the player
+    actually recalls, not the screen-blended turning wash.
 
 ## 5. The game module contract (short version)
 
