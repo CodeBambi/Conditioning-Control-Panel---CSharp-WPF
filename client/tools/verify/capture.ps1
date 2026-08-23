@@ -102,8 +102,8 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -144,6 +144,11 @@ $stateFiles = @(
 # THE REAL GUARD IS THE PROBE. The gate below requires `modal=open` before any pixel, so if page
 # state ever did survive a run, this capture REFUSES BY NAME instead of photographing the other
 # screen. That is the mechanism; this is tidying.
+# AND THE LOG FOLDER, for the session-history surface only. The retained logs are the SUBJECT of
+# those two captures (ScriptedSessionLogStore.FolderName), so a folder left behind by a previous run
+# would put a row on the `not-kept` capture and make it photograph the wrong claim - the exact
+# leak the session_preset.json note above records for the rack.
+$sessionLogsDir = Join-Path $env:APPDATA 'CcpClient\session_logs'
 $goonProfileDir = Join-Path $env:APPDATA 'CcpClient\dtrh\wv2-profile-goon'
 $outFile = Join-Path $shots "windows-$Surface-$State.png"
 
@@ -162,6 +167,13 @@ $statesFor = @{
     # cannot fail on another row is a check that is not reading the session's own data.
     'session-row'   = @('easy', 'hard')
     'session-start' = @('idle', 'running')
+    # THE TWO HISTORY STATES ARE ONE RULE. Both runs are the SAME session, started and stopped the
+    # same way through the same four gestures; the only difference between the captures is HOW LONG
+    # the session was left running, and upstream's retention rule decides whether that run is kept
+    # (Services/Session/SessionLogService.cs:24, :93-94 - no media AND under 30 seconds is the only
+    # case that is dropped). So a check that passes on both would be saying the log ignores the
+    # rule.
+    'session-history' = @('kept', 'not-kept')
 }
 if ($statesFor[$Surface] -notcontains $State) {
     Write-Output "FAIL: surface '$Surface' has no state '$State' (it has: $($statesFor[$Surface] -join ', '))"
@@ -445,6 +457,58 @@ function Get-GoonProbe($goonWindow) {
     catch { return $null }
 }
 
+# The session's own windows: the recap the end of a run raises, and the Recent Sessions history.
+# Looked up BY TITLE for the reason Get-GoonWindow gives - the moment either is up this process has
+# two top-level windows and Get-Window's process-id-only lookup stops being unambiguous.
+# WHERE AN OWNED WINDOW REALLY IS IN THE UIA TREE, and this was MEASURED rather than assumed. The
+# goon host is found as a CHILD of the desktop root; the session recap and the history are not, and
+# a first draft that looked only there refused a window the app had demonstrably shown -- the app's
+# own diagnostic read `visible=True pos=534,166 size=540x620 owner=shell` in the same run. They are
+# shown OWNED (Window.Show(owner), the LoomLaunch convention), and Windows nests an owned window
+# under its owner, so UIA reports it as a DESCENDANT of the shell rather than as a sibling. Both
+# places are searched, cheap one first.
+function Get-NamedWindow([int]$processId, [string]$title) {
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $byProcess = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $processId)
+    foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $byProcess)) {
+        if ($w.Current.Name -eq $title) { return $w }
+        $owned = $w.FindAll([System.Windows.Automation.TreeScope]::Children,
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                [System.Windows.Automation.ControlType]::Window)))
+        foreach ($o in $owned) {
+            if ($o.Current.Name -eq $title) { return $o }
+        }
+    }
+    return $null
+}
+
+# Wait for one of them to appear. Bounded, and it FAILS BY NAME rather than returning null: a
+# window that never opened is the finding, not a missing variable three lines later.
+function Wait-NamedWindow([int]$processId, [string]$title, [int]$seconds = 10) {
+    $deadline = [Diagnostics.Stopwatch]::StartNew()
+    while ($deadline.Elapsed.TotalSeconds -lt $seconds) {
+        $w = Get-NamedWindow $processId $title
+        if ($null -ne $w) { return $w }
+        Start-Sleep -Milliseconds 200
+    }
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $cond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $processId)
+    $seen = @()
+    foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)) {
+        $seen += "'$($w.Current.Name)'"
+        foreach ($o in $w.FindAll([System.Windows.Automation.TreeScope]::Children,
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                [System.Windows.Automation.ControlType]::Window)))) {
+            $seen += "'$($o.Current.Name)' (owned)"
+        }
+    }
+    Fail "no '$title' window appeared within ${seconds}s (this process has: $($seen -join ', '))"
+}
+
 function Assert-Route($window, [string]$route) {
     $texts = (Get-Texts $window) -join "`n"
     if ($texts -notmatch "route: $route") { Fail "the shell did not navigate to '$route' (state drive failed)" }
@@ -459,6 +523,10 @@ Take-Lease
 # without the preset file in this set an 'off' capture leaks into the NEXT run's 'armed' capture.
 foreach ($stateFile in $stateFiles) {
     if (Test-Path $stateFile) { Remove-Item $stateFile -Force }
+}
+if ($Surface -eq 'session-history' -and (Test-Path $sessionLogsDir)) {
+    Remove-Item $sessionLogsDir -Recurse -Force
+    Write-Output "deterministic start: retained session logs cleared ($sessionLogsDir)"
 }
 if ($Surface -eq 'goon-page' -and (Test-Path $goonProfileDir)) {
     # Only for this surface: blowing away a WebView2 profile is not free (the next launch rebuilds
@@ -540,6 +608,11 @@ $windowRect = Get-Rect $window
 
 $script:goonWindow = $null
 $script:goonHwnd = [IntPtr]::Zero
+# The session recap / history window, when one is up at capture time. Same reason the goon window
+# has its own handle: with two top-level windows Process.MainWindowHandle does not say which one it
+# names, so CloseMainWindow could send WM_CLOSE to either.
+$script:extraWindow = $null
+$script:extraHwnd = [IntPtr]::Zero
 
 if ($Surface -eq 'goon-page') {
     # =========================================================================================
@@ -918,7 +991,7 @@ elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
         $capX = $rowRect.X; $capY = $rowRect.Y; $capW = $rowRect.W; $capH = $rowRect.H
     }
 }
-elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start') {
+elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start' -or $Surface -eq 'session-history') {
     # =============================================================================================
     # THE SESSION RACK. The shell opens on Studio, so no navigation is needed — but the SESSIONS
     # row is the LAST row of the rack and is below the scroll fold at this window size, so it is
@@ -962,7 +1035,178 @@ elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start') {
     }
     Write-Output 'rack gate: four shipped sessions present with their own names and durations'
 
-    if ($Surface -eq 'session-row') {
+    if ($Surface -eq 'session-history') {
+        # =========================================================================================
+        # WHAT THE USER SEES WHEN IT ENDS. One real session is started through its confirmation,
+        # left running for a length THIS STATE CHOOSES, stopped through its confirmation, and the
+        # recap that upstream raises for an abort as much as for a completion is read off the real
+        # desktop (MainWindow/MainWindow.Presets.cs:1681; the log's LogReady fires either way,
+        # Services/Session/SessionLogService.cs:95-101). Then the door's Recent sessions button is
+        # pressed and the history window is photographed.
+        #
+        # THE PAIR IS UPSTREAM'S RETENTION RULE. `kept` leaves the run past the 30-second floor and
+        # `not-kept` stops it at once, and NOTHING ELSE DIFFERS - same session, same gestures, same
+        # window, same derived cell. So the row that appears in one capture and not the other is
+        # `log.Media.Count > 0 || duration >= PersistenceMinDuration` (:94) reaching the screen.
+        # =========================================================================================
+        $pick = Get-Element $window 'SessionRowMorningDrift'
+        Click-Rect (Get-Rect $pick)
+        if (-not (Get-Selected (Get-Element $window 'SessionRowMorningDrift'))) {
+            Fail 'the left-click did not select the Morning Drift session row (state drive failed)'
+        }
+        Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionStartButton'))
+        $confirmPromise = (Get-Element $window 'ScriptedSessionConfirmPromise').Current.Name
+        if ($confirmPromise -notlike '*restored when the session ends*') {
+            Fail "the confirmation does not carry the settings promise: '$confirmPromise'"
+        }
+        $stillIdle = (Get-Element $window 'ScriptedSessionStartButton').Current.Name
+        if ($stillIdle -ne 'Start Session') { Fail "a session started before the confirmation was answered: button reads '$stillIdle'" }
+        Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionConfirmButton'))
+        $caption = (Get-Element $window 'ScriptedSessionStartButton').Current.Name
+        if ($caption -notlike 'STOP SESSION (*') { Fail "the session did not start: the button reads '$caption'" }
+        Write-Output "start gate: promise shown, nothing started until it was answered, button '$caption'"
+
+        # THE DWELL IS THE STATE, and it is the product's own real clock rather than an injected
+        # one - the only place in this repository where that 30-second floor is exercised against
+        # wall time. 33 seconds, not 30: the stop below is three real clicks with the harness's own
+        # 700 ms settle in each, and the number that decides retention is the elapsed the run
+        # reports at STOP.
+        if ($State -eq 'kept') {
+            Write-Output 'dwell: leaving the session running past the 30-second retention floor'
+            Start-Sleep -Seconds 33
+        }
+
+        Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionStartButton'))
+        $timing = (Get-Element $window 'ScriptedSessionConfirmPromise').Current.Name
+        if ($timing -notmatch 'Time elapsed: (?<mm>\d\d):(?<ss>\d\d)') {
+            Fail "the stop confirmation does not report the elapsed time: '$timing'"
+        }
+        $elapsedSeconds = ([int]$Matches['mm'] * 60) + [int]$Matches['ss']
+        if ($State -eq 'kept' -and $elapsedSeconds -lt 30) {
+            Fail "the 'kept' capture would not be kept: the run reports ${elapsedSeconds}s elapsed, under the 30-second floor"
+        }
+        if ($State -eq 'not-kept' -and $elapsedSeconds -ge 30) {
+            Fail "the 'not-kept' capture would be kept: the run reports ${elapsedSeconds}s elapsed, past the 30-second floor"
+        }
+        Write-Output "retention gate: the run reports ${elapsedSeconds}s elapsed, which is the side of the 30-second floor this state needs"
+        Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionConfirmButton'))
+
+        # THE RECAP, AS A REAL SECOND WINDOW ON A REAL DESKTOP. Nothing in the test suites can make
+        # this claim: a headless frame has no window manager and no compositor.
+        $recap = Wait-NamedWindow $script:proc.Id 'Session Complete'
+
+        # RAISE IT BEFORE TOUCHING IT. The shell was put HWND_TOPMOST at launch (the harness's own
+        # occluder rule), and the recap is an ordinary owned window - so a click at the recap's own
+        # UIA coordinates lands on the SHELL instead. Measured: the first run here read the recap's
+        # every field through UIA and then reported 'the recap did not close on Continue', because
+        # the press never reached it.
+        $recapHwnd = [IntPtr]$recap.Current.NativeWindowHandle
+        if ($recapHwnd -eq [IntPtr]::Zero) { Fail 'the recap window has no native handle; it cannot be raised' }
+        [VerifyNative]::SetWindowPos($recapHwnd, [VerifyNative]::HWND_TOPMOST, 0, 0, 0, 0,
+            [VerifyNative]::SWP_NOMOVE -bor [VerifyNative]::SWP_NOSIZE -bor [VerifyNative]::SWP_SHOWWINDOW) | Out-Null
+        Start-Sleep -Milliseconds 300
+        $recapRect = Get-Rect $recap
+        $headline = (Get-Element $recap 'SessionRecapHeadline').Current.Name
+        $subtitle = (Get-Element $recap 'SessionRecapSubtitle').Current.Name
+        $recapDuration = (Get-Element $recap 'SessionRecapDuration').Current.Name
+        $names = (Get-Element $recap 'SessionRecapNamesNotice').Current.Name
+        $awards = (Get-Element $recap 'SessionRecapAwardsNotice').Current.Name
+        $noMedia = (Get-Element $recap 'SessionRecapNoMedia').Current.Name
+        if ($headline -ne 'Session Ended Early') { Fail "the recap does not say the run was stopped early: '$headline'" }
+        if ($subtitle -notlike '*Morning Drift*') { Fail "the recap does not name the session: '$subtitle'" }
+        if ($recapDuration -notmatch '^\d\d:\d\d$') { Fail "the recap's duration cell is not MM:SS: '$recapDuration'" }
+        if ($names -notlike '*never a name or a path*') { Fail "the recap does not carry the media-name refusal: '$names'" }
+        if ($awards -notlike '*No XP*') { Fail "the recap does not carry the XP refusal: '$awards'" }
+        if ($noMedia -notlike '*No videos or images*') { Fail "the recap does not report an empty media list: '$noMedia'" }
+        if ($recapRect.W -le 0 -or $recapRect.H -le 0) { Fail 'the recap window has no rect on this desktop' }
+        Write-Output ("recap gate: '$headline' / '$subtitle' / duration $recapDuration, both refusals present, " +
+    "window at $($recapRect.X),$($recapRect.Y) $($recapRect.W)x$($recapRect.H)")
+
+        Click-Rect (Get-Rect (Get-Element $recap 'SessionRecapCloseButton'))
+        if ($null -ne (Get-NamedWindow $script:proc.Id 'Session Complete')) { Fail 'the recap did not close on Continue' }
+
+        # UPSTREAM'S DOOR BUTTON (MainWindow/MainWindow.Presets.cs:1440).
+        Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionHistoryButton'))
+        $history = Wait-NamedWindow $script:proc.Id 'Recent Sessions'
+        $script:extraHwnd = [IntPtr]$history.Current.NativeWindowHandle
+        if ($script:extraHwnd -eq [IntPtr]::Zero) { Fail 'the history window has no native handle; it cannot be raised or captured' }
+        [VerifyNative]::SetWindowPos($script:extraHwnd, [VerifyNative]::HWND_TOPMOST, 0, 0, 0, 0,
+            [VerifyNative]::SWP_NOMOVE -bor [VerifyNative]::SWP_NOSIZE -bor [VerifyNative]::SWP_SHOWWINDOW) | Out-Null
+        Start-Sleep -Milliseconds 400
+        $script:extraWindow = $history
+        $historyRect = Get-Rect $history
+
+        $count = (Get-Element $history 'SessionHistoryCount').Current.Name
+        if ($State -eq 'kept') {
+            if ($count -ne '1 sessions') { Fail "the kept run is not in the history: the count cell reads '$count'" }
+            $rowTitle = (Get-Element $history 'SessionHistoryTitle0').Current.Name
+            $rowStatus = (Get-Element $history 'SessionHistoryStatus0').Current.Name
+            $rowDetail = (Get-Element $history 'SessionHistoryDetail0').Current.Name
+            if ($rowTitle -notlike '*Morning Drift*') { Fail "the history row does not name the session: '$rowTitle'" }
+            if ($rowStatus -ne 'Aborted') { Fail "the history row does not report the abort: '$rowStatus'" }
+            if ($rowDetail -notmatch '\d\d:\d\d') { Fail "the history row does not report a duration: '$rowDetail'" }
+            Write-Output "history gate: '$count' / '$rowTitle' / '$rowStatus' / '$rowDetail'"
+        }
+        else {
+            if ($count -ne '') { Fail "the short run WAS kept: the count cell reads '$count'" }
+            $empty = (Get-Element $history 'SessionHistoryEmpty').Current.Name
+            if ($empty -notlike '*No session logs yet*') { Fail "the empty history does not say so: '$empty'" }
+            if ($null -ne $history.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                    (New-Object System.Windows.Automation.PropertyCondition(
+                        [System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'SessionHistoryRow0')))) {
+                Fail 'the short run WAS kept: the history has a row in it'
+            }
+            Write-Output "history gate: no rows, and the window says '$empty'"
+        }
+
+        # THE CELL, DERIVED FROM TWO MEASURED RECTS AND THE WINDOW'S OWN CONSTANTS - the stripe
+        # cell's rule, and it has to be a derivation here because the `not-kept` state has no row to
+        # measure. The list plate's inner top is the header's bottom plus the header grid's 12 DIP
+        # margin, the plate's 1 DIP border and its 12 DIP padding; the band sits 2..7 DIP below that,
+        # which is inside Button.history-row's own 8 DIP top padding and therefore flat fill in the
+        # kept state and flat plate in the other.
+        $headerRect = Get-Rect (Get-Element $history 'SessionHistoryHeader')
+        $closeRect = Get-Rect (Get-Element $history 'SessionHistoryCloseButton')
+        $rowTop = $headerRect.Y + $headerRect.H + [int][math]::Round((12 + 1 + 12) * $scale)
+        $bandRight = $closeRect.X + $closeRect.W - [int][math]::Round((12 + 1) * $scale)
+        $bandLeft = $bandRight - [int][math]::Round(200 * $scale)
+        $capX = $bandLeft
+        $capY = $rowTop + [int][math]::Round(2 * $scale)
+        $capW = $bandRight - $bandLeft
+        $capH = [int][math]::Round(5 * $scale)
+
+        if ($State -eq 'kept') {
+            # THE CROSS-CHECK, and it is the whole reason the derivation is trustworthy: in the one
+            # state that HAS a row, the derived top must land on the real row's top and the band must
+            # lie inside it. If the window's layout changes and this script does not, the capture
+            # aims at the plate instead of at the row and the check fails looking like a product
+            # regression.
+            $rowRect = Get-Rect (Get-Element $history 'SessionHistoryRow0')
+            if ([math]::Abs($rowRect.Y - $rowTop) -gt 2) {
+                Fail ("the history list does not start where the plate says it does: the header ends at " +
+    "$($headerRect.Y + $headerRect.H) and its 12+1+12 DIP puts the first row at $rowTop, but the row is really " +
+    "at $($rowRect.Y) (scale $scale). The window's layout has changed and this no longer names the row")
+            }
+            if ($bandLeft -lt $rowRect.X -or $bandRight -gt ($rowRect.X + $rowRect.W)) {
+                Fail ("the sample band $bandLeft..$bandRight is not inside the history row at " +
+    "$($rowRect.X)..$($rowRect.X + $rowRect.W)")
+            }
+            $padBottom = $rowRect.Y + [int][math]::Round(8 * $scale)
+            if (($capY + $capH) -gt $padBottom) {
+                Fail ("the sample band ends at $($capY + $capH), past the row's own 8 DIP top padding ending at " +
+    "$padBottom - those pixels would contain the row's glyphs")
+            }
+            Write-Output ("row cell: $capX,$capY ${capW}x${capH} - row $($rowRect.X),$($rowRect.Y) " +
+    "$($rowRect.W)x$($rowRect.H), derived top $rowTop, padding ends $padBottom (scale $scale)")
+        }
+        else {
+            Write-Output "plate cell: $capX,$capY ${capW}x${capH} - derived first-row top $rowTop, no row there (scale $scale)"
+        }
+
+        Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $historyRect 'the history sample band' 'the history window'
+        $windowRect = $historyRect   # the cursor is parked relative to the window being captured
+    }
+    elseif ($Surface -eq 'session-row') {
         # ONE ROW PER STATE, and they are different SESSIONS: the stripe's colour is the session's
         # own difficulty (Resources/Theme/Colors.xaml:191-197), so the two captures differ only in
         # which row was photographed. That is what makes each check's failure on the other capture
@@ -997,6 +1241,7 @@ elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start') {
     "$($rowRect.W)x$($rowRect.H), meta ends $($metaRect.X + $metaRect.W), grid closes at $closes (scale $scale)")
     }
     else {
+        # session-start
         # THE ONE BUTTON, IN ITS TWO STATES. Idle is pink and says Start Session; running is red and
         # says STOP SESSION with the time left in it (MainWindow.StartStop.cs:756,
         # MainWindow.Presets.cs:1752, en.json:2321). Reaching `running` means really starting a
@@ -1164,6 +1409,13 @@ if ($null -ne $script:goonWindow -and $script:goonHwnd -ne [IntPtr]::Zero) {
     Write-Output "goon window closed after $([math]::Round($closeDeadline.Elapsed.TotalSeconds, 1))s (graceful exit handshake)"
     # The dashboard is the only top-level window left; re-read the handle that names it.
     $script:proc.Refresh()
+}
+
+if ($null -ne $script:extraWindow -and $script:extraHwnd -ne [IntPtr]::Zero) {
+    [VerifyNative]::PostMessage($script:extraHwnd, [VerifyNative]::WM_CLOSE, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+    Start-Sleep -Milliseconds 600
+    $script:proc.Refresh()
+    Write-Output 'session window closed by its own handle'
 }
 
 $null = $script:proc.CloseMainWindow()

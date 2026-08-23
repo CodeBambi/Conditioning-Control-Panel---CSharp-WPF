@@ -28,16 +28,24 @@ public sealed class SessionRecapLaunch
 {
     private readonly ScriptedSessionLogStore _store;
     private readonly Window _owner;
+    private readonly Action<string> _log;
 
     /// <param name="store">The log store the session writes into and the history reads back.</param>
     /// <param name="owner">The shell window every one of these is owned by, as upstream owns its
     /// dialogs to the main window (<c>MainWindow.Presets.cs:1444</c>, <c>:1683</c>).</param>
-    public SessionRecapLaunch(ScriptedSessionLogStore store, Window owner)
+    /// <param name="log">Where a refused open is reported. Upstream wraps BOTH of these in a
+    /// try/catch that logs and carries on (<c>MainWindow.Presets.cs:1447-1450</c>,
+    /// <c>:1719-1722</c>), and the reason is the whole shape of this feature: the recap opens by
+    /// ITSELF at the end of a run, so a throw would surface as an app that died the moment a
+    /// session finished.</param>
+    public SessionRecapLaunch(ScriptedSessionLogStore store, Window owner, Action<string> log)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(log);
         _store = store;
         _owner = owner;
+        _log = log;
     }
 
     /// <summary>
@@ -65,35 +73,55 @@ public sealed class SessionRecapLaunch
     /// COMPLETION AND ABORT alike, because upstream's is
     /// (<c>MainWindow/MainWindow.xaml.cs:373-375</c>).
     /// </summary>
-    public SessionRecapWindow ShowRecap(ScriptedSessionLog log) => ShowRecap(log, _owner);
+    public SessionRecapWindow? ShowRecap(ScriptedSessionLog log) => ShowRecap(log, _owner);
 
     /// <summary>The same, owned by a specific window — the history's rows open their recap owned by
     /// the history rather than by the shell, as upstream's do
     /// (<c>SessionLogHistoryWindow.xaml.cs:46-49</c>).</summary>
-    public SessionRecapWindow ShowRecap(ScriptedSessionLog log, Window owner)
+    public SessionRecapWindow? ShowRecap(ScriptedSessionLog log, Window owner)
     {
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(owner);
         RecapCount++;
 
         CloseRecap();
-        var window = new SessionRecapWindow(log);
-        CurrentRecap = window;
-        window.Closed += (_, _) =>
+        try
         {
-            if (ReferenceEquals(CurrentRecap, window))
+            var window = new SessionRecapWindow(log);
+            CurrentRecap = window;
+            window.Closed += (_, _) =>
             {
-                CurrentRecap = null;
-            }
-        };
+                if (ReferenceEquals(CurrentRecap, window))
+                {
+                    CurrentRecap = null;
+                }
+            };
 
-        Present(window, owner);
-        return window;
+            Present(window, owner);
+
+            // Content-free by construction: a duration, an outcome and a COUNT — never a name. It
+            // is here because the recap opens by ITSELF, so "did it open" is otherwise only
+            // answerable by looking at the screen; this line is what the headed harness used to
+            // find that an owned Avalonia window is a UIA DESCENDANT of its owner rather than a
+            // sibling.
+            _log($"session recap: shown for a run of {log.Duration.TotalSeconds:0}s "
+                + $"({(log.Completed ? "completed" : "stopped early")}, {log.Media.Count} media entries)");
+            return window;
+        }
+        catch (Exception ex)
+        {
+            // Upstream's own catch (:1719-1722, "Failed to show post-session log dialog"). The run
+            // has already ended and its log is already written; a recap that cannot be shown must
+            // not take the app with it.
+            CurrentRecap = null;
+            _log($"session recap: could not be shown ({ex.GetType().Name}: {ex.Message})");
+            return null;
+        }
     }
 
     /// <summary>Open the history, or refocus the one already open (the
     /// <see cref="LoomLaunch.Launch"/> rule).</summary>
-    public SessionHistoryWindow ShowHistory()
+    public SessionHistoryWindow? ShowHistory()
     {
         HistoryCount++;
 
@@ -103,18 +131,28 @@ public sealed class SessionRecapLaunch
             return open;
         }
 
-        var window = new SessionHistoryWindow(_store, (log, owner) => ShowRecap(log, owner));
-        CurrentHistory = window;
-        window.Closed += (_, _) =>
+        try
         {
-            if (ReferenceEquals(CurrentHistory, window))
+            var window = new SessionHistoryWindow(_store, (log, owner) => ShowRecap(log, owner));
+            CurrentHistory = window;
+            window.Closed += (_, _) =>
             {
-                CurrentHistory = null;
-            }
-        };
+                if (ReferenceEquals(CurrentHistory, window))
+                {
+                    CurrentHistory = null;
+                }
+            };
 
-        Present(window, _owner);
-        return window;
+            Present(window, _owner);
+            return window;
+        }
+        catch (Exception ex)
+        {
+            // Upstream's own catch (:1447-1450, "Failed to open session history dialog").
+            CurrentHistory = null;
+            _log($"session history: could not be opened ({ex.GetType().Name}: {ex.Message})");
+            return null;
+        }
     }
 
     private void CloseRecap()

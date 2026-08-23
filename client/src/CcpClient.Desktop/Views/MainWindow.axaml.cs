@@ -133,7 +133,7 @@ public partial class MainWindow : Window
         // (Navigation/SessionRecapLaunch.cs), on the SAME log store the running session writes
         // into. Built here rather than inside the page for the LoomLaunch reason: the windows are
         // owned by the SHELL, and the page is not a window.
-        Recap = new Navigation.SessionRecapLaunch(Session.MediaLog, this);
+        Recap = new Navigation.SessionRecapLaunch(Session.MediaLog, this, host.LogDiagnostic);
 
         _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics, Recap);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);

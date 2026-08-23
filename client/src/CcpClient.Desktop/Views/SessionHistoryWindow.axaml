@@ -50,7 +50,9 @@
 
   <DockPanel Margin="20">
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
-      <TextBlock Grid.Column="0" Foreground="#FFD05CE8" FontSize="20" FontWeight="Bold"
+      <TextBlock Grid.Column="0" x:Name="Header"
+                 AutomationProperties.AutomationId="SessionHistoryHeader"
+                 Foreground="#FFD05CE8" FontSize="20" FontWeight="Bold"
                  Text="Recent Sessions" />
       <TextBlock Grid.Column="1" x:Name="HistoryCount"
                  AutomationProperties.AutomationId="SessionHistoryCount"

@@ -283,6 +283,50 @@
       "tolerance": 4,
       "minPixelFraction": 0.98
     },
+    // THE SESSION HISTORY, and it is the only pair on this manifest whose two states differ by
+    // NOTHING A USER DID DIFFERENTLY. Both captures start the same session with the same four
+    // gestures and stop it with the same two; the only difference is how long it was left running,
+    // and upstream's retention rule decides whether that run is kept at all
+    // (Services/Session/SessionLogService.cs:24, :93-94 - no media AND under 30 seconds is the only
+    // case that is dropped). So the row that is in one capture and absent from the other IS that
+    // rule reaching the screen, and a check that could not tell them apart would be saying the log
+    // ignores it.
+    //
+    // THE CELL IS ONE BAND, SAMPLED TWICE. It is derived at capture time from the header's measured
+    // rect and the window's own constants (the header grid's 12 DIP margin, the plate's 1 DIP border
+    // and 12 DIP padding), because the `not-kept` state has no row to measure - and in the state
+    // that DOES have one the derivation is cross-checked against the real row's rect and against
+    // Button.history-row's own 8 DIP top padding, so a band that had drifted onto the row's glyphs
+    // refuses at capture time rather than failing later like a product regression.
+    //
+    // TOLERANCE 4 IS THE WHOLE POINT HERE and it is the rack's number for the rack's reason: the
+    // row card #FF2A2130 and the plate #FF241E2A are only 6/3/6 apart, which is the same distance
+    // the rack's selected fill sits from its hovered row. At 8 either check would pass on the other
+    // capture and the pair would prove nothing. ScriptedSessionPresentationTests
+    // .NoSessionCheckAcceptsTheColourOfAnotherDeclaredState asserts that separation mechanically
+    // over this file, so widening either one reddens the floor and names both colours.
+    {
+      "name": "session-history-kept-row-fill",
+      "surface": "session-history",
+      "state": "kept",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.15, "w": 0.96, "h": 0.7 } },
+      "expectedColor": "#2A2130",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "session-history-not-kept-plate",
+      "surface": "session-history",
+      "state": "not-kept",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.15, "w": 0.96, "h": 0.7 } },
+      "expectedColor": "#241E2A",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
+    },
     {
       "name": "trainer-card-ink",
       "surface": "trainer-card",
