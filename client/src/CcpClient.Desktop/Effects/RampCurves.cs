@@ -53,6 +53,13 @@ public enum RampCurve
 /// (<c>Services/Session/SessionEngine.UpdateRampingValues</c>). The port has only the first: the
 /// scripted session is explicitly not ported (see <see cref="Session.SessionEngine"/>'s remarks),
 /// so this class has exactly one caller here where it has two upstream.</para>
+///
+/// <para><b>Amended: the second caller has landed</b>, and the paragraph above is kept as it stood
+/// because the port-completeness census quotes it. The scripted session's ramps are
+/// <see cref="Session.ScriptedSessionRamp"/>, which calls <see cref="ApplyCurve"/> once per tick
+/// for the flash trio and once more for each overlay ramp — so this class now has both the callers
+/// it has upstream, and they share a curve for upstream's reason: one dial shapes every ramp the
+/// user meets (<c>Services/Session/SessionEngine.cs:569</c>).</para>
 /// </summary>
 public static class RampCurves
 {
