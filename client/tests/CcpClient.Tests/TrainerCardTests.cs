@@ -356,6 +356,114 @@ public sealed class TrainerCardTests : IDisposable
         Assert.Single(Regex.Matches(source, @"File\.ReadAllText\("));
     }
 
+    /// <summary>
+    /// THE HEADED CHECKS CANNOT BE PASSED BY A PICTURE OF NOTHING, and that is asserted here
+    /// because it has already gone wrong in this repository once: <c>capture-wslg.sh</c> printed
+    /// CAPTURE PASS over an all-black image.
+    ///
+    /// <para>The card's two checks in <c>client/tools/verify/checks.json</c> expect the module
+    /// ground (<c>#1B1622</c>, <c>MainWindow.axaml:122</c>) and the module title's ink
+    /// (<c>#E8E0EE</c>, <c>MainWindow.axaml:320</c>). This proves the property rather than the
+    /// numbers: no single colour lies inside every check's tolerance band, so a UNIFORM capture —
+    /// black, the page ground behind the card, the card's own ground, anything at all — must fail
+    /// at least one of them. Widen a tolerance or drop one of the pair and this reddens.</para>
+    ///
+    /// <para>The second half pins the pair to the geometry the capture script PROVES before it
+    /// reads the screen. A fractional region is only evidence if the thing it names is really at
+    /// that fraction, and <c>capture.ps1</c> refuses the capture unless the ink band lands on the
+    /// title's own measured line and the ground band starts right of the 640 DIP text column. Both
+    /// files are read from disk, so a region edited in one and not the other names both.</para>
+    ///
+    /// <para><b>What this does NOT prove.</b> Nothing here photographs anything. That a real
+    /// capture of the real card PASSES these checks is the headed run's evidence, not this
+    /// file's.</para>
+    /// </summary>
+    [Fact]
+    public void NoUniformCaptureCanPassTheHeadedTrainerCardChecks()
+    {
+        var manifestPath = Path.Combine(FindRepoRoot(), "client", "tools", "verify", "checks.json");
+        var checks = CcpVerify.CheckManifest.Load(manifestPath)
+            .Where(c => c.Surface == "trainer-card")
+            .ToArray();
+        Assert.True(checks.Length >= 2,
+            $"the trainer-card surface declares {checks.Length} check(s); a single check cannot rule out a "
+            + "uniform capture, which is the whole reason this surface has a pair");
+
+        // A colour c passes both checks only if EVERY channel is within tolerance of both expected
+        // values, which needs |a-b| <= ta+tb on every channel. One channel further apart than that
+        // makes the two bands unreachable together, and no uniform capture can pass the surface.
+        foreach (var a in checks)
+        {
+            foreach (var b in checks)
+            {
+                if (ReferenceEquals(a, b))
+                {
+                    continue;
+                }
+
+                var (ar, ag, ab) = CcpVerify.CheckManifest.ParseColor(a.ExpectedColor, $"check '{a.Name}':");
+                var (br, bg, bb) = CcpVerify.CheckManifest.ParseColor(b.ExpectedColor, $"check '{b.Name}':");
+                var reach = a.Tolerance + b.Tolerance;
+                Assert.True(
+                    Math.Abs(ar - br) > reach || Math.Abs(ag - bg) > reach || Math.Abs(ab - bb) > reach,
+                    $"'{a.Name}' ({a.ExpectedColor} ±{a.Tolerance}) and '{b.Name}' ({b.ExpectedColor} "
+                    + $"±{b.Tolerance}) overlap on every channel, so one flat colour satisfies both — a "
+                    + "capture of an empty rectangle would pass this surface");
+            }
+        }
+
+        // And demonstrated, not only derived: the three uniform captures this surface could
+        // plausibly be handed. Each must be rejected by at least one of the pair.
+        foreach (var (what, colour) in new (string, (byte R, byte G, byte B))[]
+                 {
+                     ("an all-black capture", ((byte)0, (byte)0, (byte)0)),
+                     ("the page ground behind the card (#141018)", ((byte)0x14, (byte)0x10, (byte)0x18)),
+                     ("a card that painted its fill and nothing else (#1B1622)", ((byte)0x1B, (byte)0x16, (byte)0x22)),
+                 })
+        {
+            var image = Solid(64, 64, colour);
+            Assert.False(
+                checks.All(c => CcpVerify.CheckEvaluator.Evaluate(c, image).Passed),
+                $"{what} passes every trainer-card check");
+        }
+
+        // The bands capture.ps1 proves against the MEASURED layout before it reads the screen.
+        var script = File.ReadAllText(Path.Combine(FindRepoRoot(), "client", "tools", "verify", "capture.ps1"));
+        var ink = Band(script, "inkBand");
+        var ground = Band(script, "groundBand");
+        var inkCheck = checks.Single(c => c.Name == "trainer-card-ink").Region.Rect!;
+        var groundCheck = checks.Single(c => c.Name == "trainer-card-ground").Region.Rect!;
+        Assert.InRange(inkCheck.Y, ink.Lo, ink.Hi);
+        Assert.InRange(inkCheck.Y + inkCheck.H, ink.Lo, ink.Hi);
+        Assert.InRange(groundCheck.X, ground.Lo, ground.Hi);
+        Assert.InRange(groundCheck.X + groundCheck.W, ground.Lo, ground.Hi);
+    }
+
+    /// <summary>One <c>$name = @(lo, hi)</c> band out of <c>capture.ps1</c>.</summary>
+    private static (double Lo, double Hi) Band(string script, string name)
+    {
+        var match = Regex.Match(script, @"\$" + name + @" = @\((?<lo>[\d.]+), (?<hi>[\d.]+)\)");
+        Assert.True(match.Success,
+            $"capture.ps1 no longer declares ${name}, so nothing proves the manifest region it bounds is "
+            + "really where the capture says it is");
+        return (double.Parse(match.Groups["lo"].Value, System.Globalization.CultureInfo.InvariantCulture),
+                double.Parse(match.Groups["hi"].Value, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static CcpVerify.DecodedImage Solid(int width, int height, (byte R, byte G, byte B) colour)
+    {
+        var bgra = new byte[width * height * 4];
+        for (var i = 0; i < width * height; i++)
+        {
+            bgra[i * 4] = colour.B;
+            bgra[i * 4 + 1] = colour.G;
+            bgra[i * 4 + 2] = colour.R;
+            bgra[i * 4 + 3] = 255;
+        }
+
+        return new CcpVerify.DecodedImage(width, height, bgra);
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

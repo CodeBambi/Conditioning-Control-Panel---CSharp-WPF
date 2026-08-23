@@ -37,8 +37,14 @@
   -->
   <!-- The page scrolls now that it carries a second module, the same way the System page does.
        PageHost is a bare ContentControl (MainWindow.axaml:486), so a page that outgrows the window
-       is CLIPPED rather than scrolled, and the card is the part that would have gone off the bottom. -->
-  <ScrollViewer>
+       is CLIPPED rather than scrolled, and the card is the part that would have gone off the bottom.
+
+       NAMED because the headed capture harness needs a VIEWPORT to prove containment against
+       (client/tools/verify/capture.ps1, -Surface trainer-card): UIA reports UNCLIPPED bounds for a
+       control scrolled out of its viewport, so a capture aimed at the card's UIA rect without this
+       check can photograph whatever is really at those coordinates. Same role, and the same
+       Name-as-AutomationId fallback, as StudioPage's RackScroll. -->
+  <ScrollViewer x:Name="IntakeScroll">
   <StackPanel Margin="20" Spacing="4">
     <TextBlock Classes="page-title" Text="Graded Intake" />
     <TextBlock Classes="page-blurb" MaxWidth="640" HorizontalAlignment="Left"

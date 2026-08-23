@@ -170,6 +170,61 @@
       "expectedColor": "#1C0923",
       "tolerance": 8,
       "minPixelFraction": 0.95
+    },
+
+    // THE TRAINER CARD, on the Graded Intake page. Reached by one real left-click on the rail
+    // door and confirmed three ways before any pixel is read (capture.ps1 -Surface trainer-card):
+    // the shell's route probe, the CARD's own text through UIA — its title, its four award rows and
+    // the no-runs-yet record note — and the geometry both regions below are fractions of.
+    //
+    // THE PAIR IS THE POINT, AND IT IS WHY THERE ARE TWO. A capture that is ONE colour cannot pass
+    // this surface: #1B1622 with tolerance 2 and #E8E0EE with tolerance 24 are 205 apart on red and
+    // 26 is as close as their two bands can reach, so no single value is inside both.
+    // TrainerCardTests.NoUniformCaptureCanPassTheHeadedTrainerCardChecks asserts that arithmetic
+    // over this file rather than trusting the numbers here, because the failure it forbids has
+    // already happened once in this repository: capture-wslg.sh printed CAPTURE PASS over an
+    // all-black image. An all-black capture scores 0.000 on both of these.
+    //
+    // WHAT THE TWO COLOURS ARE, FROM SOURCE, NOT FROM THE CAPTURE. Border.module paints
+    // Background #FF1B1622 (MainWindow.axaml:122) and TextBlock.module-title paints Foreground
+    // #FFE8E0EE at no opacity (MainWindow.axaml:320); the card is a Border.module carrying a
+    // module-title (IntakePage.axaml). Neither number was read off a screenshot.
+    //
+    // THE GROUND TOLERANCE IS 2, WHICH IS TIGHTER THAN ANYTHING ELSE IN THIS FILE, and for a
+    // named reason: the rack's ground #FF19141F is only 3 away on its widest channel, so at the
+    // rail-door precedent of 24 — or even at the rack's own 6 — this check would pass on a
+    // photograph of the Studio rack. The page ground behind the card (#141018, Window Background)
+    // is 10 away, so tolerance 2 also fails on a card that did not paint its own fill at all.
+    // These are flat fills with no antialiasing in them, exactly like the rack's, which measured
+    // 7605/7605 EXACT.
+    //
+    // THE LIMIT OF THE PAIR, STATED BECAUSE IT IS NOT VISIBLE FROM THE ROWS BELOW: these two
+    // checks prove a module's livery and a title's glyphs at named offsets. They do NOT prove
+    // WHICH module — the "Begin a run" module above the card carries the same ground and the same
+    // title style, and a capture of it would score the same. What proves this is the Trainer Card
+    // is the capture path: the rect is DERIVED from TrainerCardTitle's own UIA bounds, and the
+    // card's four award rows and record note are read before the screen is.
+    {
+      "name": "trainer-card-ground",
+      "surface": "trainer-card",
+      "state": "no-runs-yet",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.82, "y": 0.30, "w": 0.15, "h": 0.65 } },
+      "expectedColor": "#1B1622",
+      "tolerance": 2,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "trainer-card-ink",
+      "surface": "trainer-card",
+      "state": "no-runs-yet",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.053, "w": 0.10, "h": 0.026 } },
+      "expectedColor": "#E8E0EE",
+      "tolerance": 24,
+      "minPixelFraction": 0.05
     }
   ]
 }

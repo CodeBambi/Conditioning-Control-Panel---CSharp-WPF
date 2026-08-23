@@ -37,6 +37,33 @@
 #        pwsh client/tools/verify/capture.ps1 -Surface rack-row -State selected
 #        pwsh client/tools/verify/capture.ps1 -Surface rack-row-dot -State armed
 #        pwsh client/tools/verify/capture.ps1 -Surface goon-page -State first-run
+#        pwsh client/tools/verify/capture.ps1 -Surface trainer-card -State no-runs-yet
+#
+# THE TRAINER CARD, and the two things a MODULE needs that a rail door did not.
+#
+# The card is not a page and not a control: it is a Border.module on the Graded Intake page, so
+# Avalonia gives it no UIA peer at all and it is not the thing the door click lands on. Two
+# consequences, both handled below rather than assumed away.
+#
+# 1. THE RECT IS DERIVED FROM THE CARD'S OWN TEXT, not from a probe. The card's first and last
+#    TextBlocks DO have peers (TrainerCardTitle, TrainerCardLocalOnlyNote), they are children of the
+#    same StackPanel, and Border.module insets its content by BorderThickness 1 + Padding 16
+#    (MainWindow.axaml:121-127). So the card's edge is 17 DIP outside that content box on every
+#    side, and the derivation is cross-checked: both TextBlocks must share a left edge, or the
+#    layout has changed and this refuses instead of aiming at the wrong rectangle. A probe line was
+#    considered and refused for the reason the rack's was — the footer is the only place to publish
+#    one, and every line added there moves the very content this capture photographs.
+#
+# 2. THE CARD SCROLLS. It is the second module on a page inside a ScrollViewer, and UIA reports
+#    UNCLIPPED bounds with IsOffscreen=False for content scrolled out of a viewport (measured
+#    during the rack work). So this drives the wheel — real input, one notch at a time — until the
+#    DERIVED card rect is fully inside the viewport the page names (IntakeScroll), and refuses if it
+#    never is. Never a fixed number of notches: a page that grows a module would silently stop
+#    scrolling far enough while still reporting a plausible rect.
+#
+# The route is confirmed by the shell's own probe AND the card's own text before any pixel is read
+# (the card renders on AttachedToVisualTree — IntakePage.axaml.cs:71 — so a mounted page with an
+# unrendered card is a real state, and it would photograph as a plausible empty rectangle).
 #
 # THE GOON PAGE, and the one way this surface differs from every other one here.
 #
@@ -59,8 +86,8 @@
 # is a --goon-demo flag and this script deliberately does not use it, because the click is the
 # thing a regression would break.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -74,9 +101,14 @@ $exe = Join-Path $verifyDir '..\..\src\CcpClient.Desktop\bin\Debug\net10.0\CcpCl
 # directory (SessionPresetDocument.FileName, SessionParticipant.cs:96). Measured rather than
 # reasoned — a `-State off` capture right-clicked Flash Images off, and the NEXT run's `-State
 # armed` capture read back "Switched off." on what was supposed to be a cold start.
+# The third file is the Trainer Card's whole subject: the graded-run award record
+# (GradedRunAwards.cs:37, read at IntakeLaunch.cs:108-111 out of the SAME data directory as
+# settings.json). Its absence is not a failure — it is the card's `no-runs-yet` state, which is the
+# one state this harness can drive without running a whole graded intake.
 $stateFiles = @(
     (Join-Path $env:APPDATA 'CcpClient\settings.json'),
-    (Join-Path $env:APPDATA 'CcpClient\session_preset.json')
+    (Join-Path $env:APPDATA 'CcpClient\session_preset.json'),
+    (Join-Path $env:APPDATA 'CcpClient\graded_run_awards.json')
 )
 # AND THE PAGE'S OWN PREFS. Hygiene, and NOT what makes this deterministic.
 #
@@ -108,6 +140,7 @@ $statesFor = @{
     'rack-row'     = @('unselected', 'selected')
     'rack-row-dot' = @('off', 'armed')
     'goon-page'    = @('first-run')
+    'trainer-card' = @('no-runs-yet')
 }
 if ($statesFor[$Surface] -notcontains $State) {
     Write-Output "FAIL: surface '$Surface' has no state '$State' (it has: $($statesFor[$Surface] -join ', '))"
@@ -135,6 +168,10 @@ public class VerifyNative {
     public const uint WM_CLOSE = 0x0010;
     public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004;
     public const uint RIGHTDOWN = 0x0008, RIGHTUP = 0x0010;
+    // The wheel, for the one surface that has to be scrolled into view. WHEEL_DOWN is
+    // -WHEEL_DELTA (-120) as the unsigned dwData mouse_event takes: one notch toward the user.
+    // Declared here rather than cast in PowerShell, which has no unchecked conversion.
+    public const uint WHEEL = 0x0800, WHEEL_DOWN = 0xFFFFFF88;
     public const uint SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001, SWP_SHOWWINDOW = 0x0040;
     public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 }
@@ -275,6 +312,18 @@ function RightClick-Rect($rect) {
     Start-Sleep -Milliseconds 500
 }
 
+# One wheel notch over a rect. WM_MOUSEWHEEL goes to the FOCUSED window, not the one under the
+# cursor (the "scroll inactive windows" setting is a property of the machine and is not relied on
+# here); the shell has focus because this script has already clicked a rail door in it, and
+# Avalonia then routes the wheel to the element under the pointer.
+function Wheel-Down($rect) {
+    $cx = [int]($rect.X + $rect.W / 2); $cy = [int]($rect.Y + $rect.H / 2)
+    [VerifyNative]::SetCursorPos($cx, $cy) | Out-Null
+    Start-Sleep -Milliseconds 100
+    [VerifyNative]::mouse_event([VerifyNative]::WHEEL, 0, 0, [VerifyNative]::WHEEL_DOWN, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 250
+}
+
 # ---------------------------------------------------------------------------------------------
 # UIA element reads. THE RACK NEEDS NO PROBE.
 #
@@ -318,10 +367,14 @@ function Get-RowLabelRect($row) {
 # 501;1505;402;63 inside a window that ends at y=1470 and a rack viewport that ends at y=1140.
 # Aiming CopyFromScreen there photographs the wallpaper and the check then reports on somebody's
 # desktop background. Refuse instead.
-function Assert-Inside($inner, $outer, [string]$what, [string]$container) {
-    if ($inner.X -lt $outer.X -or $inner.Y -lt $outer.Y `
+function Test-Inside($inner, $outer) {
+    return -not ($inner.X -lt $outer.X -or $inner.Y -lt $outer.Y `
         -or ($inner.X + $inner.W) -gt ($outer.X + $outer.W) `
-        -or ($inner.Y + $inner.H) -gt ($outer.Y + $outer.H)) {
+        -or ($inner.Y + $inner.H) -gt ($outer.Y + $outer.H))
+}
+
+function Assert-Inside($inner, $outer, [string]$what, [string]$container) {
+    if (-not (Test-Inside $inner $outer)) {
         Fail ("$what at $($inner.X),$($inner.Y) $($inner.W)x$($inner.H) is not fully inside $container at " +
     "$($outer.X),$($outer.Y) $($outer.W)x$($outer.H) — it is clipped or scrolled away, and capturing " +
     'it would photograph whatever is really at those coordinates')
@@ -617,6 +670,135 @@ if ($Surface -eq 'goon-page') {
 
     $windowRect = $goonRect   # the cursor is parked relative to the window being captured
     $capX = $pageRect.X; $capY = $pageRect.Y; $capW = $pageRect.W; $capH = $pageRect.H
+}
+elseif ($Surface -eq 'trainer-card') {
+    # =============================================================================================
+    # THE TRAINER CARD. One real click on the Graded Intake rail door, then THREE confirmations
+    # before a pixel is read: the shell's own route probe, the CARD's own text, and the geometry
+    # the manifest's fractional regions depend on.
+    # =============================================================================================
+    $intakeDoor = Get-DoorRect $window 'intake'
+    $scale = $intakeDoor.Scale
+    Click-Rect $intakeDoor
+    Assert-Route $window 'intake'
+    Write-Output "state drive: left-click on the Graded Intake door -> route: intake (probe: $($intakeDoor.Raw))"
+
+    # (1) THE CARD'S OWN TEXT. The page mounts on navigation but the card renders on
+    # AttachedToVisualTree (IntakePage.axaml.cs:71), so "the route is intake" does NOT imply "the
+    # card rendered" — an unrendered module photographs as a perfectly plausible rectangle.
+    $cardTitle = (Get-Element $window 'TrainerCardTitle').Current.Name
+    if ($cardTitle -ne 'Trainer Card') { Fail "the Trainer Card's title reads '$cardTitle', not 'Trainer Card'" }
+    $pageText = (Get-Texts $window) -join "`n"
+    foreach ($row in @('Top of the Class', 'Honor Roll', "Teacher's Pet", 'Held Back')) {
+        if ($pageText -notlike "*$row*") { Fail "the Trainer Card is missing its '$row' row (Models/Achievement.cs:663-701)" }
+    }
+
+    # (2) THE STATE, by its own name. The deterministic-start set removed graded_run_awards.json, so
+    # the card must be reading NoRunsYetNote (TrainerCard.cs) — if it is not, a run's record
+    # survived and this capture would be of a DIFFERENT card than the one the checks name.
+    $recordNote = (Get-Element $window 'TrainerCardRecordNote').Current.Name
+    if (-not $recordNote.StartsWith('No graded run has been recorded')) {
+        Fail ("the Trainer Card is not in the 'no-runs-yet' state: its record note reads '$recordNote'. " +
+    'The award record was deleted before launch, so a card saying anything else means the record ' +
+    'was rewritten between the delete and the read')
+    }
+    Write-Output "card gate: title '$cardTitle', four award rows present, record note '$recordNote'"
+
+    # THE ABSENCE, CHECKED AS AN ABSENCE. The card's own last line says there is no sharing, export,
+    # upload or publish path in this build, and a greyed-out one would be the fake-available shape
+    # the capability contract bans (IntakePage.axaml's own note, §9 D7). A pixel check cannot see a
+    # control that is not there, so it is read off the UIA tree: matched on BUTTONS only, because
+    # the sentence making the claim contains all four of those words itself.
+    $btnCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button)
+    foreach ($b in $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)) {
+        if ($b.Current.Name -match 'shar|export|upload|publish|leaderboard') {
+            Fail ("a sharing-shaped BUTTON is on the Graded Intake page: '$($b.Current.Name)'. The card " +
+    'states there is no sharing, export, upload or publish path in this build, and upstream''s ' +
+    'counterpart traffic is owner-gated and unapproved')
+        }
+    }
+    $null = Get-Element $window 'BeginIntakeButton'   # the page's ONE button is still the launcher
+    Write-Output 'no sharing-shaped button anywhere on the page (UIA Button enumeration)'
+
+    # (3) THE RECT. Border.module insets its content by BorderThickness 1 + Padding 16
+    # (MainWindow.axaml:121-127), so the card's edge is 17 DIP outside the content box its first and
+    # last TextBlocks bound. Both are children of the same StackPanel and must therefore share a
+    # left edge — cross-checked, because a layout change here would otherwise aim a capture at a
+    # rectangle that merely looks right.
+    $inset = [int][math]::Round(17 * $scale)
+    $viewport = Get-Rect (Get-Element $window 'IntakeScroll')
+    $card = $null
+    $titleRect = $null
+    $notches = 0
+    while ($true) {
+        $titleRect = Get-Rect (Get-Element $window 'TrainerCardTitle')
+        $lastRect = Get-Rect (Get-Element $window 'TrainerCardLocalOnlyNote')
+        if ([math]::Abs($lastRect.X - $titleRect.X) -gt 1) {
+            Fail ("the Trainer Card's first and last lines do not share a left edge (title x=$($titleRect.X), " +
+    "last line x=$($lastRect.X)); the card's content box cannot be derived from them")
+        }
+        $card = @{
+            X = $titleRect.X - $inset
+            Y = $titleRect.Y - $inset
+            W = $titleRect.W + 2 * $inset
+            H = ($lastRect.Y + $lastRect.H + $inset) - ($titleRect.Y - $inset)
+        }
+        if (Test-Inside $card $viewport) { break }
+
+        # SCROLL IT INTO VIEW WITH REAL INPUT, one notch at a time, testing after each. Never a
+        # fixed count: a page that grows another module would otherwise stop scrolling far enough
+        # while still reporting a plausible rect, and UIA would still say IsOffscreen=False.
+        if ($notches -ge 24) {
+            Fail ("the Trainer Card never came fully inside the page viewport after $notches wheel notches: " +
+    "card $($card.X),$($card.Y) $($card.W)x$($card.H) vs viewport $($viewport.X),$($viewport.Y) " +
+    "$($viewport.W)x$($viewport.H). If the card is TALLER than the viewport it cannot be captured " +
+    'whole at this window size, and that is a finding about the page rather than a flake')
+        }
+        Wheel-Down $viewport
+        $notches++
+    }
+    Write-Output ("card rect $($card.X),$($card.Y) $($card.W)x$($card.H) @ scale $scale " +
+    "(derived: title $($titleRect.X),$($titleRect.Y) $($titleRect.W)x$($titleRect.H) + 17 DIP inset); " +
+    "$notches wheel notch(es) to bring it inside the viewport $($viewport.X),$($viewport.Y) $($viewport.W)x$($viewport.H)")
+
+    Assert-Inside $card $viewport 'the Trainer Card' 'the Graded Intake viewport (IntakeScroll)'
+    Assert-Inside $card $windowRect 'the Trainer Card' 'the shell window'
+
+    # THE TWO BANDS checks.json SAMPLES, PROVED AGAINST THE MEASURED LAYOUT RATHER THAN ASSUMED.
+    # A fraction of a capture is only evidence if the thing it names is really at that fraction, and
+    # both of these depend on a layout this script can measure. Widen either band in checks.json
+    # past what is proved here and TrainerCardTests.NoUniformCaptureCanPassTheHeadedTrainerCardChecks
+    # reddens, because it reads both files and compares them.
+    # The ink band sits in the MIDDLE of the title's line rather than spanning it: the line box is
+    # 38 px tall at scale 1.75 and the glyphs' cap band is the middle two thirds of it, so a band
+    # measured to the line's own edges would refuse on a pixel of layout jitter while sampling more
+    # leading than ink.
+    $inkBand = @(0.050, 0.082)    # trainer-card-ink: y, and it must land ON the title's own line
+    $groundBand = @(0.80, 0.98)   # trainer-card-ground: x, and it must be blank card ground
+    $inkTop = $card.Y + [int]($card.H * $inkBand[0])
+    $inkBottom = $card.Y + [int]($card.H * $inkBand[1])
+    if ($inkTop -lt $titleRect.Y -or $inkBottom -gt ($titleRect.Y + $titleRect.H)) {
+        Fail ("the ink band y $($inkBand[0])..$($inkBand[1]) of this capture is $inkTop..$inkBottom, which is " +
+    "not inside the title's line at $($titleRect.Y)..$($titleRect.Y + $titleRect.H). The card's height " +
+    "($($card.H) px) has moved the title out from under the band checks.json samples, so those pixels " +
+    'are no longer the title and this capture would not be evidence about it')
+    }
+    # Every note on the card is MaxWidth=640 DIP from the content's left edge (IntakePage.axaml), and
+    # the award rows' own lines are shorter still, so the blank column begins there.
+    $groundLeft = $card.X + [int]($card.W * $groundBand[0])
+    $textRight = $titleRect.X + [int][math]::Round(640 * $scale)
+    if ($groundLeft -lt $textRight) {
+        Fail ("the ground band x $($groundBand[0])..$($groundBand[1]) starts at $groundLeft, which is left of " +
+    "the card's 640 DIP text column ending at $textRight. At this window size the region checks.json " +
+    'samples for flat card ground would contain the card''s own text')
+    }
+    Write-Output ("regions proved: ink band y $inkTop..$inkBottom inside the title line " +
+    "$($titleRect.Y)..$($titleRect.Y + $titleRect.H); ground band x from $groundLeft, right of the " +
+    "640 DIP text column ending at $textRight")
+
+    $capX = $card.X; $capY = $card.Y; $capW = $card.W; $capH = $card.H
 }
 elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     # =========================================================================================
