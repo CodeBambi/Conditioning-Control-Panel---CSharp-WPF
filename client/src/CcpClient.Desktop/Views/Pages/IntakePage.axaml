@@ -170,8 +170,15 @@
                    AutomationProperties.AutomationId="TrainerCardTitle" />
 
         <!-- The two absences a user would otherwise read as a broken card. Said in words, never
-             rendered as an empty stat or a zero: no XP, level, streak or rank exists anywhere in
-             client/src, so a "Level 0" here would be a number nothing in the app computes. -->
+             rendered as an empty stat or a zero.
+
+             CORRECTED 2026-08-24: this comment used to say "no XP, level, streak or rank exists
+             anywhere in client/src", and the XP spine falsified that -
+             Features/Progression/ProgressionLedger.cs and XpCurve.cs are landed and three award
+             sites are wired. The NOTE ON SCREEN is still right, for a narrower reason: nothing
+             RENDERS a level anywhere in this build, so a "Level 0" here would still be a number
+             the user could not check against anything. What is owed is the render model, not the
+             ledger. -->
         <TextBlock x:Name="TrainerCardLevelNote"
                    Classes="page-blurb"
                    MaxWidth="640" HorizontalAlignment="Left"
