@@ -759,12 +759,18 @@ export function createMontage(o = {}) {
   }
 
   /** The two seats: free, and the two nearest their own next beat, so the plant
-   *  rides swaps that were about to happen anyway. Seeded tie-break. */
+   *  rides swaps that were about to happen anyway. Seeded tie-break.
+   *  A tile already QUEUED counts as taken - the driver would otherwise swap the
+   *  reserved second seat out from under the plant on the stagger tick, which is
+   *  exactly how the first cut of this failed every time. */
   function plantSeats() {
-    const free = tiles.filter((t) => !t.swapping && !inFlight.has(t.i));
+    const free = tiles.filter((t) => !t.swapping && !inFlight.has(t.i) && queue.indexOf(t) < 0);
     free.sort((a, b) => (a.dueAt - b.dueAt) || (a.pk - b.pk) || (a.i - b.i));
     return free.slice(0, 2);
   }
+  /** Room in the transient decoder budget for one more swap. The plant obeys the
+   *  same cap as everything else; it just gets first claim on it (see step()). */
+  function swapRoom() { return inFlight.size < MONTAGE.MAX_SWAPS_IN_FLIGHT; }
 
   /** Break up NATURAL duplicates of any OTHER url, so the plant is the only one.
    *  Re-dues rather than repaints: the tile leaves through the normal swap. */
@@ -809,14 +815,15 @@ export function createMontage(o = {}) {
     if (plant.pending) {
       if (plant.stagger > 0) { plant.stagger -= 1; return; }
       const t = plant.pending;
-      plant.pending = null;
-      if (!t.swapping && startSwapTo(t, { url: plant.url, remote: plant.remote })) {
-        t.dueAt = Math.max(t.dueAt, plant.holdUntil);
-      } else {
-        plant.tiles = plant.tiles.filter((i) => i !== t.i);
-        plant.state = 'failed';
+      if (t.swapping) { plant.pending = null; plant.state = 'failed'; return; }
+      /* no room in the transient budget this tick: WAIT, do not overshoot it */
+      if (!swapRoom()) {
+        if (plant.byMs > 0 && wallMs > plant.byMs) { plant.pending = null; plant.state = 'failed'; }
         return;
       }
+      plant.pending = null;
+      if (!startSwapTo(t, { url: plant.url, remote: plant.remote })) { plant.state = 'failed'; return; }
+      t.dueAt = plant.holdUntil;
       dedupePass();
       settlePlant();
       return;
@@ -824,7 +831,7 @@ export function createMontage(o = {}) {
     if (plant.tiles.length) { dedupePass(); settlePlant(); return; }
 
     const seats = plantSeats();
-    if (seats.length < 2) {
+    if (seats.length < 2 || !swapRoom()) {
       /* nothing free this tick - try again until the lead the caller asked for
        * has run out, then say so honestly rather than landing it late */
       if (plant.byMs > 0 && wallMs > plant.byMs) plant.state = 'failed';
@@ -838,10 +845,16 @@ export function createMontage(o = {}) {
     plant.holdUntil = wallMs + plant.holdMs;
 
     const first = seats[0];
+    const second = seats[1];
+    /* RESERVE BOTH SEATS BEFORE SWAPPING EITHER. The driver fills its queue from
+     * `dueAt` later in this same tick, and a second seat still due would be
+     * swapped to something else before the stagger tick ever arrived. */
+    first.dueAt = plant.holdUntil;
+    second.dueAt = plant.holdUntil;
     if (!startSwapTo(first, { url: plant.url, remote: plant.remote })) { plant.state = 'failed'; return; }
-    first.dueAt = Math.max(first.dueAt, plant.holdUntil);
-    plant.tiles = [first.i, seats[1].i];
-    plant.pending = seats[1];
+    first.dueAt = plant.holdUntil;
+    plant.tiles = [first.i, second.i];
+    plant.pending = second;
     plant.stagger = MONTAGE.PLANT_STAGGER_TICKS;
     dedupePass();
   }
@@ -850,10 +863,12 @@ export function createMontage(o = {}) {
   function step() {
     if (destroyed || frozen) return;
     wallMs += MONTAGE.TICK_MS;
-    plantStep();
     for (const rec of Array.from(inFlight.values())) {
       if (wallMs >= rec.doneAt) finishSwap(rec);
     }
+    /* AFTER the completions (so it sees a drained budget) and BEFORE the queue
+     * fill (so it gets first claim on the two seats it reserved). */
+    plantStep();
     for (const tile of tiles) {
       if (tile.swapping || queue.indexOf(tile) >= 0) continue;
       if (wallMs >= tile.dueAt) queue.push(tile);
