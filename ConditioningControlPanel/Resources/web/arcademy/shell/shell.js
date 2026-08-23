@@ -295,6 +295,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     .filter((w) => typeof w === 'string' && w.trim());
   let absorbed = 0;
 
+  /* THE DAY'S TRIGGERS: init.triggers = [{text, audio}] - the same phrases as
+   * init.words, each with its whisper clip url (ccp.subaudio / ccp.modaudio) or
+   * null. Frozen, never absorbed into: a game that wants a clip reads
+   * ctx.triggers, a game that wants words reads ctx.words. Echo's pads are the
+   * consumer (0823). Garbage rows are dropped, never thrown on. */
+  const dayTriggers = Object.freeze((Array.isArray(src.triggers) ? src.triggers : [])
+    .filter((t) => t && typeof t.text === 'string' && t.text.trim())
+    .map((t) => Object.freeze({ text: t.text, audio: typeof t.audio === 'string' && t.audio ? t.audio : null })));
+
   /** @returns {boolean} true when the word was taken (new, legal, under the cap). */
   function absorbWord(word) {
     if (typeof word !== 'string') return false;
@@ -1325,6 +1334,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       words: dayWords.slice(),
       absorb: absorbWord,
       sessionWords,
+      // The phrases WITH their whisper clips (frozen rows; see dayTriggers).
+      triggers: dayTriggers.slice(),
 
       log: (m) => say('[' + cls.gameKey + '] ' + m),
       endClass: (result) => {
