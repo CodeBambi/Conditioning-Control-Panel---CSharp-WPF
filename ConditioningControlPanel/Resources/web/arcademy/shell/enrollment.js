@@ -75,6 +75,11 @@ export const ENROLL_LEX = Object.freeze({
   enroll_misdirection_2: 'Keep your eyes on the one that matters. It will not make that easy.',
   enroll_misdirection_3: 'You will be shown the trick and lose anyway. Then shown it again.',
 
+  /* --- The Sorting Room: two piles you chose ----------------------------- */
+  enroll_sort_1: 'The Sorting Room does not tell you what matters. You tell it, at the door.',
+  enroll_sort_2: 'Yours goes right. Everything else goes left. The ring closes while you decide.',
+  enroll_sort_3: 'Sort your own things quickly enough and you stop asking why they are yours.',
+
   /* --- Music Room: the Simon ring --------------------------------------- */
   enroll_echo_1: 'The Music Room does not teach music. It teaches you to hold a line that somebody else set.',
   enroll_echo_2: 'It plays a phrase. You play it back. Then it adds one and asks again.',

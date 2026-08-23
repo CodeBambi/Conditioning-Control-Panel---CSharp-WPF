@@ -34,6 +34,7 @@ export const GAME_PATHS = Object.freeze({
   deja_vu: './deja-vu/index.js',
   impulse_control: './impulse-control/index.js',
   misdirection: './misdirection/index.js',
+  sort: './sort/index.js',
   echo: './echo/index.js',
   instant_recall: './instant-recall/index.js',
   anomaly: './anomaly/index.js',
@@ -61,6 +62,10 @@ export const GAME_META = Object.freeze({
      Recall (core/lexicon.js has no family_recall/family_puzzle row yet, so the
      chip degrades to the de-snaked key - readable English, never a raw token). */
   misdirection: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120 },
+  /* SORT took Misdirection's room (201) and its family. Not meaty: 120s is the
+     class, and the pile-picking DOOR runs outside the clock (shell S3), so the
+     budget here is the sorting itself and nothing else. */
+  sort: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120 },
   echo: { family: 'memory', meaty: false, flagship: false, timeBudgetSec: 105 },
   // MEATY (ruled 2026-08-23): the third meaty class. With ten games no-repeat-3 binds again
   // and outranks the meaty preference, so two meaty classes left ~a third of nights with the
@@ -84,6 +89,7 @@ export const GAME_SEMESTER = Object.freeze({
   deja_vu: 1,
   impulse_control: 1,
   misdirection: 2,
+  sort: 2,
   echo: 2,
   instant_recall: 2,
   anomaly: 3,
