@@ -16,6 +16,16 @@
  *   .g-ec-backdrop  the casino's lighting rig (pointer-events:none, z 0)
  *   .g-ec-hud       four chips: len (big, the score of this class), clock,
  *                   streak (pink), best (gold)
+ *   .g-ec-phase     THE BANNER (owner verdict A, 2026-08-23). The one node that
+ *                   answers "is it me?" from across the room: a drawn glyph
+ *                   (listening waves / a reaching hand) plus one word, on its
+ *                   own [data-p=ready|listen|yours|miss|clear|over] enum. It is
+ *                   TEXT AND COLOUR, never an animation, so motionLevel 0 and
+ *                   a single still frame both read it
+ *   .g-ec-steps     THE STRIP: one .g-ec-step[data-fill=off|on|bad] per step of
+ *                   the sequence. Fills as the room plays, empties on the
+ *                   hand-off, fills again under the player, one dot goes red on
+ *                   the press that broke it
  *   .g-ec-ring      the floor circle; the pads hang off its centre
  *   .g-ec-pad[data-pad=0..5][data-state=idle|lit|pressed|decoy]
  *                   ABSOLUTE, positioned ONLY by its transform from --ec-a
@@ -30,10 +40,15 @@
  *                   screen-blended, ken-burns drifting, and .g-ec-glyph - the
  *                   TRUTH NODE: the pad's mark, in the pad's colour, never
  *                   re-written by anyone
- *     .g-ec-word    the pad's word on a dark plate at the rim (empty under
- *                   data-faces=glyphs) - the ONE node a trickster may lie on;
+ *     .g-ec-word    THE FACE ITSELF now: the trigger the pad is bound to,
+ *                   centred on the glass and sized to be read across the room
+ *                   (owner verdict C - the phrase IS the bubble). Empty on a pad
+ *                   the pool could not fill, which is what data-face=glyph on
+ *                   the PAD means. Still the ONE node a trickster may lie on;
  *                   the glyph, the colour and the place on the ring are the
  *                   truth (Law IV)
+ *     .g-ec-hint    the reveal caption ("this one"), drawn on every pad and
+ *                   shown ONLY under data-state=reveal
  *   .g-ec-msg / .g-ec-flashwell / .g-ec-end (the core toggles .g-ec-end and
  *                   the streak chip with the hidden attribute, so NEITHER
  *                   carries a display: here - trap 27)
@@ -44,8 +59,11 @@
  *                   the ::after) - and one GO
  *
  * STAGE ATTRIBUTES the core writes and this file reads: data-phase,
- * data-tier, data-faces (words|glyphs), data-audible (1|0 - the audio tell),
- * data-reduced, data-telegraph (tier 2's decoy warning), data-encore.
+ * data-tier, data-faces (words|glyphs|media), data-audible (1|0 - the audio
+ * tell), data-reduced, data-telegraph (tier 2's decoy warning), data-encore,
+ * data-handoff (the one beat where the turn changes hands). PAD attributes:
+ * data-pad, data-state, data-glyph and data-face (word|glyph - what THIS pad
+ * actually wears, because a partial trigger pool fills some pads and not others).
  *
  * PAD STATES (the lamp ladder): idle = a dim ember that breathes; lit = the
  * lamp full on, glass bloom, spill and floor pool up, a 90ms attack and a
@@ -55,7 +73,24 @@
  * rolls toward cyan, saturation drops, the glass flickers in steps and the
  * spill goes grey-blue - the telegraphed tell of tier 2 (tier 3+ the core
  * simply marks the decoy lit, and nothing here can tell the difference,
- * which is the point).
+ * which is the point); wrong = the press that broke it, the whole pad forced
+ * RED with the face shaking; reveal = the pad you NEEDED, held bright inside a
+ * pulsing halo with its "this one" caption up (owner verdict B).
+ *
+ * THE LISTEN LOCK (owner verdict A). While the room plays, the ring is visibly
+ * NOT yours: the pads lose their saturation through --ec-sat (a gradient
+ * recompute, never a filter over a live decode - trap 36), the chalk circle
+ * dims, and the cursor says not-allowed. The pad currently lit is exempt, so
+ * the sequence is the only colour in the room. On the hand-off the whole ring
+ * sweeps back to full in one beat (data-handoff).
+ *
+ * THE PAD SIZE (owner verdict C - "bigger bubbles"). Six pads on a circle is a
+ * closed geometry problem: the pad diameter can never exceed the chord between
+ * two neighbours (which for six pads is exactly the ring radius R), and
+ * R + pad/2 has to stay inside the ring box. --ec-r .34 / --ec-pad .315 sits
+ * just under both, and the stage's fixed chrome was cut to 232px to pay for the
+ * banner and the strip, so the pad lands 1.28x - 1.51x its old diameter
+ * depending on the viewport (1.51x at 1920x1080, ~1.3x where height binds).
  *
  * AUDIO-INAUDIBLE TELL: .g-ec-stage[data-audible="0"] makes lit/pressed pads
  * flash brighter and hold longer (the contract's mandatory visual tell when
@@ -103,10 +138,10 @@ export const STYLE_TEXT = `
 
 /* ---- the stage: the whole window is the room ---------------------------- */
 .g-ec-stage{position:absolute;inset:0;overflow:hidden;display:flex;flex-direction:column;
-  align-items:center;gap:8px;padding:72px 18px 14px;color:var(--ink);
-  --ec-ring:min(calc(100dvh - 250px), calc(100vw - 60px), 640px);
-  --ec-pad:calc(var(--ec-ring) * .255);
-  --ec-r:calc(var(--ec-ring) * .355);
+  align-items:center;gap:6px;padding:64px 14px 12px;color:var(--ink);
+  --ec-ring:min(calc(100dvh - 232px), calc(100vw - 40px), 780px);
+  --ec-pad:calc(var(--ec-ring) * .315);
+  --ec-r:calc(var(--ec-ring) * .34);
   --ec-la:var(--ec-n-la, color-mix(in srgb, var(--gold), transparent 82%));
   --ec-lb:var(--ec-n-lb, color-mix(in srgb, var(--pink), transparent 84%));
   --ec-breath:var(--ec-n-breath,7s);
@@ -195,6 +230,82 @@ export const STYLE_TEXT = `
 .g-ec-chip.g-ec-timer::before{content:none}
 .g-ec-stage[data-phase="input"] .g-ec-chip.g-ec-clock{border-color:color-mix(in srgb, var(--lav), transparent 50%)}
 
+/* ---- THE PHASE BANNER: whose turn it is, in one word ------------------- */
+/* Colour, weight and a drawn glyph all carry the same message, so the banner
+   survives a greyscale screenshot, a muted room and motionLevel 0 alike. */
+.g-ec-phase{position:relative;z-index:5;display:flex;align-items:center;justify-content:center;gap:12px;
+  min-height:38px;padding:5px 22px;border-radius:999px;
+  font-family:var(--disp);font-size:clamp(15px, 2.4vh, 25px);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-dim);
+  background:color-mix(in srgb, var(--panel), transparent 34%);
+  border:1px solid color-mix(in srgb, var(--line), transparent 24%);
+  box-shadow:0 8px 22px rgba(0,0,0,.42);
+  transition:color .22s ease, background .22s ease, border-color .22s ease, box-shadow .22s ease}
+.g-ec-phase-text{display:block;line-height:1.1;white-space:nowrap}
+/* THE DRAWN HALF. One empty span; the state decides what it is. */
+.g-ec-phase-glyph{position:relative;flex:0 0 auto;width:22px;height:22px;pointer-events:none}
+/* LISTEN: three arcs leaving a point - a sound coming AT you, not from you */
+.g-ec-phase[data-p="listen"]{color:var(--lav);
+  border-color:color-mix(in srgb, var(--lav), transparent 52%);
+  background:color-mix(in srgb, var(--navy), transparent 20%)}
+.g-ec-phase[data-p="listen"] .g-ec-phase-glyph::before{content:"";position:absolute;left:2px;top:50%;
+  width:7px;height:7px;border-radius:50%;transform:translateY(-50%);background:var(--lav)}
+.g-ec-phase[data-p="listen"] .g-ec-phase-glyph::after{content:"";position:absolute;left:8px;top:50%;
+  width:14px;height:14px;transform:translateY(-50%);border-radius:50%;
+  border:2px solid var(--lav);border-left-color:transparent;border-top-color:transparent;
+  box-shadow:3px 0 0 -1px color-mix(in srgb, var(--lav), transparent 45%);
+  animation:g-ec-listenwave 1.6s ease-in-out infinite}
+@keyframes g-ec-listenwave{0%,100%{opacity:.45}50%{opacity:1}}
+/* YOUR TURN: the room hands it over - pink, lit, a pointer coming down */
+.g-ec-phase[data-p="yours"]{color:var(--ground);
+  background:linear-gradient(180deg, var(--pink), var(--pink-deep));
+  border-color:color-mix(in srgb, var(--pink), white 20%);
+  box-shadow:0 8px 26px color-mix(in srgb, var(--pink), transparent 46%),
+    inset 0 1px 0 rgba(255,255,255,.34);
+  animation:g-ec-yours .9s ease-out 1}
+@keyframes g-ec-yours{0%{transform:scale(.94)}55%{transform:scale(1.045)}100%{transform:scale(1)}}
+.g-ec-phase[data-p="yours"] .g-ec-phase-glyph::before{content:"";position:absolute;left:9px;top:1px;
+  width:4px;height:12px;border-radius:2px;background:var(--ground)}
+.g-ec-phase[data-p="yours"] .g-ec-phase-glyph::after{content:"";position:absolute;left:4px;top:9px;
+  width:14px;height:12px;border-radius:3px 3px 6px 6px;background:var(--ground)}
+/* THE VERDICTS. A miss is red and a clear is gold - two colours nothing else
+   in this room uses, so the banner alone answers "did I get it right". */
+.g-ec-phase[data-p="miss"]{color:hsl(4 96% 88%);
+  background:linear-gradient(180deg, hsl(4 60% 34%) 0%, hsl(4 70% 22%) 100%);
+  border-color:hsl(4 90% 62% / .85);
+  box-shadow:0 8px 26px hsl(4 90% 50% / .34), inset 0 1px 0 hsl(4 90% 70% / .35)}
+.g-ec-phase[data-p="miss"] .g-ec-phase-glyph::before,
+.g-ec-phase[data-p="miss"] .g-ec-phase-glyph::after{content:"";position:absolute;left:2px;top:9px;
+  width:18px;height:3px;border-radius:2px;background:hsl(4 96% 84%)}
+.g-ec-phase[data-p="miss"] .g-ec-phase-glyph::before{transform:rotate(45deg)}
+.g-ec-phase[data-p="miss"] .g-ec-phase-glyph::after{transform:rotate(-45deg)}
+.g-ec-phase[data-p="clear"]{color:var(--ground);
+  background:linear-gradient(180deg, color-mix(in srgb, var(--gold), white 22%), var(--gold));
+  border-color:color-mix(in srgb, var(--gold), white 30%);
+  box-shadow:0 8px 26px color-mix(in srgb, var(--gold), transparent 48%), inset 0 1px 0 rgba(255,255,255,.4)}
+/* a tick, drawn as two bars */
+.g-ec-phase[data-p="clear"] .g-ec-phase-glyph::before{content:"";position:absolute;left:3px;top:11px;
+  width:8px;height:3px;border-radius:2px;background:var(--ground);transform:rotate(45deg)}
+.g-ec-phase[data-p="clear"] .g-ec-phase-glyph::after{content:"";position:absolute;left:8px;top:8px;
+  width:13px;height:3px;border-radius:2px;background:var(--ground);transform:rotate(-52deg)}
+.g-ec-phase[data-p="ready"],.g-ec-phase[data-p="over"]{color:var(--ink-faint)}
+
+/* ---- THE STEP STRIP: N of len, drawn -------------------------------------- */
+.g-ec-steps{position:relative;z-index:5;display:flex;flex-wrap:wrap;justify-content:center;
+  align-items:center;gap:7px;min-height:14px;max-width:min(92vw, 620px);pointer-events:none}
+.g-ec-step{display:block;width:12px;height:12px;border-radius:50%;
+  background:color-mix(in srgb, var(--ink), transparent 88%);
+  border:1px solid color-mix(in srgb, var(--line), transparent 30%);
+  transition:background .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease}
+.g-ec-step[data-fill="on"]{background:var(--lav);border-color:color-mix(in srgb, var(--lav), white 30%);
+  box-shadow:0 0 10px color-mix(in srgb, var(--lav), transparent 40%);transform:scale(1.12)}
+.g-ec-stage[data-phase="input"] .g-ec-step[data-fill="on"]{background:var(--pink);
+  border-color:color-mix(in srgb, var(--pink), white 30%);
+  box-shadow:0 0 10px color-mix(in srgb, var(--pink), transparent 40%)}
+.g-ec-step[data-fill="bad"]{background:hsl(4 88% 58%);border-color:hsl(4 96% 76%);
+  box-shadow:0 0 12px hsl(4 92% 56% / .7);transform:scale(1.2)}
+.g-ec-steps:empty{opacity:0}
+
 /* ---- the ring: the floor circle ----------------------------------------- */
 .g-ec-ring{position:relative;z-index:3;flex:0 0 auto;width:var(--ec-ring);height:var(--ec-ring);
   margin:auto 0;border-radius:50%;
@@ -263,33 +374,47 @@ ${padRules()}
 .g-ec-pad::before{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
   border:2px solid hsl(var(--ec-h) 95% 78% / .9);opacity:0;transform:scale(1)}
 /* the media: the player's own pool at LOW alpha (Deck VI asset chrome),
-   screen-blended into the lamp, drifting (ken-burns), tinted by the pad */
+   screen-blended into the lamp, drifting (ken-burns), tinted by the pad.
+   OPT-IN ONLY since the owner's verdict: nothing is dealt into it unless
+   data-faces="media", so the default ring never wears a gif again. */
 .g-ec-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;
   opacity:0;mix-blend-mode:screen;transition:opacity .8s ease;
   filter:saturate(.7) sepia(.2) hue-rotate(calc(var(--ec-h) * 1deg - 40deg));
   animation:g-ec-kb var(--ec-kb) ease-in-out infinite alternate;
   animation-delay:calc(var(--ec-a,0deg) / 360deg * -26s)}
 @keyframes g-ec-kb{from{transform:scale(1.02) translate(0,0)}to{transform:scale(1.1) translate(2%,-1.6%)}}
-.g-ec-pad.is-loaded .g-ec-media{opacity:calc(.16 + .16 * var(--ec-lamp))}
-/* THE GLYPH: the truth node. A drawn mark in the pad's colour, centred on the
-   glass; under word faces it rides a little higher to leave the rim to the word */
+.g-ec-stage[data-faces="media"] .g-ec-pad.is-loaded .g-ec-media{opacity:calc(.16 + .16 * var(--ec-lamp))}
+/* THE GLYPH: the truth node. A drawn mark in the pad's colour. On a pad that
+   wears a trigger it steps DOWN to a small mark at the rim (the phrase is the
+   face now); on a pad the pool could not fill it is the face. */
 .g-ec-glyph{position:absolute;left:50%;top:50%;transform:translate(-50%,-52%);pointer-events:none;
-  font:400 clamp(20px, calc(var(--ec-pad) * .36), 46px)/1 var(--body,system-ui,sans-serif);
+  font:400 clamp(20px, calc(var(--ec-pad) * .36), 52px)/1 var(--body,system-ui,sans-serif);
   color:hsl(var(--ec-h) 90% calc(84% + 10% * var(--ec-lamp)));
   text-shadow:0 0 calc(4px + 14px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / .9), 0 1px 0 rgba(0,0,0,.5);
-  transition:transform .3s ease}
-.g-ec-stage[data-faces="words"] .g-ec-glyph{top:44%;font-size:clamp(16px, calc(var(--ec-pad) * .28), 36px)}
-/* THE WORD: a lit letter on a dark plate at the rim. The ONE node a trickster
-   may lie on. Empty under glyph faces: it simply is not there to read. */
-.g-ec-word{position:absolute;left:50%;bottom:11%;transform:translate(-50%,0);pointer-events:none;
-  max-width:84%;padding:2px 8px;border-radius:7px;
-  font-family:var(--disp);font-size:clamp(10px, calc(var(--ec-pad) * .13), 18px);letter-spacing:.08em;
-  text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  color:hsl(var(--ec-h) 90% calc(84% + 10% * var(--ec-lamp)));
-  background:rgba(8,6,22,calc(.55 - .2 * var(--ec-lamp)));
-  text-shadow:0 0 calc(4px + 12px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / .9);
-  transition:color .2s ease, background .3s ease, opacity .3s ease}
+  transition:transform .3s ease, font-size .3s ease}
+.g-ec-pad[data-face="word"] .g-ec-glyph{top:auto;bottom:9%;transform:translate(-50%,0);
+  font-size:clamp(11px, calc(var(--ec-pad) * .12), 20px);opacity:.72}
+/* THE WORD IS THE BUBBLE (owner verdict C). The trigger the pad is bound to,
+   centred on the glass, wrapping onto up to three lines and sized off the pad
+   so it grows with it. Still the ONE node a trickster may lie on; the glyph,
+   the colour and the place on the ring stay the truth. */
+.g-ec-word{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);pointer-events:none;
+  width:80%;padding:0;border-radius:0;background:none;
+  font-family:var(--disp);font-size:clamp(11px, calc(var(--ec-pad) * .155), 30px);
+  line-height:1.1;letter-spacing:.02em;text-transform:uppercase;text-align:center;
+  overflow-wrap:anywhere;overflow:hidden;
+  color:hsl(var(--ec-h) 92% calc(88% + 8% * var(--ec-lamp)));
+  text-shadow:0 0 calc(5px + 16px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / .95),
+    0 2px 4px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9);
+  transition:color .2s ease, opacity .3s ease}
 .g-ec-word:empty{opacity:0}
+/* THE REVEAL CAPTION. On every pad, shown only when the pad IS the answer. */
+.g-ec-hint{position:absolute;left:50%;top:calc(100% + 6px);transform:translate(-50%,0);pointer-events:none;
+  padding:2px 9px;border-radius:8px;white-space:nowrap;opacity:0;
+  font-family:var(--mono);font-size:clamp(9px, calc(var(--ec-pad) * .085), 14px);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ground);
+  background:var(--gold);box-shadow:0 4px 14px color-mix(in srgb, var(--gold), transparent 50%);
+  transition:opacity .18s ease}
 /* ---- the lamp ladder: states ------------------------------------------- */
 .g-ec-pad[data-state="lit"]{--ec-lamp:1;transition:--ec-lamp .09s ease-out}
 .g-ec-pad[data-state="lit"] .g-ec-face{transform:scale(1.04);filter:brightness(1.08)}
@@ -313,6 +438,63 @@ ${padRules()}
 .g-ec-pad[data-state="decoy"]::after{background:radial-gradient(circle, hsl(196 30% 70% / .4) 0%, hsl(200 20% 55% / .16) 30%, transparent 62%)}
 .g-ec-pad[data-state="decoy"] .g-ec-word{color:hsl(196 30% 82%);text-shadow:-1px 0 hsl(330 90% 70% / .6), 1px 0 hsl(178 80% 60% / .6)}
 @keyframes g-ec-decoyflick{0%{opacity:1}50%{opacity:.72}100%{opacity:.92}}
+/* ---- WRONG: the press that broke it (owner verdict B) ------------------ */
+/* The whole pad is forced red - hue, saturation and lamp - so no colour-blind
+   reading of "which pad is that" is needed: it is the one that just shook. */
+.g-ec-pad[data-state="wrong"]{--ec-lamp:1;--ec-h:4;--ec-sat:92%;transition:--ec-lamp .04s ease-out}
+.g-ec-pad[data-state="wrong"] .g-ec-face{border-color:hsl(4 96% 70%);
+  box-shadow:0 10px 28px rgba(0,0,0,.5), 0 0 0 3px hsl(4 96% 62% / .85),
+    0 0 42px hsl(4 96% 58% / .8), inset 0 -10px 22px rgba(0,0,0,.5);
+  animation:g-ec-shake .34s cubic-bezier(.36,.07,.19,.97) 1}
+@keyframes g-ec-shake{
+  10%,90%{transform:translateX(-3%)}
+  20%,80%{transform:translateX(5%)}
+  30%,50%,70%{transform:translateX(-7%)}
+  40%,60%{transform:translateX(7%)}
+  100%{transform:translateX(0)}}
+.g-ec-pad[data-state="wrong"] .g-ec-word,.g-ec-pad[data-state="wrong"] .g-ec-glyph{color:hsl(4 96% 92%)}
+
+/* ---- REVEAL: the pad you NEEDED, and it says so ------------------------- */
+/* Held bright for REVEAL_MS inside a halo that pulses out twice, with the
+   caption up. Nothing else in the room uses gold on a pad. */
+.g-ec-pad[data-state="reveal"]{--ec-lamp:1;transition:--ec-lamp .07s ease-out;z-index:2}
+.g-ec-pad[data-state="reveal"] .g-ec-face{transform:scale(1.05);
+  border-color:hsl(46 96% 70%);
+  box-shadow:0 10px 28px rgba(0,0,0,.5), 0 0 0 3px hsl(46 96% 62% / .9),
+    0 0 46px hsl(46 96% 60% / .75), inset 0 -10px 22px rgba(0,0,0,.5)}
+.g-ec-pad[data-state="reveal"]::before{opacity:1;border-color:hsl(46 96% 74% / .95);
+  animation:g-ec-halo .7s ease-out 2}
+@keyframes g-ec-halo{0%{opacity:.95;transform:scale(.96)}100%{opacity:0;transform:scale(1.55)}}
+.g-ec-pad[data-state="reveal"] .g-ec-hint{opacity:1}
+
+/* ---- THE LISTEN LOCK: the ring is visibly NOT yours --------------------- */
+/* --ec-sat is a gradient term, so this is a repaint, never a filter over a
+   live decode (trap 36). The pad currently playing keeps its colour: during
+   LISTEN the sequence is the only lit thing in the room. */
+.g-ec-stage[data-phase="echo"] .g-ec-pad,
+.g-ec-stage[data-phase="play"] .g-ec-pad,
+.g-ec-stage[data-phase="encore"] .g-ec-pad{--ec-sat:22%;cursor:not-allowed}
+.g-ec-stage[data-phase="echo"] .g-ec-pad[data-state="lit"],
+.g-ec-stage[data-phase="play"] .g-ec-pad[data-state="lit"],
+.g-ec-stage[data-phase="encore"] .g-ec-pad[data-state="lit"],
+.g-ec-stage[data-phase="echo"] .g-ec-pad[data-state="decoy"],
+.g-ec-stage[data-phase="encore"] .g-ec-pad[data-state="decoy"]{--ec-sat:88%}
+.g-ec-stage[data-phase="echo"] .g-ec-word,
+.g-ec-stage[data-phase="play"] .g-ec-word,
+.g-ec-stage[data-phase="encore"] .g-ec-word{opacity:.62}
+.g-ec-stage[data-phase="echo"] .g-ec-pad[data-state="lit"] .g-ec-word,
+.g-ec-stage[data-phase="encore"] .g-ec-pad[data-state="lit"] .g-ec-word{opacity:1}
+.g-ec-stage[data-phase="echo"] .g-ec-ring,
+.g-ec-stage[data-phase="play"] .g-ec-ring,
+.g-ec-stage[data-phase="encore"] .g-ec-ring{box-shadow:inset 0 0 90px rgba(0,0,0,.42)}
+
+/* ---- THE HAND-OFF: one beat, the ring comes back up -------------------- */
+.g-ec-stage[data-handoff="1"] .g-ec-ring{
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--pink), transparent 40%),
+    0 0 70px color-mix(in srgb, var(--pink), transparent 62%);
+  animation:g-ec-handoff .5s ease-out 1}
+@keyframes g-ec-handoff{0%{transform:scale(.985)}45%{transform:scale(1.012)}100%{transform:scale(1)}}
+
 /* the audio-inaudible tell (ctx.audioAudible false): brighter, longer */
 .g-ec-stage[data-audible="0"] .g-ec-pad[data-state="lit"] .g-ec-face,
 .g-ec-stage[data-audible="0"] .g-ec-pad[data-state="pressed"] .g-ec-face{filter:brightness(1.35) saturate(1.2)}
@@ -325,7 +507,6 @@ ${padRules()}
 /* ---- phases ------------------------------------------------------------- */
 /* playback: the room leans in - the spotlight narrows a hair, the HUD dims */
 .g-ec-stage[data-phase="echo"] .g-ec-hud{opacity:.72}
-.g-ec-stage[data-phase="echo"] .g-ec-pad{cursor:default}
 /* your turn: the ring's chalk line wakes */
 .g-ec-stage[data-phase="input"] .g-ec-ring{
   box-shadow:0 0 0 1px color-mix(in srgb, var(--lav), transparent 70%), 0 0 40px color-mix(in srgb, var(--lav), transparent 88%)}
@@ -340,6 +521,20 @@ ${padRules()}
 .g-ec-stage[data-phase="ended"] .g-ec-face::after{animation:none;opacity:.1}
 .g-ec-stage[data-phase="ended"] .g-ec-ring{box-shadow:none}
 .g-ec-stage[data-phase="briefing"] .g-ec-pad{--ec-lamp:0}
+
+/* ---- the stamp well: the shell's stamp, over the middle of the ring ----- */
+/* .arc-stamp carries its own rotate transform (and a pop keyframe that rewrites
+   it), so it is CENTRED BY ITS HOST rather than by a transform of our own. */
+.g-ec-stampwell{position:absolute;left:50%;top:50%;width:100%;height:0;
+  transform:translate(-50%,-50%);pointer-events:none;z-index:7;
+  display:flex;align-items:center;justify-content:center}
+.g-ec-stampwell *{pointer-events:none}
+/* Echo's stamp is a whole-round verdict, so it is sized like one. */
+.g-ec-stampwell .arc-stamp{font-size:clamp(18px, calc(var(--ec-ring) * .05), 34px);
+  padding:8px 20px;letter-spacing:.2em}
+/* the shell's CSS floor knows "pink"; a MISS needs the one colour it does not. */
+.g-ec-stampwell .arc-stamp.g-ec-stamp-bad{color:hsl(4 96% 82%);border-color:hsl(4 92% 62%);
+  box-shadow:0 0 18px hsl(4 92% 56% / .5);background:rgba(38,8,14,.82)}
 
 /* ---- the proctor line, the flashwell, the end card --------------------- */
 .g-ec-msg{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:6;
@@ -488,6 +683,15 @@ html.arc-reduced .g-ec-ring::before,html.arc-reduced .g-ec-face::after,html.arc-
 html.arc-reduced .g-ec-face{transition:box-shadow .2s ease, border-color .2s ease}
 html.arc-reduced .g-ec-pad[data-state="lit"] .g-ec-face,html.arc-reduced .g-ec-pad[data-state="pressed"] .g-ec-face{transform:none}
 html.arc-reduced .g-ec-pad[data-state="decoy"] .g-ec-face{animation:none !important;opacity:.85}
+/* THE TURN STILL READS WITH EVERY ANIMATION OFF. The banner keeps its colour
+   and its word, the dots keep their fill, the wrong pad keeps its red ring and
+   the reveal keeps its halo ring - only the movement goes. */
+html.arc-reduced .g-ec-pad[data-state="wrong"] .g-ec-face{animation:none !important}
+html.arc-reduced .g-ec-pad[data-state="reveal"]::before{animation:none !important;opacity:.9;transform:scale(1.16)}
+html.arc-reduced .g-ec-phase{animation:none !important}
+html.arc-reduced .g-ec-phase-glyph::after{animation:none !important;opacity:1}
+html.arc-reduced .g-ec-step{transition:background .2s ease, border-color .2s ease}
+html.arc-reduced .g-ec-step[data-fill="on"],html.arc-reduced .g-ec-step[data-fill="bad"]{transform:none}
 html.arc-reduced .g-ec-media{opacity:.14}
 html.arc-reduced .g-ec-howto-go{animation:none !important}
 html.arc-reduced .g-ec-howto-art::before,html.arc-reduced .g-ec-howto-art::after{animation:none !important}
@@ -495,14 +699,29 @@ html.arc-reduced .g-ec-howto-art::before,html.arc-reduced .g-ec-howto-art::after
   .g-ec-stage *{animation:none !important}
   .g-ec-stage::before,.g-ec-backdrop::before,.g-ec-backdrop::after,.g-ec-ring::before,.g-ec-face::after,.g-ec-media{animation:none !important}
   .g-ec-pad[data-state="lit"] .g-ec-face,.g-ec-pad[data-state="pressed"] .g-ec-face{transform:none}
+  .g-ec-pad[data-state="wrong"] .g-ec-face{animation:none !important}
+  .g-ec-pad[data-state="reveal"]::before{animation:none !important;opacity:.9;transform:scale(1.16)}
+  .g-ec-step[data-fill="on"],.g-ec-step[data-fill="bad"]{transform:none}
 }
 
 /* ---- small screens: the ring shrinks, the HUD tightens ------------------ */
 @media (max-width: 560px){
-  .g-ec-stage{padding:64px 10px 10px;--ec-ring:min(calc(100dvh - 230px), calc(100vw - 28px), 640px)}
+  .g-ec-stage{padding:58px 8px 8px;--ec-ring:min(calc(100dvh - 214px), calc(100vw - 20px), 640px)}
   .g-ec-chip{min-width:64px;padding:6px 9px 5px;font-size:11px}
   .g-ec-chip.g-ec-len{min-width:88px;font-size:22px}
   .g-ec-msg{font-size:13px;bottom:12px}
+  .g-ec-phase{min-height:32px;padding:4px 14px;gap:9px;font-size:clamp(13px, 2.1vh, 19px)}
+  .g-ec-phase-glyph{width:18px;height:18px}
+  .g-ec-steps{gap:5px;min-height:11px}
+  .g-ec-step{width:9px;height:9px}
+}
+/* A SHORT window (a 4:3 rig, a half-height desktop) loses the strip's own row
+   before it loses the ring: the dots ride tighter rather than the pads shrinking. */
+@media (max-height: 700px){
+  .g-ec-stage{padding-top:56px;gap:4px}
+  .g-ec-phase{min-height:32px;font-size:clamp(13px, 2.6vh, 20px)}
+  .g-ec-steps{gap:5px}
+  .g-ec-step{width:10px;height:10px}
 }
 `;
 

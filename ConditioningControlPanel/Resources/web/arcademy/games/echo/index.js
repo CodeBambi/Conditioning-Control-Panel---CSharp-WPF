@@ -7,10 +7,40 @@
  * class ends on the bell, and it is graded on the longest echo you held, how
  * clean you were, how well you kept tempo, and how many lies you refused.
  *
+ * WHOSE TURN IT IS (the owner's verdict, 2026-08-23 - "it's not clear when it
+ * is our turn"). Two phases, never implicit:
+ *   LISTEN    the room plays. The ring is LOCKED and dimmed, every pad is
+ *             desaturated, the cursor says not-allowed, and the banner reads
+ *             ec_phase_listen. The step strip fills as each note lands.
+ *   YOUR TURN the hand-off is a whole BEAT of its own: the ring sweeps bright,
+ *             every pad pulses once, one high chime that is not a pad tone, the
+ *             banner flips to ec_phase_yours. Then the strip empties and fills
+ *             again under your fingers.
+ * The banner (.g-ec-phase) and the strip (.g-ec-steps) are TEXT AND ATTRIBUTES,
+ * so both still say everything under reduced motion / motionLevel 0. The tier 3+
+ * window ring stays, but it is no longer the only "your turn" tell.
+ *
+ * RIGHT AND WRONG (the same verdict - "when we get it wrong or right"). A press
+ * answers itself three ways at once: the pad's own light, its note, and its dot.
+ * A wrong press flashes the pad RED and shakes its face, buzzes, then HOLDS the
+ * pad you needed lit for REVEAL_MS wearing a "this one" halo, and the shell
+ * stamps MISS over the ring. A cleared round sweeps the whole ring.
+ *
+ * THE PADS ARE THE BUBBLES (the same verdict again - "the gifs in a bubble are
+ * just bad, we should have bigger bubbles and have triggers associated with
+ * them"). Each pad is bound, once per class and seeded, to ONE trigger from the
+ * player's own active pool: the PHRASE is the face, big enough to read across
+ * the room, and the trigger's own whisper clip plays FAINTLY UNDER the pad's
+ * note whenever that pad sounds (init.triggers carries {text, audio}; the note
+ * still carries the pitch ratchet, the clip never outruns it, and
+ * ctx.audioAudible === false means no clip at all). Media faces are still
+ * plumbed, behind ec_pad_words = 'media'.
+ *
  * THE ROUND (pinned by the Semester II/III contract):
  *   deal      a sequence of `len` from this attempt's seeded stream
  *   echo      the ring plays it: pad lights + ONE engine audio_trigger recipe
- *             at the pad's own pitch; a DECOY may light at a seam (tier 2+)
+ *             at the pad's own pitch (+ the pad's trigger clip, faint, under
+ *             it); a DECOY may light at a seam (tier 2+)
  *   seam      the interference beat - engine.beat(), sub_flash word blips,
  *             the input pressure comes up (tier 2+)
  *   input     tap or the declared pad1..pad6 verbs; every clean press ratchets
@@ -30,7 +60,8 @@
  *   I    the ledger is honest - length, presses, latency, decoys and the clock
  *        are computed HERE and never routed through a deck. The trickster may
  *        lie on a chip FACE or a pad's WORD; the pad's GLYPH and its data-pad
- *        are truth and are repainted.
+ *        are truth and are repainted. The step strip is the ledger drawn: a dot
+ *        is filled by a real press, never by a deck.
  *   II   a pad's hitbox never moves and the key under the finger never moves;
  *        every engine one-shot over the ring is decoration (fireSafe() welds
  *        clickSafe on, bubbles are never poppable here).
@@ -94,9 +125,21 @@ const PAD_SFX = 'pad';
 const DECOY_SFX = 'glitch';
 const FAIL_SFX = 'bump';
 const CLEAR_SFX = 'streak';
+/** THE HAND-OFF. A high clean bell that is deliberately NOT a pad tone: the one
+ *  sound in the room that only ever means "now it is you". */
+const HANDOFF_SFX = 'chime';
+const HANDOFF_PITCH = 1.5;
+/** The soft tick under a correct press (the note carries the melody, this
+ *  carries the "yes"). */
+const TICK_SFX = 'tell';
+/** The fallback recipe behind a trigger CLIP: a host that cannot play the url
+ *  whispers instead of going silent (shell/audio.js falls through on its own). */
+const CLIP_SFX = 'whisper';
 
-/** The pad-face setting. */
-const FACE_MODES = Object.freeze(['words', 'glyphs']);
+/** The pad-face setting. `words` = the player's own triggers (the default and
+ *  the point); `glyphs` = the truthful marks only; `media` = the old pool-media
+ *  faces, kept plumbed but no longer the look anyone gets by accident. */
+const FACE_MODES = Object.freeze(['words', 'glyphs', 'media']);
 
 /** How often the honest window ring repaints (the trickster polls it). */
 const WINDOW_TICK_MS = 60;
@@ -142,11 +185,14 @@ function mmss(secLeft) {
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
-/** A pool word, trimmed to something a pad can wear. Never a lexicon row. */
+/** A pool phrase, trimmed to something a pad can wear. Never a lexicon row.
+ *  The cap went 12 -> 20 with the owner's verdict: the phrase IS the face now,
+ *  it wraps onto up to three lines, and most real triggers are two words. */
+const PAD_WORD_MAX = 20;
 function padWordOf(raw) {
-  const s = String(raw == null ? '' : raw).trim();
+  const s = String(raw == null ? '' : raw).trim().replace(/\s+/g, ' ');
   if (!s) return '';
-  return s.length > 12 ? s.slice(0, 12) : s;
+  return s.length > PAD_WORD_MAX ? s.slice(0, PAD_WORD_MAX).trim() : s;
 }
 
 export default {
@@ -260,6 +306,11 @@ export default {
     /* ---- pads / faces --------------------------------------------------- */
     let faceMode = 'words';             // ec_pad_words, after the empty-pool rule
     const padWords = [];                // index -> the word a pad wears (truth)
+    /** index -> {text, audio} | null. The pad's BOUND TRIGGER: one per pad, dealt
+     *  once off the class seed and frozen for the class (Law V), never repeated
+     *  across two pads. `audio` is the phrase's own whisper clip or null. */
+    const padTriggers = [];
+    let clipsFired = 0;                 // diagnostics: how many clips we asked for
     const faceUrls = new Map();         // pad -> {url, kind} | {broken:true}
     let faceKind = 'loop';
     let faceLogged = false;
@@ -268,6 +319,14 @@ export default {
     let stage = null; let backdrop = null; let hud = null; let ring = null;
     let msgEl = null; let well = null; let endEl = null; let howtoEl = null;
     let lenChip = null; let clockChip = null; let streakChip = null; let bestChip = null;
+    /* THE TURN, drawn twice over so neither the ear nor a still frame can miss
+     * it: the BANNER says whose turn it is in words, the STRIP says how far
+     * through the sequence we are in dots. Both are attribute+text only, so
+     * motionLevel 0 loses nothing. */
+    let bannerEl = null; let bannerTextEl = null;
+    let stepsEl = null; let stampWell = null;
+    const stepEls = [];
+    const stepFill = [];                // 'off' | 'on' | 'bad', one per sequence step
     /* THE WINDOW RING: the honest face of the soft input timer (tier 3+ only).
      * CORE writes `--ec-k` 1 -> 0 on it and NOTHING else; the trickster's
      * Crooked Clock paints a BENT twin over it and the real one underneath is
@@ -430,8 +489,93 @@ export default {
     /* ==================================================================== *
      * DOM (the contract's exact shape)
      * ==================================================================== */
-    function setPhase(p) { if (stage) stage.setAttribute('data-phase', p); }
+    function setPhase(p) {
+      if (stage) stage.setAttribute('data-phase', p);
+      paintBanner();
+    }
     function phase() { return stage ? stage.getAttribute('data-phase') : null; }
+
+    /* ==================================================================== *
+     * THE PHASE BANNER - the one node that answers "is it me?" without a
+     * single animation. `data-p` is its own enum (the stage's data-phase has
+     * six values; the player only needs to know four things), and a transient
+     * verdict (miss / late / clear) simply overwrites it until the next phase
+     * change paints over the top.
+     * ==================================================================== */
+    /** stage phase -> banner state. The room's turn is ONE word, yours is ONE word. */
+    function bannerStateFor(p) {
+      if (p === 'input') return 'yours';
+      if (p === 'echo' || p === 'play' || p === 'encore') return 'listen';
+      if (p === 'ended') return 'over';
+      return 'ready';
+    }
+    function bannerKeyFor(state) {
+      if (state === 'yours') return ['ec_phase_yours', EC_LEX.ec_phase_yours];
+      if (state === 'listen') return ['ec_phase_listen', EC_LEX.ec_phase_listen];
+      if (state === 'over') return ['ec_phase_over', EC_LEX.ec_phase_over];
+      return ['ec_phase_ready', EC_LEX.ec_phase_ready];
+    }
+    function bannerSet(state, text) {
+      if (!bannerEl) return;
+      bannerEl.setAttribute('data-p', state);
+      if (bannerTextEl) bannerTextEl.textContent = String(text == null ? '' : text);
+    }
+    function paintBanner() {
+      const state = bannerStateFor(phase());
+      const pair = bannerKeyFor(state);
+      bannerSet(state, t(pair[0], pair[1]));
+    }
+    /** A VERDICT on the banner: the clear / miss / late line, until the next phase. */
+    function bannerVerdict(state, key, fallback, subst) {
+      let text = t(key, fallback);
+      if (subst) for (const k of Object.keys(subst)) text = text.split('{' + k + '}').join(String(subst[k]));
+      bannerSet(state, text);
+    }
+
+    /* ==================================================================== *
+     * THE STEP STRIP - one dot per step of the sequence. During LISTEN the
+     * dots fill as the room plays; during YOUR TURN they empty and fill again
+     * under the player, and a wrong press turns one red. This is the single
+     * clearest Simon affordance and Echo did not have it.
+     *
+     * A DECOY NEVER FILLS A DOT (Law I): the strip counts the real sequence,
+     * which is exactly what makes a telegraphed decoy readable.
+     * ==================================================================== */
+    function buildSteps(len) {
+      stepEls.length = 0;
+      stepFill.length = 0;
+      if (!stepsEl) return;
+      stepsEl.textContent = '';
+      const want = Math.max(0, Math.floor(Number(len) || 0));
+      for (let i = 0; i < want; i++) {
+        const dot = el('i', 'g-ec-step');
+        dot.setAttribute('data-fill', 'off');
+        dot.setAttribute('aria-hidden', 'true');
+        dot.style.setProperty('--i', String(i));
+        stepsEl.appendChild(dot);
+        stepEls.push(dot);
+        stepFill.push('off');
+      }
+      paintStepsAria();
+    }
+    function stepFillSet(i, how) {
+      if (i < 0 || i >= stepEls.length) return;
+      stepFill[i] = how;
+      const dot = stepEls[i];
+      if (dot) dot.setAttribute('data-fill', how);
+      paintStepsAria();
+    }
+    function resetSteps() {
+      for (let i = 0; i < stepEls.length; i++) stepFillSet(i, 'off');
+    }
+    /** The strip's honest label: N of LEN, for a reader that cannot see dots. */
+    function paintStepsAria() {
+      if (!stepsEl) return;
+      const done = stepFill.filter((f) => f === 'on').length;
+      const line = t('ec_step_aria', EC_LEX.ec_step_aria).replace('{n}', String(done))
+        + ' / ' + String(stepFill.length);
+      stepsEl.setAttribute('aria-label', line);
+    }
     function msg(key, fallback) {
       if (!msgEl) return;
       msgEl.textContent = t(key, fallback);
@@ -475,6 +619,30 @@ export default {
       if (retake) hud.appendChild(el('span', 'g-ec-chip g-ec-retake', t('ec_retake', EC_LEX.ec_retake)));
       stage.appendChild(hud);
 
+      /* THE BANNER + THE STRIP. Both sit between the HUD and the ring so the
+       * eye crosses them on the way to the pads. aria-live polite: the turn
+       * flipping is exactly the kind of thing a screen reader should announce. */
+      bannerEl = el('div', 'g-ec-phase');
+      bannerEl.setAttribute('data-p', 'ready');
+      bannerEl.setAttribute('aria-live', 'polite');
+      bannerEl.setAttribute('aria-label', t('ec_phase_aria', EC_LEX.ec_phase_aria));
+      /* The listening glyph is DRAWN (style.js owns it) and aria-hidden: it is
+       * the non-text half of the signal, for the frame where the word is read
+       * already and only the shape registers. */
+      const glyph = el('span', 'g-ec-phase-glyph');
+      glyph.setAttribute('aria-hidden', 'true');
+      bannerEl.appendChild(glyph);
+      bannerTextEl = el('span', 'g-ec-phase-text', t('ec_phase_ready', EC_LEX.ec_phase_ready));
+      bannerEl.appendChild(bannerTextEl);
+      stage.appendChild(bannerEl);
+
+      stepsEl = el('div', 'g-ec-steps');
+      stepsEl.setAttribute('role', 'img');
+      stepsEl.setAttribute('aria-label', t('ec_steps_aria', EC_LEX.ec_steps_aria));
+      stage.appendChild(stepsEl);
+      stepEls.length = 0;
+      stepFill.length = 0;
+
       ring = el('div', 'g-ec-ring');
       ring.setAttribute('role', 'group');
       ring.setAttribute('aria-label', t('ec_ring_aria', EC_LEX.ec_ring_aria));
@@ -507,6 +675,12 @@ export default {
         face.appendChild(el('span', 'g-ec-glyph', GLYPHS[i] || ''));
         pad.appendChild(face);
         pad.appendChild(el('span', 'g-ec-word', ''));
+        /* THE REVEAL CAPTION. Drawn on every pad, shown by style.js ONLY under
+         * data-state="reveal" - so the pad you needed does not merely light, it
+         * says out loud that it was the one. */
+        const hint = el('span', 'g-ec-hint', t('ec_this_one', EC_LEX.ec_this_one));
+        hint.setAttribute('aria-hidden', 'true');
+        pad.appendChild(hint);
 
         pad.addEventListener('pointerdown', onPadDown);
         pad.addEventListener('pointerup', onPadUp);
@@ -516,6 +690,15 @@ export default {
         padEls.push(pad);
       }
       stage.appendChild(ring);
+
+      /* THE STAMP WELL. shell/ceremonies.js only centres a stamp when it lands
+       * on the fixed ceremony layer; an in-flow target gets it at the target's
+       * top-left corner. The ring IS where the stamp belongs, so it gets a
+       * centred, pointer-events-none host of its own rather than the game
+       * fighting `.arc-stamp`'s own rotate transform. */
+      stampWell = el('div', 'g-ec-stampwell');
+      stampWell.setAttribute('aria-hidden', 'true');
+      ring.appendChild(stampWell);
 
       msgEl = el('p', 'g-ec-msg');
       msgEl.setAttribute('aria-live', 'polite');
@@ -595,8 +778,11 @@ export default {
         say('faces: pad ' + i + ' media failed - plain face for the class');
       }
     }
-    /** One url per pad, dealt once and frozen for the class. */
+    /** One url per pad, dealt once and frozen for the class. MEDIA FACES ONLY:
+     *  the owner's verdict retired the gif faces as the default look, so the
+     *  plumbing stays and the opt-in is ec_pad_words = 'media'. */
     function dressFaces() {
+      if (faceMode !== 'media') return;
       if (!pool || typeof pool.next !== 'function') return;
       for (let i = 0; i < padEls.length; i++) {
         const have = faceUrls.get(i);
@@ -617,38 +803,114 @@ export default {
       }
     }
 
-    /* ---- pad words (may be EMPTY - the glyph fallback is designed in) ---- */
+    /* ==================================================================== *
+     * THE TRIGGER POOL - the player's OWN active triggers, as {text, audio}.
+     * `init.triggers` is the host's projection of the enabled SubliminalPool
+     * with each phrase's whisper clip resolved to a ccp.subaudio / ccp.modaudio
+     * url (or null). `init.words` is the same phrases WITHOUT audio and is what
+     * every other class reads, so we prefer triggers and fall back to words: a
+     * host that predates the field still gets text faces, just silent ones.
+     * ==================================================================== */
+    function triggerPool() {
+      const out = [];
+      const seen = new Set();
+      const push = (rawText, rawAudio) => {
+        const text = padWordOf(rawText);
+        if (!text) return;
+        const k = text.toLowerCase();
+        if (seen.has(k)) return;          // never the same trigger on two pads
+        seen.add(k);
+        const audio = (typeof rawAudio === 'string' && rawAudio) ? rawAudio : null;
+        out.push({ text, audio });
+      };
+      try {
+        const src = Array.isArray(ctx.triggers) ? ctx.triggers : null;
+        if (src) for (const row of src) {
+          if (!row) continue;
+          if (typeof row === 'string') push(row, null);
+          else push(row.text, row.audio);
+        }
+      } catch (e) { /* a malformed projection is an empty pool, never a crash */ }
+      try {
+        const words = Array.isArray(ctx.words) ? ctx.words : [];
+        for (const w of words) push(w, null);   // de-duplicated against the above
+      } catch (e) { /* ignore */ }
+      return out;
+    }
+
+    /* ---- pad faces: ONE trigger per pad, glyphs for the rest ------------- */
     function assignWords() {
       padWords.length = 0;
+      padTriggers.length = 0;
       const want = String(ctx.settings && ctx.settings.ec_pad_words != null ? ctx.settings.ec_pad_words : 'words')
         .trim().toLowerCase();
       faceMode = FACE_MODES.indexOf(want) >= 0 ? want : 'words';
-      let words = [];
-      try {
-        const src = Array.isArray(ctx.words) ? ctx.words : [];
-        const seen = new Set();
-        for (const w of src) {
-          const s = padWordOf(w);
-          if (!s || seen.has(s.toLowerCase())) continue;
-          seen.add(s.toLowerCase());
-          words.push(s);
-        }
-      } catch (e) { words = []; }
-      /* THE MAY-BE-EMPTY CONTRACT (the dossier's mod-agnosticism proof): with
-       * fewer than six distinct words the pads wear glyphs only, and the whole
-       * mechanic still runs. No half-worded ring - that reads as a bug. */
-      if (faceMode === 'words' && words.length < PLAYTEST.PADS) {
+      const pool2 = triggerPool();
+      /* THE MAY-BE-EMPTY CONTRACT (the dossier's mod-agnosticism proof) still
+       * holds at ZERO: with no triggers at all the ring wears glyphs and the
+       * whole mechanic runs unchanged. What CHANGED with the owner's verdict is
+       * the middle: a partial pool no longer throws away the triggers it has -
+       * the pads that got one wear it, the rest wear their glyph, and no
+       * trigger is ever on two pads. */
+      const wordy = faceMode === 'words' || faceMode === 'media';
+      if (wordy && pool2.length === 0) {
         faceMode = 'glyphs';
-        say('pad words: only ' + words.length + ' in the pool - glyph faces (the mechanic is unchanged)');
+        say('pad triggers: the active pool is empty - glyph faces (the mechanic is unchanged)');
       }
-      if (faceMode === 'words') {
-        const picked = shuffled(words, makeRng(seed + '|ec-words')).slice(0, PLAYTEST.PADS);
-        for (let i = 0; i < PLAYTEST.PADS; i++) padWords.push(picked[i] || '');
+      if (faceMode === 'words' || faceMode === 'media') {
+        /* Law V: the BINDING is seeded off the class seed, so a retake puts the
+         * same phrase on the same pad. The pool's own order is the host's. */
+        const picked = shuffled(pool2, makeRng(seed + '|ec-words')).slice(0, PLAYTEST.PADS);
+        for (let i = 0; i < PLAYTEST.PADS; i++) {
+          const trig = picked[i] || null;
+          padTriggers.push(trig);
+          padWords.push(trig ? trig.text : '');
+        }
       } else {
-        for (let i = 0; i < PLAYTEST.PADS; i++) padWords.push('');
+        for (let i = 0; i < PLAYTEST.PADS; i++) { padTriggers.push(null); padWords.push(''); }
       }
       if (stage) stage.setAttribute('data-faces', faceMode);
+      /* Per-PAD truth as well as per-stage: a ring with four triggers and two
+       * glyphs has to size each face for what it actually wears. */
+      for (let i = 0; i < padEls.length; i++) {
+        const pad = padEls[i];
+        if (pad) pad.setAttribute('data-face', padWords[i] ? 'word' : 'glyph');
+      }
+      const withAudio = padTriggers.filter((x) => x && x.audio).length;
+      say('faces ' + faceMode + ': ' + padWords.filter(Boolean).length + ' triggers on the ring, '
+        + withAudio + ' with a clip' + (audible ? '' : ' (INAUDIBLE - no clip will play)'));
       paintWords();
+    }
+
+    /* ==================================================================== *
+     * THE TRIGGER CLIP - the owner's "playing faintly with the tune we play
+     * hitting the bubble". The NOTE stays the primary sound and keeps the
+     * pitch ratchet; the clip rides UNDER it on the voice bus at CLIP_LEVEL,
+     * one per press, cut on a re-press of the same pad (the mixer's `key` is
+     * the voice slot) and hard-capped at CLIP_MAX_MS so a fast sequence never
+     * smears. ctx.audioAudible === false is the whole-feature off switch: the
+     * player has muted whispers app-wide and a class may not undo that.
+     * ==================================================================== */
+    function padClip(i) {
+      if (!audible) return null;
+      const trig = padTriggers[i];
+      if (!trig || !trig.audio) return null;
+      const r = fireSafe('audio_trigger', {
+        name: CLIP_SFX,                 // the recipe a host that cannot play urls falls back to
+        url: trig.audio,
+        key: 'ec-pad-' + i,
+        maxMs: PLAYTEST.CLIP_MAX_MS,
+        fadeMs: PLAYTEST.CLIP_FADE_MS,
+        bus: PLAYTEST.CLIP_BUS,
+        level: PLAYTEST.CLIP_LEVEL,
+      });
+      if (r) clipsFired += 1;
+      return r;
+    }
+    /** The pad's whole voice: the note (primary, pitched) and its trigger under it. */
+    function padVoice(i, level, pitch) {
+      tone(PAD_SFX, level, pitch);
+      padClip(i);
     }
     /** THE TRUTH on every pad word (the trickster's Unreliable Label restores
      *  exactly this string; the glyph it can never touch). */
@@ -824,6 +1086,7 @@ export default {
       sequencesDealt += 1;
       expectIdx = 0;
       stepIdx = 0;
+      buildSteps(round.seq.length);
       clearPads();
       paintWords();
       paintHud();
@@ -851,6 +1114,7 @@ export default {
       round = buildRound({ seed, gradeTier: tier, attempt, len: curLen, encore: true });
       expectIdx = 0;
       stepIdx = 0;
+      buildSteps(round.seq.length);
       clearPads();
       paintHud();
       setPhase('encore');
@@ -865,6 +1129,7 @@ export default {
       busy = true;
       inputOpen = false;
       stepIdx = 0;
+      resetSteps();
       setPhase(inEncore ? 'encore' : 'echo');
       if (!audible && sequencesDealt <= 1) msg('ec_msg_silent', EC_LEX.ec_msg_silent);
       else if (!inEncore) msg('ec_msg_watch', EC_LEX.ec_msg_watch);
@@ -891,12 +1156,17 @@ export default {
             if (targets.length) fireSafe('glitch_swap', { targets, seconds: 0.4, sfx: false, onSwap: () => {} });
           }
         } else {
-          tone(PAD_SFX, 0.34, pitchFor(step.pad, ratchet));
+          /* At tier 3+ a decoy is indistinguishable from a real step, and that
+           * includes its trigger: a pad that sounded silent would be a free tell. */
+          padVoice(step.pad, 0.34, pitchFor(step.pad, ratchet));
         }
         deck('casino', 'padLit', step.pad, i, round.len);
       } else {
         padState(step.pad, 'lit', lit);
-        tone(PAD_SFX, 0.34, pitchFor(step.pad, ratchet));
+        padVoice(step.pad, 0.34, pitchFor(step.pad, ratchet));
+        /* THE STRIP DURING LISTEN: the room fills the dots as it plays, so the
+         * player can see how much of the sequence is still coming. */
+        stepFillSet(step.index, 'on');
         deck('casino', 'padLit', step.pad, step.index, round.len);
       }
       after(round.stepMs, () => playStep());
@@ -924,10 +1194,32 @@ export default {
       after(reduced ? PLAYTEST.SEAM_MS_REDUCED : PLAYTEST.SEAM_MS, () => openInput());
     }
 
+    /* THE HAND-OFF. Not a state change - a BEAT. One chime that is not a pad
+     * tone, one pulse across every pad, the ring sweeping bright, the banner
+     * flipping. Under reduced motion the chime and the banner still land, which
+     * is why neither of them is an animation. */
+    function handoff() {
+      if (dead || ended) return;
+      tone(HANDOFF_SFX, 0.45, HANDOFF_PITCH);
+      haptic(12);
+      if (stage) {
+        stage.setAttribute('data-handoff', '1');
+        after(reduced ? PLAYTEST.HANDOFF_MS_REDUCED * 2 : PLAYTEST.HANDOFF_MS * 2, () => {
+          if (stage) stage.removeAttribute('data-handoff');
+        });
+      }
+      /* Every pad at once - unmistakably NOT a sequence step, which lights one. */
+      for (let i = 0; i < padEls.length; i++) padState(i, 'lit', PLAYTEST.HANDOFF_PULSE_MS);
+    }
+
     function openInput() {
       if (dead || ended || !round) return;
       setPhase('input');
       msg('ec_msg_input', EC_LEX.ec_msg_input);
+      /* The room's dots come off and the player's go on: the strip now counts
+       * what YOU have played, not what the room played. */
+      resetSteps();
+      handoff();
       busy = false;
       inputOpen = true;
       /* A key whose ':up' never arrived (focus loss, a suspend mid-hold) must
@@ -1009,7 +1301,11 @@ export default {
         bestStreak = Math.max(bestStreak, pressStreak);
         ratchet = Math.min(PLAYTEST.RATCHET_CAP, ratchet + 1);
         padState(i, 'pressed', reduced ? 140 : 200);
-        tone(PAD_SFX, 0.42, pitchFor(i, ratchet));
+        padVoice(i, 0.42, pitchFor(i, ratchet));
+        /* The soft tick: the note is the melody, this is the "yes". */
+        tone(TICK_SFX, 0.22, 1);
+        /* THE DOT the player just earned. */
+        stepFillSet(expectIdx, 'on');
         haptic(8);
         deck('casino', 'padPressed', i, true, pressStreak);
         /* The decoy at this seam was PRESENTED and REFUSED. The game says so:
@@ -1030,7 +1326,9 @@ export default {
         deck('trickster', 'afterInput');
         return;
       }
-      padState(i, 'pressed', reduced ? 200 : 300);
+      /* WRONG. The pad flashes RED and its face shakes - a state of its own, so
+       * a still frame of the room says "that was wrong" with no sound at all. */
+      padState(i, 'wrong', reduced ? 260 : 420);
       deck('casino', 'padPressed', i, false, pressStreak);
       fail(i, how === 'timeout' ? 'timeout' : 'wrong');
     }
@@ -1049,12 +1347,33 @@ export default {
       deck('pressure', 'beat', 'clear');
       tone(CLEAR_SFX, 0.5, pitchFor(PLAYTEST.PADS - 1, ratchet));
       haptic(18);
+      /* THE BANNER SAYS WHAT YOU HELD, with the number in it - the length is the
+       * whole score of this class and it should not live only in a HUD chip. */
+      bannerVerdict('clear', 'ec_clear', EC_LEX.ec_clear, { n: len });
+      ringSweep();
+      stamp('ec_stamp_clear', EC_LEX.ec_stamp_clear, false);
       msg(inEncore ? 'ec_msg_encore_clear' : 'ec_msg_clear',
         inEncore ? EC_LEX.ec_msg_encore_clear : EC_LEX.ec_msg_clear);
       rewardBeat();
       stopInputPressure();
       const hold = reduced ? PLAYTEST.CLEAR_HOLD_MS_REDUCED : PLAYTEST.CLEAR_HOLD_MS;
       after(hold, () => { if (!ended) dealSequence(len + 1); });
+    }
+
+    /** THE ROUND-CLEAR FLOURISH: every pad in turn, and the chime climbs with
+     *  them. Purely decorative - it runs inside the clear hold and the next deal
+     *  clears the pads anyway. */
+    function ringSweep() {
+      const stepMs = reduced ? Math.round(PLAYTEST.SWEEP_STEP_MS * 0.6) : PLAYTEST.SWEEP_STEP_MS;
+      const litMs = reduced ? Math.round(PLAYTEST.SWEEP_LIT_MS * 0.6) : PLAYTEST.SWEEP_LIT_MS;
+      for (let i = 0; i < padEls.length; i++) {
+        const idx = i;
+        after(stepMs * i, () => {
+          if (ended || dead) return;
+          padState(idx, 'lit', litMs);
+          tone(HANDOFF_SFX, 0.22, pitchFor(idx, 0));
+        });
+      }
     }
 
     function fail(pressedPad, why) {
@@ -1072,18 +1391,30 @@ export default {
       deck('casino', 'fail', pressedPad, round.seq[expectIdx]);
       deck('pressure', 'beat', 'fail');
       deck('pressure', 'setStreak', curLen, { links: 0, cleared: 0, heat: currentHeat });
+      /* THE BUZZER: low, short, and nothing else in the room sounds like it. */
       tone(FAIL_SFX, 0.4, 1);
       stopInputPressure();
       if (near) { nearMisses += 1; ceremonySafe('near_miss', {}); }
-      msg(why === 'timeout' ? 'ec_msg_timeout' : near ? 'ec_msg_near' : 'ec_msg_fail',
-        why === 'timeout' ? EC_LEX.ec_msg_timeout : near ? EC_LEX.ec_msg_near : EC_LEX.ec_msg_fail);
-      /* THE REVEAL: the pad you needed shows itself, softly, AFTER the commit -
-       * never during input (that would be a colour tell). */
+      /* THE DOT that broke it goes red, and stays red through the hold. */
+      if (expectIdx >= 0 && expectIdx < stepEls.length) stepFillSet(expectIdx, 'bad');
+      const late = why === 'timeout';
+      /* THE BANNER + THE STAMP: two ways of saying the same thing, one in the
+       * place the eye already is and one across the ring. */
+      bannerVerdict('miss', late ? 'ec_late' : 'ec_miss',
+        late ? EC_LEX.ec_late : EC_LEX.ec_miss);
+      stamp(late ? 'ec_stamp_late' : 'ec_stamp_miss',
+        late ? EC_LEX.ec_stamp_late : EC_LEX.ec_stamp_miss, true);
+      msg(late ? 'ec_msg_timeout' : near ? 'ec_msg_near' : 'ec_msg_fail',
+        late ? EC_LEX.ec_msg_timeout : near ? EC_LEX.ec_msg_near : EC_LEX.ec_msg_fail);
+      /* THE REVEAL: the pad you needed shows itself AFTER the commit - never
+       * during input (that would be a colour tell) - and it does not merely
+       * light: `reveal` is its own state, held for REVEAL_MS, wearing the halo
+       * and the "this one" caption, so the answer is impossible to miss. */
       const wanted = round.seq[expectIdx];
       if (wanted != null) {
         after(reduced ? 160 : 260, () => {
-          padState(wanted, 'lit', PLAYTEST.REVEAL_MS);
-          tone(PAD_SFX, 0.26, pitchFor(wanted, 0));
+          padState(wanted, 'reveal', PLAYTEST.REVEAL_MS);
+          padVoice(wanted, 0.26, pitchFor(wanted, 0));
         });
       }
       const hold = reduced ? PLAYTEST.FAIL_HOLD_MS_REDUCED : PLAYTEST.FAIL_HOLD_MS;
@@ -1103,6 +1434,22 @@ export default {
         attempt += 1;                       // a fresh stream: a new melody
         dealSequence(nextLenAfterFail(len, startLen));
       });
+    }
+
+    /** THE STAMP, over the middle of the ring. The shell owns the node and the
+     *  engine gets first refusal; all this adds is where it lands and, for a
+     *  miss, the one colour the shell's own floor has no word for (it knows
+     *  `pink`, and the engine's `bad` tone never reaches the CSS version). */
+    function stamp(key, fallback, bad) {
+      try {
+        const node = ctx.ceremonies.stamp({
+          text: t(key, fallback),
+          tone: bad ? 'bad' : 'pink',
+          target: stampWell || ring,
+        });
+        if (bad && node && node.classList) node.classList.add('g-ec-stamp-bad');
+        return node;
+      } catch (e) { return null; }   // a ceremony must never be the thing that fails
     }
 
     /** The variable-ratio canon on a clear (the engine's, with a seeded local
@@ -1377,6 +1724,7 @@ export default {
         ratchet = 0;
         newRecord = false;
         faceUrls.clear();
+        clipsFired = 0;
         faceKind = (reduced || motionLevelOf() <= 1) ? 'still' : 'loop';
 
         try {
@@ -1555,6 +1903,10 @@ export default {
         pool = null;
         padTimers.clear();
         padEls.length = 0;
+        stepEls.length = 0;
+        stepFill.length = 0;
+        padTriggers.length = 0;
+        bannerEl = null; bannerTextEl = null; stepsEl = null; stampWell = null;
         timerEl = null;
         try { ctx.root.textContent = ''; } catch (e) { /* noop */ }
         if (liveClass === instance) liveClass = null;
@@ -1584,6 +1936,12 @@ export default {
           currentHeat, bellOn, elapsedMs, budgetMs, secLeft: secLeft(),
           padStates: padEls.map((p) => (p ? p.getAttribute('data-state') : null)),
           padWords: padWords.slice(),
+          /* The BINDING, as the suite reads it: text + whether a clip exists. */
+          padTriggers: padTriggers.map((x) => (x ? { text: x.text, audio: !!x.audio } : null)),
+          clipsFired,
+          banner: bannerEl ? bannerEl.getAttribute('data-p') : null,
+          bannerText: bannerTextEl ? bannerTextEl.textContent : null,
+          steps: stepFill.slice(),
           faces: faceUrls.size,
           round: round ? {
             len: round.len, seq: round.seq.slice(), decoys: round.decoys.slice(),
@@ -1591,6 +1949,7 @@ export default {
           } : null,
           howtoUp: !!howtoEl,
           stage, ring, hud, well, msgEl, endEl, lenChip, clockChip, streakChip, bestChip,
+          bannerEl, stepsEl, stampWell,
           pads: padEls.slice(),
           casino: casino && typeof casino.diagnostics === 'function' ? (() => { try { return casino.diagnostics(); } catch (e) { return null; } })() : null,
           trickster: trickster && typeof trickster.diagnostics === 'function' ? (() => { try { return trickster.diagnostics(); } catch (e) { return null; } })() : null,

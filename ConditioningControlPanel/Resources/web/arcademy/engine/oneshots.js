@@ -246,6 +246,17 @@ export function createOneshots(ctx) {
     // the seam dropped it on the floor until 0822 - every descending chime and
     // reveal tick played at pitch 1. Pass-through only; audio owns the clamp.
     if (opts.pitch != null && Number.isFinite(Number(opts.pitch))) detail.pitch = Number(opts.pitch);
+    // A CLIP: a same-origin ccp.* url the mixer plays through the bus instead of
+    // synthesising the recipe (shell/audio.js). Pass-through only, exactly like
+    // pitch - the level above is still the engine's clamped one, so a clip can
+    // never be louder than the channel allows, and `key` is the voice slot the
+    // mixer cuts on a re-fire. A host that cannot play it falls back to `name`.
+    if (typeof opts.url === 'string' && opts.url) {
+      detail.url = opts.url;
+      if (opts.key != null) detail.key = String(opts.key);
+      if (Number.isFinite(Number(opts.maxMs))) detail.maxMs = Number(opts.maxMs);
+      if (Number.isFinite(Number(opts.fadeMs))) detail.fadeMs = Number(opts.fadeMs);
+    }
     if (duckKind && DUCK[duckKind] != null) {
       // depth of the duck is the player's duckDepth channel against the policy
       const policy = DUCK[duckKind];
