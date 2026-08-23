@@ -6,8 +6,8 @@ using CcpClient.Desktop.Motion;
 namespace CcpClient.Desktop.Features.Arcademy;
 
 /// <summary>
-/// Protocol v1 of the Arcademy page↔host bridge — the frames slices 1 and 2 of the board row
-/// own (the boot handshake and the settings projection), authored to the
+/// Protocol v1 of the Arcademy page↔host bridge — the frames slices 1 to 4 of the board row own
+/// (the boot handshake, the settings projection, the meta store and the class payout), authored to the
 /// <see cref="Goon.GoonProtocol"/> discipline: every type is either EMITTED here, or classified
 /// as belonging to a later slice, or refused as not-vocabulary. Nothing arriving from the page is
 /// dropped silently.
@@ -28,9 +28,10 @@ namespace CcpClient.Desktop.Features.Arcademy;
 /// verbatim (sampled across the 318 rows: <c>retake</c> → "Retake", <c>dt_commit</c> → "COMMIT
 /// ROW", <c>dv_bell</c> → "The bell. Time is up."). Transcribing 318 rows of data that no code in
 /// this build reads would add a drift surface and change nothing on screen; the table arrives with
-/// the mod resolution that gives it a purpose. <c>meta</c> (<c>:568</c>) is empty for a different
-/// reason: the meta store is slice 3, and <c>new JObject()</c> is upstream's own value when its
-/// store is absent.</para>
+/// the mod resolution that gives it a purpose. <c>meta</c> (<c>:568</c>) was the second one and is
+/// no longer empty: slice 3 landed the store, so the projection carries
+/// <see cref="ArcademyMetaStore.Snapshot"/> when a session has one, and <c>new JObject()</c> —
+/// upstream's own value on the same line — when it does not.</para>
 /// </summary>
 public static class ArcademyProtocol
 {
@@ -60,7 +61,12 @@ public static class ArcademyProtocol
     /// so the page never sees raw flags it could recombine into a gate the host did not open
     /// (<c>:520-525</c>).
     /// </summary>
-    public static object BuildInit(ArcademySettingsDocument s, ArcademyAppFacts f) => new
+    /// <param name="s">The Arcademy settings document (the ceilings and the per-game bag).</param>
+    /// <param name="f">The app-wide values the projection reads but the Arcademy does not own.</param>
+    /// <param name="meta">The meta store's whole blob (<c>_meta?.Snapshot()</c>, <c>:568</c>).
+    /// Absent means an empty object, which is upstream's own value for a session with no meta
+    /// store — <c>?? new JObject()</c> on the same line.</param>
+    public static object BuildInit(ArcademySettingsDocument s, ArcademyAppFacts f, JsonObject? meta = null) => new
     {
         type = "init",                                                          // :533
         protocol = Version,                                                     // :534
@@ -96,7 +102,7 @@ public static class ArcademyProtocol
         // ...and the LOCAL date is what rolls the attendance streak (:565).
         localDate = f.Now.DateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),        // :566
         overrideCalendar = LoadOverrideCalendar(f.OverrideCalendarPath),        // :567
-        meta = new JsonObject(),                                                // :568 (the meta store is slice 3)
+        meta = meta ?? new JsonObject(),                                        // :568
         settings = BuildSettingsBag(s, f),                                      // :569
         keybinds = ParseJsonObject(s.KeybindsJson),                             // :570
         hideTutorial = s.HideTutorial,                                          // :571
@@ -247,6 +253,42 @@ public static class ArcademyProtocol
     /// than invisible.</summary>
     public static object BuildSetting(string key, object? value) => new { type = "setting", key, value };
 
+    /// <summary>The per-key meta reply (upstream <c>ArcademyMetaStore.cs:147</c>) — the answer to every
+    /// <c>meta-command</c>, carrying the POST-write value so the page's cache converges on what C#
+    /// actually stored even when a write was clamped or refused.</summary>
+    public static object BuildMeta(string key, JsonNode? value) => new { type = "meta", key, value };
+
+    /// <summary>The whole-blob meta push (<c>SnapshotMessage</c>,
+    /// upstream <c>ArcademyMetaStore.cs:107-113</c>), sent after a HOST-side write such as an attendance
+    /// credit. The page handles both shapes and says which one matters: "the authoritative streak
+    /// arrives only that way" (<c>arcademy/core/store.js:35-38</c>).</summary>
+    public static object BuildMetaSnapshot(int rev, JsonObject state) => new { type = "meta", rev, state };
+
+    /// <summary>
+    /// The <c>payout-result</c> reply (<c>ArcademyHostService.cs:1410-1421</c>) — the ONLY source
+    /// of an XP number on the page (<c>arcademy/shell/shell.js:1331</c>).
+    ///
+    /// <para><b><c>levelUp</c> is a constant false in this build, and that is a stated
+    /// divergence.</b> Upstream fills it by reading <c>PlayerLevel</c> either side of
+    /// <c>AddXP</c> (<c>:1390</c>, <c>:1398</c>). There is no XP store, no level and no rank
+    /// anywhere in <c>client/src</c> for the computed XP to move, so there is nothing to compare
+    /// and "no level-up happened" is the truthful frame. See
+    /// <see cref="ArcademyClassPayout.ArcademyPayout.XpBanked"/>; the page degrades to omitting one
+    /// log suffix (<c>arcademy/boot.js:193</c>).</para>
+    /// </summary>
+    public static object BuildPayoutResult(ArcademyClassPayout.ArcademyPayout p) => new
+    {
+        type = "payout-result",                 // :1413
+        gameKey = p.GameKey,
+        xp = p.Xp,
+        levelUp = false,                        // :1416 — see the remarks above
+        streak = p.Streak,
+        perfectAttendance = p.PerfectAttendance,
+        classesToday = p.ClassesToday,
+        // Additive: the report card reads it to explain a 0 XP line. Older pages ignore it (:1419).
+        retake = p.Retake,
+    };
+
     // ============================ page → host ============================
 
     /// <summary>How this host treats a page→host type.</summary>
@@ -266,16 +308,18 @@ public static class ArcademyProtocol
     /// <summary>
     /// Every type upstream's <c>OnPageMessage</c> switch handles (<c>:444-497</c>), classified. A
     /// test pins this table, so widening the bridge fails a fact instead of happening quietly.
-    /// The later-slice rows name their slice: <c>meta-command</c> → 3 (<c>:463</c>),
-    /// <c>class-started</c>/<c>class-ended</c>/<c>class-left</c> → 4 (<c>:466-480</c>),
-    /// <c>resume-request</c> → 5 (<c>:481</c>), <c>assets-request</c> → 7 (<c>:484</c>).
+    /// <c>meta-command</c> (<c>:463</c>) moved to <b>handled</b> with slice 3, and
+    /// <c>class-started</c>/<c>class-ended</c>/<c>class-left</c> (<c>:466-480</c>) with slice 4.
+    /// The two rows still named for a later slice are <c>resume-request</c> → 5 (<c>:481</c>) and
+    /// <c>assets-request</c> → 7 (<c>:484</c>).
     /// </summary>
     public static ArcademyHandling Classify(string type) => type switch
     {
         "ready" or "log" or "heartbeat" or "pong" or "boot-error" or "fullscreen-request"
-            or "set-setting" or "exit" or "exit-done" => ArcademyHandling.HandledHere,
-        "meta-command" or "class-started" or "class-ended" or "class-left" or "resume-request"
-            or "assets-request" => ArcademyHandling.LaterSlice,
+            or "set-setting" or "exit" or "exit-done"
+            or "meta-command" or "class-started" or "class-ended" or "class-left"
+            => ArcademyHandling.HandledHere,
+        "resume-request" or "assets-request" => ArcademyHandling.LaterSlice,
         _ => ArcademyHandling.NotVocabulary,
     };
 
@@ -306,6 +350,24 @@ public static class ArcademyProtocol
         /// <summary>One settings write (<c>:460</c> → <c>OnSetSetting</c>, <c>:1164</c>). The value
         /// stays raw JSON: it may be a number, a bool, a string or the whole keybind object.</summary>
         public sealed record SetSetting(string Key, JsonElement? Value) : ArcademyPageMessage;
+
+        /// <summary>One meta-store command (<c>:463</c> → <c>ArcademyMetaStore.Handle</c>,
+        /// <c>:118</c>). <c>op</c> and <c>key</c> stay raw: the key's normalization and the op
+        /// vocabulary are the store's, not the parser's.</summary>
+        public sealed record MetaCommand(string? Op, string? Key, JsonElement? Value) : ArcademyPageMessage;
+
+        /// <summary>A class began (<c>:466-470</c>).</summary>
+        public sealed record ClassStarted(string? GameKey, int GradeTier) : ArcademyPageMessage;
+
+        /// <summary>A class finished — the XP + attendance payout (<c>:471-473</c>). The WHOLE
+        /// frame rides here because every field is read defensively and separately by
+        /// <see cref="ArcademyClassPayout.Compute"/>, which is the port of upstream's own reason
+        /// for reading them that way (<c>:1359-1366</c>).</summary>
+        public sealed record ClassEnded(JsonElement Fields) : ArcademyPageMessage;
+
+        /// <summary>The closing bracket for <c>class-started</c> (<c>:474-480</c>): leaving a class
+        /// with Esc ENDS no class, so nothing is graded, paid or credited.</summary>
+        public sealed record ClassLeft(string? GameKey) : ArcademyPageMessage;
 
         /// <summary>Page-initiated wind-down (<c>:487</c>).</summary>
         public sealed record Exit(string? Reason) : ArcademyPageMessage;
@@ -348,6 +410,14 @@ public static class ArcademyProtocol
         ["set-setting"] = r => new ArcademyPageMessage.SetSetting(
             GetString(r, "key") ?? "",
             r.TryGetProperty("value", out var v) ? v.Clone() : null),
+        ["meta-command"] = r => new ArcademyPageMessage.MetaCommand(
+            GetString(r, "op"),
+            GetString(r, "key"),
+            r.TryGetProperty("value", out var mv) ? mv.Clone() : null),
+        ["class-started"] = r => new ArcademyPageMessage.ClassStarted(
+            GetString(r, "gameKey"), GetInt(r, "gradeTier") ?? 0),
+        ["class-ended"] = r => new ArcademyPageMessage.ClassEnded(r),
+        ["class-left"] = r => new ArcademyPageMessage.ClassLeft(GetString(r, "gameKey")),
         ["exit"] = r => new ArcademyPageMessage.Exit(GetString(r, "reason")),
         ["exit-done"] = _ => new ArcademyPageMessage.ExitDone(),
     };
