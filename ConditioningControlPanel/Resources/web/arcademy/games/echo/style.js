@@ -46,7 +46,11 @@
  *                   the pool could not fill, which is what data-face=glyph on
  *                   the PAD means. Still the ONE node a trickster may lie on;
  *                   the glyph, the colour and the place on the ring are the
- *                   truth (Law IV)
+ *                   truth (Law IV).
+ *                   ROUND 2 - it is FROSTED at rest (data-veil=on) and its size
+ *                   is FITTED: --ec-word-px, one size for the whole ring,
+ *                   written by index.js's fitWords after measuring the glass.
+ *                   The clamp below is only the pre-layout / headless floor
  *     .g-ec-hint    the reveal caption ("this one"), drawn on every pad and
  *                   shown ONLY under data-state=reveal
  *   .g-ec-msg / .g-ec-flashwell / .g-ec-end (the core toggles .g-ec-end and
@@ -400,14 +404,56 @@ ${padRules()}
    the colour and the place on the ring stay the truth. */
 .g-ec-word{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);pointer-events:none;
   width:80%;padding:0;border-radius:0;background:none;
-  font-family:var(--disp);font-size:clamp(11px, calc(var(--ec-pad) * .155), 30px);
-  line-height:1.1;letter-spacing:.02em;text-transform:uppercase;text-align:center;
+  /* THE FITTED SIZE. index.js measures the glass and writes --ec-word-px on the
+     stage; the clamp is the floor before that lands (and headless, where there
+     is no layout to measure). The BOX is three lines tall in em, so it is three
+     lines at ANY size the fit search picks - that is what lets the search ask
+     one question ("does the wrapped phrase fit three lines of THIS size") and
+     never have to cut. */
+  font-family:var(--disp);
+  font-size:var(--ec-word-px, clamp(11px, calc(var(--ec-pad) * .155), 30px));
+  line-height:1.1;max-height:3.4em;
+  letter-spacing:.01em;text-transform:uppercase;text-align:center;
   overflow-wrap:anywhere;overflow:hidden;
   color:hsl(var(--ec-h) 92% calc(88% + 8% * var(--ec-lamp)));
   text-shadow:0 0 calc(5px + 16px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / .95),
     0 2px 4px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9);
-  transition:color .2s ease, opacity .3s ease}
+  transition:color var(--ec-veil,.2s) ease, text-shadow var(--ec-veil,.2s) ease, opacity .3s ease}
 .g-ec-word:empty{opacity:0}
+
+/* THE RULER (index.js measureTokens). Never seen: it is parked off-canvas at a
+   reference 100px and asked how wide a single word is, so the fit search knows
+   when a size would split one. Its type is COPIED off the live word node at
+   measure time - these declarations are only the floor, because a ruler that
+   keeps its own copy of the type drifts the moment .g-ec-word changes. */
+.g-ec-ruler{position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none;
+  white-space:pre;font-family:var(--disp);font-size:100px;letter-spacing:.01em;
+  text-transform:uppercase;line-height:1}
+
+/* ---- THE VEIL: the phrase is frosted until you look at it --------------- */
+/* Owner round 2: "the inside of the bubble is blurred till we mouse over it".
+   This is NOT filter:blur() - a filter would mint a render surface per pad and
+   sit over the pad's animated lamp (trap 36, and trap 42 charges WebKit for it
+   twice over). color:transparent plus a text-shadow of the SAME letterforms is
+   the same picture for free: it rasterises with the text, adds no surface, and
+   both properties interpolate, so the frost melts instead of snapping. */
+.g-ec-pad[data-veil="on"] .g-ec-word{color:transparent;
+  text-shadow:0 0 .52em hsl(var(--ec-h) 92% 88% / .72),
+    0 0 1.05em hsl(var(--ec-h) 95% 72% / .5),
+    0 1px .5em rgba(0,0,0,.6)}
+/* THE UNVEIL. Same specificity as the rule above (class + attribute + class vs
+   class + pseudo-class + class), so ORDER is what decides - these must stay
+   BELOW it. index.js clears data-veil for every non-idle state; these three add
+   the pointer, the finger and the keyboard on top of that. */
+.g-ec-pad:hover .g-ec-word,
+.g-ec-pad:focus-visible .g-ec-word,
+.g-ec-pad:focus .g-ec-word,
+.g-ec-pad:active .g-ec-word,
+.g-ec-pad[data-veil="off"] .g-ec-word{color:hsl(var(--ec-h) 92% calc(88% + 8% * var(--ec-lamp)));
+  text-shadow:0 0 calc(5px + 16px * var(--ec-lamp)) hsl(var(--ec-h) 95% 70% / .95),
+    0 2px 4px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9)}
+/* The GLYPH is the truth node and is NEVER veiled (Law IV) - it is how you know
+   which pad is which while the phrase is still frosted. */
 /* THE REVEAL CAPTION. On every pad, shown only when the pad IS the answer. */
 .g-ec-hint{position:absolute;left:50%;top:calc(100% + 6px);transform:translate(-50%,0);pointer-events:none;
   padding:2px 9px;border-radius:8px;white-space:nowrap;opacity:0;
@@ -479,9 +525,8 @@ ${padRules()}
 .g-ec-stage[data-phase="encore"] .g-ec-pad[data-state="lit"],
 .g-ec-stage[data-phase="echo"] .g-ec-pad[data-state="decoy"],
 .g-ec-stage[data-phase="encore"] .g-ec-pad[data-state="decoy"]{--ec-sat:88%}
-.g-ec-stage[data-phase="echo"] .g-ec-word,
-.g-ec-stage[data-phase="play"] .g-ec-word,
-.g-ec-stage[data-phase="encore"] .g-ec-word{opacity:.62}
+/* The LISTEN lock no longer dims the words - the VEIL already hides them, and
+   dimming a frosted word twice just made the lit one look washed out. */
 .g-ec-stage[data-phase="echo"] .g-ec-pad[data-state="lit"] .g-ec-word,
 .g-ec-stage[data-phase="encore"] .g-ec-pad[data-state="lit"] .g-ec-word{opacity:1}
 .g-ec-stage[data-phase="echo"] .g-ec-ring,
@@ -689,6 +734,9 @@ html.arc-reduced .g-ec-pad[data-state="decoy"] .g-ec-face{animation:none !import
 html.arc-reduced .g-ec-pad[data-state="wrong"] .g-ec-face{animation:none !important}
 html.arc-reduced .g-ec-pad[data-state="reveal"]::before{animation:none !important;opacity:.9;transform:scale(1.16)}
 html.arc-reduced .g-ec-phase{animation:none !important}
+/* The veil still WORKS with motion off - it is a colour, not a movement - but
+   it stops crossfading, so a frosted word snaps clear instead of melting. */
+html.arc-reduced .g-ec-stage{--ec-veil:0s}
 html.arc-reduced .g-ec-phase-glyph::after{animation:none !important;opacity:1}
 html.arc-reduced .g-ec-step{transition:background .2s ease, border-color .2s ease}
 html.arc-reduced .g-ec-step[data-fill="on"],html.arc-reduced .g-ec-step[data-fill="bad"]{transform:none}

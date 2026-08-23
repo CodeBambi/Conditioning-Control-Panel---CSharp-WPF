@@ -139,6 +139,21 @@ export const PLAYTEST = Object.freeze({
   /** The clip bus. `voice` is where the app's own whispers belong, so the
    *  player's voice slider owns them. */
   CLIP_BUS: 'voice',
+
+  /* ---- ROUND 2 (owner play-test, 2026-08-23) --------------------------- */
+  /** THE VEIL: how long the frost takes to clear off a word and come back. */
+  VEIL_FADE_MS: 200,
+  /** THE FIT. The word's box is FIT_LINES lines tall measured in `em`, so it
+   *  scales with whatever size the search lands on - a smaller font simply
+   *  fits more of the phrase into the same glass. These bound the search;
+   *  nothing here may CUT a phrase, only shrink it. */
+  FIT_LINES: 3,
+  /** The largest a word may be, as a share of the pad's diameter. */
+  FIT_MAX_K: 0.155,
+  /** The floor. Below this a phrase is unreadable anyway, so the search stops
+   *  and the glass simply holds the longest thing it can. */
+  FIT_MIN_PX: 9,
+  FIT_MAX_PX: 32,
   END_HOLD_MS: 2400,
   END_HOLD_MS_REDUCED: 1300,
   STALL_TICK_MS: 500,
@@ -259,6 +274,40 @@ export function heatFor(len, gradeTier, startLen, streakLinks) {
   const nudge = Math.min(0.08, links * 0.01);
   const h = PLAYTEST.HEAT_FLOOR + (1 - PLAYTEST.HEAT_FLOOR) * p + nudge;
   return Math.min(cap, clamp01(h));
+}
+
+/**
+ * THE FIT SEARCH (owner round 2: "some triggers were too long and got cut").
+ * The LARGEST integer size in [minPx, maxPx] for which `fits(px)` is true.
+ *
+ * PURE, and deliberately so: the DOM half is one thin wrapper that measures a
+ * real node, and everything worth getting wrong - the bounds, the monotonicity
+ * assumption, what happens when NOTHING fits - is testable without a browser.
+ *
+ * `fits` is assumed MONOTONIC (if a size fits, every smaller size fits). That
+ * holds for wrapped text in a fixed box, which is the only thing this measures.
+ * When nothing fits, the FLOOR is returned rather than a failure: a phrase at
+ * 9px is ugly, a phrase cut in half is a bug.
+ *
+ * @param {{maxPx:number, minPx:number, fits:(px:number)=>boolean}} o
+ * @returns {number} integer px
+ */
+export function fitFontPx({ maxPx, minPx, fits } = {}) {
+  const hi0 = Math.max(1, Math.floor(Number(maxPx) || 1));
+  const lo0 = Math.max(1, Math.min(hi0, Math.floor(Number(minPx) || 1)));
+  if (typeof fits !== 'function') return hi0;
+  let lo = lo0;
+  let hi = hi0;
+  let best = lo0;                    // nothing fits -> the floor, never a cut
+  let guard = 0;
+  while (lo <= hi && guard < 24) {
+    guard += 1;
+    const mid = (lo + hi) >> 1;
+    let ok = false;
+    try { ok = !!fits(mid); } catch (e) { ok = false; }
+    if (ok) { best = mid; lo = mid + 1; } else { hi = mid - 1; }
+  }
+  return best;
 }
 
 /* ----------------------------------------------------------------------------
@@ -397,6 +446,6 @@ export function buildRound({ seed, gradeTier = 1, attempt = 0, len = 3, encore =
 
 export default {
   PLAYTEST, alphabetFor, warmStartLen, nextLenAfterFail, stepMsFor, litMsFor,
-  inputWindowMs, audioCeilFor, pitchFor, ratchetAfterMiss, isNearMiss, heatFor,
+  inputWindowMs, audioCeilFor, pitchFor, ratchetAfterMiss, isNearMiss, heatFor, fitFontPx,
   buildAttempt, sequenceFor, decoysFor, playbackSteps, buildRound, tierOf, clamp01,
 };

@@ -28,13 +28,34 @@
  *
  * THE PADS ARE THE BUBBLES (the same verdict again - "the gifs in a bubble are
  * just bad, we should have bigger bubbles and have triggers associated with
- * them"). Each pad is bound, once per class and seeded, to ONE trigger from the
- * player's own active pool: the PHRASE is the face, big enough to read across
- * the room, and the trigger's own whisper clip plays FAINTLY UNDER the pad's
- * note whenever that pad sounds (init.triggers carries {text, audio}; the note
- * still carries the pitch ratchet, the clip never outruns it, and
- * ctx.audioAudible === false means no clip at all). Media faces are still
- * plumbed, behind ec_pad_words = 'media'.
+ * them"). Each pad is bound, seeded, to ONE trigger from the player's own
+ * active pool: the PHRASE is the face, big enough to read across the room, and
+ * the trigger's own whisper clip plays FAINTLY UNDER the pad's note when that
+ * pad sounds (init.triggers carries {text, audio}; the note still carries the
+ * pitch ratchet, the clip never outruns it, and ctx.audioAudible === false
+ * means no clip at all). Media faces are still plumbed, behind
+ * ec_pad_words = 'media'.
+ *
+ * ROUND 2 (owner play-test, 2026-08-23) - three changes to that, and one fix:
+ *   THE VEIL     a pad's phrase is FROSTED until you look at it. Hover (or
+ *                press, on a touch screen, or focus, on a keyboard) clears the
+ *                frost. During LISTEN the pad that is PLAYING clears for its
+ *                own beat and frosts again after - the reveal IS the tell, and
+ *                it is how you learn which phrase lives on which colour. The
+ *                glyph is never veiled: the truth node stays readable.
+ *                The frost is `color:transparent` + a text-shadow of the
+ *                letterforms, NOT `filter: blur()` - no render surface, no
+ *                per-frame re-raster, nothing for trap 36 to charge us for.
+ *   THE RESHUFFLE the COLOURS and the HITBOXES never move (Law II), but the
+ *                phrase inside a pad is re-dealt every round. The deal walks a
+ *                seeded permutation of the whole pool with a cursor, so a pool
+ *                larger than six is seen ENTIRELY before anything repeats, and
+ *                a retake replays the identical run of deals (Law V).
+ *   THE 25%      a whisper rides only one hit in four (CLIP_CHANCE), seeded per
+ *                beat, and never two at once.
+ *   THE FIT      long phrases are no longer sliced. One size is fitted for the
+ *                WHOLE ring (so the trickster's word-swap can never overflow
+ *                either) by a binary search over what actually fits the glass.
  *
  * THE ROUND (pinned by the Semester II/III contract):
  *   deal      a sequence of `len` from this attempt's seeded stream
@@ -68,8 +89,9 @@
  *   III  something always breathes: the ambient field runs from the first beat.
  *   IV   the class-rules sheet is DRAWN, GO-only, and honours ctx.hideTutorial
  *        with a once-per-grade-tier memory in gameMeta.howtoTiers (IC's policy).
- *   V    stream, decoy plan, casino, trickster and pressure are all scoped off
- *        the class seed; a retake replays the identical class.
+ *   V    stream, decoy plan, the per-round face deal, the clip roll, casino,
+ *        trickster and pressure are all scoped off the class seed; a retake
+ *        replays the identical class. Nothing here calls Math.random.
  *   VI   pause / resume / suspend / destroy: the timer registry defers, the
  *        decks ride it, no timer survives destroy, every listener is removed.
  *   VII  every visible string is ctx.lexicon(key, fallback) over lex.js EC_LEX.
@@ -100,6 +122,7 @@ import { EC_LEX } from './lex.js';
 import {
   PLAYTEST, alphabetFor, warmStartLen, nextLenAfterFail, stepMsFor, litMsFor,
   audioCeilFor, pitchFor, ratchetAfterMiss, isNearMiss, heatFor, buildRound,
+  fitFontPx,
 } from './sequence.js';
 import { compositeFor, hardGates, flavorXp } from './grade.js';
 import { makeRng, makeTaggedRoll, shuffled } from '../../core/rng.js';
@@ -135,6 +158,19 @@ const TICK_SFX = 'tell';
 /** The fallback recipe behind a trigger CLIP: a host that cannot play the url
  *  whispers instead of going silent (shell/audio.js falls through on its own). */
 const CLIP_SFX = 'whisper';
+
+/**
+ * THE CLIP CHANCE (owner, round 2: "we only got about 25% chance of the trigger
+ * playing"). One hit in four carries its trigger's whisper; the other three are
+ * just the note. Two rules keep it honest:
+ *   - the roll is SEEDED and ALWAYS CONSUMED, even when the result is going to
+ *     be dropped, so the run of clips is a function of the seed and not of the
+ *     wall clock - a retake replays the same whispers in the same places;
+ *   - a roll that LANDS while another clip is still in the air is dropped
+ *     rather than layered (it counts as one of the three-in-four), because two
+ *     overlapping whispers read as noise, not as a trigger.
+ */
+const CLIP_CHANCE = 0.25;
 
 /** The pad-face setting. `words` = the player's own triggers (the default and
  *  the point); `glyphs` = the truthful marks only; `media` = the old pool-media
@@ -185,10 +221,13 @@ function mmss(secLeft) {
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
-/** A pool phrase, trimmed to something a pad can wear. Never a lexicon row.
- *  The cap went 12 -> 20 with the owner's verdict: the phrase IS the face now,
- *  it wraps onto up to three lines, and most real triggers are two words. */
-const PAD_WORD_MAX = 20;
+/** A pool phrase, normalised for a pad face. Never a lexicon row.
+ *  ROUND 2: the cap is NO LONGER HOW A PHRASE IS MADE TO FIT. Slicing at 20 is
+ *  exactly what produced the owner's "I CANT RESIST MY TRI - then was cut";
+ *  the glass now SHRINKS THE TYPE to hold the whole phrase (fitWords), and this
+ *  is only a sanity bound against a pathological pool entry. At the fit floor a
+ *  40-character phrase still lands inside three lines of the smallest pad. */
+const PAD_WORD_MAX = 40;
 function padWordOf(raw) {
   const s = String(raw == null ? '' : raw).trim().replace(/\s+/g, ' ');
   if (!s) return '';
@@ -306,11 +345,33 @@ export default {
     /* ---- pads / faces --------------------------------------------------- */
     let faceMode = 'words';             // ec_pad_words, after the empty-pool rule
     const padWords = [];                // index -> the word a pad wears (truth)
-    /** index -> {text, audio} | null. The pad's BOUND TRIGGER: one per pad, dealt
-     *  once off the class seed and frozen for the class (Law V), never repeated
-     *  across two pads. `audio` is the phrase's own whisper clip or null. */
+    /** index -> {text, audio} | null. The pad's BOUND TRIGGER, RE-DEALT EVERY
+     *  ROUND off the class seed (Law V), never repeated across two pads.
+     *  `audio` is the phrase's own whisper clip or null. */
     const padTriggers = [];
+    /* THE DEAL. `facePool` is the class's whole trigger pool; `dealOrder` is a
+     * seeded permutation of it and `dealCursor` walks that permutation, so a
+     * pool larger than the ring is seen ENTIRELY before anything comes back.
+     * `dealCycle` seeds each fresh permutation, which is what keeps the whole
+     * run deterministic across a retake. */
+    let facePool = [];
+    let dealOrder = [];
+    let dealCursor = 0;
+    let dealCycle = 0;
+    let roundIdx = 0;                   // which face deal the ring is wearing
+    /* THE FIT: one size for the WHOLE ring (see fitWords). */
+    let fittedPx = 0;
+    let rulerEl = null;                 // the hidden measuring span (see ruler())
+    let tokenW100 = 0;                  // widest dealt word at 100px type
+    let fitPending = 0;
+    let onResize = null;
+    /* THE CLIP ROLL (CLIP_CHANCE). `clipUntil` is when the airwave frees up. */
+    let clipRoll = null;
+    let clipBeat = 0;
+    let clipUntil = 0;
     let clipsFired = 0;                 // diagnostics: how many clips we asked for
+    let clipsRolledOff = 0;             // the three-in-four the roll declined
+    let clipsSkipped = 0;               // landed, but another whisper was in the air
     const faceUrls = new Map();         // pad -> {url, kind} | {broken:true}
     let faceKind = 'loop';
     let faceLogged = false;
@@ -654,6 +715,9 @@ export default {
         try { pad.type = 'button'; } catch (e) { /* the DOM double has no button semantics */ }
         pad.setAttribute('data-pad', String(i));
         pad.setAttribute('data-state', 'idle');
+        /* Born FROSTED. The word is in the DOM from the first frame (a reader
+         * and the trickster both need it there); style.js is what hides it. */
+        pad.setAttribute('data-veil', 'on');
         pad.setAttribute('data-glyph', String(i));
         pad.setAttribute('aria-label', t('ec_pad_aria', EC_LEX.ec_pad_aria).replace('{n}', String(i + 1)));
         /* GEOMETRY IS THE CREATIVE'S. index.js only ever writes the vars: the
@@ -839,47 +903,218 @@ export default {
     }
 
     /* ---- pad faces: ONE trigger per pad, glyphs for the rest ------------- */
+    /** Once per class: settle the face mode and the pool, then deal round 0. */
     function assignWords() {
-      padWords.length = 0;
-      padTriggers.length = 0;
       const want = String(ctx.settings && ctx.settings.ec_pad_words != null ? ctx.settings.ec_pad_words : 'words')
         .trim().toLowerCase();
       faceMode = FACE_MODES.indexOf(want) >= 0 ? want : 'words';
-      const pool2 = triggerPool();
+      facePool = triggerPool();
       /* THE MAY-BE-EMPTY CONTRACT (the dossier's mod-agnosticism proof) still
        * holds at ZERO: with no triggers at all the ring wears glyphs and the
-       * whole mechanic runs unchanged. What CHANGED with the owner's verdict is
-       * the middle: a partial pool no longer throws away the triggers it has -
-       * the pads that got one wear it, the rest wear their glyph, and no
-       * trigger is ever on two pads. */
+       * whole mechanic runs unchanged. A PARTIAL pool wears what it has - the
+       * pads that got one wear it, the rest wear their glyph. */
       const wordy = faceMode === 'words' || faceMode === 'media';
-      if (wordy && pool2.length === 0) {
+      if (wordy && facePool.length === 0) {
         faceMode = 'glyphs';
         say('pad triggers: the active pool is empty - glyph faces (the mechanic is unchanged)');
       }
-      if (faceMode === 'words' || faceMode === 'media') {
-        /* Law V: the BINDING is seeded off the class seed, so a retake puts the
-         * same phrase on the same pad. The pool's own order is the host's. */
-        const picked = shuffled(pool2, makeRng(seed + '|ec-words')).slice(0, PLAYTEST.PADS);
+      if (stage) stage.setAttribute('data-faces', faceMode);
+      dealOrder = [];
+      dealCursor = 0;
+      dealCycle = 0;
+      roundIdx = 0;
+      dealFaces();
+      const withAudio = padTriggers.filter((x) => x && x.audio).length;
+      say('faces ' + faceMode + ': pool ' + facePool.length + ', '
+        + padWords.filter(Boolean).length + ' on the ring, ' + withAudio + ' with a clip'
+        + (audible ? '' : ' (INAUDIBLE - no clip will play)'));
+    }
+
+    /** The next seeded permutation of the pool. `dealCycle` is what makes the
+     *  WHOLE run of deals replayable, not just the first one. */
+    function refillDealOrder() {
+      dealOrder = facePool.length ? shuffled(facePool, makeRng(seed + '|ec-words|' + dealCycle)) : [];
+      dealCursor = 0;
+      dealCycle += 1;
+    }
+
+    /**
+     * THE PER-ROUND DEAL (owner round 2: "those should change from round to
+     * round, while the colors stay the same"). Nothing about the RING moves -
+     * hue, angle, hitbox and glyph are all functions of the pad INDEX and are
+     * never touched here (Law II). Only which phrase sits inside changes.
+     *
+     * The cursor walks a seeded permutation, so with a pool bigger than the
+     * ring every trigger is shown before any comes back. A phrase already on
+     * the ring is skipped rather than duplicated - which can only happen across
+     * a permutation boundary, and costs that phrase its slot in the new cycle.
+     */
+    function dealFaces() {
+      padWords.length = 0;
+      padTriggers.length = 0;
+      const wordy = faceMode === 'words' || faceMode === 'media';
+      if (!wordy || facePool.length === 0) {
+        for (let i = 0; i < PLAYTEST.PADS; i++) { padTriggers.push(null); padWords.push(''); }
+      } else {
+        const take = Math.min(PLAYTEST.PADS, facePool.length);
+        const picked = [];
+        const seen = new Set();
+        let guard = 0;
+        while (picked.length < take && guard < facePool.length * 4 + 8) {
+          guard += 1;
+          if (dealCursor >= dealOrder.length) refillDealOrder();
+          if (!dealOrder.length) break;
+          const cand = dealOrder[dealCursor];
+          dealCursor += 1;
+          if (!cand || !cand.text) continue;
+          const k = cand.text.toLowerCase();
+          if (seen.has(k)) continue;      // never the same trigger on two pads
+          seen.add(k);
+          picked.push(cand);
+        }
         for (let i = 0; i < PLAYTEST.PADS; i++) {
           const trig = picked[i] || null;
           padTriggers.push(trig);
           padWords.push(trig ? trig.text : '');
         }
-      } else {
-        for (let i = 0; i < PLAYTEST.PADS; i++) { padTriggers.push(null); padWords.push(''); }
       }
-      if (stage) stage.setAttribute('data-faces', faceMode);
       /* Per-PAD truth as well as per-stage: a ring with four triggers and two
        * glyphs has to size each face for what it actually wears. */
       for (let i = 0; i < padEls.length; i++) {
         const pad = padEls[i];
-        if (pad) pad.setAttribute('data-face', padWords[i] ? 'word' : 'glyph');
+        if (!pad) continue;
+        pad.setAttribute('data-face', padWords[i] ? 'word' : 'glyph');
+        /* A fresh phrase arrives FROSTED however the pad was lit a moment ago:
+         * a re-deal must never hand the new word out for free. */
+        if (pad.getAttribute('data-state') === 'idle') setVeil(pad, true);
       }
-      const withAudio = padTriggers.filter((x) => x && x.audio).length;
-      say('faces ' + faceMode + ': ' + padWords.filter(Boolean).length + ' triggers on the ring, '
-        + withAudio + ' with a clip' + (audible ? '' : ' (INAUDIBLE - no clip will play)'));
       paintWords();
+    }
+
+    /* ==================================================================== *
+     * THE FIT (owner round 2: "some triggers were too long and got cut").
+     *
+     * ONE SIZE FOR THE WHOLE RING, not one per pad, for three reasons: six pads
+     * wearing six type sizes looks like a bug; the trickster's Unreliable Label
+     * swaps a word onto ANOTHER pad, and a per-pad size would let a long phrase
+     * overflow the short pad it was lied onto; and one shared search is 5
+     * measurements instead of 30.
+     *
+     * The search is sequence.js's pure fitFontPx; this half only measures. The
+     * word box is FIT_LINES lines tall in `em`, so at any candidate size the
+     * box is exactly three lines and the question is only "does the wrapped
+     * phrase fit in three lines of THIS size". Headless (no layout) it bails and
+     * the stylesheet's own clamp stands.
+     * ==================================================================== */
+    /* ==================================================================== *
+     * THE RULER - one hidden span at a reference 100px, wearing the word's own
+     * typography, used to measure the widest single WORD in the dealt hand.
+     *
+     * Why not just read the word node? Because the box is text-align:center
+     * and Chrome does not count inline-START overflow: GIGGLETIME hanging off
+     * both sides still measures scrollWidth === clientWidth, so a search that
+     * trusted the box happily "fitted" a size that renders GIGGLETIM / E.
+     * A token's width scales linearly with the font size (letter-spacing is in
+     * `em`), so one measurement answers every candidate size.
+     * ==================================================================== */
+    function ruler() {
+      if (rulerEl && rulerEl.parentNode) return rulerEl;
+      if (!stage || typeof document === 'undefined' || !document.createElement) return null;
+      try {
+        const el = document.createElement('span');
+        el.className = 'g-ec-ruler';
+        el.setAttribute('aria-hidden', 'true');
+        stage.appendChild(el);
+        rulerEl = el;
+      } catch (e) { rulerEl = null; }
+      return rulerEl;
+    }
+    /** Widest token of the dealt hand, in px at 100px type. 0 = cannot measure
+     *  (headless, or no layout yet), and the width rule simply stands down. */
+    function measureTokens() {
+      tokenW100 = 0;
+      const el = ruler();
+      if (!el || typeof el.getBoundingClientRect !== 'function') return;
+      /* WEAR WHAT THE WORD WEARS. Copied, not duplicated: the one thing that
+       * can quietly break this measurement is the ruler and the word ending up
+       * in different type, and that is exactly what happened once already. */
+      try {
+        const w0 = wordNodeOf(padEls[0]);
+        const cs = (w0 && typeof window !== 'undefined' && window.getComputedStyle)
+          ? window.getComputedStyle(w0) : null;
+        if (cs && el.style) {
+          const base = parseFloat(cs.fontSize) || 0;
+          const ls = parseFloat(cs.letterSpacing);
+          el.style.fontFamily = cs.fontFamily || '';
+          el.style.fontWeight = cs.fontWeight || '';
+          el.style.fontStyle = cs.fontStyle || '';
+          el.style.fontStretch = cs.fontStretch || '';
+          el.style.textTransform = cs.textTransform || '';
+          /* letter-spacing comes back in px at the WORD's size; the ruler is
+           * at 100px, so it is rescaled rather than copied. */
+          el.style.letterSpacing = (base > 0 && isFinite(ls)) ? (((ls / base) * 100) + 'px') : '';
+          el.style.fontSize = '100px';
+        }
+      } catch (e) { /* the CSS floor already dressed it */ }
+      for (let i = 0; i < padWords.length; i++) {
+        const parts = String(padWords[i] || '').split(/\s+/);
+        for (let k = 0; k < parts.length; k++) {
+          if (!parts[k]) continue;
+          try {
+            el.textContent = parts[k];
+            const w = el.getBoundingClientRect().width || 0;
+            if (w > tokenW100) tokenW100 = w;
+          } catch (e) { /* noop */ }
+        }
+      }
+      try { el.textContent = ''; } catch (e) { /* noop */ }
+    }
+    function ringFitsAt(px) {
+      if (!stage) return true;
+      try { stage.style.setProperty('--ec-word-px', px + 'px'); } catch (e) { return true; }
+      for (let i = 0; i < padEls.length; i++) {
+        if (!padWords[i]) continue;
+        const w = wordNodeOf(padEls[i]);
+        if (!w) continue;
+        /* +1px of slack: sub-pixel line metrics otherwise reject a size that
+         * looks perfect, and the search would walk a step further down. */
+        if (w.scrollHeight > w.clientHeight + 1) return false;
+        if (w.scrollWidth > w.clientWidth + 1) return false;
+        /* NO WORD MAY BE SPLIT. overflow-wrap:anywhere is the net that keeps a
+         * monster token from being cut off - this is what stops the net from
+         * ever being needed on a phrase a smaller size would spell whole. */
+        if (tokenW100 > 0 && w.clientWidth > 0
+          && (tokenW100 * px) / 100 > w.clientWidth + 1) return false;
+      }
+      return true;
+    }
+    function fitWords() {
+      if (dead || !stage || !padEls.length) return;
+      const probe = wordNodeOf(padEls[0]);
+      if (!probe || typeof probe.scrollHeight !== 'number' || typeof probe.clientHeight !== 'number') return;
+      let padPx = 0;
+      try {
+        padPx = (padEls[0] && typeof padEls[0].getBoundingClientRect === 'function')
+          ? Math.round(padEls[0].getBoundingClientRect().width) : 0;
+      } catch (e) { padPx = 0; }
+      if (!padPx) return;               // not laid out yet; the next pass gets it
+      measureTokens();                    // the widest word, once, for every candidate
+      const maxPx = Math.max(
+        PLAYTEST.FIT_MIN_PX,
+        Math.min(PLAYTEST.FIT_MAX_PX, Math.round(padPx * PLAYTEST.FIT_MAX_K)),
+      );
+      const px = fitFontPx({ maxPx, minPx: PLAYTEST.FIT_MIN_PX, fits: ringFitsAt });
+      try { stage.style.setProperty('--ec-word-px', px + 'px'); } catch (e) { /* noop */ }
+      if (px !== fittedPx) {
+        fittedPx = px;
+        say('fit: the ring wears ' + px + 'px (pad ' + padPx + 'px, longest "'
+          + padWords.reduce((a, b) => (String(b || '').length > String(a || '').length ? b : a), '') + '")');
+      }
+    }
+    /** Coalesce fits: a deal, a resize and a lie can all ask in the same frame. */
+    function scheduleFit() {
+      if (dead || fitPending) return;
+      fitPending = after(16, () => { fitPending = 0; fitWords(); });
     }
 
     /* ==================================================================== *
@@ -895,6 +1130,19 @@ export default {
       if (!audible) return null;
       const trig = padTriggers[i];
       if (!trig || !trig.audio) return null;
+      /* ALWAYS consume the roll, even when the answer is going to be no: the
+       * stream position must not depend on the wall clock, or a retake would
+       * whisper in different places than the first run did (Law V). */
+      const roll = clipRoll ? clipRoll('beat|' + clipBeat) : 1;
+      clipBeat += 1;
+      if (!(roll < CLIP_CHANCE)) { clipsRolledOff += 1; return null; }
+      /* ONE WHISPER AT A TIME. A roll that lands while the last clip is still
+       * in the air is dropped, not layered - it simply spends its turn. The
+       * window is the mixer's own hard cap, scaled with the harness clock so a
+       * compressed test run sees the same proportion a real class does. */
+      const now = Date.now();
+      if (now < clipUntil) { clipsSkipped += 1; return null; }
+      clipUntil = now + Math.max(1, scaled(PLAYTEST.CLIP_MAX_MS));
       const r = fireSafe('audio_trigger', {
         name: CLIP_SFX,                 // the recipe a host that cannot play urls falls back to
         url: trig.audio,
@@ -915,10 +1163,13 @@ export default {
     /** THE TRUTH on every pad word (the trickster's Unreliable Label restores
      *  exactly this string; the glyph it can never touch). */
     function paintWords() {
+      let moved = false;
       for (let i = 0; i < padEls.length; i++) {
         const w = wordNodeOf(padEls[i]);
-        if (w && w.textContent !== (padWords[i] || '')) w.textContent = padWords[i] || '';
+        if (w && w.textContent !== (padWords[i] || '')) { w.textContent = padWords[i] || ''; moved = true; }
       }
+      /* New text means a new longest phrase, which means a new size. */
+      if (moved) scheduleFit();
     }
     function padWordText(i) { return padWords[i] || ''; }
 
@@ -962,19 +1213,38 @@ export default {
 
     /* ==================================================================== *
      * THE PADS - lighting and state. `data-state` is the contract's enum:
-     * idle | lit | pressed | decoy. Nothing else is ever written to it.
+     * idle | lit | pressed | decoy | wrong | reveal. Nothing else is ever
+     * written to it.
+     *
+     * THE VEIL rides the same switch (owner round 2). A pad at rest FROSTS its
+     * phrase; ANY other state clears it. That one rule buys three things at
+     * once: during LISTEN the playing pad shows its word for its own beat (the
+     * reveal IS the tell), your own press shows you what you just said, and the
+     * miss reveal shows the phrase you should have echoed. The DECOY clears too
+     * - deliberately: at tier 3+ a decoy that stayed frosted while every real
+     * step cleared would be a free tell, and the decoy's whole job is to be
+     * indistinguishable. Hover / focus / press clear it as well, but that half
+     * is CSS (style.js) because a pointer is not a game state.
      * ==================================================================== */
+    function setVeil(pad, on) {
+      if (!pad) return;
+      try { pad.setAttribute('data-veil', on ? 'on' : 'off'); } catch (e) { /* noop */ }
+    }
     function padState(i, state, holdMs) {
       const pad = padEls[i];
       if (!pad) return;
       const prev = padTimers.get(i);
       if (prev) { clearTimer(prev); padTimers.delete(i); }
       pad.setAttribute('data-state', state);
+      setVeil(pad, state === 'idle');
       if (holdMs > 0) {
         const id = after(holdMs, () => {
           padTimers.delete(i);
           const p = padEls[i];
-          if (p && p.getAttribute('data-state') === state) p.setAttribute('data-state', 'idle');
+          if (p && p.getAttribute('data-state') === state) {
+            p.setAttribute('data-state', 'idle');
+            setVeil(p, true);
+          }
         });
         padTimers.set(i, id);
       }
@@ -982,7 +1252,11 @@ export default {
     function clearPads() {
       for (const id of Array.from(padTimers.values())) clearTimer(id);
       padTimers.clear();
-      for (const pad of padEls) if (pad) pad.setAttribute('data-state', 'idle');
+      for (const pad of padEls) {
+        if (!pad) continue;
+        pad.setAttribute('data-state', 'idle');
+        setVeil(pad, true);
+      }
     }
 
     /* ==================================================================== *
@@ -1083,6 +1357,10 @@ export default {
       inEncore = false;
       if (stage) stage.removeAttribute('data-encore');
       round = buildRound({ seed, gradeTier: tier, attempt, len: want, encore: false });
+      /* THE RESHUFFLE. Every sequence after the first re-deals the phrases -
+       * the ENCORE deliberately does not, because it is the same melody again
+       * and moving the words under it would be a different room. */
+      if (sequencesDealt > 0) { roundIdx += 1; dealFaces(); }
       sequencesDealt += 1;
       expectIdx = 0;
       stepIdx = 0;
@@ -1734,6 +2012,14 @@ export default {
         curLen = startLen;
 
         subRoll = makeTaggedRoll(seed + '|ec-sub');
+        /* The clip roll is its own tag namespace, so adding a roll anywhere
+         * else can never shift which hits whisper (Law V, append-only). */
+        clipRoll = makeTaggedRoll(seed + '|ec-clip');
+        clipBeat = 0;
+        clipUntil = 0;
+        clipsRolledOff = 0;
+        clipsSkipped = 0;
+        fittedPx = 0;
         rollLocal = (() => {
           const roll = makeTaggedRoll(seed + '|ec-vr');
           return () => {
@@ -1830,6 +2116,16 @@ export default {
         bindInput();
         claimAssets();
         startClock();
+        /* THE FIT has to run once the pads have a real width, and again whenever
+         * the window changes it. Law VI: the listener comes off in destroy(). */
+        scheduleFit();
+        after(220, () => scheduleFit());
+        try {
+          if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+            onResize = () => scheduleFit();
+            window.addEventListener('resize', onResize);
+          }
+        } catch (e) { onResize = null; }
 
         every(PLAYTEST.STALL_TICK_MS, () => {
           if (ended || !inputOpen) return;
@@ -1901,12 +2197,20 @@ export default {
         pressure = null;
         if (pool && typeof pool.release === 'function') { try { pool.release(); } catch (e) { /* noop */ } }
         pool = null;
+        try {
+          if (onResize && typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+            window.removeEventListener('resize', onResize);
+          }
+        } catch (e) { /* noop */ }
+        onResize = null;
+        fitPending = 0;
         padTimers.clear();
         padEls.length = 0;
         stepEls.length = 0;
         stepFill.length = 0;
         padTriggers.length = 0;
         bannerEl = null; bannerTextEl = null; stepsEl = null; stampWell = null;
+        rulerEl = null; tokenW100 = 0;
         timerEl = null;
         try { ctx.root.textContent = ''; } catch (e) { /* noop */ }
         if (liveClass === instance) liveClass = null;
@@ -1921,6 +2225,14 @@ export default {
       round() { return round; },
       /** End the class as the bell would (the suite never waits 105s). */
       ringBell() { run(bell); },
+      /** Deal the NEXT round's faces, as a cleared sequence would. Diagnostics
+       *  only - the shell never calls it; the suite uses it to walk a pool
+       *  bigger than the ring without playing every round in real time. */
+      dealRound() { roundIdx += 1; run(dealFaces); return padWords.slice(); },
+      /** The pure fit search, wired to a caller-supplied measurement. The
+       *  ruler is re-read first so a seam call answers with the same numbers
+       *  the real search would use. */
+      fitAt(px) { measureTokens(); return ringFitsAt(px); },
 
       snapshot() {
         return {
@@ -1938,7 +2250,16 @@ export default {
           padWords: padWords.slice(),
           /* The BINDING, as the suite reads it: text + whether a clip exists. */
           padTriggers: padTriggers.map((x) => (x ? { text: x.text, audio: !!x.audio } : null)),
+          veils: padEls.map((p) => (p ? p.getAttribute('data-veil') : null)),
+          roundIdx,
+          poolSize: facePool.length,
+          dealCycle,
+          dealCursor,
+          fittedPx,
           clipsFired,
+          clipsRolledOff,
+          clipsSkipped,
+          clipBeat,
           banner: bannerEl ? bannerEl.getAttribute('data-p') : null,
           bannerText: bannerTextEl ? bannerTextEl.textContent : null,
           steps: stepFill.slice(),

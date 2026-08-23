@@ -105,7 +105,21 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    THE PADS ARE THE BUBBLES: each is bound (seeded, no duplicates) to ONE trigger
                    from `init.triggers`, wears its PHRASE as the face, and plays that trigger's
                    whisper clip faintly UNDER its note. `ec_pad_words` = words (default) | glyphs |
-                   media - the old gif faces are now the opt-in, not the look
+                   media - the old gif faces are now the opt-in, not the look.
+                   ROUND 2 (same owner pass): the face is VEILED - frosted until you hover / press /
+                   focus it, and unveiled for the beat a pad is lit, so LISTEN also reads the phrase
+                   out to you. The frost is `color:transparent` + a text-shadow of the same letters,
+                   NEVER `filter:` (trap 36 - a filter mints a surface per pad over a live lamp).
+                   The hand is RE-DEALT every round (`dealRound`): the hues, the glyphs and the
+                   hitboxes never move (Law II), only the words, seeded off `seed|ec-words|<cycle>`
+                   so a retake deals the same hands; a pool larger than six is walked whole before
+                   any word repeats. A trigger's clip plays on only `CLIP_CHANCE` (0.25) of beats -
+                   the roll is SEEDED and always consumed (a roll that lands while a clip is still in
+                   the air is spent, not layered), so the whisper pattern is a function of the seed,
+                   not the wall clock. THE FIT: one size for the whole ring (`--ec-word-px`), the
+                   largest that wraps every dealt phrase into three lines AND spells every word
+                   whole; measured with a hidden 100px RULER (`.g-ec-ruler`) because a centred word
+                   box reports `scrollWidth === clientWidth` even while the word hangs out of it
   instant-recall/  the vigil (recall, 120s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
                    GUARANTEE in the last 15s, density sawtooth, plants, templates LAST_WORD/EFFECT/STING/TWO,
                    THE CADENCE (owner 2026-08-23, "about 5 rounds per minute"): 9-11 stops a 120s class at
