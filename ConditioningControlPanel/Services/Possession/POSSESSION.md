@@ -168,3 +168,32 @@ Traps learned building it (2026-08-22):
 - `wobble` has no target outside a live lockdown (the Timer lives in the active panel); `swap` needs
   two visible Button targets in one parent (the main window only tags BtnStart - tag more buttons
   or accept that swap mostly fires in rooms with button pairs).
+
+## Wave 2 - density (owner play-test verdict 2026-08-23: "not dense, not impressive")
+
+Diagnosis of the first live 10-minute Eerie run: only 11 possessable targets in the whole window
+(7 tab doors, title, version tag, level label, Home Start) because every other tag sat on the
+Lockdown card, which is HIDDEN while a lockdown runs; the haunt paused whenever a video played;
+2 big effects named in 9 minutes; every warden bark after the first was muted by the global bark
+gap (fixed in 3a0eaaddc). Owner-approved wave (picker 2026-08-23), per-owner file ownership:
+
+| Item | Owner | Files |
+|---|---|---|
+| A1 auto-tag the visible window by control type (Button/Toggle/CheckBox/Slider/Combo/card Border/door/title-bar X+min/ScrollViewer/ProgressBar/TextBox), names from Content/ToolTip/AutomationId; the hand tags stay as overrides | Opus FOUNDATION | `MainWindow/MainWindow.Possession.cs`, `Services/Possession/Possession.cs` |
+| A2 cadence x2.5 (R0 20-30 s, R1 12-18, R2 8-12, R3 5-8, R4 4-6), first tic 20 s, target cooldown 45 s, MaxLive 2/2/3/4/4 | FOUNDATION | `PossessionDeck.cs` |
+| A3 no pause for video/whisper (pause only for fullscreen takeovers + Lock Card) | FOUNDATION | `PossessionDirector.cs` |
+| A5 proximity targeting (half the picks = control nearest cursor / hovered / last clicked) | FOUNDATION | `PossessionDeck.cs`, `PossessionDirector.cs`, `MainWindow.Possession.cs` |
+| A6 scenes (R2+: 4-8 s choreographies of 3-5 beats) | FOUNDATION | `Services/Possession/Scenes/*.cs`, `PossessionDirector.cs` |
+| A7 micro-tic visible floor (nudge 3-4 px + overshoot, typo 4 s, breathe 3 %, drift 6-8 px) | FOUNDATION | `Effects/Nudge|Typo|Breathe|Drift` |
+| B15 event-driven ghosts (FeatureOpened -> card breathes, SettingChanged -> its label retypes, hover Stop -> dodge, door click -> letter drop) | FOUNDATION | `PossessionDirector.cs` (+ an `PossessionEvents.cs` adapter) |
+| Timer restart handling (`LockdownService.TimerRestarted`): rung -> Settle, `_barkedRungs` cleared, UndoAll over 1 s, EdgePulse, bark `PossessionBarkTriggers.TimerRestarted` | FOUNDATION | `PossessionDirector.cs` |
+| B1 ghost cursor, B2 predictive dodge incl. title-bar X/min, B3 real Start/Stop swap + "Stay" relabel, B4 slider ghost-thumb creep + toggle lies, B5 label rewrite + glyph rot (per-mod line packs) | Opus EFFECTS-A | `Effects/GhostCursorEffect.cs`, `Effects/Dodge*` (edit), `Effects/Swap*` (edit), `Effects/SliderCreepEffect.cs`, `Effects/ToggleLieEffect.cs`, `Effects/RewriteEffect.cs`, `Effects/GlyphRotEffect.cs`, `Effects/PossessionEffectCatalog.WaveA.cs` |
+| B7 XP drain / level lie, B8 tube steals an ACTIVE card (a usable card on the current tab - the option is really gone until reassembly), B9 room tilt/sag/deepen + per-escape 1 px shrink/2 px nudge (self-contained service on the lockdown events), B10 tab misroute + door reorder, B11 crimson toasts, B14 scroll hijack, C1 fake "deleting your sessions" dialog (Full Doki) | Opus EFFECTS-B | `Effects/XpDrainEffect.cs`, `Effects/StealCardEffect.cs` (+ `Warden.cs` steal verb), `Services/Possession/RoomWarp.cs`, `Effects/MisrouteEffect.cs`, `Effects/ReorderDoorsEffect.cs`, `Effects/ToastEffect.cs`, `Effects/ScrollHijackEffect.cs`, `Effects/DeleteDialogEffect.cs`, `Effects/PossessionEffectCatalog.WaveB.cs`, `MainWindow/MainWindow.NavRail.cs` (misroute hook only) |
+| B12 chat knows (lockdown flag in the companion prompt), B13 audio tics (ember tick SFX on big effects + 300 ms pitch-dip at rung change / tripwire repeat 3), C2 it remembers (flag + next-launch tic + line), C3 portrait glitch frames (R4, photosafe-gated), C4 Full Doki retitle at R3 + note in the empty tube | Opus COMPANION | `Services/Possession/PossessionAudio.cs`, `Effects/RetitleEffect.cs`, `Warden.cs` (note), `AvatarTubeWindow` glitch hook, companion prompt builder, `Models/AppSettings.cs` (`LockdownPossessionRemembers*`), `Effects/PossessionEffectCatalog.WaveC.cs` |
+
+REJECTED by owner: B6 name drop (sensitive userbase - never use the Windows username), D2/D3
+(content windows stay clean, full stop). Build mutex + loc-additions rule: see
+`Services/EmergencyExit/EMERGENCY_EXIT.md` "Ownership".
+
+Rules that do not move: ember only for Possession; Undo restores EXACTLY; never the timer VALUE, the
+secret exit box, the Emergency Exit button's hit-testing, the premium gate, content windows.

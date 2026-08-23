@@ -46,6 +46,17 @@ public class LockdownService : IDisposable
     /// </summary>
     public event Action<EscapeAttempt>? EscapeAttempted;
 
+    /// <summary>
+    /// The Emergency Exit sent the user back in with a FULL timer (Services/EmergencyExit/EMERGENCY_EXIT.md).
+    /// Raised on the UI thread AFTER the clock was rewound; the Possession layer resets its ladder
+    /// (rung -> Settle, rung barks re-armed, live ghosts undone) and the card repaints the timer.
+    /// Argument = the reason string passed to <see cref="RestartTimer"/> (e.g. "labyrinth", "password").
+    /// </summary>
+    public event Action<string>? TimerRestarted;
+
+    /// <summary>How many times <see cref="RestartTimer"/> rewound the clock during THIS lockdown.</summary>
+    public int RestartCount { get; private set; }
+
     private readonly Dictionary<string, int> _escapeRepeats = new(StringComparer.OrdinalIgnoreCase);
     private int _escapeTotal;
     private DateTime _lastSysKeyAttempt = DateTime.MinValue;
@@ -145,6 +156,7 @@ public class LockdownService : IDisposable
         _isActive = true;
         _escapeRepeats.Clear();
         _escapeTotal = 0;
+        RestartCount = 0;
 
         // Start countdown timer (ticks every second)
         _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -261,6 +273,26 @@ public class LockdownService : IDisposable
     {
         try { if (File.Exists(RecoveryFilePath)) File.Delete(RecoveryFilePath); }
         catch { }
+    }
+
+    /// <summary>
+    /// Rewind the running lockdown to its FULL duration (the Emergency Exit's "you always come back"
+    /// verdict). Escape-attempt counters are kept (friction escalates), safeties untouched, the same
+    /// countdown timer keeps ticking. No-op when inactive. Raises <see cref="TimerRestarted"/>.
+    /// </summary>
+    public void RestartTimer(string reason)
+    {
+        if (!_isActive) return;
+        _activatedAt = DateTime.Now;
+        RestartCount++;
+        App.Logger?.Information("Lockdown timer restarted to {Minutes} minutes (reason {Reason}, restart #{Count})",
+            _duration.TotalMinutes, reason, RestartCount);
+        Helpers.DispatcherHelper.RunOnUI(() =>
+        {
+            try { CountdownTick?.Invoke(Remaining); } catch { }
+            try { TimerRestarted?.Invoke(reason ?? ""); }
+            catch (Exception ex) { App.Logger?.Warning("Lockdown TimerRestarted handler failed: {Error}", ex.Message); }
+        });
     }
 
     /// <summary>

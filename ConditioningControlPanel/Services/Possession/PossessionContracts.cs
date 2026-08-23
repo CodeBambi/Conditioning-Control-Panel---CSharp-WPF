@@ -23,7 +23,7 @@ public enum PossessionIntensity { Gentle = 0, Eerie = 1, FullDoki = 2 }
 
 /// <summary>What a registered target IS, so effects can pick fitting victims (a toggle dissolves, a
 /// card falls, a title loses letters, buttons swap).</summary>
-public enum PossessionRole { None = 0, Button, Card, Toggle, Title, Label, TabHeader, Timer, Slider, Combo, Image }
+public enum PossessionRole { None = 0, Button, Card, Toggle, Title, Label, TabHeader, Timer, Slider, Combo, Image, Scroll, Progress, TextBox }
 
 /// <summary>Escape-attempt kinds raised through LockdownService.NotifyEscapeAttempt (tripwires).</summary>
 public static class EscapeKinds
@@ -34,6 +34,7 @@ public static class EscapeKinds
     public const string Stop = "stop";                // Stop button, tube quick-menu Stop, voice stop
     public const string WrongPhrase = "wrong_phrase"; // a wrong secret phrase typed into the timer box
     public const string Settings = "settings";        // trying to flip a greyed safety toggle
+    public const string EmergencyExit = "emergency_exit"; // pressed the big Emergency Exit button (minigame launched)
 }
 
 /// <summary>One escape attempt. Repeat = how many times THIS kind fired during this lockdown (1-based);
@@ -166,4 +167,5 @@ public static class PossessionBarkTriggers
     public const string Tripwire = "PossessionTripwire";         // ctx: kind, repeat, total
     public const string Warden = "PossessionWarden";             // ctx: verb (knock|stare|leave|return)
     public const string Rules = "PossessionRules";               // first-run: the warden states the rules
+    public const string TimerRestarted = "PossessionTimerRestarted"; // ctx: reason, restart (count) - Emergency Exit sent them back in
 }
