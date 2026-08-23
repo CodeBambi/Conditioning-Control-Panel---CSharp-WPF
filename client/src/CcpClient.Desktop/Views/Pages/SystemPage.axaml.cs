@@ -33,7 +33,6 @@ public partial class SystemPage : UserControl
     private readonly SessionParticipant _session;
     private readonly ToastHost _toasts;
     private TaskCompletionSource<bool>? _importAnswer;
-    private bool _busy;
 
     /// <param name="session">The ONE conditioning session the composition root built. The three
     /// phrase pools this build can back up are its documents
@@ -189,20 +188,18 @@ public partial class SystemPage : UserControl
     }
 
     /// <summary>
-    /// One gesture, one operation. Upstream cannot need this: its pickers are modal
+    /// One gesture, one operation, and the SHUT BUTTONS are the whole mechanism — there is no
+    /// second flag, because a disabled Avalonia button raises no <c>Click</c> and a second guard
+    /// would be a latch no test could ever red.
+    ///
+    /// <para>Upstream cannot need this: its pickers are modal
     /// (<c>MainWindow/MainWindow.PresetIO.cs:76</c>), so a second click while a dialog is up is
-    /// impossible. Avalonia's are awaited and the window stays live, so without the latch the same
+    /// impossible. Avalonia's are awaited and the window stays live, so without this the same
     /// button would open a second dialog over the first — and two imports racing would interleave
-    /// their writes into the same three stores.
+    /// their writes into the same three stores.</para>
     /// </summary>
     private async Task RunAsync(Func<PhraseBackup, Task> operation)
     {
-        if (_busy)
-        {
-            return;
-        }
-
-        _busy = true;
         SetPhraseButtonsBusy(true);
         try
         {
@@ -225,7 +222,6 @@ public partial class SystemPage : UserControl
         finally
         {
             SetPhraseButtonsBusy(false);
-            _busy = false;
         }
     }
 

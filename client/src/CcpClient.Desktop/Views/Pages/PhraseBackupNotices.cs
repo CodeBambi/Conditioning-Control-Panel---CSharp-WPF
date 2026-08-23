@@ -72,11 +72,11 @@ public static class PhraseBackupNotices
     public const string ConfirmDecline = "Cancel";
 
     /// <summary>
-    /// A write is in flight and the buttons are shut. A DIVERGENCE forced by the seam rather than
+    /// A dialog is open and both buttons are shut. A DIVERGENCE forced by the seam rather than
     /// chosen: upstream's picker is modal (<c>Microsoft.Win32.SaveFileDialog.ShowDialog</c>,
-    /// <c>PresetIO.cs:76</c>) so a second click is impossible while one is open, and Avalonia's
-    /// <c>IStorageProvider</c> pickers are awaited rather than blocking — so without this the same
-    /// button could open a second dialog over the first.
+    /// <c>PresetIO.cs:76</c>) so a second click is impossible while one is up, and Avalonia's
+    /// <c>IStorageProvider</c> pickers are awaited rather than blocking — so without shutting them
+    /// the same button could open a second dialog over the first.
     /// </summary>
     public const string Busy = "Working…";
 

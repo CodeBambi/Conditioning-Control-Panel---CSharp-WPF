@@ -416,9 +416,9 @@ public class PhraseBackupPageHeadlessTests
 
     /// <summary>
     /// One gesture, one operation. Upstream cannot need this — its pickers are modal
-    /// (<c>PresetIO.cs:76</c>) — but Avalonia's are awaited with the window still live, so without
-    /// the latch a second press opens a second dialog over the first and two imports race their
-    /// writes into the same three stores.
+    /// (<c>PresetIO.cs:76</c>) — but Avalonia's are awaited with the window still live, so a second
+    /// press would open a second dialog over the first and two imports would race their writes into
+    /// the same three stores.
     /// </summary>
     [AvaloniaFact]
     public async Task ASecondPressWhileAPickerIsStillOpenIsIgnored()
@@ -435,8 +435,9 @@ public class PhraseBackupPageHeadlessTests
             Assert.Equal(PhraseBackupNotices.Busy, export.Content);
             Assert.False(ButtonOf(window, "ImportPhrasesButton").IsEnabled);
 
-            // Press it again anyway — a disabled button still receives nothing, and the latch is
-            // what makes that true even if the livery is ever changed.
+            // Press both again anyway. A disabled Avalonia button raises no Click, so the shut
+            // buttons ARE the mechanism — and the seam's own call counts are what say so, rather
+            // than the livery that produced them.
             Click(window, export);
             Click(window, ButtonOf(window, "ImportPhrasesButton"));
             Assert.Equal(1, picker.SaveCalls);
@@ -510,7 +511,8 @@ public class PhraseBackupPageHeadlessTests
             }
 
             _held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            await _held.Task;
+            await CcpClient.Tests.TestWait.Until(
+                _held.Task, "the test to release the file dialog it is holding open");
         }
     }
 }
