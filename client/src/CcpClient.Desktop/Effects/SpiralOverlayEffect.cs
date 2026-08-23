@@ -151,6 +151,38 @@ public sealed class SpiralOverlayEffect : OwnedSessionEffect
     }
 
     /// <summary>
+    /// Choose WHICH spiral is drawn, and re-draw the one that is already up.
+    ///
+    /// <para>Upstream's <c>SelectSpiral</c> (<c>Features/SpiralFeatureControl.xaml.cs:378-400</c>),
+    /// with its three decisions kept: an empty path means "use the library" rather than a file; a
+    /// path that no longer exists is a NO-OP that keeps the previous selection ("Clicking a missing
+    /// file is a no-op", <c>:383-384</c>); and a pick that is already active does nothing at all
+    /// (<c>:386</c>). Upstream then calls <c>RefreshOverlays()</c> so the change reaches the live
+    /// window; here that is <c>Refresh()</c>, the same re-engage <see cref="SetOpacityPercent"/>
+    /// uses, and the path is re-asked inside it because
+    /// <see cref="SpiralLibrary.Resolve"/> is consulted on every engage.</para>
+    ///
+    /// <para>The save is the caller's, exactly as this module's opacity is.</para>
+    /// </summary>
+    /// <param name="path">A file in the library, or null/empty for "let the library choose".</param>
+    public void SetSpiralPath(string? path)
+    {
+        var value = path ?? string.Empty;
+        if (value.Length > 0 && !File.Exists(value))
+        {
+            return;
+        }
+
+        if (string.Equals(_preset.Current.Path, value, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _preset.Mutate(p => p.Path = value);
+        Refresh();
+    }
+
+    /// <summary>
     /// Put the spiral up, or re-apply it to the one that is already up. The dial and the generation
     /// have already been checked by <see cref="OwnedSessionEffect"/>; what is left is this module's
     /// own four answers, in the order that keeps each one honest.

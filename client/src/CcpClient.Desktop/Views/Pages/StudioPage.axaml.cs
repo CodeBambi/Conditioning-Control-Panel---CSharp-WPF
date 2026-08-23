@@ -3,6 +3,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
@@ -86,6 +87,40 @@ public partial class StudioPage : UserControl
     private readonly ScriptedSessionRun _scripted;
     private readonly SessionRecapLaunch _recap;
 
+    /// <summary>
+    /// Every dial on this page a running scripted session OWNS — the port of upstream's
+    /// <c>Features/SessionLock.FindOwnedControls</c> sweep (<c>Features/SessionLock.cs:178-186</c>)
+    /// over the port of its <c>SessionLock.Owned="True"</c> marker, which here is the
+    /// <c>session-owned</c> style class in <c>StudioPage.axaml</c>.
+    ///
+    /// <para><b>A style class rather than a list of names in this file</b>, for upstream's own
+    /// reason (<c>SessionLock.cs:13-19</c>): the marker has to live ON the control, "three
+    /// characters from the thing a future author is already editing", or the list rots into a set
+    /// of holes. Avalonia's <c>Classes</c> is the native declarative marker and needs no attached
+    /// property to carry it.</para>
+    ///
+    /// <para><b>The LOGICAL tree, not the visual one</b>, and for upstream's stated reason
+    /// (<c>SessionLock.cs:166-172</c>): this rack keeps fifteen of its sixteen module panels
+    /// hidden at any moment, and a dial that is only unlocked because it happened to be hidden
+    /// when the session started is exactly the hole the sweep exists to close.</para>
+    ///
+    /// <para>Swept ONCE, at construction, because unlike upstream's popups — rebuilt on every open
+    /// — these panels are built with the page and live as long as it does. That is the same
+    /// property upstream relies on for its own rack (<c>MainWindow.SessionFeatureLock.cs:345-348</c>),
+    /// and it is why the lock is painted on session start and end rather than on reveal. The
+    /// count is pinned by a headless fact, so a dial added later without the marker reds.</para>
+    /// </summary>
+    private readonly IReadOnlyList<Control> _sessionOwned;
+
+    /// <summary>
+    /// The library files the spiral picker is currently offering, index-aligned with its items
+    /// after the leading "library default" entry. Rebuilt by the Refresh button and on every load,
+    /// never cached across one — the folder is the user's and can change under the app, which is
+    /// why upstream has a Refresh button at all
+    /// (<c>Features/SpiralFeatureControl.xaml:180</c>).
+    /// </summary>
+    private IReadOnlyList<string> _spiralLibrary = [];
+
     private readonly List<(RadioButton Row, ScriptedSession Session)> _scriptedRows = [];
     private ScriptedSession? _scriptedSelection;
     private ScriptedConfirmIntent _scriptedConfirm;
@@ -124,6 +159,8 @@ public partial class StudioPage : UserControl
         ArgumentNullException.ThrowIfNull(haptics);
         ArgumentNullException.ThrowIfNull(recap);
         InitializeComponent();
+        _sessionOwned =
+            [.. this.GetLogicalDescendants().OfType<Control>().Where(IsSessionOwnedMarker)];
         _recap = recap;
         _scheduler = scheduler;
         _haptics = haptics;
@@ -174,18 +211,18 @@ public partial class StudioPage : UserControl
         // Right-click is NOT handled on the Spiral Overlay row — that row has no effect to
         // flip, which is WPF's own unhandled case (:659, "Rows with no Toggle fall through
         // unhandled"), and a fake toggle there would be worse than no gesture.
-        AddQuickToggle(RowFlashImages, FlashImagesEffect.EffectId);
-        AddQuickToggle(RowSubliminals, SubliminalsEffect.EffectId);
-        AddQuickToggle(RowSpiralOverlay, SpiralOverlayEffect.EffectId);
-        AddQuickToggle(RowBouncingText, BouncingTextEffect.EffectId);
-        AddQuickToggle(RowPinkFilter, PinkFilterEffect.EffectId);
-        AddQuickToggle(RowIntensityRamp, IntensityRampEffect.EffectId);
-        AddQuickToggle(RowMindWipe, MindWipeEffect.EffectId);
-        AddQuickToggle(RowBrainDrain, BrainDrainEffect.EffectId);
-        AddQuickToggle(RowLockCard, LockCardEffect.EffectId);
-        AddQuickToggle(RowMandatoryVideo, MandatoryVideoEffect.EffectId);
-        AddQuickToggle(RowBubbleCount, BubbleCountEffect.EffectId);
-        AddQuickToggle(RowBubblePop, BubblePopEffect.EffectId);
+        AddQuickToggle(RowFlashImages, FlashImagesEffect.EffectId, FlashEnableToggle);
+        AddQuickToggle(RowSubliminals, SubliminalsEffect.EffectId, SubliminalEnableToggle);
+        AddQuickToggle(RowSpiralOverlay, SpiralOverlayEffect.EffectId, SpiralEnableToggle);
+        AddQuickToggle(RowBouncingText, BouncingTextEffect.EffectId, BouncingTextEnableToggle);
+        AddQuickToggle(RowPinkFilter, PinkFilterEffect.EffectId, PinkFilterEnableToggle);
+        AddQuickToggle(RowIntensityRamp, IntensityRampEffect.EffectId, RampEnableToggle);
+        AddQuickToggle(RowMindWipe, MindWipeEffect.EffectId, MindWipeEnableToggle);
+        AddQuickToggle(RowBrainDrain, BrainDrainEffect.EffectId, BrainDrainEnableToggle);
+        AddQuickToggle(RowLockCard, LockCardEffect.EffectId, LockCardEnableToggle);
+        AddQuickToggle(RowMandatoryVideo, MandatoryVideoEffect.EffectId, MandatoryVideoEnableToggle);
+        AddQuickToggle(RowBubbleCount, BubbleCountEffect.EffectId, BubbleCountEnableToggle);
+        AddQuickToggle(RowBubblePop, BubblePopEffect.EffectId, BubblePopEnableToggle);
 
         // NO quick toggle on RowVisuals, and it is upstream's own unhandled case rather than an
         // omission: the gesture flips a module's enable, and this row has no enable to flip
@@ -300,6 +337,17 @@ public partial class StudioPage : UserControl
         RampLinkFlashToggle.IsCheckedChanged += (_, _) =>
             OnRampSwitch(RampLinkFlashToggle, _ramp.Preset.LinkFlashOpacity, _ramp.SetLinkFlashOpacity);
         RampCurvePicker.SelectionChanged += (_, _) => OnRampCurvePicked();
+
+        // THE TWO PICKERS. Both were backends with nothing in front of them: SpiralLibrary resolved
+        // a file nobody could choose, and PinkFilterColour parsed a hex string nobody could write.
+        // The tint's items never change, so they are built once here; the spiral's are the contents
+        // of a folder and are rebuilt whenever the user asks or the dials reload.
+        PinkFilterTintPicker.ItemsSource =
+            StudioPickerNotices.TintPalette.Select(entry => entry.Label).ToList();
+        PinkFilterTintPicker.SelectionChanged += (_, _) => OnTintPicked();
+        PinkFilterTintResetButton.Click += (_, _) => OnTintReset();
+        SpiralPicker.SelectionChanged += (_, _) => OnSpiralPicked();
+        SpiralRefreshButton.Click += (_, _) => OnSpiralLibraryRefreshed();
 
         OnSliderMoved(FlashFrequencySlider, OnFrequencyMoved);
         OnSliderMoved(FlashImagesSlider, OnImagesPerFlashMoved);
@@ -505,10 +553,22 @@ public partial class StudioPage : UserControl
             Refresh();
         };
 
-    private void AddQuickToggle(RadioButton row, string effectId) =>
+    /// <param name="row">The rack row the gesture lives on.</param>
+    /// <param name="effectId">The module the gesture dispatches to.</param>
+    /// <param name="enable">
+    /// The panel's own master box for that module, and it is here for the SESSION FEATURE LOCK.
+    /// The right-click is a shortcut for this checkbox, so a locked checkbox with a live shortcut
+    /// beside it is a bypass — precisely what upstream's <c>RefuseIfSessionFeatureLocked</c> guards
+    /// against ("Call from any handler that is about to change the prescribed dose",
+    /// <c>MainWindow/MainWindow.SessionFeatureLock.cs:232-241</c>), and why upstream's own rack
+    /// quick-toggle flips the panel's master box rather than calling the service
+    /// (<c>StudioTabView.xaml.cs:521-525</c>). Passing the box rather than a second list of module
+    /// ids means the refusal and the greying are decided by the SAME marker, so they cannot drift.
+    /// </param>
+    private void AddQuickToggle(RadioButton row, string effectId, CheckBox enable) =>
         row.AddHandler(
             PointerReleasedEvent,
-            (_, e) => OnRowPointerReleased(e, effectId),
+            (_, e) => OnRowPointerReleased(e, effectId, enable),
             RoutingStrategies.Tunnel);
 
     /// <summary>The Bouncing Text speed dial. WPF's slider writes the setting and the next start
@@ -560,6 +620,106 @@ public partial class StudioPage : UserControl
     /// -&gt; <c>UpdateSpiralOpacity</c>). The re-apply goes through the module rather than the
     /// surface so the arm state and the dot move with it.
     /// </summary>
+    /// <summary>
+    /// Fill the spiral picker from the folder and select what the document says is in force.
+    ///
+    /// <para>Item 0 is always "let the library choose" — the empty path — and every later item is
+    /// one file, so the selected index maps to <see cref="_spiralLibrary"/> minus one. A configured
+    /// path whose file is no longer there falls back to item 0, which is exactly what
+    /// <see cref="SpiralLibrary.Resolve"/> does with the same string
+    /// (<c>Services/Notifications/OverlayService.cs:302-304</c>): the picker must not claim a file
+    /// the module would not draw.</para>
+    /// </summary>
+    private void LoadSpiralPicker(string configuredPath)
+    {
+        _spiralLibrary = SpiralLibrary.ListFolder(_session.SpiralsFolder);
+
+        var items = new List<string> { StudioPickerNotices.SpiralLibraryDefault };
+        items.AddRange(_spiralLibrary.Select(StudioPickerNotices.SpiralLabel));
+        SpiralPicker.ItemsSource = items;
+
+        var index = string.IsNullOrWhiteSpace(configuredPath)
+            ? -1
+            : _spiralLibrary.ToList().FindIndex(
+                path => string.Equals(path, configuredPath, StringComparison.Ordinal));
+        SpiralPicker.SelectedIndex = index < 0 ? 0 : index + 1;
+    }
+
+    /// <summary>
+    /// The user picked a spiral. Upstream's <c>SelectSpiral</c> writes the path, saves and
+    /// reconciles the live overlay (<c>Features/SpiralFeatureControl.xaml.cs:378-400</c>); the
+    /// module owns the first and third of those and this owns the save, exactly as the opacity
+    /// slider beside it does.
+    /// </summary>
+    private void OnSpiralPicked()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var index = SpiralPicker.SelectedIndex;
+        var path = index >= 1 && index - 1 < _spiralLibrary.Count ? _spiralLibrary[index - 1] : string.Empty;
+        _spiral.SetSpiralPath(path);
+        _ = _session.SpiralPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// Upstream's <c>⟳ Refresh</c> (<c>Features/SpiralFeatureControl.xaml:176-184</c> -&gt;
+    /// <c>RefreshLibrary()</c>): re-read the folder, because the user just dropped a file into it.
+    /// It changes no dial — the selection is re-derived from the document, so a file that vanished
+    /// while the app was running is reflected here rather than silently kept.
+    /// </summary>
+    private void OnSpiralLibraryRefreshed()
+    {
+        _syncing = true;
+        try
+        {
+            LoadSpiralPicker(_session.SpiralPreset.Current.Path);
+        }
+        finally
+        {
+            _syncing = false;
+        }
+
+        Refresh();
+    }
+
+    /// <summary>
+    /// The user picked a tint. Upstream's <c>BtnChooseColor_Click</c> without the Win32 dialog
+    /// (<c>Features/PinkFilterFeatureControl.xaml.cs:176-193</c>): write the hex, save, re-tint what
+    /// is on screen. Palette entry 0 carries the empty string, so picking "Hot pink (the default)"
+    /// and pressing Reset land on the same stored value — which is upstream's, where the two
+    /// handlers also differ only in the string they write.
+    /// </summary>
+    private void OnTintPicked()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var index = SafePickerIndex(PinkFilterTintPicker.SelectedIndex, StudioPickerNotices.TintPalette.Count);
+        _pinkFilter.SetTintColour(StudioPickerNotices.TintPalette[index].Hex);
+        _ = _session.PinkFilterPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// Upstream's <c>BtnResetColor_Click</c> (<c>:195-202</c>): the empty string, which is stored
+    /// as "use the default tint". It drives the PICKER rather than the document directly, so the
+    /// control and the setting cannot disagree about what just happened — the same reason the
+    /// scheduler's boxes reload from the document rather than from the click.
+    /// </summary>
+    private void OnTintReset() => PinkFilterTintPicker.SelectedIndex = 0;
+
+    /// <summary>A <see cref="ComboBox"/> with nothing selected reports -1, which no palette has an
+    /// entry for; the default is entry 0, for the reason
+    /// <see cref="StudioPickerNotices.TintIndexOf"/> gives.</summary>
+    private static int SafePickerIndex(int index, int count) =>
+        index >= 0 && index < count ? index : 0;
+
     private void OnSpiralOpacityMoved()
     {
         if (_syncing)
@@ -974,6 +1134,18 @@ public partial class StudioPage : UserControl
             ? SessionRackNotices.ProgressLine(progress)
             : string.Empty;
         ScriptedSessionAbsenceState.Text = SessionRackNotices.Absences;
+
+        // THE SESSION FEATURE LOCK, painted from the one place every path already reaches. It is
+        // last because it is derived from the same run this method just read, and it is HERE rather
+        // than in Refresh() because Refresh()'s own last line is a call to this method: putting it
+        // here gives it BOTH of upstream's drivers at once — the session's start and stop (which
+        // arrive through Refresh) and the per-second progress tick (which arrives straight here).
+        // Upstream drives it from exactly those two plus a tab switch, so that "no single missed
+        // event can leave the UI out of step" (MainWindow/MainWindow.SessionFeatureLock.cs:139-142).
+        // The tab-switch leg is not owed here: upstream needs it because its feature popups are
+        // rebuilt on every open, and it says so where its rack panels are long-lived like these
+        // ones (:345-348).
+        ApplySessionFeatureLock();
     }
 
     /// <summary>
@@ -981,7 +1153,7 @@ public partial class StudioPage : UserControl
     /// than also selecting the row (<c>StudioTabView.xaml.cs:1115</c>): a toggle that also
     /// opened the panel would make the two gestures indistinguishable.
     /// </summary>
-    private void OnRowPointerReleased(PointerReleasedEventArgs e, string effectId)
+    private void OnRowPointerReleased(PointerReleasedEventArgs e, string effectId, CheckBox enable)
     {
         if (e.InitialPressMouseButton != MouseButton.Right)
         {
@@ -989,6 +1161,18 @@ public partial class StudioPage : UserControl
         }
 
         e.Handled = true;
+
+        // THE SESSION FEATURE LOCK'S SECOND DOOR. The gesture is a shortcut for `enable`, so it is
+        // refused exactly when that box is refused — upstream's rule that every write path onto the
+        // prescribed dose goes through one refusal (MainWindow/MainWindow.SessionFeatureLock.cs:232-241).
+        // The refusal is not silent: the banner naming the session is on screen above the detail
+        // host for the whole time this can happen, which is the outcome upstream's ribbon pulse
+        // (:275-300) is for.
+        if (IsSessionFeatureLockActive && _sessionOwned.Contains(enable))
+        {
+            return;
+        }
+
         _session.Engine.QuickToggle(effectId);
         LoadDialsFromPreset();
         Refresh();
@@ -1448,6 +1632,82 @@ public partial class StudioPage : UserControl
         Refresh();
     }
 
+    /// <summary>
+    /// The style class that marks a control as "a running scripted session owns this value" —
+    /// the port of <c>features:SessionLock.Owned="True"</c> (<c>Features/SessionLock.cs:50-55</c>).
+    ///
+    /// <para><b>THE CLASSIFICATION RULE</b>, carried here verbatim from the place upstream keeps it
+    /// (<c>SessionLock.cs:21-38</c>) so that whoever adds the next dial reads it: marked is DOSAGE
+    /// — the master enable, rates, counts, opacity, scale, speed, intensity, ramp endpoints, the
+    /// values a session prescribes and ramps. Unmarked is COMFORT — volumes, click-to-dismiss,
+    /// renderer choice, monitor placement, which asset folder — and everything remotely
+    /// safety-shaped: stop, panic, strict lock, withdraw, exit. When in doubt leave it unmarked;
+    /// over-locking takes control away for no benefit.</para>
+    ///
+    /// <para><b>The port adds one clause upstream does not need.</b> A dial here is only worth
+    /// marking if its document is one of the ELEVEN a run actually borrows
+    /// (<see cref="ScriptedSessionDials"/>, its constructor). Brain Drain, the Intensity Ramp's
+    /// sliders, the Scheduler and Haptics all persist OUTSIDE those eleven, so a session neither
+    /// overwrites them nor discards them at the restore, and greying them would be a lie in the
+    /// other direction.</para>
+    /// </summary>
+    private const string SessionOwnedMarker = "session-owned";
+
+    private static bool IsSessionOwnedMarker(Control control) =>
+        control.Classes.Contains(SessionOwnedMarker);
+
+    /// <summary>
+    /// True while a scripted session is running — upstream's <c>IsSessionFeatureLockActive</c>
+    /// (<c>MainWindow/MainWindow.SessionFeatureLock.cs:68-83</c>).
+    ///
+    /// <para><b>DERIVED, NEVER LATCHED</b>, which is upstream's rule 2 (<c>:30-37</c>) and the
+    /// reason nothing here remembers "we locked": a crash, an abort, a window close or a stop that
+    /// raised its events out of order cannot strand the user with a permanently dead rack. Like
+    /// upstream it keys off the RUN's own liveness rather than any global flag, and it reads BOTH
+    /// halves for upstream's reason — the run nulls its session inside <c>Stop</c>, so the two go
+    /// false together on every exit path.</para>
+    ///
+    /// <para>Upstream additionally catches and fails open (<c>:78-82</c>) because its accessor
+    /// reaches through a service locator that can be mid-teardown. This one reads two fields under
+    /// the run's own lock and has nothing to throw, so an unreachable catch is left out rather
+    /// than written for symmetry.</para>
+    /// </summary>
+    private bool IsSessionFeatureLockActive => _scripted.Running && _scripted.Current is not null;
+
+    /// <summary>
+    /// Re-derive the lock and repaint every control it owns — upstream's
+    /// <c>RefreshSessionFeatureLock</c> (<c>MainWindow/MainWindow.SessionFeatureLock.cs:158-181</c>).
+    /// Idempotent in both directions, so a session that ends while a panel is open re-enables
+    /// everything in place.
+    ///
+    /// <para><b>Unlock is <c>ClearValue</c>, not <c>= true</c></b>, and that is upstream's decision
+    /// with upstream's reason (<c>:440-448</c>): a control may be disabled for some OTHER reason,
+    /// and hard-writing true would silently promote the user past that gate.</para>
+    ///
+    /// <para><b>The session's own writes are not suppressed.</b> A disabled <c>CheckBox</c> or
+    /// <c>Slider</c> still takes a programmatic value, so <see cref="LoadDialsFromPreset"/> keeps
+    /// showing the ramp climbing while the user cannot overrule it — upstream states exactly this
+    /// (<c>:49-53</c>) and it is the whole point: the dial tells the truth instead of pretending.</para>
+    /// </summary>
+    private void ApplySessionFeatureLock()
+    {
+        var locked = IsSessionFeatureLockActive;
+        foreach (var control in _sessionOwned)
+        {
+            if (locked)
+            {
+                control.IsEnabled = false;
+            }
+            else
+            {
+                control.ClearValue(IsEnabledProperty);
+            }
+        }
+
+        SessionLockBanner.IsVisible = locked;
+        SessionLockReason.Text = locked ? SessionLockNotices.Reason(_scripted.Current) : string.Empty;
+    }
+
     private void LoadDialsFromPreset()
     {
         _syncing = true;
@@ -1469,6 +1729,8 @@ public partial class StudioPage : UserControl
             var spiral = _session.SpiralPreset.Current;
             SpiralEnableToggle.IsChecked = spiral.Enabled;
             SpiralOpacitySlider.Value = spiral.OpacityPercent;
+            LoadSpiralPicker(spiral.Path);
+            PinkFilterTintPicker.SelectedIndex = StudioPickerNotices.TintIndexOf(pink.Colour);
 
             var bouncing = _session.BouncingTextPreset.Current;
             BouncingTextEnableToggle.IsChecked = bouncing.Enabled;

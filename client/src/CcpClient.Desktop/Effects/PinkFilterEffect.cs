@@ -137,6 +137,35 @@ public sealed class PinkFilterEffect : OwnedSessionEffect
     }
 
     /// <summary>
+    /// Pick the tint's COLOUR, and re-tint whatever is already on screen.
+    ///
+    /// <para>WPF's pair of buttons behind one entry: <c>BtnChooseColor_Click</c> writes
+    /// <c>$"#{R:X2}{G:X2}{B:X2}"</c> and <c>BtnResetColor_Click</c> writes <c>""</c> — "empty =
+    /// default (mod / hot pink)" in its own comment — and both then save and call
+    /// <c>ApplyColorLive()</c>, which is <c>RefreshFilterColor()</c> + <c>RefreshOverlays()</c>
+    /// (<c>Features/PinkFilterFeatureControl.xaml.cs:176-213</c>). Reset is not a separate method
+    /// here because upstream's two bodies differ only in the string they write.</para>
+    ///
+    /// <para>The value is stored RAW, exactly as upstream stores it and as
+    /// <see cref="Session.PinkFilterPresetDocument.Colour"/> records: the parse is lenient and lives
+    /// in <see cref="PinkFilterColour.TryParseHex"/>, so an unparseable value falls back to hot pink
+    /// at read time rather than failing a write. The save is the caller's, as every other dial on
+    /// this module is.</para>
+    /// </summary>
+    /// <param name="hex">A <c>#RRGGBB</c> string, or null/empty for "use the default tint".</param>
+    public void SetTintColour(string? hex)
+    {
+        var value = hex ?? string.Empty;
+        if (string.Equals(_preset.Current.Colour, value, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _preset.Mutate(p => p.Colour = value);
+        Refresh();
+    }
+
+    /// <summary>
     /// Put the tint up, or re-tint the one that is already up. The dial and the generation have
     /// already been checked by <see cref="OwnedSessionEffect"/>; what is left is this module's own
     /// three answers.
