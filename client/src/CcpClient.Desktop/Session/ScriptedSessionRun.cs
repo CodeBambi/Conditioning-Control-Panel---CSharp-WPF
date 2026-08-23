@@ -382,6 +382,8 @@ public sealed class ScriptedSessionRun
     {
         ScriptedSession session;
         TimeSpan finalElapsed;
+        DateTimeOffset startedAt;
+        DateTimeOffset endedAt;
         ScriptedSessionDialSnapshot? snapshot;
         lock (_gate)
         {
@@ -390,8 +392,10 @@ public sealed class ScriptedSessionRun
                 return false;
             }
 
+            startedAt = _wallStart;
+            endedAt = _clock.Now;
             finalElapsed = Reconcile(
-                _clock.Now - _wallStart,
+                endedAt - _wallStart,
                 _clock.Monotonic - _monotonicStart).Elapsed;
             session = _session;
             snapshot = _snapshot;
@@ -424,7 +428,8 @@ public sealed class ScriptedSessionRun
             _engine.Start();
         }
 
-        Raise(() => Ended?.Invoke(new ScriptedSessionOutcome(session, finalElapsed, completed)));
+        Raise(() => Ended?.Invoke(
+            new ScriptedSessionOutcome(session, finalElapsed, completed, startedAt, endedAt)));
         return true;
     }
 
@@ -731,10 +736,23 @@ public readonly record struct ScriptedSessionProgress(
 
 /// <summary>How a scripted session ended — upstream's <c>SessionCompletedEventArgs</c>
 /// (<c>Services/Session/SessionEngine.cs:2008-2020</c>) without the XP members, which are not in
-/// this slice.</summary>
+/// this slice.
+///
+/// <para><b>The two wall-clock instants are here rather than on a second clock reading</b>, because
+/// the log the recap is built from wants exactly what upstream's does: a <c>started_at</c> and an
+/// <c>ended_at</c> taken from the wall clock at the two ends of the run
+/// (<c>Services/Session/SessionLogService.cs:57</c>, <c>:86</c>), <b>independent of</b>
+/// <see cref="Elapsed"/>, which has been past the clock-jump guard. Deriving the start as
+/// "now minus elapsed" would quietly heal a jump upstream leaves visible.</para></summary>
 /// <param name="Session">The session that ended.</param>
 /// <param name="Elapsed">Its final elapsed time, read before the running flag cleared.</param>
 /// <param name="Completed">True when it reached its duration; false when it was stopped
 /// early.</param>
+/// <param name="StartedAt">The wall clock when it started.</param>
+/// <param name="EndedAt">The wall clock when it ended.</param>
 public sealed record ScriptedSessionOutcome(
-    ScriptedSession Session, TimeSpan Elapsed, bool Completed);
+    ScriptedSession Session,
+    TimeSpan Elapsed,
+    bool Completed,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt);

@@ -129,7 +129,13 @@ public partial class MainWindow : Window
                 + "the fake-available shape the capability contract bans, and it would be ungated on "
                 + "the one paid feature in the rack");
 
-        _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics);
+        // The ONE session-recap / session-history construction site
+        // (Navigation/SessionRecapLaunch.cs), on the SAME log store the running session writes
+        // into. Built here rather than inside the page for the LoomLaunch reason: the windows are
+        // owned by the SHELL, and the page is not a window.
+        Recap = new Navigation.SessionRecapLaunch(Session.MediaLog, this);
+
+        _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics, Recap);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
         _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon, Arcademy);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
@@ -218,6 +224,9 @@ public partial class MainWindow : Window
 
     /// <summary>The one Loom studio launch path (public so tests observe the real seam).</summary>
     public LoomLaunch Loom { get; }
+
+    /// <summary>The one session-recap and session-history launch path, same reason.</summary>
+    public Navigation.SessionRecapLaunch Recap { get; }
 
     /// <summary>The one DTRH gate + launch path (public so tests drive the real gate, and so
     /// <c>--dtrh-demo</c> reaches the SAME coordinator the user path builds).</summary>

@@ -545,6 +545,45 @@ public sealed class SessionParticipant : IBackgroundParticipant
                 ex => _log.Log($"scripted session: a tick faulted and was contained: {ex.Message}")),
             _rampPreset,
             signal);
+
+        // THE POST-SESSION MEDIA LOG (WPF Services/Session/SessionLogService.cs), wired HERE
+        // because this is the only object that holds all three parts of it: the run that says
+        // whether a scripted session is up, and the two modules that put media on screen.
+        //
+        // UPSTREAM SUBSCRIBES AND UNSUBSCRIBES AROUND EACH SESSION (:150-171) AND ALSO GUARDS ON
+        // `_activeLog == null` INSIDE EVERY HANDLER (:182, :214). The port keeps the second guard
+        // and drops the first: `Scripted.Running` IS `_activeLog != null`, read from the one object
+        // that knows, and a subscription never taken cannot be leaked — which is the whole job of
+        // upstream's `_isSubscribed` flag. The user-visible rule is unchanged and it is upstream's:
+        // media outside a scripted session is not logged, because upstream only ever begins a log
+        // from the scripted engine's own start (Services/Session/SessionEngine.cs:266).
+        //
+        // The offsets are the RUN's reconciled elapsed rather than a second wall clock, so the
+        // timeline in the recap and the countdown the user was watching cannot disagree; upstream
+        // stamps its offsets from an unguarded `DateTime.Now` (:183-184, :218-219) and a clock jump
+        // moves them.
+        MediaLog = new ScriptedSessionLogStore(dataDirectory, infra.Log);
+        Flash.Fired += flash =>
+        {
+            if (Scripted.Running)
+            {
+                MediaLog.RecordImages(flash.ImagesDrawn, Scripted.Elapsed);
+            }
+        };
+        MandatoryVideo.Fired += _ =>
+        {
+            if (Scripted.Running)
+            {
+                MediaLog.RecordVideo(Scripted.Elapsed);
+            }
+        };
+
+        // Upstream finalizes the log for BOTH endings — "Aborted sessions still get a log … so the
+        // post-session dialog shows what played even when the user cut things short"
+        // (Services/Session/SessionEngine.cs:420-424) — and the recap is driven off the log's own
+        // LogReady rather than off the end of the session, so the window can never open on a log
+        // that has not been written yet (MainWindow/MainWindow.xaml.cs:373-378).
+        Scripted.Ended += outcome => MediaLog.Complete(outcome);
     }
 
     public string Name => "Session";
@@ -562,6 +601,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// one.
     /// </summary>
     public ScriptedSessionRun Scripted { get; }
+
+    /// <summary>
+    /// The post-session media log — WPF's <c>Services/Session/SessionLogService.cs</c>. Public for
+    /// the same reason <see cref="Scripted"/> is: the Studio door's <b>Recent sessions</b> button
+    /// and the recap that opens when a session ends must read the SAME store the running session
+    /// writes into, never a second reader of the same folder.
+    /// </summary>
+    public ScriptedSessionLogStore MediaLog { get; }
 
     /// <summary>Flash Images (public so the Studio module panel and the tests reach the real object).</summary>
     public FlashImagesEffect Flash { get; }

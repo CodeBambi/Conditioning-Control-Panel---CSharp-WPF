@@ -1,0 +1,139 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Views.SessionRecapWindow"
+        Title="Session Complete"
+        Width="540" Height="620"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#FF141018">
+  <!--
+    THE SESSION COMPLETE RECAP — upstream's Windows/SessionCompleteWindow.xaml(.cs), shown for
+    COMPLETION AND ABORT ALIKE (MainWindow/MainWindow.Presets.cs:1681, reached from the media log's
+    LogReady, which fires either way — Services/Session/SessionLogService.cs:101).
+
+    What it shows is what the user was just shown: the headline for how it ended, the session, how
+    long it ran, and the timeline of every video and image that appeared. What it does NOT show is
+    named on the plate at the foot rather than left blank — the file names (this build logs counts
+    and timings, never names or paths) and the XP award (nothing in this build computes one). See
+    Views/Pages/SessionRecapNotices.
+
+    An OWNED, CENTRED, ORDINARY window. Upstream's is WindowStyle=None + AllowsTransparency +
+    Topmost + ShowInTaskbar=False with a hand-drawn rounded border (:5-12), which exists there to
+    dodge a LibVLC fullscreen surface (#462/#905, MainWindow.Presets.cs:1625-1651). This port's
+    session stop takes every module's surface down before the recap is raised, so the recap has
+    nothing to out-rank; the port's own window grammar (Features/FeaturePopupWindow, the W-04
+    contract) is used instead of importing a workaround for a hazard that is not here.
+  -->
+  <Window.Styles>
+    <Style Selector="Border.plate">
+      <Setter Property="Background" Value="#FF241E2A" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.stat-label">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.stat-value">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,3,0,0" />
+    </Style>
+    <Style Selector="TextBlock.note">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Opacity" Value="0.7" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="Button.recap-action">
+      <Setter Property="Background" Value="#FFD05CE8" />
+      <Setter Property="Foreground" Value="#FFFFFFFF" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Padding" Value="42,10" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="20">
+    <StackPanel DockPanel.Dock="Top" Spacing="4">
+      <TextBlock x:Name="Headline"
+                 AutomationProperties.AutomationId="SessionRecapHeadline"
+                 Foreground="#FFD05CE8" FontSize="26" FontWeight="Bold"
+                 HorizontalAlignment="Center" TextWrapping="Wrap" Text="" />
+      <TextBlock x:Name="Subtitle"
+                 AutomationProperties.AutomationId="SessionRecapSubtitle"
+                 Foreground="#FFE8E0EE" Opacity="0.7" FontSize="14"
+                 HorizontalAlignment="Center" TextWrapping="Wrap" Text="" />
+    </StackPanel>
+
+    <!-- Upstream's two surviving stat columns (SessionCompleteWindow.xaml:84-94); its third,
+         XP Earned (:96-100), is refused — see SessionRecapNotices.AwardsNotComputed. -->
+    <Border DockPanel.Dock="Top" Classes="plate" Margin="0,14,0,0">
+      <Grid ColumnDefinitions="*,*">
+        <StackPanel Grid.Column="0">
+          <TextBlock Classes="stat-label" Text="Session" />
+          <TextBlock x:Name="SessionName" Classes="stat-value"
+                     AutomationProperties.AutomationId="SessionRecapSessionName"
+                     TextTrimming="CharacterEllipsis" Text="" />
+        </StackPanel>
+        <StackPanel Grid.Column="1">
+          <TextBlock Classes="stat-label" Text="Duration" />
+          <TextBlock x:Name="Duration" Classes="stat-value"
+                     AutomationProperties.AutomationId="SessionRecapDuration"
+                     Text="" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Button DockPanel.Dock="Bottom" x:Name="CloseButton"
+            Classes="recap-action"
+            HorizontalAlignment="Center"
+            Margin="0,14,0,0"
+            AutomationProperties.AutomationId="SessionRecapCloseButton"
+            AutomationProperties.Name="Continue"
+            Content="Continue" />
+
+    <Border DockPanel.Dock="Bottom" Classes="plate" Margin="0,12,0,0">
+      <StackPanel Spacing="4">
+        <TextBlock x:Name="NamesNotice" Classes="note"
+                   AutomationProperties.AutomationId="SessionRecapNamesNotice" Text="" />
+        <TextBlock x:Name="AwardsNotice" Classes="note"
+                   AutomationProperties.AutomationId="SessionRecapAwardsNotice" Text="" />
+      </StackPanel>
+    </Border>
+
+    <Border Classes="plate" Margin="0,12,0,0">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+          <TextBlock Grid.Column="0" Foreground="#FFD05CE8" FontSize="13" FontWeight="SemiBold"
+                     Text="Played This Session" />
+          <TextBlock Grid.Column="1" x:Name="MediaCount"
+                     AutomationProperties.AutomationId="SessionRecapMediaCount"
+                     Foreground="#FFE8E0EE" Opacity="0.7" FontSize="12"
+                     VerticalAlignment="Center" Text="" />
+        </Grid>
+        <TextBlock DockPanel.Dock="Top" x:Name="NoMedia"
+                   AutomationProperties.AutomationId="SessionRecapNoMedia"
+                   Foreground="#FFE8E0EE" Opacity="0.6" FontSize="12" FontStyle="Italic"
+                   HorizontalAlignment="Center" Margin="0,20" IsVisible="False"
+                   TextWrapping="Wrap" Text="" />
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <!-- ONE panel, rows built in code from the log — the same reason the session rack's
+               rows are (Views/Pages/StudioPage.axaml:1786-1792): the SET is data, and markup
+               would be a second copy of it. -->
+          <StackPanel x:Name="MediaList"
+                      AutomationProperties.AutomationId="SessionRecapMediaList"
+                      Spacing="2" />
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+  </DockPanel>
+</Window>

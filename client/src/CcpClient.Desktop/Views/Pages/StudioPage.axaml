@@ -1857,12 +1857,28 @@
                for the same reason the shell's does: WPF paints the running one red
                (MainWindow.StartStop.cs:756) and captions it STOP SESSION with the time left
                (en.json:2321, MainWindow.Presets.cs:1752). -->
-          <Button x:Name="ScriptedSessionStartButton"
-                  Classes="session-start"
-                  HorizontalAlignment="Left"
-                  AutomationProperties.AutomationId="ScriptedSessionStartButton"
-                  AutomationProperties.Name="Start Session"
-                  Content="Start Session" />
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <Button x:Name="ScriptedSessionStartButton"
+                    Classes="session-start"
+                    HorizontalAlignment="Left"
+                    AutomationProperties.AutomationId="ScriptedSessionStartButton"
+                    AutomationProperties.Name="Start Session"
+                    Content="Start Session" />
+
+            <!-- RECENT SESSIONS — upstream's own door button, on this door because the rack is
+                 (MainWindow/MainWindow.Presets.cs:1440 -> SessionLogHistoryWindow;
+                 Views/Tabs/PresetsTabView.xaml:646-651, where it sits in the same header strip as
+                 the rack it belongs to). It opens the last twenty retained logs and reopens any
+                 one of them in the same recap window a session's own end raises. -->
+            <Button x:Name="ScriptedSessionHistoryButton"
+                    Classes="module-action"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ScriptedSessionHistoryButton"
+                    AutomationProperties.Name="Recent sessions"
+                    ToolTip.Tip="Browse the last 20 sessions and the videos/images each one played"
+                    Content="Recent sessions" />
+          </StackPanel>
 
           <Border Classes="notice">
             <StackPanel Spacing="4">
