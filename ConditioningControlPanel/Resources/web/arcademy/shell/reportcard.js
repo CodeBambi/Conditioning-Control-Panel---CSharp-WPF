@@ -18,6 +18,7 @@
  * ==========================================================================*/
 
 import { t, gradeLabel, tierLabel } from '../core/lexicon.js';
+import { exitBar, sign as signExit } from './exits.js';
 
 /** Mod-anonymous, name-only, no URL. Do not "improve" this. */
 export const SHARE_HEADER = 'The Arcademy';
@@ -233,13 +234,19 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
       }
     }
 
-    /* --- out --- */
-    const foot = el('div', 'arc-classbar');
+    /* --- out ---
+     * A STICKY LIT SIGN, not a button at the bottom of a page. The paper
+     * scrolls inside the stage, and a day with three classes, a share block and
+     * a stamp is taller than a short window - so Done used to be somewhere
+     * below the fold with nothing on screen saying so. It now rides the bottom
+     * of the stage for as long as the report is up, and it wears the arrow
+     * board (shell/exits.js) because this is a terminal screen: there is
+     * nothing here to out-shout. */
     const done = el('button', 'btn primary', t('done', 'Done'));
     done.type = 'button';
     done.addEventListener('click', () => { try { if (s.onDone) s.onDone(); } catch (e) { /* noop */ } });
-    foot.appendChild(done);
-    if (s.tier != null) foot.appendChild(el('span', 'chip year', tierLabel(s.tier)));
+    signExit(done, { dir: 'back' });
+    const foot = exitBar([done, s.tier != null ? el('span', 'chip year', tierLabel(s.tier)) : null]);
     put(foot);
 
     return root;

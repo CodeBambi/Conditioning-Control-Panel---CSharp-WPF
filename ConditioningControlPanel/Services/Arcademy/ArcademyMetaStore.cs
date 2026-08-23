@@ -44,6 +44,13 @@ internal sealed class ArcademyMetaStore
     /// its XP once per UTC day; every later run of the same class that day is a free replay.</summary>
     public const string XpPaidKey = "xpPaidDays";
 
+    /// <summary>Host-owned: the punch cards, <c>{ "&lt;gameKey&gt;": {punches, dates, enrolledAt,
+    /// house, complete, unlockedAt} }</c> — ten holes per class, the tenth a permanent unlock
+    /// (PUNCHCARD.md §2.1). Minted here for the same reason the streak is: a card is worth a
+    /// standing Begin on a room the seed did not deal, so a stale page must not be able to write
+    /// one. The math itself lives in <see cref="ArcademyPunchCards"/>.</summary>
+    public const string PunchCardsKey = "punchCards";
+
     /// <summary>Classes in a day — the timetable's fixed size (GROUND-RULES §4).</summary>
     private const int ClassesPerDay = 3;
 
@@ -79,7 +86,7 @@ internal sealed class ArcademyMetaStore
     /// <c>class-ended</c>, so a set/merge naming one is dropped (and logged) rather than applied.</summary>
     private static readonly HashSet<string> HostOwnedKeys = new(StringComparer.Ordinal)
     {
-        AttendanceKey, StreakKey, PerfectKey, TodayClassesKey, XpPaidKey,
+        AttendanceKey, StreakKey, PerfectKey, TodayClassesKey, XpPaidKey, PunchCardsKey,
     };
 
     private readonly object _lock = new();
@@ -235,6 +242,120 @@ internal sealed class ArcademyMetaStore
             Touch();
             return (streak, perfect, today.Count);
         }
+    }
+
+    /// <summary>
+    /// Stamp today's hole on <paramref name="gameKey"/>'s punch card. Rides the SAME
+    /// <c>class-ended</c> credit as <see cref="RecordAttendance"/> and on the same LOCAL date
+    /// (#978), which is what makes the rule "any graded finish stamps, once a day" true for free:
+    /// an Esc-leave sends <c>class-left</c> and never gets here, and a Free Swim ends without a
+    /// <c>class-ended</c> frame at all (<c>shell.js finishClass</c> returns first).
+    ///
+    /// <para>Idempotent per (local day, game), and a no-op once the card is full. See
+    /// <see cref="ArcademyPunchCards.Stamp"/> for the day-one interlock.</para>
+    /// </summary>
+    /// <returns>Null when there is no game key to stamp; otherwise the outcome, carrying a CLONE
+    /// of the card so the caller can put it straight on a frame.</returns>
+    public ArcademyPunchCards.PunchMint? StampPunchCard(string? gameKey, string localDate)
+    {
+        if (string.IsNullOrWhiteSpace(gameKey)) return null;
+        lock (_lock)
+        {
+            var mint = ArcademyPunchCards.Stamp(Cards(), gameKey, localDate);
+            if (mint.Minted)
+            {
+                Touch();
+                App.Logger?.Information("ArcademyMetaStore: punch card '{Key}' stamped for {Date} ({N}/{Holes}){Unlock}",
+                    gameKey, localDate, (int?)mint.Card[ArcademyPunchCards.PunchesField] ?? 0,
+                    ArcademyPunchCards.Holes, mint.JustUnlocked ? " - ROOM UNLOCKED" : "");
+            }
+            return new ArcademyPunchCards.PunchMint(
+                mint.Minted, mint.JustUnlocked, (JObject)mint.Card.DeepClone());
+        }
+    }
+
+    /// <summary>
+    /// The first-run mint for <paramref name="gameKey"/>: the enrollment punch plus the
+    /// on-the-house punch, two holes, once ever (PUNCHCARD §4). Driven by the page's
+    /// <c>enrollment-done</c> frame, which the shell posts at the end of the enrollment ceremony.
+    ///
+    /// <para>Validated here rather than trusted: the frame carries only a game key, and every
+    /// number on the card is derived from what this store already holds. Repeat frames are
+    /// no-ops, and today's daily stamp is superseded so the day can never net three.</para>
+    /// </summary>
+    public ArcademyPunchCards.PunchMint? EnrollPunchCard(string? gameKey, string localDate)
+    {
+        if (string.IsNullOrWhiteSpace(gameKey)) return null;
+        lock (_lock)
+        {
+            var mint = ArcademyPunchCards.Enroll(Cards(), gameKey, localDate);
+            if (mint.Minted)
+            {
+                Touch();
+                App.Logger?.Information("ArcademyMetaStore: enrolled in '{Key}' on {Date} - 2 punches",
+                    gameKey, localDate);
+            }
+            return new ArcademyPunchCards.PunchMint(
+                mint.Minted, mint.JustUnlocked, (JObject)mint.Card.DeepClone());
+        }
+    }
+
+    /// <summary>Game keys whose card is full — the rooms that offer Begin every night, board or
+    /// no board (PUNCHCARD §2.3). The page derives the same list off the snapshot; this is the
+    /// host's own read, for the log line that tells the owner what a dark build has unlocked.</summary>
+    public IReadOnlyList<string> UnlockedGameKeys()
+    {
+        lock (_lock) return ArcademyPunchCards.UnlockedKeys(_state[PunchCardsKey] as JObject);
+    }
+
+    /// <summary>
+    /// The push payload for the server mirror (PUNCHCARD §5): a normalized clone of every card
+    /// with something earned on it, or an empty object when there is nothing to mirror yet.
+    /// Taken under the lock like every other read, so it can never catch a card mid-mint.
+    /// </summary>
+    public JObject ExportCards()
+    {
+        lock (_lock) return ArcademyPunchCards.Export(_state[PunchCardsKey] as JObject);
+    }
+
+    /// <summary>
+    /// Fold the mirror's merged reply into the cards, monotonically and through the same
+    /// self-healing path a mint takes (<see cref="ArcademyPunchCards.ApplyServer"/>): dates
+    /// unioned, enrollment earliest-wins, every derived number re-counted here rather than
+    /// believed. Nothing local is ever dropped, so a cold or stale mirror costs nothing.
+    ///
+    /// <para>A restored <c>enrolledAt</c> is also what suppresses a repeat enrollment tutorial:
+    /// the shell derives "already enrolled" from the card itself (spec §2.2), so there is no
+    /// separate flag here to restore and none to forget.</para>
+    /// </summary>
+    /// <returns>The game keys the reply changed - empty when the mirror knew nothing new, which
+    /// is the ordinary case and deliberately does not <see cref="Touch"/> (no rev bump, no save,
+    /// no repaint for a no-op sync).</returns>
+    public IReadOnlyList<string> ApplyServerCards(JObject? serverCards)
+    {
+        lock (_lock)
+        {
+            var changed = ArcademyPunchCards.ApplyServer(Cards(), serverCards);
+            if (changed.Count > 0)
+            {
+                Touch();
+                App.Logger?.Information(
+                    "ArcademyMetaStore: mirror restored/updated {N} punch card(s): {Keys}",
+                    changed.Count, string.Join(", ", changed));
+            }
+            return changed;
+        }
+    }
+
+    /// <summary>The punch-card bag, created when absent. Called under the lock.</summary>
+    private JObject Cards()
+    {
+        if (_state[PunchCardsKey] is not JObject cards)
+        {
+            cards = new JObject();
+            _state[PunchCardsKey] = cards;
+        }
+        return cards;
     }
 
     /// <summary>

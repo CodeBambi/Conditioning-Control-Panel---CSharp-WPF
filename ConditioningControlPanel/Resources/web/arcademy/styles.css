@@ -1229,6 +1229,864 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   .campus-crest { display:none; }
 }
 
+/* ============================ EXITS ======================================
+   THE WAY OUT, in one place (shell/exits.js mints every node below).
+
+   Three pieces, three jobs:
+     .arc-campuspill   the crest shrunk into a chip, top-left of a live class.
+                       CALM: no bulbs, no pulse. It must be findable without
+                       ever being the loudest thing on a board you are meant to
+                       be watching.
+     .arc-exitbar      a sticky footer. The bug this wave exists to kill is a
+                       Back button at the TOP of a page that scrolls, so the
+                       guaranteed exit now rides the bottom of the viewport for
+                       as long as the screen is up.
+     .arc-exitsign     the casino arrow board. TERMINAL SCREENS ONLY (report,
+                       end card, settings, a class-rules sheet) - never
+                       something a live class has to compete with.
+
+   THE BULBS DO NOT MOVE; THE LIGHT DOES. `.arc-sign-lamps` carries the bulb
+   MASK and a dim fill, and its child `.arc-sign-chase` carries an oversized
+   repeating band that translates by exactly one period (52px = four 13px
+   bulbs), so the wrap lands on an identical pixel. Transforming the masked
+   layer itself would drag the bulbs along with the light, and animating
+   `background-position` would re-raster the strip every frame (trap 36's law:
+   patterns drift by TRANSFORM). That is why the chase is a real element and
+   not a pseudo - a pseudo-element cannot own a child.
+
+   Nothing here is toggled with the hidden attribute: the confirm dialog is
+   REMOVED when it closes, and the global reset at the top of this file covers
+   anything a game hides that way (trap 27). */
+
+/* ---- the campus pill --------------------------------------------------- */
+.arc-campuspill {
+  display:inline-flex; align-items:center; gap:9px;
+  padding:5px 13px 5px 9px;
+  background:color-mix(in srgb, var(--navy), transparent 22%);
+  border:1px solid color-mix(in srgb, var(--lav), transparent 62%);
+  border-radius:999px;
+  color:var(--ink-dim); cursor:pointer;
+  transition:border-color .18s, color .18s, box-shadow .18s, background .18s;
+}
+.arc-campuspill:hover {
+  color:var(--ink);
+  border-color:var(--lav);
+  background:color-mix(in srgb, var(--panel), transparent 10%);
+  box-shadow:0 0 18px color-mix(in srgb, var(--lav), transparent 72%);
+}
+.arc-campuspill:focus-visible { outline:2px solid var(--lav); outline-offset:3px; }
+.arc-campuspill:active { transform:translateY(1px); }
+.arc-campuspill-chev {
+  font-size:19px; line-height:1; color:var(--lav);
+  transition:transform .18s;
+}
+.arc-campuspill:hover .arc-campuspill-chev { transform:translateX(-2px); }
+.arc-campuspill-wrap { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+/* The hub's crest, at chip scale - same face, same tracking, same rule under
+   it, so the way home LOOKS like home. */
+.arc-campuspill-name {
+  font-family:var(--disp); font-size:10.5px; letter-spacing:.26em; line-height:1;
+  text-transform:uppercase; white-space:nowrap;
+}
+.arc-campuspill-rule {
+  width:100%; height:1px;
+  background:linear-gradient(90deg, color-mix(in srgb, var(--lav), transparent 40%), transparent);
+}
+/* A host suspend owns the screen and its overlay carries its own Leave class -
+   the pill steps back rather than offering a second, conflicting door. */
+.arc-campuspill[disabled] { opacity:.4; cursor:default; }
+@media (max-width:520px) {
+  .arc-campuspill-rule { display:none; }
+  .arc-campuspill-name { font-size:9.5px; letter-spacing:.18em; }
+}
+
+/* ---- the confirm dialog ------------------------------------------------ */
+/* Above the pause card (z 35) on purpose: the pill can be pressed while the
+   class is already paused, and the question must land on top of the answer. */
+.arc-confirm {
+  position:absolute; inset:0; z-index:36;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(14px, 4vh, 40px); overflow:auto;
+  background:color-mix(in srgb, var(--ground), transparent 12%);
+  backdrop-filter:blur(7px);
+  animation:arc-confirm-in .16s ease-out both;
+}
+@keyframes arc-confirm-in { from { opacity:0; } to { opacity:1; } }
+.arc-confirm-card {
+  width:min(440px, 92vw); margin:auto;
+  display:flex; flex-direction:column; align-items:center; gap:13px;
+  text-align:center; padding:24px 26px 20px;
+  background:linear-gradient(168deg, var(--panel), var(--navy) 78%);
+  border:var(--hairline); border-radius:var(--radius);
+  box-shadow:0 30px 80px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06);
+  animation:arc-confirm-rise .26s cubic-bezier(.2,1.2,.4,1) both;
+}
+@keyframes arc-confirm-rise {
+  from { transform:translateY(16px) scale(.97); opacity:0; }
+  to   { transform:none; opacity:1; }
+}
+.arc-confirm-card .arc-h2 { margin:0; font-size:19px; letter-spacing:.13em; color:var(--gold); }
+.arc-confirm-body { margin:0; max-width:38ch; font-size:13px; }
+.arc-confirm-actions {
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
+  gap:12px; margin-top:4px;
+}
+.arc-confirm-stay { min-width:150px; padding:10px 20px; font-size:12px; letter-spacing:.14em; }
+.arc-confirm-note { margin:0; font-size:11px; color:var(--ink-faint); max-width:40ch; }
+
+/* ---- the sticky exit bar ----------------------------------------------- */
+/* `sticky` binds to whatever scrolls - the document on the settings page, the
+   report stage under the paper, an overlay's own box on a card - so one class
+   covers every screen without any of them needing to know what its scroller is.
+   The fade underneath keeps text legible as it slides beneath the bar. */
+.arc-exitbar {
+  position:sticky; bottom:0; z-index:12;
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
+  gap:11px; margin-top:16px;
+  padding:13px 8px calc(11px + env(safe-area-inset-bottom, 0px));
+  background:linear-gradient(180deg,
+    transparent,
+    color-mix(in srgb, var(--ground), transparent 22%) 38%,
+    color-mix(in srgb, var(--ground), transparent 4%));
+}
+/* For a screen whose content does not scroll in a box of its own. */
+.arc-exitbar-fixed {
+  position:fixed; left:0; right:0; bottom:0; z-index:32; margin-top:0;
+}
+.arc-exitbar .chip { flex:none; }
+
+/* ---- the sign ---------------------------------------------------------- */
+/* THE DOUBLED CLASS IS DELIBERATE. Every caller signs a button that already
+   wears .btn plus one of .btn.primary / .btn.ghost, and those are TWO classes -
+   a single .arc-exitsign loses the cascade to them and the sign renders as a
+   plain pink slab (caught in a capture, not by a test). Doubling the class buys
+   the specificity without an !important and without touching the button
+   vocabulary every other screen depends on. */
+.arc-exitsign.arc-exitsign {
+  position:relative; overflow:hidden;
+  display:inline-flex; align-items:center; justify-content:center; gap:10px;
+  min-width:210px; padding:12px 24px;
+  font-family:var(--disp); font-size:12.5px; letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--gold);
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--panel), var(--gold) 6%),
+    color-mix(in srgb, var(--navy), black 14%));
+  border:1px solid color-mix(in srgb, var(--gold), transparent 42%);
+  border-radius:10px;
+  box-shadow:
+    0 0 20px color-mix(in srgb, var(--gold), transparent 74%),
+    inset 0 0 22px color-mix(in srgb, var(--gold), transparent 88%);
+  cursor:pointer;
+}
+.arc-exitsign.arc-exitsign:hover:not(:disabled) {
+  color:var(--ink);
+  border-color:var(--gold);
+  box-shadow:
+    0 0 30px color-mix(in srgb, var(--gold), transparent 58%),
+    inset 0 0 26px color-mix(in srgb, var(--gold), transparent 80%);
+}
+.arc-exitsign.arc-exitsign:focus-visible { outline:2px solid var(--ink); outline-offset:3px; }
+.arc-exitsign.arc-exitsign:active { transform:translateY(1px); }
+.arc-sign-label { position:relative; z-index:2; }
+.arc-sign-arrow {
+  position:relative; z-index:2; font-size:14px; line-height:1;
+  color:color-mix(in srgb, var(--gold), var(--ink) 30%);
+  animation:arc-sign-blink 1.04s steps(1, end) infinite;
+}
+@keyframes arc-sign-blink { 0%, 55% { opacity:1; } 56%, 100% { opacity:.34; } }
+
+/* THE BULBS. Two rows, top and bottom, drawn by masking a dim gold fill with a
+   repeating dot. 13px pitch; the chase period below is exactly four of them. */
+.arc-sign-lamps {
+  position:absolute; inset:0; z-index:1; overflow:hidden;
+  border-radius:inherit; pointer-events:none;
+  background:color-mix(in srgb, var(--gold), transparent 62%);
+  --arc-bulb:radial-gradient(circle at 50% 50%, #000 0 40%, transparent 46%);
+  -webkit-mask-image:var(--arc-bulb), var(--arc-bulb);
+  mask-image:var(--arc-bulb), var(--arc-bulb);
+  -webkit-mask-size:13px 7px; mask-size:13px 7px;
+  -webkit-mask-repeat:repeat-x; mask-repeat:repeat-x;
+  -webkit-mask-position:6px 3px, 6px calc(100% - 3px);
+  mask-position:6px 3px, 6px calc(100% - 3px);
+}
+/* THE LIGHT. Oversized by exactly one period on its trailing edge and
+   translated by exactly that period, so the loop lands on an identical pixel. */
+.arc-sign-chase {
+  position:absolute; top:0; bottom:0;
+  background-image:repeating-linear-gradient(90deg,
+    rgba(255,246,214,1) 0 13px, rgba(255,246,214,0) 13px 52px);
+}
+.arc-sign-back .arc-sign-chase {
+  left:0; right:-52px;
+  animation:arc-sign-chase-l 1.04s linear infinite;
+}
+.arc-sign-go .arc-sign-chase, .arc-sign-up .arc-sign-chase {
+  left:-52px; right:0;
+  animation:arc-sign-chase-r 1.04s linear infinite;
+}
+@keyframes arc-sign-chase-l { from { transform:translateX(0); } to { transform:translateX(-52px); } }
+@keyframes arc-sign-chase-r { from { transform:translateX(0); } to { transform:translateX(52px); } }
+
+/* The quiet sign: the glow and the arrow, no bulbs. For a secondary exit that
+   still has to be findable but must not out-shout the primary one beside it. */
+.arc-exitsign.arc-exitsign.arc-sign-quiet {
+  min-width:0; padding:8px 15px; font-size:10.5px; letter-spacing:.13em;
+  color:var(--ink-dim);
+  background:color-mix(in srgb, var(--panel), transparent 15%);
+  border-color:color-mix(in srgb, var(--lav), transparent 55%);
+  box-shadow:none;
+}
+.arc-exitsign.arc-exitsign.arc-sign-quiet:hover:not(:disabled) {
+  color:var(--ink); border-color:var(--lav);
+  box-shadow:0 0 16px color-mix(in srgb, var(--lav), transparent 72%);
+}
+.arc-exitsign.arc-exitsign.arc-sign-quiet .arc-sign-arrow { color:var(--lav); font-size:11px; }
+
+/* Reduced motion: the sign still reads as lit, it just stops running. The
+   global freeze at the bottom of this file would otherwise leave the chase
+   parked wherever .001s put it, which is a flicker, not a stop. */
+html.arc-reduced .arc-sign-chase,
+html.arc-reduced .arc-sign-arrow { animation:none; }
+html.arc-reduced .arc-sign-chase { opacity:.55; }
+@media (prefers-reduced-motion: reduce) {
+  .arc-sign-chase, .arc-sign-arrow { animation:none; }
+  .arc-sign-chase { opacity:.55; }
+}
+
+/* ---- the screens the bar lands on -------------------------------------- */
+/* SETTINGS. The page is ten classes long; its head Back scrolls away within a
+   screen or two, which is the whole complaint. The bar below never does. */
+.arc-settings-exit { margin-top:22px; }
+/* THE REPORT. The paper scrolls inside .arc-reportstage, so Done sticks to the
+   bottom of the stage instead of to the bottom of the paper. */
+.arc-reportstage .arc-exitbar {
+  margin:18px -36px -26px; padding-left:36px; padding-right:36px;
+  border-radius:0 0 6px 6px;
+  background:linear-gradient(180deg,
+    transparent, color-mix(in srgb, var(--panel), transparent 30%) 40%, var(--panel));
+}
+/* THE END CARD. Law VI said the exits were dim on purpose; that read as
+   "hidden" to real players, so they keep their small footprint and their fixed
+   row height but wear the quiet sign - and the row now sticks. The retake above
+   is untouched and still the pre-focused, pulsing one. */
+.arc-endcard-actions .arc-endcard-exits {
+  position:sticky; bottom:0; z-index:3;
+  padding:8px 0 2px;
+  background:linear-gradient(180deg, transparent, var(--navy) 45%);
+}
+.arc-endcard-exits .arc-endcard-small { opacity:1; }
+/* THE PAUSE / SUSPEND CARD. It centres its content, so a short window used to
+   push its buttons off the bottom edge with no way to reach them. */
+.arc-suspended { overflow-y:auto; }
+.arc-suspended .arc-classbar {
+  position:sticky; bottom:0; z-index:2;
+  padding:10px 0 4px;
+  background:linear-gradient(180deg, transparent, rgba(20,20,43,.94) 50%);
+}
+/* THE DOOR CARD on the campus. Short window, tall card, clipped ✕. */
+.campus-scrim { overflow:auto; padding:clamp(10px, 3vh, 32px) 0; }
+.campus-scrim .campus-classcard { margin:auto; }
+
+/* THE CLASS-RULES SHEETS the games draw. They are the shell's guests: a game
+   marks its dismiss row `arc-exitbar` and its dismiss button gets signed
+   through ctx.exits, and both are styled from here so ten classes cannot drift
+   apart. The bar sits inside the card's own scroller. */
+.arc-exitbar.arc-exitbar-card {
+  margin-top:10px; padding-bottom:11px;
+  background:linear-gradient(180deg, transparent, color-mix(in srgb, var(--navy), transparent 6%) 45%, var(--navy));
+}
+
+/* ============================ PUNCH CARDS ================================
+   PUNCHCARD.md 2 / 4 / 6. One class, one card, ten stamps; the tenth unlocks
+   the room for good. Four surfaces share this section, and they share it on
+   purpose - the card is ONE object and must not look like two:
+
+     .arc-pc          the card face itself (shell/punchcard.js). Sized by
+                      --pc-w, so the Records wall shrinks it with ONE variable
+                      instead of a second set of rules.
+     .arc-pcstage     the ceremony: the card, full screen, taking its stamps.
+     .arc-enroll      the once-ever flavour cards, over a class that has not
+                      started yet.
+     .arc-records     the Records Office (the wall + the docket).
+
+   EVERY GRAPHIC IS A TOKEN, AND SWAPPING ONE IS ONE EDIT. Each is a custom
+   property; the rules below draw the whole thing out of gradients underneath,
+   so a token still on none - or an image that 404s or has not decoded yet - is
+   a finished card rather than a hole in the page.
+
+     --pc-face-src      the cardstock face, ONE PER CLASS - overridden on
+                        .arc-pc[data-game] exactly the way the crest is
+                                              art/punchcard/face-KEY.png   LANDED
+     --pc-stamp-src     the ink stamp mark    art/punchcard/stamp.png      LANDED
+     --pc-crest-src     per class, one each   art/punchcard/crest-KEY.png  LANDED
+     --pc-ribbon-src    the UNLOCKED seal     art/punchcard/ribbon.png     open
+     --pc-desk-src      the office backdrop   art/punchcard/desk.jpg       open
+
+   THE 2026-08-23 BATCH WAS NINE FACES PLUS THE STAMP, AND THEN THE NINE CRESTS.
+   Misdirection is absent from both halves on purpose (the class was scrapped):
+   no face, no crest, both tokens none, and its card keeps the whole gradient
+   floor. With the crests in, the [data-art="on"] rule below is the ORIGINAL
+   "the crest IS the seal" rule again - the drawn gold wax seal that stood in
+   for it while the pngs were missing is gone, because a real crest carries its
+   own rim and must not be framed a second time.
+
+   NO TEXT MAY BE BAKED INTO THE STAMP, THE CREST OR THE SEAL (lexicon law):
+   the count, the flavour line and every label are rendered live over the top.
+   The face image is the one deliberate exception - the owner's locked design
+   bakes the class logo and the Arcademy logo INTO it, which is why the drawn
+   name band steps aside under [data-art="on"] instead of printing the name a
+   second time.
+
+   AND WHERE THE THREE LIVE LAYERS SIT IS THE ART'S BUSINESS, NOT THIS FILE'S.
+   shell/punchcard.js reads art/punchcard/faces.json and writes inline
+   percentages onto the ten slots, the crest and the text strip; the rules below
+   only dress them. A class missing from that file (or the file missing
+   entirely) falls back to DEFAULT_GEOM - a 2x5 grid lower-left, the crest bay
+   right of centre, the strip bottom-right - and to [data-art="off"], which is
+   where the ruled boxes, the name band and the drawn seal come back.
+
+   Nothing here writes a bare display: on a node the shell hides with the hidden
+   attribute - the ribbon and the unlock panel both ride the reset at the top of
+   this file (trap 27, used on purpose). */
+
+:root {
+  /* THE ART SLOTS. Swap none for a url() and the CSS floor steps aside.
+     LANDED 2026-08-23: the nine face images, the ink stamp, and the nine
+     crests. The ribbon and the desk backdrop have NOT shipped yet and stay
+     none, so the rules below still draw those two out of gradients. */
+  --pc-face-src:none;                        /* per class, see the map below */
+  --pc-crest-src:none;                       /* per class, see the map below */
+  --pc-stamp-src:url(art/punchcard/stamp.png);
+  --pc-ribbon-src:none;
+  --pc-desk-src:none;
+
+  /* WRITTEN PER CARD BY shell/punchcard.js, off art/punchcard/faces.json - they
+     are listed here only so a reader finds them where the other tokens live:
+       --pc-aspect      the face image's w/h  (default 1.6, the §7 template)
+       --pc-crest-rot   the crest bay's tilt  (default -8.79deg, owner-locked)
+     Slot / crest / text POSITIONS are inline percentages on the nodes
+     themselves; there is deliberately no CSS copy of a layout the art owns. */
+
+  /* derived from the palette tokens, so init.palette reskins the card free */
+  --pc-card:color-mix(in srgb, var(--ink) 12%, var(--panel));
+  --pc-card2:color-mix(in srgb, var(--ink) 4%, var(--navy));
+  --pc-edge:color-mix(in srgb, var(--gold), transparent 58%);
+  --pc-well:color-mix(in srgb, var(--flap-well), black 20%);
+  --pc-w:420px;
+}
+
+/* ---- ONE CREST AND ONE FACE PER CLASS -----------------------------------
+   The asset map, in the one place a reader will look for it. Ten classes, two
+   files each, one rule apiece - and the face overrides ride the SAME mechanism
+   the crest overrides always used, so there is one pattern here and not two.
+   Nine classes carry both files as of 2026-08-23; a class with no art keeps the
+   gradient floor the rules below draw. */
+.arc-pc[data-game="daily_trigger"] {
+  --pc-crest-src:url(art/punchcard/crest-daily_trigger.png);  /* the flip tile + the bell */
+  --pc-face-src:url(art/punchcard/face-daily_trigger.png);
+}
+.arc-pc[data-game="lost_and_found"] {
+  --pc-crest-src:url(art/punchcard/crest-lost_and_found.png);  /* the magnifier + the tag */
+  --pc-face-src:url(art/punchcard/face-lost_and_found.png);
+}
+.arc-pc[data-game="deja_vu"] {
+  --pc-crest-src:url(art/punchcard/crest-deja_vu.png);  /* the twin cards, one a ghost */
+  --pc-face-src:url(art/punchcard/face-deja_vu.png);
+}
+.arc-pc[data-game="impulse_control"] {
+  --pc-crest-src:url(art/punchcard/crest-impulse_control.png);  /* the halted palm in the tube */
+  --pc-face-src:url(art/punchcard/face-impulse_control.png);
+}
+.arc-pc[data-game="the_deep_end"] {
+  --pc-crest-src:url(art/punchcard/crest-the_deep_end.png);  /* the sinking tile on the wave */
+  --pc-face-src:url(art/punchcard/face-the_deep_end.png);
+}
+/* MISDIRECTION HAS NO ART ON PURPOSE - the class was scrapped (2026-08-23), so
+   it is absent from faces.json too and its card keeps the drawn floor. */
+.arc-pc[data-game="misdirection"] {
+  --pc-crest-src:none;  /* crest-misdirection.png - never drawn */
+  --pc-face-src:none;   /* face-misdirection.png  - never drawn */
+}
+.arc-pc[data-game="echo"] {
+  --pc-crest-src:url(art/punchcard/crest-echo.png);  /* the lit pad + three rings */
+  --pc-face-src:url(art/punchcard/face-echo.png);
+}
+.arc-pc[data-game="instant_recall"] {
+  --pc-crest-src:url(art/punchcard/crest-instant_recall.png);  /* the projector + the static */
+  --pc-face-src:url(art/punchcard/face-instant_recall.png);
+}
+.arc-pc[data-game="anomaly"] {
+  --pc-crest-src:url(art/punchcard/crest-anomaly.png);  /* the nine glyphs, one odd */
+  --pc-face-src:url(art/punchcard/face-anomaly.png);
+}
+.arc-pc[data-game="composure"] {
+  --pc-crest-src:url(art/punchcard/crest-composure.png);  /* the sliding tiles + the gap */
+  --pc-face-src:url(art/punchcard/face-composure.png);
+}
+
+/* ---- the card face ------------------------------------------------------
+   THE FACE IS THE ART AND THE SHELL OVERLAYS THREE THINGS (owner-locked): the
+   ten stamps, the crest, the live text strip. Every one of them is placed in
+   PERCENTAGES written by shell/punchcard.js off art/punchcard/faces.json, so
+   the same rules dress a 236px wall card and a full-screen ceremony card, and
+   moving a slot is an art edit rather than a CSS edit.
+
+   `data-art` is the fork, and it is honest: "on" means faces.json listed this
+   class, which means its face image shipped - so the grid squares, the name
+   band and the corner ribbon are all IN the picture and the shell must not
+   draw them twice. "off" is the gradient floor: ruled boxes, a drawn name
+   band, a drawn seal, a finished-looking card with zero art installed. */
+.arc-pc {
+  position:relative;
+  width:var(--pc-w); max-width:92vw;
+  color:var(--ink);
+}
+.arc-pc-small { --pc-w:236px; }
+.arc-pc-face {
+  position:relative;
+  width:100%;
+  aspect-ratio:var(--pc-aspect, 1.6);
+  overflow:hidden;
+  /* The image, when it lands, sits OVER the drawn floor - so a 404 or a slow
+     decode leaves the gradient card, not an empty rectangle. */
+  background-image:var(--pc-face-src),
+    repeating-linear-gradient(92deg,
+      color-mix(in srgb, var(--pc-card), black 3%) 0 3px,
+      transparent 3px 7px),
+    linear-gradient(166deg, var(--pc-card), var(--pc-card2));
+  background-size:cover, auto, auto;
+  background-position:center;
+  background-repeat:no-repeat, repeat, no-repeat;
+  border:1px solid var(--pc-edge);
+  border-radius:10px;
+  box-shadow:0 18px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.arc-pc[data-state="empty"] .arc-pc-face { opacity:.52; filter:saturate(.45); }
+.arc-pc[data-state="complete"] .arc-pc-face {
+  border-color:var(--gold);
+  box-shadow:0 18px 44px rgba(0,0,0,.55),
+    0 0 26px color-mix(in srgb, var(--gold), transparent 62%),
+    inset 0 1px 0 rgba(255,255,255,.07);
+}
+
+/* ---- 2. THE CREST: the reward, placed by the art ------------------------
+   Hidden until the tenth stamp lands. x/y are its CENTRE and `scale` its width
+   as a fraction of the face, so the translate(-50%,-50%) below is what makes
+   the art's numbers mean what the art tool meant by them. */
+.arc-pc-crest {
+  position:absolute;
+  aspect-ratio:1;
+  transform:translate(-50%, -50%) rotate(var(--pc-crest-rot, -8.79deg));
+  transform-origin:50% 50%;
+  background-image:var(--pc-crest-src),
+    radial-gradient(circle at 34% 30%,
+      color-mix(in srgb, var(--lav), transparent 55%),
+      transparent 62%),
+    linear-gradient(150deg, var(--pc-well), color-mix(in srgb, var(--pc-well), var(--lav) 12%));
+  background-size:contain, auto, auto;
+  background-repeat:no-repeat;
+  background-position:center;
+  border-radius:8px;
+  border:1px solid color-mix(in srgb, var(--gold), transparent 58%);
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.55),
+    0 0 20px color-mix(in srgb, var(--gold), transparent 66%);
+  pointer-events:none;
+}
+/* THE EMPTY BAY - the fallback's only. It occupies the crest's exact box so a
+   card with no seal yet does not read as lopsided, and it goes away the moment
+   the crest lands. A real face image has the bay printed on it, so [data-art=
+   "on"] never draws one. */
+.arc-pc-bay {
+  position:absolute;
+  aspect-ratio:1;
+  transform:translate(-50%, -50%) rotate(var(--pc-crest-rot, -8.79deg));
+  transform-origin:50% 50%;
+  border-radius:8px;
+  border:1px dashed color-mix(in srgb, var(--slate), transparent 52%);
+  background:linear-gradient(150deg,
+    color-mix(in srgb, var(--pc-well), transparent 42%),
+    color-mix(in srgb, var(--pc-well), transparent 78%));
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.42);
+  opacity:.75;
+  pointer-events:none;
+}
+.arc-pc[data-art="on"] .arc-pc-bay { display:none; }
+
+/* THE CREST IS THE SEAL (restored 2026-08-23, with the crest pngs).
+   On the fallback path the crest needs a WELL - a rim, a fill and an inner ring -
+   because there is no image and the bay would otherwise read as nothing. On the
+   art path there is an image, and it is a badge that already carries its own
+   thick gold border, its own navy depth edge and its own transparent margin. So
+   every drawn frame comes OFF here: a second rim around a crest that has one
+   reads as a box someone forgot to remove, and the dark `--pc-well` under a
+   painted face read as a missing image (measured on all nine faces, which is
+   what the parked gold-wax-seal stand-in was for while the pngs were open).
+   What is left is the picture plus one drop shadow, so the seal sits ON the
+   card instead of in a hole cut into it - and `drop-shadow` follows the badge's
+   own silhouette, which `box-shadow` on the square box could never do.
+   A class on the art path with NO crest png (none today) would land on
+   background-image:none here and simply show nothing until its tenth stamp
+   reveals an empty box - so a face and a crest ship together, per class. */
+.arc-pc[data-art="on"] .arc-pc-crest {
+  background-image:var(--pc-crest-src);
+  border:0; border-radius:0; box-shadow:none;
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));
+}
+
+/* THE REVEAL. Same beat and the same easing as the ribbon's seal below, so the
+   two land as one gesture rather than as two animations that happen to agree. */
+.arc-pc.is-unlocking .arc-pc-crest {
+  animation:arc-pc-crest-in .62s cubic-bezier(.2,1.35,.35,1) both;
+}
+@keyframes arc-pc-crest-in {
+  0%   { opacity:0; transform:translate(-50%,-50%) rotate(calc(var(--pc-crest-rot, -8.79deg) - 26deg)) scale(2.6); filter:brightness(2.4); }
+  60%  { opacity:1; transform:translate(-50%,-50%) rotate(var(--pc-crest-rot, -8.79deg)) scale(.9); }
+  100% { opacity:1; transform:translate(-50%,-50%) rotate(var(--pc-crest-rot, -8.79deg)) scale(1); filter:none; }
+}
+
+/* ---- the drawn name band: THE FALLBACK'S ONLY, the art bakes the logo ---- */
+.arc-pc-band {
+  position:absolute; left:5%; top:6%; right:32%;
+  display:flex; flex-direction:column; align-items:flex-start; gap:3px;
+  min-width:0;
+}
+.arc-pc[data-art="on"] .arc-pc-band { display:none; }
+.arc-pc-name {
+  font-family:var(--disp); font-size:15px; letter-spacing:.14em;
+  text-transform:uppercase; line-height:1.15;
+  overflow-wrap:anywhere;
+}
+.arc-pc-small .arc-pc-name { font-size:11.5px; letter-spacing:.1em; }
+.arc-pc-kind {
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.24em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+.arc-pc-small .arc-pc-kind { font-size:8px; letter-spacing:.18em; }
+
+/* ---- 1. THE TEN SLOTS - two rows of five, placed by the art -------------
+   The wrapper is a POSITIONING PLANE, not a grid: every slot carries its own
+   left/top/width/height in percentages, so nothing here has to know which row
+   a slot landed in and a hand-arranged layout survives verbatim. */
+.arc-pc-holes { position:absolute; inset:0; pointer-events:none; }
+.arc-pc-hole {
+  position:absolute;
+  display:block;
+  border-radius:4px;
+}
+/* THE DRAWN GRID - fallback only. With a face image the squares are printed in
+   the picture and a second box over them reads as a rendering bug. */
+.arc-pc[data-art="off"] .arc-pc-hole {
+  background:radial-gradient(circle at 50% 42%,
+    color-mix(in srgb, var(--pc-card), black 12%),
+    color-mix(in srgb, var(--pc-card), black 3%));
+  border:1px dashed color-mix(in srgb, var(--slate), transparent 46%);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.32);
+}
+/* A STAMPED SLOT WEARS INK, it does not read through the card: the mark sits ON
+   the stock. The art is outlined in heavy black on purpose so it stays legible
+   whatever colour the class's cardstock is; the gradient under it is the floor
+   for a slot whose art has not decoded yet. */
+.arc-pc-hole.is-punched {
+  background-image:var(--pc-stamp-src),
+    radial-gradient(circle at 50% 46%,
+      color-mix(in srgb, var(--pink), transparent 24%),
+      color-mix(in srgb, var(--pink-deep), transparent 56%) 62%,
+      transparent 74%);
+  background-size:contain, auto;
+  background-repeat:no-repeat;
+  background-position:center;
+}
+.arc-pc[data-art="off"] .arc-pc-hole.is-punched {
+  border:1px solid color-mix(in srgb, var(--pink), transparent 64%);
+  box-shadow:none;
+}
+/* THE THUD, SEEN. One pop as the stamp lands - the sound is shell/audio.js's
+   stamp cue with a pitch, and the two fire on the same beat. */
+.arc-pc-hole.is-fresh { animation:arc-pc-punch .34s cubic-bezier(.2,1.5,.4,1) both; }
+@keyframes arc-pc-punch {
+  0%   { transform:scale(2.1); filter:brightness(2.2); }
+  55%  { transform:scale(.86); }
+  100% { transform:none; filter:none; }
+}
+
+/* ---- 3. THE LIVE TEXT ZONE ----------------------------------------------
+   The free strip under the crest bay. In progress: the count and one rotating
+   line (punchcard_phrase_1..8, picked deterministically off the class key and
+   the count, so the wall never reshuffles itself). Complete: MASTERED and the
+   day the host closed the card. Both states are LIVE lexicon text - nothing
+   here is ever baked into a face image. */
+.arc-pc-text {
+  position:absolute;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:2px;
+  text-align:center;
+  overflow:hidden;
+  pointer-events:none;
+}
+.arc-pc-count {
+  font-family:var(--mono); font-size:17px; letter-spacing:.16em;
+  line-height:1.1;
+  color:var(--ink);
+  text-shadow:0 1px 3px rgba(0,0,0,.6);
+}
+.arc-pc-phrase {
+  font-size:10px; line-height:1.35;
+  color:var(--ink-dim);
+  text-shadow:0 1px 3px rgba(0,0,0,.65);
+  overflow:hidden;
+}
+/* A 236px wall card cannot carry a sentence in an 85px strip - the count is the
+   part that has to survive the shrink, and the wall prints its own line under
+   each card anyway (.arc-records-slotline). */
+.arc-pc-small .arc-pc-count { font-size:12px; letter-spacing:.1em; }
+.arc-pc-small .arc-pc-phrase { display:none; }
+.arc-pc-mastered {
+  font-family:var(--disp); font-size:12px; letter-spacing:.22em;
+  text-transform:uppercase; line-height:1.1;
+  color:var(--gold);
+  text-shadow:0 1px 4px rgba(0,0,0,.7);
+}
+.arc-pc-small .arc-pc-mastered { font-size:9.5px; letter-spacing:.16em; }
+.arc-pc-date {
+  font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+  color:var(--ink-dim);
+  text-shadow:0 1px 3px rgba(0,0,0,.65);
+}
+.arc-pc-small .arc-pc-date { font-size:8.5px; }
+.arc-pc.is-unlocking .arc-pc-mastered,
+.arc-pc.is-unlocking .arc-pc-date {
+  animation:arc-pc-mastered-in .5s ease-out both;
+}
+@keyframes arc-pc-mastered-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+/* the seal a full card wears. The FALLBACK's completion tell - with real art
+   the crest is the seal and a second badge over the picture is clutter. */
+.arc-pc-ribbon {
+  position:absolute; top:-9px; right:-9px;
+  display:flex; align-items:center;
+  padding:5px 13px;
+  font-family:var(--disp); font-size:10px; letter-spacing:.22em;
+  text-transform:uppercase;
+  color:color-mix(in srgb, var(--ground), black 30%);
+  background-image:var(--pc-ribbon-src),
+    linear-gradient(160deg, var(--gold), color-mix(in srgb, var(--gold), var(--pink) 26%));
+  background-size:cover, auto;
+  border-radius:999px;
+  box-shadow:0 6px 18px color-mix(in srgb, var(--gold), transparent 56%);
+  transform:rotate(6deg);
+}
+.arc-pc[data-art="on"] .arc-pc-ribbon { display:none; }
+.arc-pc.is-unlocking .arc-pc-ribbon { animation:arc-pc-seal .5s cubic-bezier(.2,1.4,.4,1) both; }
+@keyframes arc-pc-seal {
+  from { transform:rotate(22deg) scale(2.4); opacity:0; }
+  to   { transform:rotate(6deg) scale(1); opacity:1; }
+}
+
+/* ---- the ceremony ------------------------------------------------------- */
+/* It rides OVER the report card and the one-more card, which are both still
+   underneath it: the ceremony is the last thing mounted and the first thing
+   dismissed, so nothing it covers has to be rebuilt when it goes. */
+.arc-pcstage {
+  position:fixed; inset:0; z-index:42;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(14px, 4vh, 42px); overflow:auto;
+  background:radial-gradient(ellipse at 50% 34%,
+      color-mix(in srgb, var(--ground), transparent 6%),
+      color-mix(in srgb, black, transparent 6%) 76%);
+  animation:arc-pcstage-in .2s ease-out both;
+}
+@keyframes arc-pcstage-in { from { opacity:0; } to { opacity:1; } }
+.arc-pcstage-card {
+  width:min(520px, 94vw); margin:auto;
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  text-align:center;
+  padding:26px 24px 8px;
+  background:linear-gradient(168deg, var(--panel), var(--navy) 76%);
+  border:var(--hairline); border-radius:var(--radius);
+  box-shadow:0 34px 90px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.06);
+  animation:arc-pcstage-rise .3s cubic-bezier(.2,1.2,.4,1) both;
+}
+@keyframes arc-pcstage-rise {
+  from { transform:translateY(20px) scale(.96); opacity:0; }
+  to   { transform:none; opacity:1; }
+}
+.arc-pcstage-card .arc-h2 { margin:0; font-size:19px; letter-spacing:.13em; color:var(--gold); }
+.arc-pc-line {
+  margin:0; min-height:2.6em; max-width:40ch;
+  font-size:13px; color:var(--ink-dim);
+}
+.arc-pc-unlock {
+  display:flex; flex-direction:column; gap:6px;
+  width:100%; padding:14px 16px;
+  border:1px solid color-mix(in srgb, var(--gold), transparent 52%);
+  border-radius:10px;
+  background:linear-gradient(170deg,
+    color-mix(in srgb, var(--gold), transparent 90%),
+    transparent);
+  animation:arc-pc-unlockin .34s ease-out both;
+}
+@keyframes arc-pc-unlockin { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+.arc-pc-unlock-title {
+  margin:0; font-family:var(--disp); font-size:13px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--gold);
+}
+.arc-pc-unlock-line { margin:0; font-size:12.5px; color:var(--ink-dim); }
+
+/* ---- the enrollment intro ----------------------------------------------- */
+/* Mounted on the class ROOT, not over the whole stage, so the proctor strip and
+   its campus pill stay live - the way out never moves, not even here. */
+.arc-enroll {
+  position:absolute; inset:0; z-index:28;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(14px, 4vh, 40px); overflow:auto;
+  background:color-mix(in srgb, var(--ground), transparent 8%);
+  backdrop-filter:blur(6px);
+}
+.arc-enroll-card {
+  width:min(500px, 92vw); margin:auto;
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+  text-align:center;
+  padding:26px 26px 8px;
+  background:linear-gradient(168deg, var(--panel), var(--navy) 78%);
+  border:var(--hairline); border-radius:var(--radius);
+  box-shadow:0 30px 80px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.arc-enroll-card.turn { animation:arc-enroll-turn .28s cubic-bezier(.2,1.1,.4,1) both; }
+@keyframes arc-enroll-turn {
+  from { transform:translateY(10px); opacity:.2; }
+  to   { transform:none; opacity:1; }
+}
+.arc-enroll-card .arc-h2 { margin:0; font-size:20px; letter-spacing:.13em; color:var(--gold); }
+.arc-enroll-body { display:flex; flex-direction:column; gap:10px; max-width:44ch; }
+.arc-enroll-line { margin:0; font-size:14px; line-height:1.55; color:var(--ink); }
+.arc-enroll-dots { display:flex; gap:7px; }
+.arc-enroll-dot {
+  width:7px; height:7px; border-radius:50%;
+  background:color-mix(in srgb, var(--slate), transparent 40%);
+  transition:background .2s, transform .2s;
+}
+.arc-enroll-dot.on { background:var(--gold); transform:scale(1.25); }
+.arc-enroll-note {
+  margin:0; max-width:40ch;
+  font-size:11.5px; color:var(--ink-faint);
+  border-top:1px dashed color-mix(in srgb, var(--gold), transparent 76%);
+  padding-top:10px;
+}
+
+/* ---- the Records Office ------------------------------------------------- */
+/* IT IS ITS OWN SCROLLER, LIKE THE REPORT STAGE, AND IT HAS TO BE.
+   The shell marks <html> with `arc-report-on` for this screen too, and that rule
+   sets `body { overflow:hidden }` - a plain in-flow block would simply be
+   CLIPPED at the fold with nothing on the page able to reach the rest of the
+   wall or the exit bar under it. Fixed + overflow:auto is the same shape
+   `.arc-reportstage` uses, and it is what `position:sticky` on the exit bar
+   binds to (trap 43). */
+.arc-records {
+  position:fixed; inset:0; z-index:10;
+  padding:clamp(16px, 3vh, 34px) clamp(12px, 3vw, 30px) 0;
+  overflow:auto;
+  background-image:var(--pc-desk-src),
+    radial-gradient(ellipse at 50% -10%,
+      color-mix(in srgb, var(--navy), var(--lav) 6%), transparent 62%);
+  background-size:cover, auto;
+  background-position:center;
+}
+.arc-records-desk {
+  width:min(1000px, 96vw); margin:0 auto;
+  display:flex; flex-direction:column; gap:12px;
+}
+.arc-records-tally { flex-wrap:wrap; }
+.arc-records-wall {
+  display:grid; gap:14px;
+  grid-template-columns:repeat(auto-fill, minmax(248px, 1fr));
+  padding:6px 0 4px;
+}
+.arc-records-slot {
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  padding:12px 10px 10px;
+  background:color-mix(in srgb, var(--navy), transparent 32%);
+  border:var(--hairline); border-radius:var(--radius);
+  color:var(--ink-dim);
+  cursor:pointer;
+  transition:border-color .18s, box-shadow .18s, transform .18s;
+}
+.arc-records-slot:hover {
+  border-color:var(--lav);
+  box-shadow:0 0 22px color-mix(in srgb, var(--lav), transparent 76%);
+  transform:translateY(-2px);
+}
+.arc-records-slot:focus-visible { outline:2px solid var(--lav); outline-offset:3px; }
+.arc-records-slotline {
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ink-faint); text-align:center;
+}
+.arc-records-docket { min-height:120px; }
+.arc-records-docket-card {
+  display:flex; flex-direction:column; gap:9px;
+  padding:16px 18px;
+  background:linear-gradient(168deg, var(--panel), var(--navy) 80%);
+  border:var(--hairline); border-radius:var(--radius);
+}
+.arc-records-rows { display:flex; flex-direction:column; gap:5px; }
+.arc-records-row {
+  display:flex; justify-content:space-between; gap:14px;
+  padding:4px 0;
+  border-bottom:1px dashed color-mix(in srgb, var(--line), transparent 30%);
+}
+.arc-records-rowlabel {
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+.arc-records-rowvalue { font-size:13px; color:var(--ink); }
+.arc-records-sub {
+  margin:6px 0 0;
+  font-family:var(--disp); font-size:11px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--gold);
+}
+.arc-records-stamps { display:flex; flex-wrap:wrap; gap:7px; }
+.arc-records-stamp {
+  padding:4px 9px;
+  font-family:var(--mono); font-size:11px; letter-spacing:.06em;
+  color:var(--ink);
+  background-image:var(--pc-stamp-src),
+    linear-gradient(160deg,
+      color-mix(in srgb, var(--pink), transparent 74%),
+      color-mix(in srgb, var(--lav), transparent 82%));
+  background-size:cover, auto;
+  border:1px solid color-mix(in srgb, var(--pink), transparent 60%);
+  border-radius:6px;
+  transform:rotate(-1.5deg);
+}
+.arc-records-stamp:nth-child(2n) { transform:rotate(1.8deg); }
+.arc-records-empty { margin:0; font-size:13px; color:var(--ink-faint); }
+.arc-records-hint { margin:0; text-align:center; }
+
+/* An unlocked room's door card wears its seal where the grade stamp goes. */
+/* An unlocked room's door card wears its seal where the grade stamp goes - but a
+   WORD does not fit the round one-letter grade stamp (it clipped in the first
+   capture). Same ink, a wider seal: the doubled class buys the specificity over
+   the .campus-classcard .cc-stamp rule with no !important, the same trick the
+   exit sign uses (trap 43). */
+.cc-stamp.cc-stamp-unlocked.cc-stamp-unlocked {
+  width:auto; height:auto; min-width:0;
+  padding:5px 12px;
+  border-radius:999px;
+  border-color:var(--gold);
+  color:var(--gold);
+  font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+  box-shadow:0 0 18px color-mix(in srgb, var(--gold), transparent 76%);
+}
+
+@media (max-width:560px) {
+  /* The slots are placed in PERCENTAGES of the face now, so a narrow card
+     re-lays itself out for free - only the card's own width and the wall's
+     column count have anything left to say. */
+  .arc-pc { --pc-w:100%; }
+  .arc-pc-phrase { font-size:9px; }
+  .arc-records-wall { grid-template-columns:1fr; }
+}
+
 /* ============================ A11Y / MOTION ============================== */
 .arc-sr {
   position:absolute; width:1px; height:1px; padding:0; margin:-1px;

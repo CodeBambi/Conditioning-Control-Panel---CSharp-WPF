@@ -41,6 +41,10 @@ import { createSettingsPage, boardSizeKey, SETTING_KEYS, isGlobalSettingKey } fr
 import { createCeremonies } from './ceremonies.js';
 import { createPeek } from './peek.js';
 import { createKeybinds } from './keybinds.js';
+import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
+import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
+import { createRecords } from './records.js';
+import { loadFaceGeometry } from './punchcard.js';
 
 const FLAVOR_XP_CAP = 15;          // BUILD-CONTRACT §8 - the page clamps too
 const MEATY_MAX_SEC = 300;
@@ -369,7 +373,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /** gameKey -> share payload handed to the one share pipeline. */
   const shares = Object.create(null);
 
-  let screen = 'board';            // 'board' | 'class' | 'report' | 'settings'
+  let screen = 'board';            // 'board' | 'class' | 'report' | 'settings' | 'records'
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
   let extrasBox = null;            // replay/report bar + yesterday strip container
@@ -378,6 +382,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /** The Deck V one-more card. It sits OVER the report card, never instead of
    *  it (see showEndCard) - `{root, destroy}` while live, null otherwise. */
   let endCard = null;
+  /** The Records Office screen (PUNCHCARD §6) - built lazily, kept for reuse. */
+  let recordsPage = null;
+  /* THE PUNCH-CARD CEREMONY. `punchStage` is the live overlay; `punchArm` is
+   * what the shell is WAITING for while the host answers `class-ended`.
+   * Both are null the rest of the time. */
+  let punchStage = null;
+  let punchArm = null;             // {gameKey, mode:'daily'|'enrollment', timer}
   let active = null;               // the running class (see startClass)
   let suspendedGlobally = false;
   let destroyed = false;
@@ -397,6 +408,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     + (timetable.relaxed.length ? ' (relaxed: ' + timetable.relaxed.join(',') + ')' : ''));
 
   /* ---------------------- engine + provider ----------------------------- */
+  /* THE CARD FACES. Optional, guarded, once: art/punchcard/faces.json says
+   * where the stamps, the crest and the live text sit on each class's face
+   * image. Missing (it ships with the art batch) leaves every card on the
+   * gradient floor, which is a finished card - so this is awaited for ordering
+   * only and can never fail the boot. */
+  await loadFaceGeometry(say);
+
   const createEngine = await loadOptional('../engine/index.js', 'createEngine', NULL_ENGINE_FACTORY, say);
   const createAssets = await loadOptional('../provider/index.js', 'createAssets', NULL_ASSETS_FACTORY, say);
 
@@ -469,7 +487,46 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     } catch (e) { return null; }
   }
 
+  /* ---------------------- punch cards (PUNCHCARD §2.3) ------------------
+   * The cards are HOST-owned and read-only here (core/store.js refuses a page
+   * write). Two things the shell derives from them and nothing else does:
+   * which rooms are permanently unlocked, and whether a class still owes its
+   * once-ever enrollment. Both are pure reads off `store.punchCard`, so a card
+   * restored from the server mirror moves them without any other bookkeeping.
+   * -------------------------------------------------------------------- */
+
+  /** gameKey -> true for every card that reached its tenth hole. */
+  function unlockedMap() {
+    const out = Object.create(null);
+    for (const entry of games.list) {
+      try { if (store.punchCard(entry.key).complete) out[entry.key] = true; }
+      catch (e) { /* a card that cannot be read is simply not an unlock */ }
+    }
+    return out;
+  }
+
+  /** Is this room open tonight regardless of the board? (a full card, §2.3) */
+  function isUnlocked(gameKey) {
+    try { return !!store.punchCard(gameKey).complete; } catch (e) { return false; }
+  }
+
+  /**
+   * Does this class still owe its enrollment? DERIVED from `enrolledAt` and
+   * nothing else (§2.2) - there is no separate seen-flag, so a reinstall that
+   * restores cards suppresses the intro for free and a card the host has not
+   * enrolled yet always gets it, once.
+   */
+  function needsEnrollment(gameKey) {
+    try { return !store.punchCard(gameKey).enrolled; } catch (e) { return false; }
+  }
+
   function clearScreen() {
+    // The card ceremony is deliberately NOT dropped here. It rides ON the report
+    // card, and `onPayout` re-renders that report on the same screen - a wipe
+    // that took the ceremony with it would delete the card the instant the host
+    // paid out, which is the exact moment it is meant to be up. It is dropped
+    // beside dismissEndCard() at every real screen change instead, and
+    // showReport() re-seats it after a repaint (same treatment, same reason).
     // The campus owns a 1s bell interval; a screen wipe must not orphan it.
     if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
     extrasBox = null;
@@ -573,6 +630,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       records,
       suspended: suspendedGlobally,
       devPass,
+      // A FULL CARD IS A PERMANENT DOOR (PUNCHCARD §2.3). It sits between the
+      // board and the dev pass in the CTA order, and it is the only one of the
+      // three a player can ever earn.
+      unlocked: unlockedMap(),
       // Free Swim is a property of the GAME, not of tonight's board: a room the
       // timetable never dealt can still be swum, so the map covers every
       // registered game and campusState keeps the ones that have a room.
@@ -649,9 +710,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   function showBoard(opts) {
     const silent = !!(opts && opts.silent);
-    // Leaving the report drops the one-more card with it (a card that outlived
-    // its screen would be a second, invisible Esc rung).
+    // Leaving the report drops the one-more card AND the punch card with it (an
+    // overlay that outlived its screen would be a second, invisible Esc rung).
     dismissEndCard();
+    dismissPunchStage();
 
     // FAST REPAINT: a live campus is patched, never rebuilt - tearing the stage
     // down on every meta echo would restart every ambient animation mid-frame.
@@ -715,13 +777,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
             // THE DEV DOOR: a room off tonight's board still opens when the host
             // came in through `--arcademy`. Graded + timed like a dealt class,
             // built from the registry descriptor (freeSwimClass's parachute).
+            // THE EARNED DOOR, then the dev one. A completed punch card opens
+            // its room every night - through the SAME path the dev pass uses, so
+            // an unlocked run is an ordinary graded class end to end (grades in
+            // `days`, XP once per UTC day, attendance idempotent). Nothing
+            // host-side gates which room may start; this is the whole feature.
+            if (isUnlocked(gameKey)) {
+              say('punch card unlock: ' + gameKey + ' is off the board - graded run anyway');
+              startClass(freeSwimClass(gameKey));
+              return;
+            }
             if (devPass) {
               say('dev pass: ' + gameKey + ' is off the board - graded run anyway');
               startClass(freeSwimClass(gameKey));
             }
           },
           freeSwim: (gameKey) => startFreeSwim(gameKey),
-          records: () => showReport(),
+          records: () => showRecords(),
           registrar: () => showSettings(),
         },
         log: say,
@@ -761,6 +833,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function showSettings() {
     if (active) pauseClass(true);
     dismissEndCard();
+    dismissPunchStage();
     screen = 'settings';
     clearScreen();
     renderTopbar();
@@ -796,7 +869,116 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // the same screen; without this the one-more card would vanish the instant
     // the host paid out, which is the exact moment it is meant to be up.
     if (endCard && endCard.root) dom.screen.appendChild(endCard.root);
+    // ...and so does the punch card, for exactly the same reason. It is mounted
+    // last so it stays the topmost thing on the screen it was earned on.
+    if (punchStage && punchStage.root) dom.screen.appendChild(punchStage.root);
     setStage('arc-report-on');
+  }
+
+  /* ============================ SCREEN: RECORDS =========================
+   * PUNCHCARD §6. The campus's Records door used to open the day's report card
+   * and nothing else; it opens the office now, and the report card is one press
+   * further in - still the ONE share pipeline (trap 13), still unchanged.
+   * ==================================================================== */
+  function showRecords() {
+    screen = 'records';
+    dismissEndCard();
+    dismissPunchStage();
+    clearScreen();
+    renderTopbar();
+    if (!recordsPage) {
+      recordsPage = createRecords({
+        gameName,
+        // The card reader, not the blob: store.punchCard normalizes, so the
+        // screen never has to guess what a half-written card means.
+        punchCard: (key) => store.punchCard(key),
+        log: say,
+      });
+    }
+    recordsPage.render({
+      // Registry order, every registered class - including the ones never
+      // played. An unattended card on the wall IS the advertisement (§6).
+      gameKeys: games.list.map((e) => e.key),
+      onBack: () => showBoard(),
+      onReport: () => showReport(),
+      reportLabel: t('report_card', 'Report Card'),
+    });
+    if (dom && dom.screen) dom.screen.appendChild(recordsPage.root);
+    setStage('arc-report-on');
+  }
+
+  /* ============================ THE PUNCH CARD ==========================
+   * PUNCHCARD §4. The ceremony is the ONLY place the page draws a hole, and it
+   * draws the one the HOST minted: `punchcard-result` carries the post-mint
+   * card and `justUnlocked`, so nothing here counts anything.
+   *
+   * TWO PATHS, ONE OVERLAY:
+   *   daily       arm on `class-ended`, wait for the frame, punch one hole.
+   *               A no-op mint (same-day retake, full card) shows nothing at
+   *               all - a ceremony for a hole that was not punched is a lie.
+   *   enrollment  the first graded finish of a class. The shell KNOWS it is
+   *               owed (the card has no `enrolledAt`), so it suppresses that
+   *               run's daily beat, runs the two-punch ceremony on its own
+   *               clock, and posts `enrollment-done` when the punches land.
+   *               The host's answer supersedes the daily stamp it already made,
+   *               which is what keeps day one at exactly two either way round.
+   * ==================================================================== */
+
+  /** Drop the ceremony overlay. Idempotent; every screen change funnels here. */
+  function dismissPunchStage() {
+    if (!punchStage) return false;
+    const st = punchStage;
+    punchStage = null;
+    try { st.destroy(); } catch (e) { /* noop */ }
+    return true;
+  }
+
+  /** Stop waiting for a `punchcard-result`. */
+  function disarmPunch() {
+    if (!punchArm) return;
+    if (punchArm.timer) { try { clearTimeout(punchArm.timer); } catch (e) { /* noop */ } }
+    punchArm = null;
+  }
+
+  /**
+   * Arm the ceremony for a class that has just ended.
+   * @param {string} gameKey
+   * @param {'daily'|'enrollment'} mode
+   */
+  function armPunch(gameKey, mode) {
+    disarmPunch();
+    punchArm = { gameKey, mode, timer: 0 };
+    // A HOST THAT NEVER ANSWERS IS NOT AN ERROR. An older build (or a frame
+    // dropped on a slow save) simply means no card beat this run; the report
+    // card behind it is untouched. Stop listening rather than waiting forever.
+    punchArm.timer = setTimeout(() => {
+      if (punchArm && punchArm.gameKey === gameKey) {
+        say('punch card: no punchcard-result for ' + gameKey + ' - no ceremony this run');
+        disarmPunch();
+      }
+    }, 4000);
+  }
+
+  /** Mount the card, full screen, over the report it was earned on. */
+  function runPunchCeremony(o) {
+    dismissPunchStage();
+    if (!dom || !dom.screen) return null;
+    const spec = o || {};
+    punchStage = createPunchCeremony({
+      mount: dom.screen,
+      gameKey: spec.gameKey,
+      name: gameName(spec.gameKey),
+      card: spec.card,
+      reason: spec.reason,
+      from: spec.from,
+      to: spec.to,
+      justUnlocked: !!spec.justUnlocked,
+      reducedMotion,
+      onPunched: spec.onPunched,
+      onDone: () => { punchStage = null; },
+      log: say,
+    });
+    return punchStage;
   }
 
   /* ============================ DECK V: THE RAKE ========================
@@ -973,17 +1155,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     again.addEventListener('click', () => doRetake());
     actions.appendChild(again);
 
+    /* THE EXITS. They keep their small footprint and their fixed row height -
+     * the retake above is still the lit, pre-focused, pulsing one - but they no
+     * longer hide: each wears the QUIET sign (an arrow and a glow, no bulbs, so
+     * it cannot out-shout the retake) and the row is sticky, so a tall card on
+     * a short window can never park them below the fold. Law VI says exits are
+     * sacred; dim was a step too far and real players lost them. */
     const exits = el('div', 'arc-endcard-exits');
-    // The report card is UNDER this overlay, so the way to it is one dim press
-    // - the card may sit on top of the report, never in place of it.
+    // The report card is UNDER this overlay, so the way to it is one press -
+    // the card may sit on top of the report, never in place of it.
     const toReport = el('button', 'btn ghost arc-endcard-small', t('report_card', 'Report Card'));
     toReport.type = 'button';
     toReport.addEventListener('click', () => dismissEndCard());
+    signExit(toReport, { dir: 'back', quiet: true });
     exits.appendChild(toReport);
 
     const out = el('button', 'btn ghost arc-endcard-small', t('rake_back_to_campus', 'Back to campus'));
     out.type = 'button';
     out.addEventListener('click', () => { dismissEndCard(); showBoard(); });
+    signExit(out, { dir: 'back', quiet: true });
     exits.appendChild(out);
     actions.appendChild(exits);
     card.appendChild(actions);
@@ -1070,10 +1260,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     panel.appendChild(root);
 
     const bar = el('div', 'arc-proctor');
-    const back = el('button', 'btn ghost', t('leave_class', 'Leave class'));
-    back.type = 'button';
-    back.addEventListener('click', () => showBoard());
-    bar.appendChild(back);
+    /* THE CAMPUS PILL (shell/exits.js). The way home, in the same corner of
+     * every one of the ten classes, for as long as the class is up. It replaces
+     * the old ghost "Leave class" button in the same slot on purpose: the strip
+     * already reserves the top ~56px of the stage and every game already draws
+     * clear of it, so the pill collides with nothing and costs no game a pixel.
+     * CALM by design (no bulbs, no pulse - see the sign, which is for terminal
+     * screens), and it asks before it takes anything: a class in progress is
+     * work, and one stray click must not be able to bin it. */
+    const pill = campusPill({
+      label: t('arcademy', 'The Arcademy'),
+      onActivate: () => askLeaveClass(),
+    });
+    bar.appendChild(pill);
     bar.appendChild(el('span', 'arc-title', gameName(cls.gameKey)));
     bar.appendChild(el('span', 'chip year', tierLabel(gradeTier)));
     bar.appendChild(el('span', 'chip', t('family_' + cls.family, cls.family)));
@@ -1087,7 +1286,83 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     bar.appendChild(clock);
     panel.appendChild(bar);
 
-    return { panel, root, clock, timebar, timefill };
+    return { panel, root, clock, timebar, timefill, pill };
+  }
+
+  /* ---------------------- the leave-class confirm -----------------------
+   * ONE question, asked from ONE place. The pill is the only caller today;
+   * Esc's ladder is deliberately NOT routed through here (trap 29's corollary
+   * keeps that walk byte-for-byte what it was), and neither are the pause card
+   * or the suspend overlay, which already show what leaving costs.
+   * -------------------------------------------------------------------- */
+
+  /** Drop the confirm if it is up and put the class back the way it was.
+   *  Idempotent; every path out funnels here (cancel, Esc, a host suspend,
+   *  teardown), which is why the undo lives ON the dialog rather than in four
+   *  copies at the call sites. */
+  function dismissConfirm() {
+    if (!active || !active.confirmEl) return false;
+    try { active.confirmEl.close(); } catch (e) { /* noop */ }
+    active.confirmEl = null;
+    const restore = active.confirmRestore;
+    active.confirmRestore = null;
+    if (restore) { try { restore(); } catch (e) { /* noop */ } }
+    return true;
+  }
+
+  /**
+   * Ask, then go. The class freezes while the question is up (the clock, the
+   * game and every effect all ride pauseClass), and CANCEL puts it back exactly
+   * as it was - including leaving it paused if it already was.
+   */
+  function askLeaveClass() {
+    if (!active || active.confirmEl) return;
+    // A host suspend owns the screen and its overlay carries its own Leave
+    // class button. A second, competing door on top of it would be the exact
+    // ~60ms card-destroying race trap 29 was written about.
+    if (active.suspendEl) return;
+
+    const wasPaused = !!active.paused;
+    if (!wasPaused) pauseClass(true);
+    /* ONE CARD ON SCREEN AT A TIME. pauseClass mints the Paused overlay with its
+     * own Resume / Leave class buttons, and two stacked cards asking two
+     * different versions of the same question is worse than either alone (it
+     * also reads as a bug). The pause card steps behind the hidden attribute
+     * while the question is up and comes back if the player stays - and the
+     * `[hidden]` reset at the top of styles.css is exactly what makes that work
+     * on a display:flex node (trap 27). */
+    if (active.pauseEl) active.pauseEl.hidden = true;
+
+    /** Put the class back the way the pill found it. */
+    const restore = () => {
+      if (!active) return;
+      active.confirmEl = null;
+      active.confirmRestore = null;
+      if (!wasPaused) pauseClass(false);
+      else if (active.pauseEl) active.pauseEl.hidden = false;
+    };
+
+    const dialog = createConfirm({
+      mount: active.root,
+      title: t('leave_confirm_title', 'Head back to campus?'),
+      body: t('leave_confirm_body',
+        'This class is not finished. Nothing from it is saved.'),
+      confirmLabel: t('back_to_campus', 'Back to campus'),
+      cancelLabel: t('leave_confirm_stay', 'Stay in class'),
+      // What leaving actually costs, in the HOST's own attendance numbers.
+      // Unknown numbers print nothing at all - never invent jeopardy.
+      note: jeopardyLine(),
+      onConfirm: () => {
+        // No toast on the way out: the card's own note has already said what
+        // this costs, and saying it twice reads as a scold.
+        if (active) { active.confirmEl = null; active.confirmRestore = null; }
+        showBoard();
+      },
+      onCancel: restore,
+    });
+    if (!dialog) { restore(); return; }
+    active.confirmEl = dialog;
+    active.confirmRestore = restore;
   }
 
   /* ---------------------- the class clock (S1) --------------------------
@@ -1239,6 +1514,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function startClass(cls, opts) {
     if (suspendedGlobally) { shout(t('class_suspended', 'Class Suspended')); return; }
     dismissEndCard();
+    dismissPunchStage();
     if (active) teardownClass();
 
     const endless = !!(opts && opts.endless);
@@ -1265,6 +1541,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // game that wants to dress a replay differently can, and so the chrome can
     // say what is happening. A free swim is never a retake: it writes no row.
     const retake = endless ? false : !!todaysRecord(cls.gameKey);
+    /* THE ONCE-EVER ENROLLMENT (PUNCHCARD §4). A free swim never enrolls: it
+     * sends no `class-ended`, so it could never pay the ceremony off, and an
+     * intro that led nowhere would be the worst version of this. */
+    const enrolling = !endless && needsEnrollment(cls.gameKey);
 
     screen = 'class';
     clearScreen();
@@ -1380,11 +1660,37 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // spiral the engine wears. A class that never reads it is unaffected.
       spiralPool,
 
+      /* ---- THE EXITS (shell/exits.js) ------------------------------------
+       * A shell PRIMITIVE, like peek and ceremonies: a class never mints its
+       * own way out, it borrows the school's. Two calls, and both are pure
+       * decoration - neither wires a handler, neither can move a screen.
+       *
+       *   exits.sign(btn, {dir:'back'|'go', quiet})  dress a button as the lit
+       *       arrow board. TERMINAL SCREENS ONLY (a class-rules sheet, a
+       *       debrief) - a sign on a live board would fight the board.
+       *   exits.bar([nodes], {card:true})            a sticky footer row, so a
+       *       card that scrolls can never park its own dismiss below the fold.
+       *
+       * The CSS is the shell's (styles.css, the EXITS section), so a class gets
+       * the look for free and ten classes cannot drift apart. */
+      exits: {
+        sign: (btn, o) => { try { return signExit(btn, o); } catch (e) { return btn; } },
+        bar: (children, o) => {
+          const b = exitBar(children, o);
+          if (o && o.card) b.className += ' arc-exitbar-card';
+          return b;
+        },
+      },
+
       log: (m) => say('[' + cls.gameKey + '] ' + m),
       endClass: (result) => {
         if (ended) { say('[' + cls.gameKey + '] endClass called twice - ignored'); return; }
         ended = true;
-        finishClass(cls, gradeTier, result, { peek, belowPar, endless });
+        // `enrolling` is decided at the DOOR, not at the bell: the intro that
+        // ran is the one this finish pays for, so a card the host enrolled
+        // mid-class (it cannot, but a snapshot could) can never turn the
+        // two-punch ceremony into a one-punch one halfway through.
+        finishClass(cls, gradeTier, result, { peek, belowPar, endless, enrolling });
       },
     };
 
@@ -1400,7 +1706,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     active = {
       cls, gradeTier, instance, engine, keys, peek, ceremonies: classCeremonies,
       panel: chrome.panel, root: chrome.root, paused: false, pauseEl: null,
-      suspendEl: null, timeBudgetSec, endless,
+      suspendEl: null, confirmEl: null, confirmRestore: null, enrollEl: null,
+      pill: chrome.pill, timeBudgetSec, endless,
       // the shell's own class clock (S1) - see timeBar* above
       timebar: chrome.timebar, timefill: chrome.timefill,
       clockTimer: 0, clockElapsedMs: 0, clockLastAt: NaN,
@@ -1417,20 +1724,49 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       ? { type: 'class-started', gameKey: cls.gameKey, gradeTier, endless: true }
       : { type: 'class-started', gameKey: cls.gameKey, gradeTier });
 
-    let started = false;
-    try {
-      instance.start(endless
-        ? { gradeTier, seed, timeBudgetSec: 0, retake: false, endless: true }
-        : { gradeTier, seed, timeBudgetSec, retake });
-      started = true;
-    } catch (e) {
-      say('game ' + cls.gameKey + ' start() threw: ' + ((e && e.message) || e));
-      showSuspendedOverlay('This class could not start. Your attendance is safe.');
+    /* THE GAME STARTS HERE, AND NOT BEFORE. Everything above is the stage; this
+     * is the class. Enrollment (below) delays it by a few cards on a first run
+     * and nothing else about it moves - the game's own howto sheet is still the
+     * very next thing the player sees, untouched. */
+    function beginPlay() {
+      // The stage can be gone by the time an intro is dismissed (Esc, a panic
+      // suspend, a leave) - starting a game into a torn-down class would leave
+      // an orphan running behind the board.
+      if (!active || active.instance !== instance) return;
+      let started = false;
+      try {
+        instance.start(endless
+          ? { gradeTier, seed, timeBudgetSec: 0, retake: false, endless: true }
+          : { gradeTier, seed, timeBudgetSec, retake });
+        started = true;
+      } catch (e) {
+        say('game ' + cls.gameKey + ' start() threw: ' + ((e && e.message) || e));
+        showSuspendedOverlay('This class could not start. Your attendance is safe.');
+      }
+      // The clock runs only for a class that actually started: a bar draining over
+      // a dead class would be the most confident lie the shell could tell.
+      if (started) { active.clockArmed = true; timeBarSet(true); }
+      if (suspendedGlobally) applySuspend(true, 'video');
     }
-    // The clock runs only for a class that actually started: a bar draining over
-    // a dead class would be the most confident lie the shell could tell.
-    if (started) { active.clockArmed = true; timeBarSet(true); }
-    if (suspendedGlobally) applySuspend(true, 'video');
+
+    if (enrolling) {
+      /* Mounted on the class ROOT, not over the whole stage: the proctor strip
+       * (and the campus pill on it) stays live, so the way out is exactly where
+       * it is in every other class. A class with no copy of its own gets no
+       * intro and starts immediately - createEnrollmentIntro answers null. */
+      active.enrollEl = createEnrollmentIntro({
+        mount: chrome.root,
+        gameKey: cls.gameKey,
+        name: gameName(cls.gameKey),
+        hideTutorial: !!src.hideTutorial,
+        reducedMotion,
+        onDone: () => { if (active) active.enrollEl = null; beginPlay(); },
+        log: say,
+      });
+      if (!active.enrollEl) beginPlay();
+    } else {
+      beginPlay();
+    }
   }
 
   /* ---------------------- free swim (S2) --------------------------------
@@ -1641,6 +1977,35 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try {
       showEndCard({ cls, graded, isRetake, capped: capsList });
     } catch (e) { say('end card failed (the report card still stands): ' + ((e && e.message) || e)); }
+
+    /* THE PUNCH CARD, over both of them (PUNCHCARD §4). It is the last thing
+     * mounted and the first thing dismissed, so the report and the one-more
+     * card are exactly where they were when it goes. */
+    try {
+      if (shellState && shellState.enrolling) {
+        /* FIRST RUN. The host has already taken today's daily stamp off this
+         * very `class-ended`; the two enrollment punches SUPERSEDE it, and the
+         * frame that does so is the one we post at the end of the ceremony. The
+         * daily beat for this run is suppressed by arming 'enrollment'. */
+        armPunch(cls.gameKey, 'enrollment');
+        runPunchCeremony({
+          gameKey: cls.gameKey,
+          reason: 'enrollment',
+          card: store.punchCard(cls.gameKey),
+          from: 0,
+          to: 2,
+          onPunched: () => {
+            // ONCE, AFTER THE CEREMONY (§4). Repeats are host-side no-ops, but
+            // the shell does not lean on that: the card it just drew is the one
+            // this frame pays for, and it is sent exactly once per first run.
+            bridge.send({ type: 'enrollment-done', gameKey: cls.gameKey });
+            say('enrollment-done posted for ' + cls.gameKey);
+          },
+        });
+      } else {
+        armPunch(cls.gameKey, 'daily');
+      }
+    } catch (e) { say('punch card ceremony failed (nothing else moved): ' + ((e && e.message) || e)); }
   }
 
   /* ---------------------- pause / suspend / teardown -------------------- */
@@ -1735,6 +2100,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         try { active.instance.pause(); } catch (e) { say('game.pause threw: ' + ((e && e.message) || e)); }
       }
       if (on) {
+        // THE HOST'S WORD BEATS THE QUESTION. A suspend overlay carries its own
+        // Leave class button, so a confirm still sitting under it would be a
+        // second, conflicting door - drop it and retire the pill until the
+        // class is the player's again.
+        dismissConfirm();
+        if (active.pill) active.pill.disabled = true;
         pauseClass(true);
         showSuspendedOverlay(reason === 'audio-only'
           ? 'An audio-only session started. Your attendance is safe.'
@@ -1743,6 +2114,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       } else if (active.suspendEl) {
         active.suspendEl.remove();
         active.suspendEl = null;
+        if (active.pill) active.pill.disabled = false;
       }
     }
     renderTopbar();
@@ -1751,7 +2123,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   function teardownClass() {
     if (!active) return;
+    // The question dies with the class it was asked about - a dialog that
+    // outlived its stage would be a second, invisible Esc rung.
+    dismissConfirm();
     const a = active;
+    // The intro dies with the stage it was mounted on. Closing it here (rather
+    // than letting the panel removal take it) keeps its onDone from starting a
+    // game into a class that no longer exists.
+    if (a.enrollEl) { const intro = a.enrollEl; a.enrollEl = null; try { intro.close(); } catch (e) { /* noop */ } }
     // NO RAW TIMER OUTLIVES A CLASS. The class clock is the shell's only
     // interval per class and it dies here, before `active` is dropped - a tick
     // that fired afterwards would paint a bar that is no longer on the page.
@@ -1821,6 +2200,60 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (screen === 'report') showReport();
     },
 
+    /**
+     * {type:'punchcard-result'} - the host's same-frame truth about a card
+     * (PUNCHCARD §2/§4). It arrives on BOTH mint paths, minted or not, so the
+     * shell can tell "nothing was punched" apart from "the host never answered".
+     *
+     * `card.punches` is the POST-mint total: the ceremony animates TO it and
+     * never increments a counter of its own, and `justUnlocked` is the ONLY
+     * signal that this finish was the tenth hole (a snapshot could only say so
+     * by diffing, which is exactly the guess this frame exists to avoid).
+     */
+    onPunchCard(m) {
+      if (!m || typeof m.gameKey !== 'string') return;
+      const card = m.card && typeof m.card === 'object' ? m.card : null;
+      const norm = card ? Object.assign({}, card, {
+        // The frame carries the host's raw card; give the ceremony the same
+        // derived flag every other reader sees.
+        enrolled: typeof card.enrolledAt === 'string' && !!card.enrolledAt,
+      }) : null;
+
+      // A ceremony already on screen reconciles - it may have been animating on
+      // its own clock (the enrollment path) or drawing a stale number.
+      if (punchStage && punchStage.gameKey === m.gameKey && norm) {
+        try { punchStage.reconcile(norm, !!m.justUnlocked); }
+        catch (e) { say('punch reconcile: ' + ((e && e.message) || e)); }
+      }
+
+      if (!punchArm || punchArm.gameKey !== m.gameKey) return;
+
+      if (punchArm.mode === 'enrollment') {
+        // The two-punch beat is already running and has just reconciled above;
+        // the daily frame for this same finish is the one enrollment supersedes,
+        // so it is deliberately ignored rather than played as a second ceremony.
+        if (m.reason === 'enrollment') disarmPunch();
+        return;
+      }
+
+      if (m.reason !== 'daily') return;
+      disarmPunch();
+      // A NO-OP MINT GETS NO CEREMONY. Same local day twice, a full card, a
+      // class the host declined to stamp: nothing was punched, so nothing is
+      // shown. A card beat for a hole that did not happen is the one lie this
+      // screen must never tell.
+      if (!m.minted || !norm) return;
+      try {
+        runPunchCeremony({
+          gameKey: m.gameKey,
+          reason: 'daily',
+          card: norm,
+          to: Math.round(Number(norm.punches) || 0),
+          justUnlocked: !!m.justUnlocked,
+        });
+      } catch (e) { say('punch ceremony failed: ' + ((e && e.message) || e)); }
+    },
+
     /** {type:'suspend'} */
     onSuspend(m) { applySuspend(!!(m && m.on), m && m.reason); },
 
@@ -1832,6 +2265,28 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * boot.js only reaches for fullscreen/exit once the page has nothing to close.
      */
     escapeStep() {
+      // THE CONFIRM IS THE INNERMOST RUNG. It is a modal the player opened one
+      // press ago, so Esc closing it first is the only answer that is not a
+      // surprise - and it is the ONE rung this wave added. Everything below is
+      // byte-for-byte the ladder it always was (trap 29's corollary).
+      // dismissConfirm carries the undo: it unfreezes a class the pill froze,
+      // and hands a class that was ALREADY paused its pause card back.
+      if (active && active.confirmEl) { dismissConfirm(); return true; }
+      /* THE CARD CEREMONY IS A TERMINAL OVERLAY over the report card, and it
+       * can only be up when there is no class at all - so it cannot race the
+       * suspend rung below and it closes the way any full-screen card closes.
+       * The report (and the one-more card) are underneath, untouched. */
+      if (punchStage) { dismissPunchStage(); return true; }
+      /* THE ENROLLMENT INTRO. The class has not started yet, so Esc means "get
+       * on with it" rather than "leave" - the campus pill on the strip is still
+       * the way out and has not moved. Skipping starts the class, which is what
+       * every other dismissal of this overlay does too. */
+      if (active && active.enrollEl) {
+        const intro = active.enrollEl;
+        active.enrollEl = null;
+        try { intro.skip(); } catch (e) { /* noop */ }
+        return true;
+      }
       // The campus door card is the outermost thing a tap can close.
       if (screen === 'board' && campus) {
         try { if (campus.closeCard()) return true; } catch (e) { /* noop */ }
@@ -1841,6 +2296,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         if (active) showClassScreen(); else showBoard();
         return true;
       }
+      // The Records Office is a screen like settings: Esc walks back to campus.
+      if (screen === 'records') { showBoard(); return true; }
       // A host suspend owns the screen. The panic ladder's second press (host
       // side) is the exit, and walking to the board here would destroy the
       // Resume card ~60ms after it appeared (both ladders fire on one Esc -
@@ -1882,6 +2339,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (destroyed) return;
       destroyed = true;
       dismissEndCard();
+      dismissPunchStage();
+      disarmPunch();
       teardownClass();
       setStage(null);
       if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }

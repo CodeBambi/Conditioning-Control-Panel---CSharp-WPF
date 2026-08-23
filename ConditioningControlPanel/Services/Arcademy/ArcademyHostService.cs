@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -175,6 +175,25 @@ internal static class ArcademyHostService
             _panicSuspended = false;
             _lastPanicPressUtc = DateTime.MinValue;
             _meta = new ArcademyMetaStore(msg => _host?.Post(msg));
+            // Which rooms a full punch card has unlocked (PUNCHCARD §2.3). The page derives the
+            // same list off the `meta` projection; this line is the log the owner reads on a dark
+            // build, where the campus is the only other place it shows.
+            var unlocked = _meta.UnlockedGameKeys();
+            if (unlocked.Count > 0)
+                App.Logger?.Information("ArcademyHost: punch cards unlock {N} room(s): {Keys}",
+                    unlocked.Count, string.Join(", ", unlocked));
+
+            // THE MIRROR (PUNCHCARD §5). Pull the account's cards now, on a background thread:
+            // the reply restores a reinstalled or second machine's drawer, and a restored
+            // `enrolledAt` suppresses that class's enrollment tutorial for free (the page derives
+            // "enrolled" from the card - §2.2 - so there is no flag to restore separately).
+            //
+            // It is NOT awaited and the launch does not depend on it. In the ordinary case the
+            // reply lands before the page has finished booting and simply rides out in `init`;
+            // when it is slower, the callback pushes the same whole-blob `meta` snapshot a mint
+            // does and the shell repaints. No identity, no network, no server: the Arcademy opens
+            // exactly the same, on the cards this machine already holds.
+            ArcademySyncService.Attach(_meta, OnMirrorCardsChanged);
 
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             var mappings = new List<(string, string, CoreWebView2HostResourceAccessKind)>
@@ -502,6 +521,9 @@ internal static class ArcademyHostService
                 break;
             case "class-ended":
                 OnClassEnded(o);
+                break;
+            case "enrollment-done":
+                OnEnrollmentDone(o);
                 break;
             case "class-left":
                 // The closing bracket for `class-started`. Leaving a class with Esc ends no class,
@@ -941,6 +963,13 @@ internal static class ArcademyHostService
         ["back"] = "Back",
         ["begin_class"] = "Begin",
         ["leave_class"] = "Leave class",
+        // ---- the exits (shell/exits.js: the campus pill + its confirm) ------------------
+        // Every value stays well under MergeModTable's 96-char cap so a mod can re-voice
+        // all of them (trap 26 - the long ic_* rows are the cautionary tale).
+        ["back_to_campus"] = "Back to campus",
+        ["leave_confirm_title"] = "Head back to campus?",
+        ["leave_confirm_body"] = "This class is not finished. Nothing from it is saved.",
+        ["leave_confirm_stay"] = "Stay in class",
         ["replay_board"] = "Flip the board again",
         ["share"] = "Copy share card",
         ["shared"] = "Copied to clipboard",
@@ -1013,6 +1042,88 @@ internal static class ArcademyHostService
         ["campus_hint"] = "Hover a room - click to step inside.",
         ["campus_night_sessions"] = "Night Sessions",
         ["campus_rm"] = "RM",
+        // ---- punch cards: the campus door (PUNCHCARD.md §2.3) --------------------------
+        ["campus_unlocked"] = "Unlocked - open every night",
+        ["campus_unlocked_sign"] = "Open",
+        ["campus_unlocked_hint"] = "Card complete. This room opens every night, board or no board.",
+        // ---- punch cards: the card + its ceremony (PUNCHCARD.md §4) ---------------------
+        // Every value stays under MergeModTable's 96-char cap so a mod can re-voice the
+        // whole mechanic (trap 26). A line that needs more room becomes a second card.
+        ["punchcard"] = "Stamp Card",
+        ["punchcard_holes"] = "{have} of {need}",
+        // The card face's LIVE TEXT ZONE: the tight count, the MASTERED label, and the
+        // eight rotating flavour lines (shell/punchcard.js PHRASE_LEX - copy the values,
+        // do not re-word them). One row per line so a mod can re-voice them one at a time.
+        ["punchcard_count"] = "{have}/{need}",
+        ["punchcard_mastered"] = "Mastered",
+        ["punchcard_phrase_1"] = "Attendance is a habit. Habits are the only thing this school grades.",
+        ["punchcard_phrase_2"] = "The card does not ask how well you did. Only that you came.",
+        ["punchcard_phrase_3"] = "Ten stamps and the room is yours. Nine of them are patience.",
+        ["punchcard_phrase_4"] = "Nobody has ever filled a card in one night. You will not be the first.",
+        ["punchcard_phrase_5"] = "The register is already open. Your name has been on it a while.",
+        ["punchcard_phrase_6"] = "One stamp a night. The school is in no hurry whatsoever.",
+        ["punchcard_phrase_7"] = "Progress in here is measured in ink, never in effort.",
+        ["punchcard_phrase_8"] = "You will stop noticing that you collect these. That is the intention.",
+        ["punchcard_stamped"] = "Stamped for today.",
+        ["punchcard_next_hole"] = "Come back tomorrow for the next stamp.",
+        ["punchcard_unlocked_chip"] = "Unlocked",
+        ["punchcard_unlocked_title"] = "Assignment complete",
+        ["punchcard_unlocked_line"] = "This room is now open even when the course is not in session.",
+        ["enroll_kicker"] = "Enrollment",
+        ["enroll_next"] = "Next",
+        ["enroll_begin"] = "Begin class",
+        ["enroll_card_line"] = "Every class carries a stamp card. Ten stamps, one a night.",
+        ["enroll_tutorial_line"] = "One stamp for finishing your first class.",
+        ["enroll_house_line"] = "And one on the house. Welcome to the class.",
+        // ---- punch cards: the Records Office (PUNCHCARD.md §6) --------------------------
+        ["records_kicker"] = "Records Office",
+        ["records_lede"] = "Ten cards, ten stamps each. The wall keeps them whether you come back or not.",
+        ["records_enrolled"] = "Enrolled",
+        ["records_enrolled_on"] = "Enrolled",
+        ["records_unlocked_on"] = "Unlocked",
+        ["records_holes_punched"] = "Stamps earned",
+        ["records_holes_left"] = "Stamps left",
+        ["records_stamps"] = "Daily stamps",
+        ["records_no_stamps"] = "No daily stamps yet.",
+        ["records_not_enrolled"] = "Not enrolled - attend the class",
+        ["records_enroll_hint"] = "The first graded finish opens the card and earns two stamps.",
+        ["records_house_note"] = "Day one is two stamps: one for finishing, one on the house.",
+        ["records_flip_hint"] = "Pick a card to read its stamps.",
+        ["records_empty_wall"] = "Nothing on the wall yet. Attend a class and the first card gets pinned.",
+        // ---- enrollment flavour, per class (PUNCHCARD.md §4) ----------------------------
+        // Mirrors shell/enrollment.js's ENROLL_LEX verbatim - copy the values, do not
+        // re-word them (the IC_LEX rule). Three cards per class, in the campus voice:
+        // what the room is for, what it makes you do, what it is doing to you.
+        ["enroll_daily_trigger_1"] = "Homeroom takes attendance first, and the register is one word long.",
+        ["enroll_daily_trigger_2"] = "Everyone in the school sits the same word tonight. Six chances, no help.",
+        ["enroll_daily_trigger_3"] = "Say it enough mornings and you stop deciding what it means.",
+        ["enroll_lost_and_found_1"] = "Things go missing here constantly. Nobody files a report.",
+        ["enroll_lost_and_found_2"] = "A wall of moving pictures, and one of them is yours. Find it first.",
+        ["enroll_lost_and_found_3"] = "This trains the part of you that keeps looking after looking stops working.",
+        ["enroll_deja_vu_1"] = "The Memory Lab studies what happens to a board you have already learned.",
+        ["enroll_deja_vu_2"] = "Match the pairs. The pairs move when you blink. Both of those are the work.",
+        ["enroll_deja_vu_3"] = "You will feel certain and be wrong. We would rather you stopped noticing.",
+        ["enroll_impulse_control_1"] = "Discipline Hall exists because you reach for things. Every time.",
+        ["enroll_impulse_control_2"] = "Hands on the desk. Pop when told, hold when told. The room may lie.",
+        ["enroll_impulse_control_3"] = "A held hand is worth more here than a fast one. Learn which order was real.",
+        ["enroll_the_deep_end_1"] = "The Pool has a shallow end that nobody uses. This class is not held there.",
+        ["enroll_the_deep_end_2"] = "Sink tile into tile. Every merge takes you further from the surface.",
+        ["enroll_the_deep_end_3"] = "The deeper the board, the harder it is to read. That is the subject.",
+        ["enroll_misdirection_1"] = "The Parlour teaches what a room does to your attention when it wants it.",
+        ["enroll_misdirection_2"] = "Keep your eyes on the one that matters. It will not make that easy.",
+        ["enroll_misdirection_3"] = "You will be shown the trick and lose anyway. Then shown it again.",
+        ["enroll_echo_1"] = "The Music Room does not teach music. It teaches you to hold a line that somebody else set.",
+        ["enroll_echo_2"] = "It plays a phrase. You play it back. Then it adds one and asks again.",
+        ["enroll_echo_3"] = "Nobody passes by remembering harder. They pass by stopping the arguing.",
+        ["enroll_instant_recall_1"] = "The Lecture Hall never announces the test. That is the design of the room.",
+        ["enroll_instant_recall_2"] = "Watch the hour, answer for it after. You will not hear the question coming.",
+        ["enroll_instant_recall_3"] = "Attention that only arrives when asked is not attention. This corrects that.",
+        ["enroll_anomaly_1"] = "The Darkroom is where the school checks that you still notice a difference.",
+        ["enroll_anomaly_2"] = "Everything on the grid matches. One thing does not. Find it before it moves.",
+        ["enroll_anomaly_3"] = "The differences get smaller every year. You are expected to keep up.",
+        ["enroll_composure_1"] = "The Studio grades one thing: can you finish a picture while interfered with.",
+        ["enroll_composure_2"] = "Slide the tiles back into order while the room blurs what order was.",
+        ["enroll_composure_3"] = "Nothing in here is fast. Composure is the subject and it cannot be rushed.",
         // ---- per-game rows (Semester 1) -------------------------------------------------
         // Keys that are not prefixed by a game: the shell and more than one class render
         // them (Daily Trigger mints them today).
@@ -1968,6 +2079,26 @@ internal static class ArcademyHostService
             // player east of UTC) crediting the streak it has earned.
             var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var (streak, perfect, classesToday) = _meta?.RecordAttendance(localDate, gameKey) ?? (0, 0, 0);
+
+            // THE PUNCH CARD RIDES THE ATTENDANCE CREDIT (PUNCHCARD §2.1). Same frame, same local
+            // date, same idempotence - a graded finish is exactly the event that stamps, so there
+            // is nothing here to keep in step with the rule. It is wrapped on its own because the
+            // payout frame below must survive anything the card math could do; the credit above is
+            // the thing we must not lose, and this must not become a second way to lose it.
+            //
+            // Dev-door runs stamp like any other graded class (PUNCHCARD §3): it IS graded play,
+            // the owner wants it for testing, and `--arcademy` never reaches a player build.
+            // Excluding them later is this one condition - `if (!_devDoor)`.
+            ArcademyPunchCards.PunchMint? punch = null;
+            try
+            {
+                punch = _meta?.StampPunchCard(gameKey, localDate);
+                // A real punch is worth mirroring; a same-day retake is not. Debounced, so the
+                // enrollment ceremony's second mint rides the same request (PUNCHCARD §5).
+                if (punch is { Minted: true }) ArcademySyncService.NotifyMutation();
+            }
+            catch (Exception ex) { App.Logger?.Warning("ArcademyHost punch card: {E}", ex.Message); }
+
             if (_meta != null) _host?.Post(_meta.SnapshotMessage());
 
             _host?.Post(new
@@ -1982,12 +2113,112 @@ internal static class ArcademyHostService
                 // Additive: the report card reads it to explain a 0 XP line. Older pages ignore it.
                 retake = !firstToday,
             });
+            PostPunchCard(gameKey, "daily", punch);
             App.Logger?.Information(
                 "ArcademyHost: class complete ({Game}, tier {Tier}, grade {Grade}) = {Xp:0} XP{Retake}, streak {Streak}, {Today}/3 today",
                 gameKey, tier, grade, xp, firstToday ? "" : " (retake - already paid for " + dayUtc + ")",
                 streak, classesToday);
         }
         catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnClassEnded: {E}", ex.Message); }
+    }
+
+    // ============================ enrollment-done: the first-run punches ============================
+
+    /// <summary>
+    /// <c>enrollment-done {gameKey}</c> -> the two first-run punches (PUNCHCARD §4). The shell
+    /// posts this once, at the end of the enrollment ceremony that follows a class's FIRST graded
+    /// finish; everything the mint needs beyond the key is derived host-side, so the frame carries
+    /// no numbers to forge and a replayed one is a no-op.
+    ///
+    /// <para>It arrives AFTER that run's <c>class-ended</c>, whose daily stamp it supersedes - the
+    /// two punches replace it rather than adding to it, so day one is exactly two either way
+    /// round (<see cref="ArcademyPunchCards.Enroll"/>).</para>
+    /// </summary>
+    private static void OnEnrollmentDone(JObject o)
+    {
+        try
+        {
+            var gameKey = (ReadString(o, "gameKey") ?? "").Trim();
+            if (gameKey.Length > 64) gameKey = gameKey[..64];
+            if (gameKey.Length == 0)
+            {
+                App.Logger?.Debug("ArcademyHost: enrollment-done with no game key - ignored");
+                return;
+            }
+
+            // LOCAL date, like every other daily gate here (#978).
+            var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var mint = _meta?.EnrollPunchCard(gameKey, localDate);
+            if (mint is { Minted: true })
+            {
+                if (_meta != null) _host?.Post(_meta.SnapshotMessage());
+                ArcademySyncService.NotifyMutation();
+            }
+            PostPunchCard(gameKey, "enrollment", mint);
+        }
+        catch (Exception ex) { App.Logger?.Warning("ArcademyHost.OnEnrollmentDone: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// The mirror changed a card (a launch pull that restored something, or a merged push reply
+    /// that carried another machine's day). Repaint the page with the same whole-blob snapshot a
+    /// local mint sends - the page has no idea the server exists and does not need one.
+    ///
+    /// <para>Raised from a background thread, so it hops to the dispatcher: <c>Post</c> reaches
+    /// WebView2 and WebView2 is UI-thread-only. Every guard from the async rules applies - a null
+    /// or shutting-down dispatcher means there is nothing left to repaint anyway.</para>
+    /// </summary>
+    private static void OnMirrorCardsChanged()
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_meta == null || _host == null) return;
+                    _host.Post(_meta.SnapshotMessage());
+                    var unlocked = _meta.UnlockedGameKeys();
+                    if (unlocked.Count > 0)
+                        App.Logger?.Information("ArcademyHost: after sync, punch cards unlock {N} room(s): {Keys}",
+                            unlocked.Count, string.Join(", ", unlocked));
+                }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnMirrorCardsChanged post: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnMirrorCardsChanged: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// The <c>punchcard-result</c> frame: same-frame truth for the card, on both mint paths. The
+    /// whole-blob <c>meta</c> snapshot carries the same state, but the ceremony needs to know
+    /// whether THIS finish punched anything and whether it was the tenth hole - which a snapshot
+    /// can only answer by diffing. Same reason <c>payout-result</c> carries the streak.
+    ///
+    /// <para>Posted even for a no-op mint (<c>minted:false</c> — a same-day retake, a repeat
+    /// enrollment, a full card), so the shell never has to tell "nothing happened" apart from "the
+    /// host did not answer". A NULL mint is the other thing entirely: there was no card to touch
+    /// (no game key, or no store), and that gets no frame.</para>
+    /// </summary>
+    private static void PostPunchCard(string gameKey, string reason, ArcademyPunchCards.PunchMint? mint)
+    {
+        if (mint is not { } m) return;
+        try
+        {
+            _host?.Post(new
+            {
+                type = "punchcard-result",
+                gameKey,
+                reason,
+                minted = m.Minted,
+                justUnlocked = m.JustUnlocked,
+                holes = ArcademyPunchCards.Holes,
+                card = m.Card,
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostPunchCard: {E}", ex.Message); }
     }
 
     // Field readers that degrade instead of throwing. Newtonsoft's explicit JToken casts throw an
@@ -2577,6 +2808,10 @@ internal static class ArcademyHostService
             HookVideoEvents(false);
             HookSettingsWatch(false);
             HookBrowserVideoEvents(false);
+            // Unbind the mirror BEFORE the store goes: a push still sitting in the debounce is
+            // sent now (payload taken first, so the request outlives this window without touching
+            // anything being disposed) and every reply still in the air is dropped by generation.
+            try { ArcademySyncService.Detach(); } catch { }
             try { _meta?.FlushSave(); } catch { }
             _meta = null;
             _classActive = false;

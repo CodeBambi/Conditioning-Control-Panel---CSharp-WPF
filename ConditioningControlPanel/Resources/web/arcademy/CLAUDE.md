@@ -24,7 +24,8 @@ This file is the *implementation* companion: what the pieces are, where the trap
 | media | `provider/` (parallel agent) | a game fetching anything itself |
 | sound | `shell/audio.js` | the engine, a game, or C# owning an Audio node |
 
-Screen router: **split-flap board → class → report card** (+ settings, which is a screen).
+Screen router: **split-flap board → class → report card** (+ settings and the Records
+Office, which are screens).
 `boot.js` owns the bridge handshake and the Esc ladder's outer rungs; `shell.js` owns the
 inner rungs.
 
@@ -53,6 +54,24 @@ shell/splitflap.js departure-board reveal
 shell/reportcard.js day summary + THE one share pipeline
 shell/settings.js  THE settings page (3 tiers) + SETTING_KEYS
 shell/ceremonies.js stamp / 10-segment meter / reward beats (engine-delegated)
+shell/exits.js     THE WAY OUT: the campus pill + its confirm, the sticky exit
+                   bar, and the casino arrow SIGN. Every back/leave/done in the
+                   school is minted here (games borrow it through ctx.exits)
+shell/punchcard.js THE CARD: cardFace() = a full-bleed face IMAGE with exactly
+                   three live overlays - the ten stamps, the crest (the REWARD,
+                   hidden until complete) and the text strip (count + a rotating
+                   punchcard_phrase_1..8 line, or MASTERED + the date). Where the
+                   three sit is DATA: loadFaceGeometry() reads art/punchcard/
+                   faces.json once, optionally, and anything missing falls back
+                   to DEFAULT_GEOM + [data-art="off"]'s drawn floor. Plus thud()
+                   + holesLine(). Shared by the ceremony and the Records wall so
+                   a card is ONE object
+shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
+                   AND the stamp ceremony (day one = two punches, daily = one,
+                   the tenth = the unlock beat)
+shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-card
+                   stamp docket, and a link to the report card (never a second
+                   share pipeline - trap 13)
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
@@ -215,6 +234,46 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   numbers back from two places: `payout-result` (which carries `streak` /
   `perfectAttendance` / `classesToday` on the same frame) and the whole-blob snapshot.
   The page still owns `days` (the graded view) and `games` (tier + per-game state).
+- **`punchCards` is HOST-owned too** (PUNCHCARD.md §2). `ArcademyPunchCards` is the pure math,
+  `ArcademyMetaStore.StampPunchCard` / `EnrollPunchCard` the mints; the key is refused to the page
+  and every date is LOCAL. One card per game key:
+  `{punches:0..10, dates:["yyyy-MM-dd"], enrolledAt:string|null, house:bool, complete:bool,
+  unlockedAt:string|null}`, with `punches` recomputed on every touch so a bad blob self-heals.
+  - The **daily stamp rides the attendance credit** on `class-ended`, which makes "any graded
+    finish stamps, once a local day" true for free: Esc-leave sends `class-left`, and a Free Swim
+    never sends `class-ended` at all (`shell.js finishClass` returns first).
+  - The page posts **`enrollment-done {gameKey}`** once, after the enrollment ceremony. It mints
+    the two first-run punches and **supersedes that day's daily stamp** (which has already landed,
+    the ceremony running after `class-ended`) - day one is exactly 2, never 3, in either ordering.
+    Repeat frames are no-ops.
+  - The host answers both paths with **`punchcard-result {gameKey, reason:'daily'|'enrollment',
+    minted, justUnlocked, holes, card}`** - same-frame truth for the ceremony, the way
+    `payout-result` carries the streak. The whole-blob `meta` snapshot is pushed as well.
+  - `complete:true` IS the permanent unlock: the shell offers Begin on that room every night
+    through the same door path as `devDoor`. Nothing host-side gates which room may start.
+  - **The SHELL half** (2026-08-23): `core/store.js` lists the key in `HOST_OWNED_KEYS` and
+    exposes `store.punchCard(gameKey)` / `store.unlockedGames()`, both of which RE-DERIVE
+    `punches`, `house`, `complete` and `enrolled` off the two fields that are actually earned -
+    the same self-heal `ArcademyPunchCards.Normalize` does in C#, so a denormalized blob can
+    never draw a hole the host does not hold. `shell.js` turns that into `campusState.unlocked`
+    (a map, beside `devPass`) and into `needsEnrollment()`; `shell/enrollment.js` runs both
+    beats; `boot.js` routes `punchcard-result` to `shell.onPunchCard`. The page's ONLY
+    outbound frame about a card is `enrollment-done` - there is deliberately no "punch" verb
+    it could send.
+- **`art/punchcard/faces.json` is the card-art seam, and it is also the ART
+  MANIFEST.** `{ "<gameKey>": { slots:[{x,y,w,h} x10 row-major], crest:{x,y,scale,
+  rotation}, text:{x,y,w,h} } }`, every number a fraction of that class's own face
+  image (slots and text are BOXES - top-left plus size; the crest's x/y is its
+  CENTRE, `scale` its width, `rotation` degrees; an optional `aspect` overrides the
+  1.6 default). `shell/punchcard.js` loads it ONCE through `loadFaceGeometry()`
+  (`shell.js` calls it beside the engine/provider `loadOptional`s) and sanitizes it
+  FIELD BY FIELD, so a junk slot list, an unparseable number or a nine-entry grid
+  each fall back on their own rather than taking the card down. **A class listed in
+  that file is a class whose face image shipped** - that is the ONLY signal for
+  `data-art="on"`, which is what drops the drawn grid boxes, the drawn name band
+  and the corner ribbon (all three are baked into a real face). So the json ships
+  WITH the pngs, never before them, or a card loses its floor and gains nothing.
+  No file at all = every class on `DEFAULT_GEOM` and a finished-looking card.
 - **`meta` arrives in TWO shapes** — `{key, value}` (the reply to a meta-command) and
   `{rev, state}` (the snapshot the host pushes after crediting attendance). Handle both; a
   handler that requires `key` silently drops the authoritative streak.
@@ -618,6 +677,71 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     SHIPPED - square, unspun, uncoloured - because arm shape and palette are what the player
     actually recalls, not the screen-blended turning wash.
 
+46. **AN EXIT THAT SCROLLS AWAY IS NOT AN EXIT.** The settings page is ten classes
+    long, the report paper is taller than a short window, and eight of the ten
+    class-rules sheets declared `max-height` + `overflow:auto` **and**
+    `pointer-events:none` in the same rule - and a box the pointer cannot hit is a box
+    the wheel cannot scroll, so on a short window GO sat below a fold that nothing on
+    the page could reach and the class simply could not be entered. `shell/exits.js`
+    is the answer and `.arc-exitbar` (sticky, bottom:0) is the pattern: it binds to
+    whatever scrolls - the document for settings, `.arc-reportstage` for the report,
+    an overlay's own box for a card - so no screen has to know what its scroller is.
+    Two things that bite:
+    - **The sign is `.arc-exitsign.arc-exitsign` on purpose.** Callers sign buttons
+      that already wear `.btn.primary` / `.btn.ghost`, and a single class LOSES to two.
+      The doubled class buys the specificity with no `!important`.
+    - **The bulbs do not move; the light does.** `.arc-sign-lamps` carries the bulb
+      mask and a dim fill, and its CHILD `.arc-sign-chase` translates by exactly one
+      period (52px = four 13px bulbs). Transforming the masked layer would drag the
+      bulbs along with the light, and a pseudo-element cannot own a child - which is
+      why the chase is a real node. Never animate its `background-position` (trap 36).
+47. **THE PILL AND THE PAUSE CARD MUST NOT BOTH BE UP.** `askLeaveClass()` freezes the
+    class to ask, and `pauseClass(true)` mints the Paused overlay with its own Resume /
+    Leave class buttons - two stacked cards asking two versions of one question, which
+    reads as a bug (it looked like one in the first capture). The pause card steps
+    behind the hidden attribute while the confirm is up and comes back if the player
+    stays; `dismissConfirm()` carries that undo so all four exits from the dialog
+    (cancel, Esc, a host suspend, teardown) restore the same state. The `[hidden]`
+    reset at the top of `styles.css` is what makes hiding a `display:flex` node work at
+    all - trap 27, used on purpose this time.
+48. **THE CONFIRM ADDS EXACTLY ONE ESC RUNG, AT THE TOP.** It is a modal the player
+    opened one press ago, so Esc closing it first is the only answer that is not a
+    surprise. Everything below it in `escapeStep()` is byte-for-byte the ladder it
+    always was, the suspend rung still owns the key while a suspend overlay is up
+    (trap 29's corollary), and the pill REFUSES to open while `active.suspendEl` is
+    live - that overlay carries its own Leave class and a second door on top of it is
+    the exact race trap 29 was written about.
+
+49. **NEVER FEATURE-TEST A DOM COLLECTION WITH `Array.isArray`.** The enrollment
+    intro re-labels its own CTA between cards, and the label lives INSIDE the sign
+    (`signExit` replaces the button's text with three children: `.arc-sign-lamps`,
+    `.arc-sign-arrow`, `.arc-sign-label`), so writing `btn.textContent` deletes the
+    whole arrow board and leaves a plain slab. The guard that walked the children to
+    find the label span read `Array.isArray(btn.children)` - and the headless DOM
+    double hands back a real **Array** while a browser hands back an
+    **HTMLCollection**, so the suite went green and Chromium rendered a bare button
+    (caught in a capture, 2026-08-23). Walk `node.children` by index; it is iterable
+    in both worlds and `Array.isArray` is true in neither that matters.
+50. **THE CEREMONY MUST OUTLIVE A REPORT REPAINT, AND `clearScreen()` IS NOT WHERE
+    IT DIES.** The punch card mounts ON the report card (which itself sits under the
+    Deck V one-more card), and `onPayout` re-renders that report on the same screen
+    the instant the host pays out - which is the exact moment the card is meant to be
+    up. Dropping it in `clearScreen()` therefore deleted it a frame after it appeared.
+    It is dropped beside `dismissEndCard()` at every REAL screen change instead
+    (`showBoard` / `showSettings` / `showRecords` / `startClass`) and `showReport()`
+    re-seats it last, after the end card - byte-for-byte the treatment the end card
+    already had, for byte-for-byte the same reason.
+51. **A CEREMONY FOR A HOLE THAT WAS NOT PUNCHED IS THE ONE LIE THIS SCREEN CANNOT
+    TELL.** `punchcard-result` is posted on BOTH mint paths even when `minted:false`
+    (a same-day retake, a full card, a class the host declined to stamp), so the shell
+    can tell "nothing happened" apart from "the host never answered" - and it shows
+    NOTHING for the first. The daily path also arms a 4s timeout: a host that never
+    answers (an older build, a dropped frame) simply means no card beat this run, and
+    the report card behind it is untouched. The ceremony always animates TO
+    `card.punches` (already the post-mint total) and `punchTo()` refuses to walk a card
+    backwards, so a race between its own schedule and the host's answer can only ever
+    add holes.
+
 ## 5. The game module contract (short version)
 
 ```js
@@ -629,12 +753,17 @@ export default {
 };
 ```
 `ctx = { root, engine, assets, lexicon:t, caps, rng, settings, keys, peek, ceremonies,
-store, endClass({metrics:{composite}, hardGates?, zen?, flavorXp?, share?, assists?}), log }`
+exits, store, endClass({metrics:{composite}, hardGates?, zen?, flavorXp?, share?, assists?}), log }`
 plus the additive read-only projection: `platform` (init's `{isTouch, hasHaptics, host}`),
 `motion` (`{reducedMotion, motionLevel}`), `audioAudible` (resolved `SubAudioAudible` - FALSE
 means a cue is mixed but inaudible, so carry a visual tell), `words` (a COPY of the day pool),
 `absorb(word)` / `sessionWords` (trap 24), and `keys.panicKey` (the projected panic key name,
 a launch-time snapshot - see trap 19).
+`ctx.exits` is a shell PRIMITIVE like peek and ceremonies, and it is pure decoration -
+neither call wires a handler or can move a screen: `exits.sign(btn, {dir, quiet})` dresses
+a button as the lit arrow board (TERMINAL screens only - a rules sheet, a debrief; a sign
+on a live board fights the board) and `exits.bar(nodes, {card:true})` returns a sticky
+footer row. The CSS is the shell's, so ten classes cannot drift apart (trap 46).
 `classSpec = { gradeTier 1..4, seed, timeBudgetSec, retake }` - `retake` is true when today
 already has a row for this class (trap 23). The seed is unchanged on a retake, on purpose:
 the day's script IS the day's script.
@@ -682,10 +811,28 @@ must never grow a test seam that ships. Cases opt in through an `overrideCalenda
 other case still sees the shipping five-game pool and the seeded boards it asserts against.
 Remember `clearTimetableCache()` between boots (trap 25).
 
-Last full run: **144 assertions, 0 failures** (timetable 27, grades 23, shell 45,
-bridge+boot 15, **e2e seams 14**, **host fixes 20**), against the live `engine/` + `provider/`
-modules (the note line in the shell run says which). The four game suites (`games-dt`,
-`games-lf`, `games-dv`, `games-ic`) drive the REAL games and run green alongside it.
+Last full run: **276 assertions, 0 failures** (timetable 27, grades 23, shell 48,
+bridge+boot 15, **e2e seams 14**, campus 23, **host fixes 20**, time bar + free swim 15,
+rake 44, **punch cards 47**), against the live `engine/` + `provider/` modules (the note line
+in the shell run says which). The four game suites (`games-dt`, `games-lf`, `games-dv`,
+`games-ic`) drive the REAL games and run green alongside it.
+
+`test-punchcard.mjs` (2026-08-23) is the punch-card half: the store's refusal + self-heal,
+the 96-char cap on every one of the 30 flavour rows AND the 8 rotating card lines AND their
+verbatim presence in the C# table, the face geometry (the uniform fallback, percentage
+placement, the manifest fork, a broken entry sanitized field by field), the live strip
+(N/10 + a seeded line, turning over to MASTERED + the date) and the crest as the reward, the intro showing once and never again, the ceremony on all three shapes (daily,
+enrollment, `justUnlocked`) plus the no-op silence, the door CTA order, and the Records
+Office populated and empty. **A boot with no `punchCards` in `init.meta` now opens with an
+enrollment intro**, so the older suites seed an already-enrolled school in their `fakeInit`
+- a first night is `test-punchcard.mjs`'s subject, not theirs.
+
+**Browser pass, not just node.** The suites drive a DOM double, which cannot see a CSS rule
+that does not parse, a module that throws on evaluation, or trap 49. The recipe: serve the
+web root over plain http, install `window.chrome.webview` through Playwright's
+`addInitScript` (bridge.js captures the transport at module scope, so it must exist before
+the first import), post a realistic `init`, then screenshot and read `document.styleSheets`
+back. It caught trap 49 and two duplicated-copy layout bugs the node run could not.
 
 `test-hostfixes.mjs` covers the two seams that are not JavaScript. It **parses the real
 `styles.css`** and evaluates the `[hidden]` cascade for every element the shell toggles
@@ -742,6 +889,50 @@ audio.js no-ops harmlessly in the other suites) and a fake `AudioContext`.
   snapshot. The page still needs no new code: it already honours the frame. (The gate properties
   themselves — `ShouldDeferInterruptions` / `ShouldDeferNewVideo` — are polls, and polling a
   class's freeze state would be worse than not having it, which is why the event is the hook.)
+- ~~**The punch cards ship on a CSS floor; the art batch is still open**~~ **HALF CLOSED
+  2026-08-23.** Landed in `Resources/web/arcademy/art/punchcard/`: nine `face-<gameKey>.png`
+  (1208x794), `stamp.png`, nine `crest-<gameKey>.png` (700x700, keyed, transparent) and
+  `faces.json` beside them - `--pc-face-src` and `--pc-crest-src` per class plus
+  `--pc-stamp-src` now resolve to `url(...)`. **Misdirection has no art on purpose** (the class
+  was scrapped): it is absent from `faces.json`, BOTH its tokens stay `none`, and its card must
+  keep drawing the whole gradient floor. Still open: `--pc-ribbon-src`, `--pc-desk-src`.
+  Four things a reader needs:
+  - **`faces.json` carries an `aspect` per class and it is load-bearing.** The faces are
+    1208x794 = 1.52141, not the 1.6 `DEFAULT_ASPECT`; without it `background-size:cover` crops
+    the face and every measured slot fraction lands somewhere the art did not paint a square.
+  - **`data-art="on"` says a FACE shipped, and NOTHING about a crest** - which is why the
+    `[data-art="on"] .arc-pc-crest` override was PARKED in a comment while only the faces had
+    landed, and the crest floor was re-lit as a drawn gold wax seal (the dark `--pc-well` read
+    as a missing image over a painted face; without the stand-in a mastered card revealed an
+    EMPTY BOX on its unlock beat, the one moment the card exists to pay out). **Both are now
+    UNPARKED**: the nine crests shipped, the original rule is restored, and the stand-in seal is
+    gone. It had to go - every crest carries its own thick gold rim and navy depth edge, so the
+    drawn rim was a second frame around a framed badge. The rule is now the picture plus one
+    `drop-shadow` (which follows the badge silhouette; a `box-shadow` on the square box could
+    not). The invariant that replaces the old one: **a face and a crest ship together per
+    class**, because a class on the art path with no crest png lands on `background-image:none`
+    and is back to revealing an empty box.
+  - **The crests are ~700px squares with a transparent margin, and they are BADGES.** Locked
+    varsity-pixel DNA (chunky pixel art, gold outline, navy depth, cel shading), one per class
+    on its own card's palette, a different shield silhouette each so they collect - and NO TEXT,
+    like every other live-drawn layer. They are placed by `faces.json`'s `crest {x,y,scale,
+    rotation}` (centre, width, -8.79deg) and drawn `background-size:contain`, so a crest that is
+    not square simply letterboxes inside its bay rather than stretching.
+  - **No text may ever be baked into the stamp, the crest or the seal** (lexicon law): the count,
+    the flavour line and every label are rendered live over the top. The face image is the ONE
+    owner-locked exception - it bakes the class logo and the Arcademy logo, which is why the
+    drawn name band steps aside under `[data-art="on"]` rather than printing the name twice.
+- ~~**The server mirror is a separate PR**~~ **CLOSED** - the mirror is live at both ends
+  (PUNCHCARD §5; wire contract `proxy/docs/arcademy-cards-api.md`, client
+  `Services/Arcademy/ArcademySyncService.cs`). **Nothing in this folder talks to it or ever
+  will**: the page is offline, and the HOST pulls once at launch and pushes after a mint
+  (debounced ~6s, `PUT /v2/arcademy/cards`, `X-Auth-Token` + `unified_id`). What the page gets
+  for free is a restored card suppressing a repeat enrollment - `enrolledAt` is the only flag
+  and it arrives in the blob, in the ordinary `init` projection or in the whole-blob `meta`
+  push if the reply is slower than the boot. A card is only ever ADDED to: the merged reply is
+  folded in monotonically and every derived number is re-counted from `enrolledAt` + `dates`,
+  the same derivation the server runs, so a cold or nonsense mirror cannot talk a card down.
+  No identity or no network = the Arcademy behaves exactly as before, on local cards.
 - **Nothing consumes `arcademy-fx`.** The engine narrates every primitive on that event and
   only `arcademy-log` is read (by `boot.js`). It is the obvious hook for a future telemetry
   or "what did the engine just do" debug overlay.

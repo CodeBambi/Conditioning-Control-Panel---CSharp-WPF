@@ -771,6 +771,14 @@ html.arc-reduced .g-ec-howto-art::before,html.arc-reduced .g-ec-howto-art::after
   .g-ec-steps{gap:5px}
   .g-ec-step{width:10px;height:10px}
 }
+
+/* ---- THE SHEET NEEDS A BOTTOM BEFORE A STICKY FOOTER MEANS ANYTHING ----
+   Unlike its eight siblings this card never declared a max-height, so a tall
+   ring sheet simply ran off the stage and took GO with it. Bound it, let it
+   scroll, and pin the button. */
+.g-ec-howto{max-height:86vh;overflow:auto}
+.g-ec-howto-go{position:sticky;bottom:0;z-index:3}
+
 `;
 
 /** Inject once per document. No-op headless (the DOM double has no head). */
