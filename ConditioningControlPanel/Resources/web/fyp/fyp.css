@@ -1,5 +1,12 @@
 /* For You feed — dark theme matching the app (#1A1A2E / pink #FF69B4). */
 
+:root {
+  /* Shared "verified" orange (every port uses this exact value — see
+     planning/fyp-online/EXHAUSTION-AND-PRESETS.md §8). A third chip state on
+     purpose: pink means "on", orange means "on AND Scrolller confirmed it". */
+  --verified: #F0A04B;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
@@ -286,6 +293,52 @@ html, body {
 }
 .niche-chip.custom { border-style: dashed; }
 .niche-chip.custom .chip-x { margin-left: 6px; opacity: 0.7; }
+.niche-chip.custom .chip-warn { margin-left: 5px; opacity: 0.85; }
+/* Probed and confirmed: solid orange (beats .selected on specificity, so it wins
+   whatever the source order). */
+.niche-chip.custom.verified {
+  border-style: solid;
+  border-color: var(--verified);
+  background: rgba(240, 160, 75, 0.14);
+  color: var(--verified);
+}
+/* Probe in flight — inert, not clickable, so it reads as a receipt not a chip. */
+.niche-chip.custom.pending {
+  border-color: #4a4a70;
+  background: transparent;
+  color: #8f8fae;
+  cursor: default;
+}
+/* Probed and NOT found: kept visible but muted, so a dead channel is explained
+   rather than silently missing. */
+.niche-chip.custom.unverified {
+  border-color: #3a3a5c;
+  background: transparent;
+  color: #7d7d9c;
+}
+
+/* B2 expander: the subs behind each selected niche. Collapsed = one line each. */
+#niche-subs { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; }
+#niche-subs:empty { display: none; }
+.niche-subs-row {
+  display: block;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: #6a6a88;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  /* collapsed rows never wrap: one niche, one line */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.niche-subs-row:hover { color: #b0b0c8; }
+.niche-subs-row.open { white-space: normal; overflow: visible; }
 
 #custom-sub-row { margin-top: 8px; }
 #custom-sub-input {
@@ -368,6 +421,8 @@ html, body {
 .option-row.disabled { opacity: 0.4; pointer-events: none; }
 
 .option-status { font-size: 11.5px; color: #ffb3d9; margin-top: 8px; }
+/* Soft error under the custom-sub input: says what went wrong without a modal. */
+.option-status.error { color: #ff9aa2; }
 
 .mini-btn {
   padding: 6px 14px;
@@ -417,6 +472,30 @@ body.clickthrough #attention { display: none !important; }
   transition: opacity 300ms ease;
 }
 #ct-note.show { opacity: 1; }
+
+/* Transient one-liner over the feed (see showFeedNote). Bottom-centre keeps it
+   clear of the bottom-LEFT caption and the top corner buttons. */
+#feed-note {
+  position: absolute;
+  bottom: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 105, 180, 0.35);
+  background: rgba(18, 18, 31, 0.9);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  color: #d5d5e8;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+#feed-note.show { opacity: 1; }
 .ct-note-title { font-size: 17px; font-weight: 700; letter-spacing: 1px; color: #ffb3d9; margin-bottom: 8px; }
 .ct-note-sub { font-size: 13px; color: #d5d5e8; line-height: 1.5; }
 .ct-note-sub b { color: #fff; }

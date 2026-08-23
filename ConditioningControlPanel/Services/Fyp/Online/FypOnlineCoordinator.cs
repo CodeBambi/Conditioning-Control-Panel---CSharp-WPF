@@ -36,29 +36,36 @@ internal sealed class FypOnlineCoordinator
 
     /// <summary>The single authority for the niche taxonomy across all four scrolller ports
     /// (desktop, mobile, web intake, web spiral-express) — the others hand-sync to this list.
-    /// Subs verified live: the first eight 2026-08-10, the last four 2026-08-11 (existence +
-    /// item counts); unresolvable ones fail soft. Order is display order in every picker.
+    /// Every sub below was existence-checked against the live API on 2026-08-23 and carries its
+    /// then-current <c>videoCount</c> in the comments; unresolvable ones fail soft (one wasted
+    /// request, then the channel retires itself for the session). Order is display order in
+    /// every picker.
     ///
-    /// This is the union of what the ports had drifted to, so no port loses a niche: the four
-    /// below came from web spiral-express, and "amateur" is the one the web ports still lack —
-    /// it travels the other way on the next hand-sync.</summary>
+    /// Ids are NEVER removed or renamed — saved settings and web share codes reference them —
+    /// so a widened niche keeps its id (Bambi Sleep has 9 clips of its own, hence the two
+    /// neighbours; the pickers' grey sub-expander shows the real list so nothing is hidden).
+    /// "beta" was appended LAST for the same reason.</summary>
     public static readonly Niche[] Catalog =
     {
-        new("hypno",      "Hypno",       new[] { "EroticHypnosis", "sissyhypno" }),
-        new("bimbo",      "Bimbo",       new[] { "bimbo", "bimbofication" }),
-        new("sissy",      "Sissy",       new[] { "Sissies", "sissyhypno" }),
-        new("hentai",     "Hentai",      new[] { "hentai", "rule34" }),
-        new("censored",   "Censored",    new[] { "censoredporn" }),
-        new("bbc",        "BBC",         new[] { "BBCSluts" }),
-        new("goon",       "Goon",        new[] { "GOONED" }),
-        new("amateur",    "Amateur",     new[] { "RealGirls", "TittyDrop" }),
-        // The four the web spiral-express port added. Both relapse subs were live-verified
-        // video-rich 2026-08-11 (91 / 630 videos); r/prematurefetish was requested alongside
-        // them but does not exist on scrolller.
+        new("hypno",      "Hypno",       new[] { "EroticHypnosis", "sissyhypno", "HypnoGoneWild", "HypnoHentai" }),
+        new("bimbo",      "Bimbo",       new[] { "bimbo", "bimbofication", "bimbofetish" }),
+        new("sissy",      "Sissy",       new[] { "Sissies", "sissyhypno", "sissycaptions" }),
+        new("hentai",     "Hentai",      new[] { "hentai", "rule34", "nsfwanimegifs", "ecchi" }),
+        // The ceiling for this niche: censoredporn (64 videos) + Censored_Porn (121) is
+        // everything scrolller has — a dozen plausible neighbours (BlurredPorn,
+        // censoredcaptions, CensoredHentai, BetaSafePorn...) simply do not exist there.
+        new("censored",   "Censored",    new[] { "censoredporn", "Censored_Porn" }),
+        new("bbc",        "BBC",         new[] { "BBCSluts", "interracial_porn", "QOS" }),
+        new("goon",       "Goon",        new[] { "GOONED", "GoonCaves", "edging" }),
+        new("amateur",    "Amateur",     new[] { "RealGirls", "TittyDrop", "gonewild" }),
         new("relapse",    "Relapse",     new[] { "pornrelapsed", "stillstraightcaptions" }),
-        new("bambisleep", "Bambi Sleep", new[] { "BambiSleep" }),
+        // 9 videos on its own, so it borrows the two nearest hypno communities rather than
+        // exhausting in the first minute. r/Bambi_Sleep and friends do not exist on scrolller.
+        new("bambisleep", "Bambi Sleep", new[] { "BambiSleep", "HypnoGoneWild", "EroticHypnosis" }),
         new("futa",       "Futa",        new[] { "futanari" }),
-        new("cosplay",    "Cosplay",     new[] { "nsfwcosplay" }),
+        new("cosplay",    "Cosplay",     new[] { "nsfwcosplay", "cosplaygirls", "CosplayLewd", "cosplaybutts" }),
+        // Appended 2026-08-23; new ids go on the END so existing selections keep their order.
+        new("beta",       "Beta / SPH",  new[] { "sph", "SmallPenisHumiliation" }),
     };
 
     /// <summary>Consumer id of the For You feed — the tenant that predates multi-tenancy and
@@ -74,6 +81,11 @@ internal sealed class FypOnlineCoordinator
     // ---- tenant registry -----------------------------------------------------------
     // Consumers ask for their coordinator by id rather than holding one, so nothing has to
     // manage a lifetime and teardown is one SaveAll().
+
+    /// <summary>Probes have no tenant (the name was typed a second ago and may never become a
+    /// channel), so they get their own stateless source instance; the politeness gate inside
+    /// it is static, so this shares the queue with every real fetch.</summary>
+    private static readonly IFeedSource ProbeSource = new ScrolllerSource();
 
     private static readonly object RegistryLock = new();
     private static readonly Dictionary<string, FypOnlineCoordinator> Instances =
@@ -219,9 +231,10 @@ internal sealed class FypOnlineCoordinator
     // 2026-08-12; leave isNsfw unread, it is not an oversight. (A per-sub/per-post blocklist
     // existed here until 2026-08-14 but nothing ever fed it, so it was removed.)
 
-    /// <summary>Niche selection / custom subs changed: drop rotation state
-    /// (iterators, dead flags, backoff) but keep the learned dwell — taste survives a
-    /// channel reshuffle.</summary>
+    /// <summary>Niche selection / custom subs changed: drop rotation state (iterators, dead
+    /// flags, backoff, and the exhaustion flags with their served-id sets) but keep the learned
+    /// dwell — taste survives a channel reshuffle. Clearing the map IS the reset: the next
+    /// fetch rebuilds every channel from scratch.</summary>
     public void ResetChannels()
     {
         lock (_lock) _channels.Clear();
@@ -266,10 +279,25 @@ internal sealed class FypOnlineCoordinator
     }
 
     /// <summary>
+    /// One batch plus everything a UI needs to explain it. <see cref="Entries"/> are FRESH
+    /// only (ids this channel has not served this session); <see cref="Dry"/> means no channel
+    /// can produce right now (all dead, exhausted or cooling), which is the difference between
+    /// "wait, it's loading" and "you have seen everything in this niche"; <see cref="PoolTotal"/>
+    /// is how many distinct remote ids the whole rotation has handed out, so the page can say
+    /// the number out loud and scale its reshuffle cooldown to the real pool size.
+    /// </summary>
+    public readonly record struct FeedBatch(
+        List<FypAssetManifest.Entry> Entries, string? Error, bool Dry, int PoolTotal);
+
+    /// <summary>
     /// Fetch the next batch of entries from the rotation, in this consumer's media kind.
     /// Returns (entries, error): a null error with zero entries means "nothing new right
     /// now" (all channels dry or cooling down), a non-null error means the
     /// API itself is unreachable. Runs off the UI thread.
+    ///
+    /// This two-value shape is what every consumer except the FYP page wants (they all dedupe
+    /// again on their own side and have nothing to render a dry verdict with); it delegates to
+    /// <see cref="FetchBatchDetailedAsync(FeedMediaKind, CancellationToken)"/>.
     /// </summary>
     public Task<(List<FypAssetManifest.Entry> Entries, string? Error)> FetchBatchAsync(CancellationToken ct)
         => FetchBatchAsync(_kind, ct);
@@ -279,29 +307,45 @@ internal sealed class FypOnlineCoordinator
     public async Task<(List<FypAssetManifest.Entry> Entries, string? Error)> FetchBatchAsync(
         FeedMediaKind kind, CancellationToken ct)
     {
+        var batch = await FetchBatchDetailedAsync(kind, ct).ConfigureAwait(false);
+        return (batch.Entries, batch.Error);
+    }
+
+    /// <summary>The full batch result — see <see cref="FeedBatch"/>. Same fetch, more answer.</summary>
+    public Task<FeedBatch> FetchBatchDetailedAsync(CancellationToken ct)
+        => FetchBatchDetailedAsync(_kind, ct);
+
+    /// <summary>The full batch result for an explicit media kind.</summary>
+    public async Task<FeedBatch> FetchBatchDetailedAsync(FeedMediaKind kind, CancellationToken ct)
+    {
         List<FeedChannelState> order;
         lock (_lock)
         {
             EnsureDwellLoaded();
             var active = ActiveChannels();
             // Rebuild the state map to the active set (keeps live iterators for kept subs).
+            // Rebuilding is also what clears exhaustion on ResetChannels(): a dropped sub loses
+            // its state entirely, and a re-picked one comes back as a virgin channel.
             var next = new Dictionary<string, FeedChannelState>(StringComparer.OrdinalIgnoreCase);
             foreach (var name in active)
                 next[name] = _channels.TryGetValue(name, out var st) ? st : new FeedChannelState { Name = name };
             _channels = next;
+            foreach (var st in next.Values) st.ReviveIfDue();
             order = PickOrder(active);
         }
 
         bool sawTransportFailure = false;
         // Dead is forever (the subreddit doesn't resolve at all); a channel serving a backoff
         // cooldown is skipped for THIS batch and comes back on its own, so a flaky minute no
-        // longer shrinks the pool for the whole session.
+        // longer shrinks the pool for the whole session. Exhaustion is the third flavour: the
+        // channel answers fine, it just has nothing left we have not already served.
         //
-        // Both are filtered BEFORE the take, not skipped inside the loop: a skip used to be
+        // All three are filtered BEFORE the take, not skipped inside the loop: a skip used to be
         // rare (three hard failures) but a cooldown starts at two seconds, so counting cooling
         // channels against the batch's three attempts would return an empty batch precisely
         // when the feed is already struggling.
-        foreach (var channel in order.Where(c => !c.Dead && !c.InBackoff).Take(MaxChannelTriesPerBatch))
+        foreach (var channel in order.Where(c => !c.Dead && !c.InBackoff && !c.InExhaustion)
+                                     .Take(MaxChannelTriesPerBatch))
         {
             var page = await _source.FetchPageAsync(channel, kind, ct).ConfigureAwait(false);
             if (page == null)
@@ -313,18 +357,68 @@ internal sealed class FypOnlineCoordinator
                 continue;
             }
             channel.NoteSuccess();
-            // A drained iterator restarts from the top: RANDOM sort deals different pages
-            // and the page's cooldown machinery absorbs the occasional repeat.
+            // A drained iterator restarts from the top: RANDOM sort deals different pages and
+            // the page's cooldown machinery absorbs the occasional repeat — right up to the
+            // point where the whole sub fits inside what we have already served, which is what
+            // the fresh count below is for.
             channel.Iterator = page.NextIterator;
-            var entries = page.Entries;
-            if (entries.Count > 0)
+
+            // Mutating filter on purpose: NoteServed records the id AND reports whether it was
+            // new. Dedupe is per channel per consumer, which is what every consumer wants —
+            // they all dedupe again anyway, and re-serving is the bug being fixed here.
+            var fresh = page.Entries.Where(e => channel.NoteServed(e.Id)).ToList();
+            if (fresh.Count > 0) channel.DryPages = 0;
+            else if (page.Entries.Count > 0) channel.DryPages++;
+
+            // Two all-repeat pages in a row, or a wrapped iterator that produced nothing new:
+            // the channel has been walked. (One dry page alone is not proof — RANDOM sort can
+            // legitimately re-deal a page we already hold from a mid-sized sub.)
+            if (channel.DryPages >= 2 || (page.NextIterator == null && fresh.Count == 0))
+            {
+                channel.NoteExhausted();
+                App.Logger?.Information(
+                    "[FYP online] r/{Sub} exhausted after {N} unique ids ({Consumer}) — reshuffling for 10 min",
+                    channel.Name, channel.ServedIds.Count, _consumerId);
+            }
+
+            if (fresh.Count > 0)
             {
                 App.Logger?.Information("[FYP online] +{N} entries from r/{Sub} ({Consumer})",
-                    entries.Count, channel.Name, _consumerId);
-                return (entries, null);
+                    fresh.Count, channel.Name, _consumerId);
+                return Summarize(fresh, null);
             }
+            App.Logger?.Debug("[FYP online] r/{Sub} dealt {N} already-served ids ({Consumer}, dry page {Dry})",
+                channel.Name, page.Entries.Count, _consumerId, channel.DryPages);
         }
-        return (new List<FypAssetManifest.Entry>(), sawTransportFailure ? "offline" : null);
+        return Summarize(new List<FypAssetManifest.Entry>(), sawTransportFailure ? "offline" : null);
+    }
+
+    /// <summary>Wrap a result with the rotation-wide verdict the consumer UIs render: "nothing
+    /// can produce right now" and "this is how big the pool actually turned out to be".</summary>
+    private FeedBatch Summarize(List<FypAssetManifest.Entry> entries, string? error)
+    {
+        bool dry;
+        int pool;
+        lock (_lock)
+        {
+            var states = _channels.Values.ToList();
+            // No channels at all is "not configured", not "exhausted" — never tell the user
+            // they have seen everything when they have seen nothing.
+            dry = states.Count > 0 && states.All(c => c.Dead || c.InExhaustion || c.InBackoff);
+            pool = states.Sum(c => c.ServedIds.Count);
+        }
+        return new FeedBatch(entries, error, dry, pool);
+    }
+
+    /// <summary>Does this subreddit exist upstream, and how much video does it hold? Static
+    /// because it is taxonomy, not tenant state: both pickers (the FYP popover and the Assets
+    /// tab) ask the same question about a name the user just typed, long before any coordinator
+    /// would be built for it. Rides the source's own 1.1s politeness gate.</summary>
+    public static async Task<SubProbe> ProbeSubAsync(string? rawSub, CancellationToken ct)
+    {
+        var clean = SanitizeSub(rawSub);
+        if (clean == null) return new SubProbe { Ok = false, Error = "invalid" };
+        return await ProbeSource.ProbeSubAsync(clean, ct).ConfigureAwait(false);
     }
 
     /// <summary>Channels sorted by a weighted-random draw over dwell taste: a channel the

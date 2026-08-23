@@ -36,6 +36,29 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// What we learned the last time a custom subreddit was probed against the remote media
+    /// provider: does it resolve, and how much video does it hold. Persisted with the sub
+    /// (AppSettings.FypOnlineSubVerdicts) so a verified pill survives a relaunch instead of
+    /// costing a network round-trip on every picker paint; re-probed lazily once older than
+    /// a week (AppSettings.SubVerdictIsStale).
+    ///
+    /// A NOT-FOUND answer is worth storing too (Ok = false): it is a real verdict about the
+    /// sub. A transport failure is NOT — the probe learned nothing, so nothing is written.
+    /// </summary>
+    public class RemoteSubVerdict
+    {
+        /// <summary>The sub resolves upstream.</summary>
+        [JsonProperty] public bool Ok { get; set; }
+
+        /// <summary>Videos the provider reported, or null when unknown. Zero is meaningful
+        /// (the sub exists but is stills-only) and the pickers say so rather than lying.</summary>
+        [JsonProperty] public int? VideoCount { get; set; }
+
+        /// <summary>When this verdict was taken (UTC).</summary>
+        [JsonProperty] public DateTime CheckedAtUtc { get; set; }
+    }
+
+    /// <summary>
     /// Legacy content mode enum. Kept for settings deserialization backward compatibility.
     /// Use App.Mods (ModService) instead.
     /// </summary>
@@ -3286,6 +3309,45 @@ namespace ConditioningControlPanel.Models
         {
             get => _fypOnlineCustomSubs;
             set { _fypOnlineCustomSubs = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, RemoteSubVerdict> _fypOnlineSubVerdicts =
+            new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Last probe result per custom sub, keyed by the SANITIZED bare name
+        /// (case-insensitive — reddit names are, and a user typing "GOONED" must not get a
+        /// second entry beside "gooned"). Shared by both pickers, same as the sub list itself.
+        /// Entries outlive their sub only until the next removal prunes them.</summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, RemoteSubVerdict> FypOnlineSubVerdicts
+        {
+            get => _fypOnlineSubVerdicts;
+            // Rebuilt through the case-insensitive comparer on every set: Newtonsoft hands back
+            // a plain (ordinal) dictionary on load, which would quietly make lookups
+            // case-sensitive again. Copied key by key rather than via the copy constructor
+            // because a hand-edited file could carry two keys that differ only in case, and
+            // that must lose a duplicate, not throw on startup.
+            set
+            {
+                var next = new Dictionary<string, RemoteSubVerdict>(StringComparer.OrdinalIgnoreCase);
+                if (value != null)
+                    foreach (var kv in value)
+                        if (!string.IsNullOrWhiteSpace(kv.Key) && kv.Value != null)
+                            next[kv.Key] = kv.Value;
+                _fypOnlineSubVerdicts = next;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>How long a probe verdict is trusted before the pickers re-ask.</summary>
+        public const int SubVerdictMaxAgeDays = 7;
+
+        /// <summary>True when we have no verdict for this sub, or the one we have has aged out.
+        /// Callers probe on true and paint from the store on false.</summary>
+        public bool SubVerdictIsStale(string? sanitizedName)
+        {
+            if (string.IsNullOrWhiteSpace(sanitizedName)) return true;
+            if (!_fypOnlineSubVerdicts.TryGetValue(sanitizedName, out var v) || v == null) return true;
+            return DateTime.UtcNow - v.CheckedAtUtc > TimeSpan.FromDays(SubVerdictMaxAgeDays);
         }
 
         private bool _fypOnlineConsented = false;

@@ -32,6 +32,29 @@ internal interface IFeedSource
     /// <see cref="FeedMediaKind.Image"/>. A source that cannot serve the requested kind
     /// returns an empty page rather than substituting the other.</param>
     Task<FeedPage?> FetchPageAsync(FeedChannelState channel, FeedMediaKind kind, CancellationToken ct);
+
+    /// <summary>
+    /// Does this channel exist upstream, and how much video does it hold? One cheap request
+    /// (limit 1) on the same politeness gate as <see cref="FetchPageAsync"/>. Lives on the
+    /// source rather than in the pickers because "what counts as a channel" is the source's
+    /// vocabulary: a custom sub the user types must be answered by the same API that would
+    /// later serve it, never by a guess.
+    /// </summary>
+    Task<SubProbe> ProbeSubAsync(string sub, CancellationToken ct);
+}
+
+/// <summary>
+/// The answer to "is r/&lt;sub&gt; real?". Three distinct outcomes, and the pickers render all
+/// three differently, so they must not be collapsed: <c>Ok</c> = it resolves (with its video
+/// count, possibly 0 = stills only); <c>!Ok</c> with no <c>Error</c> = it does not exist
+/// upstream (a user-facing "no such sub", worth persisting); <c>Error</c> = we could not ask
+/// (transport/GraphQL), which says nothing about the sub and must never be cached as a verdict.
+/// </summary>
+internal sealed class SubProbe
+{
+    public bool Ok { get; init; }
+    public int? VideoCount { get; init; }
+    public string? Error { get; init; }
 }
 
 /// <summary>
@@ -98,6 +121,62 @@ internal sealed class FeedChannelState
 
     /// <summary>The subreddit didn't resolve at all — never ask again this session.</summary>
     public bool Dead;
+
+    // ---- Exhaustion (the dry-channel fix, 2026-08-23) -----------------------------
+    // A drained iterator comes back null and the next request restarts the sub from the top
+    // under RANDOM sort, so a small community (r/censoredporn: 64 videos, r/BambiSleep: 9)
+    // silently re-serves ids the consumer already holds — forever, at one request per 1.1s.
+    // Nothing marked that state before: Dead only ever meant "does not resolve". So count
+    // what we have actually handed out and stop asking once the channel repeats itself.
+
+    /// <summary>Entry ids this channel has served this session. Capped: a channel that has
+    /// already produced <see cref="ServedIdCap"/> distinct ids is not the tiny-community case
+    /// this guard exists for, and an unbounded set in an all-night session is a leak.</summary>
+    public readonly HashSet<string> ServedIds = new(StringComparer.Ordinal);
+
+    /// <summary>Past this many distinct ids we stop tracking and treat everything as fresh.</summary>
+    public const int ServedIdCap = 2000;
+
+    /// <summary>How long an exhausted channel sits out before it is asked again — long enough
+    /// that a sub which gained posts mid-session still refreshes, short enough that a niche
+    /// re-picked half an hour later is not permanently written off.</summary>
+    public static readonly TimeSpan ExhaustionCooldown = TimeSpan.FromMinutes(10);
+
+    /// <summary>The channel has nothing left we have not already served.</summary>
+    public bool Exhausted;
+
+    /// <summary>When <see cref="Exhausted"/> was raised.</summary>
+    public DateTime ExhaustedAtUtc;
+
+    /// <summary>Consecutive pages that arrived non-empty but 100% already-served.</summary>
+    public int DryPages;
+
+    /// <summary>True while the channel is sitting out its exhaustion cooldown. Batch selection
+    /// skips it exactly like <see cref="Dead"/> / <see cref="InBackoff"/>.</summary>
+    public bool InExhaustion => Exhausted && DateTime.UtcNow < ExhaustedAtUtc + ExhaustionCooldown;
+
+    /// <summary>Mark an id as served. Returns true when it is FRESH (not seen before on this
+    /// channel this session) — call it exactly once per entry, it mutates.</summary>
+    public bool NoteServed(string id)
+        => ServedIds.Count >= ServedIdCap || ServedIds.Add(id);
+
+    /// <summary>The channel repeated itself: sit out <see cref="ExhaustionCooldown"/>.</summary>
+    public void NoteExhausted()
+    {
+        Exhausted = true;
+        ExhaustedAtUtc = DateTime.UtcNow;
+        DryPages = 0;
+    }
+
+    /// <summary>Cooldown served: put the channel back in the rotation. <see cref="ServedIds"/>
+    /// is deliberately KEPT — the consumer still holds those clips, so counting them as fresh
+    /// again would just re-arm the same repeat loop the flag exists to stop.</summary>
+    public void ReviveIfDue()
+    {
+        if (!Exhausted || InExhaustion) return;
+        Exhausted = false;
+        DryPages = 0;
+    }
 
     // ---- Transient-failure backoff -------------------------------------------------
     // Ported from the web spiral-express port, which is the most evolved of the four

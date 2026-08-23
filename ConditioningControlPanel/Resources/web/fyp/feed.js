@@ -21,7 +21,8 @@ export const PAGE_SIZE = 8;
 export const MAX_COMPS = 6 * PAGE_SIZE;
 const HISTORY_KEYS_MAX = 512; // hard ceiling on distinct per-tile history stacks
 const HISTORY_MAX = 20;       // per-tile swipe-back depth
-const ASSET_COOLDOWN = 2;     // don't show 3+ clips of the same video in a row
+const ASSET_COOLDOWN_MIN = 2;  // don't show 3+ clips of the same video in a row
+const ASSET_COOLDOWN_MAX = 24; // ...but never lock out most of a big library
 const SAME_ASSET_PENALTY = 0.25;
 const MOSAIC_MIN_TILES = 2;
 const MOSAIC_MAX_TILES = 4;
@@ -43,6 +44,20 @@ function weightFor(id) {
 
 function segCooldownFor(n) {
   return Math.max(1, Math.min(12, Math.floor(n * 0.5)));
+}
+
+/**
+ * How many recent picks block a repeat of the same ASSET. A flat 2 was fine for a big
+ * local library, but an online niche can be a few dozen clips in total (r/censoredporn
+ * is 64 videos, the whole niche) and once every channel is drained the feed deliberately
+ * recycles what it has already served — at a cooldown of 2 that keeps re-drawing
+ * near-recent clips and reads as "it just shows me the same three". Scaling to ~a third
+ * of the pool cycles a small pool evenly instead; the ceiling stops the LRU fallback
+ * from becoming the normal path on a large one. n = DISTINCT ASSETS, not segments: one
+ * long video expands into many segments and would otherwise inflate its own cooldown.
+ */
+function assetCooldownFor(n) {
+  return Math.max(ASSET_COOLDOWN_MIN, Math.min(ASSET_COOLDOWN_MAX, Math.floor(n / 3)));
 }
 
 function remember(ring, id) {
@@ -93,12 +108,12 @@ function leastRecentlyUsed(candidates, ring) {
  * optimism-under-uncertainty term and a capped retention boost; recency and the
  * exclusion set zero candidates out. O(N); LRU fallback when all on cooldown.
  */
-function weightedPick(pool, ring, segCooldown, exclude) {
+function weightedPick(pool, ring, segCooldown, assetCooldown, exclude) {
   if (pool.length === 0) return null;
   const lastSeg = ring.length ? ring[ring.length - 1] : null;
   const lastAsset = lastSeg ? lastSeg.slice(0, lastSeg.indexOf(':')) : null;
   const recentSegs = new Set(ring.slice(-segCooldown));
-  const recentAssets = new Set(ring.slice(-ASSET_COOLDOWN).map((s) => s.slice(0, s.indexOf(':'))));
+  const recentAssets = new Set(ring.slice(-assetCooldown).map((s) => s.slice(0, s.indexOf(':'))));
   let total = 0;
   const eff = pool.map((c) => {
     let w = weightFor(c.segId);
@@ -128,16 +143,16 @@ function weightedPick(pool, ring, segCooldown, exclude) {
  * so a starved bucket (online buffer still loading, tiny library) never blanks
  * a tile. Every fresh-pick site routes through here.
  */
-function pickWithMix(pool, ring, segCooldown, exclude) {
+function pickWithMix(pool, ring, segCooldown, assetCooldown, exclude) {
   if (mixRemoteShare > 0 && mixRemoteShare < 1) {
     const wantRemote = Math.random() < mixRemoteShare;
     const bucket = pool.filter((c) => c.remote === wantRemote);
     if (bucket.length) {
-      const pick = weightedPick(bucket, ring, segCooldown, exclude);
+      const pick = weightedPick(bucket, ring, segCooldown, assetCooldown, exclude);
       if (pick) return pick;
     }
   }
-  return weightedPick(pool, ring, segCooldown, exclude);
+  return weightedPick(pool, ring, segCooldown, assetCooldown, exclude);
 }
 
 function toCut(pick) {
@@ -187,7 +202,7 @@ function splitRects(n, aspect) {
 }
 
 /** Landscape stack (duo/trio) or a single portrait / lone-landscape tile. */
-function buildLeadTiles(lead, rows, landscapePool, ring, segCooldown) {
+function buildLeadTiles(lead, rows, landscapePool, ring, segCooldown, assetCooldown) {
   if (!lead.landscape) {
     return [{
       cut: toCut(lead),
@@ -201,7 +216,7 @@ function buildLeadTiles(lead, rows, landscapePool, ring, segCooldown) {
   const picks = [lead];
   const exclude = new Set([lead.segId]);
   for (let r = 1; r < rows; r++) {
-    const mate = pickWithMix(landscapePool, ring, segCooldown, exclude);
+    const mate = pickWithMix(landscapePool, ring, segCooldown, assetCooldown, exclude);
     if (!mate) break;
     picks.push(mate);
     exclude.add(mate.segId);
@@ -220,7 +235,7 @@ function buildLeadTiles(lead, rows, landscapePool, ring, segCooldown) {
 }
 
 /** One irregular mosaic: orientation-matched picks into split cells. */
-function buildMosaicTiles(candidates, ring, segCooldown, aspect) {
+function buildMosaicTiles(candidates, ring, segCooldown, assetCooldown, aspect) {
   const n = MOSAIC_MIN_TILES + Math.floor(Math.random() * (MOSAIC_MAX_TILES - MOSAIC_MIN_TILES + 1));
   const rects = splitRects(n, aspect);
   const exclude = new Set();
@@ -233,9 +248,9 @@ function buildMosaicTiles(candidates, ring, segCooldown, aspect) {
     // Prefer fresh + orientation-matched; widen to the full pool; only for a pack
     // too small to fill every cell, allow a repeat rather than a black gap.
     const pick =
-      pickWithMix(pool, ring, segCooldown, exclude) ??
-      weightedPick(candidates, ring, segCooldown, exclude) ??
-      weightedPick(candidates, ring, segCooldown, null);
+      pickWithMix(pool, ring, segCooldown, assetCooldown, exclude) ??
+      weightedPick(candidates, ring, segCooldown, assetCooldown, exclude) ??
+      weightedPick(candidates, ring, segCooldown, assetCooldown, null);
     if (!pick) continue;
     exclude.add(pick.segId);
     remember(ring, pick.segId);
@@ -262,6 +277,9 @@ export function createFeed(getAspect) {
   let includeGifs = true;
   let layout = 'duo';
   let candidates = [];
+  // Recomputed with the candidate set (never per pick): the pool only changes on
+  // configure/append/meta, so every pick in between shares one honest number.
+  let assetCooldown = ASSET_COOLDOWN_MIN;
   let poolKey = '';
   const recent = { ring: [] };
   let comps = [];
@@ -285,7 +303,9 @@ export function createFeed(getAspect) {
   }
 
   function rebuildCandidates() {
-    candidates = enumerateSegments(activePool());
+    const pool = activePool();
+    candidates = enumerateSegments(pool);
+    assetCooldown = assetCooldownFor(pool.length);
   }
 
   function computePoolKey() {
@@ -302,12 +322,12 @@ export function createFeed(getAspect) {
       const key = `cut-${compSeq++}`;
       let tiles;
       if (layout === 'random') {
-        tiles = buildMosaicTiles(candidates, recent.ring, segCooldown, aspect);
+        tiles = buildMosaicTiles(candidates, recent.ring, segCooldown, assetCooldown, aspect);
       } else {
-        const lead = pickWithMix(candidates, recent.ring, segCooldown, null);
+        const lead = pickWithMix(candidates, recent.ring, segCooldown, assetCooldown, null);
         if (!lead) break;
         remember(recent.ring, lead.segId);
-        tiles = buildLeadTiles(lead, layout === 'trio' ? 3 : 2, landscapePool, recent.ring, segCooldown);
+        tiles = buildLeadTiles(lead, layout === 'trio' ? 3 : 2, landscapePool, recent.ring, segCooldown, assetCooldown);
       }
       if (!tiles.length) break;
       out.push({ key, layout, gen: 0, tiles });
@@ -331,7 +351,7 @@ export function createFeed(getAspect) {
     if (!stacked && pickPool.length < 2) pickPool = candidates;
     const exclude = new Set(comp.tiles.map((t) => t.cut.segId)); // no dupes on the page
     exclude.add(tile.cut.segId);
-    return pickWithMix(pickPool, recent.ring, segCooldownFor(candidates.length), exclude);
+    return pickWithMix(pickPool, recent.ring, segCooldownFor(candidates.length), assetCooldown, exclude);
   }
 
   /** The outgoing cut joins the tile's replay stack (bounded both ways). */
@@ -542,7 +562,7 @@ export function createFeed(getAspect) {
     morph(compKey) {
       const comp = comps.find((c) => c.key === compKey);
       if (!comp || comp.layout !== 'random' || candidates.length === 0) return null;
-      const tiles = buildMosaicTiles(candidates, recent.ring, segCooldownFor(candidates.length), getAspect());
+      const tiles = buildMosaicTiles(candidates, recent.ring, segCooldownFor(candidates.length), assetCooldown, getAspect());
       if (!tiles.length) return null;
       for (const k of history.keys()) {
         if (k.startsWith(compKey + ':')) history.delete(k);

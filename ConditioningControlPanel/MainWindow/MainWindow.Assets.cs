@@ -2125,6 +2125,19 @@ namespace ConditioningControlPanel
         private readonly List<ToggleButton> _remoteSourceChipButtons = new();
         private readonly List<ToggleButton> _remoteNicheChipButtons = new();
 
+        /// <summary>Niche ids whose sub list is currently unfolded under the chip row. Session
+        /// state on purpose: which disclosure triangles you left open is not worth a settings
+        /// key, and a fresh launch showing every niche as one tidy line is the better default.</summary>
+        private readonly HashSet<string> _remoteNicheExpanded = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The sub being probed right now, or null. Held as state rather than as a
+        /// captured Border so the pending pill survives a picker repaint mid-probe.</summary>
+        private string? _remoteSubPending;
+
+        /// <summary>Same cap the FYP popover host enforces (Take(20)). The WPF picker used to
+        /// have none, so the two surfaces could disagree about what was saved.</summary>
+        private const int RemoteCustomSubCap = 20;
+
         /// <summary>Builds the picker once, then re-syncs it to settings on every tab visit.</summary>
         private void InitializeRemoteMediaPicker()
         {
@@ -2241,6 +2254,7 @@ namespace ConditioningControlPanel
                 foreach (var chip in _remoteNicheChipButtons)
                     chip.IsChecked = chip.Tag is string id && selected.Contains(id);
 
+                RebuildRemoteNicheSubs(settings);
                 RebuildRemoteCustomSubChips(settings);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Remote media picker refresh failed"); }
@@ -2331,6 +2345,8 @@ namespace ConditioningControlPanel
                 // niche rather than serving nothing, so "none" degrades instead of breaking.
                 settings.FypOnlineNiches = selected;
                 PersistRemoteChannelChange();
+                // The sub list under the row is a projection of exactly this selection.
+                RebuildRemoteNicheSubs(settings);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Remote niche toggle failed"); }
         }
@@ -2361,35 +2377,164 @@ namespace ConditioningControlPanel
             AddRemoteCustomSub();
         }
 
-        private void AddRemoteCustomSub()
+        /// <summary>
+        /// Commit a typed subreddit, but only after asking the provider whether it exists.
+        /// Everything a user can get wrong here is answered inline, under the box: the modal
+        /// MessageBox this used to throw for a typo blocked the whole window over a missing
+        /// letter, and it had nothing to say about the two failures that actually matter (the
+        /// sub is not on Scrolller / we could not reach Scrolller at all).
+        ///
+        /// The pill goes up grey and dashed the moment the name is legal, then turns orange
+        /// when the probe answers - the sub is only written to settings on a real "it exists".
+        /// A NOT-FOUND verdict is stored anyway so re-adding the same typo costs no round trip;
+        /// a transport failure stores nothing, because it taught us nothing about the sub.
+        /// </summary>
+        private async void AddRemoteCustomSub()
         {
+            string clean;
+            var settings = App.Settings?.Current;
+            var box = AssetsTab?.TxtRemoteCustomSub;
+            if (box == null || settings == null) return;
+            if (_remoteSubPending != null) return;   // one probe at a time; the button is disabled too
+
             try
             {
-                var box = AssetsTab?.TxtRemoteCustomSub;
-                var settings = App.Settings?.Current;
-                if (box == null || settings == null) return;
+                ShowRemoteSubError(null);
 
-                var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(box.Text);
-                if (clean == null)
+                var sanitized = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(box.Text);
+                if (sanitized == null)
                 {
-                    MessageBox.Show(this,
-                        LocOr("msg_remote_sub_invalid",
-                            "That doesn't look like a subreddit. Try a name like r/EroticHypnosis, or paste its link."),
-                        LocOr("title_remote_sub_invalid", "Check that name"),
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ShowRemoteSubError(LocOr("msg_remote_sub_invalid",
+                        "That doesn't look like a subreddit. Try a name like r/EroticHypnosis, or paste its link."));
+                    return;
+                }
+                clean = sanitized;
+
+                var current = settings.FypOnlineCustomSubs ?? new List<string>();
+                if (current.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ShowRemoteSubError(string.Format(LocOr("msg_remote_sub_duplicate",
+                        "r/{0} is already added"), clean));
+                    box.Text = "";
+                    return;
+                }
+                if (current.Count >= RemoteCustomSubCap)
+                {
+                    ShowRemoteSubError(LocOr("msg_remote_sub_cap", "Up to 20 custom subreddits"));
                     return;
                 }
 
-                var list = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
-                if (!list.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
-                    list.Add(clean);
-                settings.FypOnlineCustomSubs = list;
                 box.Text = "";
-
-                PersistRemoteChannelChange();
-                RefreshRemoteMediaPicker();
+                _remoteSubPending = clean;
+                if (AssetsTab?.BtnRemoteAddSub != null) AssetsTab.BtnRemoteAddSub.IsEnabled = false;
+                RebuildRemoteCustomSubChips(settings);
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "Adding a custom subreddit failed"); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Adding a custom subreddit failed");
+                EndRemoteSubProbe();
+                return;
+            }
+
+            Services.Fyp.Online.SubProbe probe;
+            try
+            {
+                probe = await Task.Run(() =>
+                    Services.Fyp.Online.FypOnlineCoordinator.ProbeSubAsync(clean, CancellationToken.None));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Probing r/{Sub} threw", clean);
+                probe = new Services.Fyp.Online.SubProbe { Ok = false, Error = "offline" };
+            }
+
+            // The window can go away while a probe is in flight (Known Issues #6/#8).
+            if (Application.Current?.Dispatcher == null ||
+                Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            try
+            {
+                settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                if (probe.Ok)
+                {
+                    var list = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
+                    if (!list.Any(x => string.Equals(x, clean, StringComparison.OrdinalIgnoreCase)))
+                        list.Add(clean);
+                    settings.FypOnlineCustomSubs = list;
+                    settings.FypOnlineSubVerdicts[clean] = new RemoteSubVerdict
+                    {
+                        Ok = true,
+                        VideoCount = probe.VideoCount,
+                        CheckedAtUtc = DateTime.UtcNow
+                    };
+
+                    _remoteSubPending = null;
+                    PersistRemoteChannelChange();
+                    RefreshRemoteMediaPicker();
+                    App.Logger?.Information("[remote media] custom sub r/{Sub} verified ({N} videos)",
+                        clean, probe.VideoCount);
+                }
+                else if (string.Equals(probe.Error, "offline", StringComparison.Ordinal))
+                {
+                    // Nothing persisted: we learned nothing about the sub, only about the wire.
+                    ShowRemoteSubError(LocOr("msg_remote_sub_offline",
+                        "Couldn't reach Scrolller - try again"));
+                }
+                else if (string.Equals(probe.Error, "invalid", StringComparison.Ordinal))
+                {
+                    ShowRemoteSubError(LocOr("msg_remote_sub_invalid",
+                        "That doesn't look like a subreddit. Try a name like r/EroticHypnosis, or paste its link."));
+                }
+                else
+                {
+                    // A real verdict about a real name: remember it so the same typo does not
+                    // buy another round trip.
+                    settings.FypOnlineSubVerdicts[clean] = new RemoteSubVerdict
+                    {
+                        Ok = false,
+                        VideoCount = null,
+                        CheckedAtUtc = DateTime.UtcNow
+                    };
+                    App.Settings?.Save();
+                    ShowRemoteSubError(string.Format(LocOr("msg_remote_sub_not_found",
+                        "r/{0} isn't on Scrolller"), clean));
+                }
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Committing a probed subreddit failed"); }
+            finally { EndRemoteSubProbe(); }
+        }
+
+        /// <summary>Drops the pending pill and gives the Add button back, whatever happened.</summary>
+        private void EndRemoteSubProbe()
+        {
+            try
+            {
+                var hadPending = _remoteSubPending != null;
+                _remoteSubPending = null;
+                if (AssetsTab?.BtnRemoteAddSub != null) AssetsTab.BtnRemoteAddSub.IsEnabled = true;
+                var settings = App.Settings?.Current;
+                if (hadPending && settings != null) RebuildRemoteCustomSubChips(settings);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Ending a sub probe failed: {E}", ex.Message); }
+        }
+
+        /// <summary>The one soft-error slot under the add row. Null hides it.</summary>
+        private void ShowRemoteSubError(string? text)
+        {
+            var label = AssetsTab?.TxtRemoteSubError;
+            if (label == null) return;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                label.Text = "";
+                label.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                label.Text = text;
+                label.Visibility = Visibility.Visible;
+            }
         }
 
         private void RemoveRemoteCustomSub(string sub)
@@ -2400,6 +2545,11 @@ namespace ConditioningControlPanel
             var list = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
             list.RemoveAll(x => string.Equals(x, sub, StringComparison.OrdinalIgnoreCase));
             settings.FypOnlineCustomSubs = list;
+            // The verdict is about a sub the user no longer keeps, so it goes with it: leaving it
+            // behind would silently re-verify a name they deliberately dropped and re-probed later.
+            var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(sub) ?? sub;
+            settings.FypOnlineSubVerdicts.Remove(clean);
+            ShowRemoteSubError(null);
 
             PersistRemoteChannelChange();
             RefreshRemoteMediaPicker();
@@ -2420,12 +2570,52 @@ namespace ConditioningControlPanel
             if (host == null) return;
 
             host.Children.Clear();
+
+            var verified = AssetsTab?.TryFindResource("RemoteSubVerifiedBrush") as Brush;
+            var muted = Application.Current?.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
+            var removeTip = LocOr("tooltip_remote_custom_sub_remove", "Remove this subreddit");
+
             foreach (var sub in (settings.FypOnlineCustomSubs ?? new List<string>()).ToList())
             {
                 var name = sub;   // captured per chip, not per loop variable
-                host.Children.Add(BuildRemoteChip($"r/{name}",
-                    LocOr("tooltip_remote_custom_sub_remove", "Remove this subreddit"),
-                    () => RemoveRemoteCustomSub(name)));
+                settings.FypOnlineSubVerdicts.TryGetValue(name, out var verdict);
+
+                var label = $"r/{name}";
+                Brush? accent = null;
+                string? chipTip = null;
+
+                if (verdict != null && verdict.Ok)
+                {
+                    // Orange = we asked and it answered. VideoCount 0 is a real answer too, and
+                    // the pill says "stills only" rather than promising clips it does not have.
+                    accent = verified;
+                    chipTip = verdict.VideoCount.GetValueOrDefault() > 0
+                        ? string.Format(LocOr("label_remote_sub_verified",
+                            "Verified · {0} clips on Scrolller"), verdict.VideoCount.GetValueOrDefault())
+                        : LocOr("label_remote_sub_verified_stills", "Verified · stills only");
+                }
+                else if (verdict != null)
+                {
+                    // Probed and NOT found. It stays in the list (the user put it there and may
+                    // know something we do not) but it is marked, not quietly rendered as fine.
+                    accent = muted;
+                    label = $"r/{name} ?";
+                    chipTip = string.Format(LocOr("msg_remote_sub_not_found",
+                        "r/{0} isn't on Scrolller"), name);
+                }
+                // No verdict at all = added before probing existed. Default pill, no claim either way.
+
+                host.Children.Add(BuildRemoteChip(label, removeTip,
+                    () => RemoveRemoteCustomSub(name), accent, chipTip));
+            }
+
+            // Grey dashed placeholder while the probe is out, so the click has a visible effect
+            // long before the network answers.
+            if (_remoteSubPending != null)
+            {
+                host.Children.Add(BuildRemoteChip($"r/{_remoteSubPending}…", null, null, muted,
+                    string.Format(LocOr("label_remote_sub_checking", "Checking r/{0}…"), _remoteSubPending),
+                    dashed: true));
             }
 
             if (host.Children.Count == 0)
@@ -2434,36 +2624,133 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>A removable pill. Same look as the niche toggles, with the companion tab's
-        /// ✕ affordance; both styles live in AssetsTabView.xaml's own resources.</summary>
-        private Border BuildRemoteChip(string label, string removeTip, Action onRemove)
+        /// ✕ affordance; both styles live in AssetsTabView.xaml's own resources.
+        ///
+        /// <paramref name="accent"/> repaints the border AND the label (orange = probed and real,
+        /// muted = probed and missing, null = never probed). <paramref name="onRemove"/> may be
+        /// null for a pill that cannot be removed yet - the in-flight probe placeholder.
+        /// <paramref name="dashed"/> draws the outline as a rounded Rectangle instead, because a
+        /// WPF Border has no dash style of its own.</summary>
+        private Border BuildRemoteChip(string label, string? removeTip, Action? onRemove,
+            Brush? accent = null, string? chipTip = null, bool dashed = false)
         {
             var chip = new Border { Style = AssetsTab?.TryFindResource("RemoteChipBorder") as Style };
+            if (chipTip != null) chip.ToolTip = chipTip;
             var row = new StackPanel { Orientation = Orientation.Horizontal };
 
             row.Children.Add(new TextBlock
             {
                 Text = label,
-                Foreground = Brushes.White,
+                Foreground = accent ?? Brushes.White,
                 FontSize = 11,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center
             });
 
-            var close = new Button
+            if (onRemove != null)
             {
-                Content = "✕",
-                ToolTip = removeTip,
-                Style = AssetsTab?.TryFindResource("RemoteChipCloseButton") as Style
-            };
-            close.Click += (_, _) =>
-            {
-                try { onRemove(); }
-                catch (Exception ex) { App.Logger?.Debug("Remote chip removal failed: {E}", ex.Message); }
-            };
-            row.Children.Add(close);
+                var close = new Button
+                {
+                    Content = "✕",
+                    ToolTip = removeTip,
+                    Style = AssetsTab?.TryFindResource("RemoteChipCloseButton") as Style
+                };
+                close.Click += (_, _) =>
+                {
+                    try { onRemove(); }
+                    catch (Exception ex) { App.Logger?.Debug("Remote chip removal failed: {E}", ex.Message); }
+                };
+                row.Children.Add(close);
+            }
 
-            chip.Child = row;
+            if (dashed)
+            {
+                chip.BorderThickness = new Thickness(0);
+                chip.Background = Brushes.Transparent;
+                var stack = new Grid();
+                stack.Children.Add(new Rectangle
+                {
+                    RadiusX = 13,
+                    RadiusY = 13,
+                    Fill = Brushes.Transparent,
+                    Stroke = accent ?? Brushes.Gray,
+                    StrokeThickness = 1,
+                    StrokeDashArray = new DoubleCollection { 3, 2 }
+                });
+                stack.Children.Add(row);
+                chip.Child = stack;
+            }
+            else
+            {
+                if (accent != null) chip.BorderBrush = accent;
+                chip.Child = row;
+            }
             return chip;
+        }
+
+        /// <summary>One grey line per checked niche, naming the subs it really resolves to.
+        /// Collapsed to a count by default and unfolded on click - the picker should never hide
+        /// that "Censored" is two subreddits, or that Bambi Sleep borrows from Hypno.
+        /// Single-sub niches skip the disclosure entirely: there is nothing to unfold, and the
+        /// name is shorter than the promise to show it.</summary>
+        private void RebuildRemoteNicheSubs(Models.AppSettings settings)
+        {
+            var host = AssetsTab?.RemoteNicheSubs;
+            if (host == null) return;
+
+            try
+            {
+                host.Children.Clear();
+                var muted = Application.Current?.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
+                var selected = new HashSet<string>(settings.FypOnlineNiches ?? new List<string>(),
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (var niche in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
+                {
+                    if (niche?.Id == null || !selected.Contains(niche.Id)) continue;
+                    var subs = niche.Subs ?? Array.Empty<string>();
+                    if (subs.Length == 0) continue;
+
+                    var id = niche.Id;
+                    var names = string.Join(" · ", subs.Select(x => "r/" + x));
+
+                    var line = new TextBlock
+                    {
+                        Foreground = muted,
+                        FontSize = 11,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(2, 0, 0, 3),
+                        Background = Brushes.Transparent   // so the whole row is a hit target
+                    };
+
+                    if (subs.Length == 1)
+                    {
+                        line.Text = $"{niche.Label} · {names}";
+                        host.Children.Add(line);
+                        continue;
+                    }
+
+                    line.Cursor = Cursors.Hand;
+                    void Paint() => line.Text = _remoteNicheExpanded.Contains(id)
+                        ? $"▾ {niche.Label} · {names}"
+                        : $"▸ {niche.Label} · " +
+                          string.Format(LocOr("label_remote_niche_subs", "{0} subs"), subs.Length);
+                    Paint();
+
+                    line.MouseLeftButtonUp += (_, _) =>
+                    {
+                        try
+                        {
+                            if (!_remoteNicheExpanded.Add(id)) _remoteNicheExpanded.Remove(id);
+                            Paint();
+                        }
+                        catch (Exception ex) { App.Logger?.Debug("Niche sub toggle failed: {E}", ex.Message); }
+                    };
+
+                    host.Children.Add(line);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Rebuilding the niche sub list failed"); }
         }
 
         private static TextBlock MutedRemoteNote(string text) => new()
