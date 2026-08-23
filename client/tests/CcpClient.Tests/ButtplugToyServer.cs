@@ -275,10 +275,14 @@ internal sealed class ButtplugToyServer : IDisposable
 
         // Unregistered only after a SUCCESSFUL close — the registry's rule, because a leak report
         // that lied would fail the whole assembly loud on a false fact.
+        //
+        // Close() ALONE, for the reason spelled out in HapticToyServer.Dispose: on the managed
+        // listener (every non-Windows run) Stop() and Close() each call RemoveListener, and the
+        // second call RE-BINDS the port the first one released. This server was caught by the same
+        // instrumentation throwing the same HttpListenerException 98 out of the same re-bind.
         var closed = false;
         try
         {
-            _listener.Stop();
             _listener.Close();
             closed = true;
         }
