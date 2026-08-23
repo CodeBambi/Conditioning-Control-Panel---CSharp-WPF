@@ -47,7 +47,7 @@ namespace CcpClient.Desktop.Features.Chaos;
 /// counterpart. What the port is actually missing is the Chaos RUN — and the lobby that
 /// configures it — for the backdrop to sit under: a feature row, not a door. Until that lands
 /// <c>--tunnel-demo</c> is the correct and only way to render this surface. Recorded at
-/// wpf-surface-reachability.md §11 D30.</para>
+/// wpf-surface-reachability.md §11 D30 @ 7527243e7.</para>
 ///
 /// <para><b>An earlier revision of this comment said the lobby was "reachable only from inside a
 /// running classic descent", which is the INVERSE of what its own citation does</b> — and it is
@@ -55,7 +55,7 @@ namespace CcpClient.Desktop.Features.Chaos;
 /// sentence. The citation pointed at real lines; the prose described the conclusion the author
 /// had already reached, and it happened to make WPF's tunnel control look less reachable than it
 /// is, which flattered the no-door verdict. Third instance in this project of a citation aimed at
-/// real lines while describing their opposite (wpf-surface-reachability.md §8.5's occluded title;
+/// real lines while describing their opposite (wpf-surface-reachability.md §8.5 @ 7527243e7's occluded title;
 /// §10 D24's two-term grant recorded as one term). Read the cited lines, then write the
 /// sentence.</para>
 /// </summary>

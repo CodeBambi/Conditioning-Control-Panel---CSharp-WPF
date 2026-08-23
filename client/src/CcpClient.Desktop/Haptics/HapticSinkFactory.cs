@@ -20,9 +20,9 @@ namespace CcpClient.Desktop.Haptics;
 public static class HapticSinkFactory
 {
     /// <summary>
-    /// The provider routes this build has a client for. <b>Empty, and the refusal is produced by
-    /// reading it rather than by a hard-coded branch</b> — so the day one is admitted, the same code
-    /// stops refusing without being edited to stop refusing.
+    /// The provider routes this build has a client for. <b>Lovense, and the refusal for everything
+    /// else is produced by reading this list rather than by a hard-coded branch</b> — which is why
+    /// admitting Lovense stopped the refusal without any code being edited to stop refusing.
     /// </summary>
     public static IReadOnlyList<HapticProviderRoute> AdmittedRoutes { get; } = [HapticProviderRoute.Lovense];
 
@@ -108,8 +108,10 @@ public static class HapticSinkFactory
         + "this machine's API surface at all.";
 
     /// <summary>
-    /// The sink for this build. <b>Every path returns a refusal today</b>, and it is produced by
-    /// asking <see cref="AdmittedRoutes"/> rather than by a constant.
+    /// The sink for this build. <b>A real Lovense client since that route was admitted</b>, chosen by
+    /// asking <see cref="AdmittedRoutes"/> rather than by a constant. Constructing a client is not
+    /// reaching a device: whether a server answers is <see cref="HapticServerObservation.Classify"/>'s
+    /// business, and no automated step here establishes that a motor moved.
     /// </summary>
     public static IHapticSink Create() => CreateFrom(AdmittedRoutes);
 

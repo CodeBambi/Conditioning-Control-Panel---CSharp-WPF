@@ -55,7 +55,7 @@ public static class GlyphSurfaceFactory
         + "is unavailable - a Wayland client cannot read back the composited output - so the honest result there "
         + "is a refusal even if the picture happens to be right. "
         + "This machine cannot discharge it: the port's Linux environment is WSLg, whose XWayland root has no "
-        + "_NET_CLIENT_LIST (client/docs/port-lessons.md:52), so window enumeration and z-order cannot be trusted "
+        + "_NET_CLIENT_LIST (client/docs/port-lessons.md:52 @ a8d32c219), so window enumeration and z-order cannot be trusted "
         + "there at all.";
 
     /// <summary>Why Wayland is a refusal rather than a harder Linux. Same substance as the

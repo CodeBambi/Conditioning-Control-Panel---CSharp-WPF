@@ -10,7 +10,7 @@ namespace CcpClient.Desktop.Features.Chaos;
 /// /dtrh/+/media/+/bridge/ route table and inbox are DTRH-shaped, and the intake-style
 /// overlay borrow would expose the whole payload/ parent; pre-approach consult ruling 1).
 /// ONE GET-only origin on 127.0.0.1 (the tunnel serves no media — no second origin, no CORS
-/// split; WPF uses a single virtual host for the same reason, ChaosTunnelService.cs:43-46):
+/// split; WPF uses a single virtual host for the same reason, Chaos/ChaosTunnelService.cs:43-46):
 ///
 ///   /health, /tunnel/* → output payload/tunnel, /vendor/* → output payload/vendor.
 ///
@@ -196,7 +196,7 @@ public sealed class ChaosTunnelLoopback : IDisposable
         //      empty body and emits no line — so this line can stand alone for a response
         //      that never left the process. Only faults OUTSIDE that filter reach the
         //      handler-fault line. Closing that silence is an owed row, not this change.
-        //   2. This sink is synchronous on the live path (ChaosTunnelService.cs:179-180 ->
+        //   2. This sink is synchronous on the live path (Chaos/ChaosTunnelService.cs:179-180 ->
         //      ApplicationHost.LogDiagnostic:78 -> DebugLogSink: Console.Error.WriteLine plus
         //      Debug.WriteLine), so a blocked or redirected stderr now delays the FIRST byte
         //      of a 200 rather than following its last.

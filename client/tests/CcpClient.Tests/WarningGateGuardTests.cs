@@ -20,7 +20,7 @@ namespace CcpClient.Tests;
 /// therefore vacuous, and would sign off a tree with live warnings in it.</para>
 ///
 /// <para>THE CENTRAL TRAP THIS SUITE ALSO PINS. <c>check-floor.mjs</c> DELIBERATELY DOES NOT BUILD
-/// (<c>client/docs/port-lessons.md:204</c>) and its <c>assertBuildIsFresh</c> stale-build guard exists
+/// (<c>client/docs/port-lessons.md:204 @ a8d32c219</c>) and its <c>assertBuildIsFresh</c> stale-build guard exists
 /// because it once measured the previous wave's assemblies and called them a regression. It used to
 /// run <c>dotnet test --no-build</c>; as of 2026-08-23 it runs the xunit v3 ASSEMBLY directly with
 /// <c>-trx</c>, which cannot build by construction, so the invariant is now stronger rather than
@@ -74,7 +74,7 @@ public partial class WarningGateGuardTests
     {
         // The trap this gate was written not to fall into. A warning gate needs a build; the tempting
         // shortcut is to teach the floor to build and read its output. That would delete the very
-        // signal `assertBuildIsFresh` exists to raise (client/docs/port-lessons.md:204, and the
+        // signal `assertBuildIsFresh` exists to raise (client/docs/port-lessons.md:204 @ a8d32c219, and the
         // wave-30 observation of 1022 counted against a source tree containing 1018).
         var floor = File.ReadAllText(Path.Combine([FindRepoRoot(), .. FloorParts]));
 
@@ -89,7 +89,7 @@ public partial class WarningGateGuardTests
             + "never build. It may run the test assembly directly (its current shape) or `dotnet test`, "
             + "and nothing else. The warning gate is SEPARATE precisely so the floor would not become a "
             + "builder: making it build deletes the signal assertBuildIsFresh exists to raise "
-            + "(client/docs/port-lessons.md:204).");
+            + "(client/docs/port-lessons.md:204 @ a8d32c219).");
         // The verb check alone binds only the literal `"dotnet", ["verb"` shape, so a build passed
         // as a VARIABLE (`execFileSync("dotnet", buildArgs)`) would slip past it with the verb set
         // still reading [test]. Require every dotnet invocation's argument list to be a literal

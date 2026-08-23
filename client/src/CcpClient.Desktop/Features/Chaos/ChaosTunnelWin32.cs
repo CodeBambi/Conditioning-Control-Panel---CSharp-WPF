@@ -18,7 +18,7 @@ internal static class ChaosTunnelWin32
     public const uint GwHwndprev = 3;
 
     // Absorb clicks (NO WS_EX_TRANSPARENT — clicks reach the page for power-up raycasting,
-    // ChaosTunnelService.cs:31) but never steal focus / show in Alt-Tab.
+    // Chaos/ChaosTunnelService.cs:31) but never steal focus / show in Alt-Tab.
     public const uint WsExNoactivate = 0x08000000;
     public const uint WsExToolwindow = 0x00000080;
 

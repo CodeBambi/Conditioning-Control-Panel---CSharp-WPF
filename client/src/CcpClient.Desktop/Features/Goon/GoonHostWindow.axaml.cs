@@ -20,7 +20,7 @@ namespace CcpClient.Desktop.Features.Goon;
 /// the 25 as code"). What this window owes the page is the handshake and nothing more.</para>
 ///
 /// <para><b>Boot contract</b> (<c>GoonHostService.cs:297-388</c>, mirrored): the page announces
-/// <c>ready</c> (<c>bridge.js:106</c>), then the host posts <c>init</c>, then <c>manifest</c>,
+/// <c>ready</c> (<c>goon/bridge.js:106</c>), then the host posts <c>init</c>, then <c>manifest</c>,
 /// then the <c>fullscreen</c> echo. <c>boot.js</c> settles only when BOTH init and manifest have
 /// landed (<c>boot.js:415-416</c>) and gives up at 45 s (<c>:112-113</c>), so the manifest is
 /// mandatory, not optional.</para>
@@ -246,9 +246,9 @@ public partial class GoonHostWindow : Window
         UnsupportedPanel.IsVisible = true;
         UnsupportedDetail.Text =
             $"capability {DtrhCapabilityProbes.EmbeddedCapability}: {Intake.IntakeHostWindow.DescribeState(embedded)}\n"
-            + "The goon page's bridge speaks WebView2 chrome.webview only (bridge.js:45-47, :65-67, "
+            + "The goon page's bridge speaks WebView2 chrome.webview only (goon/bridge.js:45-47, :65-67, "
             + ":93-95) — the NativeWebDialog path is not admitted here, because a standalone page "
-            + "synthesizes its own init (bridge.js:473) and would ignore every door refusal this "
+            + "synthesizes its own init (goon/bridge.js:473) and would ignore every door refusal this "
             + "host declares. Linux is unproven and is a named gate, never faked.";
         SetStatus("goon: honest unsupported (no silent standalone)");
         PublishProbe();
@@ -610,7 +610,7 @@ public partial class GoonHostWindow : Window
 
     /// <summary>Host→page: the synthetic <c>MessageEvent</c> dispatch on
     /// <c>window.chrome.webview</c> that DTRH and intake already use (spike W4). The goon page's
-    /// own listener is <c>bridge.js:66</c> and needs no shadow — which is why zero payload bytes
+    /// own listener is <c>goon/bridge.js:66</c> and needs no shadow — which is why zero payload bytes
     /// are forked for this surface.</summary>
     public void SendToPage(object msg)
     {
@@ -653,7 +653,7 @@ public partial class GoonHostWindow : Window
     /// <para><c>solo</c>, <c>displayName</c>, <c>canHost</c> and <c>assetCache</c> are values THIS
     /// host computed and posted, read back out of the page — so they also prove the frame the page
     /// parsed is the frame this host built, not a standalone one it synthesized for itself
-    /// (<c>bridge.js:473</c>).</para>
+    /// (<c>goon/bridge.js:473</c>).</para>
     /// </summary>
     internal const string PageStateScript =
         "(function(){var s=(window.__gg&&window.__gg.session)||{};var c=s.caps||{};"

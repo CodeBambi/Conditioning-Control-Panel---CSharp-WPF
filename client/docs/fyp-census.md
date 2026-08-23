@@ -21,7 +21,7 @@ bytes only (`bin/`, `obj/`, `.git/`, `__pycache__/`, `*.log`, `*.binlog`, `*.net
 
 | Source | Claim | Reality |
 |---|---|---|
-| `client/docs/task-board.md:97` | "`Services/Fyp/` (3 new)" | **WRONG — 9 files** |
+| `client/docs/task-board.md`, the For You Feed row | "`Services/Fyp/` (3 new)" | **WRONG — 9 files** |
 | Wave coordinator, measured independently | 9 `.cs` + an `Online/` subdirectory | **CONFIRMED** |
 | This census, `find` and `git ls-files` | 9 files, 3237 lines, 2 directories | — |
 
@@ -169,11 +169,13 @@ No proposal to copy bytes into `client/` appears anywhere in this document.
 ## 3. Behaviour map — every row cites both sides and carries a platform cell
 
 Vocabulary is closed: `COVERED`, `PARTIAL`, `GAP`, `OWNER-GATED`. Essentiality is decided against the
-seven noun phrases the owner wrote at `client/docs/task-board.md:97`, not re-derived per row.
+seven noun phrases the owner wrote in the For You Feed row of `client/docs/task-board.md`, not
+re-derived per row. The board is cited WITHOUT a line: it is rewritten every wave, so a line
+number into it is a citation with an expiry date.
 
 | # | Owner's phrase | WPF evidence (opened) | Required primitive | Port anchor | Label | Platform |
 |---|---|---|---|---|---|---|
-| B1 | endless conditioning-clip feed | `Services/Fyp/FypHostService.cs:16-18` — feed "rendered in a WebView2 window at `Resources/web/fyp/index.html`" | Render a local HTML/JS page in an embedded browser and exchange messages with it | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhCapabilityProbes.cs:21` — "Embedded WebView surface (Windows = WebView2 NativeWebView, §5)" | **COVERED by video/webview** (DTRH ships it) | Windows: proven (DTRH). **Linux: unproven** — gate: run the feed page in the Avalonia WebView on a real X11/Wayland box; no WSL distro exists here (`client/memories/port-status.md:89-96`) |
+| B1 | endless conditioning-clip feed | `Services/Fyp/FypHostService.cs:16-18` — feed "rendered in a WebView2 window at `Resources/web/fyp/index.html`" | Render a local HTML/JS page in an embedded browser and exchange messages with it | `client/src/CcpClient.Desktop/Features/Dtrh/DtrhCapabilityProbes.cs:21` — "Embedded WebView surface (Windows = WebView2 NativeWebView, §5)" | **COVERED by video/webview** (DTRH ships it) | Windows: proven (DTRH). **Linux: unproven** — gate: run the feed page in the Avalonia WebView on a real X11/Wayland box; no WSL distro exists here (`client/memories/port-status.md:89-96 @ a8d32c219`) |
 | B2 | ghost mode = see-through AND click-through | `Services/Fyp/FypGhostOverlay.cs:9-42` (technique), `:285` (`WS_EX_LAYERED\|WS_EX_TRANSPARENT\|WS_EX_NOACTIVATE\|WS_EX_TOOLWINDOW`), `:379-423` (DWM P/Invokes) | A live translucent mirror of another window's pixels, click-through, composited by the OS | `client/src/CcpClient.Desktop/Overlay/Win32OverlayPresence.cs:18-40` gives layered + click-through + topmost, **but mirrors nothing** | **GAP: live window-thumbnail mirroring** — (a) primitive: DWM thumbnail of another HWND; (b) WPF uses `DwmRegisterThumbnail`/`DwmUpdateThumbnailProperties` + `SetLayeredWindowAttributes(LWA_COLORKEY)` on a **GDI/WinForms** surface; (c) the port would need a DWM-thumbnail host on Windows and an entirely different mechanism on Linux | Windows: **unproven** (nothing in `client/src` registers a DWM thumbnail). **Linux: unproven and unmapped** — X11/Wayland have no `DwmRegisterThumbnail` analogue; Wayland forbids reading other surfaces' pixels without a portal |
 | B3 | webcam gaze scrolling | `Services/Fyp/FypHostService.cs:903-1045`; consent `:944`, dialog `:946`, `StartAsync` `:958`, ownership `:964`, conditional stop `:1023`, gaze subscribe `:1045` | Camera capture + face/iris inference + calibrated gaze mapped to a screen point | `none` — webcam is **not** among the port's seven landed capabilities | **OWNER-GATED** (see §5) — `client/docs/capability-inventory.md:70` requires "a consent-contract revision and owner review"; `:78` "a stub that says running is a failure" | Windows: **unproven**. **Linux: unproven** — `capability-inventory.md:78` additionally requires XDG Camera portal/PipeWire proof |
 | B4 | opacity control | `Models/AppSettings.cs:3190-3199` — `FypWindowOpacity`, clamp `Math.Clamp(value, 0.01, 1.0)`, "the DWM thumbnail opacity of the see-through mirror, **never the real window's alpha**" | A 0.01-1.0 translucency applied to the mirror | inherits B2 — there is no mirror to apply it to | **GAP: consequent of B2** (the clamp itself is trivial; its subject does not exist) | Windows: unproven. Linux: unproven |
@@ -353,7 +355,7 @@ Written into `client/docs/wpf-surface-reachability.md` per the standing obligati
   Every capability claim above is a claim about *source*, and B1's "COVERED" means the DTRH WebView
   exists and ships — **not** that the FYP page renders in it.
 - **Linux is unproven for every row without exception.** `wsl.exe --list --verbose` reports no
-  installed distributions on this machine (`client/memories/port-status.md:89-96`), so every Linux
+  installed distributions on this machine (`client/memories/port-status.md:89-96 @ a8d32c219`), so every Linux
   cell is a named gate, never a discharge.
 - **The Wayland claim in B2 is reasoning, not a measurement.** I did not test a Wayland compositor.
 - **The 12 compile-time consumers were derived by grep, not by a compiler.** A consumer reaching these

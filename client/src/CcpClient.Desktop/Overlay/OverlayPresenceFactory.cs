@@ -43,7 +43,7 @@ public static class OverlayPresenceFactory
         + "(4) the same run repeated under a native Wayland session, where the expected outcome is a REFUSAL, not "
         + "a surface. "
         + "This machine cannot discharge it: the port's Linux environment is WSLg, whose XWayland root has no "
-        + "_NET_CLIENT_LIST (client/docs/port-lessons.md:52), so window enumeration and z-order cannot be trusted "
+        + "_NET_CLIENT_LIST (client/docs/port-lessons.md:52 @ a8d32c219), so window enumeration and z-order cannot be trusted "
         + "there at all.";
 
     /// <summary>

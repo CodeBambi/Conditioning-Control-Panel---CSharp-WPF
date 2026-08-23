@@ -61,7 +61,7 @@ public static class PointerSurfaceFactory
         + "(5) a HUMAN clicks the target and reports that the click popped it AND that whatever they were typing "
         + "into kept the keyboard — which no automated step on ANY platform discharges, Windows included. "
         + "This machine cannot discharge it: the port's Linux environment is WSLg, whose XWayland root has no "
-        + "_NET_CLIENT_LIST (client/docs/port-lessons.md:52), so window enumeration, stacking and _NET_ACTIVE_WINDOW "
+        + "_NET_CLIENT_LIST (client/docs/port-lessons.md:52 @ a8d32c219), so window enumeration, stacking and _NET_ACTIVE_WINDOW "
         + "cannot be trusted there at all.";
 
     /// <summary>

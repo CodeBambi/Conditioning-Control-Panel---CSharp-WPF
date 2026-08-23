@@ -236,9 +236,9 @@ public sealed class CompositionRoot
         // so hoisting it changes no behaviour at all. It is still REGISTERED last, below, which is
         // what actually decides start and teardown order.
         //
-        // A session that built its own sink instead would be a SECOND sink: harmless only while
-        // HapticSinkFactory.AdmittedRoutes is empty, and two live clients against one server the day
-        // a route is admitted.
+        // A session that built its own sink instead would be a SECOND sink, and since the Lovense
+        // admission that is no longer hypothetical: HapticSinkFactory.AdmittedRoutes carries a route
+        // with a real client behind it, so two sinks would be two live clients against one server.
         var haptics = new Haptics.HapticParticipant(
             infra, Path.GetDirectoryName(SettingsPathFactory())!,
             sink: null,

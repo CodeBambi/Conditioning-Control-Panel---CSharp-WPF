@@ -42,7 +42,7 @@ namespace CcpClient.Desktop.Overlay;
 /// degrade to — a surface that is invisible, buried, or swallowing clicks is worse for the user
 /// than no surface at all, because it breaks the desktop while looking implemented. A caller that
 /// sees Unavailable reports the effect's visual half as absent, which is exactly what the Flash
-/// Images module already does in plain words (<c>wpf-surface-reachability.md</c> D47).</para>
+/// Images module already does in plain words (<c>wpf-surface-reachability.md</c> D47 @ 7527243e7).</para>
 ///
 /// <para><b>Thread affinity.</b> A backend owns a native window, and a native window belongs to
 /// the thread that created it. Call <see cref="Present"/>/<see cref="SetClickThrough"/>/

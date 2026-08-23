@@ -34,7 +34,8 @@ untracked state, and generated output are excluded from product facts.
 
 ### 1.1 The row makes two counted claims. Both were tested; neither was inherited
 
-`client/docs/task-board.md:107`.
+The Goon Game row of `client/docs/task-board.md` (cited without a line: the board is rewritten
+every wave, so a line number into it is a citation with an expiry date).
 
 | # | Row claim | Directory today | Verdict |
 |---|---|---|---|
@@ -262,13 +263,14 @@ duel from native effects instead of the page is a real option rather than a rewr
 ## 4. Behaviour map — every row cites both sides and carries a platform cell
 
 Vocabulary closed: `COVERED`, `PARTIAL`, `GAP`, `OWNER-GATED`. Essentiality is decided against the
-noun phrases the owner wrote at `client/docs/task-board.md:107`, not re-derived per row. An anchor
+noun phrases the owner wrote in the Goon Game row of `client/docs/task-board.md`, not re-derived
+per row. An anchor
 must **expose the required primitive** at an opened `client/src/**` line.
 
 | # | Owner's phrase | WPF evidence (opened) | Required primitive | Port anchor | Label | Platform |
 |---|---|---|---|---|---|---|
 | B1 | Real-time 1v1 duels | `docs/GOON_GAME_PROTOCOL.md:141-142` — WebRTC data channel via `/v2/goon/signal`, then peer-to-peer; `Services/GoonGame/GoonWebRtcTransport.cs:12-19` | Two people on different machines see the same match state change within a second of each other | `none` — nothing in `client/src` opens a socket to anything but its own loopback (§2.3) | **OWNER-GATED** (§6.1) — it creates the port's first outbound network boundary | Windows: unproven. Linux: unproven. **Neither cell is dischargeable by engineering** |
-| B2 | media payload throwing | `GoonContracts.cs:44-54` (the nine elements); `docs/GOON_GAME_PROTOCOL.md:264-272` (charge costs, risk tiers, 1/30 s rate) | Throw one of nine effect kinds at the other seat, receiver-validated and receiver-resolved | The served page's own `exec/` renderers, over the shipped WebView host precedent (`client/src/CcpClient.Desktop/Features/Dtrh/DtrhCapabilityProbes.cs:22`) | **PARTIAL on the shipped WebView-host precedent** — missing member: the `init`/`manifest` bridge frames (§7). Delivery to a *second seat* is B1 | Windows: unproven — gate: a headed capture of the page in the port's WebView. **Linux: unproven** — gate: run the page in the Avalonia WebView on real X11/Wayland; no WSL distro here (`client/memories/port-status.md:89-93`) |
+| B2 | media payload throwing | `GoonContracts.cs:44-54` (the nine elements); `docs/GOON_GAME_PROTOCOL.md:264-272` (charge costs, risk tiers, 1/30 s rate) | Throw one of nine effect kinds at the other seat, receiver-validated and receiver-resolved | The served page's own `exec/` renderers, over the shipped WebView host precedent (`client/src/CcpClient.Desktop/Features/Dtrh/DtrhCapabilityProbes.cs:22`) | **PARTIAL on the shipped WebView-host precedent** — missing member: the `init`/`manifest` bridge frames (§7). Delivery to a *second seat* is B1 | Windows: unproven — gate: a headed capture of the page in the port's WebView. **Linux: unproven** — gate: run the page in the Avalonia WebView on real X11/Wayland; no WSL distro here (`client/memories/port-status.md:89-93 @ a8d32c219`) |
 | B3 | heat build | `docs/GOON_GAME_PROTOCOL.md:268-272` — 1 pt/s x (1 + 0.15 x draft risk sum) x attention multiplier; charge cap 3 | A score and a charge budget that climb while you endure | Same served page; the arithmetic runs in `core/scoring.js` | **PARTIAL on the shipped WebView-host precedent** — same missing member as B2 | Windows: unproven. Linux: unproven — same gates |
 | B4 | sudden death | `docs/GOON_GAME_PROTOCOL.md:229-253` — the ladder is a pure function both sides compute; `Services/GoonGame/Rounds/` (5 files, 1098 lines) | Synchronised mini-rounds with a net-score ladder ending at −3 | Same served page (`core/suddenDeath.js`, `ui/sd/`) | **PARTIAL on the shipped WebView-host precedent** — in Practice the ladder runs locally against the scripted peer | Windows: unproven. Linux: unproven |
 | B5 | P2P own-media send (photos/videos/GIFs) | `docs/GOON_GAME_PROTOCOL.md:287-296` — second negotiated data channel `goon-media`, **media frames never ride relay or signaling**; `Services/GoonGame/GoonCacheBridge.cs` (892 lines) | Send your own image or video to the other person's screen | `none` | **OWNER-GATED** (§6.2) — user media leaving the machine | Windows: unproven. Linux: unproven |
@@ -587,8 +589,8 @@ BUILDABLE-IN-PART and clause 3 is not reached.
 |---|---|
 | Payload to serve | **184 files, 164 of them loaded by the page**, 12 471 900 bytes — **linked read-only, zero bytes forked** (§5.3) |
 | Port code already present | The embedded WebView (`Features/Dtrh/DtrhCapabilityProbes.cs:22`), the loopback serving contract (`Features/Intake/IntakeHostWindow.axaml.cs:701-707` names it), and the payload glob shipped four times (`CcpClient.Desktop.csproj:50-54`) |
-| Port code to add | A host window plus the bridge subset: **`init` + `manifest`** (host->page) and **`ready` + `log` + `heartbeat`/`pong` + `exit`/`exit-done`** (page->host). The frame catalogue is at `GoonHostService.cs:30-53` and the `init` shape is written out **field-for-field twice** — `GoonHostService.cs:300-350` and `bridge.js:371-440` — so it is transcribable, not reverse-engineered. **`manifest` is decomposed in §7.1.1 — it is the smallest item here, not the largest** |
-| `caps` for this unit | `haptics:false`, `camera:false`, `assetCache:false`, `mediaTransfer:false`, `canHost:false`; `solo` defaults on (`bridge.js:391`) |
+| Port code to add | A host window plus the bridge subset: **`init` + `manifest`** (host->page) and **`ready` + `log` + `heartbeat`/`pong` + `exit`/`exit-done`** (page->host). The frame catalogue is at `GoonHostService.cs:30-53` and the `init` shape is written out **field-for-field twice** — `GoonHostService.cs:300-350` and `goon/bridge.js:371-440` — so it is transcribable, not reverse-engineered. **`manifest` is decomposed in §7.1.1 — it is the smallest item here, not the largest** |
+| `caps` for this unit | `haptics:false`, `camera:false`, `assetCache:false`, `mediaTransfer:false`, `canHost:false`; `solo` defaults on (`goon/bridge.js:391`) |
 | Upstream code to port | **none of the 25 as code.** Practice runs entirely in the page on the loopback pair (`ui/soloDriver.js:1-18`, `net/loopbackTransport.js:19-23`). What must be transcribed is **three consent defaults** the `init` frame carries — `LiveDurationSec` 720 (`GoonContracts.cs:97`), `ToyCap` 0.7 (`:297`), `PayloadMinGapMs` 30000 (`:108`) — because the host reads them off `ConsentSheetMsg` rather than inventing them (§1.3) |
 | OS interop required | Only what DTRH already ships: an embedded WebView. **Linux unproven, and that is the one real gate** |
 | Owner decisions required | **none** — nothing leaves the machine, no sensor opens, nothing is sold |
@@ -644,7 +646,7 @@ it means shipping a title screen where Host, Join, voice notes and media setup a
 Three things keep it on the right side of the line, and a reader may weigh them differently.
 (1) Upstream already ships exactly this configuration as a first-class state — `ui/screens/title.js:9-11`
 says Practice *"is always present and becomes the PRIMARY action when the page is standalone"*, and
-`bridge.js:11-14` gives the standalone path a synthesized `init` precisely so a person with no server
+`goon/bridge.js:11-14` gives the standalone path a synthesized `init` precisely so a person with no server
 has a working game. (2) A practice duel is a complete play experience, not a stub: nine element
 kinds, the full sudden-death ladder, a recap. (3) The alternative reading — that nothing short of a
 live 1v1 is user-observable — makes clause 2 unreachable for every unit of this surface, which is the
@@ -708,7 +710,7 @@ none of them.
   other; neither was checked against a live server, which is private
   (`GoonSignalingClient.cs:16-17`: *"Phase F builds these endpoints in the private repo"*).
 - **Linux is unproven for every row without exception.** `wsl.exe --list --verbose` reports no
-  installed distributions on this machine (`client/memories/port-status.md:89-93`), so every Linux
+  installed distributions on this machine (`client/memories/port-status.md:89-93 @ a8d32c219`), so every Linux
   cell is a named gate. Windows is unproven for every row too.
 - **The reachability claim in §1.3 is a LEXICAL compile-time trace, not a runtime one.** It is a
   transitive closure over type names declared in the 25 files, computed on stripped code lines. **A

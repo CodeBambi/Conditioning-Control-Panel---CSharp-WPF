@@ -197,8 +197,8 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// to mean "something is being SENT". Nothing is, and the reason is no longer that the modules
     /// are silent: five statements in the effect spine now command
     /// <see cref="Limb"/> at the right moments with upstream's own envelopes. What stops a send is
-    /// one rung further out — <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, so no server
-    /// was ever asked, so <see cref="LastObservation"/> names no device, so
+    /// one rung further out — <see cref="HapticSinkFactory.AdmittedRoutes"/> carries Lovense, so a
+    /// server IS asked; with none listening <see cref="LastObservation"/> names no device, so
     /// <see cref="HapticLimb.EvaluationsWithNoDevice"/> rises where <see cref="HapticLimb.Sends"/>
     /// cannot. <b>A limb does not light this dot and must not</b>: both conjuncts below are about
     /// what a SERVER said, and a limb touches neither.</item>

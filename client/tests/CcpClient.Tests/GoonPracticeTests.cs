@@ -290,7 +290,7 @@ public sealed class GoonPracticeTests
     public void Init_CarriesExactlyTheUpstreamRootFields()
     {
         // GoonHostService.cs:311-354 carries type/protocol/identity/net/caps/consent/fullscreen
-        // (+ discord, which this build has none of). bridge.js:388-391 adds `solo` at the ROOT.
+        // (+ discord, which this build has none of). goon/bridge.js:388-391 adds `solo` at the ROOT.
         Assert.Equal(
             new[] { "type", "protocol", "solo", "identity", "net", "caps", "consent", "fullscreen" },
             InitFrame().EnumerateObject().Select(p => p.Name).ToArray());
@@ -302,7 +302,7 @@ public sealed class GoonPracticeTests
         var init = InitFrame();
         Assert.Equal("init", init.GetProperty("type").GetString());
         Assert.Equal(1, init.GetProperty("protocol").GetInt32());
-        // bridge.js:391 defaults solo ON; boot.js:323 reads it as m.solo. It is NOT a caps member.
+        // goon/bridge.js:391 defaults solo ON; boot.js:323 reads it as m.solo. It is NOT a caps member.
         Assert.True(init.GetProperty("solo").GetBoolean());
         Assert.False(init.GetProperty("caps").TryGetProperty("solo", out _));
     }
@@ -327,7 +327,7 @@ public sealed class GoonPracticeTests
         Assert.Equal("", net.GetProperty("serverBase").GetString());
         Assert.Equal("", net.GetProperty("authToken").GetString());
         // TRUE on purpose: it routes every server call into net-post, which this host refuses
-        // in-process. FALSE would make the page issue a real fetch() itself (bridge.js:181-192).
+        // in-process. FALSE would make the page issue a real fetch() itself (goon/bridge.js:181-192).
         Assert.True(net.GetProperty("viaHost").GetBoolean());
     }
 

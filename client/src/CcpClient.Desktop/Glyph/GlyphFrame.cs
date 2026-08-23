@@ -10,7 +10,7 @@ namespace CcpClient.Desktop.Glyph;
 /// rectangle at one opacity with an image filling it. It is wrong for glyphs, where the shape IS
 /// the alpha: at the shipped default opacity a transparency-backed text window rendered as an
 /// opaque rectangle would put a black screen with text on it in front of the user
-/// (<c>wpf-surface-reachability.md</c> D83). The two frame types are deliberately NOT merged —
+/// (<c>wpf-surface-reachability.md</c> D83 @ 7527243e7). The two frame types are deliberately NOT merged —
 /// they feed different Win32 mechanisms (<c>BitBlt</c> into a window DC versus
 /// <c>UpdateLayeredWindow</c>) that are mutually exclusive on one window, and a single type would
 /// invite a caller to hand a padded buffer to a call that reads the fourth byte as alpha.</para>

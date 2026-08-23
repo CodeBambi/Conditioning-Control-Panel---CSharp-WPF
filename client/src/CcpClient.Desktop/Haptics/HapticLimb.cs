@@ -133,10 +133,11 @@ public sealed class HapticLimb : IHapticLimb, IDisposable
     /// <summary>
     /// Evaluations that produced a level with <b>no device key to address it to</b>.
     ///
-    /// <para>This is where "nothing moves" is legible rather than asserted: on this build it equals
-    /// <see cref="Evaluations"/> whenever the gate is open, because
-    /// <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, nothing was ever asked of a server,
-    /// and an observation that was never made names no device.</para>
+    /// <para>This is where "nothing moves" is legible rather than asserted: on a machine with no
+    /// Lovense server listening it equals <see cref="Evaluations"/> whenever the gate is open,
+    /// because the ask comes back with an observation that names no device.
+    /// <see cref="HapticSinkFactory.AdmittedRoutes"/> has carried Lovense since that route was
+    /// admitted, so the reason is the ABSENT SERVER and no longer the absent route.</para>
     /// </summary>
     public int EvaluationsWithNoDevice { get; private set; }
 

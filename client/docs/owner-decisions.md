@@ -14,7 +14,8 @@ it against the queue produced the three corrections below, and one of them matte
 ## The correction that matters: you already answered the entitlement question
 
 **I have been telling you the login-token decision is still open. It is not. You answered it on
-2026-08-18** (`task-board.md:202`), and the answer was better than the three options that row had offered:
+2026-08-18** (in `task-board.md` — cited without a line, because the board is rewritten every wave),
+and the answer was better than the three options that row had offered:
 
 > *"I have just installed to original app and logged into the app to access the premium feats. Will that work?"*
 
@@ -43,7 +44,7 @@ read, used and dropped.
 ## Decision register
 
 ### 1. May the port transmit the borrowed token, and read a second cross-app file?
-`task-board.md:206` · scope: one further step, not the whole feature
+the entitlement row of `task-board.md` · scope: one further step, not the whole feature
 
 The entitlement capability above works from the token on disk. Reading your actual **tier** additionally
 needs a call to `/v2/user/profile`, which means two things the port is currently forbidden to do: it must
@@ -92,7 +93,7 @@ the consent that unlocks remote media in Flash, Video, Wallpaper, IntakeHost, an
 manifest remain distinct from this camera-engine decision.
 
 ### 4. Goon Game, six items
-`task-board.md:322` · this is the port's first outbound network boundary
+the Goon Game row of `task-board.md` · this is the port's first outbound network boundary
 
 The port has no outbound network today. Its only `HttpClient` is a loopback probe. So this builds the first
 boundary rather than extending one, and two properties are inherent to the transport rather than defects:

@@ -404,9 +404,10 @@ public class HapticLimbTests
     public void OnAnUNADMITTEDSinkAWholeSessionOfMomentsSendsABSOLUTELYNOTHING()
     {
         // The central trap, executed. The limb commands correctly and there is no device key to
-        // address, because HapticSinkFactory.AdmittedRoutes is empty and nothing was ever asked of a
-        // server. The commands are FORMED and never delivered, and that is the honest state of this
-        // build.
+        // address, because THIS FACT HANDS IT AN UNADMITTED SINK EXPLICITLY rather than reaching the
+        // product factory — HapticSinkFactory.AdmittedRoutes carries Lovense now, so a fact that
+        // depended on the product list being empty would have been deleted by the admission instead
+        // of surviving it. The commands are FORMED and never delivered.
         var clock = new ManualClock();
         var sink = HapticSinkFactory.CreateFrom([]);
         using var limb = new HapticLimb(sink, clock, () => true, () => []);

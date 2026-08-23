@@ -12,13 +12,13 @@ namespace CcpClient.Desktop.Features.Dtrh;
 ///
 /// Tolerance decision (Step 1 consult): unknown types, forward-version envelopes, and
 /// malformed frames are TYPED outcomes — logged presence+shape only, never silent drops,
-/// never crashes (page-side mirror: bridge.js preBuffers unknown types, bridge.js:19-24).
+/// never crashes (page-side mirror: bridge.js preBuffers unknown types, dtrh/bridge.js:19-24).
 /// Messages whose FEATURES land in later slices classify as Deferred(slice) — typed,
 /// not stubbed.
 /// </summary>
 public static class DtrhProtocol
 {
-    /// <summary>The protocol version this host speaks (bridge.js:11, DtrhHostService.cs:31).</summary>
+    /// <summary>The protocol version this host speaks (dtrh/bridge.js:11, DtrhHostService.cs:31).</summary>
     public const int Version = 1;
 
     private static readonly JsonSerializerOptions PageOptions = new()

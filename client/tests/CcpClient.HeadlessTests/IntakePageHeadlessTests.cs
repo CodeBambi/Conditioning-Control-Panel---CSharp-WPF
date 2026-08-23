@@ -454,7 +454,7 @@ public class IntakePageHeadlessTests
         window.UpdateLayout();
 
         var decision = Assert.IsType<IntakePassDecision.RefusedSpent>(window.Intake.LastDecision);
-        Assert.True(decision.DaysUntilNextPass >= 1, "WPF floors the count at 1 so the UI never says 'in 0 days' (IntakePassService.cs:80-86)");
+        Assert.True(decision.DaysUntilNextPass >= 1, "WPF floors the count at 1 so the UI never says 'in 0 days' (Services/Progression/IntakePassService.cs:80-86)");
         Assert.Empty(opened);
 
         // WPF's spent copy, and its two-key day handling (en.json:25,26 — "unlocks in 1 days" is

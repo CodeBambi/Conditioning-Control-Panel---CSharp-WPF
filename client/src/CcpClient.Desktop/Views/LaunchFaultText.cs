@@ -90,7 +90,7 @@ public static class LaunchFaultText
     /// with and without <c>LineHeight</c>, and — the part that matters — it reproduces identically
     /// in the EXISTING refusal plate, so it is a property of the surface rather than of this
     /// feature. Single newlines are the shape the landed refusal copy already uses and are proven
-    /// safe. Divergence and close condition at wpf-surface-reachability.md §13 D43;
+    /// safe. Divergence and close condition at wpf-surface-reachability.md §13 D43 @ 7527243e7;
     /// <c>LaunchFaultTextTests</c> holds the line over a DERIVED set - reflection across this class
     /// and both gates, plus every message the gates can produce - never a hand list.</para>
     /// </summary>

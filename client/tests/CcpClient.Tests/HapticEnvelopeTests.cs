@@ -124,7 +124,8 @@ public class HapticEnvelopeTests
     public void TheSubliminalDurationIsKeyedOffTheTriggersOwnWording()
     {
         // HapticService.cs:899-909, with the Buttplug multiplier at 1.0 because
-        // HapticSinkFactory.AdmittedRoutes is empty and no provider can be active.
+        // HapticSinkFactory.AdmittedRoutes carries Lovense and not Buttplug, so the Buttplug
+        // provider can never be the active one here.
         Assert.Equal(250, HapticEnvelopes.SubliminalDurationMs("you will CUM on command"));
         Assert.Equal(250, HapticEnvelopes.SubliminalDurationMs("collapse"));
         Assert.Equal(250, HapticEnvelopes.SubliminalDurationMs("DROP"));

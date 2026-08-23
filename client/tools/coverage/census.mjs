@@ -833,7 +833,7 @@ function typePath(name, namespaces) {
 //     and it must not mark anything.
 //
 //  2. THE PREDICATE MUST SELECT AN OS THIS CENSUS DID NOT RUN ON, or it explains nothing. Four of
-//     the original marks (DtrhProcessFailed.cs:45, DtrhProfileLock.cs:86, ChaosTunnelService.cs:278,
+//     the original marks (DtrhProcessFailed.cs:45, DtrhProfileLock.cs:86, Chaos/ChaosTunnelService.cs:278,
 //     DtrhHostWindow.axaml.cs:701) are `!OperatingSystem.IsWindows()` guards selecting WINDOWS — the
 //     OS this census was generated on. Such a type would be MORE dead on the other OS, not less, so
 //     "the machine explains the zero" is exactly backwards for it. Those rows are marked

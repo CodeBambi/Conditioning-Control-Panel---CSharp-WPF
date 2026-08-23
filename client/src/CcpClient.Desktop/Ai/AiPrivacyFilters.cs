@@ -252,7 +252,7 @@ public static class AiPrivacyFilters
     //  F3 — unsanctioned-link strip (audit row C3, strip half only)
     // =====================================================================================
 
-    // A URL as a model writes one (WPF verbatim, AiTextHygiene.cs:146-149). Guillemets and
+    // A URL as a model writes one (WPF verbatim, Services/AIService/AiTextHygiene.cs:146-149). Guillemets and
     // quotes are excluded so a link inside a quoted phrase ends where the punctuation does.
     private static readonly Regex AnyUrl = new(
         @"(?:https?://|www\.)[^\s<>""«»]+",
@@ -260,7 +260,7 @@ public static class AiPrivacyFilters
 
     /// <summary>
     /// Removes links the app never gave the model, along with the sentence that carried them
-    /// (WPF `StripUnsanctionedLinks`, AiTextHygiene.cs:217-260 — the strip half of audit row
+    /// (WPF `StripUnsanctionedLinks`, Services/AIService/AiTextHygiene.cs:217-260 — the strip half of audit row
     /// C3). The WHOLE sentence goes, not just the URL: "Click here:" left dangling reads
     /// worse than a clean cut, and the model frequently glues the next word onto the link,
     /// which no URL-shaped pattern can split correctly. An all-links reply strips to empty
@@ -340,7 +340,7 @@ public static class AiPrivacyFilters
     }
 
     // Sentence spans, delimiters kept, so dropping one leaves the rest reading normally
-    // (WPF verbatim, AiTextHygiene.cs:161-185). Hand-written rather than a regex because a
+    // (WPF verbatim, Services/AIService/AiTextHygiene.cs:161-185). Hand-written rather than a regex because a
     // URL is full of sentence punctuation; terminators inside a URL span are skipped so the
     // link stays whole and travels with the sentence that carried it.
     private static List<(int Start, int Length)> SplitSentences(string text, List<Match> urls)

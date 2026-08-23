@@ -9,8 +9,9 @@ namespace CcpClient.Desktop.Views.Pages;
 ///
 /// <para><b>This panel has to say two different "no"s without letting either be read as the
 /// other.</b> The switch is off because an entitlement could not be verified; and the sink reaches
-/// nothing because <see cref="Haptics.HapticSinkFactory.AdmittedRoutes"/> is empty, so no server
-/// was ever asked. Collapsing them into one sentence would send a user to fix the wrong thing —
+/// nothing because no Lovense server answers the admitted route
+/// (<see cref="Haptics.HapticSinkFactory.AdmittedRoutes"/>). Collapsing them into one sentence would
+/// send a user to fix the wrong thing —
 /// which is exactly what upstream's own <i>"No devices found. Connect your device in Intiface
 /// first."</i> (<c>Services/Haptics/ButtplugProvider.cs:135</c>) does when the real problem is that
 /// Intiface is not running.</para>
@@ -144,13 +145,21 @@ public static class HapticsPanelNotices
     /// with a device attached, nothing would move: no effect in this build sends anything to
     /// haptics yet". Both halves went false at D210: the modules DO send — six live sites
     /// fire the limb — and with a route admitted those sends would go out, so the counterfactual
-    /// was wrong too. What is true is one rung further out:
-    /// <see cref="Haptics.HapticSinkFactory.AdmittedRoutes"/> is <c>[]</c>
-    /// (<c>HapticSinkFactory.cs:27</c>), <c>Create()</c> returns
-    /// <see cref="Haptics.UnadmittedHapticSink"/>, and <c>HapticLimb.Send</c> returns at
-    /// <see cref="Haptics.HapticLimb.EvaluationsWithNoDevice"/><c>++</c>
-    /// (<c>HapticLimb.cs:566-570</c>) without ever reaching
+    /// was wrong too. What was true then was one rung further out:
+    /// <see cref="Haptics.HapticSinkFactory.AdmittedRoutes"/> was <c>[]</c>, <c>Create()</c> returned
+    /// <see cref="Haptics.UnadmittedHapticSink"/>, and <c>HapticLimb.Send</c> returned at
+    /// <see cref="Haptics.HapticLimb.EvaluationsWithNoDevice"/><c>++</c> without ever reaching
     /// <see cref="Haptics.IHapticSink.SetOutputsAsync"/>. D179/D202 are the superseded rows.</para>
+    ///
+    /// <para><b>THE RETURNED TEXT BELOW HAS NOT BEEN RE-DERIVED SINCE THE LOVENSE ADMISSION, AND A
+    /// USER READS IT.</b> <see cref="Haptics.HapticSinkFactory.AdmittedRoutes"/> now carries Lovense
+    /// (<c>Haptics/HapticSinkFactory.cs:27</c>) and <c>Create()</c> returns a real
+    /// <c>LovenseHapticSink</c>, so the sentence "because no provider route is admitted at all — so
+    /// the thing to fix is the missing route" names a cause that no longer holds: what a user must
+    /// fix on this build is a server that is not listening, not a route that is not admitted.
+    /// Rewriting it is a change to text a user sees and to what
+    /// <c>UserFacingClaimTests</c> binds, so it belongs to the haptics row that admitted the route
+    /// rather than to the citation audit that found it.</para>
     /// </summary>
     public static string DescribeAbsences() =>
         "The Windows app's haptics page also has a provider list with two server addresses, an auto-connect box, a "

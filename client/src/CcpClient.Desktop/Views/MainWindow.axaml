@@ -6,7 +6,7 @@
         Background="#FF141018">
   <!--
     The navigation shell. Rail + page host + a diagnostic footer, modelled on the
-    v6.8.1 Studio rack the owner pointed at (wpf-surface-reachability.md §8.3) rather than on
+    v6.8.1 Studio rack the owner pointed at (wpf-surface-reachability.md §8.3 @ 7527243e7) rather than on
     any WPF layout code. The demonstrator card that used to live here is retired: its own text
     said "the first real feature card supersedes it", and the Spiral Overlay module is that
     supersession. The startup-trace and capability proofs moved to the System

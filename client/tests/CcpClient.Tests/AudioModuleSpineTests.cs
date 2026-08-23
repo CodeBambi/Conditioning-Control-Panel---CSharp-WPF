@@ -54,7 +54,7 @@ public class AudioModuleSpineTests
         // Bubble Pop was added later and goes FIRST in that group, which is where the rack puts it
         // (Add("bubbles", ...) at StudioTabView.xaml.cs:499, before bubblecount at :501 and lockcard
         // at :503). Nothing in StartEngine competes for its position: the ambient game is started
-        // from the dashboard card and from SessionEngine.cs:444, not from StartEngine's effect
+        // from the dashboard card and from Services/Session/SessionEngine.cs:444, not from StartEngine's effect
         // sequence, so the rack's order stands unopposed here.
         Assert.Equal(
             [

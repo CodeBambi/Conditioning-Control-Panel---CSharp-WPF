@@ -39,7 +39,7 @@ public static class TrayPresenceFactory
         + "listing it after Remove(); "
         + "(3) a human confirms the icon is visible in the panel and that clicking it raises Activated. "
         + "This machine cannot discharge it: the port's WSLg session has no _NET_CLIENT_LIST on the XWayland root "
-        + "(client/docs/port-lessons.md:52), so there is no reliable way to prove a panel icon exists from here.";
+        + "(client/docs/port-lessons.md:52 @ a8d32c219), so there is no reliable way to prove a panel icon exists from here.";
 
     /// <summary>The backend for the platform this process is running on.</summary>
     public static ITrayPresence Create() => CreateFor(CurrentPlatform());

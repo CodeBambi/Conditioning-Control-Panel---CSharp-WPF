@@ -411,7 +411,7 @@ public class PlayPageHeadlessTests
         // reading "Couldn't start Down the Rabbit Hole:" plus ex.Message
         // (MainWindow/MainWindow.Lab.cs:266-271). The port caught only around ResolveAsync, and
         // PlayPage fires `_ = dtrh.FallInAsync()` — so a throw from the descent became an
-        // UNOBSERVED task exception: raked up by the panic hook at some later GC (Program.cs:313)
+        // UNOBSERVED task exception: raked up by the panic hook at some later GC (CcpClient.Desktop/Program.cs:313)
         // and never shown to anyone. Entitled, so the gate really opens and the throw is
         // unambiguously PAST it.
         var diagnostics = new List<string>();

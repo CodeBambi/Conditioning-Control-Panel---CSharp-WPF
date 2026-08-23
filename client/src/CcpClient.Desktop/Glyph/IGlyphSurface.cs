@@ -81,7 +81,7 @@ public interface IGlyphSurface : IDisposable
     /// the OS's whole top-level z-order and asks the window manager's hit test in BOTH polarities —
     /// momentarily clearing click-through — and at 60 Hz that is a window becoming input-catching
     /// sixty times a second over whatever the user is doing (<c>wpf-surface-reachability.md</c>
-    /// D84). Here a move is one <c>UpdateLayeredWindow</c> carrying a destination point and nothing
+    /// D84 @ 7527243e7). Here a move is one <c>UpdateLayeredWindow</c> carrying a destination point and nothing
     /// else: no style write, no z-order walk, no hit test.</para>
     ///
     /// <para><see cref="CapabilityState.Available"/> is earned from <c>GetWindowRect</c>: the OS

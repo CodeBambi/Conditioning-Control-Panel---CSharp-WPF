@@ -37,7 +37,7 @@ public class CompanionWindowHeadlessTests
 
     /// <summary>
     /// The companion is now TWO hops, as it is in WPF (a rail door navigates to the
-    /// page, a control on the page opens the window — wpf-surface-reachability.md §5). Both
+    /// page, a control on the page opens the window — wpf-surface-reachability.md §5 @ 7527243e7). Both
     /// hops are real pointer input.
     /// </summary>
     private static CompanionWindow OpenViaRealClick(MainWindow window)

@@ -21,7 +21,7 @@
 // not negotiable here, and why `WarningGateGuardTests` pins it with this measurement as the reason.
 //
 // RELATIONSHIP TO THE TEST FLOOR — READ THIS BEFORE CHANGING EITHER FILE
-// `check-floor.mjs` runs `dotnet test --no-build` DELIBERATELY (client/docs/port-lessons.md:204).
+// `check-floor.mjs` runs `dotnet test --no-build` DELIBERATELY (client/docs/port-lessons.md:204 @ a8d32c219).
 // Run standalone it measures the LAST BUILD rather than the tree; that defect cost real time at
 // three lands, which is why its `assertBuildIsFresh` stale-build guard exists and why it fires.
 // THIS FILE DOES NOT CHANGE THAT. The floor still does not build. The warning gate builds because

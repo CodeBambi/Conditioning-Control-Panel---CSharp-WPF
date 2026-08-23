@@ -603,7 +603,7 @@ amount of engineering closes.
 
 | class | what it means | who can produce it |
 |---|---|---|
-| **`haptic-admitted`** | this build has a provider CLIENT at all — a route in `HapticSinkFactory.AdmittedRoutes` | **Nobody today.** The list is empty; this is the gap every current refusal names, and it is a property of the BUILD, identical on Windows and Linux |
+| **`haptic-admitted`** | this build has a provider CLIENT at all — a route in `HapticSinkFactory.AdmittedRoutes` | **This build, since the Lovense route was admitted.** The list carries Lovense and a real `LovenseHapticSink` is constructed for it; Buttplug has a sink but is NOT in the list. This class is a property of the BUILD, identical on Windows and Linux, and it is the only one of the four this build has reached |
 | **`haptic-server-answered`** | the separate server process answered a real request over loopback | a build with an admitted client, plus Intiface Central / Lovense Connect running |
 | **`haptic-device-named`** | the server answered and named at least one device this process can address. **This — and only this — is what `CapabilityState.Available` may rest on** (`HapticServerObservation.Confirmed`) | the above, plus a paired toy |
 | **`felt-verified`** | a human reports that a device really moved, and that it STOPPED when the all-stop ran | **a HUMAN, and nothing else, on any platform, at any depth of API** |

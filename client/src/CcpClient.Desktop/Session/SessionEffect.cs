@@ -9,7 +9,7 @@ namespace CcpClient.Desktop.Session;
 ///
 /// <para>The Studio onboarding card promises: <i>"The dot on each row is live: at a glance you
 /// can see everything that is currently running."</i> (quoted in
-/// <c>client/docs/wpf-surface-reachability.md</c> §8.3). The mechanism reads the persisted
+/// <c>client/docs/wpf-surface-reachability.md</c> §8.3 @ 7527243e7). The mechanism reads the persisted
 /// ENABLE FLAG — <c>Add("flash", …, () =&gt; App.Settings?.Current?.FlashEnabled)</c>
 /// (<c>Views/Tabs/StudioTabView.xaml.cs:484-485</c>) — which says "armed", not "running". The
 /// two coincide only while the engine runs, because <c>StartEngine</c> gates each service on
@@ -35,7 +35,7 @@ public enum EffectDotState
 
 /// <summary>
 /// One effect module under the conditioning session. This is the spine's contract, and the
-/// other fourteen rack modules (<c>wpf-surface-reachability.md</c> §8.3) implement THIS —
+/// other fourteen rack modules (<c>wpf-surface-reachability.md</c> §8.3 @ 7527243e7) implement THIS —
 /// which is why it is deliberately small: a stable identity, a display title, one persisted
 /// dial, a truthful dot, and an arm/disarm pair with an owned completion behind it.
 ///

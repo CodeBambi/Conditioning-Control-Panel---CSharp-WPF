@@ -60,7 +60,7 @@ public abstract record DtrhGateDecision
 /// </list>
 /// The user-visible consequence — a free user who would fall in on a WPF drop day is refused
 /// here — is recorded as a divergence with its close condition
-/// (wpf-surface-reachability.md §10 D24), because the port has nothing to wire and inventing a
+/// (wpf-surface-reachability.md §10 D24 @ 7527243e7), because the port has nothing to wire and inventing a
 /// second grant condition out of nothing would be worse than the gap.</para>
 ///
 /// <para><b>Where the port improves on WPF, deliberately.</b> WPF has no third answer: with a
@@ -69,7 +69,7 @@ public abstract record DtrhGateDecision
 /// "you are not a patron". The port refuses too (it must: an unknown entitlement may not open
 /// paid content) but it refuses with a DIFFERENT message that says which part could not be
 /// determined. That is a divergence, recorded as an improvement rather than smuggled in as
-/// parity (wpf-surface-reachability.md §10 D21).</para>
+/// parity (wpf-surface-reachability.md §10 D21 @ 7527243e7).</para>
 ///
 /// <para><b>And this is not the rare branch.</b> This build's authority is
 /// <see cref="UnconfiguredTierSource"/>, so every real user today gets
@@ -86,7 +86,7 @@ public static class DtrhGate
     /// implements: <c>App.Patreon?.HasLabAccess == true</c>, i.e. tier 2
     /// (<c>Services/TierGate.cs:90</c>). The second term — <c>IsFreeToday("dtrh")</c> on a
     /// server-declared drop day (<c>:91</c>) — has nothing to bind to in this port; see the
-    /// class remarks and wpf-surface-reachability.md §10 D24.
+    /// class remarks and wpf-surface-reachability.md §10 D24 @ 7527243e7.
     /// </summary>
     public const EntitlementTier RequiredTier = EntitlementTier.Lab;
 

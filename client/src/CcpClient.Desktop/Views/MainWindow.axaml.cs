@@ -23,7 +23,7 @@ public partial class MainWindow : Window
     /// The navigation shell. A rail of doors, one page host, and — for the first time
     /// in the port — a landed surface reachable by a real gesture from a cold start with no
     /// command-line arguments: Studio -> Spiral Overlay -> THE LOOM
-    /// (wpf-surface-reachability.md §8.4, verified against the running v6.8.1 app).
+    /// (wpf-surface-reachability.md §8.4 @ 7527243e7, verified against the running v6.8.1 app).
     ///
     /// <para>The second real route is the port's flagship one: Play -> the DTRH
     /// hero card -> FALL IN / Quick Drop, behind the Tier-2 gate
@@ -33,7 +33,7 @@ public partial class MainWindow : Window
     /// WPF's rail sub-entry <c>BtnNavGradedIntake</c> (<c>MainWindow/MainWindow.xaml:811-812</c>
     /// -> <c>MainWindow.TabNavigation.cs:947</c>) and of the destination page that entry opens.
     /// It also settles the two surfaces that do NOT get a door — the Chaos tunnel backdrop and
-    /// the AvatarTube demonstrator; wpf-surface-reachability.md §11 carries the evidence.</para>
+    /// the AvatarTube demonstrator; wpf-surface-reachability.md §11 @ 7527243e7 carries the evidence.</para>
     /// </summary>
     /// <param name="dtrhHarness">HARNESS-ONLY <c>--dtrh-*</c> options; null on every user path.</param>
     /// <param name="intakeHarness">HARNESS-ONLY <c>--intake-*</c> options; null on every user path.</param>
@@ -297,7 +297,7 @@ public partial class MainWindow : Window
     /// <summary>
     /// The companion surface: owned, modeless, one-at-a-time (activate if already open —
     /// the W-04 discipline). The window closes with its owner automatically. WPF has no
-    /// entitlement gate on showing the companion (wpf-surface-reachability.md §5).
+    /// entitlement gate on showing the companion (wpf-surface-reachability.md §5 @ 7527243e7).
     /// </summary>
     private void ShowCompanion()
     {

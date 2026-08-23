@@ -25,7 +25,7 @@ namespace CcpClient.Desktop.Tray;
 /// MainWindow via native ownership: main gets raised by plenty of things we don't control (avatar
 /// barks, a video window closing, a tray restore) and used to land on top of the game."</i> In
 /// Avalonia the two properties are mutually exclusive at 12.1.1, and keeping the descent owned is
-/// the load-bearing one. Full reasoning at wpf-surface-reachability.md §12 D35.</para>
+/// the load-bearing one. Full reasoning at wpf-surface-reachability.md §12 D35 @ 7527243e7.</para>
 ///
 /// <para><b>What ships instead.</b> The shell is plain-minimized — the taskbar button never leaves
 /// — AND a shell-confirmed icon carrying the full menu is placed for exactly the interval WPF's
@@ -55,7 +55,7 @@ public sealed class ShellTray : IDisposable
     /// <param name="log">The host's content-free diagnostic sink.</param>
     /// <param name="wakeCompanion">WPF's "Wake Bambi Up!" entry (<c>TrayIconService.cs:102-105</c>
     /// -> <c>MainWindow/MainWindow.xaml.cs:348-351</c> -> <c>MainWindow.Companion.cs:265</c>), which
-    /// wpf-surface-reachability.md §5 records as one of the three ways a user reaches the companion.</param>
+    /// wpf-surface-reachability.md §5 @ 7527243e7 records as one of the three ways a user reaches the companion.</param>
     /// <param name="exit">WPF's "Exit" entry (<c>TrayIconService.cs:109-111</c> ->
     /// <c>MainWindow/MainWindow.xaml.cs:323-343</c>, ending in <c>Application.Current.Shutdown()</c>).</param>
     /// <param name="presenceFactory">The backend. Defaults to the platform's own — Windows gets the

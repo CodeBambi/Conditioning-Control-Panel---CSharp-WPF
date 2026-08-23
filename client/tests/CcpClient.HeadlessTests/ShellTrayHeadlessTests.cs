@@ -31,7 +31,7 @@ public class ShellTrayHeadlessTests
     [AvaloniaFact]
     public void AvaloniaHidesOwnedWindowsWithTheirOwner_WhichIsWhyTheShellIsNeverHidden()
     {
-        // THE MEASUREMENT THE "NO TUCK" DECISION RESTS ON (wpf-surface-reachability.md §12 D35),
+        // THE MEASUREMENT THE "NO TUCK" DECISION RESTS ON (wpf-surface-reachability.md §12 D35 @ 7527243e7),
         // pinned rather than described. WPF's tuck is _mainWindow.Hide() plus a visible icon
         // (Services/Notifications/TrayIconService.cs:145-148), fired when the hole opens
         // (Services/Chaos/DtrhHostService.cs:156). It survives there because Win32 does not
@@ -53,7 +53,7 @@ public class ShellTrayHeadlessTests
         shell.Hide();
         Assert.False(descent.IsVisible,
             "Avalonia no longer hides owned windows with their owner. That removes the ONLY reason the port "
-            + "minimizes where WPF tucks — re-open the tuck decision on purpose (wpf-surface-reachability.md §12 D35) "
+            + "minimizes where WPF tucks — re-open the tuck decision on purpose (wpf-surface-reachability.md §12 D35 @ 7527243e7) "
             + "rather than leaving this test green in a direction nobody read");
 
         shell.Show();

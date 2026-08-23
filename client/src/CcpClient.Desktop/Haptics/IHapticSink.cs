@@ -220,9 +220,9 @@ public sealed record HapticServerObservation(
 ///
 /// <para><b>Nothing is DELIVERED, and the reason is now one rung further out.</b> It is no longer
 /// that the modules are silent; it is that the limb has nothing to address.
-/// <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, so no server was ever asked, so no
-/// <see cref="HapticServerObservation"/> names a device, so <see cref="SetOutputsAsync"/> is never
-/// reached. <b>A landed capability is not a working feature</b>, and a limb commanding a sink with
+/// <see cref="HapticSinkFactory.AdmittedRoutes"/> carries Lovense, so a server IS asked; with none
+/// listening no <see cref="HapticServerObservation"/> names a device, so
+/// <see cref="SetOutputsAsync"/> is never reached. <b>A landed capability is not a working feature</b>, and a limb commanding a sink with
 /// no device is a limb, not a feature.</para>
 ///
 /// <para><b>Two of the eighteen are unported for a reason that is about a PROGRAM rather than a

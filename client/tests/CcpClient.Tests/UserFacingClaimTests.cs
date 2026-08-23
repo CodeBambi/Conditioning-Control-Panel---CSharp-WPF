@@ -169,9 +169,8 @@ public sealed class UserFacingClaimTests
     /// <c>MandatoryVideoEffect.cs:307</c>, <c>:340</c>, <c>:419</c>,
     /// <c>SubliminalsEffect.cs:223</c>, <c>BouncingTextField.cs:237</c>), each incrementing
     /// <c>HapticLimb.Moments</c> and posting a real envelope. What stops delivery is one rung
-    /// further out: <c>HapticSinkFactory.AdmittedRoutes</c> is <c>[]</c>, so
-    /// <c>HapticLimb.Send</c> returns at <c>EvaluationsWithNoDevice++</c>
-    /// (<c>HapticLimb.cs:566-570</c>).</para>
+    /// further out: with no Lovense server listening for the admitted route, the sink's observation
+    /// names no device and <c>HapticLimb.Send</c> returns at <c>EvaluationsWithNoDevice++</c>.</para>
     /// </summary>
     [Fact]
     public void TheHapticAbsenceLine_SaysWhereTheSendReallyStops()
@@ -316,10 +315,10 @@ public sealed class UserFacingClaimTests
     /// <summary>The absence line, which every user of this panel reads today.</summary>
     private static string HapticAbsenceText() => HapticsPanelNotices.DescribeAbsences();
 
-    /// <summary>The Armed arm ALONE — never joined to the absence line. It is unreachable while
-    /// <c>AdmittedRoutes</c> is empty, which is precisely why it needs its OWN binding: it goes live
-    /// the day a route is admitted, and a sentence that is only NEGATIVELY constrained can be false
-    /// on exactly that day while a needle shared with the absence line stays green.</summary>
+    /// <summary>The Armed arm ALONE — never joined to the absence line. It is unreachable until a
+    /// server answers, which is precisely why it needs its OWN binding: it goes live on the first
+    /// machine that has one, and a sentence that is only NEGATIVELY constrained can be false on
+    /// exactly that day while a needle shared with the absence line stays green.</summary>
     private static string HapticArmedArmText() =>
         HapticsPanelNotices.DescribeLiveState(EffectDotState.Armed, enabled: true, reachable: true);
 

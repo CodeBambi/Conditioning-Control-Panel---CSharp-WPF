@@ -426,8 +426,8 @@ public static class HapticEnvelopes
     /// <para><b>The Buttplug multiplier is 1.0 and that is a fact about this build, not a
     /// simplification.</b> Upstream doubles every one of these <i>"due to protocol overhead"</i>
     /// when the active provider is Buttplug (<c>:903</c>); <see cref="HapticSinkFactory.AdmittedRoutes"/>
-    /// is empty, so no route is active and the multiplier cannot be anything but one. It returns the
-    /// day a route is admitted.</para>
+    /// carries Lovense and NOT Buttplug, so the Buttplug provider is never the active one here and the
+    /// multiplier cannot be anything but one. It returns the day the Buttplug route is admitted.</para>
     /// </summary>
     public static int SubliminalDurationMs(string? phrase)
     {

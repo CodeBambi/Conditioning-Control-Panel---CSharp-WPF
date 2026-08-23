@@ -50,10 +50,10 @@ public class IntensityRampEffectTests
         var sCurve = RampCurves.ApplyCurve(0.5, RampCurve.SCurve);
         var easeOut = RampCurves.ApplyCurve(0.5, RampCurve.EaseOut);
 
-        Assert.Equal(0.125, easeIn, 10);          // p³ (RampCurves.cs:53)
+        Assert.Equal(0.125, easeIn, 10);          // p³ (Helpers/RampCurves.cs:53)
         Assert.Equal(0.5, linear, 10);
         Assert.Equal(0.5, sCurve, 10);            // smoothstep is symmetric about the middle
-        Assert.Equal(0.875, easeOut, 10);         // 1 - (1-p)³ (RampCurves.cs:56-58)
+        Assert.Equal(0.875, easeOut, 10);         // 1 - (1-p)³ (Helpers/RampCurves.cs:56-58)
         Assert.True(exponential < linear, "the exponential curve is back-loaded");
         Assert.True(easeIn < exponential, "and it is still ahead of the cube at half time");
     }
@@ -61,7 +61,7 @@ public class IntensityRampEffectTests
     [Fact]
     public void ProgressOutsideZeroToOneIsClamped_SoACallerThatForgotCannotDriveACurvePastItsEnds()
     {
-        // Math.Clamp on the way in (RampCurves.cs:49). The ramp clamps its own progress too, so this
+        // Math.Clamp on the way in (Helpers/RampCurves.cs:49). The ramp clamps its own progress too, so this
         // is belt and braces — and it is the belt, because the helper is public.
         Assert.Equal(0.0, RampCurves.ApplyCurve(-4.0, RampCurve.Exponential), 10);
         Assert.Equal(1.0, RampCurves.ApplyCurve(9.0, RampCurve.EaseIn), 10);
@@ -70,7 +70,7 @@ public class IntensityRampEffectTests
     [Fact]
     public void AnUnknownCurveOrdinalIsTreatedAsLinear_AndIsNotCorrectedAway()
     {
-        // Upstream's own default arm (RampCurves.cs:69-71) and its combo box's `_ => 0`
+        // Upstream's own default arm (Helpers/RampCurves.cs:69-71) and its combo box's `_ => 0`
         // (IntensityRampFeatureControl.xaml.cs:54). A document written by a newer build survives a
         // round trip through this one rather than being rewritten to Linear on load, which is the
         // persistence contract's unknown-member rule applied to a VALUE.
