@@ -184,6 +184,11 @@ export function createVoice(o) {
     ? opts.stats
     : (typeof emi.stats === 'function' ? () => emi.stats() : () => ({}));
 
+  /* CAN SHE ACTUALLY PERFORM RIGHT NOW. The renderer attaches a tick or two
+   * after the mount and a `say` before that returns false - so without this
+   * gate a one-shot beat would be spent on a bubble nobody ever saw. The
+   * controller injects the real probe; a direct caller gets "always". */
+  const canPerform = typeof opts.canPerform === 'function' ? opts.canPerform : () => true;
   let rng = typeof opts.rng === 'function' ? opts.rng : Math.random;
   let clock = typeof opts.now === 'function' ? opts.now : Date.now;
   const now = () => { const n = Number(clock()); return Number.isFinite(n) ? n : 0; };
@@ -422,9 +427,14 @@ export function createVoice(o) {
        * so ONE moment is replayed - and only inside the grace window, because a
        * line three seconds after its moment is worse than a line that was
        * missed (emi/index.js's rule, same number). */
+      /* WHOEVER OWNS THE BUFFER REPLAYS IT. With a controller wired in
+       * (`onReady`) the buffer is ITS one slot, because only the controller
+       * also knows whether the renderer has landed; a direct caller keeps
+       * ours. Never both - two replays of one moment is two barks in a row. */
       const p = pending;
       pending = null;
-      if (p && now() - p.when < D.DATA_GRACE_MS) {
+      if (typeof opts.onReady === 'function') { try { opts.onReady(); } catch (e) { /* noop */ } }
+      else if (p && now() - p.when < D.DATA_GRACE_MS) {
         try { onMoment(p.name, p.payload); } catch (e) { /* noop */ }
       }
     }).catch(() => { ready = true; });
@@ -920,8 +930,10 @@ export function createVoice(o) {
       /* THE GEOFENCE, FIRST AND UNCONDITIONAL. Not a quiet reaction: none. */
       if (name === 'lockedClick' && p && SILENT_TARGETS[String(p.what)]) return false;
 
-      if (!ready) {
-        // The data is one tick away. Remember the moment, answer honestly.
+      if (!ready || !canPerform()) {
+        /* NOT YET. Either the script has not landed or the face has not, and
+         * both mean the same thing: consuming a one-shot beat here would burn
+         * it on a bubble that cannot be drawn. Remember, answer honestly. */
         pending = { name, payload: p, when: now() };
         return false;
       }
@@ -954,7 +966,10 @@ export function createVoice(o) {
   function onGesture(kind, p) {
     if (typeof kind !== 'string' || !kind) return false;
     try {
-      if (kind === 'blinkIdle' && glitch()) return true;
+      /* THE IDLE BLINK IS THE ONE UNATTENDED "GESTURE", so it reaches the
+       * GLITCH and nothing else: no beat and no bark may ever be spent by a
+       * page nobody is touching (field bug, 2026-08-24). */
+      if (kind === 'blinkIdle') return glitch();
       let payload = p || {};
       if (kind === 'dropAt') {
         const hit = hitTest(Number(payload.x) || 0, Number(payload.y) || 0);

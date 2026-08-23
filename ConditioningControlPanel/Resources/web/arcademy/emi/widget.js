@@ -535,6 +535,16 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
    * only fire when the expression actually CHANGES, not for every frame she
    * happens to be travelling fast. */
   let dragFace = null;
+  /* THE TWO THINGS A GESTURE HAS TO PROVE (field bug, 2026-08-24). `beginDrag`
+   * also fires on the TIME threshold, so a slow click that never moved - the
+   * click that focuses the window, say, landing on EMI's corner - used to end
+   * as a "drag" that committed her existing position and emitted a dropAt with
+   * nobody touching anything. A gesture now needs a pointer that TRAVELLED at
+   * least DRAG_PX, and an event the platform did not mark synthetic. EMI's own
+   * reactions are unchanged: this gates only what the VOICE is told. */
+  let dragMax = 0;            // furthest the pointer got from the press point
+  let dragTold = false;       // 'drag' is announced once, when it becomes real
+  let trusted = true;         // ev.isTrusted, when the platform reports one
   let armTimer = null;
   let petTimes = [];
   let petCooldownUntil = 0;
@@ -555,6 +565,9 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
    * moment), and a latched `pressing`/`dragging` would then let the NEXT
    * pointerup commit a position read from a hidden element - rect 0,0, i.e. she
    * teleports to the top-left corner the next time she is restored. */
+  /** Did this press actually become a DRAG a human would recognise? */
+  function realDrag() { return trusted && dragMax >= DIALS.DRAG_PX; }
+
   function endPress() {
     if (pressId !== null) {
       try { if (el.releasePointerCapture) el.releasePointerCapture(pressId); } catch (e) { /* noop */ }
@@ -565,6 +578,8 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     fastSince = 0;
     wasFling = false;
     dragFace = null;
+    dragMax = 0;
+    dragTold = false;
     disarmHold();
     el.classList.remove('dragging', 'armed');
   }
@@ -592,6 +607,9 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     startX = ev.clientX; startY = ev.clientY;
     lastX = ev.clientX; lastY = ev.clientY; lastT = pressAt;
     fastSince = 0;
+    dragMax = 0;
+    dragTold = false;
+    trusted = ev.isTrusted !== false;
     try { if (el.setPointerCapture) el.setPointerCapture(ev.pointerId); } catch (e) { /* noop */ }
     // PRESS-AND-HOLD ARMS THE x. Touch has no hover, so this is the only way to
     // reach the dismiss affordance with a finger.
@@ -610,7 +628,6 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     // The reaction is a raw face, not a chain: a chain would fight the next
     // frame of movement. A live SAY keeps the glass (law 3).
     if (!saying()) { cancelChain(); killTimers(); stopBlink(); clearBody(); setDragFace(DRAG_FACE); }
-    emitGesture('drag');
   }
 
   function onMove(ev) {
@@ -621,12 +638,15 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     const dt = Math.max(1, t - lastT);
     const moved = Math.hypot(ev.clientX - lastX, ev.clientY - lastY);
 
+    // The threshold is measured from where the PRESS began, never from the
+    // previous move - a slow drag never crosses a per-move delta.
+    const total = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+    if (total > dragMax) dragMax = total;
     if (!dragging) {
-      // The threshold is measured from where the PRESS began, never from the
-      // previous move - a slow drag never crosses a per-move delta.
-      const total = Math.hypot(ev.clientX - startX, ev.clientY - startY);
       if (total > DIALS.DRAG_PX || (t - pressAt) > DIALS.DRAG_MS) beginDrag();
     }
+    // ...and the voice only hears about it once it is a journey, not a jiggle.
+    if (dragging && !dragTold && realDrag()) { dragTold = true; emitGesture('drag'); }
     if (dragging) {
       const vp = viewport();
       const s = sizePx();
@@ -675,20 +695,24 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
         later(() => idle(), DIALS.SETTLE_MS);
       }
       const flung = wasFling;
+      const travelled = realDrag();
       wasFling = false;
       // ONE write per interaction, on the END of it (never per pointermove).
       save();
-      if (flung) emitGesture('fling');
-      // WHERE SHE LANDED, in viewport coordinates: her CENTRE, which is the
-      // point a hit-test should ask about. voice.js does the asking.
-      const sz = sizePx();
-      emitGesture('dropAt', { x: Math.round(r.left + sz.w / 2), y: Math.round(r.top + sz.h / 2) });
+      if (travelled) {
+        if (flung) emitGesture('fling');
+        // WHERE SHE LANDED, in viewport coordinates: her CENTRE, which is the
+        // point a hit-test should ask about. voice.js does the asking. A press
+        // that never travelled is NOT a drop - she is exactly where she was.
+        const sz = sizePx();
+        emitGesture('dropAt', { x: Math.round(r.left + sz.w / 2), y: Math.round(r.top + sz.h / 2) });
+      }
       return;
     }
     // NOT A DRAG. A short press is a PET; a long hold was the x-arming gesture
     // and is deliberately not a pet (the player was reaching for the dismiss).
     el.classList.remove('dragging');
-    if (held < DIALS.HOLD_MS) pet();
+    if (held < DIALS.HOLD_MS && ev.isTrusted !== false) pet();
   }
 
   function onCancel() {
