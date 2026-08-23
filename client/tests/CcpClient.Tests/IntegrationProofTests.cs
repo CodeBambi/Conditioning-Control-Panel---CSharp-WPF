@@ -34,7 +34,7 @@ public class IntegrationProofTests
 
         // MainWindow's dependencies are (host, host.Trace) — both resolve from the root's product.
         Assert.Same(trace, host!.Trace);
-        Assert.Equal(11, host.Participants.Count);
+        Assert.Equal(12, host.Participants.Count);
         var store = Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
         // The motion preference's store: phase-3 loaded, and Full on a fresh data root — the
         // default that makes the app's own setting govern a hosted page from first run.
@@ -73,7 +73,10 @@ public class IntegrationProofTests
         // could benefit from. The gate is closed too, and closed through the "could not verify"
         // answer rather than through "you are not a patron", because this build's entitlement
         // authority is unconfigured.
-        var haptics = Assert.IsType<CcpClient.Desktop.Haptics.HapticParticipant>(host.Participants[10]);
+        // The camera capability sits between the scheduler and the sink; it asked nothing of any
+        // camera on the way through phase 3, which its own facts assert in full.
+        Assert.IsType<CcpClient.Desktop.Camera.CameraParticipant>(host.Participants[10]);
+        var haptics = Assert.IsType<CcpClient.Desktop.Haptics.HapticParticipant>(host.Participants[11]);
         Assert.True(haptics.Running);
         Assert.Equal(0, haptics.ConnectAttempts);
         Assert.Null(haptics.LastConnectOutcome);

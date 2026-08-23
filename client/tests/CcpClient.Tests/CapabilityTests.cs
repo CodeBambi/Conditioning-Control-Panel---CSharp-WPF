@@ -458,8 +458,12 @@ public class CapabilityTests
             // effect: it refuses EVERY user on EVERY platform, and a capability that refuses
             // everyone while staying invisible in the one place the port reports what it cannot do
             // is exactly the shape the truthful-capability contract exists to prevent.
+            // The CAMERA capability is appended last for the same reason and refuses the same way:
+            // its probe is gated on the gaze engine and then on consent, so a default install
+            // reports camera-no-engine without asking the OS about anybody's cameras
+            // (Camera/CameraParticipant.ProbeAsync).
             Assert.Equal(
-                ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded", "host-login-entitlement", "haptic-sink"],
+                ["ai.provider.local-ollama", "ai.provider.cloud", "display-session", "atomic-filesystem", "dtrh-webview-embedded", "dtrh-web-dialog", "chaos-tunnel-webview-embedded", "host-login-entitlement", "haptic-sink", "webcam-gaze"],
                 capabilities.Names);
 
             // THE PROBE DID NOT OPEN A SOCKET, and this assertion is what says so.
