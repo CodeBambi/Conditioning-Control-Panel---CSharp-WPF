@@ -479,6 +479,14 @@ public sealed class OverlaySurfaceSet : IDisposable
     /// REFUSED cannot be won by tearing the window down again, and tearing it down every three
     /// seconds for the rest of the session is worse than the loss.</para>
     ///
+    /// <para><b>The unconditional cadence can END a streak, and that is right.</b> Measured while
+    /// writing the real-desktop fact for this rule: a 5 s kick landing inside a losing run re-asserts
+    /// the band, the next tick reads it back as HELD, and the streak resets — so on a healthy desktop
+    /// a rebuild only ever happens for a loss that survives re-assertion, which is exactly the
+    /// contended and the REFUSED cases. Nothing was changed to make that happen and nothing was
+    /// changed to prevent it; it is recorded because it is the reason a real-desktop fact has to hold
+    /// its loss across the whole streak to reach the escalation at all.</para>
+    ///
     /// <para><b>What is not ported:</b> upstream's third arm, which skips the rebuild while a
     /// display-topology change is settling (<c>:684-691</c>). It defers to a monitor/DPI
     /// coordinator this port does not have; without one the honest behaviour is the ordinary rule,
