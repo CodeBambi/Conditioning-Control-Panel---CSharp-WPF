@@ -83,6 +83,9 @@
  *   A FACE IS FOUR BOXES AND THERE ARE 25 OF THEM: no isolation, no blend
  *   mode, no filter on a <video>, and the ken-burns pan is for stills only.
  *   .g-de-lite is the whole room one rung down (see the block near the bottom).
+ *   THE TOUCH RUNG (html.ae-touch) is NOT that ladder: it is a hardware
+ *   ceiling that applies on FULL too and stacks with lite. No blur over a
+ *   face, no blend surface, no backdrop-filter - see the block by the lite one.
  * ==========================================================================*/
 
 const STYLE_ID = 'g-de-style';
@@ -899,6 +902,39 @@ ${glyphRules()}
 .g-de-lite .g-de-bd{animation:none}
 .g-de-lite img.g-de-media{animation:none}
 .g-de-lite .g-de-tile .g-de-name::after{animation:none;opacity:.35}
+
+/* ---- pass 5: THE TOUCH RUNG (html.ae-touch) ------------------------------
+   index.js puts '.ae-touch' on <html> from the pointer, next to '.ae-lite',
+   and engine/style.js keeps its own half of it. This is NOT the lite rung and
+   it does not stack behind one: a phone on FULL still gets every cut here,
+   because these are not quality dials, they are things a mobile GPU - WebKit's
+   most of all - cannot pay for at ANY quality. There is no setting; the device
+   is the setting, so desktop is untouched to the byte.
+   What a phone actually pays for, in this sheet:
+     - A FILTER OVER A FACE IS A GPU PASS PER DECODED FRAME. A tile face is a
+       live <video> whenever the pool hands back a webm, and blur() over one is
+       the worst of them. The two blurs here both land in a WINDOW where the
+       board is already at its busiest - the dissolve at the end of a merge and
+       the whole-board resurface - so the hitch lands exactly on the beat the
+       player is watching. Both go to opacity, which is compositor-only. The
+       resurface KEEPS its brightness lift: one filter on a settling board is
+       affordable, a blur over up to 25 decodes is not.
+     - A BLEND SURFACE HAS TO READ WHAT IS UNDER IT before it can write, and
+       the caustic nets are full-screen. On the pool's near-black ground
+       'screen' and plain alpha read almost identically, so the light stays and
+       the read-back goes (the same trade the engine makes for its washes).
+     - BACKDROP-FILTER is the full-screen read-back-and-blur, every frame the
+       pressure glitch is up. The sheet's own tint already carries the read.
+   THE DRIFT LAW is untouched: every pattern here still travels by transform. */
+html.ae-touch .g-de-tile.is-gone{filter:none}
+html.ae-touch .g-de-stage[data-phase="resurface"] .g-de-tile{filter:brightness(1.5)}
+html.ae-touch .g-de-bd-lens::before,html.ae-touch .g-de-bd-lens::after{
+  mix-blend-mode:normal;opacity:.55}
+html.ae-touch .g-de-p-glitch.is-on{backdrop-filter:none;-webkit-backdrop-filter:none}
+/* the merge ceremony, transform/opacity only: the glyph still POPS, it just
+   stops asking for a brightness pass on the frame the new name lands. */
+html.ae-touch .g-de-tile.is-merged .g-de-glyph{animation:g-de-glyphpop-t .42s ease-out 1}
+@keyframes g-de-glyphpop-t{0%{transform:scale(1.25);opacity:.72}100%{transform:none;opacity:1}}
 
 /* ---- reduced motion: the mechanic survives, the motion does not ---------- */
 html.arc-reduced .g-de-stage *{animation:none !important}

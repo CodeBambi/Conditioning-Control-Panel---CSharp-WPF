@@ -72,6 +72,20 @@
  * is lite from the first frame. With no requestAnimationFrame (the headless
  * double) the probe never runs and the class stays FULL.
  *
+ * PASS 6 (the owner's iPhone 13 Pro Max on the web teaser): THE TOUCH RUNG,
+ * which is NOT a third quality level - it is a hardware ceiling laid over
+ * whichever rung the class resolved to, and it applies on FULL too. A coarse
+ * pointer (or more than one touch point) puts `.ae-touch` on <html> for the
+ * life of the class: four animated tiers instead of six, stills four deep
+ * instead of three, three engine decoration videos instead of six, and
+ * engine/style.js drops the backdrop-filter, the full-screen blend surfaces,
+ * the scanline re-raster and the filters that sit over a live decode. iOS caps
+ * concurrent hardware decode sessions and WebKit charges real milliseconds for
+ * a blend or a blur, so none of that is a preference the player should have to
+ * find - there is no setting, the device is the setting. It composes with the
+ * rung in the PROTECTIVE direction (cap = min, still-line = max), so a phone on
+ * lite is still lite. It comes off on destroy, exactly like `.ae-lite`.
+ *
  * PASS 4 (the owner's third note): THE PRESSURE - the CCP effects ladder and
  * the Balatro tremor live in pressure.js, DECK III. This file owns none of
  * that look; it owns the WIRING. The deck is built after the casino and the
@@ -374,6 +388,7 @@ export default {
     let perfReason = '';                   // why (diagnostics + the log line)
     let perfProbeDone = false;             // the probe fires once per class
     let perfLogged = false;
+    let touch = false;                     // pass 6: a touch device, on any rung
     let stuckHints = 0;
     let slides = 0;
     let bumps = 0;
@@ -721,10 +736,50 @@ export default {
      * reach into the engine, but the document root is common ground). Both come
      * off on destroy, or the lobby inherits a lit-down room.
      * ==================================================================== */
-    /** The animated-tier cap and the still-shallows line, by resolved level. */
-    function faceCap() { return perf === 'lite' ? PLAYTEST.FACE_CAP_LITE : PLAYTEST.FACE_CAP; }
+    /**
+     * PASS 6 - THE TOUCH RUNG, which is not a rung at all: it is a HARDWARE
+     * ceiling laid over whichever rung the class resolved to. iOS caps
+     * concurrent hardware decode sessions (three or four in practice), and
+     * WebKit charges a phone several ms a frame for a backdrop-filter or a
+     * full-screen blend surface, so those cuts are owed even on FULL - they are
+     * orthogonal to the full/lite quality ladder and are never user-facing
+     * (there is no setting; the device is the setting). Same seam as lite:
+     * `.ae-touch` on <html>, which engine/style.js and engine/util.js's shared
+     * decoder budget read, plus this game's own stylesheet.
+     */
+    function probeTouch() {
+      try {
+        if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+          const m = window.matchMedia('(pointer: coarse)');
+          if (m && m.matches) return true;
+        }
+      } catch (e) { /* ignore */ }
+      try {
+        if (typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints) > 1) return true;
+      } catch (e) { /* ignore */ }
+      return false;
+    }
+    function setTouchClass(on) {
+      /* <html> ONLY: the stage's own look hangs off `html.ae-touch .g-de-*` in
+         style.js, so there is no second class to keep in sync here. */
+      try {
+        const html = typeof document !== 'undefined' ? document.documentElement : null;
+        if (html && html.classList) html.classList[on ? 'add' : 'remove']('ae-touch');
+      } catch (e) { /* ignore */ }
+    }
+    /** The animated-tier cap and the still-shallows line: the resolved rung
+     *  COMPOSED with the touch ceiling, always in the PROTECTIVE direction. The
+     *  two dials point opposite ways - a cap wants the MIN (fewer decoders) and
+     *  a still-shallows LINE wants the MAX (more of the numerous tiers frozen)
+     *  - so a touch phone on lite keeps lite's 3 loops and lite's five-deep
+     *  shallows, and never trades one of them back for the touch number. */
+    function faceCap() {
+      const rung = perf === 'lite' ? PLAYTEST.FACE_CAP_LITE : PLAYTEST.FACE_CAP;
+      return touch ? Math.min(rung, PLAYTEST.FACE_CAP_TOUCH) : rung;
+    }
     function shallowStillMaxTier() {
-      return perf === 'lite' ? PLAYTEST.SHALLOW_STILL_MAX_TIER_LITE : PLAYTEST.SHALLOW_STILL_MAX_TIER;
+      const rung = perf === 'lite' ? PLAYTEST.SHALLOW_STILL_MAX_TIER_LITE : PLAYTEST.SHALLOW_STILL_MAX_TIER;
+      return touch ? Math.max(rung, PLAYTEST.SHALLOW_STILL_MAX_TIER_TOUCH) : rung;
     }
     /** Read the setting. Anything that is not one of the three is `auto` - the
      *  host clamps its OWN knobs, but a per-game bag is stored verbatim, so a
@@ -1928,9 +1983,16 @@ export default {
         perfProbeDone = false;
         perfLogged = false;
         setLiteClass(false);
+        /* PASS 6 - THE TOUCH RUNG: detected ONCE per class, before any node
+         * exists, and independent of de_perf. A phone's decoder ceiling is not
+         * a quality preference, so `full` does not opt out of it. */
+        touch = probeTouch();
+        setTouchClass(touch);
         if (perfSetting === 'lite') applyPerf('lite', 'setting');
         else if (perfSetting === 'auto' && (reduced || motionLevelOf() <= 1)) applyPerf('lite', 'reduced motion');
         else applyPerf('full', perfSetting === 'full' ? 'setting' : 'auto: probing');
+        if (touch) say('touch device: html.ae-touch armed - faces ' + faceCap()
+          + ' animated tiers, stills to tier ' + shallowStillMaxTier() + ' (iOS decoder ceiling)');
         n = sizeFromSetting(ctx.settings ? ctx.settings.de_board_size : '4x4');
         {
           const want = String(ctx.settings && ctx.settings.de_tile_faces != null ? ctx.settings.de_tile_faces : 'media').trim().toLowerCase();
@@ -2091,6 +2153,7 @@ export default {
         hideHowto();
         perfProbeDone = true;                // any in-flight rAF step is a no-op now
         setLiteClass(false);                 // .ae-lite is on <html>: it outlives us unless we take it off
+        setTouchClass(false);                // and so does .ae-touch - same seam, same cleanup
         clearQueue();
         clearGrab();
         opened = false;
@@ -2160,6 +2223,8 @@ export default {
           perf, perfReason, perfSetting, perfProbeDone,
           faceCap: faceCap(), shallowStillMaxTier: shallowStillMaxTier(),
           lite: !!(stage && stage.classList && stage.classList.contains('g-de-lite')),
+          /* pass 6 - THE TOUCH RUNG (composed with the rung above, not a rung) */
+          touch,
           slides, bumps, stuckHints, stuckShown,
           /* pass 3 - THE HAND + THE QUEUE */
           held: !!grab,

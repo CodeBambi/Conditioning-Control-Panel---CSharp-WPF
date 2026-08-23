@@ -437,6 +437,42 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     misdirection/casino.js) can never be registered globally - if registration is ever genuinely
     needed, use game-prefixed names.
 
+42. **A PHONE NEEDS THE CUTS ON *FULL*, AND THE SEAM IS `html.ae-touch`.** The owner's
+    iPhone 13 Pro Max skipped frames on slide/merge and skipped harder when effects fired -
+    on the LITE rung (web teaser, 2026-08-23). de_perf's full/lite ladder is a QUALITY
+    ladder and it cannot fix this, because two of the three costs are HARDWARE ceilings, not
+    frame budget: iOS caps concurrent hardware video decode SESSIONS (three or four before
+    VideoToolbox thrashes and every stream stutters at once), and WebKit charges several ms
+    a frame for a backdrop-filter or a full-screen blend surface that a desktop GPU eats for
+    free. So The Deep End probes the device once per class - `matchMedia('(pointer: coarse)')`
+    or `navigator.maxTouchPoints > 1` - and puts **`.ae-touch` on `<html>`**, the same
+    document-root seam `.ae-lite` uses (the game sets it, the engine only reads it, and
+    BOTH come off on destroy or the lobby inherits a phone's ceiling).
+    - It is **NOT a third rung**: it applies on FULL too, and `de_perf: full` does not opt
+      out of it. There is no setting and there must never be one - the device is the setting.
+    - It **composes with the rung in the PROTECTIVE direction, and the two dials point
+      opposite ways**: `faceCap` takes the **MIN** (`FACE_CAP` 6 / `_LITE` 3 / `_TOUCH` 4 -
+      fewer decoders wins) while `shallowStillMaxTier` takes the **MAX** (3 / 5 / 4 - more
+      of the numerous shallow tiers frozen wins). A `min` on the still-line would hand a lite
+      PHONE more animated tiers than a lite desktop. `engine/util.js videoBudget()` mins the
+      same way: 6 desktop, 3 touch, 2 lite, 2 touch+lite.
+    - `engine/style.js` `.ae-touch` drops what WebKit charges most for, on every rung: the
+      drain wash's backdrop-filter, `mix-blend-mode` on the four FULL-SCREEN washes (the
+      spiral is 150vmax - over twice the viewport of read-back), the scanline's
+      `background-position` roll (per-frame re-raster of a full-screen sheet), and the two
+      filters that can land over a live decode (`ae-burst-double` on a gif_burst <video>,
+      `ae-mosh`'s blur every frame of a swap). The Deep End's own `.ae-touch` block in
+      `games/the-deep-end/style.js` does the same on the game side: no blur on `.is-gone` /
+      resurface tiles (blur over a live face), the lens loses its blend surface, the glitch
+      payload loses backdrop-filter, the merge glyph pops by transform/opacity only.
+    - Low Power Mode caps rAF to 30fps and the auto probe demotes to lite on that. That is
+      CORRECT, not a bug: iOS Safari caps rAF to 60 even on ProMotion, so the PASS-5
+      thresholds (median 20ms / 25ms x 40%) mean the same thing on a phone as on a desktop.
+    - Caveat, accepted deliberately: a Windows touchscreen laptop reports
+      `maxTouchPoints: 10` with a fine pointer and therefore also gets the ceiling. It is
+      hardware-protective and cheap; do not "fix" it by dropping the maxTouchPoints probe,
+      which is the only signal a webview that answers no media query has.
+
 ## 5. The game module contract (short version)
 
 ```js

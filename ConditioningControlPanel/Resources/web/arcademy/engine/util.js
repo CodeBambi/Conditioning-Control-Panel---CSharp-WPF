@@ -42,18 +42,30 @@ export const isVideoUrl = (url) => VIDEO_URL_RE.test(String(url || ''));
  *
  * The lite rung reads `.ae-lite` on <html> (a game or the shell sets it; the
  * engine never owns that class), because a machine that cannot paint the frame
- * cannot decode six videos either. */
+ * cannot decode six videos either.
+ *
+ * THE TOUCH RUNG reads `.ae-touch` on <html>, set the same way and by the same
+ * kind of caller, and it is a HARDWARE ceiling rather than a quality level: iOS
+ * caps concurrent hardware decode SESSIONS (three or four before VideoToolbox
+ * thrashes and every stream stutters), so a phone gets 3 even on the FULL rung.
+ * The two compose the protective way - fewer decoders always wins - so
+ * touch+lite is min(2,3) = 2 and a lite phone is never handed MORE video than a
+ * lite desktop. */
 export const VIDEO_BUDGET = 6;
 export const VIDEO_BUDGET_LITE = 2;
+export const VIDEO_BUDGET_TOUCH = 3;
 let liveVideos = 0;
 /** How many decoration <video> nodes mediaEl has minted and not yet released. */
 export const liveVideoCount = () => liveVideos;
 export function videoBudget() {
+  let budget = VIDEO_BUDGET;
   try {
     const html = hasDom() ? document.documentElement : null;
-    if (html && html.classList && html.classList.contains('ae-lite')) return VIDEO_BUDGET_LITE;
+    const cl = html && html.classList ? html.classList : null;
+    if (cl && cl.contains('ae-lite')) budget = Math.min(budget, VIDEO_BUDGET_LITE);
+    if (cl && cl.contains('ae-touch')) budget = Math.min(budget, VIDEO_BUDGET_TOUCH);
   } catch { /* ignore */ }
-  return VIDEO_BUDGET;
+  return budget;
 }
 /** The asset kind decoration may actually ask for. 'loop' until the budget is
  *  spent, then 'still' - every other kind passes straight through. */

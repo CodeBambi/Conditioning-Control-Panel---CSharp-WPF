@@ -95,6 +95,19 @@ export const PLAYTEST = Object.freeze({
    *  fell to 40fps, so a weak machine needs a ladder, not a switch. */
   FACE_CAP_LITE: 3,
   SHALLOW_STILL_MAX_TIER_LITE: 5,
+  /** THE TOUCH RUNG (PASS 6, the owner's iPhone 13 Pro Max, 2026-08-23), and it
+   *  is NOT a third quality level - it is a HARDWARE ceiling that applies on
+   *  FULL as well as on lite. iOS caps CONCURRENT HARDWARE VIDEO DECODE
+   *  SESSIONS (practically three or four before VideoToolbox starts thrashing
+   *  and every one of them stutters), and a phone pays several ms a frame for a
+   *  backdrop-filter or a blend surface that a desktop GPU eats for free. So a
+   *  touch device gets four animated tiers and stills five deep no matter what
+   *  rung it is on. It COMPOSES with the rung in the PROTECTIVE direction, so
+   *  touch never makes a lite board heavier: the animated-tier cap takes the
+   *  MIN (fewer decoders wins) and the still-shallows line takes the MAX (more
+   *  stills wins) - see faceCap()/shallowStillMaxTier() in index.js. */
+  FACE_CAP_TOUCH: 4,
+  SHALLOW_STILL_MAX_TIER_TOUCH: 4,
 
   /** PASS 5 - THE AUTO PROBE. After the board is dealt we sample rAF deltas
    *  for PERF_SAMPLE_MS, skipping PERF_WARMUP_MS of first-frame cost (style
