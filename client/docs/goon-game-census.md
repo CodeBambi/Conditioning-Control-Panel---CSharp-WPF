@@ -863,8 +863,8 @@ by 3 and 5 lines. Here a citation that drifts by **one** line reds the suite.
 | cli-goon | App.xaml.cs | 2517 | GoonHostService.Launch() |
 | cli-goon-test | App.xaml.cs | 2445 | new GoonTestWindow() |
 | cli-goon-vectors | App.xaml.cs | 2528 | GoonVectorDumper.Run() |
-| playtab-send-rung | MainWindow/MainWindow.PlayTab.cs | 112 | HasPremiumAccess |
-| playtab-host-rung | MainWindow/MainWindow.PlayTab.cs | 113 | HasLabAccess |
+| playtab-send-rung | MainWindow/MainWindow.PlayTab.cs | 123 | HasPremiumAccess |
+| playtab-host-rung | MainWindow/MainWindow.PlayTab.cs | 124 | HasLabAccess |
 | stale-single-perk-comment | MainWindow/MainWindow.Lab.cs | 193 | only premium part |
 | wrong-citation-site | Views/Tabs/PlayTabView.xaml | 604 | MainWindow.Lab.cs:182-186 |
 | wrong-citation-target | MainWindow/MainWindow.Lab.cs | 182 | BtnStartBureau_Click failed |

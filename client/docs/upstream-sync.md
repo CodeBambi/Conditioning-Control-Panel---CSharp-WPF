@@ -96,7 +96,16 @@ pre-existing rot makes the next one distrust its own ledger.
    88 -> 91 files, `ArcademyHostService.cs` +51 lines with 13 new `ic_*` lexicon entries from the
    Impulse Control House Rules wave: `casino.js`, `pressure.js`, `trickster.js` added, plus
    `index/lex/render/style/tube2d/tube3d` edited).
-2. **Parity drift on landed port code: NONE, and this was checked rather than assumed.** The changed
+2. **Parity drift on landed port code: no BEHAVIOUR drift, but one landed EVIDENCE break that the first
+   pass missed.** `GoonGameCensusTests.EveryPinnedCitation_IsOnTheExactLineItClaims` went red on the merged
+   tree: the Arcademy visibility block added 11 lines to `MainWindow/MainWindow.PlayTab.cs`, moving the two
+   citations the goon census pins (`playtab-send-rung` 112 -> 123, `playtab-host-rung` 113 -> 124). Corrected
+   in `client/docs/goon-game-census.md`. **The first pass of this ledger claimed bucket 2 was empty, and that
+   claim was wrong** - it rested on a hand-picked subset of guards (inventory, citations, execution census,
+   read-only tree) rather than on the suite. The lesson is the one the protocol already states and this pass
+   did not honour: a sync is not verified until the WHOLE suite runs on the merged tree, because the guards
+   that pin upstream line numbers are exactly the ones a line-shifting merge breaks, and they are not the
+   guards a human thinks to name. No user-observable port behaviour changed. The other changed
    WPF areas are Arcademy (absent from the port - zero `arcademy` references under `client/`),
    `Services/Update/UpdateService.cs` (not ported; the port's version is deliberately `0.1.0` and
    `client/Directory.Build.props` states the client "must not impersonate" the WPF product's version, so
