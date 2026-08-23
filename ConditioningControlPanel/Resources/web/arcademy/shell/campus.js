@@ -190,6 +190,53 @@ export function currentSemester() {
 const ROMAN = Object.freeze(['', 'I', 'II', 'III', 'IV']);
 
 /* ----------------------------------------------------------------------------
+ * LIGHTS ON - THE ROOM INHERITS THE CARD.
+ *
+ * The restyle is entirely in styles.css; what lives here is STRUCTURE, and the
+ * module's oldest law still holds without an exception: not one line below
+ * writes a colour. The per-room gradients are `<linearGradient>` nodes whose
+ * `<stop>`s carry a class and a `data-game`, and the stylesheet paints them off
+ * `--room-<key>-a/-b/-glow`; the logos are `<image>` nodes; the marquee bulbs,
+ * the cabinet trim and the powered-off scanlines are plain rects wearing class
+ * names. A mod palette therefore reskins the lit campus for free, exactly the
+ * way it already reskinned the blueprint one.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Where a class's keyed logo hangs INSIDE its own room, in viewBox units.
+ * A BOX, not a size: the `<image>` is `preserveAspectRatio="xMidYMid meet"`, so
+ * a wide wordmark and a squarer crest both land centred inside the same box and
+ * neither can ever reach the room plate drawn under it - the name and the RM
+ * number are the lexicon surface, and a logo that covered them would take the
+ * mod's own words off the map.
+ *
+ * Deliberately NOT a field on ROOMS: that table is frozen geography and this is
+ * dressing. A key with no entry (a retired class, a future one whose art has
+ * not been drawn) simply gets no `<image>` and keeps the blueprint room.
+ */
+const LOGO_BOX = Object.freeze({
+  /* corridor rooms - 158 of a 220-wide room (~72%), in the band above the plate */
+  daily_trigger:   [251, 244, 158, 96],
+  deja_vu:         [491, 244, 158, 96],
+  impulse_control: [731, 244, 158, 96],
+  lost_and_found:  [251, 586, 158, 96],
+  /* the Pool is a WIDE, SHORT building: a letterbox over the water */
+  the_deep_end:    [349, 762, 242, 52],
+  /* wing rooms are half a corridor room. There is no clear band between the
+     sign and the name in 66 units of height, so their logo is a full-room
+     BACKPLATE instead and the stylesheet holds it well under the text (`.sm`). */
+  echo:            [1268, 434, 96, 58],
+  instant_recall:  [1268, 506, 96, 58],
+  anomaly:         [68, 368, 104, 84],
+  composure:       [68, 480, 104, 84],
+});
+
+/** Keyed logo PNGs. `<image href>` resolves against the DOCUMENT, and
+ *  index.html sits one level above shell/ - so this path is document-relative
+ *  while the preload probe below resolves the same file off import.meta.url. */
+const LOGO_DIR = 'art/campus/';
+
+/* ----------------------------------------------------------------------------
  * THE IDLE ATTRACT - tunables (Deck VI: demo, don't explain).
  * -------------------------------------------------------------------------- */
 export const ATTRACT_IDLE_MS = 25000;   // silence before the school starts showing off
@@ -399,6 +446,48 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   pave.appendChild(svg('line', { x1: 0, y1: 0, x2: 0, y2: 26 }, 'campus-paveline'));
   pave.appendChild(svg('line', { x1: 0, y1: 0, x2: 26, y2: 0 }, 'campus-paveline'));
   defs.appendChild(pave);
+
+  /* THE MIDWAY CARPET - a drawn 48-unit tile of 90s arcade floor: a ground, two
+   * confetti triangles, two squiggles, three dots and two dashes. All vector,
+   * all class-styled, and NOTHING in it animates: a tiling background that
+   * moved would re-raster the whole hall every frame (trap 36's law). The
+   * stylesheet keeps the finished layer well under the route and the stops. */
+  const carpet = svg('pattern', {
+    id: 'campusCarpet', width: 48, height: 48, patternUnits: 'userSpaceOnUse',
+  });
+  carpet.appendChild(svg('rect', { x: 0, y: 0, width: 48, height: 48 }, 'campus-carpet-ground'));
+  carpet.appendChild(svg('path', { d: 'M7,9 L16,9 L11.5,17 Z' }, 'campus-carpet-p'));
+  carpet.appendChild(svg('path', { d: 'M33,29 L42,29 L37.5,37 Z' }, 'campus-carpet-p'));
+  carpet.appendChild(svg('path', { d: 'M2,33 q5,-6 10,0 t10,0' }, 'campus-carpet-l'));
+  carpet.appendChild(svg('path', { d: 'M26,5 q5,6 10,0' }, 'campus-carpet-l'));
+  carpet.appendChild(svg('circle', { cx: 41, cy: 13, r: 2.2 }, 'campus-carpet-g'));
+  carpet.appendChild(svg('circle', { cx: 21, cy: 24, r: 1.5 }, 'campus-carpet-g'));
+  carpet.appendChild(svg('circle', { cx: 6, cy: 44, r: 1.5 }, 'campus-carpet-p'));
+  carpet.appendChild(svg('rect', { x: 28, y: 17, width: 6, height: 2 }, 'campus-carpet-g'));
+  carpet.appendChild(svg('rect', { x: 13, y: 39, width: 2, height: 6 }, 'campus-carpet-p'));
+  defs.appendChild(carpet);
+
+  /* POWERED-OFF GLASS - the scanlines a dark room's dead screen keeps. */
+  const scan = svg('pattern', {
+    id: 'campusScan', width: 6, height: 6, patternUnits: 'userSpaceOnUse',
+  });
+  /* y 3, not y 0: a pattern clips to its own tile, so a 1-unit line on the tile
+   * edge would draw at half width and the scanlines would read as a grey haze
+   * instead of as lines. */
+  scan.appendChild(svg('line', { x1: 0, y1: 3, x2: 6, y2: 3 }, 'campus-scanline'));
+  defs.appendChild(scan);
+
+  /* ONE VERTICAL GRADIENT PER ROOM - the card, stood up as a cabinet front.
+   * The stops carry the class AND the game key, because a <stop> lives in
+   * <defs> and can never inherit a custom property from its room group. */
+  function roomGradientId(key) { return 'campusRoomG-' + key; }
+  Object.keys(ROOMS).forEach((key) => {
+    const lg = svg('linearGradient', { id: roomGradientId(key), x1: 0, y1: 0, x2: 0, y2: 1 });
+    lg.appendChild(svg('stop', { offset: '0', 'data-game': key }, 'campus-stop-a'));
+    lg.appendChild(svg('stop', { offset: '1', 'data-game': key }, 'campus-stop-b'));
+    defs.appendChild(lg);
+  });
+
   plan.appendChild(defs);
 
   /* grounds: trees, paths, lamps, fountain */
@@ -418,6 +507,19 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   grounds.appendChild(svg('circle', { cx: 1088, cy: 846, r: 9 }, 'campus-fountain-eye'));
   grounds.appendChild(svg('circle', { cx: 1088, cy: 846, r: 16 }, 'campus-ripple'));
   grounds.appendChild(svg('circle', { cx: 1088, cy: 846, r: 16 }, 'campus-ripple r2'));
+  /* THE TOKEN FOUNTAIN - five coins in the basin ring (every one of them clear
+   * of the r9 eye and inside the r26 coping), each with a one-dot highlight so
+   * it reads as struck metal rather than as another lamp. */
+  [[1078, 852, 2.6], [1094, 856, 2.2], [1082, 834, 2.0], [1100, 844, 2.4], [1074, 840, 1.8]]
+    .forEach(([cx, cy, r]) => {
+      grounds.appendChild(svg('circle', { cx, cy, r }, 'campus-coin'));
+      grounds.appendChild(svg('circle', {
+        cx: cx - r * 0.32, cy: cy - r * 0.32, r: r * 0.34,
+      }, 'campus-coin-hi'));
+    });
+  /* ONE glint, on a 17s cycle that is dark for sixteen and a half of them.
+   * SPARKLE BURST IS SCARCE BY LAW - a second one would make it wallpaper. */
+  grounds.appendChild(svg('path', { d: 'M1100,830 L1100,840 M1095,835 L1105,835' }, 'campus-sparkle'));
   grounds.appendChild(svgText(1088, 806, 'campus-groundlbl', t('campus_the_quad', 'The Quad').toUpperCase()));
   grounds.appendChild(svgText(756, 858, 'campus-groundlbl start', t('campus_front_path', 'Front Path').toUpperCase(),
     { 'text-anchor': 'start' }));
@@ -438,10 +540,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   /* corridor + entrance hall floors (+ paving texture overlays) */
   const floors = svg('g', null, 'campus-floors');
+  /* THE HALL IS CARPETED. Ground -> midway carpet -> paving lines: the carpet
+   * lays over the floor fill and the drawn paving still reads on top of it. */
   floors.appendChild(svg('rect', { x: 200, y: 430, width: 1040, height: 80 }, 'campus-ghall'));
+  floors.appendChild(svg('rect', { x: 200, y: 430, width: 1040, height: 80, fill: 'url(#campusCarpet)' }, 'campus-carpet'));
   floors.appendChild(svg('rect', { x: 200, y: 430, width: 1040, height: 80, fill: 'url(#campusPave)' }, 'campus-pave'));
   floors.appendChild(svgText(252, 474, 'campus-rsub start wide', t('campus_main_hall', 'Main Hall').toUpperCase(), { 'text-anchor': 'start' }));
   floors.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220 }, 'campus-ghall'));
+  floors.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220, fill: 'url(#campusCarpet)' }, 'campus-carpet'));
   floors.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
   plan.appendChild(stag(floors, 60));
 
@@ -486,7 +592,12 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
         t('game_' + key, spec.gameEn || spec.nameEn).toUpperCase()));
     });
     const mx = w.mouthX;
+    /* THE WALL TAPE IS A CHEQUER. One stroked line can only ever be a dashed
+     * line, so the tape is TWO thin rows half a dash out of phase - which is
+     * the pink checkerboard an arcade tapes a doorway with. The second row is
+     * a new node; the first keeps its own coordinates exactly. */
     g.appendChild(svg('line', { x1: mx, y1: 446, x2: mx, y2: 474 }, 'campus-tape2'));
+    g.appendChild(svg('line', { x1: mx + 2, y1: 446, x2: mx + 2, y2: 474 }, 'campus-tape2 b'));
     g.appendChild(svg('line', { x1: mx - 7, y1: 452, x2: mx + 7, y2: 468 }, 'campus-tape'));
     g.appendChild(svg('line', { x1: mx + 7, y1: 452, x2: mx - 7, y2: 468 }, 'campus-tape'));
     g.appendChild(svgText(w.labelX, w.labelY, 'campus-rsub ' + w.sealedTone,
@@ -604,9 +715,39 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const spec = ROOMS[key];
     const [x, y, w, h] = spec.rect;
     const g = svg('g', null, 'campus-room');
+    /* THE ROOM IS THE CARD. `data-game` is the only new attribute update() has
+     * to leave alone, and it does - update() rewrites `class`, never this. It
+     * hands the room its three identity tokens in the stylesheet. */
+    g.setAttribute('data-game', key);
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-gfloor'));
+    /* the cabinet front: a second floor rect wearing the room's own gradient.
+     * `fill` is a REFERENCE, not a hue - the stops are painted from CSS. This
+     * is the same seam .campus-pave has used since the first campus. */
+    g.appendChild(svg('rect', {
+      x, y, width: w, height: h, fill: 'url(#' + roomGradientId(key) + ')',
+    }, 'campus-cabinet'));
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-lit'));
     furnitureFor(key, g);
+    /* THE LOGO - over the furniture, under every label. Optional: the art probe
+     * below flips the stage to data-art="off" and CSS drops all of these. */
+    const box = LOGO_BOX[key];
+    if (box) {
+      const logo = svg('image', {
+        x: box[0], y: box[1], width: box[2], height: box[3],
+        href: LOGO_DIR + 'logo-' + key + '.png',
+        preserveAspectRatio: 'xMidYMid meet',
+      }, 'campus-logo' + (spec.wing ? ' sm' : ''));
+      logo.setAttribute('pointer-events', 'none');
+      g.appendChild(logo);
+    }
+    /* the lit cabinet's bezel (open/retake only - CSS holds it at 0 otherwise)
+     * and the powered-off cabinet's scanlines (dark only, same deal). */
+    g.appendChild(svg('rect', {
+      x: x + 5, y: y + 5, width: Math.max(0, w - 10), height: Math.max(0, h - 10), rx: 3,
+    }, 'campus-trim'));
+    g.appendChild(svg('rect', {
+      x, y, width: w, height: h, fill: 'url(#campusScan)',
+    }, 'campus-scan'));
     /* The sign's centre line: the door x for a corridor room, an explicit pin for
      * a wing room whose `door` is a y. Unchanged for every Semester-1 room. */
     const signX = spec.neonX != null ? spec.neonX : spec.door;
@@ -638,6 +779,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const neonText = svgText(signX, neonY + 11, null, '');
     neon.appendChild(neonRect);
     neon.appendChild(neonText);
+    /* THE MARQUEE BULBS. Same rect, deliberately WITHOUT the sign's rx: an
+     * un-rounded 94x16 has a perimeter of exactly 220, which divides by the
+     * stylesheet's 11-unit bulb pitch into twenty dots with no seam at the
+     * path start. The chase itself is one CSS animation shared by every open
+     * room - there is no per-bulb node and no JS timer anywhere near it. */
+    neon.appendChild(svg('rect', {
+      x: signX - 47, y: neonY, width: 94, height: 16,
+    }, 'campus-marquee'));
     g.appendChild(neon);
     roomRefs[key] = { g, neon, neonText, ping, spec };
     g.addEventListener('click', () => openClassCard(key));
@@ -680,6 +829,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       desc: t('campus_desc_records', 'Report card, attendance ledger, grades. Your whole term, in ink.'),
       // (the desc row is unchanged on purpose - it already describes the office)
     }));
+  /* THE TROPHY-CASE LIGHT. Records keeps the whole facility contract (same
+   * class, same click, same tip) and gains ONE modifier the stylesheet uses to
+   * warm its existing bloom rect from lavender to gold. update() never touches
+   * a facility's class - roomRefs holds game rooms only - so this is stable. */
+  recordsG.setAttribute('class', 'campus-room facility records');
   [228, 262, 296, 330].forEach((y) => recordsG.appendChild(svg('rect', { x: 1196, y, width: 14, height: 26 }, 'campus-furnf')));
   recordsG.appendChild(svg('rect', { x: 1044, y: 264, width: 66, height: 24 }, 'campus-furnf'));
   recordsG.appendChild(svg('rect', { x: 1006, y: 308, width: 140, height: 52, 'stroke-dasharray': '3 5' }, 'campus-furn'));
@@ -706,9 +860,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   const hall = svg('g', null, 'campus-halldress');
   hall.appendChild(svg('circle', { cx: 700, cy: 622, r: 46, 'stroke-dasharray': '4 6' }, 'campus-crestring'));
   hall.appendChild(svgText(700, 638, 'campus-crestA', 'A'));
+  /* THE NOTICE BOARD is corkboard under a lamp now: a felt backing behind the
+   * existing board, and a gold plate instead of a chalk one. The board rect,
+   * its four pins and their coordinates are untouched. */
+  hall.appendChild(svg('rect', { x: 496, y: 512, width: 138, height: 18 }, 'campus-felt'));
   hall.appendChild(svg('rect', { x: 500, y: 516, width: 130, height: 10 }, 'campus-furnf'));
   [[516, 'p1'], [548, 'p2'], [583, 'p3'], [612, 'p4']].forEach(([cx, k]) => hall.appendChild(svg('circle', { cx, cy: 521, r: 1.6 }, 'campus-pin ' + k)));
-  hall.appendChild(svgText(565, 542, 'campus-rsub tiny', t('campus_notice_board', 'Notice Board').toUpperCase()));
+  hall.appendChild(svgText(565, 542, 'campus-rsub tiny gold', t('campus_notice_board', 'Notice Board').toUpperCase()));
   hall.appendChild(svg('rect', { x: 916, y: 548, width: 12, height: 150 }, 'campus-furnf'));
   [[566, 'gold'], [596, 'gold'], [626, 'lav'], [656, 'dim']].forEach(([cy, k]) => hall.appendChild(svg('circle', { cx: 922, cy, r: 2.4 }, 'campus-trophy ' + k)));
   hall.appendChild(svgText(893, 628, 'campus-rsub tiny', t('campus_trophy_case', 'Trophy Case').toUpperCase(), { transform: 'rotate(-90 893 628)' }));
@@ -760,6 +918,37 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   plan.appendChild(stopsLayer);
 
   root.appendChild(plan);
+
+  /* ------------------------------ THE ART PROBE -------------------------- */
+  /* Room logos are OPTIONAL, on exactly the terms punchcard.js's face geometry
+   * is: the stage starts on `data-art="on"` and ONE preload decides. No file,
+   * no decoder, a 404 or a corrupt png and the attribute flips to "off" - CSS
+   * then hides every `<image>` and what is left is the drawn blueprint the
+   * campus has always been. WHOLE, not holed: nothing else in the treatment
+   * depends on the art, so a room with no logo still wears its card gradient,
+   * its gold trim, its marquee and its plate.
+   * ONE probe, not nine: the nine files ship together or not at all, and nine
+   * preloads on a screen that is always up is nine decodes to learn one fact. */
+  try { root.setAttribute('data-art', 'on'); } catch (e) { /* noop */ }
+  (function probeArt() {
+    const artOff = (why) => {
+      try { root.setAttribute('data-art', 'off'); } catch (e) { /* noop */ }
+      say('campus: no room art (' + why + ') - drawing the blueprint');
+    };
+    try {
+      const first = Object.keys(LOGO_BOX)[0];
+      if (!first) return;
+      if (typeof Image !== 'function') { artOff('no Image'); return; }
+      const probe = new Image();
+      probe.onerror = () => { if (!destroyed) artOff('preload failed'); };
+      /* Resolved against THIS module the way loadFaceGeometry resolves its
+       * json, so the file:// suites fail fast into the fallback instead of
+       * hanging on a path that only exists behind the host's origin. */
+      probe.src = new URL('../' + LOGO_DIR + 'logo-' + first + '.png', import.meta.url).href;
+    } catch (e) {
+      artOff((e && e.message) || e);
+    }
+  }());
 
   /* ------------------------------ fireflies ------------------------------ */
   [['18%', '78%', '9s', '0s', ''], ['26%', '84%', '11s', '2s', 'p'], ['64%', '88%', '8s', '1s', ''],
