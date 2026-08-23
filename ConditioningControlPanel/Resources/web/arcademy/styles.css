@@ -1052,10 +1052,12 @@ g.campus-room.retake .campus-logo { opacity:.8; }
    reads as a shape behind dead glass. Still a static filter on a static node,
    one raster, never over a live decode (trap 36). */
 g.campus-room.dark .campus-logo { filter:brightness(0) invert(1); opacity:.1; }
-/* NO `.sm` RUNG ANY MORE. The first cut hung a faint full-room backplate in
-   the wings; the shots killed it (the plate turned a 112x66 room's name into
-   noise and its RM number vanished), so campus.js simply mints no <image> for
-   a wing room and the gradient carries that identity instead. */
+/* NO `.sm` RUNG, AND NOW NO EXCEPTIONS EITHER. The first cut hung a faint
+   full-room backplate in the wings and the shots killed it (the plate turned a
+   112x66 room's name into noise and its RM number vanished), so the wings went
+   without art. Lot 2 answered that the honest way - it made the rooms bigger -
+   so every one of the nine classes carries the same <image> in the same band,
+   and the ONE rung below is still the whole art contract. */
 .campus-stage[data-art="off"] .campus-logo { display:none; }
 
 /* THE PLATE READS OVER THE CARD. A room name drawn in chalk over a lit,
@@ -1138,12 +1140,18 @@ g.campus-room.open .campus-ping { animation:campus-pingring 2.6s cubic-bezier(.2
 .campus-neon.v text { fill:var(--lav); }
 .campus-neon.v { filter:drop-shadow(0 0 5px var(--lav)); animation:none; opacity:.95; }
 .campus-neon.off { opacity:0; animation:none; filter:none; }
-/* A WING SIGN GLOWS LESS. 94x16 of sign in a 112x66 room leaves ~10 units
+/* A COMPACT SIGN GLOWS LESS. 94x16 of sign in a small room leaves ~10 units
    between the plate and the room name, and the default 14px outer bloom walked
-   straight over both it and the RM number. Geometry is frozen, so the fix is
-   the bleed: one tight halo instead of two. */
-g.campus-room[data-wing] .campus-neon { filter:drop-shadow(0 0 2.5px var(--pink)); }
-g.campus-room[data-wing] .campus-neon.v { filter:drop-shadow(0 0 2.5px var(--lav)); }
+   straight over both it and the RM number. The fix is the bleed: one tight halo
+   instead of two.
+   THIS IS THE FRONT OFFICE'S RULE NOW (LIGHTS ON lot 2). It was written for the
+   old wing cupboards and hooked on `data-wing`, which was never what it meant -
+   the rule is about a room 84 units tall, not about which end of the school it
+   stands in. The wings' classes are full storefronts today and wear the full
+   bloom; Records and the Registrar are the compact rooms, so campus.js hangs
+   `data-compact` on exactly them. */
+g.campus-room[data-compact] .campus-neon { filter:drop-shadow(0 0 2.5px var(--pink)); }
+g.campus-room[data-compact] .campus-neon.v { filter:drop-shadow(0 0 2.5px var(--lav)); }
 @keyframes campus-flicker {
   0%, 100% { opacity:1; } 7% { opacity:.5; } 8% { opacity:1; }
   52% { opacity:.8; } 54% { opacity:1; } 83% { opacity:.55; } 84% { opacity:1; }

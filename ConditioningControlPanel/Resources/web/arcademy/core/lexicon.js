@@ -131,7 +131,10 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_east_wing: 'East Wing',
   campus_west_wing: 'West Wing',
   campus_desc_east: 'You can hear hammering behind the tape.',
-  campus_desc_east_open: 'The tape is down. Wet paint, three new doors, nobody at the desk.',
+  /* LOT 2 (2026-08-23) made the east wing the FRONT OFFICE - it holds Records
+     and the Registrar now, not three new classrooms. Same key, new sentence;
+     campus.js carries the identical fallback. */
+  campus_desc_east_open: 'The front office. Two counters, one bell, and a queue that is always you.',
   campus_desc_west_open: 'Older boards, deeper rooms. Nobody in here is in any hurry.',
   campus_desc_west: 'The boards are older here.',
   campus_sealed: 'Sealed',
