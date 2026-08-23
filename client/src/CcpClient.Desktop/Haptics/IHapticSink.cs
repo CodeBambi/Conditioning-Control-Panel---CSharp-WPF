@@ -4,12 +4,13 @@ namespace CcpClient.Desktop.Haptics;
 
 /// <summary>
 /// Which upstream provider route a sink speaks for. <b>A selection input only</b>: naming a route
-/// never makes one admitted, and <see cref="HapticSinkFactory.AdmittedRoutes"/> is the only thing
-/// that decides which are.
+/// never makes one admitted, and <see cref="HapticSinkFactory.AdmittedRoutes"/> — both of upstream's
+/// real providers — is the only thing that decides which are.
 /// </summary>
 public enum HapticProviderRoute
 {
-    /// <summary>No route. The value every sink this build constructs carries.</summary>
+    /// <summary>No route. What a sink reports when the user has ticked no provider, and what the
+    /// refusing sink carries.</summary>
     None,
 
     /// <summary>Buttplug.io through Intiface Central, a WebSocket at <c>ws://127.0.0.1:12345</c>
@@ -105,12 +106,16 @@ public readonly record struct HapticOutput(int ActuatorIndex, HapticLevel Level)
 /// <param name="Route">Which provider route the ask went down, or <see cref="HapticProviderRoute.None"/>.</param>
 /// <param name="ClientAdmitted">
 /// Whether this build has a client that could speak to a server at all. <b>The rung no other
-/// capability in this port has</b>, and the one that is false today.
+/// capability in this port has.</b> It is TRUE for both admitted routes now; it is false only for a
+/// sink built for a route this build has no client for.
 /// </param>
 /// <param name="ServerAnswered">Whether the separate server process answered.</param>
 /// <param name="DeviceKeys">
-/// The devices the server named, as <c>provider:id</c> keys — upstream's own identity shape
-/// (<c>HapticContracts.cs:51,67</c>). A snapshot from THIS ask; nothing here is cached, so a caller
+/// The devices the server named. A key is only ever meaningful to the sink that produced it: a
+/// single-route sink names them the way its own server does (a Lovense toy id, a Buttplug device
+/// index), and <see cref="CompositeHapticSink"/> — the sink the product actually holds — prefixes
+/// each with its route to give upstream's own <c>provider:id</c> identity shape
+/// (<c>HapticContracts.cs:67</c>). A snapshot from THIS ask; nothing here is cached, so a caller
 /// that needs the fact later asks again.
 /// </param>
 public sealed record HapticServerObservation(
@@ -120,9 +125,56 @@ public sealed record HapticServerObservation(
     bool ServerAnswered,
     IReadOnlyList<string> DeviceKeys)
 {
-    /// <summary>Nothing was asked and nothing is admitted. The only value this build ever produces.</summary>
+    /// <summary>
+    /// Nothing was asked, of anything.
+    ///
+    /// <para><b><c>ClientAdmitted</c> is TRUE here now, and the flip is the admission of the second
+    /// route made visible.</b> It used to be false because it was true of the build: no route had a
+    /// client, so "nothing was asked" and "there is nothing to ask with" were the same fact. Both
+    /// routes have a client today (<see cref="HapticSinkFactory.AdmittedRoutes"/>), so a
+    /// <c>false</c> here would make every un-probed moment classify as the admission gap and tell a
+    /// user this build cannot talk to a haptic server at all — which is now simply untrue. A sink
+    /// that really has no client behind it reports its own observation with its own reason
+    /// (<see cref="UnadmittedHapticSink"/>) rather than borrowing this one.</para>
+    /// </summary>
     public static HapticServerObservation NotAsked { get; } =
-        new(false, HapticProviderRoute.None, false, false, []);
+        new(false, HapticProviderRoute.None, ClientAdmitted: true, ServerAnswered: false, DeviceKeys: []);
+
+    /// <summary>
+    /// Nothing was asked because the sink is GONE.
+    ///
+    /// <para><b>It is not <see cref="NotAsked"/> and the difference is a real repair.</b> While
+    /// <c>NotAsked.ClientAdmitted</c> was false, a disposed sink borrowing it classified as the
+    /// admission gap — wrong, but at least loud. With that field now true, borrowing it would make a
+    /// released sink report <c>not-probed</c>: "nothing is known yet" about an object that will never
+    /// know anything again, which is the one wording that would send somebody to wait. Every sink's
+    /// other verbs already answer <see cref="HapticReasonCodes.HapticSinkDisposed"/> for this state
+    /// (<c>UnadmittedHapticSink</c>, <c>LovenseHapticSink</c>, <c>ButtplugHapticSink</c>,
+    /// <see cref="CompositeHapticSink"/>), so the observation says the same thing they do.</para>
+    /// </summary>
+    public static HapticServerObservation SinkDisposed { get; } =
+        new(false, HapticProviderRoute.None, ClientAdmitted: true, ServerAnswered: false, DeviceKeys: [])
+        {
+            Refused = new CapabilityReason(
+                HapticReasonCodes.HapticSinkDisposed,
+                "this haptic sink was disposed, so nothing was asked of any server and nothing ever will be"),
+        };
+
+    /// <summary>
+    /// The refusal that stopped this ask before it reached a wire, or null when nothing refused it.
+    ///
+    /// <para><b>It exists for one rung that has no field of its own: the user has ticked no
+    /// provider.</b> That is neither "no client" nor "not probed yet" nor "the server said nothing"
+    /// — upstream treats it as its own case with its own message, refusing twice before any socket
+    /// is opened (<c>Services/Haptics/Core/HapticDeviceManager.cs:103-107</c> and
+    /// <c>MainWindow/MainWindow.Haptics.cs:653-660</c>, <i>"Tick at least one provider first"</i>).
+    /// Carrying it on the observation is what lets the System page and the Haptics panel say
+    /// <b>which checkbox</b> rather than "nothing is known yet".</para>
+    ///
+    /// <para>It is an <c>init</c> property with a null default so every existing construction site
+    /// keeps its meaning: an observation that answers about a server never sets it.</para>
+    /// </summary>
+    public CapabilityReason? Refused { get; init; }
 
     /// <summary>How many devices the server named in this ask.</summary>
     public int DeviceCount => DeviceKeys.Count;
@@ -132,19 +184,34 @@ public sealed record HapticServerObservation(
     /// <b>This — and only this — is what <see cref="CapabilityState.Available"/> may rest on</b>,
     /// and <see cref="Classify"/> returns <see cref="CapabilityState.Available"/> exactly when this
     /// is true.
+    ///
+    /// <para><b><see cref="Refused"/> is a conjunct here for the same reason it is an arm in
+    /// <see cref="Classify"/>, and leaving it out would have broken the "same claim written two
+    /// ways" property this whole type rests on.</b> An ask that was stopped before it reached a wire
+    /// cannot be confirmed by the fields it never filled in, and a value carrying both a refusal and
+    /// a device list would otherwise report <c>Confirmed</c> while classifying
+    /// <see cref="CapabilityState.Unavailable"/> — two answers about one observation, which is
+    /// exactly what a truth table over this type exists to make impossible.</para>
     /// </summary>
-    public bool Confirmed => Asked && ClientAdmitted && ServerAnswered && DeviceCount >= 1;
+    public bool Confirmed => Asked && ClientAdmitted && ServerAnswered && DeviceCount >= 1
+                             && Refused is null;
 
     /// <summary>
     /// The typed state this observation earns. <b>Arm order is the whole design</b>: the admission
-    /// question is asked FIRST, so no combination of the other three fields can produce an answer
-    /// about a server this build cannot reach, and no run of this product can report a missing
-    /// device when the real gap is that there is no client with which to look.
+    /// question is asked FIRST, so no combination of the other fields can produce an answer about a
+    /// server this build cannot reach, and no run of this product can report a missing device when
+    /// the real gap is that there is no client with which to look.
+    ///
+    /// <para><b><see cref="Refused"/> is asked SECOND</b>, for the same ordering reason one rung
+    /// down: a user who ticked no provider must be told about the checkbox and not about a probe
+    /// that has not run, because the two have different repairs and only one of them is theirs.</para>
     /// </summary>
     public CapabilityState Classify() =>
         !ClientAdmitted
             ? new CapabilityState.Unavailable(new CapabilityReason(
                 HapticReasonCodes.HapticNoAdmittedProvider, HapticSinkFactory.AdmissionGap))
+            : Refused is { } refusal
+            ? new CapabilityState.Unavailable(refusal)
             : !Asked
                 ? new CapabilityState.Unavailable(new CapabilityReason(
                     CapabilityReasonCodes.NotProbed,
@@ -218,12 +285,14 @@ public sealed record HapticServerObservation(
 /// named files</b>, which was the count before the searched universe widened from a file list to
 /// the three directories — corrected once and rewritten here (D202).</para>
 ///
-/// <para><b>Nothing is DELIVERED, and the reason is now one rung further out.</b> It is no longer
-/// that the modules are silent; it is that the limb has nothing to address.
-/// <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, so no server was ever asked, so no
-/// <see cref="HapticServerObservation"/> names a device, so <see cref="SetOutputsAsync"/> is never
-/// reached. <b>A landed capability is not a working feature</b>, and a limb commanding a sink with
-/// no device is a limb, not a feature.</para>
+/// <para><b>What stops delivery today is a SERVER and a DEVICE, and no longer this build.</b>
+/// <see cref="HapticSinkFactory.AdmittedRoutes"/> carries BOTH upstream routes, both of which have a
+/// real client here, and the routes the user has ticked are asked together
+/// (<see cref="CompositeHapticSink"/>). What remains between the limb and a motor is outside this
+/// process: the user's haptic server must be running and a device must be paired to it, or the
+/// observation names no device and <see cref="SetOutputsAsync"/> is never reached. <b>A landed
+/// capability is still not a working feature</b>: nothing in this repository has driven a real toy,
+/// and every fact behind this seam is evidenced to a server or a fake, never to a motor.</para>
 ///
 /// <para><b>Two of the eighteen are unported for a reason that is about a PROGRAM rather than a
 /// moment</b>, named here so nobody re-derives it: <c>VideoService.cs:2584</c> and <c>:6584</c> (and
@@ -238,8 +307,10 @@ public sealed record HapticServerObservation(
 /// </summary>
 public interface IHapticSink : IDisposable
 {
-    /// <summary>The provider route this sink speaks for. <see cref="HapticProviderRoute.None"/> in
-    /// every sink this build constructs.</summary>
+    /// <summary>The provider route this sink speaks for, and
+    /// <see cref="HapticProviderRoute.None"/> when it speaks for none — which for the composite sink
+    /// means the user has enabled no provider, and is the answer
+    /// <c>HapticParticipant</c> refuses on before touching a wire.</summary>
     HapticProviderRoute Route { get; }
 
     /// <summary>

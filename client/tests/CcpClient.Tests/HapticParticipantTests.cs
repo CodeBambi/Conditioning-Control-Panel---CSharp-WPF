@@ -27,8 +27,8 @@ public class HapticParticipantTests
 
         Assert.True(participant.Running);
         // The product does not knock on a door it has no key for. Upstream guards its own
-        // auto-connect the same way (App.xaml.cs:2103, predicate at :3487-3495) and says why at
-        // :2098-2102.
+        // auto-connect the same way (App.xaml.cs:2176, predicate at :3580-3589) and says why at
+        // :2173-2174.
         Assert.Equal(0, participant.ConnectAttempts);
         Assert.Null(participant.LastConnectOutcome);
         Assert.Null(participant.LastObservation);
@@ -71,22 +71,43 @@ public class HapticParticipantTests
         await participant.StopAsync();
     }
 
+    /// <summary>
+    /// The panel's line and the System page's line are the SAME expression, with the feature off and
+    /// with it on.
+    ///
+    /// <para><b>The probe is now <c>ProbeSinkAsync</c> rather than a bare
+    /// <c>Sink.ObserveAsync().Classify()</c></b>, because it carries the gate. This fact compares
+    /// <see cref="HapticParticipant.SinkState"/> against that real member on both sides of the gate,
+    /// so the two surfaces cannot tell different stories about one sink in either state.</para>
+    /// </summary>
     [Fact]
     public async Task THESINKSTATEIsTheSAMEExpressionTheCapabilityProbeEvaluates()
     {
         using var scope = new Scope();
-        var participant = scope.Build();
+        var sink = new RecordingSink(HapticProviderRoute.Buttplug, devices: 2);
+        var participant = scope.Build(sink, Entitled(EntitlementTier.Supporter));
 
         await participant.StartAsync(TestContext.Current.CancellationToken);
 
-        var state = Assert.IsType<CapabilityState.Unavailable>(participant.SinkState);
-        Assert.Equal(HapticReasonCodes.HapticNoAdmittedProvider, state.Reason.Code);
-        // The probe's expression, evaluated here on the same sink: the panel and the System page
-        // cannot tell two different stories.
-        var probed = Assert.IsType<CapabilityState.Unavailable>(
-            (await participant.Sink.ObserveAsync(TestContext.Current.CancellationToken)).Classify());
-        Assert.Equal(state.Reason.Code, probed.Reason.Code);
-        Assert.Equal(state.Reason.Detail, probed.Reason.Detail);
+        // WITH THE FEATURE OFF. Both surfaces say not-probed, and the sink was NEVER ASKED - which
+        // is the fact that would fail if the probe opened a socket for a switched-off feature.
+        var offState = Assert.IsType<CapabilityState.Unavailable>(participant.SinkState);
+        var offProbe = Assert.IsType<CapabilityState.Unavailable>(
+            await participant.ProbeSinkAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(CapabilityReasonCodes.NotProbed, offState.Reason.Code);
+        Assert.Equal(offState.Reason.Code, offProbe.Reason.Code);
+        Assert.Equal(offState.Reason.Detail, offProbe.Reason.Detail);
+        Assert.Equal(0, sink.Observes);
+
+        // WITH THE FEATURE ON. Both surfaces now report what the SERVER said, and they still agree.
+        participant.RequestEnable(true);
+        await TestWait.Until(participant.PendingConnect!, "the enable-path connect to land");
+
+        var onState = participant.SinkState;
+        var onProbe = await participant.ProbeSinkAsync(TestContext.Current.CancellationToken);
+        Assert.IsType<CapabilityState.Available>(onState);
+        Assert.IsType<CapabilityState.Available>(onProbe);
+        Assert.True(sink.Observes > 0);
 
         await participant.StopAsync();
     }
@@ -566,10 +587,11 @@ public class HapticParticipantTests
 
         /// <summary>The refusing sink, named explicitly. Before a route was admitted this was what
         /// the product factory returned, so a fact could get it by default; now the default is a
-        /// REAL client that would open a socket. A fact about the unadmitted case has to ask for
-        /// the unadmitted case.</summary>
+        /// composite over the routes the user ticked, and an EMPTY list means "ticked nothing"
+        /// rather than "nothing is admitted". A fact about the unadmitted case has to ask for the
+        /// unadmitted case, and this is where it asks.</summary>
         public static IHapticSink Unadmitted() =>
-            HapticSinkFactory.CreateFrom([]);
+            HapticSinkFactory.CreateFor(HapticProviderRoute.None);
 
         public void Dispose()
         {
@@ -609,6 +631,10 @@ public class HapticParticipantTests
 
         public int Connects { get; private set; }
 
+        /// <summary>How many times anything asked this sink about a server. <b>The witness that a
+        /// gated probe did not open a socket</b>: a real sink's ObserveAsync IS the wire.</summary>
+        public int Observes { get; private set; }
+
         public int OutputCalls { get; private set; }
 
         public int StopAlls { get; private set; }
@@ -620,8 +646,11 @@ public class HapticParticipantTests
         /// gone, which is the defect upstream's own comment describes (App.xaml.cs:4401-4404).</summary>
         public int StopAllsBeforeDispose { get; private set; } = -1;
 
-        public Task<HapticServerObservation> ObserveAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(new HapticServerObservation(true, Route, true, true, _devices));
+        public Task<HapticServerObservation> ObserveAsync(CancellationToken cancellationToken)
+        {
+            Observes++;
+            return Task.FromResult(new HapticServerObservation(true, Route, true, true, _devices));
+        }
 
         public async Task<CapabilityState> ConnectAsync(CancellationToken cancellationToken)
         {

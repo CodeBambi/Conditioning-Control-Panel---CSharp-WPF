@@ -164,12 +164,12 @@ would be `absent-unexplained`, and there are none.
 | site | decision | quote |
 |---|---|---|
 | 5 | `Effects/FlashSurfacePresenter.cs:303` | `serve pop / hydra / XP mechanics this port does not have` |
-| 8 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
-| 9 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
+| 8 | `Haptics/IHapticSink.cs:301` | `a script player this port has not ported at all` |
+| 9 | `Haptics/IHapticSink.cs:301` | `a script player this port has not ported at all` |
 | 10 | `Effects/MandatoryVideoEffect.cs:405` | `not ported and not shown as dead controls: attention` |
 | 11 | `Effects/MandatoryVideoEffect.cs:405` | `not ported and not shown as dead controls: attention` |
-| 11 | `Haptics/IHapticSink.cs:235` | `haptic INPUT` |
-| 13 | `Haptics/IHapticSink.cs:232` | `a script player this port has not ported at all` |
+| 11 | `Haptics/IHapticSink.cs:304` | `haptic INPUT` |
+| 13 | `Haptics/IHapticSink.cs:301` | `a script player this port has not ported at all` |
 | 16 | `Effects/SubliminalsEffect.cs:56` | `follow-up (<c>:276-404</c>)` |
 | 17 | `Effects/SubliminalsEffect.cs:56` | `follow-up (<c>:276-404</c>)` |
 <!-- /census:decisions -->

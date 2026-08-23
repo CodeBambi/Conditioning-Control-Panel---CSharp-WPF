@@ -423,11 +423,14 @@ public static class HapticEnvelopes
     /// Sites 14-15 — the duration a subliminal pulse asks for, keyed off the phrase's own wording
     /// (<c>HapticService.cs:899-909</c>).
     ///
-    /// <para><b>The Buttplug multiplier is 1.0 and that is a fact about this build, not a
-    /// simplification.</b> Upstream doubles every one of these <i>"due to protocol overhead"</i>
-    /// when the active provider is Buttplug (<c>:903</c>); <see cref="HapticSinkFactory.AdmittedRoutes"/>
-    /// is empty, so no route is active and the multiplier cannot be anything but one. It returns the
-    /// day a route is admitted.</para>
+    /// <para><b>The Buttplug multiplier is 1.0, and it is now an UNPORTED behaviour rather than an
+    /// unreachable one.</b> Upstream doubles every one of these <i>"due to protocol overhead"</i> when
+    /// the active provider is Buttplug (<c>:903</c>). While no route had a client that branch could
+    /// not be taken at all; the Buttplug route now HAS one
+    /// (<see cref="HapticSinkFactory.AdmittedRoutes"/>), so the doubling is a real difference this
+    /// port does not yet make. It is deliberately not guessed at here: this envelope is built before
+    /// any route is chosen, and upstream keys the multiplier off the ACTIVE provider, so honouring it
+    /// means threading the route in rather than doubling a number in this method.</para>
     /// </summary>
     public static int SubliminalDurationMs(string? phrase)
     {

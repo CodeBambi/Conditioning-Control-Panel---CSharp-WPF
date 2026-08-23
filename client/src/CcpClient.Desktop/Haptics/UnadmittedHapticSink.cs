@@ -3,8 +3,13 @@ using CcpClient.Desktop.Capabilities;
 namespace CcpClient.Desktop.Haptics;
 
 /// <summary>
-/// The honest refusal. Used where this build cannot EARN a haptic claim — which today is
-/// everywhere, on every platform.
+/// The honest refusal for a route with NO CLIENT behind it.
+///
+/// <para><b>No route this build ships reaches it any more</b> — both of upstream's real providers
+/// have a client here (<see cref="HapticSinkFactory.AdmittedRoutes"/>) — and it is kept rather than
+/// deleted because it is what stops the next route being admitted as a no-op. The user having ticked
+/// no provider is a DIFFERENT refusal with a different repair, and it is
+/// <see cref="CompositeHapticSink"/>'s, not this one's.</para>
 ///
 /// <para><b>Why a no-op here is a different kind of wrong from a no-op anywhere else in the
 /// port.</b> A stubbed overlay is a screen with nothing on it, a stubbed audio backend is silence, a
@@ -54,10 +59,26 @@ public sealed class UnadmittedHapticSink : IHapticSink
     {
         cancellationToken.ThrowIfCancellationRequested();
         RefusedCalls++;
-        // NotAsked, and every field in it is false: nothing was attempted, so nothing may be
-        // reported. Classifying this observation yields the admission gap by construction rather
-        // than by a second copy of the refusal.
-        return Task.FromResult(HapticServerObservation.NotAsked);
+        if (_disposed)
+        {
+            // The DISPOSAL outranks the admission gap here, and the order matters: a caller debugging
+            // a teardown needs "this object is gone" rather than "this build has no client", which
+            // are different problems with different repairs. Every other verb on this sink already
+            // answers the disposal first.
+            return Task.FromResult(HapticServerObservation.SinkDisposed);
+        }
+
+        // Nothing was attempted, so nothing may be reported — and this sink builds the observation
+        // itself rather than borrowing HapticServerObservation.NotAsked, because that value now
+        // carries ClientAdmitted: true (both routes have a client in this build). The one thing this
+        // sink must say is the opposite, and classifying it yields the admission gap by construction
+        // rather than by a second copy of the refusal.
+        return Task.FromResult(new HapticServerObservation(
+            Asked: false,
+            Route: HapticProviderRoute.None,
+            ClientAdmitted: false,
+            ServerAnswered: false,
+            DeviceKeys: []));
     }
 
     /// <inheritdoc/>

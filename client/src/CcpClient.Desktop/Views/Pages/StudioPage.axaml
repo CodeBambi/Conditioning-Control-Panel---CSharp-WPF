@@ -1431,12 +1431,30 @@
         </StackPanel>
 
         <!-- ================= Haptics ================= -->
-        <!-- ONE CONTROL, and the count is the finding rather than an omission. Upstream's haptics
+        <!-- THREE CONTROLS, and the count is the finding rather than an omission. Upstream's haptics
              page is 1640 lines over a 9193-line service (Views/Tabs/HapticsTabView.xaml,
              Services/Haptics/**): two provider boxes with their own URLs, an auto-connect box, a
-             per-event routing table, a master cap, a temperament and a DSP block. Every one of them
-             configures a connection this build cannot make, so every one of them would be a control
-             that decides nothing (§9 D7). What IS here is the one control the premium gate guards.
+             per-event routing table, a master cap, a temperament and a DSP block. Every one of THOSE
+             configures a mixer or an address this build has no implementation for, so every one of
+             them would be a control that decides nothing (§9 D7).
+
+             THE TWO PROVIDER BOXES ARE HERE BECAUSE THEY NOW DECIDE SOMETHING. Both of upstream's
+             real routes have a client (HapticSinkFactory.AdmittedRoutes) and both flags default
+             FALSE, which is upstream's own stored default (Models/HapticSettings.cs:769). Without
+             these boxes that default would be unreachable-by-design: the nothing-ticked refusal
+             names a checkbox, and it must not name one that does not exist.
+
+             CHECKBOXES, NEVER A DROPDOWN, and that is upstream's shape rather than a layout choice:
+             the v2 manager connects every enabled provider concurrently and succeeds if any did
+             (HapticDeviceManager.cs:101-125), and upstream's own header says so —
+             "PROVIDERS - enable as many as you like, they connect together" (en.json:4113,
+             HapticsTabView.xaml:726). The URL boxes beside upstream's are NOT ported: this build
+             has no setting that honours a custom address.
+
+             NOT GATED BY THE PREMIUM CHECK, which is also upstream's: ChkHapticProvider_Changed
+             writes and saves with no gate (MainWindow/MainWindow.Haptics.cs:580-595); the gate is on
+             the master toggle (:552-564) and the connect button (:633-641). A ticked route on its
+             own reaches nothing.
 
              NO SURFACE LINE OF THE USUAL KIND, and a capability line instead. Every drawing
              module's panel ends with "where did the picture go"; this module's output is not on
@@ -1461,6 +1479,19 @@
                     AutomationProperties.AutomationId="HapticsEnableToggle"
                     AutomationProperties.Name="Haptics enabled"
                     Content="Enable Haptics" />
+
+          <StackPanel Orientation="Horizontal" Spacing="18">
+            <CheckBox x:Name="HapticsLovenseToggle"
+                      AutomationProperties.AutomationId="HapticsLovenseToggle"
+                      AutomationProperties.Name="Lovense provider enabled"
+                      ToolTip.Tip="Needs Lovense Connect or Lovense Remote running on this machine."
+                      Content="Lovense" />
+            <CheckBox x:Name="HapticsButtplugToggle"
+                      AutomationProperties.AutomationId="HapticsButtplugToggle"
+                      AutomationProperties.Name="Intiface provider enabled"
+                      ToolTip.Tip="Needs Intiface Central or Intiface Engine running on this machine."
+                      Content="Intiface (Buttplug.io)" />
+          </StackPanel>
 
           <Border Classes="notice">
             <StackPanel Spacing="4">

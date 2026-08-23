@@ -404,11 +404,16 @@ public class HapticLimbTests
     public void OnAnUNADMITTEDSinkAWholeSessionOfMomentsSendsABSOLUTELYNOTHING()
     {
         // The central trap, executed. The limb commands correctly and there is no device key to
-        // address, because HapticSinkFactory.AdmittedRoutes is empty and nothing was ever asked of a
-        // server. The commands are FORMED and never delivered, and that is the honest state of this
-        // build.
+        // address, because nothing was ever asked of a server. The commands are FORMED and never
+        // delivered, which is what every run looks like until a user ticks a route AND its server
+        // names a device.
+        //
+        // The sink is asked for EXPLICITLY. It used to arrive by handing the factory an empty list,
+        // which meant "nothing is admitted"; an empty list now means "the user ticked nothing" and
+        // returns a composite, so this cast would throw. A fact about the unadmitted case has to ask
+        // for the unadmitted case.
         var clock = new ManualClock();
-        var sink = HapticSinkFactory.CreateFrom([]);
+        var sink = HapticSinkFactory.CreateFor(HapticProviderRoute.None);
         using var limb = new HapticLimb(sink, clock, () => true, () => []);
 
         limb.FlashPlaced();

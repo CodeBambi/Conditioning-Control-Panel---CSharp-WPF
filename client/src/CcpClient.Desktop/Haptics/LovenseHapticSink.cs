@@ -157,7 +157,7 @@ public sealed class LovenseHapticSink : IHapticSink
     {
         if (_disposed)
         {
-            return HapticServerObservation.NotAsked;
+            return HapticServerObservation.SinkDisposed;
         }
 
         try

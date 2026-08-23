@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Capabilities;
+﻿using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Entitlement;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
@@ -47,7 +47,9 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// <param name="infra">The participant infrastructure: the operation owner and the log.</param>
     /// <param name="dataDirectory">Where the one setting lives, beside every other document.</param>
     /// <param name="sink">
-    /// The sink this build owns. Defaults to <see cref="HapticSinkFactory.Create"/>, which refuses.
+    /// The sink this build owns. Defaults to the composite over the routes the user has ticked
+    /// (<see cref="HapticSinkFactory.Create"/>), which refuses before touching a wire while that set
+    /// is empty — and it is empty on a fresh install, because both route flags default false.
     /// A test substitutes a recording sink so the ownership, ordering and gate facts are about real
     /// calls; <b>nothing may inject a sink that claims Available on a product path</b>, which is the
     /// fake-available shape the capability contract bans (the same wording
@@ -81,19 +83,24 @@ public sealed class HapticParticipant : IBackgroundParticipant
         _log = infra.Log;
         _resolveEntitlement = resolveEntitlement;
         _sequence = sequence;
-        Sink = sink ?? HapticSinkFactory.Create();
-
         _store = new PersistenceStore<HapticSettingsDocument>(
             infra.OwnerFor("HapticSettings"), infra.Log,
             Path.Combine(dataDirectory, HapticSettingsDocument.FileName),
             HapticSettingsDocument.CurrentSchemaVersion);
 
+        // The store is built FIRST so the sink can read the user's per-route flags off it. The sink
+        // holds a DELEGATE rather than a snapshot for two reasons: this runs before phase 3 has
+        // loaded the file, and the flags are a live setting — upstream re-reads them at every connect
+        // (Services/Haptics/Core/HapticDeviceManager.cs:102, :91-98) rather than capturing a set at
+        // construction.
+        Sink = sink ?? HapticSinkFactory.Create(() => _store.Current.EnabledRoutes());
+
         // The gate is the master toggle AND the entitlement decision, asked HERE and never
         // at a module, which is upstream's central refusal (HapticMixer.cs:191-204, :843) and the
         // reason D204's activity readout keeps firing for a user who can feel nothing. The device
-        // roster is whatever the LAST observation named — null on every run of this build, because
-        // no route is admitted and nothing was ever asked of a server, so the limb evaluates and
-        // has nothing to address.
+        // roster is whatever the LAST observation named — null until a route the user ticked has
+        // been asked and a server has answered, so until then the limb evaluates and has nothing to
+        // address.
         Limb = new HapticLimb(
             Sink,
             clock ?? new SystemSessionClock(ex => infra.Log.Log(
@@ -157,10 +164,11 @@ public sealed class HapticParticipant : IBackgroundParticipant
     public bool HasEntitlementAuthority => _resolveEntitlement is not null;
 
     /// <summary>
-    /// How many times this participant asked a sink to connect. <b>Zero on every run of this
-    /// build</b>, and it is evidence rather than a counter: a product that knocked on
-    /// <c>ws://127.0.0.1:12345</c> with no client to speak the protocol would be making a network
-    /// connection for no reason a user could benefit from.
+    /// How many times this participant asked a sink to connect. <b>Zero on a fresh install</b>, and
+    /// it is evidence rather than a counter: the master toggle is off and no route is ticked, and a
+    /// product that knocked on <c>ws://127.0.0.1:12345</c> or <c>http://127.0.0.1:20010</c> for a
+    /// feature nobody switched on would be making a network connection for no reason a user could
+    /// benefit from.
     /// </summary>
     public int ConnectAttempts { get; private set; }
 
@@ -176,10 +184,46 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// <para><b>It is the SAME expression the registered capability probe evaluates</b>
     /// (<c>Lifecycle/CompositionRoot.HapticCapabilityName</c>), so the panel and the System page
     /// cannot tell two different stories about one sink. With nothing ever asked it classifies
-    /// <see cref="HapticServerObservation.NotAsked"/>, whose first field is the admission question —
-    /// so a build that never asked reports the admitted-provider gap and never a missing device.</para>
+    /// <see cref="HapticServerObservation.NotAsked"/>, which earns
+    /// <c>Unavailable(not-probed)</c> — a run that never asked reports that it never asked, and never
+    /// a missing device.</para>
     /// </summary>
     public CapabilityState SinkState => (LastObservation ?? HapticServerObservation.NotAsked).Classify();
+
+    /// <summary>
+    /// The registered capability probe, in one place, <b>gated so it cannot contact a haptic server
+    /// for a feature the user has not switched on.</b>
+    ///
+    /// <para><b>The gate is upstream's own auto-connect conjunction</b>, field for field:
+    /// <c>Settings.Current.Haptics.AutoConnect &amp;&amp; HasRealHapticProviderEnabled()</c>
+    /// (<c>App.xaml.cs:2176</c>), whose predicate is <c>lovense.Enabled || buttplug.Enabled</c>
+    /// (<c>:3580-3589</c>). Here the first conjunct is <see cref="Enabled"/> and the second is
+    /// <see cref="IHapticSink.Route"/> being anything but <see cref="HapticProviderRoute.None"/>,
+    /// which for the composite sink IS "the user ticked at least one route".</para>
+    ///
+    /// <para><b>Why it is a method on the participant and not a lambda in the composition root.</b>
+    /// <c>CapabilityRegistry.RunAllAsync</c> probes every registered capability at launch. An ungated
+    /// registration therefore fired an HTTP GET at <c>http://127.0.0.1:20010/GetToys</c> — and would
+    /// open a WebSocket to <c>ws://127.0.0.1:12345</c> — on EVERY launch of a default install, for a
+    /// feature nobody had switched on. That is an unrequested outbound connection attempt, and it is
+    /// the kind of thing that must have exactly one implementation that a fact can call.</para>
+    ///
+    /// <para><b>What it answers when it refuses.</b>
+    /// <see cref="HapticServerObservation.NotAsked"/>, which classifies
+    /// <c>Unavailable(not-probed)</c> — an EXISTING arm rather than a state invented for this
+    /// branch, and the true one: a client IS admitted and nobody has asked it anything. It must never
+    /// be a server-unreachable answer, which would be a claim about a socket this method
+    /// deliberately did not open.</para>
+    /// </summary>
+    public async Task<CapabilityState> ProbeSinkAsync(CancellationToken cancellationToken)
+    {
+        if (!Enabled || Sink.Route == HapticProviderRoute.None)
+        {
+            return HapticServerObservation.NotAsked.Classify();
+        }
+
+        return (await Sink.ObserveAsync(cancellationToken).ConfigureAwait(false)).Classify();
+    }
 
     /// <summary>How many times the all-stop really ran. One per teardown on every path.</summary>
     public int AllStops { get; private set; }
@@ -193,15 +237,14 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// <list type="bullet">
     /// <item><b>Off</b> — the enable is off, OR nothing in this build can reach a device.</item>
     /// <item><b>Armed</b> — the enable is on and a device is really reachable.</item>
-    /// <item><b>Live</b> — <b>STILL UNREACHABLE, and the limb did not change that.</b> Live would have
-    /// to mean "something is being SENT". Nothing is, and the reason is no longer that the modules
-    /// are silent: five statements in the effect spine now command
-    /// <see cref="Limb"/> at the right moments with upstream's own envelopes. What stops a send is
-    /// one rung further out — <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, so no server
-    /// was ever asked, so <see cref="LastObservation"/> names no device, so
-    /// <see cref="HapticLimb.EvaluationsWithNoDevice"/> rises where <see cref="HapticLimb.Sends"/>
-    /// cannot. <b>A limb does not light this dot and must not</b>: both conjuncts below are about
-    /// what a SERVER said, and a limb touches neither.</item>
+    /// <item><b>Live</b> — <b>NOT A STATE THIS ROW HAS.</b> Live would have to mean "something is
+    /// being SENT", and this dot reports REACH. That is a decision about the dot's vocabulary and not
+    /// a report on what this build can do: five statements in the effect spine command
+    /// <see cref="Limb"/> at the right moments with upstream's own envelopes, both provider routes
+    /// have a client (<see cref="HapticSinkFactory.AdmittedRoutes"/>), and a user who ticks a route
+    /// and runs its server gets a confirmed <see cref="LastObservation"/> and real
+    /// <see cref="HapticLimb.Sends"/>. <b>A limb does not light this dot and must not</b>: both
+    /// conjuncts below are about what a SERVER said, and a limb touches neither.</item>
     /// </list>
     ///
     /// <para>Upstream passes a dot predicate for this row —
@@ -223,17 +266,21 @@ public sealed class HapticParticipant : IBackgroundParticipant
     /// Patreon property on every 10 Hz mixer tick (<c>HapticMixer.cs:200</c>); a DPAPI read plus an
     /// authority call is not a 10 Hz operation, so the port asks at start. The divergence — a pledge
     /// that lapses mid-run is noticed at the next launch — is recorded rather than hidden.</item>
-    /// <item>Connect, <b>if and only if a provider route is admitted.</b> Upstream guards its own
-    /// auto-connect the same way and says why: <c>Settings.Current.Haptics.AutoConnect &amp;&amp;
-    /// HasRealHapticProviderEnabled()</c> (<c>App.xaml.cs:2103</c>, predicate at <c>:3487-3495</c>),
-    /// because auto-connecting a provider nobody really has <i>"would silently bring up three virtual
-    /// toys and a stream of pink toasts at each launch"</i> (<c>:2098-2102</c>). This build admits no
-    /// route, so it never asks — <see cref="ConnectAttempts"/> stays zero.</item>
+    /// <item>Connect, <b>if and only if the master toggle is on AND the user has ticked at least one
+    /// provider route.</b> That conjunction is upstream's own auto-connect guard, field for field:
+    /// <c>Settings.Current.Haptics.AutoConnect &amp;&amp; HasRealHapticProviderEnabled()</c>
+    /// (<c>App.xaml.cs:2176</c>), where the predicate is <c>lovense.Enabled || buttplug.Enabled</c>
+    /// (<c>:3580-3589</c>), because auto-connecting a provider nobody really has <i>"would silently
+    /// bring up three virtual toys and a stream of pink toasts at each launch"</i>
+    /// (<c>:2173-2174</c>). On a fresh install both conjuncts are false — the master toggle is off
+    /// and both route flags default false — so <see cref="ConnectAttempts"/> stays zero.</item>
     /// </list>
-    /// <para>The fourth thing it does not do is open a socket to find out. There is no client here to
-    /// speak either protocol, so a probe of <c>12345</c> or <c>20010</c> could only ever report
-    /// whether some other program is listening, which is not a fact about this build's ability to do
-    /// anything.</para>
+    /// <para>The fourth thing it does not do is open a socket to find out ANYWAY. A probe of
+    /// <c>12345</c> or <c>20010</c> behind a switched-off feature would report whether some other
+    /// program is listening, which is not a fact about anything the user asked for — and it would be
+    /// an unrequested outbound connection attempt at every launch. The registered capability probe
+    /// carries the same guard for the same reason
+    /// (<c>Lifecycle/CompositionRoot.HapticCapabilityName</c>).</para>
     /// </remarks>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -259,9 +306,9 @@ public sealed class HapticParticipant : IBackgroundParticipant
         // THE USER'S SETTING GATES THE CONNECT, and this is upstream's guard rather than an
         // optimisation. Upstream auto-connects only on
         // `Settings.Current.Haptics.AutoConnect && HasRealHapticProviderEnabled()`
-        // (App.xaml.cs:2103, predicate at :3487-3495) because auto-connecting a provider nobody
+        // (App.xaml.cs:2176, predicate at :3580-3589) because auto-connecting a provider nobody
         // really has "would silently bring up three virtual toys and a stream of pink toasts at each
-        // launch" (:2098-2102).
+        // launch" (:2173-2174).
         //
         // While no route was admitted this was invisible: Route was always None, so the branch below
         // returned first and no launch ever reached a socket. Admitting a route made the omission
@@ -276,9 +323,13 @@ public sealed class HapticParticipant : IBackgroundParticipant
 
         if (Sink.Route == HapticProviderRoute.None)
         {
-            // The admitted-provider gap, logged as a classification exactly once per launch. Not a
-            // warning: nothing failed. Nothing was attempted.
-            _log.Log("haptics: no provider client is admitted in this build — nothing was attempted "
+            // NO PROVIDER ROUTE IS ENABLED, logged as a classification exactly once per launch. Not a
+            // warning: nothing failed, and nothing was contacted. This is where "refuse before
+            // touching the wire" happens on the product path, which is the order upstream keeps —
+            // its connect button refuses before the manager is called at all
+            // (MainWindow/MainWindow.Haptics.cs:653-660) and the manager refuses again before
+            // connecting anything (Services/Haptics/Core/HapticDeviceManager.cs:103-107).
+            _log.Log("haptics: no provider route is enabled — nothing was contacted "
                 + "(this is not \"no device found\")");
             return;
         }
@@ -395,6 +446,50 @@ public sealed class HapticParticipant : IBackgroundParticipant
     }
 
     /// <summary>
+    /// The user ticked or un-ticked ONE provider route.
+    ///
+    /// <para><b>Not gated, and that is upstream's shape.</b> Upstream's per-provider boxes write and
+    /// save with no premium check at all (<c>MainWindow/MainWindow.Haptics.cs:580-595</c>); the gate
+    /// sits on the master toggle (<c>:552-564</c>) and on the connect button (<c>:633-641</c>). A
+    /// route flag on its own reaches nothing: the participant connects only when
+    /// <see cref="Enabled"/> is also on, and that is what <see cref="HapticGate"/> guards.</para>
+    ///
+    /// <para><b>Ticking a route while haptics is already ON is the other moment a connect is owed</b>,
+    /// for the same reason <see cref="RequestEnable"/> states: without it a user who enables their
+    /// provider mid-session sits at an Off dot until they relaunch, because nothing would ever ask a
+    /// server whether a toy is there. Fire-and-forget with the outcome recorded, never awaited — this
+    /// returns to a UI caller on that caller's thread.</para>
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The route has no flag on this document. Louder
+    /// than a silent no-op: a control bound to a route nothing persists would look like a working
+    /// checkbox that forgets.</exception>
+    public void SetRouteEnabled(HapticProviderRoute route, bool enabled)
+    {
+        if (route is not (HapticProviderRoute.Lovense or HapticProviderRoute.Buttplug))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(route), route, "no haptic settings flag exists for that route");
+        }
+
+        _store.Mutate(document =>
+        {
+            if (route == HapticProviderRoute.Lovense)
+            {
+                document.LovenseEnabled = enabled;
+            }
+            else
+            {
+                document.ButtplugEnabled = enabled;
+            }
+        });
+
+        if (enabled && _running && Enabled && Sink.Route != HapticProviderRoute.None)
+        {
+            PendingConnect = ConnectAndRecordAsync();
+        }
+    }
+
+    /// <summary>
     /// The in-flight connect started by <see cref="RequestEnable"/>, or null when none was started.
     ///
     /// <para>Exposed because the enable path cannot await its own socket — it returns a gate decision
@@ -465,9 +560,10 @@ public sealed class HapticParticipant : IBackgroundParticipant
         // line. A participant that never started still owns a sink: this one is registered LAST, so
         // any earlier participant's phase-3 failure leaves it constructed and un-started while
         // teardown runs (StartParticipantsAsync returns Failed and ShutdownAsync still stops
-        // everyone). Today that costs nothing — the unadmitted sink's Dispose is empty — but the day
-        // a route is admitted the sink holds a WebSocket or an HttpClient, and leaking one on the
-        // failure path is how a process keeps a connection open after it has given up.
+        // everyone). It costs nothing while the user has ticked no route, because the composite
+        // builds a route's client lazily and has none to release — but the moment one is ticked the
+        // sink holds a WebSocket or an HttpClient, and leaking one on the failure path is how a
+        // process keeps a connection open after it has given up.
         //
         // The LIMB is released BEFORE the sink, and the order is the same one this method
         // has always been about. The limb holds scheduled one-shot wakes; a wake that fired after

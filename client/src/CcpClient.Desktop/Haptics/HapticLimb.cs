@@ -133,15 +133,15 @@ public sealed class HapticLimb : IHapticLimb, IDisposable
     /// <summary>
     /// Evaluations that produced a level with <b>no device key to address it to</b>.
     ///
-    /// <para>This is where "nothing moves" is legible rather than asserted: on this build it equals
-    /// <see cref="Evaluations"/> whenever the gate is open, because
-    /// <see cref="HapticSinkFactory.AdmittedRoutes"/> is empty, nothing was ever asked of a server,
-    /// and an observation that was never made names no device.</para>
+    /// <para>This is where "nothing moves" is legible rather than asserted. It equals
+    /// <see cref="Evaluations"/> whenever the gate is open and the roster is empty — which is every
+    /// run in which the user has ticked no provider route, and every run in which the route they
+    /// ticked named no device, because an observation that was never made names none either.</para>
     /// </summary>
     public int EvaluationsWithNoDevice { get; private set; }
 
-    /// <summary>How many <see cref="IHapticSink.SetOutputsAsync"/> calls were attempted. Zero on
-    /// every run of this build.</summary>
+    /// <summary>How many <see cref="IHapticSink.SetOutputsAsync"/> calls were attempted. Zero until
+    /// an observation names a device, which needs a ticked route and a running server.</summary>
     public int Sends { get; private set; }
 
     /// <summary>Envelopes dropped at promotion for failing to out-rank the weakest thing playing

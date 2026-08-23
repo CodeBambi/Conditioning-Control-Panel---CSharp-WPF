@@ -8,9 +8,17 @@ namespace CcpClient.Desktop.Haptics;
 /// capability is a platform API: a layered window, a raw input queue, a WASAPI endpoint, a
 /// <c>WindowFromPoint</c> hit test. <b>Haptics is not.</b> Upstream's two providers are a WebSocket
 /// client and an HTTP client talking to loopback (<c>Services/Haptics/ButtplugProvider.cs:27,83</c>;
-/// <c>Services/Haptics/LovenseProvider.cs:21,83,89</c>) — nothing in either one is Windows-only, and
-/// a Linux box running Intiface Central would answer identically. So the axis of refusal here is not
-/// the platform: it is whether this BUILD admits a client at all.</para>
+/// <c>Services/Haptics/LovenseProvider.cs:21,83,89</c>) — nothing READ in either one is Windows-only.
+/// So the axis here is not the platform: it is which routes have a client in this BUILD (both of them
+/// now) and which of those the USER has switched on.</para>
+///
+/// <para><b>That is a claim about the SOURCE, and it is the only one made here.</b> This file used to
+/// add that <i>"a Linux box running Intiface Central would answer identically"</i>, which is
+/// <b>UNEVIDENCED</b> and is removed rather than softened in place: no run of either sink against any
+/// server on Linux exists in this repository, nothing in it has driven a real toy on any platform,
+/// and reading a Windows-only API out of two source files does not establish that a second operating
+/// system behaves the same way. The manual gate below is where that would be discharged, by a human,
+/// on the platform in question.</para>
 ///
 /// <para><b>Selection is not availability</b> (<c>runtime-capability-contract.md</c> §2 rule 2).
 /// Nothing here produces <see cref="Capabilities.CapabilityState.Available"/>; only
@@ -20,74 +28,51 @@ namespace CcpClient.Desktop.Haptics;
 public static class HapticSinkFactory
 {
     /// <summary>
-    /// The provider routes this build has a client for. <b>Empty, and the refusal is produced by
-    /// reading it rather than by a hard-coded branch</b> — so the day one is admitted, the same code
-    /// stops refusing without being edited to stop refusing.
+    /// The provider routes this build has a client for. <b>BOTH of upstream's real providers</b>, in
+    /// upstream's own preference order (<c>Services/Haptics/Core/HapticDeviceManager.cs:21</c>).
+    ///
+    /// <para><b>This list is not a choice the user makes and never was.</b> It says which routes have
+    /// a client compiled in; which of them run is the user's per-route flags
+    /// (<see cref="HapticSettingsDocument.EnabledRoutes"/>), and they are a SET — upstream registers
+    /// all its providers unconditionally (<c>:36-38</c>) and connects every ENABLED one together
+    /// (<c>:102</c>, <c>:109-125</c>). Upstream's third provider is a mock, which this port does not
+    /// have and will not add: a fake toy that reports success is the fake-available shape the
+    /// truthful-capability contract bans.</para>
     /// </summary>
-    public static IReadOnlyList<HapticProviderRoute> AdmittedRoutes { get; } = [HapticProviderRoute.Lovense];
+    public static IReadOnlyList<HapticProviderRoute> AdmittedRoutes { get; } =
+        [HapticProviderRoute.Lovense, HapticProviderRoute.Buttplug];
 
     /// <summary>
-    /// The gap, in one paragraph, worded so that nobody can read it as a missing toy.
+    /// The refusal for a route with no client behind it, in one paragraph, worded so that nobody can
+    /// read it as a missing toy.
     ///
-    /// <para>It names both routes because a refusal justified against one provider is exactly the
-    /// failure this capability was built to avoid, and it names the SERVER because the thing this
-    /// build cannot talk to is another program, not hardware.</para>
+    /// <para>It names both admitted routes because a refusal justified against one provider is
+    /// exactly the failure this capability was built to avoid, and it names the SERVER because what
+    /// is on the other end of either route is another program, not hardware.</para>
+    ///
+    /// <para><b>No route this build ships reaches it any more</b>, and that is the change rather than
+    /// a reason to delete it: it is what <see cref="HapticProviderRoute.None"/> gets, and what a
+    /// route added to the enum without a client would get, which is the only way this text can be
+    /// wrong again.</para>
     /// </summary>
     public const string AdmissionGap =
-        "this build admits no haptic provider client, so nothing was attempted. THIS IS NOT \"no device found\": "
-        + "there is nothing here with which to look. Upstream ships two providers and BOTH are clients of a "
-        + "SEPARATE SERVER PROCESS the user installs, not drivers — Buttplug.io over a WebSocket to "
+        "no haptic provider client stands behind that route, so nothing was attempted. THIS IS NOT \"no device "
+        + "found\": there is nothing here with which to look. Upstream ships two real providers and BOTH are clients "
+        + "of a SEPARATE SERVER PROCESS the user installs, not drivers — Buttplug.io over a WebSocket to "
         + "ws://127.0.0.1:12345 into Intiface Central (Services/Haptics/ButtplugProvider.cs:27,83), and Lovense "
         + "over HTTP to http://127.0.0.1:20010 into Lovense Connect or Lovense Remote "
-        + "(Services/Haptics/LovenseProvider.cs:21,83,89). Admitting either is an owner decision about a "
-        + "dependency, and the two cost different things: see HapticSinkFactory.DescribeRoute.";
+        + "(Services/Haptics/LovenseProvider.cs:21,83,89). THIS BUILD HAS A CLIENT FOR BOTH OF THEM, so this "
+        + "refusal is about a route outside that pair and never about the product's reach.";
 
     /// <summary>
-    /// What ONE named route would need here, priced. Both branches are reachable so neither
-    /// description is written for a route nobody looked at.
+    /// The manual gate that a real haptic claim needs. <b>It is now ATTEMPTABLE</b> — every step
+    /// below has a client behind it — and it is still UNDISCHARGED, which are different facts and
+    /// must not be collapsed.
     ///
-    /// <para>The Buttplug line is the packet's stopping point: it is a decision about a package,
-    /// and this build does not make it.</para>
-    /// </summary>
-    public static string DescribeRoute(HapticProviderRoute route) => route switch
-    {
-        HapticProviderRoute.Buttplug =>
-            "Buttplug.io / Intiface Central needs a NuGet package this project does not carry: the shipping app "
-            + "references Buttplug 5.0.1 (ConditioningControlPanel.csproj:60) and its provider imports "
-            + "Buttplug.Client and Buttplug.Core.Messages (Services/Haptics/ButtplugProvider.cs:6-7). With the "
-            + "package, the sink is ONE file: connect a ButtplugWebsocketConnector to ws://127.0.0.1:12345, scan "
-            + "(:89-95), take every device whose features expose a Vibrate output (:62-66), and set levels per "
-            + "feature — Buttplug outputs LATCH, so no keep-alive is needed at all "
-            + "(Services/Haptics/ButtplugProviderV2.cs:27-30). Without the package it is not one file: it is a "
-            + "hand-written implementation of Buttplug message spec v4 over ClientWebSocket, and the port would "
-            + "then own a wire protocol somebody else versions.",
-
-        HapticProviderRoute.Lovense =>
-            "Lovense Connect / Lovense Remote needs NO HAPTICS-SPECIFIC package at all: the shipping provider's "
-            + "wire imports are pure BCL (Services/Haptics/LovenseProvider.cs:1-7 — System.Net.Http and "
-            + "System.Text.Json). Its ONE non-BCL using is Serilog at :8, which is the shipping app's existing "
-            + "logger and not a haptics dependency: this port logs through its own ILogSink, so nothing new enters "
-            + "the dependency graph for the Lovense route. The sink is one file plus two pieces of real work: an "
-            + "HttpClient whose certificate exception is loopback-only (:41-52), and a HOLD strategy, because the "
-            + "LAN API expires its own command — timeSec, floored at a whole second by "
-            + "Math.Max(1, durationMs / 1000) (:232-233) — while Connect mode expires nothing at all (:242-243). "
-            + "It reaches Lovense hardware only.",
-
-        HapticProviderRoute.None =>
-            "no route. This build admits none, which is the state it is in: " + AdmissionGap,
-
-        _ => "this build has no description for that route, which means it is not one of the two upstream ships",
-    };
-
-    /// <summary>
-    /// The manual gate that a real haptic claim would need — and it is DOWNSTREAM of the admission
-    /// decision above, not a substitute for it.
-    ///
-    /// <para><b>Read the order.</b> Nothing on this list can be attempted until a client is
-    /// admitted, so a refusal that quoted this gate today would be telling a user to go and fix
-    /// something that is not what is wrong. It is here so that the day a route is admitted the gate
-    /// is already written, and so that the difference between the two gaps is legible in the source
-    /// rather than only in a record.</para>
+    /// <para><b>Read the order.</b> Until both routes were admitted, nothing on this list could be
+    /// attempted at all, so quoting it would have told a user to fix something that was not what was
+    /// wrong. That rung is gone. What remains is a device and a person, and as of 2026-08-23 the
+    /// owner reports no device on hand, so no step past (1) has been run by anybody.</para>
     ///
     /// <para>The last step is the one no automated step on any platform discharges, and it is not
     /// dischargeable at any depth of API: a haptic server reports what it believes it commanded over
@@ -95,7 +80,8 @@ public static class HapticSinkFactory
     /// a flat battery in the next room.</para>
     /// </summary>
     public const string DeviceManualGate =
-        "MANUAL GATE (undischarged, and it CANNOT be attempted until a provider client is admitted): "
+        "MANUAL GATE (undischarged; a HUMAN with a device is the only thing that can run it, and no automated step "
+        + "on any platform substitutes for step 4): "
         + "(1) install and run the server the route needs — Intiface Central for Buttplug, or Lovense Connect / "
         + "Lovense Remote for Lovense — and confirm it is listening (the shipping app's own ports are 12345 and "
         + "20010; Lovense Connect's documented HTTPS alias is :30010); "
@@ -108,57 +94,97 @@ public static class HapticSinkFactory
         + "this machine's API surface at all.";
 
     /// <summary>
-    /// The sink for this build. <b>Every path returns a refusal today</b>, and it is produced by
-    /// asking <see cref="AdmittedRoutes"/> rather than by a constant.
+    /// The sink this build hands the participant: <b>every route the user has ticked, driven
+    /// together</b>.
+    ///
+    /// <para>The enabled set is a delegate rather than a value because it is a user setting that
+    /// changes while the app runs, and because the participant constructs this sink before its
+    /// settings file has loaded. Upstream re-reads the same flags at every connect
+    /// (<c>Services/Haptics/Core/HapticDeviceManager.cs:102</c>, <c>:91-98</c>).</para>
     /// </summary>
-    public static IHapticSink Create() => CreateFrom(AdmittedRoutes);
+    /// <param name="enabledRoutes">
+    /// The user's per-route flags, asked afresh at every operation — normally
+    /// <see cref="HapticSettingsDocument.EnabledRoutes"/> off the live document.
+    /// </param>
+    public static IHapticSink Create(Func<IReadOnlyList<HapticProviderRoute>> enabledRoutes)
+    {
+        ArgumentNullException.ThrowIfNull(enabledRoutes);
+        return new CompositeHapticSink(
+            () => Admitted(enabledRoutes()), route => SinkFor(route, AdmittedRoutes));
+    }
 
     /// <summary>
-    /// The selection itself, over a given admitted-route list.
+    /// The selection itself, over a fixed route list.
     ///
     /// <para>Taking the list as a parameter is what makes the guard below EXECUTABLE rather than
-    /// merely written: with the product list it returns the refusal, and a fact can hand it a
-    /// non-empty list and watch it refuse to manufacture anything. A guard nothing can run is a
-    /// comment with a keyword in front of it.</para>
+    /// merely written: a fact can hand it a route with no client and watch it refuse to manufacture
+    /// anything. A guard nothing can run is a comment with a keyword in front of it.</para>
+    ///
+    /// <para>An EMPTY list is not that guard and never was: it is the user having ticked nothing,
+    /// which is a typed refusal and never an exception — upstream returns false before connecting
+    /// anything (<c>Services/Haptics/Core/HapticDeviceManager.cs:103-107</c>) and its button refuses
+    /// before calling the manager at all (<c>MainWindow/MainWindow.Haptics.cs:653-660</c>).</para>
     /// </summary>
+    /// <param name="routes">The routes to bring up. Empty is the user having ticked nothing.</param>
+    /// <param name="admittedRoutes">
+    /// Which routes count as admitted; null takes <see cref="AdmittedRoutes"/>. It is a parameter so
+    /// the guard below can be RUN — a fact hands it a route it calls admitted for which no client
+    /// exists, and watches the factory refuse to manufacture one.
+    /// </param>
     /// <exception cref="InvalidOperationException">
-    /// A route is admitted and no sink is constructed for it. Deliberately louder than a fallback:
-    /// a factory that quietly returned a no-op for an admitted route would be the fake-available
-    /// shape the truthful-capability contract bans, and it would do it on the exact path where a
-    /// user believes their toy is connected. The day a route is admitted, its sink is constructed
-    /// HERE and this throw becomes unreachable for that route.
+    /// A route is named and no sink can be constructed for it. Deliberately louder than a fallback:
+    /// a factory that quietly returned a no-op for such a route would be the fake-available shape the
+    /// truthful-capability contract bans, and it would do it on the exact path where a user believes
+    /// their toy is connected. Both admitted routes stopped reaching it by ACQUIRING A CLIENT, never
+    /// by the check being relaxed.
     /// </exception>
-    public static IHapticSink CreateFrom(IReadOnlyList<HapticProviderRoute> admittedRoutes)
+    public static IHapticSink CreateFrom(
+        IReadOnlyList<HapticProviderRoute> routes,
+        IReadOnlyList<HapticProviderRoute>? admittedRoutes = null)
     {
-        ArgumentNullException.ThrowIfNull(admittedRoutes);
-        if (admittedRoutes.Count == 0)
+        ArgumentNullException.ThrowIfNull(routes);
+        var admitted = admittedRoutes ?? AdmittedRoutes;
+
+        // Eager, not lazy: a route with no client is a BUILD mistake, and one that waited for the
+        // first command would surface on the path a user is watching. Building one to check costs
+        // nothing observable — no client here opens anything in its constructor; both connect only
+        // in ConnectAsync — and the composite builds its own on demand.
+        foreach (var route in routes)
+        {
+            SinkFor(route, admitted).Dispose();
+        }
+
+        return new CompositeHapticSink(() => routes, route => SinkFor(route, admitted));
+    }
+
+    /// <summary>
+    /// The sink for ONE named route. A route with a client gets that client; a route without one gets
+    /// the refusal that names what is behind the two this build does have.
+    /// </summary>
+    public static IHapticSink CreateFor(HapticProviderRoute route) => SinkFor(route, AdmittedRoutes);
+
+    /// <summary>
+    /// One route, one client. <b>The whole admission decision is this switch</b>: a route reaches its
+    /// arm because a client was written for it, and everything else reaches the refusal below.
+    /// </summary>
+    private static IHapticSink SinkFor(
+        HapticProviderRoute route, IReadOnlyList<HapticProviderRoute> admittedRoutes)
+    {
+        if (!admittedRoutes.Contains(route))
         {
             return new UnadmittedHapticSink(HapticReasonCodes.HapticNoAdmittedProvider, AdmissionGap);
         }
 
-        // The throw below is still reachable, and keeping it reachable is the point: it fires for a
-        // route that is admitted with no client behind it, which is the fake-available shape the
-        // truthful-capability contract bans. Lovense stops reaching it because Lovense now HAS a
-        // client, not because the check was relaxed.
-        if (admittedRoutes.Contains(HapticProviderRoute.Lovense))
+        return route switch
         {
-            return new LovenseHapticSink(_ => { });
-        }
-
-        throw new InvalidOperationException(
-            "a haptic provider route is admitted and no sink is constructed for it — admit the route AND "
-            + $"its client together ({string.Join(", ", admittedRoutes)})");
+            HapticProviderRoute.Lovense => new LovenseHapticSink(_ => { }),
+            HapticProviderRoute.Buttplug => new ButtplugHapticSink(_ => { }),
+            _ => throw new InvalidOperationException(
+                "a haptic provider route is admitted and no sink is constructed for it — admit the route AND "
+                + $"its client together ({route})"),
+        };
     }
 
-    /// <summary>
-    /// The sink for ONE named route, so the per-route refusal text is reachable and executed rather
-    /// than only written. It refuses for the same reason <see cref="Create"/> does and adds what
-    /// that specific route would need.
-    /// </summary>
-    public static IHapticSink CreateFor(HapticProviderRoute route) =>
-        AdmittedRoutes.Contains(route)
-            ? Create()
-            : new UnadmittedHapticSink(
-                HapticReasonCodes.HapticNoAdmittedProvider,
-                AdmissionGap + " " + DescribeRoute(route));
+    private static IReadOnlyList<HapticProviderRoute> Admitted(IReadOnlyList<HapticProviderRoute>? wanted) =>
+        wanted is null ? [] : [.. wanted.Where(AdmittedRoutes.Contains)];
 }

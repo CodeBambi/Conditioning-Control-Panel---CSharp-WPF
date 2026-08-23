@@ -77,7 +77,6 @@ public static class HapticReasonCodes
     /// </summary>
     public const string HapticNotEntitled = "haptic-not-entitled";
 
-    /// <summary>The sink was disposed; it holds nothing and will never drive anything again.</summary>
     /// <summary>The server answered and REFUSED the command. Distinct from
     /// <see cref="HapticServerUnreachable"/> on purpose: "nobody is listening" and "the program
     /// listening said no" have different repairs, and reporting the second as the first sends a user
@@ -89,5 +88,26 @@ public static class HapticReasonCodes
     /// unreachable, and never reported as a success with a caveat.</summary>
     public const string HapticStopIncomplete = "haptic-stop-incomplete";
 
+    /// <summary>The sink was disposed; it holds nothing and will never drive anything again.</summary>
     public const string HapticSinkDisposed = "haptic-sink-disposed";
+
+    /// <summary>
+    /// <b>Clients are admitted and the USER has ticked none of them</b>, so nothing was attempted —
+    /// and the refusal is decided before any socket is opened.
+    ///
+    /// <para>The rung that exists because upstream's providers are a <b>SET</b> rather than a
+    /// one-of: all three are registered unconditionally
+    /// (<c>Services/Haptics/Core/HapticDeviceManager.cs:36-38</c>) and the connect runs over the
+    /// per-provider ENABLED flags (<c>:91-98</c>), so "which providers can this build speak to" and
+    /// "which has the user switched on" are different questions with different repairs. Upstream
+    /// refuses in exactly this place, twice: the manager returns false before any connect
+    /// (<c>:103-107</c>) and the button refuses before calling it at all
+    /// (<c>MainWindow/MainWindow.Haptics.cs:653-660</c>), with a message that names what to tick
+    /// (<c>Localization/Languages/en.json:4125</c>, <i>"Tick at least one provider first"</i>).</para>
+    ///
+    /// <para>It is never <see cref="HapticNoAdmittedProvider"/>: telling a user this build has no
+    /// client, when it has two and they enabled neither, sends them to wait for a release instead of
+    /// to a checkbox.</para>
+    /// </summary>
+    public const string HapticNoProviderEnabled = "haptic-no-provider-enabled";
 }
