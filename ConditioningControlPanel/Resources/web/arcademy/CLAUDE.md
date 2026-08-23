@@ -118,8 +118,9 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    TRACKABILITY INVARIANT: occlusion hides at most ONE link of a swap chain and every
                    occlusion carries a tell) / grade / lex MD_LEX; keybinds pick1..pick5; md_stake_mode
                    ask|bank|ride (greed scored UPWARD only, ride cap 5), md_shell_skin themed|minimal|contrast
-  sort/            the two-pile swipe (tracking, 120s)   - room 201, the class that TOOK
-                   Misdirection's room when it was retired. Right = TARGET, left = NOISE, and
+  sort/            the two-pile swipe (tracking, 120s)   - room 203, The Sorting Room, built
+                   on the Entrance Hall's west span after Misdirection's retirement (lot 2
+                   gave the old parlour to the front office). Right = TARGET, left = NOISE, and
                    the piles are the PLAYER'S OWN NICHES, picked at a setup DOOR that runs
                    BEFORE the class clock (`manifest.setup` + `instance.setup()`, §5). Truth is
                    the `tag` the host stamped on the row, never pixels; the deck comes from
@@ -839,10 +840,11 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     `RETIRED_GAMES` / a closed semester, and it is one line. So: never land a registry row
     ahead of its module unless the same merge carries the module, and if a class has to ship
     dark, retire it rather than leaving the row to stub.
-58. **A ROOM CAN CHANGE HANDS, AND THE LEXICON ROWS DO NOT GO WITH IT.** SORT took room 201
-    (rect, door, alley stop and number unchanged) when Misdirection was retired, so `ROOMS` has
-    a `sort` entry and no `misdirection` one - un-retiring that class now means giving it a
-    room. Its `campus_room_misdirection` / `campus_desc_misdirection` / `game_misdirection`
+58. **A ROOM CAN CHANGE HANDS, AND THE LEXICON ROWS DO NOT GO WITH IT.** When Misdirection
+    was retired SORT first took its parlour whole; the lot-2 geography rework then razed the
+    parlour for the front office and sort built new (room 203, the Entrance Hall's donated
+    west span). `ROOMS` has a `sort` entry and no `misdirection` one - un-retiring that class
+    now means giving it a room. Its `campus_room_misdirection` / `campus_desc_misdirection` / `game_misdirection`
     rows deliberately STAY: the host's `NeutralLexicon` is append-only and a retired class is
     not a deleted one. (The scratch campus suite asserted "misdirection has a room now" as of
     Semesters II/III - that line needs re-baselining onto `sort`, the LAW it protects, "a pool

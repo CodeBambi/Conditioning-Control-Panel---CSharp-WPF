@@ -5,10 +5,15 @@
  * (the owner-approved look) per BUILD-CONTRACT §10. Single dark theme, painted
  * explicitly - nothing here inherits a host background.
  *
- * FONTS: the mockup used Graduate / Sora / IBM Plex Mono from Google Fonts. The
- * hosted webview is OFFLINE, so those are gone: --disp/--body/--mono below are
- * the mockup's own fallback stacks (varsity-ish display, geometric UI, tabular
- * mono). Never add a remote @import or <link> to a font host here.
+ * FONTS: the mockup used Graduate / Sora / IBM Plex Mono from Google Fonts. A
+ * REMOTE font host is still forbidden (trap 2: the webview is offline, a
+ * fonts.googleapis.com link falls back silently and burns a boot on a DNS
+ * timeout). What LIGHTS ON added instead are two BUNDLED latin-subset woff2
+ * files under art/fonts/, declared right below - Graduate (the varsity display
+ * face the mockup actually wanted, PREPENDED to --disp) and Press Start 2P
+ * (--pix, campus micro-label seasoning only, never body copy). Both are
+ * `font-display:swap`, so a missing or corrupt file degrades to exactly the
+ * system stack the shell has always used. --body/--mono are unchanged.
  *
  * MOD SKIN: init.palette overrides the six theme tokens by writing CSS custom
  * properties on :root (see shell/shell.js applyPalette) - which is why every
@@ -18,6 +23,18 @@
  * styles into its root); this file must stay shell-only so a game restyle can
  * never regress the board or the report card.
  * ==========================================================================*/
+
+/* ---- BUNDLED FACES (LIGHTS ON). Local files, never a font host. --------- */
+@font-face {
+  font-family:'Arcademy Display';
+  src:url('./art/fonts/graduate.woff2') format('woff2');
+  font-weight:400; font-style:normal; font-display:swap;
+}
+@font-face {
+  font-family:'Arcademy Pixel';
+  src:url('./art/fonts/press-start-2p.woff2') format('woff2');
+  font-weight:400; font-style:normal; font-display:swap;
+}
 
 :root {
   /* --- palette (mockup TOKEN PLAN) --- */
@@ -40,10 +57,16 @@
   --gPass:var(--lav);
   --flap-face:#31315E; --flap-fold:#262649; --flap-well:#101024;
 
-  /* --- type --- */
-  --disp:'Copperplate Gothic Bold','Bahnschrift Condensed','Arial Black',Impact,serif;
+  /* --- type ---
+     'Arcademy Display' is PREPENDED, not substituted: the old system stack is
+     still the whole fallback chain, so a missing woff2 changes nothing. --pix
+     is seasoning for campus micro-labels (neon signs, stop badges, status
+     chips) and must never carry body copy - Press Start 2P has no lowercase
+     rhythm and no diacritic coverage worth the name. */
+  --disp:'Arcademy Display','Copperplate Gothic Bold','Bahnschrift Condensed','Arial Black',Impact,serif;
   --body:'Segoe UI Variable Text','Segoe UI',system-ui,-apple-system,sans-serif;
   --mono:'Cascadia Mono','Consolas','IBM Plex Mono','Courier New',monospace;
+  --pix:'Arcademy Pixel','Cascadia Mono','Consolas','Courier New',monospace;
 
   --radius:12px;
   --hairline:1px solid var(--line);
@@ -51,7 +74,10 @@
   /* --- campus (Direction A hub) - every hue DERIVED from the tokens above so
          init.palette reskins the whole plan for free. color-mix is safe here:
          the host is the evergreen WebView2 runtime (Chromium 111+). --- */
-  --campus-sky:color-mix(in srgb, var(--ground), black 55%);
+  /* LIGHTS ON warmed the sky: the campus is DUSK, not a dead navy-black. A few
+     percent of --pink through the ground before the black mix is what lets the
+     neon read as light hitting something instead of glowing in a vacuum. */
+  --campus-sky:color-mix(in srgb, color-mix(in srgb, var(--ground), var(--pink) 7%), black 50%);
   --campus-plan:color-mix(in srgb, var(--navy), var(--lav) 6%);
   --campus-hall:color-mix(in srgb, var(--panel), black 12%);
   --campus-line:color-mix(in srgb, var(--lav) 72%, var(--slate) 28%);
@@ -59,6 +85,53 @@
   --campus-furn:color-mix(in srgb, var(--panel2), var(--lav) 8%);
   --campus-text:color-mix(in srgb, var(--ink-dim), var(--lav) 45%);
   --campus-text-dim:color-mix(in srgb, var(--ink-faint), var(--lav) 20%);
+
+  /* --- CARD IDENTITY (LIGHTS ON) - THE ROOM INHERITS THE CARD.
+     These are the ONE sanctioned set of literals outside the palette above, and
+     the reason is that they are not a taste: they MIRROR LOCKED ART. Each pair
+     was sampled off that class's real stamp-card face
+     (Screenshots/arcademy-set/card-*.png) and then pulled DOWN to dusk - `-a`
+     near 30-34% lightness, `-b` near 14-17% - because the pink route, the pink
+     stop badges and the chalk room plates all have to stay the loudest thing
+     drawn ON TOP of a lit room. A card hue at its own card brightness would win
+     that fight and the map would stop being readable.
+     They are still plain custom properties, so a mod that wants its own room
+     hues overrides `--room-<key>-a/-b/-glow` on :root exactly like the palette.
+     `-glow` is the only bright one: it tints the room's bloom and its marquee,
+     and it is never a fill. */
+  --room-daily_trigger-a:#7B2D38;   /* sunset rose      (Homeroom) */
+  --room-daily_trigger-b:#311C26;
+  --room-daily_trigger-glow:#E65B7B;
+  --room-lost_and_found-a:#7C5227;  /* amber            (Lost & Found) */
+  --room-lost_and_found-b:#32211B;
+  --room-lost_and_found-glow:#EAA23E;
+  --room-deja_vu-a:#592D80;         /* violet           (Memory Lab) */
+  --room-deja_vu-b:#201D3A;
+  --room-deja_vu-glow:#AE61E5;
+  --room-impulse_control-a:#762329; /* deep red/scarlet (Discipline Hall) */
+  --room-impulse_control-b:#31171F;
+  --room-impulse_control-glow:#E2413C;
+  --room-echo-a:#7C6727;            /* gold/canary      (Music Room) */
+  --room-echo-b:#32291A;
+  --room-echo-glow:#EFCF4D;
+  --room-instant_recall-a:#2E2E6B;  /* projector navy   (Lecture Hall) */
+  --room-instant_recall-b:#1B1D32;
+  --room-instant_recall-glow:#656DE2;
+  /* SORT'S CARD IS NOT DRAWN YET (its punchcard face ships as a byte-copy of
+     Discipline Hall's) - so these three are a PLACEHOLDER reading "casino
+     felt", not a sample of locked art. Re-sample when the real card lands. */
+  --room-sort-a:#2E6B4A;            /* felt emerald     (The Sorting Room) */
+  --room-sort-b:#152F22;
+  --room-sort-glow:#4FD08E;
+  --room-anomaly-a:#4C4554;         /* graphite/silver  (Darkroom) */
+  --room-anomaly-b:#1F1F28;
+  --room-anomaly-glow:#A699B8;
+  --room-composure-a:#6D4440;       /* dusty mauve/blush(The Studio) */
+  --room-composure-b:#2F2433;
+  --room-composure-glow:#D08B80;
+  --room-the_deep_end-a:#245D6B;    /* pool cyan        (The Pool) */
+  --room-the_deep_end-b:#17293F;
+  --room-the_deep_end-glow:#40D1E7;
 }
 
 * { box-sizing:border-box; }
@@ -132,7 +205,11 @@ kbd {
 
 /* ============================ BUTTONS ==================================== */
 .btn {
-  font-family:var(--disp); font-size:11px; letter-spacing:.1em;
+  /* .1em -> .14em when LIGHTS ON prepended Graduate to --disp: a varsity face
+     has tighter counters than the old Copperplate stack and the board foot
+     shrinks this same rule to 9.5px. Every box that wears it is auto-sized, so
+     the extra air costs a couple of pixels of width and nothing else. */
+  font-family:var(--disp); font-size:11px; letter-spacing:.14em;
   background:var(--panel); color:var(--ink);
   border:1px solid var(--pink-deep); border-radius:8px;
   padding:7px 14px; cursor:pointer;
@@ -796,6 +873,22 @@ svg.campus-plan { position:absolute; inset:0; width:100%; height:100%; display:b
 .campus-hit { fill:transparent; stroke:none; }
 .campus-pave { opacity:.13; pointer-events:none; }
 .campus-paveline { stroke:var(--campus-line-dim); stroke-width:1; }
+
+/* ---- THE MIDWAY CARPET (LIGHTS ON) -------------------------------------
+   The Main Hall and the entrance hall get the 90s arcade floor: a drawn 48-unit
+   vector tile of navy ground and sparse confetti geometry. It is deliberately
+   the QUIETEST thing in the hall - the tile's own parts are already muted and
+   the whole layer then sits at .34, because the route and the numbered stop
+   badges must stay the loudest marks on that floor. Vector, so it costs one
+   raster and never re-rasters: nothing here animates. */
+.campus-carpet { opacity:.34; pointer-events:none; }
+.campus-carpet-ground { fill:color-mix(in srgb, var(--campus-hall), var(--lav) 7%); }
+.campus-carpet-p { fill:color-mix(in srgb, var(--pink), transparent 52%); stroke:none; }
+.campus-carpet-g { fill:color-mix(in srgb, var(--gold), transparent 55%); stroke:none; }
+.campus-carpet-l {
+  fill:none; stroke:color-mix(in srgb, var(--lav), transparent 55%);
+  stroke-width:1.6; stroke-linecap:round;
+}
 .campus-rname {
   font-family:var(--body); font-size:13.5px; font-weight:600; letter-spacing:.14em;
   fill:var(--campus-text); text-anchor:middle;
@@ -829,8 +922,13 @@ svg.campus-plan { position:absolute; inset:0; width:100%; height:100%; display:b
 }
 .campus-fountain { fill:var(--campus-plan); stroke:var(--campus-line-dim); stroke-width:1.6; }
 .campus-fountain-eye { fill:var(--campus-hall); stroke:var(--campus-line-dim); stroke-width:1; }
+/* THE TOKEN FOUNTAIN (LIGHTS ON). People throw arcade tokens in this one: the
+   basin carries gold coins with a tiny highlight and the ripples are gold-lit
+   rather than chalk. */
+.campus-coin { fill:var(--gold); opacity:.8; }
+.campus-coin-hi { fill:var(--ink); opacity:.55; }
 .campus-ripple {
-  fill:none; stroke:var(--campus-line); stroke-width:1.2;
+  fill:none; stroke:color-mix(in srgb, var(--gold) 55%, var(--campus-line) 45%); stroke-width:1.2;
   transform-box:fill-box; transform-origin:center;
   animation:campus-rip 4s ease-out infinite;
 }
@@ -839,17 +937,158 @@ svg.campus-plan { position:absolute; inset:0; width:100%; height:100%; display:b
   0% { transform:scale(.3); opacity:.8; }
   100% { transform:scale(1.5); opacity:0; }
 }
+/* ONE sparkle, and it is SCARCE BY LAW: a 17-second cycle that is invisible for
+   sixteen and a half of them. A second one would make it decoration. */
+.campus-sparkle {
+  fill:none; stroke:var(--ink); stroke-width:1.4; stroke-linecap:round; opacity:0;
+  transform-box:fill-box; transform-origin:center;
+  animation:campus-glint 17s linear infinite;
+}
+@keyframes campus-glint {
+  0%, 96% { opacity:0; transform:scale(.4) rotate(0deg); }
+  97.5% { opacity:.9; transform:scale(1) rotate(35deg); }
+  100% { opacity:0; transform:scale(.5) rotate(70deg); }
+}
 
-/* tower */
-.campus-tower-tie, .campus-dial { stroke:var(--campus-line-dim); fill:none; }
-.campus-dial { stroke-width:1; stroke-dasharray:3 5; }
-.campus-tower-tie { stroke-width:2; }
+/* tower - LIGHTS ON made the clock a NEON one: the dial is an unbroken pink
+   tube with a small glow (a 33-unit ring, so the drop-shadow is cheap) and the
+   hands are gold. Geometry, ticks and both spins are untouched. */
+.campus-tower-tie { stroke:var(--campus-line-dim); fill:none; stroke-width:2; }
+.campus-dial {
+  fill:none; stroke:var(--pink); stroke-width:1.6; stroke-dasharray:none;
+  filter:drop-shadow(0 0 4px color-mix(in srgb, var(--pink), transparent 35%));
+}
 .campus-tick { stroke:var(--campus-line); stroke-width:2; }
 .campus-clockpin { fill:var(--ink); }
-.campus-clockhand { stroke:var(--ink); stroke-width:2.5; stroke-linecap:round; transform-box:view-box; }
+.campus-clockhand { stroke:var(--gold); stroke-width:2.5; stroke-linecap:round; transform-box:view-box; }
 .campus-clockhand.hh { transform-origin:1310px 156px; animation:campus-spin 240s linear infinite; }
 .campus-clockhand.mh { transform-origin:1310px 156px; animation:campus-spin 24s linear infinite; }
 @keyframes campus-spin { to { transform:rotate(360deg); } }
+
+/* ---- LIGHTS ON: THE ROOM INHERITS THE CARD -----------------------------
+   ONE block per class hands that room's three identity tokens down as three
+   LOCAL names, and everything below reads only the local names - so the whole
+   treatment is written once instead of nine times. Both the room <g> and its
+   gradient's <stop> nodes carry `data-game`, because a <stop> lives in <defs>
+   and can never inherit from the room group; scoping to `svg.campus-plan`
+   keeps this off the punch cards, which carry a `data-game` of their own. */
+svg.campus-plan [data-game="daily_trigger"] {
+  --room-a:var(--room-daily_trigger-a); --room-b:var(--room-daily_trigger-b);
+  --room-glow:var(--room-daily_trigger-glow);
+}
+svg.campus-plan [data-game="lost_and_found"] {
+  --room-a:var(--room-lost_and_found-a); --room-b:var(--room-lost_and_found-b);
+  --room-glow:var(--room-lost_and_found-glow);
+}
+svg.campus-plan [data-game="deja_vu"] {
+  --room-a:var(--room-deja_vu-a); --room-b:var(--room-deja_vu-b);
+  --room-glow:var(--room-deja_vu-glow);
+}
+svg.campus-plan [data-game="impulse_control"] {
+  --room-a:var(--room-impulse_control-a); --room-b:var(--room-impulse_control-b);
+  --room-glow:var(--room-impulse_control-glow);
+}
+svg.campus-plan [data-game="echo"] {
+  --room-a:var(--room-echo-a); --room-b:var(--room-echo-b);
+  --room-glow:var(--room-echo-glow);
+}
+svg.campus-plan [data-game="instant_recall"] {
+  --room-a:var(--room-instant_recall-a); --room-b:var(--room-instant_recall-b);
+  --room-glow:var(--room-instant_recall-glow);
+}
+svg.campus-plan [data-game="sort"] {
+  --room-a:var(--room-sort-a); --room-b:var(--room-sort-b);
+  --room-glow:var(--room-sort-glow);
+}
+svg.campus-plan [data-game="anomaly"] {
+  --room-a:var(--room-anomaly-a); --room-b:var(--room-anomaly-b);
+  --room-glow:var(--room-anomaly-glow);
+}
+svg.campus-plan [data-game="composure"] {
+  --room-a:var(--room-composure-a); --room-b:var(--room-composure-b);
+  --room-glow:var(--room-composure-glow);
+}
+svg.campus-plan [data-game="the_deep_end"] {
+  --room-a:var(--room-the_deep_end-a); --room-b:var(--room-the_deep_end-b);
+  --room-glow:var(--room-the_deep_end-glow);
+}
+/* THE GRADIENT STOPS. campus.js mints one vertical <linearGradient> per room
+   and writes no colour into it at all - the stop nodes carry a class and a
+   data-game, the hue arrives from here. A room with no identity (a future
+   class whose tokens have not been minted) falls back to the plan fill and
+   simply looks like the blueprint it always was. */
+.campus-stop-a { stop-color:var(--room-a, var(--campus-plan)); }
+.campus-stop-b { stop-color:var(--room-b, var(--campus-plan)); }
+
+/* THE CABINET FRONT. A second rect over .campus-gfloor carrying the room's own
+   gradient. Idle (a room that is neither open nor retaking) it is barely there
+   - the plan still reads as a plan; lit, it is the card. */
+.campus-cabinet { pointer-events:none; opacity:.15; transition:opacity .3s; }
+g.campus-room.open .campus-cabinet { opacity:1; }
+g.campus-room.retake .campus-cabinet { opacity:.62; }
+g.campus-room.dark .campus-cabinet { opacity:.13; }
+
+/* THE GOLD TRIM - an inset stroke, the lit cabinet's bezel. Open only; a retake
+   cools it to lavender the way the sign and the bloom already do. */
+.campus-trim { fill:none; stroke:var(--gold); stroke-width:1.2; opacity:0; pointer-events:none; }
+g.campus-room.open .campus-trim { opacity:.55; }
+g.campus-room.retake .campus-trim { stroke:var(--lav); opacity:.3; }
+
+/* THE POWERED-OFF CABINET. Dark rooms are near-black glass with scanlines and
+   a slow breath: curiosity, not absence. The breath is opacity on ONE small
+   rect per room, sharing one keyframe - no filter, no blur, no per-node JS. */
+.campus-scanline { stroke:var(--ink); stroke-width:1; }
+.campus-scan { opacity:0; pointer-events:none; }
+g.campus-room.dark .campus-scan {
+  opacity:.05;
+  animation:campus-breath 4s ease-in-out infinite;
+}
+g.campus-room.dark .campus-gfloor { fill:color-mix(in srgb, var(--campus-sky), black 32%); }
+@keyframes campus-breath { 0%, 100% { opacity:.05; } 50% { opacity:.13; } }
+
+/* THE LOGO. The class's keyed varsity wordmark, centred in its room, over the
+   floor and UNDER the room plate - the drawn name and RM number are the lexicon
+   surface and a mod re-voices them, so the logo joins them and never replaces
+   them. Optional art: one probe image decides `data-art`, and `off` hides every
+   one of these with the blueprint left whole underneath (punchcard.js's law). */
+.campus-logo { pointer-events:none; opacity:.16; transition:opacity .3s, filter .3s; }
+g.campus-room.open .campus-logo { opacity:1; }
+g.campus-room.retake .campus-logo { opacity:.8; }
+/* A DARK ROOM'S LOGO IS A GHOST, and it is a LIGHT one. The first cut said
+   `brightness(0)` - a black silhouette - which was right against the old
+   blueprint floor and self-defeating against the near-black glass this same
+   wave gave a powered-off cabinet: black on black rendered nothing, which is
+   the absence the treatment exists to avoid. Inverting to white at a tenth
+   reads as a shape behind dead glass. Still a static filter on a static node,
+   one raster, never over a live decode (trap 36). */
+g.campus-room.dark .campus-logo { filter:brightness(0) invert(1); opacity:.1; }
+/* NO `.sm` RUNG, AND NOW NO EXCEPTIONS EITHER. The first cut hung a faint
+   full-room backplate in the wings and the shots killed it (the plate turned a
+   112x66 room's name into noise and its RM number vanished), so the wings went
+   without art. Lot 2 answered that the honest way - it made the rooms bigger -
+   so every one of the nine classes carries the same <image> in the same band,
+   and the ONE rung below is still the whole art contract. */
+.campus-stage[data-art="off"] .campus-logo { display:none; }
+
+/* THE PLATE READS OVER THE CARD. A room name drawn in chalk over a lit,
+   saturated cabinet front needs its own ground, so a lit room's labels get
+   `paint-order:stroke` - the dark stroke is painted UNDER the fill, which is a
+   halo rather than an outline. Two widths, because one that suits a 13.5px
+   name would swallow an 8.5px room number. Dark rooms keep the flat blueprint
+   label they always had. */
+g.campus-room.open .campus-rname,
+g.campus-room.retake .campus-rname,
+g.campus-room.open .campus-rsub,
+g.campus-room.retake .campus-rsub {
+  fill:var(--ink);
+  paint-order:stroke fill;
+  stroke:color-mix(in srgb, var(--campus-sky), black 45%);
+  stroke-linejoin:round;
+}
+g.campus-room.open .campus-rname,
+g.campus-room.retake .campus-rname { stroke-width:2.4; }
+g.campus-room.open .campus-rsub,
+g.campus-room.retake .campus-rsub { stroke-width:1.7; }
 
 /* rooms: mood classes written by campus.js update() */
 g.campus-room { cursor:pointer; transition:filter .25s; }
@@ -857,15 +1096,20 @@ g.campus-room:hover { filter:brightness(1.28) saturate(1.1); }
 g.campus-room:hover .campus-gfloor { stroke:var(--ink); }
 g.campus-room.dark .campus-gfloor { opacity:.8; }
 .campus-lit { opacity:0; pointer-events:none; }
+/* THE BLOOM is the room's own hue now, not a flat pink - the fallbacks keep a
+   facility (and any room with no identity token) on the old two colours. */
 g.campus-room.open .campus-lit {
-  fill:var(--pink); filter:blur(22px);
+  fill:var(--room-glow, var(--pink)); filter:blur(22px);
   animation:campus-roompulse 3.2s ease-in-out infinite;
 }
 g.campus-room.retake .campus-lit {
-  fill:var(--lav); filter:blur(22px);
+  fill:color-mix(in srgb, var(--room-glow, var(--lav)) 45%, var(--lav) 55%); filter:blur(22px);
   animation:campus-roompulse 5s ease-in-out infinite;
 }
 g.campus-room.facility .campus-lit { fill:var(--lav); filter:blur(22px); opacity:.12; }
+/* RECORDS is the trophy case: a warm gold wash behind its glass, brighter than
+   the other two facilities because it is the room that holds what you earned. */
+g.campus-room.facility.records .campus-lit { fill:var(--gold); opacity:.17; }
 @keyframes campus-roompulse { 0%, 100% { opacity:.16; } 50% { opacity:.38; } }
 
 .campus-ping {
@@ -878,21 +1122,74 @@ g.campus-room.open .campus-ping { animation:campus-pingring 2.6s cubic-bezier(.2
   70%, 100% { transform:scale(1.8); opacity:0; }
 }
 
-/* neon signs */
-.campus-neon rect { fill:color-mix(in srgb, var(--campus-sky), var(--pink) 10%); stroke:var(--pink); stroke-width:1; }
+/* neon signs - LIGHTS ON turned these into MARQUEES. Geometry is untouched
+   (same rect, same text, same place); the sign text speaks --pix now and an
+   extra rect on top carries the bulb chase. */
+/* DARK GLASS, not tinted glass. The plate used to be sky+10% pink, which was
+   fine over a blueprint room and hopeless over a lit cabinet front: the sign
+   has to be the darkest thing in a bright room for the bulbs and the letters
+   to be the brightest. The PINK is the tube (the stroke and the glow), never
+   the ground. */
+.campus-neon rect { fill:color-mix(in srgb, var(--campus-sky), black 55%); stroke:var(--pink); stroke-width:1; }
 .campus-neon text {
-  font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.18em;
-  fill:var(--pink); text-anchor:middle;
+  /* --pix is a full-width 8x8 cell face: one glyph is ~1em of advance against
+     mono's ~0.6em, so the size drops from 9px to 7px to keep roughly the old
+     character budget inside the 94-unit sign (about 13 characters - "IN
+     SESSION" is 10) and the tracking goes to zero, which pixel type wants. */
+  font-family:var(--pix); font-size:7px; font-weight:400; letter-spacing:0;
+  /* CHALK ON BLACK, not pink on black. At 7px a pixel face's one-unit strokes
+     land under a device pixel and anti-alias away most of their weight, so the
+     sign needs the highest-contrast fill it can get - pink lost the letters at
+     map distance (measured 5.5:1 against the plate; ink is ~14:1). The sign is
+     still unmistakably neon: the tube, the glow and the chase are all still
+     pink and gold around it. */
+  fill:var(--ink); text-anchor:middle;
 }
 .campus-neon { filter:drop-shadow(0 0 5px var(--pink)) drop-shadow(0 0 14px color-mix(in srgb, var(--pink), transparent 55%)); animation:campus-flicker 6s steps(1) infinite; }
-.campus-neon.v rect { stroke:var(--lav); fill:color-mix(in srgb, var(--campus-sky), var(--lav) 10%); }
+.campus-neon.v rect { stroke:var(--lav); fill:color-mix(in srgb, var(--campus-sky), black 55%); }
 .campus-neon.v text { fill:var(--lav); }
 .campus-neon.v { filter:drop-shadow(0 0 5px var(--lav)); animation:none; opacity:.95; }
 .campus-neon.off { opacity:0; animation:none; filter:none; }
+/* A COMPACT SIGN GLOWS LESS. 94x16 of sign in a small room leaves ~10 units
+   between the plate and the room name, and the default 14px outer bloom walked
+   straight over both it and the RM number. The fix is the bleed: one tight halo
+   instead of two.
+   THIS IS THE FRONT OFFICE'S RULE NOW (LIGHTS ON lot 2). It was written for the
+   old wing cupboards and hooked on `data-wing`, which was never what it meant -
+   the rule is about a room 84 units tall, not about which end of the school it
+   stands in. The wings' classes are full storefronts today and wear the full
+   bloom; Records and the Registrar are the compact rooms, so campus.js hangs
+   `data-compact` on exactly them. */
+g.campus-room[data-compact] .campus-neon { filter:drop-shadow(0 0 2.5px var(--pink)); }
+g.campus-room[data-compact] .campus-neon.v { filter:drop-shadow(0 0 2.5px var(--lav)); }
 @keyframes campus-flicker {
   0%, 100% { opacity:1; } 7% { opacity:.5; } 8% { opacity:1; }
   52% { opacity:.8; } 54% { opacity:1; } 83% { opacity:.55; } 84% { opacity:1; }
 }
+
+/* THE BULB CHASE. `stroke-dasharray:0 11` with a round cap is a ring of DOTS -
+   twenty of them, because the marquee rect is deliberately un-rounded so its
+   perimeter (2*(94+16) = 220) divides by the 11-unit bulb pitch exactly and the
+   loop has no seam. The chase advances ONE pitch per cycle in four steps(), so
+   a bulb ticks like a filament instead of sliding like a gradient (brief §perf)
+   and every open room shares this ONE animation. It rides only `open`: a retake
+   keeps the calm lavender tube, and a dark room has no sign at all. */
+/* `rect.campus-marquee`, NOT `.campus-marquee` - and the extra type selector is
+   load-bearing, not tidiness. `.campus-neon rect` above is (0,1,1) and a bare
+   `.campus-marquee` is (0,1,0), so the bulb ring LOST and inherited the plate's
+   own fill plus a pink stroke: an opaque slab, painted after the text because
+   it is the last child, dropping "IN SESSION" to 15% of its colour. The sign
+   was unreadable in every shot and nothing about it looked like a fill bug. */
+rect.campus-marquee {
+  fill:none; stroke:var(--gold); stroke-width:2.4; stroke-linecap:round;
+  stroke-dasharray:0 11; opacity:0; pointer-events:none;
+}
+g.campus-room.open rect.campus-marquee {
+  opacity:.85;
+  animation:campus-chase .52s steps(4) infinite;
+  filter:drop-shadow(0 0 3px color-mix(in srgb, var(--gold), transparent 40%));
+}
+@keyframes campus-chase { to { stroke-dashoffset:-11; } }
 
 /* tonight's route + stops */
 .campus-route {
@@ -905,8 +1202,10 @@ g.campus-room.open .campus-ping { animation:campus-pingring 2.6s cubic-bezier(.2
 @keyframes campus-march { to { stroke-dashoffset:-12; } }
 .campus-stopb { transform-box:fill-box; transform-origin:center; }
 .campus-stopb circle { fill:var(--pink); stroke:var(--ink); stroke-width:1.5; }
+/* A stop badge is a single digit - the one place pixel type costs nothing in
+   width and buys the whole arcade read. */
 .campus-stopb text {
-  font-family:var(--body); font-size:11px; font-weight:700;
+  font-family:var(--pix); font-size:8px; font-weight:400;
   fill:var(--ground); text-anchor:middle;
 }
 .campus-stopb .halo {
@@ -924,13 +1223,32 @@ g.campus-room.open .campus-ping { animation:campus-pingring 2.6s cubic-bezier(.2
   fill:var(--campus-text-dim); text-anchor:middle; opacity:.85;
 }
 .campus-tape { stroke:var(--pink); stroke-width:2.5; opacity:.4; }
-.campus-tape2 { stroke:color-mix(in srgb, var(--campus-sky), var(--pink) 20%); stroke-width:4; stroke-dasharray:10 10; opacity:.55; }
+/* THE WALL TAPE IS A CHECKERBOARD NOW. One stroked line can only ever be a
+   dashed line, so campus.js mints a SECOND line beside it (`.campus-tape2.b`)
+   at half the old width and half a dash out of phase - two offset rows read as
+   the pink chequer an arcade tapes a doorway with. Both wings are open in the
+   current OPEN_SEMESTERS, so this path draws nothing today; it is here so a
+   future sealed semester is taped in the same language as the rest of the
+   restyle rather than in the old blueprint's. */
+.campus-tape2 {
+  stroke:color-mix(in srgb, var(--campus-sky), var(--pink) 34%);
+  stroke-width:2; stroke-dasharray:6 6; opacity:.6;
+}
+.campus-tape2.b { stroke-dashoffset:6; }
 g.campus-room.locked { opacity:.75; }
 g.campus-room.locked:hover { filter:brightness(1.2); }
 
 /* entrance-hall dressing */
 .campus-crestring { fill:none; stroke:var(--line); stroke-width:1.6; }
 .campus-crestA { font-family:var(--disp); font-size:44px; fill:var(--line); text-anchor:middle; }
+/* THE NOTICE BOARD is felt-dark with a gold plate now (a corkboard under a
+   lamp, not another blueprint rectangle). The felt is a rect campus.js mints
+   BEHIND the existing board; the board and its four pins are untouched. */
+.campus-felt {
+  fill:color-mix(in srgb, var(--campus-sky), black 22%);
+  stroke:color-mix(in srgb, var(--gold), transparent 68%); stroke-width:1;
+}
+.campus-rsub.gold { fill:var(--gold); opacity:.8; }
 .campus-pin.p1 { fill:var(--pink); } .campus-pin.p2 { fill:var(--gold); }
 .campus-pin.p3 { fill:var(--lav); }  .campus-pin.p4 { fill:var(--ink-dim); }
 .campus-trophy.gold { fill:var(--gold); } .campus-trophy.lav { fill:var(--lav); }
@@ -1043,7 +1361,9 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   92% { transform:rotate(10deg); } 94% { transform:rotate(-6deg); } 96% { transform:rotate(0); }
 }
 .campus-bellchip .cap { font-family:var(--mono); font-size:9.5px; letter-spacing:.22em; color:var(--ink-faint); }
-.campus-bellchip .tm { font-size:14px; font-weight:600; color:var(--gold); }
+/* The countdown is a fixed eight characters (HH:MM:SS) in an auto-sized pill,
+   which is the other place --pix costs nothing and buys the arcade read. */
+.campus-bellchip .tm { font-family:var(--pix); font-size:11px; font-weight:400; color:var(--gold); }
 .campus-hint {
   position:absolute; bottom:14px; right:clamp(12px, 2.5vw, 40px); z-index:20;
   font-family:var(--mono); font-size:10.5px; letter-spacing:.18em; color:var(--ink-faint);
@@ -1111,7 +1431,7 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   box-shadow:0 10px 32px rgba(0,0,0,.7);
 }
 .campus-tip.on { opacity:1; }
-.campus-tip .t-name { font-family:var(--disp); font-size:13px; letter-spacing:.04em; color:var(--ink); }
+.campus-tip .t-name { font-family:var(--disp); font-size:13px; letter-spacing:.07em; color:var(--ink); }
 .campus-tip .t-status { font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; color:var(--pink); margin-top:3px; }
 .campus-tip .t-desc { font-size:11.5px; color:var(--ink-dim); margin-top:5px; line-height:1.45; }
 
@@ -1222,6 +1542,23 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
 .campus-stage.enter .campus-topright,
 .campus-stage.enter .campus-idcard,
 .campus-stage.enter .campus-hint { animation:campus-fadein .6s 1.4s both; }
+
+/* ---- REDUCED MOTION for what LIGHTS ON added --------------------------
+   The global freeze at the bottom of this file runs every animation once at
+   .001s, which parks a chase and a breath wherever that frame landed. These
+   three say what STILL means for each of them instead: the marquee stays LIT
+   (a dead sign would read as a closed room), the powered-off cabinet keeps its
+   scanlines at the middle of the breath, and the fountain's sparkle - which is
+   a BURST, not a state - simply never fires. Both paths, exactly like the
+   .arc-sign-chase pair further down. */
+html.arc-reduced g.campus-room.open rect.campus-marquee { animation:none; opacity:.85; }
+html.arc-reduced g.campus-room.dark .campus-scan { animation:none; opacity:.09; }
+html.arc-reduced .campus-sparkle { animation:none; opacity:0; }
+@media (prefers-reduced-motion: reduce) {
+  g.campus-room.open rect.campus-marquee { animation:none; opacity:.85; }
+  g.campus-room.dark .campus-scan { animation:none; opacity:.09; }
+  .campus-sparkle { animation:none; opacity:0; }
+}
 
 /* small stages: hide the flourishes before they collide with the board */
 @media (max-width:760px), (max-height:600px) {

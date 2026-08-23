@@ -1499,7 +1499,7 @@ internal static class ArcademyHostService
         // ---- campus wings: Semester II/III rooms (2026-08-23)
         ["campus_desc_anomaly"] = "Everything in here matches. One thing does not. Find it before it moves.",
         ["campus_desc_composure"] = "Slide the picture back together while the room does its best to blur it.",
-        ["campus_desc_east_open"] = "The tape is down. Wet paint, three new doors, nobody at the desk.",
+        ["campus_desc_east_open"] = "The front office. Two counters, one bell, and a queue that is always you.",
         ["campus_desc_echo"] = "It plays a line, you play it back. Then it adds one more, every time.",
         ["campus_desc_instant_recall"] = "Watch the whole hour, then answer for it. You never hear it coming.",
         ["campus_desc_misdirection"] = "Keep your eyes on the one that matters. It will not make that easy.",
