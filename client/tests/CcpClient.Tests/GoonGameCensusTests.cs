@@ -1011,11 +1011,41 @@ public sealed class GoonGameCensusTests
             .ToList();
     }
 
+    /// <summary>
+    /// Bytes with CRLF counted as LF, which is NOT the same as bytes on disk and is deliberately so.
+    ///
+    /// <para><b>A raw byte count is not portable in this repository and the first Linux run proved it.</b>
+    /// Git normalises text on checkout, so the same commit is 12,471,900 bytes on Windows and 12,376,646 on
+    /// Linux - a difference of exactly 95,254, the number of CRLF pairs. Every other figure in this section
+    /// re-derived identically on both platforms; only this one moved, because only this one measured the
+    /// CHECKOUT rather than the CONTENT.</para>
+    ///
+    /// <para>Subtracting the CRLF count makes the figure answer the question the census is actually asking.
+    /// A binary file carrying a stray CR-LF pair is counted slightly short, but IDENTICALLY on both
+    /// platforms, because git does not rewrite binaries - so the total stays portable, which is the property
+    /// this number needs and the property it did not have.</para>
+    /// </summary>
     private static long TotalBytes(string wpf, string relative)
     {
         var dir = Resolve(wpf, relative);
         RequirePath(dir, isDirectory: true, $"HALF-PRESENT reference tree: {relative} is missing");
-        return WalkFiles(dir).Sum(p => new FileInfo(p).Length);
+        return WalkFiles(dir).Sum(NormalisedLength);
+    }
+
+    /// <summary>One file's length with every CRLF counted as a single LF.</summary>
+    private static long NormalisedLength(string path)
+    {
+        var bytes = File.ReadAllBytes(path);
+        long crlf = 0;
+        for (var i = 1; i < bytes.Length; i++)
+        {
+            if (bytes[i] == (byte)'\n' && bytes[i - 1] == (byte)'\r')
+            {
+                crlf++;
+            }
+        }
+
+        return bytes.Length - crlf;
     }
 
     /// <summary>Which of these paths are absent from the shipping tree. The <c>File.Exists</c> lives

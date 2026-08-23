@@ -46,7 +46,7 @@ every wave, so a line number into it is a citation with an expiry date).
 git ls-files ConditioningControlPanel/Services/GoonGame | Measure-Object -Line
   -> 25 files; 12309 source lines
 git ls-files ConditioningControlPanel/Resources/web/goon | Measure-Object -Line
-  -> 184 files; 12471900 total bytes
+  -> 184 files; 12376551 total bytes (CRLF counted as LF, so the figure is the same on both platforms)
 ```
 
 Both trees agree with `git ls-files`, so there are no untracked bytes in either. **R2 additionally
@@ -366,7 +366,7 @@ only the first would under-read the second.
 | How much of the 184 is this surface's own authorship? | **180 (97.8%)** |
 | How many files must be served for the page to render? | **164 (89.1%)** |
 | What is the difference? | **20 files the browser never loads**: `test/` (19 self-test and parity-vector modules, unreferenced by `index.html`) and `package.json`, whose own first key says *"Browsers never read this file"* |
-| Bytes on disk | **12 471 900** — stated as bytes on disk, **not** as a packaging decision |
+| Payload bytes | **12 376 551** — CRLF counted as LF so the figure is identical on Windows and Linux; stated as a measurement, **not** as a packaging decision |
 
 ### 5.3 How the port would serve it, without forking a byte
 
@@ -587,7 +587,7 @@ BUILDABLE-IN-PART and clause 3 is not reached.
 
 | Item | Size |
 |---|---|
-| Payload to serve | **184 files, 164 of them loaded by the page**, 12 471 900 bytes — **linked read-only, zero bytes forked** (§5.3) |
+| Payload to serve | **184 files, 164 of them loaded by the page**, 12 376 551 bytes — **linked read-only, zero bytes forked** (§5.3) |
 | Port code already present | The embedded WebView (`Features/Dtrh/DtrhCapabilityProbes.cs:22`), the loopback serving contract (`Features/Intake/IntakeHostWindow.axaml.cs:701-707` names it), and the payload glob shipped four times (`CcpClient.Desktop.csproj:50-54`) |
 | Port code to add | A host window plus the bridge subset: **`init` + `manifest`** (host->page) and **`ready` + `log` + `heartbeat`/`pong` + `exit`/`exit-done`** (page->host). The frame catalogue is at `GoonHostService.cs:30-53` and the `init` shape is written out **field-for-field twice** — `GoonHostService.cs:300-350` and `goon/bridge.js:371-440` — so it is transcribable, not reverse-engineered. **`manifest` is decomposed in §7.1.1 — it is the smallest item here, not the largest** |
 | `caps` for this unit | `haptics:false`, `camera:false`, `assetCache:false`, `mediaTransfer:false`, `canHost:false`; `solo` defaults on (`goon/bridge.js:391`) |
@@ -1001,7 +1001,7 @@ Every term is re-derived from the shipping bytes on every run.
 | payload-this-surface-share-percent | 97.8 |
 | payload-served-files | 164 |
 | payload-harness-files | 20 |
-| payload-total-bytes | 12471900 |
+| payload-total-bytes | 12376551 |
 | duel-elements | 9 |
 | duel-elements-with-port-module | 9 |
 
