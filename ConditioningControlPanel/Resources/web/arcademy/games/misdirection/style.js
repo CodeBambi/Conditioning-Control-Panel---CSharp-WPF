@@ -81,7 +81,6 @@ export const STYLE_TEXT = `
 @property --md-n-tilt{syntax:'<number>';inherits:true;initial-value:-12}
 @property --md-n-scale{syntax:'<number>';inherits:true;initial-value:1}
 @property --md-n-ride{syntax:'<number>';inherits:true;initial-value:0}
-@property --md-x{syntax:'<number>';inherits:false;initial-value:.5}
 @property --md-feint{syntax:'<number>';inherits:false;initial-value:0}
 @property --md-hw-k{syntax:'<angle>';inherits:false;initial-value:270deg}
 
@@ -198,12 +197,12 @@ export const STYLE_TEXT = `
   transition:transform .6s ease}
 .g-md-stage[data-occluding="1"] .g-md-arc{filter:brightness(.5) saturate(.7);transition:filter .1s ease}
 .g-md-stage[data-occluding="1"] .g-md-table{filter:brightness(.7)}
-.g-md-shell{position:absolute;left:calc(var(--md-x, .5) * 100%);top:50%;
+.g-md-shell{position:absolute;left:calc(var(--x, .5) * 100%);top:50%;
   width:var(--md-shell);height:calc(var(--md-shell) * 1.08);margin:0;padding:0;border:0;background:none;
   appearance:none;-webkit-appearance:none;cursor:pointer;color:inherit;font:inherit;
   /* POSITIONAL ONLY: the centre, the gentle arc (outer shells sit lower, nearer
      the player) and the slide. Nothing decorative lives here. */
-  transform:translate(-50%, calc(-50% + (var(--md-x, .5) - .5) * (var(--md-x, .5) - .5) * 110px));
+  transform:translate(-50%, calc(-50% + (var(--x, .5) - .5) * (var(--x, .5) - .5) * 110px));
   transition:left .28s cubic-bezier(.3,.7,.25,1), transform .28s cubic-bezier(.3,.7,.25,1);
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;outline:none}
 .g-md-shell:focus-visible .g-md-lid{box-shadow:0 0 0 3px color-mix(in srgb, var(--gold), transparent 20%), 0 14px 26px rgba(0,0,0,.55)}

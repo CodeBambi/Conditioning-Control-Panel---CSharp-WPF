@@ -115,8 +115,6 @@ export const CP_TRICKSTER = Object.freeze({
 const STYLE_ID = 'g-cp-trickster-style';
 const STYLE_TEXT = `
 /* ---- THE LIE LAYER (trickster) --------------------------------------------
-@property --pr{syntax:'<number>';inherits:false;initial-value:0}
-@property --pc{syntax:'<number>';inherits:false;initial-value:0}
    Over the board, never a pointer. Ghost tiles (.g-cp-pv) carry --pr/--pc and
    a cloned face; the layer's variant class is the engine's glitch look redrawn
    here (rgbsplit / vhsroll / datamosh), .is-plain is the reduced-motion

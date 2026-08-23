@@ -536,9 +536,7 @@ export default {
         const cell = el('div', 'g-cp-cell');
         cell.setAttribute('data-i', String(i));
         cell.style.setProperty('--r', String(rowOf(n, i)));
-        cell.style.setProperty('--cp-r', String(rowOf(n, i)));  // registered twin (iOS: unregistered vars in calc() do not transition)
         cell.style.setProperty('--c', String(colOf(n, i)));
-        cell.style.setProperty('--cp-c', String(colOf(n, i)));  // registered twin (iOS: unregistered vars in calc() do not transition)
         boardEl.appendChild(cell);
         cellEls.push(cell);
       }
@@ -607,9 +605,7 @@ export default {
         if (id === BLANK) continue;
         const node = fresh ? tileElFor(id) : (tileEls.get(id) || tileElFor(id));
         node.style.setProperty('--r', String(rowOf(n, pos)));
-        node.style.setProperty('--cp-r', String(rowOf(n, pos)));  // registered twin (iOS: unregistered vars in calc() do not transition)
         node.style.setProperty('--c', String(colOf(n, pos)));
-        node.style.setProperty('--cp-c', String(colOf(n, pos)));  // registered twin (iOS: unregistered vars in calc() do not transition)
       }
     }
 
@@ -845,9 +841,7 @@ export default {
       const node = tileEls.get(res.id);
       if (node) {
         node.style.setProperty('--r', String(rowOf(n, res.to)));
-        node.style.setProperty('--cp-r', String(rowOf(n, res.to)));  // registered twin (iOS: unregistered vars in calc() do not transition)
         node.style.setProperty('--c', String(colOf(n, res.to)));
-        node.style.setProperty('--cp-c', String(colOf(n, res.to)));  // registered twin (iOS: unregistered vars in calc() do not transition)
         node.classList.add('is-moving');
         after(moveMs() + 40, () => { if (node) node.classList.remove('is-moving'); });
       }

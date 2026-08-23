@@ -469,7 +469,6 @@ export default {
         shell.setAttribute('data-slot', String(i));
         shell.style.setProperty('--slot', String(i));
         shell.style.setProperty('--x', n > 1 ? (i / (n - 1)).toFixed(4) : '0.5');
-        shell.style.setProperty('--md-x', n > 1 ? (i / (n - 1)).toFixed(4) : '0.5');  // registered twin (iOS: unregistered vars in calc() do not transition)
         shell.appendChild(el('span', 'g-md-lid'));
         const face = el('span', 'g-md-face');
         const media = el('img', 'g-md-media');
@@ -568,7 +567,6 @@ export default {
         shell.setAttribute('data-slot', String(slot));
         shell.style.setProperty('--slot', String(slot));
         shell.style.setProperty('--x', n > 1 ? (slot / (n - 1)).toFixed(4) : '0.5');
-        shell.style.setProperty('--md-x', n > 1 ? (slot / (n - 1)).toFixed(4) : '0.5');  // registered twin (iOS: unregistered vars in calc() do not transition)
       }
       paintTags();
     }

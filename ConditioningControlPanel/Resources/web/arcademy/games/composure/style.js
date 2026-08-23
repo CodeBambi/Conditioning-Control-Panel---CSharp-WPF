@@ -101,12 +101,6 @@ const STYLE_ID = 'g-cp-style';
 export const STYLE_TEXT = `
 /* ---- registered decoration props: numbers interpolate, so a var change
    glides (the lamp warms, the lean springs) instead of snapping ------------- */
-/* iOS/WebKit TRAP: a transform whose calc() reads an UNREGISTERED custom property does
-   not transition when that property changes - the tile TELEPORTS. --r/--c stay the
-   CORE contract (unregistered, read by decks); the transform reads these registered
-   twins that CORE writes alongside them. */
-@property --cp-r{syntax:'<number>';inherits:false;initial-value:0}
-@property --cp-c{syntax:'<number>';inherits:false;initial-value:0}
 @property --cp-lean-x{syntax:'<number>';inherits:false;initial-value:0}
 @property --cp-lean-y{syntax:'<number>';inherits:false;initial-value:0}
 @property --cp-grab-x{syntax:'<number>';inherits:true;initial-value:0}
@@ -303,7 +297,7 @@ export const STYLE_TEXT = `
 /* index.js lays one .g-cp-cell per square (--r/--c); the one with no tile on
    it is the gap - a recess in the linen. Drift (row_drift) targets these. */
 .g-cp-cell{position:absolute;left:0;top:0;width:var(--cp-tile);height:var(--cp-tile);z-index:0;border-radius:2px;
-  transform:translate3d(calc(var(--cp-c,0) * var(--cp-step)), calc(var(--cp-r,0) * var(--cp-step)), 0);
+  transform:translate3d(calc(var(--c,0) * var(--cp-step)), calc(var(--r,0) * var(--cp-step)), 0);
   background:color-mix(in srgb, var(--ground), black 22%);
   box-shadow:inset 0 2px 8px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.03);pointer-events:none}
 
@@ -311,8 +305,8 @@ export const STYLE_TEXT = `
 .g-cp-tile{position:absolute;left:0;top:0;width:var(--cp-tile);height:var(--cp-tile);
   pointer-events:auto;cursor:pointer;will-change:transform;z-index:2;
   transform:translate3d(
-    calc(var(--cp-c,0) * var(--cp-step) + var(--cp-grab-x,0) * var(--cp-grab-k,1) * var(--cp-grab-max,0px)),
-    calc(var(--cp-r,0) * var(--cp-step) + var(--cp-grab-y,0) * var(--cp-grab-k,1) * var(--cp-grab-max,0px)), 0);
+    calc(var(--c,0) * var(--cp-step) + var(--cp-grab-x,0) * var(--cp-grab-k,1) * var(--cp-grab-max,0px)),
+    calc(var(--r,0) * var(--cp-step) + var(--cp-grab-y,0) * var(--cp-grab-k,1) * var(--cp-grab-max,0px)), 0);
   transition:transform 190ms cubic-bezier(.22,.9,.3,1.04),opacity .22s ease,filter .22s ease}
 /* the body: weight. A bevel and a shadow that deepen in flight. */
 .g-cp-tile::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:2px;

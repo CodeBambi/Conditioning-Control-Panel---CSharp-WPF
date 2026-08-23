@@ -422,13 +422,20 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     near-equal consecutive pairs); every deck had worked around it with its own per-tag mulberry32.
     Same contract (tags independent, replay exact), different stream - any golden value recorded
     off the old stream (none were) would move.
-41. **iOS/WebKit: a `transform` whose `calc()` reads an UNREGISTERED custom property does NOT
-    transition when that property changes - the tile TELEPORTS** (owner, iPhone 13 Pro Max, the
-    Deep End web teaser, 2026-08-23). `--r`/`--c`/`--x` are the CORE<->deck contract and stay
-    unregistered (decks read them; `--r` is even an ANGLE in one casino, so a global `@property
-    --r <number>` would break it). Fix = game-scoped REGISTERED twins: CORE writes `--cp-r/--cp-c`
-    (`--md-x`, `--de-r/--de-c`) beside the contract vars and the stylesheet's transform reads the
-    twin. Chromium/WebView2 never showed it, so the desktop rigs cannot catch it - the iPhone can.
+41. **"WebKit won't transition an unregistered custom property" is a MYTH - measure before you
+    rename.** The Deep End web teaser "teleported" tiles on an iPhone 13 Pro Max (2026-08-23) and the
+    first diagnosis was exactly that myth; registered `--cp-r/--cp-c` / `--md-x` twins were even
+    built and then reverted. The measurement (peer session, Playwright WebKit 26.5 + Chromium): all
+    four variants - unregistered var + `transition:transform`, `@property` var, transition on the
+    vars themselves, both - interpolate IDENTICALLY in both engines; on the live Deep End page WebKit
+    fires `transitionrun` on transform when `--r/--c` change (keyboard and touch) and a no-var
+    plain-transform control traced byte-identical. What reads as "the transition never fired" on a
+    phone is a 170ms transition receiving 1-3 FRAMES under load - cut per-frame cost (the
+    `html.ae-touch` rung: no blur over a live face, no blend surface, no backdrop-filter, video
+    budget 3 on coarse pointers) instead of renaming variables. What IS true: `@property` is
+    page-global, so a var name shared with mixed types (`--r` is a number here and an ANGLE in
+    misdirection/casino.js) can never be registered globally - if registration is ever genuinely
+    needed, use game-prefixed names.
 
 ## 5. The game module contract (short version)
 
