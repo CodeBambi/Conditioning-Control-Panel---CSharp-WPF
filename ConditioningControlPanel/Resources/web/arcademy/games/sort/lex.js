@@ -46,6 +46,11 @@ export const SORT_LEX = Object.freeze({
   sort_just: 'JUST',
   sort_almost: 'ALMOST',
   sort_record: 'record',
+  /* THE RECORD PING (casino.js): the chain is one link off your best chain and
+     the house wants you to know it. The near-miss you have not lost yet. */
+  sort_record_near: 'ONE OFF YOUR BEST',
+  /* The jackpot ladder's own word (casino.js). ROYAL has sort_royal already. */
+  sort_jackpot: 'JACKPOT',
   sort_pass: 'PASSED',
   sort_wrong: 'WRONG',
   sort_royal: 'ROYAL',
