@@ -151,12 +151,12 @@ public sealed class ScriptedSession
     }
 
     /// <summary>
-    /// Every readable session in a folder, ordered by file name so the rack a later slice draws is
-    /// the same on every machine (upstream enumerates with <c>Directory.GetFiles</c>, whose order
-    /// is
-    /// the file system's). An absent folder is an empty list, never a throw: the shipped files are
-    /// content beside the binary and a published tree missing them is a degraded install, not a
-    /// crash.
+    /// Every readable session in a folder — upstream's <c>LoadBuiltInSessions</c>
+    /// (<c>Services/Session/SessionFileService.cs:202-217</c>) — ordered by file name so the rack a
+    /// later slice draws is the same on every machine, where upstream takes whatever order
+    /// <c>Directory.GetFiles</c> gives it. An absent folder is an empty list, never a throw: the
+    /// shipped files are content beside the binary, and a published tree missing them is a degraded
+    /// install rather than a crash.
     /// </summary>
     public static IReadOnlyList<ScriptedSession> ReadFolder(string folder)
     {
@@ -219,8 +219,7 @@ public enum ScriptedCornerPosition
 /// engine's only use of it is to decide which one is current
 /// (<c>Services/Session/SessionEngine.cs:540-562</c>).
 /// Everything that changes over the session's length is a ramp on <see
-/// cref="ScriptedSessionSettings"/>,
-/// not a property of the phase.</para>
+/// cref="ScriptedSessionSettings"/>, not a property of the phase.</para>
 /// </summary>
 public sealed class ScriptedSessionPhase
 {

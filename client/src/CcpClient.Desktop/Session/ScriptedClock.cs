@@ -40,8 +40,7 @@ public interface IScriptedClock
     /// <summary>
     /// A monotonic reading — upstream's <c>_wallClockStopwatch.Elapsed</c>
     /// (<c>Services/Session/SessionEngine.cs:98</c>). Only DIFFERENCES between two readings are
-    /// meaningful; the
-    /// origin is arbitrary, exactly as a <see cref="Stopwatch"/>'s is.
+    /// meaningful; the origin is arbitrary, exactly as a <see cref="Stopwatch"/>'s is.
     /// </summary>
     TimeSpan Monotonic { get; }
 
