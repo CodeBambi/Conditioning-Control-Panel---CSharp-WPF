@@ -295,7 +295,13 @@ public sealed class CompositionRoot
             new Features.Companion.CompanionParticipant(
                 infra, _capabilitiesForParticipants ?? new CapabilityRegistry(),
                 Path.GetDirectoryName(SettingsPathFactory())!,
-                AiOllamaHostOverride),
+                AiOllamaHostOverride,
+                // The session's effect rack, so the executor's handler map is the REAL one.
+                // Without it AiEffectBridge is unreachable and every permission row reads
+                // 'not in this build' — which would be a lie about the backends, though not
+                // about dispatch: her replies are still not read as commands, and
+                // CompanionWindow's EffectDispatchNotice says so unconditionally.
+                effects: session.Engine.Effects),
             // The conditioning session: the preset store, the effect rack and the
             // engine START drives. It starts NO session: WPF's engine runs only when the user
             // presses START (MainWindow/MainWindow.StartStop.cs:34,105).
