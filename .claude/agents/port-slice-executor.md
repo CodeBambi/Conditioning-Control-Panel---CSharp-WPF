@@ -43,6 +43,8 @@ node client/tests/floor/check-warnings.mjs   # forces --no-incremental and OBSER
 node client/tests/floor/check-floor.mjs
 ```
 
+**When you run a suite directly rather than through the gate, CAPTURE ITS OUTPUT.** The test projects are xunit v3 EXECUTABLES, so run `client/tests/CcpClient.Tests/bin/Debug/net10.0/CcpClient.Tests.exe` (not `dotnet test`, whose VSTest adapter this repo deliberately stopped using) and ALWAYS pass `-trx <path>` or redirect to a file. The reason is not tidiness: an intermittent failure that scrolls past uncaptured cannot be named afterwards, and a re-run cannot tell you what the previous run saw — you are left with "it went red once" and no way to act on it. That happened on 2026-08-24 and cost the board a row admitting a failure whose identity is now unrecoverable. `check-floor.mjs` already preserves its results directory and writes TRX, which is why a loop over the GATE is the cheapest way to catch a rare failure by name.
+
 Commit your work on your branch at meaningful boundaries with a conventional message. Leave the tree buildable at every commit.
 
 ## Checkpoints: never go idle having written nothing
