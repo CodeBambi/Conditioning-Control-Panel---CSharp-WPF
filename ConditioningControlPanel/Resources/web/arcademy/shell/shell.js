@@ -741,18 +741,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     }
     extrasBox.textContent = '';
 
-    const bar = el('div', 'arc-classbar');
-    const replay = el('button', 'btn ghost', t('replay_board', 'Flip the board again'));
-    replay.type = 'button';
-    replay.addEventListener('click', () => board && board.replay());
-    bar.appendChild(replay);
+    /* No "flip the board again" button any more: the flaps roll every time the
+     * hanging board is EXPANDED (the plaque is the flip - see boardToggle
+     * below), and the plain fallback screen still rolls them on entry. */
     if (allDone()) {
+      const bar = el('div', 'arc-classbar');
       const rc = el('button', 'btn', t('report_card', 'Report Card'));
       rc.type = 'button';
       rc.addEventListener('click', () => showReport());
       bar.appendChild(rc);
+      extrasBox.appendChild(bar);
     }
-    extrasBox.appendChild(bar);
 
     /* yesterday's strip (the mockup's report-card row) */
     const y = store.day(dayAdd(localDate, -1));
@@ -821,10 +820,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       const cls = timetable.classes.find((c) => c.gameKey === gameKey);
       if (cls) startClass(cls);
     };
+    /* Built composed, never flipping: the board is BEHIND the collapsed plaque
+     * when the campus stands up, and the reveal cascade belongs to the moment
+     * the player opens it (boardToggle below). The plain fallback screen keeps
+     * its entry roll - it has no plaque. */
     board = createBoard({
       rows: buildRows(true),
       reducedMotion,
-      animate: !silent,
+      animate: false,
       onSelect: onSelectRow,
     });
 
@@ -844,7 +847,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // different fraction than the end card would be the one lie the rake
         // cannot afford. Optional on the campus side: an older hub ignores it.
         progressFor,
+        // The collapsed plaque's clock pulses until the timetable has been
+        // opened once TODAY (local date - it is attendance furniture, not
+        // content; regression #978's rule).
+        boardPulse: store.get('boardOpenedDate') !== localDate,
         on: {
+          boardToggle: (expanded) => {
+            if (!expanded) return;
+            // Opening IS the flip: roll the flaps through, and remember the
+            // open so tomorrow is the next time the clock nags.
+            try {
+              if (store.get('boardOpenedDate') !== localDate) store.set('boardOpenedDate', localDate);
+            } catch (e) { say('boardOpenedDate write failed: ' + ((e && e.message) || e)); }
+            if (board) board.replay();
+          },
           begin: (gameKey) => {
             const cls = timetable.classes.find((c) => c.gameKey === gameKey);
             if (cls) { startClass(cls); return; }

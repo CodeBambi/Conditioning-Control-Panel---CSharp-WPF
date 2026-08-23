@@ -85,10 +85,20 @@
 /* Words NEVER go on the face (talk rule, locked); they go here. */
 .emi-bubble {
   position: absolute;
-  right: -5%;
-  top: -2%;
+  /* Off the RIGHT EAR, rising: the box's left edge sits past the ear and its
+   * BOTTOM is pinned just over the head, so a longer line grows UP into the
+   * sky instead of down across the glass. (The old right:-5% anchored the
+   * box's right edge at the ear, which laid every line straight over her
+   * face.) widget.js flips this to `.bubble-left` near the right margin and
+   * to `.bubble-low` when she is parked at the very top - both in widget.css. */
+  left: 58%;
+  bottom: 96%;
   /* Absolute, not a % of EMI: the pixel face is a fixed 8px grid, so the box that holds
-   * it has to be fixed too or the 116px EMI wraps every line to four rows. */
+   * it has to be fixed too or the 116px EMI wraps every line to four rows.
+   * width:max-content matters with the left-edge anchor above - shrink-to-fit
+   * would clamp an abs-pos box to the sliver of containing block RIGHT of 58%
+   * (~49px) and wrap every bark three characters at a time. */
+  width: max-content;
   max-width: 104px;
   text-align: left;
   background: #F5F0E1;

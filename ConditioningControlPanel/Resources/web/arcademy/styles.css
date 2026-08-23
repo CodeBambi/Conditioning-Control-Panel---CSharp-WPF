@@ -1284,13 +1284,16 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   background:repeating-linear-gradient(var(--campus-line-dim) 0 6px, var(--campus-hall) 6px 10px);
   box-shadow:0 0 6px rgba(0,0,0,.5);
 }
+/* The sway is on the GROUP (plaque + board + foot rock as one hung object). */
+.campus-boardsway {
+  animation:campus-sway 7s ease-in-out infinite alternate;
+  transform-origin:50% -40px;
+}
 .campus-board {
   background:linear-gradient(180deg, var(--navy), color-mix(in srgb, var(--navy), black 25%));
   border:var(--hairline); border-radius:10px;
   box-shadow:0 18px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.07);
   padding:10px 14px 8px;
-  animation:campus-sway 7s ease-in-out infinite alternate;
-  transform-origin:50% -40px;
 }
 @keyframes campus-sway { from { transform:rotate(-.4deg); } to { transform:rotate(.4deg); } }
 /* compact flaps inside the hanging board (the full-size ones are for the plain
@@ -1313,6 +1316,56 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
 .campus-boardfoot .reportcard { margin-top:6px; padding-top:6px; gap:7px; }
 .campus-boardfoot .rcell { font-size:10.5px; padding:3px 7px; }
 .campus-boardfoot .grade { font-size:12px; min-width:20px; height:20px; }
+
+/* ---- the plaque: the collapsed timetable -------------------------------
+   What hangs from the chains until the player opens the board. The clock
+   pulses while the timetable has not been opened yet TODAY (campus.js wears
+   `.pulse` off the shell's store read); opening rolls the flaps, so this
+   plaque replaced the old "flip the board again" button outright. */
+.campus-boardtab {
+  display:flex; align-items:center; gap:8px;
+  margin:0 auto; width:max-content;
+  background:linear-gradient(180deg, var(--navy), color-mix(in srgb, var(--navy), black 25%));
+  border:var(--hairline); border-radius:9px;
+  box-shadow:0 14px 34px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07);
+  padding:7px 14px;
+  color:var(--ink-dim); cursor:pointer;
+  font:600 10.5px/1 var(--mono); letter-spacing:.14em;
+}
+.campus-boardtab:hover { color:var(--ink); border-color:var(--pink-deep); }
+.campus-boardtab:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+.campus-boardtab .tclock { font-size:14px; line-height:1; }
+.campus-boardtab .tchev { color:var(--ink-faint); font-size:9px; transition:transform .2s ease; }
+.campus-boardtab.pulse .tclock {
+  animation:campus-clockpulse 1.4s ease-in-out infinite;
+  filter:drop-shadow(0 0 6px var(--pink));
+}
+@keyframes campus-clockpulse {
+  0%, 100% { transform:scale(1); }
+  50% { transform:scale(1.35); }
+}
+/* Expanded: the plaque becomes the board's header bar (click again to fold). */
+.campus-boardwrap:not(.collapsed) .campus-boardtab {
+  border-radius:9px 9px 0 0; border-bottom:0;
+  box-shadow:none;
+  width:100%; justify-content:center; box-sizing:border-box;
+  padding:6px 14px 5px;
+}
+.campus-boardwrap:not(.collapsed) .campus-boardtab .tchev { transform:rotate(180deg); }
+.campus-boardwrap.collapsed .campus-board,
+.campus-boardwrap.collapsed .campus-boardfoot { display:none; }
+.campus-boardwrap:not(.collapsed) .campus-board {
+  border-radius:0 0 10px 10px; border-top:0;
+  animation:campus-boardunfold .32s ease-out;
+}
+@keyframes campus-boardunfold {
+  from { opacity:0; transform:translateY(-10px); }
+  to { opacity:1; transform:translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .campus-boardsway, .campus-boardtab.pulse .tclock,
+  .campus-boardwrap:not(.collapsed) .campus-board { animation:none; }
+}
 
 /* ---- crest (top-left) / top-right cluster / hint ---- */
 .campus-crest {
