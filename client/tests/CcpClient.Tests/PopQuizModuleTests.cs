@@ -120,7 +120,7 @@ public class PopQuizModuleTests
             }
         }
 
-        Assert.Equal(25 * PopQuizQuestion.AnswerCount, replies.Count);
+        Assert.Equal(100, replies.Count);
         Assert.DoesNotContain(replies, string.IsNullOrWhiteSpace);
     }
 
@@ -285,6 +285,14 @@ public class PopQuizModuleTests
         // Windows/PopQuizWindow.xaml.cs:170-177 — await Task.Delay(300), swap the panels, await
         // Task.Delay(1500), close. Both on the INJECTED clock here; there is no Task.Delay in this
         // port's session paths at all.
+        //
+        // THE NUMBERS ARE LITERALS BELOW, NOT THE MODULE'S OWN CONSTANTS. Advancing by
+        // PopQuizEffect.AffirmationDelay would move with the constant, so a mutation that changed
+        // 300 ms to 200 ms passed this fact — measured, on the first sweep. Upstream's two numbers
+        // are what this pins.
+        Assert.Equal(TimeSpan.FromMilliseconds(300), PopQuizEffect.AffirmationDelay);
+        Assert.Equal(TimeSpan.FromMilliseconds(1500), PopQuizEffect.AffirmationDwell);
+
         using var rig = new Rig();
         rig.Enable();
         rig.Effect.Arm();
@@ -295,7 +303,7 @@ public class PopQuizModuleTests
         Assert.Empty(rig.Presence.Updates);
         Assert.Equal(PopQuizResolution.None, rig.Effect.LastResolution);
 
-        rig.Clock.Advance(PopQuizEffect.AffirmationDelay - TimeSpan.FromMilliseconds(1));
+        rig.Clock.Advance(TimeSpan.FromMilliseconds(299));
         Assert.Empty(rig.Presence.Updates);
 
         rig.Clock.Advance(TimeSpan.FromMilliseconds(1));
@@ -303,7 +311,7 @@ public class PopQuizModuleTests
         Assert.Equal(ask.Question.Affirmations[ask.Order[1]], affirmation.Question);
         Assert.Equal(0, rig.Presence.Dismissals);
 
-        rig.Clock.Advance(PopQuizEffect.AffirmationDwell - TimeSpan.FromMilliseconds(1));
+        rig.Clock.Advance(TimeSpan.FromMilliseconds(1499));
         Assert.Equal(0, rig.Presence.Dismissals);
 
         rig.Clock.Advance(TimeSpan.FromMilliseconds(1));
@@ -352,8 +360,12 @@ public class PopQuizModuleTests
 
         var grant = Assert.IsType<XpGrant>(rig.Effect.LastGrant);
         Assert.True(grant.Banked);
-        Assert.Equal(PopQuizEffect.AnswerXp, grant.Amount);
-        Assert.Equal(PopQuizEffect.AnswerXp, rig.Ledger!.XpIntoLevel);
+
+        // A LITERAL twenty-five, not PopQuizEffect.AnswerXp: asserting the module's own constant
+        // against itself is a tautology, and a mutation that made it ten passed this fact on the
+        // first sweep. Upstream's number is what this pins (PopQuizWindow.xaml.cs:161).
+        Assert.Equal(25.0, grant.Amount);
+        Assert.Equal(25.0, rig.Ledger!.XpIntoLevel);
 
         // ...and the card then says so, in upstream's own words (Windows/PopQuizWindow.xaml:124).
         rig.Clock.Advance(PopQuizEffect.AffirmationDelay);
