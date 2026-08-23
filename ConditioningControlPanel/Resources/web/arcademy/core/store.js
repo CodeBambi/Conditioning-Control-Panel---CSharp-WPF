@@ -24,6 +24,15 @@
  *   xpPaidDays              : { '<utcDay>': [gameKey] }  the XP ledger: a class
  *                             pays once per UTC day, every later run that day is
  *                             a free replay (payout-result carries retake:true)
+ *   punchCards              : { <gameKey>: {punches, dates[], enrolledAt, house,
+ *                             complete, unlockedAt} }  PUNCHCARD.md §2. Ten holes
+ *                             per class; ArcademyPunchCards mints them from the
+ *                             same `class-ended` that credits attendance, plus the
+ *                             page's one `enrollment-done` frame. A full card IS
+ *                             the room's permanent unlock, and `enrolledAt` is the
+ *                             ONLY enrollment-seen flag there is - derived, so a
+ *                             blob restored from the server mirror suppresses a
+ *                             repeat tutorial for free.
  *
  * PAGE-OWNED:
  *   days   : { '2026-08-19': { classes: { <gameKey>: {grade, zen, at} },
@@ -43,10 +52,13 @@
  * ==========================================================================*/
 
 const DAY_HISTORY_MAX = 30;   // keep the local view small; C# owns the archive
+/** Holes on a punch card. Mirrors ArcademyPunchCards.Holes - the two must agree. */
+export const PUNCH_HOLES = 10;
 
 /** Keys the host mints. The page never writes them (the write would be refused). */
 export const HOST_OWNED_KEYS = Object.freeze([
   'streak', 'perfectAttendance', 'lastAttendanceLocalDate', 'todayClasses', 'xpPaidDays',
+  'punchCards',
 ]);
 const HOST_OWNED = new Set(HOST_OWNED_KEYS);
 
@@ -204,6 +216,58 @@ export function createStore({ bridge, initialMeta, log } = {}) {
       post('merge', 'days', { [localDate]: day });
       return day;
     },
+
+    /* ---------------------- punch cards (HOST-OWNED, read-only) -----------
+     * PUNCHCARD.md §2.2. One card per class; the host mints every hole and
+     * refuses a page write, so everything here reads and nothing writes.
+     * -------------------------------------------------------------------- */
+    /**
+     * One class's card, NORMALIZED - an absent, half-written or hand-edited card
+     * still answers with the full shape, so no caller has to guard six fields.
+     * `punches` is trusted only as far as the two fields that are actually
+     * earned: it is recomputed here the same way ArcademyPunchCards.Normalize
+     * recomputes it in C#, which is what keeps a stale denormalized total from
+     * drawing a hole the host never punched.
+     * @returns {{punches:number, dates:string[], enrolledAt:?string, house:boolean,
+     *            complete:boolean, unlockedAt:?string, enrolled:boolean}}
+     */
+    punchCard(gameKey) {
+      const all = isObj(cache.punchCards) ? cache.punchCards : {};
+      const c = isObj(all[gameKey]) ? all[gameKey] : {};
+      const dates = (Array.isArray(c.dates) ? c.dates : [])
+        .filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d));
+      const seen = [];
+      for (const d of dates) if (seen.indexOf(d) < 0) seen.push(d);
+      seen.sort();
+      const enrolledAt = (typeof c.enrolledAt === 'string' && c.enrolledAt) ? c.enrolledAt : null;
+      // The house punch is enrollment's second hole and cannot exist without it.
+      const house = !!enrolledAt && c.house === true;
+      const punches = Math.min(PUNCH_HOLES,
+        (enrolledAt ? 1 : 0) + (house ? 1 : 0) + Math.min(PUNCH_HOLES, seen.length));
+      const complete = punches >= PUNCH_HOLES;
+      return {
+        punches,
+        dates: seen.slice(0, PUNCH_HOLES),
+        enrolledAt,
+        house,
+        complete,
+        unlockedAt: (complete && typeof c.unlockedAt === 'string' && c.unlockedAt) ? c.unlockedAt : null,
+        // DERIVED, never stored: PUNCHCARD §2.2. There is no second flag to keep
+        // in step, and a server-restored card suppresses its tutorial for free.
+        enrolled: !!enrolledAt,
+      };
+    },
+
+    /** Every game key whose card is full - the permanent unlocks (§2.3). */
+    unlockedGames() {
+      const all = isObj(cache.punchCards) ? cache.punchCards : {};
+      const out = Object.create(null);
+      for (const k of Object.keys(all)) if (api.punchCard(k).complete) out[k] = true;
+      return out;
+    },
+
+    /** Holes on a card. Games and screens must not hardcode 10. */
+    get holes() { return PUNCH_HOLES; },
 
     /* ---------------------- attendance (HOST-OWNED, read-only) ------------ */
     /**
