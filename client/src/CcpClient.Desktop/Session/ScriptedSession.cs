@@ -248,13 +248,25 @@ public sealed class ScriptedSessionPhase
 /// round-trips through this type must not lose them, and because the values are what a later
 /// slice's editor and rack read.</para>
 ///
-/// <para><b>Two of them upstream itself never reads.</b> <c>flashScale</c> and
-/// <c>flashSmallSize</c> are written by the definitions and the editor
-/// (<c>Models/Session.cs:264</c>, <c>:367</c>) and shown in the spoiler text (<c>:705</c>), but
-/// <c>ApplySessionSettings</c> never assigns them to anything
+/// <para><b>Neither is applied at START, and the two reach that same outcome for DIFFERENT
+/// reasons — which matters, because only one of them is finished.</b> Both are written by
+/// the definitions and the editor (<c>Models/Session.cs:264</c>, <c>:367</c>) and shown in the
+/// spoiler text (<c>:705</c>), and <c>ApplySessionSettings</c> assigns neither
 /// (<c>Services/Session/SessionEngine.cs:1150-1160</c> assigns frequency, opacity, image count,
-/// clickable, hydra and flash audio — and nothing else). The port does not apply them either; that
-/// is upstream's behaviour, not an omission here.</para>
+/// clickable, hydra and flash audio — and nothing else). There the resemblance ends.</para>
+///
+/// <para><c>flashSmallSize</c> is genuinely dead upstream: grepping the shipping tree for it finds
+/// only writes — the session and program definitions and its own declaration — and no read
+/// at all. Not applying it is upstream's behaviour.</para>
+///
+/// <para><c>flashScale</c> is NOT dead, and an earlier draft of this comment said it was. Upstream
+/// reads it in the ramp — <c>UpdateRampingValues</c> at
+/// <c>Services/Session/SessionEngine.cs:596-599</c>: when <c>FlashEnabled</c> and
+/// <c>FlashScale != 100</c> it pins <c>rampedScale</c> for the whole session and pushes it through
+/// <c>AppSettings.SetSessionFlashRamp</c> (<c>Models/AppSettings.cs:908</c>), an ephemeral
+/// override that is deliberately not persisted. So a session file that sets it DOES change what
+/// the user sees. It is unapplied here only because <c>UpdateRampingValues</c> is out of slice 1
+/// entirely, and it is owed to whichever slice ports the ramp — not written off.</para>
 /// </summary>
 public sealed class ScriptedSessionSettings
 {
@@ -279,8 +291,9 @@ public sealed class ScriptedSessionSettings
     /// <summary>Upstream <c>FlashOpacityEnd</c> (<c>:829</c>). Ramp destination.</summary>
     public int FlashOpacityEnd { get; set; } = 100;
 
-    /// <summary>Upstream <c>FlashScale</c> (<c>:830</c>) — written by the editor, read by nobody at
-    /// runtime.</summary>
+    /// <summary>Upstream <c>FlashScale</c> (<c>:830</c>) — not applied at start, but READ by
+    /// the ramp (<c>Services/Session/SessionEngine.cs:596-599</c>), so a session that sets it does
+    /// change what the user sees. Unapplied here because the ramp is out of slice 1.</summary>
     public int FlashScale { get; set; } = 100;
 
     /// <summary>Upstream <c>FlashClickable</c>, default true (<c>:831</c>).</summary>

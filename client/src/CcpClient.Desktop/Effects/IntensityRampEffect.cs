@@ -63,8 +63,15 @@ namespace CcpClient.Desktop.Effects;
 /// see <see cref="IntensityRampPresetDocument"/>); the tray notification that accompanies the
 /// auto-stop (<c>MainWindow.StartStop.cs:552</c>, outside this packet's File Scope); and the
 /// <c>!sessionActive</c> guard that makes the visual links stand down while a SCRIPTED preset
-/// session runs (<c>:490,507,513,521</c>) — the port has no scripted session, so that condition is
-/// constantly false here and the links are always live.</para>
+/// session runs (<c>:490,507,513,521</c>) — that condition is constantly false here and the links
+/// are always live.</para>
+///
+/// <para><b>Amended:</b> "the port has no scripted session" was true when this was written and is
+/// now too strong. <see cref="Session.ScriptedSessionRun"/> is its runtime core. The SENTENCE
+/// above still holds, for a different and weaker reason: nothing in the composition root
+/// constructs one, so no surface can start a scripted session in this build, and nothing wires
+/// this effect's stand-down to a session that is running. When a surface does start one, this
+/// guard is owed and is NOT written yet.</para>
 /// </summary>
 public sealed class IntensityRampEffect : OwnedSessionEffect
 {

@@ -50,9 +50,14 @@ public enum RampCurve
 ///
 /// <para><b>Upstream shares this helper between two ramp systems</b> — the manual Intensity Ramp
 /// ported here and the scripted preset session's own ramp
-/// (<c>Services/Session/SessionEngine.UpdateRampingValues</c>). The port has only the first: the
-/// scripted session is explicitly not ported (see <see cref="Session.SessionEngine"/>'s remarks),
-/// so this class has exactly one caller here where it has two upstream.</para>
+/// (<c>Services/Session/SessionEngine.UpdateRampingValues</c>). The port has only the first, so
+/// this class has exactly one caller here where it has two upstream.</para>
+///
+/// <para><b>Amended:</b> the reason changed and the count did not. The scripted session's runtime
+/// core IS ported now (<see cref="Session.ScriptedSessionRun"/>), but
+/// <c>UpdateRampingValues</c> (<c>Services/Session/SessionEngine.cs:564</c>) is out of that
+/// slice deliberately, so the second caller still does not exist. It is owed to whichever slice
+/// ports the ramp — and that slice's curve arithmetic is already here.</para>
 /// </summary>
 public static class RampCurves
 {

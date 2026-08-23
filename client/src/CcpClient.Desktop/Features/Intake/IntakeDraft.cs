@@ -4,9 +4,13 @@ namespace CcpClient.Desktop.Features.Intake;
 
 /// <summary>
 /// The session-drafting sink (the degraded-delivery contract encoded): a completed
-/// intake run drafts a session document that is **marked never-runnable** — no session
-/// engine exists in greenfield (the row's verbatim contract: "the drafted session is never
-/// runnable (no session engine — punches pend forever, silently)").
+/// intake run drafts a session document that is **marked never-runnable** (the row's verbatim
+/// contract: "the drafted session is never runnable (no session engine — punches pend forever,
+/// silently)"). The premise moved and the outcome did not: a scripted session runtime core now
+/// exists (<see cref="Session.ScriptedSessionRun"/>), but this draft is still never-runnable,
+/// now for two narrower reasons — nothing in the composition root constructs a run, and this
+/// draft is not a <c>.session.json</c> document that <see cref="Session.ScriptedSession"/>
+/// reads.
 ///
 /// Port scope (pre-approach consult + advisor Correction 1, both adopted): the deterministic
 /// core of WPF QuizSessionGenerator.GenerateSession(QuizRunResult) —

@@ -184,8 +184,11 @@ public sealed class ScriptedSessionDials
     /// delayed feature starts are not in this slice. The dial state at t=0 IS ported: a feature
     /// whose start minute is not zero is applied OFF, exactly as upstream applies it
     /// (<c>:1288-1296</c> for pink, <c>:1299-1307</c> for spiral, <c>:1315</c> for bubbles).</item>
-    /// <item><c>flashScale</c> and <c>flashSmallSize</c> — upstream itself never reads them at
-    /// runtime (see <see cref="ScriptedSessionSettings"/>).</item>
+    /// <item><c>flashSmallSize</c> — upstream never reads it at runtime at all — and
+    /// <c>flashScale</c>, which upstream DOES read, but only in the ramp
+    /// (<c>Services/Session/SessionEngine.cs:596-599</c>), which is not ported. See
+    /// <see cref="ScriptedSessionSettings"/>: the first is upstream's behaviour, the second is
+    /// this slice's boundary.</item>
     /// </list>
     /// </remarks>
     public void Apply(ScriptedSessionSettings settings)

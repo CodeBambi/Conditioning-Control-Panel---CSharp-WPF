@@ -50,9 +50,15 @@ public static class LockCardSchedule
     /// How long the caller expects to keep running, or null for open-ended. <b>The port always
     /// passes null</b>, and that is upstream's own dashboard path rather than a simplification: the
     /// clamp exists for the session engine's remaining-minutes window (<c>:54-58</c>, issue #736)
-    /// and this port has no scripted session with a declared length (D99). Kept as a parameter, and
-    /// pinned in both arms, so the day the port grows one the arithmetic is already here rather than
+    /// and the port's own dashboard has no declared length to pass (D99). Kept as a parameter, and
+    /// pinned in both arms, so the day a caller has one the arithmetic is already here rather than
     /// re-derived.
+    ///
+    /// <para><b>Amended:</b> "this port has no scripted session with a declared length" is no
+    /// longer true — <see cref="Session.ScriptedSession"/> carries
+    /// <c>DurationMinutes</c> and <see cref="Session.ScriptedSessionRun"/> exposes the remaining
+    /// window. The parameter this comment kept alive is exactly what that caller will pass; it is
+    /// not wired, because nothing constructs a run yet.</para>
     /// </param>
     /// <param name="roll">A uniform sample in [0,1).</param>
     public static double FirstCardDelayMinutes(int perHour, double? windowMinutes, double roll)
