@@ -92,9 +92,10 @@ public class TestTimingGuardTests
         foreach (var file in Directory.EnumerateFiles(testsRoot, "*.cs", SearchOption.AllDirectories))
         {
             var normalized = file.Replace('\\', '/');
-            if (ExemptFileNames.Any(e => normalized.EndsWith("/" + e, StringComparison.Ordinal)))
+            if (normalized.Contains("/obj/", StringComparison.Ordinal)
+                || ExemptFileNames.Any(e => normalized.EndsWith("/" + e, StringComparison.Ordinal)))
             {
-                continue; // the helper and this guard
+                continue; // SDK-generated sources nobody can edit, the helper, and this guard
             }
 
             var relative = normalized[(normalized.IndexOf("tests/", StringComparison.Ordinal) + "tests/".Length)..];

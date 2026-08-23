@@ -835,6 +835,18 @@
       "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS)"
     },
     {
+      "key": "CcpClient.Tests/UnboundedWaitGuardTests.cs::UnboundedWaitGuardTests.NoUnboundedJoinsOrInjectedBudgetsInClientTests",
+      "path": "CcpClient.Tests/UnboundedWaitGuardTests.cs",
+      "line": 111,
+      "method": "UnboundedWaitGuardTests.NoUnboundedJoinsOrInjectedBudgetsInClientTests",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "the wall-clock guard's shape exactly: fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS). The obj/ filter inside the walk skips only SDK-generated sources, which have no author to act on a finding"
+    },
+    {
       "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_HalfPresentWpfTree_Fails_RefusesToSkip",
       "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
       "line": 447,

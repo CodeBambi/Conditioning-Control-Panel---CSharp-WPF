@@ -32,7 +32,7 @@ public class DtrhMetaTests
             Slots = new DtrhSaveSlots(
                 new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), new Sink(Log)),
                 Dir.Root);
-            Slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            Slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult(); // wallclock-allow: DtrhSaveSlots.StartAsync only awaits PersistenceStore starts, each already complete when handed over (pinned by PersistenceStoreTests) — the chain runs inline and this bridge waits on nothing
             Stats = new DtrhAssetStats(Slots.AssetStatsStore, m => Log.Add(m));
             ResetMeta(testMode: false);
         }
@@ -55,7 +55,7 @@ public class DtrhMetaTests
 
         public void Dispose()
         {
-            Slots.StopAsync().GetAwaiter().GetResult();
+            Slots.StopAsync().GetAwaiter().GetResult(); // wallclock-allow: DtrhSaveSlots.StopAsync only awaits PersistenceStore stops, which cancel a generation and touch no file — the chain runs inline and this bridge waits on nothing
             Dir.Dispose();
         }
 

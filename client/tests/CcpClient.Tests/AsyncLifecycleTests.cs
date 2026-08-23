@@ -176,7 +176,7 @@ public class AsyncLifecycleTests
             using var registration = token.Register(() =>
             {
                 callbackEntered.SetResult();
-                releaseTheCallback.Wait(); // deterministic signal; the finally below always sets it
+                releaseTheCallback.Wait(); // wallclock-allow: the wedge IS the subject — a cancellation callback still running is what the fact observes, and the test's finally releases it on every path
                 stopped.TrySetResult();
             });
 

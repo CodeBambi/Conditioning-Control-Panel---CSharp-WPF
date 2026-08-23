@@ -7,15 +7,20 @@ namespace CcpClient.Tests;
 /// The unbounded-wait guard: the sibling of <see cref="TestTimingGuardTests"/>, and deliberately
 /// the SAME idiom rather than a second one (bound the wait, or carry the shared
 /// <c>// wallclock-allow: &lt;reason&gt;</c> marker AND a pin here). The wall-clock guard bans
-/// timing LITERALS at the wait. The two shapes below hide a wait where no literal is visible at
+/// timing LITERALS at the wait. The shapes below hide a wait where no literal is visible at
 /// the wait at all, so neither that token ban nor an ordinary read of the diff sees them:
 ///
-/// <para>(a) UNBOUNDED JOIN — <c>Task.WhenAll</c>/<c>Task.WaitAll</c>, or an <c>await</c> of a
-/// <c>TaskCompletionSource</c> signal, with no budget around it. This suite has no per-test
-/// timeout, so a participant that never completes HANGS the whole run instead of failing it: the
-/// run dies by outer kill with no failing test name, which is the one failure mode a suite must
-/// never have. The bounded forms are <c>TestWait.Until</c> (a window plus a verdict) or a
-/// token-bounded <c>WaitAsync</c>.</para>
+/// <para>(a) UNBOUNDED JOIN OR BLOCKING WAIT — <c>Task.WhenAll</c>/<c>Task.WaitAll</c>, an
+/// <c>await</c> of a <c>TaskCompletionSource</c> signal, or a bare blocking wait
+/// (<c>.Wait()</c>, <c>.WaitOne()</c>, <c>.GetAwaiter().GetResult()</c>), with no budget around
+/// it. This suite has no per-test timeout, so a participant that never completes HANGS the whole
+/// run instead of failing it: the run dies by outer kill with no failing test name, which is the
+/// one failure mode a suite must never have. The bounded forms are <c>TestWait.Until</c>/
+/// <c>UntilSync</c> (a window plus a verdict) or a token-bounded <c>WaitAsync</c>.
+/// The ARGUMENT-LESS spelling is the whole point of covering the blocking forms here: the timed
+/// spellings carry a literal and are already the wall-clock guard's, so without this shape a
+/// BOUNDED five-second wait needed a marker and a pin while the UNBOUNDED form that kills the run
+/// needed nothing — a severity inversion between two guards that share one marker.</para>
 ///
 /// <para>(b) INJECTED BUDGET — a deadline handed INTO the subject by name
 /// (<c>longPollTimeout:</c>, <c>teardownBudget:</c>, a <c>…Budget</c> field) and then waited on.
@@ -25,13 +30,22 @@ namespace CcpClient.Tests;
 /// outcome and belongs on <see cref="TestWait.InjectedBudget"/>.</para>
 ///
 /// <para>SCOPE, STATED PLAINLY BECAUSE IT IS THE HONEST MEASURE OF THE GUARD: this scans
-/// <c>client/tests/**</c> only, exactly as the wall-clock guard does. The known unbounded join in
-/// PRODUCT code — <c>ApplicationHost.ShutdownAsync</c> awaiting each participant's
-/// <c>StopAsync()</c> with no budget of its own, beside an
-/// <c>OperationRegistry.CancelAndDrainAsync</c> that DOES bound its drain — is outside this scan,
-/// and would not be caught by these shapes even if the scan were widened: a bare
-/// <c>await x.StopAsync()</c> is textually indistinguishable from every ordinary await. That one is
-/// a lifecycle fix, not a lint finding, and this guard does not claim it.</para>
+/// <c>client/tests/**</c> HAND-WRITTEN sources only, exactly as the wall-clock guard does.
+/// Generated sources under <c>obj/</c> are skipped: the xunit v3 entry point the SDK writes is
+/// itself a <c>.GetAwaiter().GetResult()</c> bridge, and a lint that reds on code no author can
+/// edit teaches only that the lint is wrong.</para>
+///
+/// <para>Three unbounded shapes are deliberately NOT covered, and naming them is cheaper than a
+/// reader assuming they were: <c>Thread.Join()</c>, a bare <c>.Result</c> and a bare
+/// <c>lock</c>/<c>Monitor</c> contention. The first two are indistinguishable by name from
+/// ordinary property reads and short-lived thread joins in this tree; the third has no textual
+/// form at all. The known unbounded join in PRODUCT code —
+/// <c>ApplicationHost.ShutdownAsync</c> awaiting each participant's <c>StopAsync()</c> with no
+/// budget of its own, beside an <c>OperationRegistry.CancelAndDrainAsync</c> that DOES bound its
+/// drain — is outside this scan, and would not be caught by these shapes even if the scan were
+/// widened: a bare <c>await x.StopAsync()</c> is textually indistinguishable from every ordinary
+/// await. That one is a lifecycle fix, not a lint finding, and this guard does not claim
+/// it.</para>
 /// </summary>
 public class UnboundedWaitGuardTests
 {
@@ -53,6 +67,40 @@ public class UnboundedWaitGuardTests
         ("CcpClient.Tests/AiMemoryPipelineTests.cs", "await _gate.Task.ConfigureAwait(false);", 1),
         ("CcpClient.Tests/AiOperationPipelineTests.cs", "await _gate.Task.ConfigureAwait(false);", 1),
         ("CcpClient.Tests/AsyncLifecycleTests.cs", "await stopped.Task;", 2),
+        // Shape (a), blocking form, population 1: the WEDGE IS THE SUBJECT. Each of these parks a
+        // thread INSIDE a product call (a cancellation callback, a native construct/dispose/init/
+        // enumerate, a teardown holding the lifecycle lock) so the fact can observe what the
+        // product does while it is still in there. The test releases every one of them.
+        ("CcpClient.Tests/AsyncLifecycleTests.cs", "releaseTheCallback.Wait();", 1),
+        ("CcpClient.Tests/MovingEffectSpineTests.cs", "_gate.Wait();", 1),
+        ("CcpClient.Tests/SoundArbitrationTests.cs", "ConstructGate?.Wait();", 1),
+        ("CcpClient.Tests/SoundArbitrationTests.cs", "DisposeGate?.Wait();", 1),
+        ("CcpClient.Tests/SoundArbitrationTests.cs", "teardownMayFinish.Wait();", 1),
+        ("CcpClient.Tests/SoundArbitrationTests.cs", "release.Wait();", 2),
+        // Shape (a), blocking form, population 2: a SYNC-OVER-ASYNC BRIDGE over a task that is
+        // already complete when the caller receives it. PersistenceStore.StartAsync/StopAsync run
+        // on the calling thread and return Task.CompletedTask (PersistenceStore.cs:179-217, pinned
+        // by PersistenceStoreTests.StartAsync_ReturnsACompletedTask_...), so there is no wait to
+        // bound; the wrappers below (AiMemoryStore, CompanionParticipant, DtrhSaveSlots) only
+        // forward to it. If any of them ever grows real I/O, the marker becomes false and the site
+        // must move to TestWait — which is why the reason names the mechanism, not the intent.
+        ("CcpClient.Tests/AiMemoryPipelineTests.cs", "Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/AiMemoryPromptAssemblyTests.cs", "Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/AiReplyHygienePipelineTests.cs", "Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/AssetActivePoolTests.cs", "store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/BarkPipelineTests.cs", "store.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/CompanionViewModelTests.cs", "Participant.StopAsync().GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/DtrhBarkCompositionTests.cs", "store.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/DtrhMetaTests.cs", "Slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/DtrhMetaTests.cs", "Slots.StopAsync().GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/GradedRunAwardsTests.cs", "store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/IntakePassServiceTests.cs", "store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/IntakePunchCardTests.cs", "store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
+        ("CcpClient.HeadlessTests/DtrhSlotPickerHeadlessTests.cs", "slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
+        // Shape (a), blocking form, population 3: the awaited task ALREADY carries a budget, so the
+        // block inherits it. Bare in the source only because the bound is one frame further out.
+        ("CcpClient.Tests/AudioObservations.cs", ".GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/SchedulerModuleTests.cs", ".GetAwaiter().GetResult();", 1),
         // Shape (b): the budget's elapsing IS the subject (TestWait population 2).
         ("CcpClient.Tests/DtrhLoopbackContractTests.cs", "longPollTimeout: TimeSpan.FromMilliseconds(200));", 1),
         ("CcpClient.Tests/SoundArbitrationTests.cs", "private static readonly TimeSpan GiveUpBudget = TimeSpan.FromMilliseconds(200);", 1),
@@ -71,7 +119,11 @@ public class UnboundedWaitGuardTests
         foreach (var file in Directory.EnumerateFiles(testsRoot, "*.cs", SearchOption.AllDirectories))
         {
             var normalized = file.Replace('\\', '/');
-            if (ExemptFileNames.Any(e => normalized.EndsWith("/" + e, StringComparison.Ordinal)))
+            // obj/ holds SDK-generated sources nobody can edit — the xunit v3 entry point is itself
+            // a .GetAwaiter().GetResult() bridge, so scanning it would red the guard on a file with
+            // no author.
+            if (normalized.Contains("/obj/", StringComparison.Ordinal)
+                || ExemptFileNames.Any(e => normalized.EndsWith("/" + e, StringComparison.Ordinal)))
             {
                 continue;
             }
@@ -149,6 +201,27 @@ public class UnboundedWaitGuardTests
     }
 
     [Fact]
+    public void Scan_FlagsABareBlockingWait_ButNotATimedOne()
+    {
+        // THE SEVERITY INVERSION THIS SHAPE CLOSES. The wall-clock guard bans `.Wait(` with a
+        // literal, so a BOUNDED five-second wait needed a marker and a pin — while the unbounded
+        // spelling, the one that takes the run down with no failing test name, needed nothing.
+        var finding = Assert.Single(UnboundedWaitScan.Scan("        gate.Wait();\n"));
+        Assert.Equal("blocking wait", finding.Shape);
+        Assert.Equal("gate.Wait();", finding.Code);
+        Assert.Equal("blocking wait", Assert.Single(
+            UnboundedWaitScan.Scan("        h.StartAsync(default).GetAwaiter().GetResult();\n")).Shape);
+        Assert.Equal("blocking wait", Assert.Single(UnboundedWaitScan.Scan("        handle.WaitOne();\n")).Shape);
+
+        // The timed spellings stay the wall-clock guard's, and by BOTH mechanisms: the
+        // argument-less pattern never matches them, and the deferral to that guard's token list
+        // drops the line anyway. The first sample is CONCATENATED because the wall-clock guard
+        // scans THIS file and would otherwise read its own banned token here.
+        Assert.Empty(UnboundedWaitScan.Scan("        gate.Wait(" + "TimeSpan.FromSeconds(5));\n"));
+        Assert.Empty(UnboundedWaitScan.Scan("        gate.Wait(5000);\n"));
+    }
+
+    [Fact]
     public void Scan_FlagsABudgetInjectedByName_ButNotTheSharedOne()
     {
         var finding = Assert.Single(UnboundedWaitScan.Scan(
@@ -219,6 +292,13 @@ internal static class UnboundedWaitScan
     [
         ("join", new Regex(@"Task\.(?:WhenAll|WaitAll)\s*\(", RegexOptions.Compiled), true),
         ("signal await", new Regex(@"await\s+[A-Za-z_][A-Za-z0-9_.]*\.Task\b", RegexOptions.Compiled), true),
+        // A BLOCKING wait, matched only in its ARGUMENT-LESS spelling. Every timed spelling carries
+        // a literal at the wait and is therefore already the wall-clock guard's (see the deferral
+        // to its token list below); what is left here is the form that waits forever, which is the
+        // one this suite cannot survive.
+        ("blocking wait", new Regex(
+            @"\.(?:Wait|WaitOne)\s*\(\s*\)|\.GetAwaiter\(\)\s*\.\s*GetResult\(\s*\)",
+            RegexOptions.Compiled), true),
         // A deadline handed in by NAME. Deliberately name-driven: a bare TimeSpan literal is an
         // ordinary data value 300+ times over in this suite (durations, cooldowns, session lengths),
         // so a shape-only rule would be noise nobody could act on. The `(?<![=!<>])[:=](?!=)`

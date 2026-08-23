@@ -150,7 +150,7 @@ public sealed class DtrhBarkCompositionTests
                 new SilentLogSink(),
                 Path.Combine(dataDirectory, "companion.json"),
                 CompanionStateDocument.CurrentSchemaVersion);
-            store.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+            store.StartAsync(CancellationToken.None).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
 
             var pipeline = DtrhBarkRouting.CreatePipeline(arbitration, store, dataDirectory, _ => { });
             return new Harness(dataDirectory, arbitration, store, pipeline);

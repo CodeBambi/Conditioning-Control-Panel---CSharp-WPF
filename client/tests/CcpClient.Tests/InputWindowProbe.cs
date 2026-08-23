@@ -610,7 +610,12 @@ internal static class InputWindowProbe
 
             parked = new ParkedWindow(thread);
             thread.Start();
-            parked._ready.Wait();
+            // BOUNDED, not pinned: the wedge is not the subject here, it is bring-up. If the thread
+            // dies before Set() (a failed CreateWindowEx, a Win32 throw), a bare Wait() takes the
+            // whole run down with no failing test name; the window turns that into one failure.
+            TestWait.UntilSync(
+                () => parked._ready.IsSet,
+                "the parked input window thread to create and focus its window");
             return parked;
         }
 

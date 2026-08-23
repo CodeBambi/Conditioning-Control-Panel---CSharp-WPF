@@ -58,7 +58,7 @@ internal static class AudioObservations
                         return peakWentNonZero;
                     },
                     "the OS's own peak meter to read a non-zero level on this process's audio stream")
-                    .GetAwaiter().GetResult();
+                    .GetAwaiter().GetResult(); // wallclock-allow: the awaited task is the caller's injected TestWait window (AudioCapabilityTests.WaitUntil), so this block is bounded by it and the expiry is caught below
             }
             catch (Exception)
             {

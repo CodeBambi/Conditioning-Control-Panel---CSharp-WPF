@@ -634,7 +634,7 @@ public sealed class BarkPipelineTests
             new ListLogSink(),
             path,
             CompanionStateDocument.CurrentSchemaVersion);
-        store.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+        store.StartAsync(CancellationToken.None).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
 
         var resolver = new RecordingResolver();
         var rules = BarkRuleLoader.Parse(DefaultBarkRules.ManifestJson, _ => { });

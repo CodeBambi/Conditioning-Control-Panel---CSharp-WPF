@@ -45,7 +45,7 @@ public sealed class IntakePassServiceTests : IDisposable
             new SinkAdapter(_log),
             Path.Combine(_root, Guid.NewGuid().ToString("N"), "intake_settings.json"),
             IntakeSettingsDocument.CurrentSchemaVersion);
-        store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+        store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
         return store;
     }
 
