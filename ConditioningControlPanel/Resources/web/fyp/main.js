@@ -69,11 +69,18 @@ let settings = {
 // ---- online source state (Scrolller via the host) ----
 let remoteAssets = [];      // appended online entries, session-scoped
 let onlineCatalog = [];     // [{id,label,subs,selected}] from init
-let customSubs = [];        // user-added subreddit names
+let customSubs = [];        // user-added subs: [{name, ok, videoCount}] (ok null = never probed)
+let pendingSubs = [];       // names posted to the host, awaiting a 'sub-probe' verdict
 let onlineOk = true;        // last online-status verdict
 let remoteReqInFlight = false;
 let lastRemoteReqAt = 0;
 let remoteDryUntil = 0;     // backoff after an ok-but-empty batch (channels drained)
+let remoteDryStep = 0;      // rung of the escalating dry ladder (reset by any fresh clip)
+let remoteExhausted = false; // every channel drained: the feed is recycling on purpose
+let exhaustionNoticed = false; // the on-feed note is a one-per-session courtesy
+// Which niche rows have their sub list open. Page memory only — a disclosure
+// triangle is not a preference worth a settings round-trip.
+const openNicheSubs = new Set();
 const seenRemote = new Set();  // remote asset ids that already played (buffer freshness)
 let pendingSource = null;   // source waiting on the consent card
 let feed = null;
@@ -114,7 +121,13 @@ function setting(key, value) {
 const REMOTE_LOWWATER = 60;         // ask for more when fewer unseen than this
 const REMOTE_CAP = 1500;            // stop growing the session pool past this
 const REMOTE_REQ_TIMEOUT_MS = 20000; // a request with no reply may be retried after this
-const REMOTE_DRY_BACKOFF_MS = 30000; // all channels came back empty: breathe
+const REMOTE_OFFLINE_BACKOFF_MS = 30000; // transport failure: breathe, then retry
+// All channels came back with nothing NEW. Escalating, because "drained" is usually
+// permanent for the session: a single-sub niche like r/censoredporn is ~64 clips in
+// total, so a flat 30 s retry is just a slow version of the poll loop this replaces.
+// Any batch with fresh ids resets the ladder (a sub that gained posts revives).
+const REMOTE_DRY_LADDER_MS = [30000, 120000, 600000];
+const CUSTOM_SUB_CAP = 20;          // mirror of the host's Take(20)
 
 const sourceUsesRemote = () => settings.source !== 'library';
 const isRemoteId = (id) => typeof id === 'string' && id.startsWith('scrolller/');
@@ -156,7 +169,7 @@ function activeChannelSet() {
   for (const n of onlineCatalog) {
     if (n.selected) for (const s of n.subs || []) set.add(String(s).toLowerCase());
   }
-  for (const c of customSubs) set.add(String(c).toLowerCase());
+  for (const c of customSubs) set.add(String(c.name).toLowerCase());
   if (set.size === 0) {
     for (const s of onlineCatalog[0]?.subs || []) set.add(String(s).toLowerCase());
   }
@@ -477,21 +490,8 @@ function updateOnlineUi() {
     nicheBox.appendChild(chip);
   }
 
-  const customBox = $('custom-sub-chips');
-  customBox.innerHTML = '';
-  for (const sub of customSubs) {
-    const chip = document.createElement('button');
-    chip.className = 'niche-chip custom selected';
-    chip.title = 'Remove';
-    chip.innerHTML = `r/${sub}<span class="chip-x">✕</span>`;
-    chip.addEventListener('click', () => {
-      customSubs = customSubs.filter((s) => s !== sub);
-      setting('onlineCustomSubs', customSubs.slice());
-      updateOnlineUi();
-      pruneRemoteToChannels();
-    });
-    customBox.appendChild(chip);
-  }
+  renderNicheSubs();
+  renderCustomSubChips();
 
   const status = $('online-status');
   if (!sourceUsesRemote()) {
@@ -499,11 +499,134 @@ function updateOnlineUi() {
   } else if (!onlineOk) {
     status.textContent = 'Online feed unreachable - retrying as you scroll.';
     status.classList.remove('hidden');
+  } else if (remoteExhausted && remoteAssets.length > 0) {
+    // Say it out loud instead of quietly re-serving: the pool is the whole niche.
+    status.textContent = exhaustionLine(remoteAssets.length) + ' Add another niche for more.';
+    status.classList.remove('hidden');
   } else if (remoteAssets.length > 0) {
     status.textContent = `${remoteAssets.length} online clips this session`;
     status.classList.remove('hidden');
   } else {
     status.classList.add('hidden');
+  }
+}
+
+function exhaustionLine(n) {
+  return `You've seen all ${n} clips in this niche - reshuffling.`;
+}
+
+/**
+ * B2: one grey line per selected niche naming the subs it actually pulls from.
+ * `n.subs` already rides in on the init payload, so this is pure disclosure - no
+ * host round-trip, no setting. Collapsed it is a count (one line per niche, the
+ * card is a 320px column); open it lists every r/ the niche resolves to, so a
+ * "tiny" preset like Bambi Sleep cannot hide what it really is.
+ * Rendered in its own container because #niche-chips is a flex-wrap chip row -
+ * a full-width row inside it would fight the wrap.
+ */
+function renderNicheSubs() {
+  const box = $('niche-subs');
+  box.innerHTML = '';
+  const selected = onlineCatalog.filter((n) => n.selected);
+  // Nothing ticked = the host falls back to the first niche (activeChannelSet does
+  // the same). Show THAT row rather than an empty gap, so the picker never implies
+  // the feed is off.
+  const rows = selected.length ? selected : onlineCatalog.slice(0, 1);
+  for (const n of rows) {
+    const subs = dedupeSubs(n.subs);
+    if (!subs.length) continue;
+    const open = openNicheSubs.has(n.id);
+    const label = n.label + (selected.length ? '' : ' (default)');
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'niche-subs-row' + (open ? ' open' : '');
+    row.textContent = open
+      ? `▾ ${label} · ${subs.map((s) => 'r/' + s).join(' · ')}`
+      : `▸ ${label} · ${subs.length} sub${subs.length === 1 ? '' : 's'}`;
+    row.title = open ? 'Hide the subreddits' : 'Show the subreddits';
+    row.addEventListener('click', () => {
+      if (open) openNicheSubs.delete(n.id); else openNicheSubs.add(n.id);
+      renderNicheSubs(); // only this list moves - no need to rebuild the whole card
+    });
+    box.appendChild(row);
+  }
+}
+
+/** A niche's own list, case-insensitively deduped. Deliberately NOT deduped across
+ *  niches: sissyhypno really is in both Hypno and Sissy, and hiding it from one of
+ *  them would misrepresent that niche's contents. */
+function dedupeSubs(subs) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of subs || []) {
+    const s = String(raw || '').trim();
+    if (!s) continue;
+    const k = s.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s);
+  }
+  return out;
+}
+
+/**
+ * Custom-sub pills, three states plus pending:
+ *   orange  - the host probed Scrolller and it answered (ok === true)
+ *   pink dashed - stored before verdicts existed (ok === null): unproven, still used
+ *   muted "?"   - the probe said "not there" (ok === false); kept so the user can see
+ *                 why it is dead instead of it silently vanishing
+ * A pending pill is inert (no remove) - it is a receipt for the request in flight.
+ */
+function renderCustomSubChips() {
+  const customBox = $('custom-sub-chips');
+  customBox.innerHTML = '';
+  for (const name of pendingSubs) {
+    const chip = document.createElement('span');
+    chip.className = 'niche-chip custom pending';
+    chip.textContent = `r/${name}…`;
+    chip.title = 'Checking Scrolller…';
+    customBox.appendChild(chip);
+  }
+  for (const entry of customSubs) {
+    const verified = entry.ok === true;
+    const missing = entry.ok === false;
+    const chip = document.createElement('button');
+    chip.className = 'niche-chip custom selected'
+      + (verified ? ' verified' : missing ? ' unverified' : '');
+    if (verified) {
+      // videoCount 0 is a real answer (the sub exists, it just has no video) — say
+      // "stills only" rather than a bare 0, and say nothing at all when the host
+      // could not read a count.
+      chip.title = entry.videoCount === 0 ? 'verified · stills only'
+        : entry.videoCount == null ? 'verified on Scrolller'
+        : `verified · ${entry.videoCount} clips on Scrolller`;
+    } else if (missing) {
+      chip.title = "Scrolller didn't have this sub - click to remove";
+    } else {
+      chip.title = 'Remove';
+    }
+    // Built from text nodes, not innerHTML: the name can come from an older
+    // settings file and is never trusted as markup.
+    chip.append(`r/${entry.name}`);
+    if (missing) {
+      const warn = document.createElement('span');
+      warn.className = 'chip-warn';
+      warn.textContent = '?';
+      chip.appendChild(warn);
+    }
+    const x = document.createElement('span');
+    x.className = 'chip-x';
+    x.textContent = '✕';
+    chip.appendChild(x);
+    chip.addEventListener('click', () => {
+      customSubs = customSubs.filter((s) => s !== entry);
+      // Removal still commits from this side (the host only owns the ADD, which it
+      // commits itself once the probe comes back ok).
+      setting('onlineCustomSubs', customSubs.map((s) => s.name));
+      updateOnlineUi();
+      pruneRemoteToChannels();
+    });
+    customBox.appendChild(chip);
   }
 }
 
@@ -517,17 +640,108 @@ function sanitizeSub(raw) {
   return s.length >= 2 && s.length <= 40 ? s : null;
 }
 
+/** Init (or an older host) may hand us plain names; the current host sends verdicts.
+ *  Accept both so a mismatched host/page pair still renders every pill. */
+function normalizeCustomSubs(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const raw of list) {
+    const isObj = raw && typeof raw === 'object';
+    const name = String((isObj ? raw.name : raw) || '').trim();
+    if (!name) continue;
+    const ok = isObj && (raw.ok === true || raw.ok === false) ? raw.ok : null; // null = never probed
+    const vc = isObj && Number.isFinite(raw.videoCount) ? Number(raw.videoCount) : null;
+    out.push({ name, ok, videoCount: vc });
+  }
+  return out;
+}
+
+function showSubError(text) {
+  const el = $('custom-sub-error');
+  el.textContent = text;
+  el.classList.remove('hidden');
+}
+
+function clearSubError() {
+  $('custom-sub-error').classList.add('hidden');
+}
+
+const sameSub = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+/**
+ * Submit a custom sub. Nothing is committed here any more: the page asks the host to
+ * probe Scrolller and the HOST writes the sub into settings only if it answers, so a
+ * typo can never become a permanently dead channel. Until the verdict lands the pill
+ * shows pending and the typed text stays put - the old code silently emptied the box
+ * on bad input, which read as "the app ate it".
+ */
 function addCustomSub() {
   const input = $('custom-sub-input');
-  const clean = sanitizeSub(input.value);
-  if (!clean) { input.value = ''; return; }
-  if (!customSubs.some((s) => s.toLowerCase() === clean.toLowerCase()) && customSubs.length < 20) {
-    customSubs.push(clean);
-    setting('onlineCustomSubs', customSubs.slice());
+  const raw = String(input.value || '').trim();
+  const clean = sanitizeSub(raw);
+  if (!clean) {
+    showSubError(raw ? `"${raw}" isn't a subreddit name` : 'Type a subreddit name first');
+    return;
   }
-  input.value = '';
+  if (customSubs.some((s) => sameSub(s.name, clean)) || pendingSubs.some((s) => sameSub(s, clean))) {
+    showSubError(`r/${clean} is already on the list`);
+    return;
+  }
+  if (customSubs.length + pendingSubs.length >= CUSTOM_SUB_CAP) {
+    showSubError(`That's the limit of ${CUSTOM_SUB_CAP} custom subs - remove one first`);
+    return;
+  }
+  clearSubError();
+  pendingSubs.push(clean);
+  post({ type: 'probe-sub', sub: clean });
   updateOnlineUi();
-  ensureRemoteBuffer();
+}
+
+/** Verdict for one probe. ok:false with no error = Scrolller has no such sub. */
+function onSubProbe(data) {
+  const name = String(data.sub || '').trim();
+  if (!name) return;
+  pendingSubs = pendingSubs.filter((s) => !sameSub(s, name));
+  if (data.ok) {
+    const vc = Number.isFinite(data.videoCount) ? Number(data.videoCount) : null;
+    const existing = customSubs.find((s) => sameSub(s.name, name));
+    if (existing) { existing.ok = true; existing.videoCount = vc; }
+    else customSubs.push({ name, ok: true, videoCount: vc });
+    clearSubError();
+    const input = $('custom-sub-input');
+    // Only clear the box if it still holds THIS sub - the user may already be typing
+    // the next one while the probe is in flight.
+    if (sameSub(sanitizeSub(input.value) || '', name)) input.value = '';
+    updateOnlineUi();
+    pruneRemoteToChannels(); // the new channel joins the batch loop immediately
+    return;
+  }
+  if (data.error === 'offline') showSubError("Couldn't reach Scrolller - try again");
+  else if (data.error === 'invalid') showSubError(`r/${name} isn't a usable subreddit name`);
+  else if (data.error) showSubError(`Couldn't check r/${name} - try again`);
+  else showSubError(`r/${name} isn't on Scrolller`);
+  updateOnlineUi(); // drops the pending pill
+}
+
+let feedNoteTimer = null;
+
+/** A small transient line over the feed itself. Same mechanism as the ghost-mode
+ *  note (#ct-note): fades in, fades out, never takes a click. */
+function showFeedNote(text, ms = 3000) {
+  const el = $('feed-note');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(feedNoteTimer);
+  feedNoteTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+/** First time a session runs the niche dry, tell the user on the FEED — most people
+ *  never open the options card, and silent repetition reads as a broken shuffle.
+ *  Once per session: after that the options status line carries it. */
+function noteExhaustion() {
+  if (exhaustionNoticed || !started || !remoteAssets.length) return;
+  exhaustionNoticed = true;
+  showFeedNote(exhaustionLine(remoteAssets.length));
 }
 
 /** Source chip pressed: consent-gate the first step away from the library. */
@@ -788,6 +1002,7 @@ function wireChrome() {
     if (started) applyConfig(); // same pool → no reset; just re-biases future picks
   });
   $('btn-add-sub').addEventListener('click', addCustomSub);
+  $('custom-sub-input').addEventListener('input', clearSubError);
   $('custom-sub-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); addCustomSub(); }
     e.stopPropagation(); // typing must never page the feed (arrow keys etc.)
@@ -957,7 +1172,8 @@ function onHostMessage(data) {
       settings.audioGlow = settings.audioGlow !== false;
       settings.windowOpacity = clampOpacity(settings.windowOpacity);
       onlineCatalog = Array.isArray(data.online?.niches) ? data.online.niches : [];
-      customSubs = Array.isArray(data.online?.customSubs) ? data.online.customSubs.slice() : [];
+      customSubs = normalizeCustomSubs(data.online?.customSubs);
+      pendingSubs = [];
       // Consent is the source of truth for whether a non-library source can stand.
       if (!settings.onlineConsented && settings.source !== 'library') settings.source = 'library';
       clickThrough = false; // never sticky across a reload
@@ -1029,13 +1245,33 @@ function onHostMessage(data) {
       // in-flight latch, flips the offline notice, and paces the dry-channel backoff.
       remoteReqInFlight = false;
       onlineOk = !!data.ok;
-      if (data.ok && !(data.added > 0)) remoteDryUntil = performance.now() + REMOTE_DRY_BACKOFF_MS;
-      if (!data.ok) remoteDryUntil = performance.now() + REMOTE_DRY_BACKOFF_MS;
+      // `fresh` is the honest count of ids we had never seen. `added` used to be the
+      // raw batch size, which a drained channel still fills with re-served ids — that
+      // is exactly why the backoff below never armed and the page polled every ~1.1 s.
+      const fresh = Number.isFinite(data.fresh) ? Number(data.fresh) : Number(data.added) || 0;
+      const now = performance.now();
+      if (!data.ok) {
+        remoteDryUntil = now + REMOTE_OFFLINE_BACKOFF_MS; // transport, not exhaustion
+      } else if (fresh > 0) {
+        remoteDryStep = 0; // the well refilled: forget the ladder entirely
+        remoteDryUntil = 0;
+      } else {
+        const rung = Math.min(remoteDryStep, REMOTE_DRY_LADDER_MS.length - 1);
+        remoteDryUntil = now + REMOTE_DRY_LADDER_MS[rung];
+        remoteDryStep++;
+      }
+      // `dry` is the host's own verdict (every channel exhausted or cooling); the
+      // second clause covers a host that predates it.
+      remoteExhausted = data.dry === true || (!!data.ok && fresh === 0 && remoteAssets.length > 0);
+      if (remoteExhausted) noteExhaustion();
       updateEmptyState();
       updateOnlineUi();
-      if (data.ok && data.added > 0) ensureRemoteBuffer();
+      if (data.ok && fresh > 0) ensureRemoteBuffer();
       break;
     }
+    case 'sub-probe':
+      onSubProbe(data);
+      break;
     case 'eyeStatus':
       eyeStatus = {
         enabled: !!data.enabled,
@@ -1091,6 +1327,8 @@ Object.defineProperty(window, '__ccpDebug', {
     get activeIdx() { return activeIdx; },
     get remoteCount() { return remoteAssets.length; },
     get remoteSeen() { return seenRemote.size; },
+    get remoteExhausted() { return remoteExhausted; },
+    get remoteDryStep() { return remoteDryStep; },
     get source() { return settings.source; },
   },
 });

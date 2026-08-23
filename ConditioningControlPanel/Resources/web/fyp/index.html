@@ -49,10 +49,14 @@
         <div id="online-config" class="hidden">
           <div class="options-label online-label">Niches</div>
           <div id="niche-chips"></div>
+          <!-- One grey collapsible line per selected niche listing its subs. Its own
+               container because #niche-chips is a flex-wrap chip row. -->
+          <div id="niche-subs"></div>
           <div class="option-row" id="custom-sub-row">
             <input id="custom-sub-input" type="text" placeholder="Add a subreddit (r/…)" spellcheck="false" autocomplete="off">
             <button id="btn-add-sub" class="mini-btn">Add</button>
           </div>
+          <div class="option-status error hidden" id="custom-sub-error"></div>
           <div id="custom-sub-chips"></div>
           <div class="option-status hidden" id="online-status"></div>
         </div>
@@ -145,6 +149,10 @@
       <div class="ct-note-sub">Press <b>Esc</b> or tap the <b>panic key</b> once to take back control.
         The corner buttons (<b>⚙</b> and <b>🔊</b>) stay clickable.</div>
     </div>
+
+    <!-- Transient one-liner over the feed (niche exhausted, etc). Outside #chrome
+         for the same reason as #ct-note: it must survive body.clickthrough. -->
+    <div id="feed-note"></div>
 
     <!-- attention check -->
     <button id="attention" class="hidden" title="tap!">💗</button>
