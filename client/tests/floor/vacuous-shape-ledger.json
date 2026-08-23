@@ -1001,6 +1001,18 @@
       "expectDetected": true,
       "verdict": "not-vacuous",
       "reason": "Same Windows-CCW precondition and the same asserting non-Windows arm as the two entries above. Detach can only be exercised on a subscription that exists, and the subscription needs the CCW; making it cross-platform by reflecting the signal's internal constructor was possible and was REJECTED, because a token this fact invented rather than received would make Assert.Equal(DefaultToken, remove.TokenSeen) tautological and lose the attach-to-detach round trip. The deny decision itself needs no CCW and is asserted everywhere by the eight TheAnswer_* facts over WebViewPermissionDeny.AnswerRequest"
+    },
+    {
+      "key": "CcpClient.Tests/ButtplugHapticSinkTests.cs::ButtplugHapticSinkTests.EveryButtplugLibraryAwaitGoesThroughTheDetachHelper",
+      "path": "CcpClient.Tests/ButtplugHapticSinkTests.cs",
+      "line": 257,
+      "method": "ButtplugHapticSinkTests.EveryButtplugLibraryAwaitGoesThroughTheDetachHelper",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists appears only inside Assert.True at body depth 0 — the predicate IS the assertion, and a RealButtplugSession.cs that moved or vanished FAILS this guard rather than silencing it. That is the stated idiom of the guard it follows (DataRootChokePointGuardTests.cs:32): a guard never skips"
     }
   ]
 }
