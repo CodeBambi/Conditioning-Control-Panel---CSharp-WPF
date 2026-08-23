@@ -2771,6 +2771,10 @@ public class OverlayService : IDisposable
         // pass after each mandatory video. Un-timeout-able Win32 - so name it for the next hang
         // report instead (VideoDiag.UiScope).
         using var _uiMark = VideoDiag.UiScope("OverlayService.ReassertZOrder");
+        // Mid drag / display-change storm the sweep would poke layered windows whose composition
+        // surfaces WPF may be rebuilding synchronously (the mixed-DPI drag hang) — stand down, same
+        // as ReassertBounds. The 500ms timer re-runs it the moment the storm passes.
+        if (Services.UI.DisplayChangeCoordinator.RenderQuiesced) return false;
         bool anyRecovered = false;
 
         // While a mandatory/session video is playing, keep the overlays in the topmost band but

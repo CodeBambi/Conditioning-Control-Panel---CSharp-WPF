@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -74,7 +74,51 @@ namespace ConditioningControlPanel.Services
         /// app-raised constants, so a mod's rule under this trigger inherits the exemption.
         /// </summary>
         private static readonly HashSet<string> GlobalGapExemptTriggers =
-            new(StringComparer.OrdinalIgnoreCase) { "AttentionCheckFail" };
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                "AttentionCheckFail",
+                // Possession attribution is functional, not flavor: "the warden names the big ones" is
+                // the clarity-in-front rule (POSSESSION.md), and a tripwire that fires silently because
+                // the room chatted 40s ago reads as a bug. Per-rule cooldowns (4-20s) stay in force.
+                Services.Possession.PossessionBarkTriggers.Effect,
+                Services.Possession.PossessionBarkTriggers.Tripwire,
+                Services.Possession.PossessionBarkTriggers.Warden,
+                Services.Possession.PossessionBarkTriggers.RungChanged,
+                Services.Possession.PossessionBarkTriggers.TimerRestarted,
+                Services.Possession.PossessionBarkTriggers.Remember,
+                // The Emergency Exit's two moments are functional for the same reason: the door the
+                // user just pressed has to be ACKNOWLEDGED, and a verdict that lands in silence
+                // because the room chatted 40s ago reads as the button doing nothing. Both rules are
+                // text-only and carry their own cooldowns.
+                EmergencyExitOpenedTrigger,
+                EmergencyExitVerdictTrigger,
+                // The Dose: "you aren't picking anything, so I pick" has to be SAID the moment the
+                // feature lights up, or it reads as the app flipping switches on its own.
+                Services.Possession.PossessionBarkTriggers.Conscript,
+            };
+
+        /// <summary>The huge button was pressed and a minigame opened. ctx: game, attempt.</summary>
+        internal const string EmergencyExitOpenedTrigger = "EmergencyExitOpened";
+
+        /// <summary>The minigame resolved. ctx: game, outcome ("escape" | "sendback").</summary>
+        internal const string EmergencyExitVerdictTrigger = "EmergencyExitVerdict";
+
+        private static bool IsPossessionAttribution(string? trigger) =>
+            string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Effect, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Tripwire, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Warden, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.RungChanged, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.TimerRestarted, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Remember, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Conscript, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Sibling of <see cref="IsPossessionAttribution"/> for the Emergency Exit. Same
+        /// contract, same reason: both rules are authored text-only (audio null), so they can never
+        /// BE the second voice a whisper is being protected from - and staying mute through the one
+        /// exchange the user actively started is worse than talking over a subliminal tail.</summary>
+        private static bool IsEmergencyExitAttribution(string? trigger) =>
+            string.Equals(trigger, EmergencyExitOpenedTrigger, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, EmergencyExitVerdictTrigger, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>Barks at/above this priority (or any non-Normal class) speak via GigglePriority; lower ones queue via Giggle.</summary>
         private const int PriorityBarkThreshold = 100;
@@ -335,6 +379,48 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrEmpty(action)) return;
             Raise("UiAction", c => c.Set("action", action!));
         }
+
+        // ---- Possession (haunted-UI layer of Lockdown; Services/Possession/POSSESSION.md) ----
+        // Trigger names are the constants in Possession.PossessionBarkTriggers. Rules live in each
+        // pack's bark_rules.json as text-only variants; "target" is what the warden NAMES.
+        public void NotifyPossessionRung(int rung) =>
+            Raise(Possession.PossessionBarkTriggers.RungChanged, c => c.Set("rung", (double)rung));
+        // The packs' PossessionEffect lines use the {target} placeholder (ApplySubstitutions swaps any
+        // {key} from this context), so an absent display name must not leave a hole in the sentence -
+        // it falls back the way {0} already falls back to "that".
+        public void NotifyPossessionEffect(string effect, string? target) =>
+            Raise(Possession.PossessionBarkTriggers.Effect, c => { c.Set("effect", effect); c.Set("target", string.IsNullOrWhiteSpace(target) ? "that one" : target!); });
+        public void NotifyPossessionTripwire(string kind, int repeat, int total) =>
+            Raise(Possession.PossessionBarkTriggers.Tripwire, c => { c.Set("kind", kind); c.Set("repeat", (double)repeat); c.Set("total", (double)total); });
+        public void NotifyPossessionWarden(string verb) =>
+            Raise(Possession.PossessionBarkTriggers.Warden, c => c.Set("verb", verb));
+        public bool NotifyPossessionRules() =>
+            Raise(Possession.PossessionBarkTriggers.Rules, guaranteed: true);
+        /// <summary>The Emergency Exit sent the user back in with a full timer. ctx: reason (game id), restart (count).</summary>
+        public void NotifyPossessionTimerRestarted(string reason, int restart) =>
+            Raise(Possession.PossessionBarkTriggers.TimerRestarted, c => { c.Set("reason", reason ?? ""); c.Set("restart", (double)restart); });
+        /// <summary>Next launch after a Full Doki lockdown: one line, "I remember." (PossessionRemember).</summary>
+        public bool NotifyPossessionRemember() =>
+            Raise(Possession.PossessionBarkTriggers.Remember, guaranteed: true);
+
+        /// <summary>The Dose (Services/Haptics/LockdownDoseKeeper.cs): the lockdown switched features on
+        /// because nothing was running. ctx: features ("Flash and Subliminals"), round (1-based, 0 when
+        /// only the engine was started), engine (1 = the engine itself was started for them).</summary>
+        public void NotifyLockdownConscript(string features, int round, bool engineStarted) =>
+            Raise(Possession.PossessionBarkTriggers.Conscript, c => { c.Set("features", string.IsNullOrWhiteSpace(features) ? "something" : features); c.Set("round", (double)round); c.Set("engine", engineStarted ? 1.0 : 0.0); });
+
+        // ---- Emergency Exit (the friction door of Lockdown; Services/EmergencyExit/EMERGENCY_EXIT.md) ----
+        // Text-only rules in every pack, matched per game via the ctx `game` field (game_eq) the same
+        // way the possession rung rules match rung_eq.
+
+        /// <summary>The user pressed EMERGENCY EXIT and a minigame opened. ctx: game, attempt.</summary>
+        public void NotifyEmergencyExitOpened(string game, int attempt) =>
+            Raise(EmergencyExitOpenedTrigger, c => c.Set("game", game ?? "").Set("attempt", (double)attempt));
+
+        /// <summary>The minigame resolved and the host has ALREADY applied it. ctx: game, outcome
+        /// ("escape" = the lockdown is over, "sendback" = the timer went back to full).</summary>
+        public void NotifyEmergencyExitVerdict(string game, string outcome) =>
+            Raise(EmergencyExitVerdictTrigger, c => c.Set("game", game ?? "").Set("outcome", outcome ?? ""));
 
         /// <summary>The user opened/refreshed the leaderboard. rank/total let rules react to standing (rank 0 = unranked).</summary>
         public void NotifyLeaderboardViewed(int rank, int total)
@@ -1467,7 +1553,10 @@ namespace ConditioningControlPanel.Services
 
                 // Don't talk over a subliminal/flash whisper that's still audible — two voices at once is
                 // jarring. Safety/guaranteed barks bypass this (handled above) so panic still speaks.
-                if (App.Audio?.IsWhisperAudioPlaying == true)
+                // Possession attribution barks are text-only by contract (POSSESSION.md: audio null,
+                // bubble still shows), so they cannot be a second voice - let them name the haunt.
+                if (App.Audio?.IsWhisperAudioPlaying == true && !IsPossessionAttribution(rule.Trigger)
+                    && !IsEmergencyExitAttribution(rule.Trigger))
                     return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "whisper-active" };
 
                 // Don't talk over the Chaos narrator (the Madam). She holds the floor; the next

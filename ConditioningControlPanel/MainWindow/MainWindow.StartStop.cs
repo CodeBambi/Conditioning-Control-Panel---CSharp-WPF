@@ -44,6 +44,9 @@ namespace ConditioningControlPanel
 
             if (_isRunning && App.Lockdown?.IsActive == true)
             {
+                // Possession tripwire, before the dialog: the refusal message is unchanged (do not
+                // regress it) - Possession only adds the room's reaction on top of it.
+                try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Stop); } catch { }
                 MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), Loc.Get("title_lockdown"),
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return;

@@ -1062,6 +1062,9 @@ namespace ConditioningControlPanel
                 {
                     if (IsEngineStopLocked())
                     {
+                        // Possession tripwire: the tube's Stop is the same escape as the main Stop
+                        // button, so it must count the same. No-op when lockdown is not running.
+                        try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Stop); } catch { }
                         Giggle("nuh-uh~ no stopping now, you're locked in~");
                         return;
                     }

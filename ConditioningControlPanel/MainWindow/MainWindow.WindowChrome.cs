@@ -57,6 +57,9 @@ namespace ConditioningControlPanel
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)
         {
             try { App.Bark?.NotifyUiAction("minimize"); } catch { }
+            // Minimizing during a lockdown stays ALLOWED (owner decision) - it just gets noticed.
+            // No-op outside lockdown, so no extra guard is needed here.
+            try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Minimize); } catch { }
             // Hide avatar tube BEFORE minimizing to prevent visual artifacts
             HideAvatarTube();
             WindowState = WindowState.Minimized;
@@ -125,6 +128,9 @@ namespace ConditioningControlPanel
             // Lockdown mode: block all close attempts
             if (App.Lockdown?.IsActive == true)
             {
+                // Possession tripwire: the refusal is old behaviour, the REACTION is new. Fired before
+                // the cancel so the haunt is already moving as the window refuses to go.
+                try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Close); } catch { }
                 e.Cancel = true;
                 return;
             }
@@ -358,6 +364,10 @@ namespace ConditioningControlPanel
             // beat so we don't pile fresh surfaces onto that rebuild burst (desktop-heap/GPU exhaustion
             // -> "Not enough quota" crash / render-thread wedge). See DisplayChangeCoordinator.
             Services.UI.DisplayChangeCoordinator.NotifyDisplayChange("dpi-changed");
+            // Breadcrumb for the field: a mixed-DPI wedge that still gets through dies inside this
+            // transition, and hang_<ts>.txt should say so (there is no local mixed-DPI repro rig).
+            Services.HangContext.Note($"MainWindow DPI transition {oldDpi.DpiScaleX:0.##}x -> {newDpi.DpiScaleX:0.##}x" +
+                (Services.UI.DisplayChangeCoordinator.InteractiveMoveActive ? " (mid-drag)" : ""));
             base.OnDpiChanged(oldDpi, newDpi);
 
             // Dragging onto a 300%-scaled TV multiplies the window's pixel size without changing its

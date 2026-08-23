@@ -652,5 +652,211 @@ namespace ConditioningControlPanel
         /// queue and, by the time the queue drains, comment on something that happened seconds ago.
         /// </summary>
         public bool IsSpeaking => _isGiggling;
+
+        // =========================================================================================
+        //  POSSESSION - the two things the haunted-UI layer is allowed to do to the tube.
+        //  Read Services/Possession/POSSESSION.md ("Companion wave") first.
+        //
+        //  Both are deliberately dumb: they draw into their OWN overlay elements and never touch
+        //  ImgAvatar / ImgAvatarB / the animated pair, the pose timer, the emote crossfade or the
+        //  portrait float loop. The haunt must never be able to leave the companion looking wrong
+        //  after a lockdown ends, and the only way to guarantee that is to never write to the real
+        //  pipeline in the first place.
+        // =========================================================================================
+
+        /// <summary>Possession ember (#FF8A5C). Ember means Possession, only - crimson is the theme.</summary>
+        private static readonly System.Windows.Media.Brush PossessionEmberBrush = MakePossessionEmber();
+
+        private static System.Windows.Media.Brush MakePossessionEmber()
+        {
+            var b = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0x8A, 0x5C));
+            b.Freeze();
+            return b;
+        }
+
+        private DispatcherTimer? _possessionGlitchTimer;
+
+        /// <summary>
+        /// R4 "glitchportrait": for <paramref name="ms"/> milliseconds the portrait tears into three
+        /// horizontal bands that slip a few pixels sideways, ember-tinted, then snaps back.
+        ///
+        /// <para>The copies live in PossessionGlitchLayer, a sibling of the avatar images inside
+        /// AvatarBounceHost, so each one inherits the SAME layout slot as the real portrait and lines
+        /// up with it without any measuring - and it rides the bounce and float transforms with it.
+        /// The bands are clipped before they are translated (WPF applies Clip in local space, ahead of
+        /// RenderTransform), which is what makes them read as a tear rather than three ghosts.</para>
+        ///
+        /// <para>No-op when no portrait is loaded, when the tube has not laid out yet, or when the
+        /// window is on its way down. Safe to call again while one is still running: the previous
+        /// glitch is torn down first.</para>
+        /// </summary>
+        public void GlitchPortrait(int ms)
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => GlitchPortrait(ms))); return; }
+
+            try
+            {
+                var layer = PossessionGlitchLayer;
+                if (layer == null) return;
+
+                var src = CurrentPortraitImage();
+                var source = src?.Source;
+                if (src == null || source == null) return;
+
+                double w = src.ActualWidth, h = src.ActualHeight;
+                if (w < 8 || h < 8) return;
+
+                ClearGlitchPortrait();
+
+                const int slices = 3;
+                double band = h / slices;
+                for (int i = 0; i < slices; i++)
+                {
+                    // Alternating, so the tear reads as a horizontal SLIP and not as a lean.
+                    double dx = (i % 2 == 0) ? 6 : -6;
+                    double dy = (i % 2 == 0) ? -1 : 1;
+
+                    var cell = new Grid
+                    {
+                        Width = w,
+                        Height = h,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        IsHitTestVisible = false,
+                        Clip = new System.Windows.Media.RectangleGeometry(new Rect(0, i * band, w, band)),
+                        RenderTransform = new System.Windows.Media.TranslateTransform(dx, dy)
+                    };
+                    cell.Children.Add(new Image
+                    {
+                        Source = source,
+                        Stretch = src.Stretch,
+                        Width = w,
+                        Height = h,
+                        IsHitTestVisible = false
+                    });
+                    cell.Children.Add(new System.Windows.Shapes.Rectangle
+                    {
+                        Fill = PossessionEmberBrush,
+                        Opacity = 0.20,
+                        Width = w,
+                        Height = h,
+                        IsHitTestVisible = false
+                    });
+                    layer.Children.Add(cell);
+                }
+
+                layer.Visibility = Visibility.Visible;
+
+                _possessionGlitchTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(Math.Clamp(ms, 60, 1000))
+                };
+                _possessionGlitchTimer.Tick += (_, __) => ClearGlitchPortrait();
+                _possessionGlitchTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AvatarTube GlitchPortrait failed: {Error}", ex.Message);
+                ClearGlitchPortrait();
+            }
+        }
+
+        /// <summary>Take the glitch down. Safe any number of times, from any thread.</summary>
+        public void ClearGlitchPortrait()
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(ClearGlitchPortrait)); return; }
+            try
+            {
+                if (_possessionGlitchTimer != null)
+                {
+                    _possessionGlitchTimer.Stop();
+                    _possessionGlitchTimer = null;
+                }
+                var layer = PossessionGlitchLayer;
+                if (layer == null) return;
+                layer.Children.Clear();
+                layer.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex) { App.Logger?.Debug("AvatarTube ClearGlitchPortrait failed: {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Whichever avatar Image is actually on screen right now, topmost first: the two animated
+        /// layers (Circe webp / GIF sets), then the emotive-portrait crossfade layer, then the plain
+        /// pose image. Opacity is checked as well as Visibility because the crossfade layers stay
+        /// Visible at Opacity 0 between emotes.
+        /// </summary>
+        private Image? CurrentPortraitImage()
+        {
+            foreach (var img in new[] { ImgAvatarAnimatedB, ImgAvatarAnimated, ImgAvatarB, ImgAvatar })
+            {
+                try
+                {
+                    if (img == null) continue;
+                    if (img.Visibility != Visibility.Visible) continue;
+                    if (img.Opacity < 0.5) continue;
+                    if (img.Source == null) continue;
+                    return img;
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// R4 "leave": the warden puts a note where she was standing. Idempotent - calling it twice
+        /// just rewrites the card - and a no-op when the card never made it into the tree.
+        /// </summary>
+        public void ShowPossessionNote(string text)
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => ShowPossessionNote(text))); return; }
+            try
+            {
+                var card = PossessionNoteCard;
+                if (card == null || string.IsNullOrWhiteSpace(text)) return;
+
+                if (TxtPossessionNote != null) TxtPossessionNote.Text = text;
+                // A small random lean, so it reads as something that was PUT there.
+                if (PossessionNoteRotate != null) PossessionNoteRotate.Angle = _random.Next(2) == 0 ? -3 : 3;
+
+                card.Opacity = 0;
+                card.Visibility = Visibility.Visible;
+                card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.HoldEnd
+                });
+            }
+            catch (Exception ex) { App.Logger?.Debug("AvatarTube ShowPossessionNote failed: {Error}", ex.Message); }
+        }
+
+        /// <summary>Take the note down. Safe when there never was one, and safe to call twice.</summary>
+        public void HidePossessionNote()
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(HidePossessionNote)); return; }
+            try
+            {
+                var card = PossessionNoteCard;
+                if (card == null || card.Visibility != Visibility.Visible) return;
+
+                var fade = new DoubleAnimation(card.Opacity, 0, TimeSpan.FromMilliseconds(200))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
+                    FillBehavior = FillBehavior.HoldEnd
+                };
+                fade.Completed += (_, __) =>
+                {
+                    try
+                    {
+                        card.BeginAnimation(OpacityProperty, null);
+                        card.Opacity = 0;
+                        card.Visibility = Visibility.Collapsed;
+                    }
+                    catch { }
+                };
+                card.BeginAnimation(OpacityProperty, fade);
+            }
+            catch (Exception ex) { App.Logger?.Debug("AvatarTube HidePossessionNote failed: {Error}", ex.Message); }
+        }
     }
 }

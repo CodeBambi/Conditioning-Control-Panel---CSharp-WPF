@@ -1,0 +1,178 @@
+/* ============================================================================
+ * games/captcha.css - "Confirm you are NOT a {honorific}" (Emergency Exit)
+ * Tokens from shared/theme.css only. Photosafe variants under .ee-photosafe.
+ * Popups are crimson infomercial windows: obviously themed, never OS chrome.
+ * ==========================================================================*/
+
+.eecap {
+  position: relative; z-index: 1;
+  width: min(580px, 94%);
+  display: flex; flex-direction: column; align-items: stretch;
+}
+
+/* --- the verification card ------------------------------------------------ */
+.eecap-card {
+  position: relative;
+  padding: 18px 26px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.eecap-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 11px; font-weight: 800; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--ee-crimson);
+}
+.eecap-head span:last-child { color: var(--ee-mute); letter-spacing: .12em; }
+.eecap-title {
+  margin: 2px 0 0; font-size: 27px; line-height: 1.12; font-weight: 900; letter-spacing: .02em;
+  text-transform: uppercase; color: var(--ee-text);
+}
+.eecap-title em { font-style: normal; color: var(--ee-crimson); text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+.eecap-sub { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ee-dim); }
+
+.eecap-row {
+  display: flex; align-items: center; gap: 18px;
+  margin-top: 8px; padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--ee-bg-deep);
+  border: 1px solid var(--ee-crimson-soft);
+}
+
+/* the box */
+.eecap-box {
+  position: relative; flex: 0 0 auto;
+  width: 92px; height: 92px; border-radius: 16px;
+  background: linear-gradient(180deg, var(--ee-card-2), var(--ee-card));
+  border: 1px solid var(--ee-crimson-soft);
+  box-shadow: 0 10px 26px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
+  cursor: pointer; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  transition: box-shadow .2s ease, transform .15s ease, border-color .2s ease;
+}
+.eecap-box:hover { border-color: var(--ee-ember-soft); }
+.eecap-box.is-held { transform: scale(.97); box-shadow: 0 4px 14px rgba(0,0,0,.5), 0 0 18px var(--ee-ember-soft); border-color: var(--ee-ember); }
+.eecap-box.is-blocked { cursor: not-allowed; opacity: .7; }
+.eecap-box.is-done { border-color: var(--ee-ember); box-shadow: 0 0 26px var(--ee-ember-glow); cursor: default; transform: none; }
+.eecap-box.is-capped { animation: eecap-jam .5s ease 1; }
+.ee-photosafe .eecap-box.is-capped { animation: none; }
+@keyframes eecap-jam { 0%,100% { transform: translateX(0) scale(.97); } 25% { transform: translateX(-3px) scale(.97); } 75% { transform: translateX(3px) scale(.97); } }
+.eecap-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.eecap-ring .track { fill: none; stroke: var(--ee-crimson-soft); stroke-width: 6; }
+.eecap-ring .fill { fill: none; stroke: var(--ee-ember); stroke-width: 6; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--ee-ember-soft)); }
+.eecap-glyph {
+  position: relative; font-size: 30px; font-weight: 900; color: var(--ee-mute); line-height: 1;
+  transition: color .2s ease, transform .25s ease;
+}
+.eecap-box.is-held .eecap-glyph { color: var(--ee-ember); }
+.eecap-box.is-done .eecap-glyph { color: var(--ee-ember); transform: scale(1.15); text-shadow: 0 0 12px var(--ee-ember-soft); }
+
+/* label block */
+.eecap-lbl { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.eecap-lbl-main { font-size: 20px; font-weight: 800; color: var(--ee-text); letter-spacing: .01em; }
+.eecap-lbl-main em { font-style: normal; color: var(--ee-crimson); }
+.eecap-lbl-hint { font-size: 12px; color: var(--ee-mute); letter-spacing: .08em; text-transform: uppercase; }
+.eecap-status {
+  display: flex; align-items: baseline; gap: 10px; margin-top: 4px;
+  font-size: 13px; color: var(--ee-dim); font-style: italic;
+}
+.eecap-status b { font-style: normal; font-size: 20px; color: var(--ee-ember); font-variant-numeric: tabular-nums; min-width: 52px; }
+.eecap-status.is-warn { color: var(--ee-crimson); }
+.eecap-status.is-warn b { color: var(--ee-crimson); }
+
+.eecap-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 4px; font-size: 11px; color: var(--ee-mute); letter-spacing: .06em;
+}
+.eecap-foot b { color: var(--ee-dim); font-variant-numeric: tabular-nums; }
+.eecap-foot .eecap-seal {
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.eecap-seal::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ee-crimson);
+  box-shadow: 0 0 6px var(--ee-crimson-glow);
+}
+
+/* --- the popups ----------------------------------------------------------- */
+.eecap-pop {
+  position: absolute; z-index: 60;
+  width: 330px; max-width: calc(100% - 20px);
+  border-radius: 12px; overflow: hidden;
+  background: var(--ee-card);
+  border: 2px solid var(--ee-crimson);
+  box-shadow: 0 22px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04) inset, 0 0 28px var(--ee-crimson-soft);
+  transform-origin: 50% 20%;
+  animation: eecap-pop-in .28s cubic-bezier(.2,.9,.3,1.25) 1;
+  touch-action: none;
+}
+.ee-photosafe .eecap-pop { animation: eecap-pop-in-soft .32s ease 1; }
+@keyframes eecap-pop-in { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes eecap-pop-in-soft { from { opacity: 0; } to { opacity: 1; } }
+.eecap-pop.is-out { transition: transform .18s ease, opacity .18s ease; transform: scale(.85); opacity: 0; pointer-events: none; }
+.eecap-pop.is-shake { animation: eecap-shake .3s ease 1; }
+.ee-photosafe .eecap-pop.is-shake { animation: none; }
+@keyframes eecap-shake { 0%,100% { transform: translateX(0); } 30% { transform: translateX(-5px) rotate(-.6deg); } 70% { transform: translateX(5px) rotate(.6deg); } }
+
+.eecap-pop-bar {
+  position: relative; height: 34px;
+  display: flex; align-items: center;
+  padding: 0 44px 0 12px;
+  background: linear-gradient(90deg, var(--ee-crimson), #8c0c26);
+  color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase;
+  cursor: grab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.eecap-pop-bar::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; flex: 0 0 auto;
+  background: var(--ee-ember); box-shadow: 0 0 8px var(--ee-ember-glow);
+}
+.eecap-pop-bar.is-dragging { cursor: grabbing; }
+.eecap-pop-x {
+  position: absolute; top: 4px; right: 6px;
+  width: 26px; height: 26px; border-radius: 7px;
+  border: 1px solid rgba(255,255,255,.35); background: rgba(26,26,46,.35);
+  color: #fff; font-size: 16px; font-weight: 900; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform .18s cubic-bezier(.2,.9,.3,1.2), background .15s ease;
+  cursor: pointer;
+}
+.eecap-pop-x:hover { background: rgba(26,26,46,.6); }
+
+.eecap-pop-body { padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 6px; }
+.eecap-pop-kicker { font-size: 10px; font-weight: 800; letter-spacing: .22em; text-transform: uppercase; color: var(--ee-pink); }
+.eecap-pop-name {
+  margin: 0; font-size: 26px; line-height: 1.05; font-weight: 900; letter-spacing: .01em;
+  color: var(--ee-ember); text-shadow: 0 0 14px var(--ee-ember-soft);
+}
+.eecap-pop-tag { margin: 0; font-size: 14px; font-weight: 700; font-style: italic; color: var(--ee-text); }
+.eecap-pop-copy { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--ee-dim); font-weight: 600; }
+.eecap-pop-cta {
+  align-self: flex-start; margin-top: 6px;
+  padding: 8px 18px; border-radius: 9px; border: 0;
+  background: linear-gradient(180deg, #ff3b66, var(--ee-crimson)); color: #fff;
+  font-size: 13px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase;
+  box-shadow: 0 6px 18px var(--ee-crimson-soft); text-shadow: 0 1px 0 rgba(0,0,0,.3);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.eecap-pop-cta:hover { transform: translateY(-1px); box-shadow: 0 8px 22px var(--ee-crimson-glow); }
+.eecap-pop-ticker {
+  position: relative; height: 22px; overflow: hidden;
+  background: var(--ee-bg-deep); border-top: 1px solid var(--ee-crimson-soft);
+  color: var(--ee-pink); font-size: 10px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase;
+  line-height: 22px; white-space: nowrap;
+}
+.eecap-pop-ticker span { display: inline-block; padding-left: 100%; animation: eecap-ticker 9s linear infinite; }
+.ee-photosafe .eecap-pop-ticker span { animation-duration: 14s; }
+@keyframes eecap-ticker { to { transform: translateX(-100%); } }
+
+/* tight window */
+@media (max-height: 600px), (max-width: 860px) {
+  .eecap-card { padding: 12px 18px 12px; gap: 7px; }
+  .eecap-title { font-size: 22px; }
+  .eecap-sub { font-size: 13px; }
+  .eecap-box { width: 78px; height: 78px; }
+  .eecap-lbl-main { font-size: 17px; }
+  .eecap-pop { width: 300px; }
+  .eecap-pop-name { font-size: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eecap-pop, .eecap-pop.is-shake, .eecap-box.is-capped, .eecap-pop-ticker span { animation: none !important; }
+}

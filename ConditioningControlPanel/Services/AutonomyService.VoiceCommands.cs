@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -1002,6 +1002,9 @@ namespace ConditioningControlPanel.Services
             try { blocked = intent.Blocked?.Invoke() == true; } catch { }
             if (blocked)
             {
+                // Possession tripwire: talking your way out is an escape attempt too. Only lockdown
+                // arms it - a strict-video / bubble-count refusal simply finds the service inactive.
+                try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.Stop); } catch { }
                 var refuseKey = ModKey();
                 var refusal = intent.BlockedConfirm.TryGetValue(refuseKey, out var r) && !string.IsNullOrWhiteSpace(r)
                     ? r

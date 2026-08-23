@@ -1240,32 +1240,67 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void ToggleWallFeature(string key)
         {
+            if (RefuseIfSessionFeatureLocked($"card:{key}")) return;
+            SetWallFeature(key, !IsWallFeatureOn(key));
+        }
+
+        /// <summary>The persisted flag behind a wall key. Unknown key = false.</summary>
+        internal static bool IsWallFeatureOn(string key)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return false;
+            return key switch
+            {
+                "flash" => s.FlashEnabled,
+                "video" => s.MandatoryVideosEnabled,
+                "subliminal" => s.SubliminalEnabled,
+                "spiral" => s.SpiralEnabled,
+                "pinkfilter" => s.PinkFilterEnabled,
+                "bubbles" => s.BubblesEnabled,
+                "lockcard" => s.LockCardEnabled,
+                "bubblecount" => s.BubbleCountEnabled,
+                "bouncingtext" => s.BouncingTextEnabled,
+                "mindwipe" => s.MindWipeEnabled,
+                "braindrain" => s.BrainDrainEnabled,
+                _ => false,
+            };
+        }
+
+        /// <summary>
+        /// Sets a wall feature to an explicit state: writes the flag, and if the engine is running,
+        /// starts/stops the matching service so the toggle is TRUE, not just persisted. This is the
+        /// one seam every programmatic flip goes through - the wall card (via ToggleWallFeature) and
+        /// the lockdown Dose keeper (LockdownDoseKeeper, which switches features ON for a user who
+        /// ran a lockdown with nothing on, and back OFF at the end). Does NOT consult the session
+        /// feature lock: the caller decides (the card refuses; the keeper never runs during a session).
+        /// </summary>
+        internal void SetWallFeature(string key, bool on)
+        {
             var s = App.Settings?.Current;
             if (s == null) return;
-            if (RefuseIfSessionFeatureLocked($"card:{key}")) return;
             var running = App.IsEngineRunning;
             try
             {
                 switch (key)
                 {
-                    case "flash": { var on = s.FlashEnabled = !s.FlashEnabled; if (running) { if (on) App.Flash?.Start(); else App.Flash?.Stop(); } break; }
-                    case "video": { var on = s.MandatoryVideosEnabled = !s.MandatoryVideosEnabled; if (running) { if (on) App.Video?.Start(); else App.Video?.Stop(); } break; }
-                    case "subliminal": { var on = s.SubliminalEnabled = !s.SubliminalEnabled; if (running) { if (on) App.Subliminal?.Start(); else App.Subliminal?.Stop(); } break; }
-                    case "spiral": s.SpiralEnabled = !s.SpiralEnabled; App.Overlay?.RefreshOverlays(); break;
-                    case "pinkfilter": s.PinkFilterEnabled = !s.PinkFilterEnabled; App.Overlay?.RefreshOverlays(); break;
-                    case "bubbles": { var on = s.BubblesEnabled = !s.BubblesEnabled; if (running) { if (on) App.Bubbles?.Start(); else App.Bubbles?.Stop(); } break; }
-                    case "lockcard": { var on = s.LockCardEnabled = !s.LockCardEnabled; if (running) { if (on) App.LockCard?.Start(); else App.LockCard?.Stop(); } break; }
-                    case "bubblecount": { var on = s.BubbleCountEnabled = !s.BubbleCountEnabled; if (running) { if (on) App.BubbleCount?.Start(); else App.BubbleCount?.Stop(); } break; }
-                    case "bouncingtext": { var on = s.BouncingTextEnabled = !s.BouncingTextEnabled; if (running) { if (on) App.BouncingText?.Start(); else App.BouncingText?.Stop(); } break; }
-                    case "mindwipe": s.MindWipeEnabled = !s.MindWipeEnabled; break;
-                    case "braindrain": { var on = s.BrainDrainEnabled = !s.BrainDrainEnabled; if (running) { if (on) App.BrainDrain?.Start(); else App.BrainDrain?.Stop(); } break; }
+                    case "flash": { s.FlashEnabled = on; if (running) { if (on) App.Flash?.Start(); else App.Flash?.Stop(); } break; }
+                    case "video": { s.MandatoryVideosEnabled = on; if (running) { if (on) App.Video?.Start(); else App.Video?.Stop(); } break; }
+                    case "subliminal": { s.SubliminalEnabled = on; if (running) { if (on) App.Subliminal?.Start(); else App.Subliminal?.Stop(); } break; }
+                    case "spiral": s.SpiralEnabled = on; App.Overlay?.RefreshOverlays(); break;
+                    case "pinkfilter": s.PinkFilterEnabled = on; App.Overlay?.RefreshOverlays(); break;
+                    case "bubbles": { s.BubblesEnabled = on; if (running) { if (on) App.Bubbles?.Start(); else App.Bubbles?.Stop(); } break; }
+                    case "lockcard": { s.LockCardEnabled = on; if (running) { if (on) App.LockCard?.Start(); else App.LockCard?.Stop(); } break; }
+                    case "bubblecount": { s.BubbleCountEnabled = on; if (running) { if (on) App.BubbleCount?.Start(); else App.BubbleCount?.Stop(); } break; }
+                    case "bouncingtext": { s.BouncingTextEnabled = on; if (running) { if (on) App.BouncingText?.Start(); else App.BouncingText?.Stop(); } break; }
+                    case "mindwipe": s.MindWipeEnabled = on; break;
+                    case "braindrain": { s.BrainDrainEnabled = on; if (running) { if (on) App.BrainDrain?.Start(); else App.BrainDrain?.Stop(); } break; }
                     default: return;
                 }
                 App.Settings?.Save();
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Wall quick-toggle failed for {Key}", key);
+                App.Logger?.Warning(ex, "Wall feature set failed for {Key}={On}", key, on);
             }
             // The INPC hook repaints too (MainWindow.xaml.cs), but refresh explicitly in case a
             // service mutated a second flag along the way.

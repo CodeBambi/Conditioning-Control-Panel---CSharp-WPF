@@ -2886,6 +2886,113 @@ namespace ConditioningControlPanel.Models
             set { _bubbleAvatarEggEnabled = value; OnPropertyChanged(); }
         }
 
+        // ---- Lockdown: Safeties + Possession (Services/Possession/POSSESSION.md) ----
+        // The old cage (forced Strict Lock, panic key off, system keys blocked) stays, as default-on
+        // Safeties toggles inside the Lockdown card. Possession is the haunted-UI layer that runs on
+        // top while a lockdown is active. None of these are touched by LockdownService at runtime;
+        // they are read on Activate.
+        private bool _lockdownForceStrictLock = true;
+        public bool LockdownForceStrictLock
+        {
+            get => _lockdownForceStrictLock;
+            set { _lockdownForceStrictLock = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockdownDisablePanicKey = true;
+        public bool LockdownDisablePanicKey
+        {
+            get => _lockdownDisablePanicKey;
+            set { _lockdownDisablePanicKey = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockdownBlockSystemKeys = true;
+        public bool LockdownBlockSystemKeys
+        {
+            get => _lockdownBlockSystemKeys;
+            set { _lockdownBlockSystemKeys = value; OnPropertyChanged(); }
+        }
+
+        // The Dose (Services/Haptics/LockdownDoseKeeper.cs): a lockdown refuses to run EMPTY. If the
+        // engine is off when the lockdown starts it is started for the user; if every feature is
+        // off (at the start, or because they were all switched off mid-lockdown) the warden picks
+        // some and turns them on, one more each time, and gives everything back at the end. A
+        // Safeties toggle on the Lockdown card, listed in the warning dialog like the other three.
+        private bool _lockdownDoseKeeperEnabled = true;
+        public bool LockdownDoseKeeperEnabled
+        {
+            get => _lockdownDoseKeeperEnabled;
+            set { _lockdownDoseKeeperEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockdownPossessionEnabled = true;
+        public bool LockdownPossessionEnabled
+        {
+            get => _lockdownPossessionEnabled;
+            set { _lockdownPossessionEnabled = value; OnPropertyChanged(); }
+        }
+
+        // 0 Gentle (caps rung 2) / 1 Eerie (default, rungs 0-3) / 2 Full Doki (rung 4 + themed dialogs)
+        private int _lockdownPossessionIntensity = 1;
+        public int LockdownPossessionIntensity
+        {
+            get => _lockdownPossessionIntensity;
+            set { _lockdownPossessionIntensity = Math.Clamp(value, 0, 2); OnPropertyChanged(); }
+        }
+
+        private bool _lockdownTripwiresEnabled = true;
+        public bool LockdownTripwiresEnabled
+        {
+            get => _lockdownTripwiresEnabled;
+            set { _lockdownTripwiresEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _lockdownWardenEnabled = true;
+        public bool LockdownWardenEnabled
+        {
+            get => _lockdownWardenEnabled;
+            set { _lockdownWardenEnabled = value; OnPropertyChanged(); }
+        }
+
+        // Photosensitive-safe: no blinks / strobes / hard shakes; the ember charge becomes a static tint.
+        private bool _lockdownPhotosafe = false;
+        public bool LockdownPhotosafe
+        {
+            get => _lockdownPhotosafe;
+            set { _lockdownPhotosafe = value; OnPropertyChanged(); }
+        }
+
+        // First-run: the warden has stated the Possession rules once (intro card + bark).
+        private bool _lockdownPossessionIntroSeen = false;
+        public bool LockdownPossessionIntroSeen
+        {
+            get => _lockdownPossessionIntroSeen;
+            set { _lockdownPossessionIntroSeen = value; OnPropertyChanged(); }
+        }
+
+        // Possession audio tics: the ember "tick" on every big effect and the 300 ms dip at a rung
+        // change / a third repeated escape attempt (Services/Possession/PossessionAudio.cs).
+        // Separate from LockdownPhotosafe on purpose - photosafe is a VISUAL accommodation, and a
+        // user who needs the room to stop flashing may still want to hear it move. Master volume 0
+        // and AudioService's own circuit breaker silence this like everything else.
+        private bool _lockdownAudioTics = true;
+        public bool LockdownAudioTics
+        {
+            get => _lockdownAudioTics;
+            set { _lockdownAudioTics = value; OnPropertyChanged(); }
+        }
+
+        // "It remembers": set when a Full Doki lockdown ENDS, spent ~20 s into the next launch as one
+        // ember charge on the Lockdown door plus one bark, then cleared. Persisted because the whole
+        // point is that it survives the app closing; cleared unconditionally on the next launch so a
+        // crash between arming and spending can never leave it stuck on
+        // (Services/Possession/PossessionRemember.cs).
+        private bool _lockdownPossessionRememberPending = false;
+        public bool LockdownPossessionRememberPending
+        {
+            get => _lockdownPossessionRememberPending;
+            set { _lockdownPossessionRememberPending = value; OnPropertyChanged(); }
+        }
+
         // ---- Chaos Mode (effect-bubbles roguelite, Lab) ----
         private bool _chaosModeEnabled = true;
         public bool ChaosModeEnabled

@@ -478,12 +478,35 @@ namespace ConditioningControlPanel
                 Accent = "#FF4D6D",
                 Bullets = new[]
                 {
-                    "Pick a duration and commit: strict lock switches on and the panic key switches off until the timer runs out.",
+                    "Pick a duration and commit: the Safeties on the card decide what gets taken away until the timer runs out.",
                     "From five minutes to four hours. The countdown is all you'll see.",
+                    "Possession is switched on by default: while the timer runs, the app's own UI misbehaves on purpose. Ember glow means it was Lockdown, never a bug.",
                     "If the app crashes mid-lockdown, your real settings are restored on the next launch - nothing stays stuck.",
                     "And if you truly need out early... the timer keeps a secret. Ask it nicely."
                 },
                 Footer = "Premium feature. Sitting through a long lockdown counts toward achievements."
+            },
+
+            // The rules card. It fires ONCE, on the first lockdown that actually runs with Possession
+            // on (MainWindow.Lab.cs), not on the first visit to the tab - the point is to state the
+            // rules while they are about to matter, and a user who turned the haunt off should never
+            // meet this card at all.
+            ["possession"] = new FeatureIntroContent
+            {
+                Key = "possession",
+                Glyph = "🕯️",
+                RailTitle = "Possession",
+                Title = "🔒  Possession",
+                Tagline = "The room misbehaves while you're locked in.",
+                Accent = "#FF8A5C",
+                Bullets = new[]
+                {
+                    "Things move. Buttons swap places, labels drift, cards sag, letters fall out of titles, and your companion gets up and wanders the window.",
+                    "The rule: an ember glow, and her naming what just happened, means it was Lockdown. Never a bug, never real damage - every last piece puts itself back when the timer ends.",
+                    "It grows with the timer, and it reacts when you try to leave. Minimizing still works. Ctrl+Alt+Del always works.",
+                    "Your dials are on the Lockdown card: Gentle, Eerie or Full Doki, a photosensitive-safe switch, and the three Safeties."
+                },
+                Footer = "Premium feature. Turn Possession off on the Lockdown card to get the plain timed cage back."
             },
 
             ["haptics"] = new FeatureIntroContent

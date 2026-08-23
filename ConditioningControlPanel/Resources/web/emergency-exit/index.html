@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency Exit</title>
+    <!-- Emergency Exit - the friction door of Lockdown. Served by the WebView2
+         EmergencyExitHostService from https://ccp.game/emergency-exit/index.html?game=<id>
+         (window ~960x640, owned by MainWindow). One document, classic scripts
+         (so file:// authoring works), NO build step, NO frameworks, NO remote
+         anything. Contract: Services/EmergencyExit/EMERGENCY_EXIT.md.
+         Primer for this folder: README.md next to this file.
+
+         ?game=labyrinth|password|jigsaw|captcha   which game to load
+         ?mock=1                                   fabricate the host (see shared/bridge.js)
+    -->
+    <link rel="stylesheet" href="./shared/theme.css">
+</head>
+<body>
+    <!-- Shell chrome (HUD / say strip / stage) is built by shared/shell.js into #ee-root. -->
+    <div id="ee-root" class="ee-root"></div>
+
+    <!-- Loader: covers the page until init lands and the game has started. -->
+    <div id="ee-loader" class="ee-loader">
+        <div class="ee-loader-ring" aria-hidden="true"></div>
+        <p>opening the emergency exit</p>
+    </div>
+
+    <!-- Boot failure fallback. -->
+    <div id="ee-nope" class="ee-nope" hidden>
+        <h1>the exit is jammed</h1>
+        <p id="ee-nope-msg">Something went wrong opening the exit.</p>
+        <p><kbd>Esc</kbd> to go back</p>
+    </div>
+
+    <script src="./shared/bridge.js"></script>
+    <script src="./shared/shell.js"></script>
+    <script>
+    (function () {
+        'use strict';
+        var GAMES = ['labyrinth', 'password', 'jigsaw', 'captcha'];
+        var q = (window.EE && EE.bridge && EE.bridge.query) || {};
+        var id = String(q.game || '').toLowerCase();
+        if (GAMES.indexOf(id) < 0) {
+            // Unknown / missing ?game= : pick one deterministically so an author
+            // opening index.html bare still sees something; the host always sets it.
+            id = GAMES[Math.floor(Math.random() * GAMES.length)];
+            if (EE && EE.bridge) EE.bridge.log('warn', '?game missing or unknown (' + (q.game || '') + '), loading ' + id);
+        }
+        document.documentElement.setAttribute('data-game', id);
+
+        // Optional per-game stylesheet (a 404 is fine: the host serves the folder,
+        // a missing css just never applies).
+        var css = document.createElement('link');
+        css.rel = 'stylesheet'; css.href = './games/' + id + '.css';
+        css.onerror = function () { /* optional */ };
+        document.head.appendChild(css);
+
+        var js = document.createElement('script');
+        js.src = './games/' + id + '.js';
+        js.onerror = function () {
+            if (EE && EE.showNope) EE.showNope('Could not load games/' + id + '.js');
+        };
+        document.body.appendChild(js);
+
+        // If the game file loads but never registers, do not hang on the loader.
+        setTimeout(function () {
+            if (EE && EE._shell && !EE._shell.state.def) {
+                EE.showNope('games/' + id + '.js loaded but registered no game.');
+            }
+        }, 4000);
+    })();
+    </script>
+</body>
+</html>
