@@ -1,7 +1,7 @@
 /* ============================================================================
  * shell/reportcard.js - the day summary + the ONE share pipeline (§9).
  *
- * Renders: the day's three classes with their grades and the XP the HOST paid
+ * Renders: the day's four classes with their grades and the XP the HOST paid
  * (never a locally computed number - the XP table lives in C#), the attendance
  * streak on the shared 10-segment meter, and the perfect-attendance stamp
  * through the shared ceremony.
@@ -149,7 +149,7 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
     put(el('p', 'arc-kicker', s.title || t('report_card', 'Report Card')));
     put(el('h2', 'arc-h2', s.dateLabel || (s.timetable && s.timetable.dateSeed) || ''));
 
-    /* --- the three classes --- */
+    /* --- the day's classes (CLASSES_PER_DAY of them) --- */
     const strip = el('div', 'reportcard');
     for (const c of classes) {
       const r = results[c.gameKey];
@@ -236,7 +236,7 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
 
     /* --- out ---
      * A STICKY LIT SIGN, not a button at the bottom of a page. The paper
-     * scrolls inside the stage, and a day with three classes, a share block and
+     * scrolls inside the stage, and a day with four classes, a share block and
      * a stamp is taller than a short window - so Done used to be somewhere
      * below the fold with nothing on screen saying so. It now rides the bottom
      * of the stage for as long as the report is up, and it wears the arrow

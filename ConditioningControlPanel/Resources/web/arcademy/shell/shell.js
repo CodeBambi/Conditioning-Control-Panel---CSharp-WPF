@@ -44,7 +44,7 @@ import { createKeybinds } from './keybinds.js';
 import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
 import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createRecords } from './records.js';
-import { loadFaceGeometry } from './punchcard.js';
+import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
 /* EMI, the mascot. Two of B's own modules: `mountEmi` builds the floating widget
  * (which dynamic-imports agent A's renderer optionally, so a broken face costs
  * EMI's expression and never the shell's boot) and `fireMoment` is the ONE verb
@@ -943,7 +943,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *               all - a ceremony for a hole that was not punched is a lie.
    *   enrollment  the first graded finish of a class. The shell KNOWS it is
    *               owed (the card has no `enrolledAt`), so it suppresses that
-   *               run's daily beat, runs the two-punch ceremony on its own
+   *               run's daily beat, runs the three-punch ceremony on its own
    *               clock, and posts `enrollment-done` when the punches land.
    *               The host's answer supersedes the daily stamp it already made,
    *               which is what keeps day one at exactly two either way round.
@@ -1004,6 +1004,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       name: gameName(spec.gameKey),
       card: spec.card,
       reason: spec.reason,
+      minted: spec.minted,
       from: spec.from,
       to: spec.to,
       justUnlocked: !!spec.justUnlocked,
@@ -1724,7 +1725,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // `enrolling` is decided at the DOOR, not at the bell: the intro that
         // ran is the one this finish pays for, so a card the host enrolled
         // mid-class (it cannot, but a snapshot could) can never turn the
-        // two-punch ceremony into a one-punch one halfway through.
+        // three-punch ceremony into a one-punch one halfway through.
         finishClass(cls, gradeTier, result, { peek, belowPar, endless, enrolling });
       },
     };
@@ -2026,16 +2027,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try {
       if (shellState && shellState.enrolling) {
         /* FIRST RUN. The host has already taken today's daily stamp off this
-         * very `class-ended`; the two enrollment punches SUPERSEDE it, and the
-         * frame that does so is the one we post at the end of the ceremony. The
-         * daily beat for this run is suppressed by arming 'enrollment'. */
+         * very `class-ended`; the THREE enrollment punches SUPERSEDE it (owner
+         * ruling 2026-08-23), and the frame that does so is the one we post at
+         * the end of the ceremony. The daily beat for this run is suppressed by
+         * arming 'enrollment'. */
         armPunch(cls.gameKey, 'enrollment');
         runPunchCeremony({
           gameKey: cls.gameKey,
           reason: 'enrollment',
           card: store.punchCard(cls.gameKey),
+          minted: ENROLL_PUNCHES,
           from: 0,
-          to: 2,
+          to: ENROLL_PUNCHES,
           onPunched: () => {
             // ONCE, AFTER THE CEREMONY (§4). Repeats are host-side no-ops, but
             // the shell does not lean on that: the card it just drew is the one
@@ -2272,7 +2275,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (!punchArm || punchArm.gameKey !== m.gameKey) return;
 
       if (punchArm.mode === 'enrollment') {
-        // The two-punch beat is already running and has just reconciled above;
+        // The three-punch beat is already running and has just reconciled above;
         // the daily frame for this same finish is the one enrollment supersedes,
         // so it is deliberately ignored rather than played as a second ceremony.
         if (m.reason === 'enrollment') disarmPunch();
@@ -2291,6 +2294,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           gameKey: m.gameKey,
           reason: 'daily',
           card: norm,
+          // `minted` is a COUNT now, not a flag: 2 on a day the class graded S,
+          // 1 otherwise. The ceremony walks that many beats; the shell still
+          // grades nothing and counts nothing of its own.
+          minted: Math.round(Number(m.minted) || 1),
           to: Math.round(Number(norm.punches) || 0),
           justUnlocked: !!m.justUnlocked,
         });

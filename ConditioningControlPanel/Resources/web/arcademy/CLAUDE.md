@@ -13,7 +13,7 @@ This file is the *implementation* companion: what the pieces are, where the trap
 
 | Concern | Owner | Never |
 |---|---|---|
-| the day's 3 classes | `core/timetable.js` (pure) | a game, a store, a clock |
+| the day's 4 classes | `core/timetable.js` (pure) | a game, a store, a clock |
 | S/A/B/C + caps | `core/grades.js` (pure) | a game grading itself |
 | grade tier (Year 1–4) | `games/registry.js` + meta store | a game choosing its tier |
 | XP numbers | **C#** (`payout-result`) | any page-side XP table |
@@ -67,7 +67,8 @@ shell/punchcard.js THE CARD: cardFace() = a full-bleed face IMAGE with exactly
                    + holesLine(). Shared by the ceremony and the Records wall so
                    a card is ONE object
 shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
-                   AND the stamp ceremony (day one = two punches, daily = one,
+                   AND the stamp ceremony (day one = three punches, an S day =
+                   two, an ordinary day = one,
                    the tenth = the unlock beat)
 shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-card
                    stamp docket, and a link to the report card (never a second
@@ -279,18 +280,49 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
 - **`punchCards` is HOST-owned too** (PUNCHCARD.md §2). `ArcademyPunchCards` is the pure math,
   `ArcademyMetaStore.StampPunchCard` / `EnrollPunchCard` the mints; the key is refused to the page
   and every date is LOCAL. One card per game key:
-  `{punches:0..10, dates:["yyyy-MM-dd"], enrolledAt:string|null, house:bool, complete:bool,
-  unlockedAt:string|null}`, with `punches` recomputed on every touch so a bad blob self-heals.
+  `{punches:0..10, dates:["yyyy-MM-dd"], sDates:["yyyy-MM-dd"], enrolledAt:string|null,
+  house:bool, complete:bool, unlockedAt:string|null}`, with `punches` recomputed on every
+  touch so a bad blob self-heals.
+  - **THE PACE, and THE FORMULA** (owner ruling 2026-08-23 - three levers shortened the time
+    to master a card). Enrolling is worth **3** holes, an ordinary stamped day **1**, and a day
+    the class graded **S** is worth **2**. `sDates` is the whole of the third lever: the subset
+    of `dates` that graded S. The derivation, and it is ONE line that must match on both sides:
+
+    ```
+    punches = min(10, (enrolledAt ? 3 : 0) + dates.length + sDates.length)
+    ```
+
+    `core/store.js punchCard()` and `ArcademyPunchCards.Normalize` compute exactly that, and
+    both intersect `sDates` with `dates` first, so an S entry for a day that never stamped is
+    worth nothing - a card heals DOWN, never up. (The third lever, **four classes a day**, is
+    `CLASSES_PER_DAY` in `core/timetable.js`, not a card field.)
+  - **OLD BLOBS ARE PROMOTED, deliberately.** A card enrolled under the old two-punch rule
+    carries no marker of which rule minted it (`enrolledAt` is the only earned field), so the
+    re-derivation pays it the current rate: everybody who already enrolled gains one hole on
+    the next touch. It cannot overflow - the total caps at ten and a complete card stays
+    complete - and a blob with no `sDates` at all reads as an empty list, never a throw.
   - The **daily stamp rides the attendance credit** on `class-ended`, which makes "any graded
     finish stamps, once a local day" true for free: Esc-leave sends `class-left`, and a Free Swim
     never sends `class-ended` at all (`shell.js finishClass` returns first).
   - The page posts **`enrollment-done {gameKey}`** once, after the enrollment ceremony. It mints
-    the two first-run punches and **supersedes that day's daily stamp** (which has already landed,
-    the ceremony running after `class-ended`) - day one is exactly 2, never 3, in either ordering.
-    Repeat frames are no-ops.
+    the three first-run punches and **supersedes that day's daily stamp** (which has already
+    landed, the ceremony running after `class-ended`) - the day is folded out of BOTH `dates` and
+    `sDates`, so day one is exactly 3, never 4 or 5, in either ordering and even when that first
+    night graded S. Repeat frames are no-ops.
+  - **THE S DOUBLE IS THE HOST'S DECISION, and it is decided ONCE.** The grade is only known at
+    `class-ended`, so `ArcademyHostService` reads it there (`grade == "S"`, after the clamp) and
+    passes `gradedS` down through `ArcademyMetaStore.StampPunchCard` to `ArcademyPunchCards.Stamp`.
+    The same-day guard runs BEFORE the S list is touched, so **a retake mints nothing whatever it
+    grades** (trap 23) and cannot upgrade a day that already stamped at one: the FIRST graded
+    finish of the day decides. The page has no S-day verb and never writes `sDates`.
   - The host answers both paths with **`punchcard-result {gameKey, reason:'daily'|'enrollment',
     minted, justUnlocked, holes, card}`** - same-frame truth for the ceremony, the way
-    `payout-result` carries the streak. The whole-blob `meta` snapshot is pushed as well.
+    `payout-result` carries the streak. **`minted` is a COUNT, not a flag** (2026-08-23): 3 on an
+    enrollment, 2 on an S day, 1 on an ordinary day, **0** on a no-op. Zero is still falsy, so
+    the shell's "no ceremony for a hole that was not punched" test reads exactly as it did when
+    this was a bool - but a reader that treats `minted` as boolean truth loses the double. The
+    count is MEASURED off the card (post minus pre), not assumed, so a card at nine holes that
+    grades S is told 1. The whole-blob `meta` snapshot is pushed as well.
   - `complete:true` IS the permanent unlock: the shell offers Begin on that room every night
     through the same door path as `devDoor`. Nothing host-side gates which room may start.
   - **The SHELL half** (2026-08-23): `core/store.js` lists the key in `HOST_OWNED_KEYS` and
@@ -512,7 +544,11 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     untouched, because `RecordAttendance` is idempotent per (local day, gameKey) and runs
     either way - which is what still credits a new LOCAL day that shares a UTC day.
     Board rows for a graded class stay CLICKABLE and wear a `t('retake')` chip;
-    `classSpec.retake` tells the game.
+    `classSpec.retake` tells the game. **The punch card obeys the same rule and now has a
+    second reason to** (2026-08-23): an S day mints two holes, so a retake that grades S would
+    be the farm. It cannot be - `ArcademyPunchCards.Stamp` refuses on the date before it looks
+    at the grade, so the FIRST graded finish of a local day is the only one that can stamp or
+    double. The mint reports `minted: 0` and the shell draws no ceremony at all.
 24. **`ctx.absorb(word)` / `ctx.sessionWords` is SESSION-ONLY.** A class may add to the day's
     word pool and every engine built *after* that gets the longer list (Daily Trigger absorbs
     the word you solved). Nothing is persisted, nothing is posted to the host, and
@@ -871,6 +907,26 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     made it the player's choice (there is no resize UI yet). Writing the auto width on
     every save - which is the obvious thing to do - would out-vote the viewport rule for
     ever after the first drag, and the mascot would stay laptop-sized on a 4K screen.
+57. **THE MEATY CAP AND THE MEATY REQUIREMENT ARE TWO RULES, AND ONLY ONE OF THEM MAY
+    YIELD.** `core/timetable.js` used to express "one meaty class per day" as a single
+    predicate, which is fine at three classes a day because the relaxation ladder never has to
+    reach it. At FOUR it does - the last seat regularly has no candidate left - and relaxing
+    `meaty` dropped the CAP along with the requirement, so the shipped nine-class pool started
+    dealing boards with TWO 300-second classes on them. They are now `meatyCapOk` (applied to
+    the candidate list, OUTSIDE the ladder, never yields) and `meatyOk` (inside the ladder,
+    yields under the name `meaty` exactly as before). Measured after the split: a meaty class
+    on 120/120 nights, and never two. If you widen the board again, check what else is riding
+    inside a relaxable filter.
+58. **FOUR SLOTS COST THE NO-REPEAT WINDOW, AND THE POOL COMPOSITION IS WHAT PAYS.** With
+    `CLASSES_PER_DAY = 4` the homeroom is fixed and EIGHT rotating classes have to cover THREE
+    slots a night, so a strict 3-day no-repeat window would need nine distinct games and has
+    eight: window 3 is arithmetically unsatisfiable and the ladder narrows to 1 on every night
+    (reported honestly in `relaxed` / `noRepeatWindow`). The promise players feel - "not the
+    class I just played" - still holds: measured ZERO back-to-back over 120 nights. What DID
+    change is the spread. With the one-meaty cap, every board is 1 meaty + 3 quick, and the
+    rotating pool is four meaty and four quick, so each quick class deals 3 nights in 4 (60/360)
+    and each meaty 1 night in 4 (30/360), with a duplicate family on 30/120 nights. Demoting ONE
+    class back to quick flattens it to 40-50 and 18-20 - an owner call, not a code fix.
 
 ## 5. The game module contract (short version)
 
@@ -946,6 +1002,18 @@ bridge+boot 15, **e2e seams 14**, campus 23, **host fixes 20**, time bar + free 
 rake 44, **punch cards 47**), against the live `engine/` + `provider/` modules (the note line
 in the shell run says which). The four game suites (`games-dt`, `games-lf`, `games-dv`,
 `games-ic`) drive the REAL games and run green alongside it.
+
+**THE PACE re-baseline (2026-08-23, `feat/arcademy-pace`).** Four classes a day plus the
+3-punch enrollment and the S double moved every count that names a number: **timetable 32**
+(five new cases drive the SHIPPED nine-class pool - four rows every night, the pool walked,
+zero back-to-back over 120 nights, one meaty and never two, four distinct periods) and
+**punch cards 57** (ten new cases on the derivation: enrol = 3, ordinary day = 1, S day = 2,
+a stray `sDates` entry = 0, the enrollment day folded out of both lists, a retake = 0, the cap
+at ten, `complete` flipping there, an OLD two-punch blob repriced, and a source-shape check
+that the JS and C# formulas are the same three-term sum). Board-row assertions in `shell`,
+`bridge+boot` and `e2e` moved 3 -> 4; the ONE that stays 3 is `test-e2e.mjs`'s
+`overrideCalendar` day, because a calendar day is VERBATIM (§7) whatever `CLASSES_PER_DAY` is.
+The 14 failures that were already red on `feat/arcademy-emi` are unchanged and untouched.
 
 `test-punchcard.mjs` (2026-08-23) is the punch-card half: the store's refusal + self-heal,
 the 96-char cap on every one of the 30 flavour rows AND the 8 rotating card lines AND their

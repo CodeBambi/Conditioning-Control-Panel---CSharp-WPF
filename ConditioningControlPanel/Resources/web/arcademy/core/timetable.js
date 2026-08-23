@@ -1,5 +1,5 @@
 /* ============================================================================
- * core/timetable.js - the day's three classes. BUILD-CONTRACT §7.
+ * core/timetable.js - the day's four classes. BUILD-CONTRACT §7.
  *
  * PURE FUNCTION. buildTimetable({dateSeed, registry, overrideCalendar}) is a
  * deterministic function of its arguments and nothing else: no clock, no
@@ -22,7 +22,7 @@
  * the player.
  *
  * Cost is one cheap pick per day since the epoch (a few RNG draws over a
- * 4-entry pool), memoised per (date, pool, calendar). MAX_WALK_DAYS is a
+ * small pool), memoised per (date, pool, calendar). MAX_WALK_DAYS is a
  * pathology guard, not a design parameter: cross it (>10 years past the epoch)
  * and the window starts sliding, which reintroduces a little drift in the
  * derived history. Nothing else breaks.
@@ -30,7 +30,7 @@
  * ---------------------------------------------------------------------------
  * CONSTRAINTS, and why the small V1 pool cannot crash them
  *
- * Slot 1 is always the homeroom (daily_trigger). Slots 2-3 are drawn under four
+ * Slot 1 is always the homeroom (daily_trigger). Slots 2-4 are drawn under four
  * constraints; when the surviving candidate set is EMPTY they are relaxed in the
  * contract's order - flagship -> meaty -> family -> no-repeat - until something
  * survives. Two details make that survivable on a tiny pool:
@@ -40,13 +40,23 @@
  *   - every constraint also exists as a seeded WEIGHT (weightFor), so once a
  *     hard filter is gone its PREFERENCE still shapes the draw.
  *
- * With the 4-game Semester-1 pool (3 rotating games into 2 slots) no-repeat-3 is
+ * With the 4-game Semester-1 pool (3 rotating games into 3 slots) no-repeat-3 is
  * mathematically unsatisfiable, so most days relax down to the 1-day window and
  * the board becomes a rotation - which is the best available answer, not a bug.
  * One consequence worth knowing: a pool with exactly ONE meaty game cannot
  * satisfy "one meaty per day" AND no-repeat, and the contract ranks no-repeat
  * higher, so some days legitimately have no meaty class. Add more games and the
  * hard filters simply start binding again - no code change.
+ *
+ * FOUR CLASSES A DAY (owner ruling 2026-08-23 - the pace levers). The day used
+ * to deal three. The fourth slot costs the no-repeat window a little headroom
+ * and nothing else: with the shipped pool (9 live classes, misdirection
+ * retired) the homeroom is fixed and EIGHT rotating games have to cover THREE
+ * slots a night, so a strict 3-day window would need nine distinct games and
+ * only has eight. The ladder already answers that - it NARROWS to 2 on the days
+ * arithmetic forbids 3 - so the board still refuses yesterday's class every
+ * night, which is the promise players actually feel. Add a ninth rotating class
+ * and no-repeat-3 binds again with no code change.
  * ==========================================================================*/
 
 import { makeRng } from './rng.js';
@@ -55,15 +65,15 @@ import { makeRng } from './rng.js';
  * TUNABLES - one block, playtest-facing.
  * -------------------------------------------------------------------------- */
 export const HOMEROOM_KEY = 'daily_trigger';
-export const CLASSES_PER_DAY = 3;
+export const CLASSES_PER_DAY = 4;
 /** GROUND-RULES §3 amendment 3 + DECISIONS #3. */
 export const FAMILIES = Object.freeze(['word', 'memory', 'search', 'tracking', 'reflex', 'comfort']);
-/** DECISIONS #3: "one meaty (<=300s) + two quick". */
+/** DECISIONS #3, at the four-class pace: "one meaty (<=300s) + three quick". */
 export const MEATY_MAX_SEC = 300;
 export const QUICK_MAX_SEC = 180;
 export const MIN_BUDGET_SEC = 30;
 /** Mockup's departure-board periods. */
-export const PERIOD_LABELS = Object.freeze(['09:00', '09:05', '09:10']);
+export const PERIOD_LABELS = Object.freeze(['09:00', '09:05', '09:10', '09:15']);
 
 /** Anchor for the history walk. NEVER move this: it would reshuffle every past day. */
 export const EPOCH = '2026-08-01';
@@ -177,9 +187,30 @@ function daysAgo(history, date, window, key) {
 /* ----------------------------------------------------------------------------
  * THE PICK
  * -------------------------------------------------------------------------- */
-/** Exactly one meaty class per day, and only when the pool actually has one. */
+/**
+ * NEVER TWO MEATY CLASSES ON ONE BOARD. This is the half of DECISIONS #3 that
+ * does NOT relax: a night is one meaty plus quick ones, and two 300-second
+ * classes back to back is a different night than the one that was designed.
+ *
+ * It has to be separate from meatyOk below because relaxation drops a whole
+ * hard filter, and the old single predicate carried BOTH halves - so the moment
+ * a four-slot board relaxed 'meaty' to fill its last seat, it lost the cap as
+ * well and could deal two. (Measured the day CLASSES_PER_DAY went to 4: the
+ * shipped nine-class pool dealt two meaty classes on real nights.) The cap is
+ * applied to the candidate list BEFORE the ladder, so nothing can yield it.
+ */
+function meatyCapOk(g, chosen) {
+  return !g.meaty || !chosen.some((c) => c.meaty);
+}
+
+/**
+ * BOOK one meaty class per day, when the pool has one to book. This is the half
+ * that DOES relax (the ladder drops it under the name 'meaty'): a pool whose
+ * only meaty games are all inside the no-repeat window legitimately deals a
+ * night without one, because no-repeat outranks it.
+ */
 function meatyOk(g, chosen, meatyAvailable) {
-  if (!meatyAvailable) return true;                        // V1: no meaty games -> no-op
+  if (!meatyAvailable) return true;                        // no meaty games -> no-op
   if (chosen.some((c) => c.meaty)) return !g.meaty;        // already booked the meaty slot
   const slotsLeftIncludingThis = CLASSES_PER_DAY - chosen.length;
   if (slotsLeftIncludingThis <= 1) return g.meaty;         // last chance to book it
@@ -281,7 +312,12 @@ function pickDay(date, pool, history, calendar) {
 
   while (chosen.length < CLASSES_PER_DAY) {
     const taken = new Set(chosen.map((c) => c.key));
-    const candidates = pool.filter((g) => !taken.has(g.key));
+    // The meaty CAP is applied here, outside the relaxation ladder, because it is
+    // the one rule that must not yield (see meatyCapOk). It can never empty the
+    // list on its own: it only ever hides meaty games, and it only does that once
+    // a meaty game is already booked.
+    let candidates = pool.filter((g) => !taken.has(g.key) && meatyCapOk(g, chosen));
+    if (!candidates.length) candidates = pool.filter((g) => !taken.has(g.key));
     if (!candidates.length) break;   // pool smaller than a full day - short board, never a crash
 
     /* Relaxation order is law (BUILD-CONTRACT §7): flagship yields first, then
