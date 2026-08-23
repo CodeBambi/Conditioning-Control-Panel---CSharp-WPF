@@ -416,6 +416,31 @@
     </ScrollViewer>
 
     <Border Grid.Column="1" Classes="module" Margin="20,0,0,0">
+      <DockPanel>
+      <!-- THE SESSION FEATURE LOCK'S "WHY" (MainWindow/MainWindow.SessionFeatureLock.cs:203-227).
+           Upstream injects one banner per open panel (:305-313) because its dials live in fourteen
+           separate Features/*FeatureControl.xaml files; this rack's dials are all children of the
+           one detail host below, so ONE banner docked above it is on screen for whichever panel is
+           open. It is never blank while the lock is up, for upstream's stated reason: "a greyed-out
+           control with no explanation reads as a bug" (:104-106).
+
+           It is a DOCKED strip rather than upstream's zero-height overlay ribbon (:205-212). That
+           ribbon exists because WPF's dashboard is a fixed 1489x901 design canvas that silently
+           clips anything pushed past it; this page is a live-layout DockPanel with no such canvas,
+           so the honest shape is the one that reserves its own height instead of covering a dial. -->
+      <Border DockPanel.Dock="Top"
+              x:Name="SessionLockBanner"
+              Classes="notice"
+              IsVisible="False"
+              Margin="0,0,0,10">
+        <TextBlock x:Name="SessionLockReason"
+                   AutomationProperties.AutomationId="SessionLockReason"
+                   Foreground="#FFFF69B4"
+                   FontSize="12"
+                   FontWeight="SemiBold"
+                   TextWrapping="Wrap"
+                   Text="" />
+      </Border>
       <Panel>
         <TextBlock x:Name="RackHint"
                    Classes="page-blurb"
@@ -439,7 +464,7 @@
                them (Features/VisualsFeatureControl.xaml). This panel is the SCHEDULE; that one is
                the DRAW. -->
           <CheckBox x:Name="FlashEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="FlashEnableToggle"
                     AutomationProperties.Name="Flash Images enabled"
                     Content="Enable Flash Images" />
@@ -448,6 +473,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Flashes per hour" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="FlashFrequencySlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="180"
                     SmallChange="1" LargeChange="10"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -462,6 +488,7 @@
             <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Images per flash" />
             <Slider Grid.Row="1" Grid.Column="1"
                     x:Name="FlashImagesSlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="20"
                     SmallChange="1" LargeChange="5"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -536,6 +563,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Size" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="VisualsScaleSlider"
+                    Classes="session-owned"
                     Minimum="50" Maximum="250"
                     SmallChange="1" LargeChange="10"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -550,6 +578,7 @@
             <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Opacity" />
             <Slider Grid.Row="1" Grid.Column="1"
                     x:Name="VisualsOpacitySlider"
+                    Classes="session-owned"
                     Minimum="10" Maximum="100"
                     SmallChange="1" LargeChange="10"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -564,6 +593,7 @@
             <TextBlock Grid.Row="2" Grid.Column="0" Classes="dial-label" Text="On screen for" />
             <Slider Grid.Row="2" Grid.Column="1"
                     x:Name="VisualsDurationSlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="30"
                     SmallChange="1" LargeChange="5"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -619,7 +649,7 @@
           </Border>
 
           <CheckBox x:Name="MandatoryVideoEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="MandatoryVideoEnableToggle"
                     AutomationProperties.Name="Mandatory Video enabled"
                     Content="Enable Mandatory Video (silent half)" />
@@ -628,6 +658,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Clips per hour" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="MandatoryVideoFrequencySlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="20"
                     SmallChange="1" LargeChange="5"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -642,6 +673,7 @@
             <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Max length (s)" />
             <Slider Grid.Row="1" Grid.Column="1"
                     x:Name="MandatoryVideoMaxLengthSlider"
+                    Classes="session-owned"
                     Minimum="0" Maximum="600"
                     SmallChange="5" LargeChange="30"
                     IsSnapToTickEnabled="True" TickFrequency="5"
@@ -694,7 +726,7 @@
                dial swallows the gesture and tells the user nothing (§9 D7), so what is not here is
                absent rather than greyed. -->
           <CheckBox x:Name="SubliminalEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="SubliminalEnableToggle"
                     AutomationProperties.Name="Subliminals enabled"
                     Content="Enable Subliminals" />
@@ -703,6 +735,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Messages per minute" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="SubliminalFrequencySlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="30"
                     SmallChange="1" LargeChange="5"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -758,7 +791,7 @@
           </Border>
 
           <CheckBox x:Name="BouncingTextEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="BouncingTextEnableToggle"
                     AutomationProperties.Name="Bouncing Text enabled"
                     Content="Enable Bouncing Text" />
@@ -767,6 +800,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Speed" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="BouncingTextSpeedSlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="10"
                     SmallChange="1" LargeChange="2"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -781,6 +815,7 @@
             <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Size" />
             <Slider Grid.Row="1" Grid.Column="1"
                     x:Name="BouncingTextSizeSlider"
+                    Classes="session-owned"
                     Minimum="50" Maximum="300"
                     SmallChange="5" LargeChange="25"
                     IsSnapToTickEnabled="True" TickFrequency="5"
@@ -844,7 +879,7 @@
                target is D66 — and rendering them dead is exactly the greyed control that swallows
                the gesture (§9 D7), so what is not here is absent rather than disabled. -->
           <CheckBox x:Name="SpiralEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="SpiralEnableToggle"
                     AutomationProperties.Name="Spiral Overlay enabled"
                     Content="Enable Spiral Overlay" />
@@ -853,6 +888,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Spiral opacity" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="SpiralOpacitySlider"
+                    Classes="session-owned"
                     Minimum="0" Maximum="100"
                     SmallChange="1" LargeChange="10"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -913,7 +949,7 @@
                string is read and parsed — but nothing here PICKS one yet, so the swatch below
                reports the tint in force rather than offering a control that does not work. -->
           <CheckBox x:Name="PinkFilterEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="PinkFilterEnableToggle"
                     AutomationProperties.Name="Pink Filter enabled"
                     Content="Enable Pink Filter" />
@@ -922,6 +958,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Tint opacity" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="PinkFilterOpacitySlider"
+                    Classes="session-owned"
                     Minimum="0" Maximum="50"
                     SmallChange="1" LargeChange="5"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -998,7 +1035,7 @@
                BubblePopPresetDocument says why for each (D7 — a disabled dial swallows the
                gesture and tells the user nothing). -->
           <CheckBox x:Name="BubblePopEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="BubblePopEnableToggle"
                     AutomationProperties.Name="Bubble Pop enabled"
                     Content="Enable Bubble Pop" />
@@ -1007,6 +1044,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Bubbles per minute" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="BubblePopFrequencySlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="60"
                     SmallChange="1" LargeChange="5"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -1035,6 +1073,7 @@
             <TextBlock Grid.Row="2" Grid.Column="0" Classes="dial-label" Text="Extra speed" />
             <Slider Grid.Row="2" Grid.Column="1"
                     x:Name="BubblePopSpeedSlider"
+                    Classes="session-owned"
                     Minimum="0" Maximum="500"
                     SmallChange="10" LargeChange="50"
                     IsSnapToTickEnabled="True" TickFrequency="10"
@@ -1113,7 +1152,7 @@
                Esc is always live — D112), so it is ABSENT rather than greyed. A disabled dial
                swallows the gesture and tells the user nothing (§9 D7). -->
           <CheckBox x:Name="BubbleCountEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="BubbleCountEnableToggle"
                     AutomationProperties.Name="Bubble Count enabled"
                     Content="Enable Bubble Count" />
@@ -1122,6 +1161,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Games per hour" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="BubbleCountFrequencySlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="10"
                     SmallChange="1" LargeChange="1"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -1136,6 +1176,7 @@
             <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Difficulty" />
             <Slider Grid.Row="1" Grid.Column="1"
                     x:Name="BubbleCountDifficultySlider"
+                    Classes="session-owned"
                     Minimum="0" Maximum="2"
                     SmallChange="1" LargeChange="1"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -1213,7 +1254,7 @@
                ported, so both are ABSENT rather than greyed — a disabled dial swallows the gesture
                and tells the user nothing (§9 D7). -->
           <CheckBox x:Name="LockCardEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="LockCardEnableToggle"
                     AutomationProperties.Name="Lock Card enabled"
                     Content="Enable Lock Card" />
@@ -1222,6 +1263,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Cards per hour" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="LockCardFrequencySlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="10"
                     SmallChange="1" LargeChange="1"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -1236,6 +1278,7 @@
             <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Repeats" />
             <Slider Grid.Row="1" Grid.Column="1"
                     x:Name="LockCardRepeatsSlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="10"
                     SmallChange="1" LargeChange="1"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -1303,7 +1346,7 @@
                ABSENT rather than greyed — a disabled dial swallows the gesture and tells the user
                nothing (§9 D7). -->
           <CheckBox x:Name="MindWipeEnableToggle"
-                    Classes="dial-enable"
+                    Classes="dial-enable session-owned"
                     AutomationProperties.AutomationId="MindWipeEnableToggle"
                     AutomationProperties.Name="Mind Wipe enabled"
                     Content="Enable Mind Wipe" />
@@ -1312,6 +1355,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Clips per hour" />
             <Slider Grid.Row="0" Grid.Column="1"
                     x:Name="MindWipeFrequencySlider"
+                    Classes="session-owned"
                     Minimum="1" Maximum="180"
                     SmallChange="1" LargeChange="10"
                     IsSnapToTickEnabled="True" TickFrequency="1"
@@ -1718,6 +1762,7 @@
             <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Ramp curve" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       x:Name="RampCurvePicker"
+                      Classes="session-owned"
                       HorizontalAlignment="Stretch"
                       AutomationProperties.AutomationId="RampCurvePicker"
                       AutomationProperties.Name="Ramp curve">
@@ -1906,6 +1951,7 @@
           </Border>
         </StackPanel>
       </Panel>
+      </DockPanel>
     </Border>
   </Grid>
 </UserControl>
