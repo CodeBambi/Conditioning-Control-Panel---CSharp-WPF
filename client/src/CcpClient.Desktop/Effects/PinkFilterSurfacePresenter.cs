@@ -55,10 +55,18 @@ public interface IPinkFilterSurface
 /// that is up for a whole session loses the always-on-top band to anything that later claims it,
 /// and WPF spends a periodic unconditional kick reclaiming it — every 5 seconds, ten ticks of its
 /// 500 ms reconcile loop (<c>OverlayService.cs:666-673</c>). That number is this presenter's
-/// cadence. WPF's <i>other</i> half — a conditional recovery pass every 500 ms that re-asserts only
-/// when the band was actually lost (<c>:633-663</c>) — has no honest counterpart:
+/// cadence.</para>
+///
+/// <para><b>WPF's <i>other</i> half is now here too, and D79 is closed.</b> That divergence said the
+/// conditional recovery pass had no honest counterpart because
 /// <see cref="IOverlayPresence.Reassert"/> confirms nothing by design and the capability exposes no
-/// z-order query to condition on (divergence D79).</para>
+/// z-order query to condition on. The first half of that is still true and the conclusion was not:
+/// the condition does not need a z-order query, it needs the OS's own extended style, which
+/// <see cref="OverlaySurfaceSet.TopmostHeldByOs"/> reads back per tick. So the loop runs at WPF's
+/// 500 ms, escalates to a rebuild after six consecutive losing ticks — three seconds — and is capped
+/// at three rebuilds, which is upstream's own backoff and the only thing standing between a
+/// REFUSED band and a window torn down every three seconds forever
+/// (<see cref="OverlaySurfaceSet.MaxRebuildAttempts"/>).</para>
 /// </summary>
 public sealed class PinkFilterSurfacePresenter : IPinkFilterSurface, IDisposable
 {
@@ -82,16 +90,21 @@ public sealed class PinkFilterSurfacePresenter : IPinkFilterSurface, IDisposable
     /// <param name="dispatch">Marshals a cadence callback onto the surface thread.</param>
     /// <param name="presenceFactory">Builds the overlay presence, lazily, on the surface thread.</param>
     /// <param name="display">Where the tint may go; null when the OS reports no display.</param>
+    /// <param name="topmostHeld">The topmost read-back the rebuild rule is conditioned on; null
+    /// takes the product one (<see cref="OverlaySurfaceSet.TopmostHeldByOs"/>).</param>
     public PinkFilterSurfacePresenter(
         ISessionClock clock,
         Action<Action> dispatch,
         Func<IOverlayPresence> presenceFactory,
-        Func<OverlayBounds?> display)
+        Func<OverlayBounds?> display,
+        Func<IOverlayPresence, bool?>? topmostHeld = null)
     {
         ArgumentNullException.ThrowIfNull(display);
         _display = display;
         _surfaces = new OverlaySurfaceSet(
-            clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence);
+            clock, dispatch, presenceFactory, MaxConcurrentSurfaces, TopmostCadence,
+            rebuild: Rebuild,
+            topmostHeld: topmostHeld);
     }
 
     /// <summary>The product composition: the real overlay backend for this platform and the OS's own
@@ -120,6 +133,18 @@ public sealed class PinkFilterSurfacePresenter : IPinkFilterSurface, IDisposable
     /// <summary>The tint currently believed to be up, or null when nothing is. What the module asked
     /// for, not what the screen holds.</summary>
     public PinkFilterTint? CurrentTint { get; private set; }
+
+    /// <summary>How many consecutive reconcile ticks have found the band lost, zero once the OS says
+    /// it is held again. Diagnostics and facts; never a claim about a screen.</summary>
+    public int TopmostLossTicks => _surfaces.TopmostLossTicks;
+
+    /// <summary>Rebuilds this presenter has been asked for after sustained topmost loss.
+    /// Diagnostics and facts; never a claim about a screen.</summary>
+    public int Rebuilds => _surfaces.RebuildsRequested;
+
+    /// <summary>Times the rebuild rule came due and was already backed off
+    /// (<see cref="OverlaySurfaceSet.MaxRebuildAttempts"/>).</summary>
+    public int RebuildsBackedOff => _surfaces.RebuildsBackedOff;
 
     /// <inheritdoc/>
     public CapabilityState Engage(PinkFilterTint tint)
@@ -164,6 +189,27 @@ public sealed class PinkFilterSurfacePresenter : IPinkFilterSurface, IDisposable
         var placed = _surfaces.Place(_slot, request, frame, lifetime: null);
         CurrentTint = placed ? tint : null;
         return Outcome(placed);
+    }
+
+    /// <summary>
+    /// Put the tint back after three seconds of sustained topmost loss — WPF's
+    /// <c>RecreateOverlays</c> arm (<c>OverlayService.cs:692-695</c>), which is what stops a tint
+    /// that lost the band from staying gone for the rest of the run.
+    ///
+    /// <para>It is <see cref="Engage"/> with the tint already up, which is a re-PRESENT of the same
+    /// slot — and a present is the one call that EARNS the fact, because it re-reads the extended
+    /// style, the z-order and the hit test from the OS (<c>Overlay/Win32OverlayPresence.cs:504-560</c>).
+    /// So a rebuild that did not work reports itself; nothing here claims a screen.</para>
+    ///
+    /// <para>Nothing to rebuild when nothing is up: the reconcile loop only ticks while a surface is
+    /// live, and this second check keeps a rebuild from re-placing a tint the user just turned off.</para>
+    /// </summary>
+    private void Rebuild()
+    {
+        if (CurrentTint is { } tint && Showing)
+        {
+            Engage(tint);
+        }
     }
 
     /// <summary>

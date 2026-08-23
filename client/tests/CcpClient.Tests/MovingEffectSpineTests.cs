@@ -36,21 +36,23 @@ public class MovingEffectSpineTests
 
         Assert.True(rig.Engine.Start());
 
-        // FIVE timers, and every one of them is accounted for — this rig runs the REAL presenters
+        // SEVEN timers, and every one of them is accounted for — this rig runs the REAL presenters
         // for both continuous modules, so their surface cadences are on this clock too:
         //   1 flash firing + 1 subliminal firing  -> the two PACED MODULES' schedules
-        //   1 pink filter                         -> its SURFACE's topmost band. The MODULE has
-        //                                            none: the tint's rig, which injects a recording
-        //                                            double instead of the presenter, counts 2 here
-        //   2 spiral                              -> its SURFACE's topmost band AND its frame
-        //                                            advance. The MODULE has none either
+        //   2 pink filter                         -> its SURFACE's topmost band and its band
+        //                                            reconcile. The MODULE has none: the tint's rig,
+        //                                            which injects a recording double instead of the
+        //                                            presenter, counts 2 here
+        //   3 spiral                              -> its SURFACE's topmost band, its band reconcile
+        //                                            AND its frame advance. The MODULE has none
+        //                                            either
         //
-        // So of five timers, two belong to modules and three belong to surfaces, and the two
+        // So of seven timers, two belong to modules and five belong to surfaces, and the two
         // modules that draw a persistent layer own not one of them. A moving module that had grown
-        // its own scheduler would show a SIXTH here, or would have taken the clock in its
+        // its own scheduler would show an EIGHTH here, or would have taken the clock in its
         // constructor to arm one — which is what the tripwire in SpiralOverlayEffectTests pins at
         // the line.
-        Assert.Equal(5, rig.Clock.PendingCount);
+        Assert.Equal(7, rig.Clock.PendingCount);
         Assert.True(rig.Flash.ScheduleArmed);
         Assert.True(rig.Subliminals.ScheduleArmed);
 

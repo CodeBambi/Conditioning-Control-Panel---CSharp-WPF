@@ -13,6 +13,26 @@ namespace CcpClient.Desktop.Effects;
 /// which is also what keeps the port's memory flat where upstream's is not (see
 /// <see cref="ISpiralAnimation"/>).</para>
 /// </summary>
+/// <summary>
+/// Which module a clip is being opened for. The GDI+ walk underneath is ONE decoder — the frame
+/// dimension list, the frame count, the <c>0x5100</c> delay property, the active-frame select and
+/// the one reused buffer are shared — and these are the only two things that differ, because they
+/// are the only two things upstream does differently for the two surfaces.
+/// </summary>
+public enum AnimatedImageProfile
+{
+    /// <summary>The full-screen spiral: <c>Stretch.UniformToFill</c> centre-crop
+    /// (<c>Services/Notifications/OverlayService.cs:1695</c>, <c>:1701-1706</c>) and
+    /// <see cref="SpiralFrameDelay"/>'s law over the FIRST frame's delay (<c>:1543-1556</c>).</summary>
+    Spiral,
+
+    /// <summary>A flash image: stretched to the rectangle its geometry already sized to the source's
+    /// aspect ratio (the same <c>GdipDrawImageRectI</c> the still path uses,
+    /// <see cref="GdiPlusFlashFrameSource"/>), and <see cref="FlashFrameDelay"/>'s law — the AVERAGE
+    /// of the frames' own delays (<c>Services/Media/AnimatedWebp.cs:205-212</c>).</summary>
+    Flash,
+}
+
 public interface ISpiralFrameSource
 {
     /// <summary>
@@ -86,7 +106,22 @@ public interface ISpiralAnimation : IDisposable
 public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
 {
     /// <inheritdoc/>
-    public ISpiralAnimation? Open(string path, int width, int height)
+    public ISpiralAnimation? Open(string path, int width, int height) =>
+        OpenAnimation(path, width, height, AnimatedImageProfile.Spiral);
+
+    /// <summary>
+    /// The GDI+ animated-image walk, for either module — <b>the one decoder in this port that
+    /// knows how to step frames</b>, and the reason Flash Images did not grow a second one.
+    ///
+    /// <para>A flash calls this through <see cref="GdiPlusFlashAnimationSource"/>. Everything that
+    /// makes a clip a clip is shared: the first frame dimension
+    /// (<c>gdiplus GdipImageGetFrameDimensionsList</c>, WPF's <c>FrameDimensionsList[0]</c>), the
+    /// frame count, the <c>0x5100</c> delay property, <c>GdipImageSelectActiveFrame</c>, and one
+    /// pinned buffer every frame is drawn into. <see cref="AnimatedImageProfile"/> names the two
+    /// things that are genuinely different between the surfaces.</para>
+    /// </summary>
+    public static ISpiralAnimation? OpenAnimation(
+        string path, int width, int height, AnimatedImageProfile profile)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         if (width <= 0 || height <= 0 || !GdiPlusRuntime.Available)
@@ -94,7 +129,7 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
             return null;
         }
 
-        return GdiPlusSpiralAnimation.Open(path, width, height);
+        return GdiPlusSpiralAnimation.Open(path, width, height, profile);
     }
 
     /// <summary>
@@ -160,10 +195,12 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
         private Guid _dimension;
         private bool _disposed;
 
+        private readonly AnimatedImageProfile _profile;
+
         private GdiPlusSpiralAnimation(
             nint image, nint target, nint graphics, byte[] pixels, GCHandle pinned,
             int width, int height, int sourceWidth, int sourceHeight,
-            Guid dimension, int frameCount, TimeSpan frameDelay)
+            Guid dimension, int frameCount, TimeSpan frameDelay, AnimatedImageProfile profile)
         {
             _image = image;
             _target = target;
@@ -175,6 +212,7 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
             _sourceWidth = sourceWidth;
             _sourceHeight = sourceHeight;
             _dimension = dimension;
+            _profile = profile;
             FrameCount = frameCount;
             FrameDelay = frameDelay;
         }
@@ -183,7 +221,8 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
 
         public TimeSpan FrameDelay { get; }
 
-        public static ISpiralAnimation? Open(string path, int width, int height)
+        public static ISpiralAnimation? Open(
+            string path, int width, int height, AnimatedImageProfile profile)
         {
             if (GdiPlus.GdipLoadImageFromFile(path, out var image) != Ok || image == 0)
             {
@@ -205,7 +244,7 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
 
                 var dimension = FirstFrameDimension(image);
                 var frameCount = FrameCountOf(image, ref dimension);
-                var delay = ReadFrameDelay(image);
+                var delay = ReadFrameDelay(image, profile);
 
                 var pixels = new byte[(long)width * height * OverlayFrame.BytesPerPixel];
                 pinned = GCHandle.Alloc(pixels, GCHandleType.Pinned);
@@ -229,7 +268,7 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
                 opened = true;
                 return new GdiPlusSpiralAnimation(
                     image, target, graphics, pixels, pinned, width, height,
-                    (int)sourceWidth, (int)sourceHeight, dimension, frameCount, delay);
+                    (int)sourceWidth, (int)sourceHeight, dimension, frameCount, delay, profile);
             }
             finally
             {
@@ -277,8 +316,17 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
                 return null;
             }
 
-            var (cropX, cropY, cropWidth, cropHeight) =
-                SourceCrop(_sourceWidth, _sourceHeight, _width, _height);
+            // THE SOURCE RECTANGLE IS THE PROFILE'S. The spiral takes the largest centred rectangle
+            // with the destination's aspect ratio (WPF's Stretch.UniformToFill inside a clip); a
+            // flash takes the WHOLE image, which through the same call is a plain stretch — byte for
+            // byte what GdiPlusFlashFrameSource does to a still with GdipDrawImageRectI. The flash's
+            // destination was ALREADY sized to the source's aspect ratio by FlashGeometry.Size, so
+            // there is nothing to crop; cropping it anyway would make a clip's frames disagree with
+            // the still pictures beside them.
+            var (cropX, cropY, cropWidth, cropHeight) = _profile is AnimatedImageProfile.Flash
+                ? (0, 0, _sourceWidth, _sourceHeight)
+                : SourceCrop(_sourceWidth, _sourceHeight, _width, _height);
+
             if (GdiPlus.GdipDrawImageRectRectI(
                     _graphics, _image, 0, 0, _width, _height,
                     cropX, cropY, cropWidth, cropHeight, UnitPixel, 0, 0, 0) != Ok)
@@ -335,17 +383,31 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
         }
 
         /// <summary>
-        /// WPF's frame-delay read (<c>OverlayService.cs:1542-1549</c>): property <c>0x5100</c>, the
-        /// first four bytes as an <c>int</c> of hundredths, through
-        /// <see cref="SpiralFrameDelay.FromHundredths"/>. Anything missing or short is the default —
-        /// upstream's <c>catch</c> around the same read.
+        /// The frame-delay read, property <c>0x5100</c> — one GDI+ item holding <b>every</b> frame's
+        /// delay in hundredths of a second, one <c>int</c> each.
+        ///
+        /// <para>The two modules ask it different questions and get different answers, which is why
+        /// the profile reaches this far down. The spiral takes the FIRST value through
+        /// <see cref="SpiralFrameDelay"/> (WPF's <c>OverlayService.cs:1542-1549</c>, which reads
+        /// <c>GetPropertyItem(0x5100).Value</c> and converts four bytes). A flash takes the AVERAGE
+        /// through <see cref="FlashFrameDelay"/>, because upstream's flash decoder averages the
+        /// per-frame durations its codec reported (<c>Services/Media/AnimatedWebp.cs:205-212</c>) —
+        /// and the two laws disagree loudly on ordinary files: a GIF declaring 60 hundredths animates
+        /// at 600 ms under one and 50 ms under the other.</para>
+        ///
+        /// <para>Anything missing or short is that profile's own default — upstream's <c>catch</c>
+        /// around the same read.</para>
         /// </summary>
-        private static TimeSpan ReadFrameDelay(nint image)
+        private static TimeSpan ReadFrameDelay(nint image, AnimatedImageProfile profile)
         {
+            var fallback = profile is AnimatedImageProfile.Flash
+                ? FlashFrameDelay.Default
+                : SpiralFrameDelay.Default;
+
             if (GdiPlus.GdipGetPropertyItemSize(image, PropertyTagFrameDelay, out var size) != Ok
                 || size < Marshal.SizeOf<PropertyItem>() + sizeof(int))
             {
-                return SpiralFrameDelay.Default;
+                return fallback;
             }
 
             var buffer = Marshal.AllocHGlobal((int)size);
@@ -353,16 +415,28 @@ public sealed class GdiPlusSpiralFrameSource : ISpiralFrameSource
             {
                 if (GdiPlus.GdipGetPropertyItem(image, PropertyTagFrameDelay, size, buffer) != Ok)
                 {
-                    return SpiralFrameDelay.Default;
+                    return fallback;
                 }
 
                 var item = Marshal.PtrToStructure<PropertyItem>(buffer);
                 if (item.Value == 0 || item.Length < sizeof(int))
                 {
-                    return SpiralFrameDelay.Default;
+                    return fallback;
                 }
 
-                return SpiralFrameDelay.FromHundredths(Marshal.ReadInt32(item.Value));
+                if (profile is not AnimatedImageProfile.Flash)
+                {
+                    return SpiralFrameDelay.FromHundredths(Marshal.ReadInt32(item.Value));
+                }
+
+                var count = item.Length / sizeof(int);
+                var hundredths = new int[count];
+                for (var i = 0; i < count; i++)
+                {
+                    hundredths[i] = Marshal.ReadInt32(item.Value, i * sizeof(int));
+                }
+
+                return FlashFrameDelay.FromHundredths(hundredths);
             }
             finally
             {

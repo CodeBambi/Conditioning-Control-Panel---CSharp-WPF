@@ -120,10 +120,11 @@ public class SpiralSurfacePresenterTests
 
         rig.Presenter.Engage(SpiralPath, Dial);
 
-        // ONE timer on the clock, and it is the topmost cadence — not a frame advance. WPF's own
-        // condition is `if (_spiralGifFrames.Count > 1 && …)` (OverlayService.cs:1370): a one-frame
-        // spiral is a picture and a timer for it would be a tick that changes nothing, forever.
-        Assert.Equal(1, rig.Clock.PendingCount);
+        // TWO timers on the clock — the topmost cadence and the band's reconcile — and NEITHER is a
+        // frame advance. WPF's own condition is `if (_spiralGifFrames.Count > 1 && …)`
+        // (OverlayService.cs:1370): a one-frame spiral is a picture and a timer for it would be a
+        // tick that changes nothing, forever.
+        Assert.Equal(2, rig.Clock.PendingCount);
 
         rig.Clock.Advance(TimeSpan.FromHours(2));
 
@@ -132,17 +133,18 @@ public class SpiralSurfacePresenterTests
     }
 
     [Fact]
-    public void AMovingSpiralArmsExactlyTwoTimers_TheBandAndTheFrame_AndNeitherIsALifetime()
+    public void AMovingSpiralArmsExactlyThreeTimers_TheBandTheFrameAndTheReconcile_AndNoneIsALifetime()
     {
         var rig = new Rig(frames: 5);
 
         rig.Presenter.Engage(SpiralPath, Dial);
 
-        // Two, and only two. A THIRD would be a per-surface lifetime, which a layer that is up
-        // until the session ends must not have (the static module's nullable lifetime); a lifetime of "four
-        // hours" is a timer that exists, that a stop has to cancel, and that fires in a session
-        // nobody meant it to reach.
-        Assert.Equal(2, rig.Clock.PendingCount);
+        // Three, and only three: the topmost cadence, the frame advance, and the 500 ms reconcile
+        // that watches the band for sustained loss. A FOURTH would be a per-surface lifetime, which
+        // a layer that is up until the session ends must not have (the static module's nullable
+        // lifetime); a lifetime of "four hours" is a timer that exists, that a stop has to cancel,
+        // and that fires in a session nobody meant it to reach.
+        Assert.Equal(3, rig.Clock.PendingCount);
 
         rig.Clock.Advance(TimeSpan.FromHours(4));
 
@@ -367,12 +369,12 @@ public class SpiralSurfacePresenterTests
         Assert.False(rig.Presenter.Running);
         Assert.Equal(1, presence.WithdrawCalls);
 
-        // The frame cadence is gone at once — OnAdvance re-arms only while something is up. The one
-        // timer still pending is the BAND's, which OverlaySurfaceSet re-arms only while a slot is
-        // live, so it fires once, finds nothing, and stops. Asserted as one-then-zero rather than
-        // as zero, because "no timer survives a failed frame" would be a claim this code does not
-        // make and a reader would be entitled to believe it.
-        Assert.Equal(1, rig.Clock.PendingCount);
+        // The frame cadence is gone at once — OnAdvance re-arms only while something is up. The two
+        // timers still pending are the BAND's and the RECONCILE's, both of which OverlaySurfaceSet
+        // re-arms only while a slot is live, so each fires once, finds nothing, and stops. Asserted
+        // as two-then-zero rather than as zero, because "no timer survives a failed frame" would be
+        // a claim this code does not make and a reader would be entitled to believe it.
+        Assert.Equal(2, rig.Clock.PendingCount);
         rig.Clock.Advance(SpiralSurfacePresenter.TopmostCadence);
         Assert.Equal(0, rig.Clock.PendingCount);
         Assert.Equal(0, presence.ReassertCalls);
