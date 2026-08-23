@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CcpClient.Desktop.Effects;
 
 namespace CcpClient.Desktop.Session;
 
@@ -26,8 +27,10 @@ namespace CcpClient.Desktop.Session;
 /// <para><b>Modelled = what the four shipped files carry.</b> Upstream's <c>SessionSettings</c>
 /// also has a <c>StartMinute</c>/<c>EndMinute</c> pair per feature and a <c>TimelineEvents</c>
 /// list (<c>Models/Session.cs:822-935</c>, <c>:53</c>); none of the four built-ins writes them, the
-/// editor that does is not ported, and the members that read them (<c>CheckDelayedFeatures</c>,
-/// <c>Services/Session/SessionEngine.cs:663</c>) are not in this slice. They are not dropped:
+/// editor that does is not ported, and the half of <c>CheckDelayedFeatures</c> that reads them —
+/// its queue of deferred timeline starts (<c>Services/Session/SessionEngine.cs:668-685</c>) — has
+/// nothing to drive it here. The rest of that method IS ported: the three delayed feature starts
+/// the shipped files really use are <see cref="ScriptedSessionRun"/>'s. They are not dropped:
 /// anything unmodelled
 /// lands in <see cref="ExtensionData"/> and is preserved, which is the persistence contract's §6
 /// rule and the only reason a later slice can add them without a schema story.</para>
@@ -248,13 +251,18 @@ public sealed class ScriptedSessionPhase
 /// round-trips through this type must not lose them, and because the values are what a later
 /// slice's editor and rack read.</para>
 ///
-/// <para><b>Two of them upstream itself never reads.</b> <c>flashScale</c> and
-/// <c>flashSmallSize</c> are written by the definitions and the editor
-/// (<c>Models/Session.cs:264</c>, <c>:367</c>) and shown in the spoiler text (<c>:705</c>), but
-/// <c>ApplySessionSettings</c> never assigns them to anything
+/// <para><b>One of them upstream itself never reads</b> — <c>flashSmallSize</c>, written by the
+/// definitions and the editor (<c>Models/Session.cs:264</c>, <c>:367</c>) and assigned nowhere at
+/// runtime. The port does not apply it either; that is upstream's behaviour, not an omission
+/// here.</para>
+///
+/// <para><b>Corrected:</b> this paragraph used to say the same of <c>flashScale</c>, and that was
+/// wrong. <c>ApplySessionSettings</c> is indeed not where it is read
 /// (<c>Services/Session/SessionEngine.cs:1150-1160</c> assigns frequency, opacity, image count,
-/// clickable, hydra and flash audio — and nothing else). The port does not apply them either; that
-/// is upstream's behaviour, not an omission here.</para>
+/// clickable, hydra and flash audio — and nothing else), but <c>UpdateRampingValues</c> reads it on
+/// every tick and pushes it through the session's ephemeral flash override
+/// (<c>:596-601</c>, <c>Models/AppSettings.cs:908-913</c>). It is live at runtime, it is pinned
+/// rather than ramped, and <see cref="ScriptedSessionRamp.FlashScalePercent"/> carries it.</para>
 /// </summary>
 public sealed class ScriptedSessionSettings
 {
@@ -266,8 +274,8 @@ public sealed class ScriptedSessionSettings
     /// <summary>Upstream <c>FlashPerHour</c>, default 10 (<c>:825</c>).</summary>
     public int FlashPerHour { get; set; } = 10;
 
-    /// <summary>Upstream <c>FlashPerHourEnd</c> — the frequency ramp's destination (<c>:826</c>).
-    /// Ramps are not in this slice.</summary>
+    /// <summary>Upstream <c>FlashPerHourEnd</c> — the frequency ramp's destination (<c>:826</c>),
+    /// reached at the session's end (<see cref="ScriptedSessionRamp.Compute"/>).</summary>
     public int FlashPerHourEnd { get; set; } = 10;
 
     /// <summary>Upstream <c>FlashImages</c>, default 2 (<c>:827</c>).</summary>
@@ -279,8 +287,10 @@ public sealed class ScriptedSessionSettings
     /// <summary>Upstream <c>FlashOpacityEnd</c> (<c>:829</c>). Ramp destination.</summary>
     public int FlashOpacityEnd { get; set; } = 100;
 
-    /// <summary>Upstream <c>FlashScale</c> (<c>:830</c>) — written by the editor, read by nobody at
-    /// runtime.</summary>
+    /// <summary>Upstream <c>FlashScale</c> (<c>:830</c>): the size a session draws its flash images
+    /// at, in percent, where 100 means "leave the user's own". <b>Pinned for the whole session, not
+    /// ramped</b> (<c>Services/Session/SessionEngine.cs:596-599</c>) — see
+    /// <see cref="ScriptedSessionRamp.FlashScalePercent"/>.</summary>
     public int FlashScale { get; set; } = 100;
 
     /// <summary>Upstream <c>FlashClickable</c>, default true (<c>:831</c>).</summary>
@@ -474,6 +484,23 @@ public sealed class ScriptedSessionSettings
 
     /// <summary>Upstream <c>BrainDrainEndIntensity</c>, default 5 (<c>:930</c>).</summary>
     public int BrainDrainEndIntensity { get; set; } = 5;
+
+    // ---- The ramps' shared easing curve (:932-935) ----
+
+    /// <summary>
+    /// The easing curve for ALL of this session's ramps — upstream <c>SessionSettings.RampCurve</c>
+    /// (<c>Models/Session.cs:932-935</c>). <b>Nullable, and null means "use the user's own"</b>:
+    /// upstream resolves it as <c>settings.RampCurve ?? App.Settings.Current.RampCurve</c> on every
+    /// tick (<c>Services/Session/SessionEngine.cs:569</c>), so a session that sets nothing follows
+    /// whatever curve the user picked for their manual ramp. The port's counterpart of that one
+    /// global dial is <see cref="IntensityRampPresetDocument.Curve"/>, which
+    /// <see cref="ScriptedSessionRun"/> reads per tick for exactly this fallback.
+    ///
+    /// <para>None of the four shipped files writes it, so every built-in session runs on the user's
+    /// curve today. It is modelled because the file format has it and because a session that DOES
+    /// set one must not lose it through a round trip.</para>
+    /// </summary>
+    public RampCurve? RampCurve { get; set; }
 
     /// <summary>Unknown-member preservation (persistence contract §6).</summary>
     [JsonExtensionData]

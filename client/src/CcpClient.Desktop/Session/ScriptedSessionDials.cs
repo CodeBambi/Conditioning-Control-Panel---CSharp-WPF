@@ -180,12 +180,21 @@ public sealed class ScriptedSessionDials
     /// <c>lockCardPhrases</c>, so the member is not modelled and there is nothing to apply.</item>
     /// <item><c>MindWipeBaseMultiplier</c> (<c>:212</c>) — session mode's escalating frequency,
     /// which <see cref="MindWipePresetDocument"/> records as absent.</item>
-    /// <item>every <c>StartMinute</c>-gated deferral (<c>DeferFeatureStart</c>, <c>:1136</c>) — the
-    /// delayed feature starts are not in this slice. The dial state at t=0 IS ported: a feature
-    /// whose start minute is not zero is applied OFF, exactly as upstream applies it
-    /// (<c>:1288-1296</c> for pink, <c>:1299-1307</c> for spiral, <c>:1315</c> for bubbles).</item>
-    /// <item><c>flashScale</c> and <c>flashSmallSize</c> — upstream itself never reads them at
-    /// runtime (see <see cref="ScriptedSessionSettings"/>).</item>
+    /// <item>the <c>DeferFeatureStart</c> queue (<c>:1136</c>) — it is fed by the per-feature
+    /// timeline start events the port's model does not carry (see
+    /// <see cref="ScriptedSessionSettings"/>). The three delayed starts the shipped files really
+    /// use are ported and live in <see cref="ScriptedSessionRun"/>; what this method still owns is
+    /// the dial state at t=0, where a feature whose start minute is not zero is applied OFF exactly
+    /// as upstream applies it (<c>:1288-1296</c> for pink, <c>:1299-1307</c> for spiral,
+    /// <c>:1315</c> for bubbles).</item>
+    /// <item><c>flashSmallSize</c> — upstream itself never reads it at runtime (see
+    /// <see cref="ScriptedSessionSettings"/>).</item>
+    /// <item><c>flashScale</c> — read at runtime after all
+    /// (<c>Services/Session/SessionEngine.cs:596-599</c>), but never as a persisted dial: it is
+    /// parked on the session's ephemeral flash override with the two flash ramps
+    /// (<c>Models/AppSettings.cs:908-913</c>) and is <see cref="ScriptedSessionRun.Ramp"/>'s here.
+    /// The port persists no flash draw dials at all, so there is nothing for it to be applied
+    /// to.</item>
     /// </list>
     /// </remarks>
     public void Apply(ScriptedSessionSettings settings)
@@ -338,6 +347,46 @@ public sealed class ScriptedSessionDials
                 d.VolumePercent = settings.MindWipeVolume;
             }
         });
+    }
+
+    /// <summary>
+    /// The opacity a delayed PINK FILTER should come up at — the dial half of upstream's delayed
+    /// start (<c>Services/Session/SessionEngine.cs:687-697</c>), written the moment the start
+    /// minute arrives and before the module is armed.
+    ///
+    /// <para><b>A recorded divergence, and the reason for it.</b> Upstream writes no opacity here:
+    /// its filter is already being driven by <c>UpdateRampingValues</c> through the overlay
+    /// service's sustained hold (<c>:611-618</c>), so the enable at <c>:692</c> only has to flip a
+    /// flag. This port has no such hold — <see cref="Effects.PinkFilterEffect"/> records
+    /// <c>Services/Notifications/OverlayService.cs:900-965</c> as unported — and its modules read
+    /// their dials when they ARM, so a delayed pink filter armed with no dial written would come up
+    /// at the USER's opacity: neither the session's starting value nor its ramp. What is written is
+    /// the ramp's own FIRST SAMPLE, which at <c>elapsed == start</c> is exactly
+    /// <c>PinkFilterStartOpacity</c> (<c>:616</c> with <c>pinkProgress</c> at 0) — the same value
+    /// <see cref="Apply"/> writes for a session whose filter starts at t=0 (<c>:1290</c>). The
+    /// climb past that first sample is published on <see cref="ScriptedSessionRun.Ramp"/> and is
+    /// deliberately NOT written here; writing it would be upstream's #471 defect.</para>
+    /// </summary>
+    public void ApplyDelayedPinkStart(ScriptedSessionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        _pinkFilter.Mutate(d => d.OpacityPercent = settings.PinkFilterStartOpacity);
+    }
+
+    /// <summary>
+    /// The same for a delayed SPIRAL (<c>Services/Session/SessionEngine.cs:717-727</c>).
+    ///
+    /// <para>For a session whose spiral does not ramp this IS upstream's write, comment and all:
+    /// "A non-ramping session never drives the overlay directly, so its prescribed opacity has to
+    /// land in settings here the way an immediate start does" (<c>:719-722</c>). For one that does
+    /// ramp it is the same first-sample rule <see cref="ApplyDelayedPinkStart"/> states, and it
+    /// lands on the same number — <c>SpiralOpacity</c> is where the ramp begins (<c>:631</c>).
+    /// One line for both, because upstream's two cases agree on the value.</para>
+    /// </summary>
+    public void ApplyDelayedSpiralStart(ScriptedSessionSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        _spiral.Mutate(d => d.OpacityPercent = settings.SpiralOpacity);
     }
 
     private interface IDocumentSlot

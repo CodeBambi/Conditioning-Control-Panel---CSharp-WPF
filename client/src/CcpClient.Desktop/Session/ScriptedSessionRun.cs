@@ -1,18 +1,22 @@
+using CcpClient.Desktop.Effects;
+using CcpClient.Desktop.Persistence;
+
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
 /// A scripted session RUNNING: upstream's <c>Services/Session/SessionEngine.cs:22</c>, the timed
 /// session with named phases that sits <b>on top of</b> the ordinary <see cref="SessionEngine"/>.
 ///
-/// <para>Slice 1 of that surface, and deliberately the runtime rather than the rack: the persisted
-/// model (<see cref="ScriptedSession"/>), phases advancing on a clock, the live progress and
-/// remaining readout, START and STOP with the settings snapshot restored at the end
-/// (<see cref="ScriptedSessionDials"/>), and the clock-jump guard. <b>Not</b> in it, each recorded
-/// rather than half-built: the session editor, the rack UI and its repaint, the Session Complete
-/// recap and history, the media log, pause and its XP penalty, the XP award itself, the Gamer-Girl
-/// corner-GIF window, scheduled bubble bursts, the ±3 min randomized ramp starts, the per-tick
-/// ramping values (<c>UpdateRampingValues</c>, <c>Services/Session/SessionEngine.cs:564</c>) and
-/// the delayed feature starts (<c>CheckDelayedFeatures</c>, <c>:663</c>). </para>
+/// <para>Slices 1 and 2 of that surface, and deliberately the runtime rather than the rack: the
+/// persisted model (<see cref="ScriptedSession"/>), phases advancing on a clock, the live progress
+/// and remaining readout, START and STOP with the settings snapshot restored at the end
+/// (<see cref="ScriptedSessionDials"/>), the clock-jump guard, the per-tick ramping values
+/// (<c>UpdateRampingValues</c>, <c>Services/Session/SessionEngine.cs:564</c> —
+/// <see cref="ScriptedSessionRamp"/>), the delayed feature starts (<c>CheckDelayedFeatures</c>,
+/// <c>:663</c>) and the ±3 minute jitter on them (<c>RandomizeStartTimes</c>, <c>:777</c>).
+/// <b>Not</b> in them, each recorded rather than half-built: the session editor, the rack UI and
+/// its repaint, the Session Complete recap and history, the media log, pause and its XP penalty,
+/// the XP award itself, the Gamer-Girl corner-GIF window and scheduled bubble bursts.</para>
 ///
 /// <para><b>It owns the ordinary engine from outside</b>, the way
 /// <see cref="Scheduling.SessionScheduler"/> does, and for upstream's reason: starting a scripted
@@ -54,6 +58,8 @@ public sealed class ScriptedSessionRun
     private readonly SessionEngine _engine;
     private readonly ScriptedSessionDials _dials;
     private readonly IScriptedClock _clock;
+    private readonly PersistenceStore<IntensityRampPresetDocument> _rampCurve;
+    private readonly Random _random;
     private readonly EffectSignal? _signal;
     private readonly object _gate = new();
 
@@ -64,28 +70,49 @@ public sealed class ScriptedSessionRun
     private DateTimeOffset _wallStart;
     private TimeSpan _monotonicStart;
     private int _phaseIndex;
+    private double _pinkStartMinute;
+    private double _spiralStartMinute;
+    private ScriptedSessionRamp _ramp;
 
     /// <param name="engine">The REAL ordinary engine, never a seam — the rule
     /// <see cref="Scheduling.SessionScheduler"/> states and the reason it gives: a double that
     /// diverges from the product is exactly where a defect hides.</param>
     /// <param name="dials">The user's settings, which this session borrows and gives back.</param>
     /// <param name="clock">The two clocks and the tick timer.</param>
+    /// <param name="rampCurve">The user's own easing curve, READ every tick and never captured,
+    /// applied or restored. Upstream has one global <c>AppSettings.RampCurve</c> shared by both of
+    /// its ramp systems, resolved as <c>settings.RampCurve ?? App.Settings.Current.RampCurve</c>
+    /// (<c>Services/Session/SessionEngine.cs:569</c>); in this port that dial belongs to the
+    /// Intensity Ramp module's document, which is why a scripted session reaches for it here. It is
+    /// re-read per tick rather than captured at START because upstream re-reads it per tick — the
+    /// reason its combo box is the one control that stays live during a session
+    /// (<c>Features/IntensityRampFeatureControl.xaml:84-86</c>).</param>
     /// <param name="signal">Where this class's own notifications are delivered. Its ticks arrive on
     /// a pool thread, so a UI consumer needs the same marshalling every module's notifications get.
     /// Omitting it raises inline, which is what a caller with no UI wants.</param>
+    /// <param name="random">The jitter on a delayed feature's start minute
+    /// (<c>Services/Session/SessionEngine.cs:777-805</c>). Injected for the same reason the clock
+    /// is — a start time nothing can pin is a start time no fact can check — and defaulted the way
+    /// every other module in this port defaults its randomness
+    /// (<c>Effects/AudioCueEffect.cs:86</c>).</param>
     public ScriptedSessionRun(
         SessionEngine engine,
         ScriptedSessionDials dials,
         IScriptedClock clock,
-        EffectSignal? signal = null)
+        PersistenceStore<IntensityRampPresetDocument> rampCurve,
+        EffectSignal? signal = null,
+        Random? random = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(dials);
         ArgumentNullException.ThrowIfNull(clock);
+        ArgumentNullException.ThrowIfNull(rampCurve);
         _engine = engine;
         _dials = dials;
         _clock = clock;
+        _rampCurve = rampCurve;
         _signal = signal;
+        _random = random ?? new Random();
     }
 
     /// <summary>A phase became current: the phase and its index. Upstream's <c>PhaseChanged</c>
@@ -121,6 +148,50 @@ public sealed class ScriptedSessionRun
     public int CurrentPhaseIndex
     {
         get { lock (_gate) { return _phaseIndex; } }
+    }
+
+    /// <summary>
+    /// <b>The values this session is currently moving, parked over the user's dials rather than
+    /// written into them</b> — upstream's session flash overlay plus the two overlay opacities it
+    /// drives directly (<c>Models/AppSettings.cs:908-913</c>,
+    /// <c>Services/Session/SessionEngine.cs:604-633</c>). Recomputed on every tick and handed back
+    /// at STOP (<see cref="ScriptedSessionRamp.None"/>, upstream's <c>ClearSessionFlashRamp</c> at
+    /// <c>:343</c>).
+    ///
+    /// <para><b>A pull, and deliberately silent.</b> Upstream publishes no change notification for
+    /// these so a running session does not drag the user's sliders around mid-ramp
+    /// (<c>Models/AppSettings.cs:905</c>); its readers see the ramped number because the settings
+    /// getters prefer the parked value. This property is that parked value, and it is why nothing
+    /// here writes a ramped number into a persisted document — see
+    /// <see cref="ScriptedSessionRamp"/> for the defect that rule exists to prevent.</para>
+    ///
+    /// <para><b>No module reads it in this build</b>, and that is named rather than hidden: the
+    /// port's modules read their dials when they ARM and it has no sustained-overlay hold to park a
+    /// live value in (<see cref="PinkFilterEffect"/>'s remarks). What a delayed feature comes up
+    /// at IS the session's — <see cref="ScriptedSessionDials.ApplyDelayedPinkStart"/> writes the
+    /// ramp's first sample — but the climb after that is published here and consumed by nobody
+    /// until a module learns to prefer it.</para>
+    /// </summary>
+    public ScriptedSessionRamp Ramp
+    {
+        get { lock (_gate) { return _ramp; } }
+    }
+
+    /// <summary>
+    /// The minute this session's PINK FILTER really begins, after the ±3 minute jitter
+    /// (<c>Services/Session/SessionEngine.cs:781-790</c>). Equal to the file's own value when the
+    /// filter starts with the session, because upstream jitters only a start greater than zero.
+    /// Zero when nothing runs.
+    /// </summary>
+    public double PinkStartMinute
+    {
+        get { lock (_gate) { return _pinkStartMinute; } }
+    }
+
+    /// <summary>The same for the spiral (<c>:792-801</c>).</summary>
+    public double SpiralStartMinute
+    {
+        get { lock (_gate) { return _spiralStartMinute; } }
     }
 
     /// <summary>The phase a user is in right now, or null when nothing runs.</summary>
@@ -260,6 +331,16 @@ public sealed class ScriptedSessionRun
 
             _session = session;
             _snapshot = _dials.Capture();
+
+            // The jitter is decided BEFORE the dials are imposed, exactly where upstream decides it
+            // (:180 before :183), and it is what every later comparison against a start minute uses
+            // — the ramp's and the delayed start's alike (:611, :690).
+            _pinkStartMinute = ScriptedSessionRamp.JitterStartMinute(
+                session.Settings.PinkFilterEnabled, session.Settings.PinkFilterStartMinute, _random);
+            _spiralStartMinute = ScriptedSessionRamp.JitterStartMinute(
+                session.Settings.SpiralEnabled, session.Settings.SpiralStartMinute, _random);
+            _ramp = ScriptedSessionRamp.None;
+
             _dials.Apply(session.Settings);
             _wallStart = _clock.Now;
             _monotonicStart = _clock.Monotonic;
@@ -318,6 +399,14 @@ public sealed class ScriptedSessionRun
             _session = null;
             _snapshot = null;
             _phaseIndex = 0;
+            _pinkStartMinute = 0;
+            _spiralStartMinute = 0;
+
+            // The parked ramp is handed back BEFORE the dials are, and unconditionally, which is
+            // upstream's own order and its own reason: a session overlay left parked would keep
+            // overriding the user's values for the rest of the run, and the restore below returns
+            // early when there is no snapshot (:340-346).
+            _ramp = ScriptedSessionRamp.None;
             Interlocked.Exchange(ref _pending, null)?.Dispose();
         }
 
@@ -344,7 +433,14 @@ public sealed class ScriptedSessionRun
     /// (<c>Services/Session/SessionEngine.cs:504-537</c>), in its order:
     /// refuse when nothing runs (<c>:506</c>), end the session the moment elapsed reaches the
     /// duration and do nothing else that tick (<c>:512-517</c>), publish the readout
-    /// (<c>:520-524</c>), then move the phase (<c>:527</c>).
+    /// (<c>:520-524</c>), move the phase (<c>:527</c>), move the ramping values (<c>:530</c>) and
+    /// then start whatever delayed feature has come due (<c>:533</c>).
+    ///
+    /// <para><b>That last order is behaviour.</b> The ramp runs FIRST, so a feature whose start
+    /// minute arrives on this tick is armed with the dial the ramp's first sample just wrote rather
+    /// than with the one it had a second ago (upstream's overlay is already carrying the value by
+    /// the time its enable runs, for the same reason). The intermittent bubble bursts upstream
+    /// handles last (<c>:536</c>) are not in this slice.</para>
     ///
     /// <para>Public because it is the decision, and the clock is only how it is delivered — the
     /// shape <see cref="Scheduling.SessionScheduler.Tick"/> already uses.</para>
@@ -372,6 +468,127 @@ public sealed class ScriptedSessionRun
         Raise(() => ProgressUpdated?.Invoke(progress));
 
         CheckPhaseTransition(session, elapsedMinutes);
+        UpdateRampingValues(session, elapsedMinutes);
+        CheckDelayedFeatures(session.Settings, elapsedMinutes);
+    }
+
+    /// <summary>
+    /// The values that move continuously — upstream's <c>UpdateRampingValues</c>
+    /// (<c>Services/Session/SessionEngine.cs:564-661</c>). The arithmetic is
+    /// <see cref="ScriptedSessionRamp.Compute"/>; what happens to it is here.
+    ///
+    /// <para><b>Two destinations, and the split is upstream's.</b> The flash trio and the two
+    /// overlay opacities are PARKED on <see cref="Ramp"/> and never written into a document, which
+    /// is the whole point of the separation (<c>:604-610</c>, upstream issues #471/#476). The
+    /// bubble frequency is the one value upstream really does write into the user's dial
+    /// (<c>:644-647</c>), so it is written here too — through the module's own entry point, which
+    /// re-times a field that is already spawning exactly as upstream's <c>RefreshFrequency()</c>
+    /// does. The snapshot taken at START is what gives the user's rate back at the end.</para>
+    /// </summary>
+    private void UpdateRampingValues(ScriptedSession session, double elapsedMinutes)
+    {
+        var settings = session.Settings;
+
+        // Upstream re-reads the curve every tick (:569): the per-session override when the file
+        // sets one, the user's own dial otherwise.
+        var curve = settings.RampCurve ?? _rampCurve.Current.Curve;
+        var ramp = ScriptedSessionRamp.Compute(
+            settings,
+            elapsedMinutes,
+            session.DurationMinutes,
+            curve,
+            PinkStartMinute,
+            SpiralStartMinute);
+
+        lock (_gate)
+        {
+            // A stop that landed while this tick was computing has already handed the ramp back;
+            // parking a stale one over the user's dials again is the exact leak :340-343 warns of.
+            if (_running)
+            {
+                _ramp = ramp;
+            }
+        }
+
+        if (ScriptedSessionRamp.BubblesPerMinute(settings, elapsedMinutes) is { } perMinute)
+        {
+            // Outside the gate: this reaches a module, which raises its own notifications.
+            _engine.Effects.OfType<BubblePopEffect>().FirstOrDefault()?.SetPerMinute(perMinute);
+        }
+    }
+
+    /// <summary>
+    /// The features that turn themselves on part-way through — upstream's
+    /// <c>CheckDelayedFeatures</c> (<c>Services/Session/SessionEngine.cs:663-772</c>) for the three
+    /// starts the shipped session files really use: the pink filter (<c>:687-697</c>), the spiral
+    /// (<c>:699-728</c>) and the bubbles (<c>:730-738</c>).
+    ///
+    /// <para><b>This is what makes <see cref="ScriptedSessionDials.Apply"/>'s deliberate OFF at
+    /// t=0 finish</b>: a session whose pink filter starts at minute 10 applies it off and nothing
+    /// turned it on until now.</para>
+    ///
+    /// <para><b>Not ported, each with its reason.</b> The queue of deferred timeline starts
+    /// (<c>:668-685</c>) is fed by per-feature <c>StartMinute</c>/<c>EndMinute</c> events the port's
+    /// model does not carry and the editor that writes them is unported. The spiral's
+    /// "are there any spiral files" probe (<c>:702-715</c>) is answered here by the module itself:
+    /// <see cref="SpiralOverlayEffect"/> resolves its own library on every engage and its refusal
+    /// is recorded verbatim in <see cref="SessionEngine.ArmOutcomes"/>, where upstream's version
+    /// silently switched the session's dial off. The corner GIF (<c>:740-760</c>) has no window in
+    /// this port, and brain drain (<c>:762-771</c>) is commented out upstream — porting dead code
+    /// would be inventing behaviour, not preserving it.</para>
+    /// </summary>
+    private void CheckDelayedFeatures(ScriptedSessionSettings settings, double elapsedMinutes)
+    {
+        if (settings.PinkFilterEnabled && elapsedMinutes >= PinkStartMinute)
+        {
+            StartDelayedFeature(PinkFilterEffect.EffectId, () => _dials.ApplyDelayedPinkStart(settings));
+        }
+
+        if (settings.SpiralEnabled && elapsedMinutes >= SpiralStartMinute)
+        {
+            StartDelayedFeature(SpiralOverlayEffect.EffectId, () => _dials.ApplyDelayedSpiralStart(settings));
+        }
+
+        // Upstream's conjunction, verbatim (:731): a start minute of 0 was already turned on by
+        // Apply, and an intermittent session's bubbles arrive as scheduled bursts instead.
+        if (settings.BubblesEnabled
+            && settings.BubblesStartMinute > 0
+            && !settings.BubblesIntermittent
+            && elapsedMinutes >= settings.BubblesStartMinute)
+        {
+            StartDelayedFeature(BubblePopEffect.EffectId, prepareDial: null);
+        }
+    }
+
+    /// <summary>
+    /// Turn one feature on NOW — upstream's pair of acts for each of the three
+    /// (<c>Services/Session/SessionEngine.cs:692-693</c>): write the dial, then take the feature
+    /// live rather than leaving it for the next START.
+    ///
+    /// <para>The guard is upstream's own — "the session wants it and the user's live dial has not
+    /// got it yet" (<c>:688</c>, <c>:700</c>, <c>:731</c>) — which is what makes this idempotent
+    /// across the ticks that follow, and what leaves a filter the user switched on by hand alone.
+    /// <see cref="SessionEngine.QuickToggle"/> is the port's own version of the second act: it
+    /// flips the persisted flag and arms the module when the engine is running, which is what
+    /// upstream's <c>_mainWindow.EnableX(true)</c> does. Its save writes the flash preset, which
+    /// this session's START already wrote (<see cref="ScriptedSessionDials"/>'s remarks) — no
+    /// document reaches disk here that was not already going to.</para>
+    ///
+    /// <para>A composition whose rack has no such module does nothing at all, which is the honest
+    /// answer for a feature this build does not have: in this port the dial belongs to the module,
+    /// so there is no dial to move without one.</para>
+    /// </summary>
+    private void StartDelayedFeature(string effectId, Action? prepareDial)
+    {
+        var effect = _engine.Effects.FirstOrDefault(
+            e => string.Equals(e.Id, effectId, StringComparison.Ordinal));
+        if (effect is null || effect.Enabled)
+        {
+            return;
+        }
+
+        prepareDial?.Invoke();
+        _engine.QuickToggle(effectId);
     }
 
     /// <summary>
