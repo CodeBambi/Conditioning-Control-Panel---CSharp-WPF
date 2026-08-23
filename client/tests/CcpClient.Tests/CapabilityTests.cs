@@ -126,7 +126,7 @@ public class CapabilityTests
         var runner = new CapabilityProbeRunner(owner, registry);
 
         var run = runner.RunAllAsync(CancellationToken.None);
-        await started.Task;
+        await TestWait.Until(started.Task, "the mid-flight probe to report it is running, before teardown cancels it");
         owner.Cancel(); // teardown-shape cancellation while the probe is in flight
         await run;
 
@@ -163,7 +163,7 @@ public class CapabilityTests
         var runner = new CapabilityProbeRunner(owner, registry);
 
         var run = runner.RunAllAsync(CancellationToken.None); // the STARTUP token is never cancelled
-        await started.Task;
+        await TestWait.Until(started.Task, "the cancellation-swallowing probe to report it is running");
         owner.Cancel(); // teardown shape: the GENERATION token, exactly as CancelAndDrainAsync does
         await run;
 
@@ -193,7 +193,7 @@ public class CapabilityTests
         var runner = new CapabilityProbeRunner(owner, registry);
 
         var run = runner.RunAllAsync(CancellationToken.None);
-        await started.Task;
+        await TestWait.Until(started.Task, "the first probe of the sweep to report it is running");
         owner.Cancel();
         await run;
 
@@ -227,7 +227,7 @@ public class CapabilityTests
         var runner = new CapabilityProbeRunner(owner, registry);
 
         var run = runner.RunAllAsync(CancellationToken.None);
-        await started.Task;
+        await TestWait.Until(started.Task, "the probe to report it is running, before it is released rather than cancelled");
         release.SetResult(); // released instead of cancelled: the probe finishes honestly
         await run;
 

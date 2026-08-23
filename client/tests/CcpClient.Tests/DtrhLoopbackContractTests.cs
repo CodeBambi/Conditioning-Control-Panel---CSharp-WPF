@@ -39,7 +39,7 @@ public sealed class DtrhLoopbackContractTests : IDisposable
         File.WriteAllText(Path.Combine(media, "note.json"), "{}");
 
         _server = new LoopbackServer(payload, overlay, media, _inbox, Token, _log,
-            longPollTimeout: TimeSpan.FromMilliseconds(200));
+            longPollTimeout: TimeSpan.FromMilliseconds(200)); // wallclock-allow: the budget's elapsing IS the subject on this shared fixture — the fast-empty ack-purge facts observe an empty poll RETURNING, which only the budget can cause
         _server.Start();
         LoopbackListenerRegistry.RegisterLoopbackServer(nameof(DtrhLoopbackContractTests), _server); // T-15 self-check coverage
     }
@@ -253,15 +253,16 @@ public sealed class DtrhLoopbackContractTests : IDisposable
     public async Task Inbox_LongPollHangs_UntilEnqueue()
     {
         // Class-1: a DEDICATED server sharing the fixture's _inbox/_log (a different
-        // inbox would not be woken by the enqueue below) with a generous 5s long-poll timeout —
+        // inbox would not be woken by the enqueue below) on the SHARED injected budget —
         // the shared fixture's 200ms is load-bearing for the fast-empty ack-purge tests but
-        // here it created a real load race (server poll expiring before the enqueue). No
+        // here it created a real load race (server poll expiring before the enqueue), and any
+        // literal short enough to type is another one waiting to happen. No
         // pre-enqueue settle: EITHER arrival order satisfies the assertions — if the enqueue
         // lands first the message is retained and the late poll returns it immediately; if the
         // server's poll registers first the enqueue wakes it (Inbox registration is synchronous).
         var server = new LoopbackServer(
             Path.Combine(_root, "payload"), Path.Combine(_root, "overlay"), Path.Combine(_root, "payload", "assets"),
-            _inbox, Token, _log, longPollTimeout: TimeSpan.FromSeconds(5));
+            _inbox, Token, _log, longPollTimeout: TestWait.InjectedBudget);
         server.Start();
         LoopbackListenerRegistry.RegisterLoopbackServer("DtrhLoopbackContractTests.long-poll", server);
         try
@@ -310,7 +311,7 @@ public sealed class DtrhLoopbackContractTests : IDisposable
         Directory.CreateDirectory(overlay);
         File.WriteAllText(Path.Combine(payload, "index.html"), "<html>payload</html>");
         var server = new LoopbackServer(payload, overlay, media, new Inbox(), Token, _log,
-            longPollTimeout: TimeSpan.FromMilliseconds(200),
+            longPollTimeout: TestWait.InjectedBudget, // no poll is issued here; nothing in this fact may turn on a budget
             blockedRoutePrefixes: ["/media/"]);
         server.Start();
         LoopbackListenerRegistry.RegisterLoopbackServer("DtrhLoopbackContractTests.blocked-route", server); // T-15 self-check coverage

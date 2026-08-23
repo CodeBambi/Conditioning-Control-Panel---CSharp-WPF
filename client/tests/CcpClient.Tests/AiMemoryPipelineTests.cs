@@ -40,7 +40,7 @@ public class AiMemoryPipelineTests
         {
             if (_gate is not null)
             {
-                await _gate.Task.ConfigureAwait(false); // uncooperative: ignores the token, replies late
+                await _gate.Task.ConfigureAwait(false); // wallclock-allow: the uncooperative provider IS the subject — it ignores the token and replies late; the test releases the gate on every path
             }
 
             return Reply;

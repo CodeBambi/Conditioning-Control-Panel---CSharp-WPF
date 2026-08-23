@@ -606,7 +606,7 @@ public sealed class SoundArbitrationTests
     // population 2). Every rendezvous is a deterministic signal: the probe is PROVEN parked
     // (TryInitInFlight) before Dispose is called, so the budget always expires with the
     // native call still in flight — the outcome never depends on scheduler timing.
-    private static readonly TimeSpan GiveUpBudget = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan GiveUpBudget = TimeSpan.FromMilliseconds(200); // wallclock-allow: the budget's elapsing IS the subject — the probe is PROVEN parked before Dispose, so the give-up always fires with the native call in flight
 
     /// <summary>
     /// Drive the REAL probe path (suppressed → kick → the scheduled one-shot fires on a
@@ -1105,7 +1105,7 @@ public sealed class SoundArbitrationTests
     // The budget whose ELAPSING is the subject (TestWait population 2 — same pinned-literal
     // discipline as the GiveUpBudget). Every rendezvous below is a deterministic signal
     // (gates + the recorded event stream), never timing.
-    private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200); // wallclock-allow: the budget's elapsing IS the subject — every rendezvous is a gate, so the abandonment always fires with the construction still wedged
 
     private sealed class OrphanPlayer(string path, float volume)
     {

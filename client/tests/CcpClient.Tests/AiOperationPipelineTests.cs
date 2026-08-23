@@ -53,7 +53,7 @@ public class AiOperationPipelineTests
             }
 
             // Uncooperative: ignores the token, returns a LATE reply when released.
-            await _gate.Task.ConfigureAwait(false);
+            await _gate.Task.ConfigureAwait(false); // wallclock-allow: the uncooperative provider IS the subject — it ignores the token and returns a LATE reply when Release() is called
             return new AiReply.Generated("late-reply", Descriptor.EndpointClass);
         }
 
