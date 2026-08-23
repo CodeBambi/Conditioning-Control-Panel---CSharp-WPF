@@ -189,6 +189,11 @@ internal static class FypHostService
                         s?.FypOnlineSubVerdicts.TryGetValue(name, out v);
                         return new { name, ok = (bool?)v?.Ok, videoCount = v?.VideoCount };
                     }),
+                    // The LIBRARY: every sub the user has kept anywhere in the app, with
+                    // `selected` saying whether THIS surface's feed currently uses it. The popover
+                    // renders pills from here (toggle = selection, X = forget it everywhere);
+                    // `customSubs` above stays exactly as it was so an older page still paints.
+                    library = BuildLibraryPayload(s),
                 },
                 stats = LoadStats(),
             });
@@ -252,6 +257,11 @@ internal static class FypHostService
             case "need-remote":
             {
                 ServeRemoteBatch();
+                break;
+            }
+            case "library-remove":
+            {
+                RemoveLibrarySub((string?)o["name"] ?? (string?)o["sub"]);
                 break;
             }
             case "probe-sub":
@@ -388,10 +398,16 @@ internal static class FypHostService
                         s.FypOnlineCustomSubs = arr.Select(t => FypOnlineCoordinator.SanitizeSub((string?)t))
                             .Where(x => x != null).Select(x => x!)
                             .Distinct(StringComparer.OrdinalIgnoreCase).Take(20).ToList();
-                        // This is the page's REMOVE path (it posts the surviving list), so drop
-                        // the verdicts of whatever is gone — otherwise the store grows forever
-                        // with subs nobody kept, and re-adding one would paint a stale pill.
+                        // This is the page's DESELECT path (it posts the surviving selection), so
+                        // drop the verdicts of whatever nothing keeps any more - otherwise the
+                        // store grows forever with subs nobody has, and re-adding one would paint
+                        // a stale pill. A name still in the LIBRARY is kept: deselecting a pill is
+                        // not forgetting it, and losing its verdict would grey out a verified sub.
+                        // Anything selected is by definition kept (an older page can post a name
+                        // the library has never seen); the migration on load says the same thing.
+                        foreach (var name in s.FypOnlineCustomSubs) s.TryAddLibrarySub(name);
                         var kept = new HashSet<string>(s.FypOnlineCustomSubs, StringComparer.OrdinalIgnoreCase);
+                        foreach (var name in s.LibrarySubs) kept.Add(name);
                         foreach (var gone in s.FypOnlineSubVerdicts.Keys.Where(k => !kept.Contains(k)).ToList())
                             s.FypOnlineSubVerdicts.Remove(gone);
                         FypOnlineCoordinator.Fyp.ResetChannels();
@@ -552,6 +568,9 @@ internal static class FypHostService
                     };
                     if (probe.Ok)
                     {
+                        // Keeping it comes first and is unconditional: the library is where a
+                        // verified name lives, and it outlives any one surface's 20-channel feed.
+                        s.TryAddLibrarySub(clean);
                         var subs = s.FypOnlineCustomSubs.ToList();
                         if (!subs.Contains(clean, StringComparer.OrdinalIgnoreCase) && subs.Count < 20)
                         {
@@ -574,10 +593,58 @@ internal static class FypHostService
                     videoCount = probe.VideoCount,
                     error = probe.Error,
                 });
+                // The pill row is built from the library, so it has to hear about a new keeper.
+                if (probe.Ok) PushLibrary();
             });
         }
         catch (Exception ex) { App.Logger?.Warning("FypHost: sub probe failed: {E}", ex.Message); }
         finally { lock (_probesInFlight) _probesInFlight.Remove(clean); }
+    }
+
+    // ============================= the sub library =============================
+    //
+    // LIBRARY vs SELECTION: AppSettings.RemoteSubLibrary is every sub the user has KEPT, anywhere
+    // in the app; FypOnlineCustomSubs is still exactly what it always was, the app-wide feed
+    // SELECTION every consumer resolves channels from. The popover's pill row renders the library
+    // and toggles the selection, so adding a sub for one surface no longer conscripts every other
+    // one - and the X below still means "gone everywhere", in one gesture.
+
+    /// <summary>The library joined with verdicts and with this surface's selection.</summary>
+    private static object[] BuildLibraryPayload(Models.AppSettings? s)
+    {
+        if (s == null) return Array.Empty<object>();
+        var rows = s.BuildRemoteSubLibraryView();
+        var payload = new List<object>(rows.Count);
+        foreach (var r in rows)
+            payload.Add(new { name = r.Name, ok = r.Ok, videoCount = r.VideoCount, stillOnly = r.StillOnly, selected = r.Selected });
+        return payload.ToArray();
+    }
+
+    /// <summary>Push the whole library after any change. Replace, never patch.</summary>
+    private static void PushLibrary()
+    {
+        try { _host?.Post(new { type = "library", library = BuildLibraryPayload(App.Settings?.Current) }); }
+        catch (Exception ex) { App.Logger?.Debug("FypHost.PushLibrary: {E}", ex.Message); }
+    }
+
+    /// <summary>The X on a pill: the library entry, its verdict and its feed membership go
+    /// together (AppSettings.RemoveLibrarySub), then every consumer's rotation is reset because
+    /// the name may have been a live channel for all of them.</summary>
+    private static void RemoveLibrarySub(string? rawName)
+    {
+        try
+        {
+            var s = App.Settings?.Current;
+            if (s == null || string.IsNullOrWhiteSpace(rawName)) { PushLibrary(); return; }
+            if (s.RemoveLibrarySub(rawName))
+            {
+                App.Settings?.Save();
+                FypOnlineCoordinator.ResetAllChannels();
+                App.Logger?.Information("[FYP online] r/{Sub} removed from the library", rawName.Trim());
+            }
+            PushLibrary();
+        }
+        catch (Exception ex) { App.Logger?.Warning("FypHost: library remove failed: {E}", ex.Message); }
     }
 
     private static JObject? LoadStats()

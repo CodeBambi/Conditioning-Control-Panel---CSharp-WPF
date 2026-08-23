@@ -96,13 +96,19 @@ export const ROOMS = Object.freeze({
    * than 16:9 crops the LEFT AND RIGHT edges - 72 viewBox units a side at 16:10.
    * The wings sit at those edges, so every wing room and every wing label is
    * kept inside x 72..1368. Widen one and it clips on somebody's monitor. */
-  misdirection: {
+  /* ROOM 201 IS SORT's. Misdirection was retired (games/registry.js
+     RETIRED_GAMES) and the room it left is dressed for the class that moved in:
+     same rect, same door, same alley stop, same room number - a room is a place,
+     and the place did not change, only the class held in it. Misdirection keeps
+     its lexicon rows and its module on disk; it simply has no room any more, so
+     un-retiring it means giving it one. */
+  sort: {
     rect: [1260, 358, 112, 66], side: 'w', door: 391, rm: '201', wing: 'east',
     stop: [1250, 391], via: [1250, 470], neonX: 1316, neonY: 364, nameY: 398,
-    gameEn: 'Misdirection',
-    nameKey: 'campus_room_misdirection', nameEn: 'The Parlour',
-    descKey: 'campus_desc_misdirection',
-    descEn: 'Keep your eyes on the one that matters. It will not make that easy.',
+    gameEn: 'Sort',
+    nameKey: 'campus_room_sort', nameEn: 'The Sorting Room',
+    descKey: 'campus_desc_sort',
+    descEn: 'Two piles, and you decide what goes in them. Yours to the right.',
   },
   echo: {
     rect: [1260, 430, 112, 66], side: 'w', door: 463, rm: '202', wing: 'east',
@@ -578,10 +584,19 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       // diving block on the west deck
       put(svg('rect', { x: 306, y: 774, width: 20, height: 14 }, 'campus-furnf'));
       put(svg('line', { x1: 326, y1: 774, x2: 326, y2: 788 }, 'campus-furn'));
-    } else if (key === 'misdirection') {
-      // three cups on a felt line, in the band between the sign and the name
-      put(svg('line', { x1: 1288, y1: 388, x2: 1344, y2: 388 }, 'campus-furn'));
-      [1298, 1316, 1334].forEach((cx) => put(svg('circle', { cx, cy: 384, r: 3.2 }, 'campus-furn')));
+    } else if (key === 'sort') {
+      /* A THREE-CARD FAN in the band between the sign and the name: the middle
+         card square to the room, its neighbours tipped left and right - the
+         two piles and the one you are holding, drawn in three strokes. The
+         rotations are around each card's own centre so the fan reads at the
+         plan's own scale without a group transform. */
+      [[1298, -14], [1316, 0], [1334, 14]].forEach(([cx, deg]) => {
+        const card = svg('rect', { x: cx - 5, y: 378, width: 10, height: 14, rx: 1.5 }, 'campus-furnf');
+        if (deg) card.setAttribute('transform', 'rotate(' + deg + ' ' + cx + ' 385)');
+        put(card);
+      });
+      // the felt line the fan sits on
+      put(svg('line', { x1: 1288, y1: 394, x2: 1344, y2: 394 }, 'campus-furn'));
     } else if (key === 'echo') {
       // six pads in a row
       [1292, 1302, 1312, 1322, 1332, 1342].forEach((x) => put(svg('rect', { x, y: 456, width: 6, height: 6 }, 'campus-furnf')));

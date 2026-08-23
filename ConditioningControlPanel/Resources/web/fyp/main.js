@@ -69,7 +69,11 @@ let settings = {
 // ---- online source state (Scrolller via the host) ----
 let remoteAssets = [];      // appended online entries, session-scoped
 let onlineCatalog = [];     // [{id,label,subs,selected}] from init
-let customSubs = [];        // user-added subs: [{name, ok, videoCount}] (ok null = never probed)
+// The LIBRARY: every sub kept anywhere in the app, [{name, ok, videoCount, selected}]
+// (ok null = never probed). `selected` is this feed's own membership - the app-wide
+// selection the host stores as onlineCustomSubs. Toggling a pill changes the selection;
+// the X forgets the sub everywhere (library-remove).
+let customSubs = [];
 let pendingSubs = [];       // names posted to the host, awaiting a 'sub-probe' verdict
 let onlineOk = true;        // last online-status verdict
 let remoteReqInFlight = false;
@@ -127,7 +131,8 @@ const REMOTE_OFFLINE_BACKOFF_MS = 30000; // transport failure: breathe, then ret
 // total, so a flat 30 s retry is just a slow version of the poll loop this replaces.
 // Any batch with fresh ids resets the ladder (a sub that gained posts revives).
 const REMOTE_DRY_LADDER_MS = [30000, 120000, 600000];
-const CUSTOM_SUB_CAP = 20;          // mirror of the host's Take(20)
+const CUSTOM_SUB_CAP = 20;          // mirror of the host's Take(20) - the FEED cap
+const LIBRARY_CAP = 40;             // mirror of AppSettings.RemoteSubLibraryCap - the KEPT cap
 
 const sourceUsesRemote = () => settings.source !== 'library';
 const isRemoteId = (id) => typeof id === 'string' && id.startsWith('scrolller/');
@@ -169,7 +174,8 @@ function activeChannelSet() {
   for (const n of onlineCatalog) {
     if (n.selected) for (const s of n.subs || []) set.add(String(s).toLowerCase());
   }
-  for (const c of customSubs) set.add(String(c.name).toLowerCase());
+  // Kept but not selected is not in play: the library is a shelf, the selection is the feed.
+  for (const c of customSubs) if (c.selected !== false) set.add(String(c.name).toLowerCase());
   if (set.size === 0) {
     for (const s of onlineCatalog[0]?.subs || []) set.add(String(s).toLowerCase());
   }
@@ -569,13 +575,30 @@ function dedupeSubs(subs) {
   return out;
 }
 
+/** Names this feed currently pulls from, in library order. */
+function selectedSubNames() {
+  return customSubs.filter((s) => s.selected !== false).map((s) => s.name);
+}
+
+/** Commit the selection (and only the selection) to the host. The library itself only
+ *  ever changes through a probe (add) or library-remove (forget). */
+function commitSubSelection() {
+  setting('onlineCustomSubs', selectedSubNames());
+  updateOnlineUi();
+  pruneRemoteToChannels();
+}
+
 /**
- * Custom-sub pills, three states plus pending:
+ * Library pills, three verdict states plus pending, times two membership states:
  *   orange  - the host probed Scrolller and it answered (ok === true)
  *   pink dashed - stored before verdicts existed (ok === null): unproven, still used
  *   muted "?"   - the probe said "not there" (ok === false); kept so the user can see
  *                 why it is dead instead of it silently vanishing
- * A pending pill is inert (no remove) - it is a receipt for the request in flight.
+ *   .off        - kept but NOT in this feed right now; one click puts it back
+ * The pill body toggles membership, the ✕ forgets the sub everywhere (library-remove) -
+ * so a sub added for another surface (the Arcademy's sorting room) can sit here unlit
+ * instead of quietly joining the feed. A pending pill is inert - it is a receipt for the
+ * request in flight.
  */
 function renderCustomSubChips() {
   const customBox = $('custom-sub-chips');
@@ -590,20 +613,23 @@ function renderCustomSubChips() {
   for (const entry of customSubs) {
     const verified = entry.ok === true;
     const missing = entry.ok === false;
+    const on = entry.selected !== false;
     const chip = document.createElement('button');
-    chip.className = 'niche-chip custom selected'
+    chip.className = 'niche-chip custom'
+      + (on ? ' selected' : ' off')
       + (verified ? ' verified' : missing ? ' unverified' : '');
     if (verified) {
       // videoCount 0 is a real answer (the sub exists, it just has no video) — say
       // "stills only" rather than a bare 0, and say nothing at all when the host
       // could not read a count.
-      chip.title = entry.videoCount === 0 ? 'verified · stills only'
+      chip.title = (entry.videoCount === 0 ? 'verified · stills only'
         : entry.videoCount == null ? 'verified on Scrolller'
-        : `verified · ${entry.videoCount} clips on Scrolller`;
+        : `verified · ${entry.videoCount} clips on Scrolller`)
+        + (on ? ' · click to drop it from this feed' : ' · click to add it to this feed');
     } else if (missing) {
-      chip.title = "Scrolller didn't have this sub - click to remove";
+      chip.title = "Scrolller didn't have this sub - ✕ to forget it";
     } else {
-      chip.title = 'Remove';
+      chip.title = on ? 'In this feed - click to drop it' : 'Kept - click to add it to this feed';
     }
     // Built from text nodes, not innerHTML: the name can come from an older
     // settings file and is never trusted as markup.
@@ -617,14 +643,26 @@ function renderCustomSubChips() {
     const x = document.createElement('span');
     x.className = 'chip-x';
     x.textContent = '✕';
-    chip.appendChild(x);
-    chip.addEventListener('click', () => {
+    x.title = `Forget r/${entry.name} everywhere`;
+    x.addEventListener('click', (ev) => {
+      // The X is the LIBRARY gesture and it must not read as "just untick this".
+      ev.stopPropagation();
       customSubs = customSubs.filter((s) => s !== entry);
-      // Removal still commits from this side (the host only owns the ADD, which it
-      // commits itself once the probe comes back ok).
-      setting('onlineCustomSubs', customSubs.map((s) => s.name));
+      // The host owns the library: it drops the entry, its verdict and its feed
+      // membership together, then pushes the fresh list back as {type:'library'}.
+      post({ type: 'library-remove', name: entry.name });
       updateOnlineUi();
       pruneRemoteToChannels();
+    });
+    chip.appendChild(x);
+    chip.addEventListener('click', () => {
+      if (entry.selected === false && selectedSubNames().length >= CUSTOM_SUB_CAP) {
+        showSubError(`That's the limit of ${CUSTOM_SUB_CAP} subs in the feed - drop one first`);
+        return;
+      }
+      entry.selected = entry.selected === false;
+      clearSubError();
+      commitSubSelection();
     });
     customBox.appendChild(chip);
   }
@@ -641,7 +679,9 @@ function sanitizeSub(raw) {
 }
 
 /** Init (or an older host) may hand us plain names; the current host sends verdicts.
- *  Accept both so a mismatched host/page pair still renders every pill. */
+ *  Accept both so a mismatched host/page pair still renders every pill.
+ *  `selected` defaults to TRUE: a payload without it is the old shape, where the list
+ *  WAS the feed - defaulting the other way would silently empty someone's feed. */
 function normalizeCustomSubs(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
@@ -651,9 +691,17 @@ function normalizeCustomSubs(list) {
     if (!name) continue;
     const ok = isObj && (raw.ok === true || raw.ok === false) ? raw.ok : null; // null = never probed
     const vc = isObj && Number.isFinite(raw.videoCount) ? Number(raw.videoCount) : null;
-    out.push({ name, ok, videoCount: vc });
+    const selected = isObj && raw.selected === false ? false : true;
+    out.push({ name, ok, videoCount: vc, selected });
   }
   return out;
+}
+
+/** The library if the host sent one, otherwise the old selection list read as a library
+ *  where everything is selected (a host that predates the split). */
+function normalizeLibrary(library, legacySelection) {
+  const rows = normalizeCustomSubs(library);
+  return rows.length ? rows : normalizeCustomSubs(legacySelection);
 }
 
 function showSubError(text) {
@@ -683,12 +731,34 @@ function addCustomSub() {
     showSubError(raw ? `"${raw}" isn't a subreddit name` : 'Type a subreddit name first');
     return;
   }
-  if (customSubs.some((s) => sameSub(s.name, clean)) || pendingSubs.some((s) => sameSub(s, clean))) {
-    showSubError(`r/${clean} is already on the list`);
+  if (pendingSubs.some((s) => sameSub(s, clean))) {
+    showSubError(`r/${clean} is already being checked`);
     return;
   }
-  if (customSubs.length + pendingSubs.length >= CUSTOM_SUB_CAP) {
-    showSubError(`That's the limit of ${CUSTOM_SUB_CAP} custom subs - remove one first`);
+  // Typing a name the library already keeps is a SELECT, not an error: that is what
+  // "added once" buys, and re-probing a known sub would spend a round trip to say so.
+  const kept = customSubs.find((s) => sameSub(s.name, clean));
+  if (kept) {
+    if (kept.selected !== false) {
+      showSubError(`r/${clean} is already in this feed`);
+      return;
+    }
+    if (selectedSubNames().length >= CUSTOM_SUB_CAP) {
+      showSubError(`That's the limit of ${CUSTOM_SUB_CAP} subs in the feed - drop one first`);
+      return;
+    }
+    kept.selected = true;
+    input.value = '';
+    clearSubError();
+    commitSubSelection();
+    return;
+  }
+  if (selectedSubNames().length + pendingSubs.length >= CUSTOM_SUB_CAP) {
+    showSubError(`That's the limit of ${CUSTOM_SUB_CAP} subs in the feed - drop one first`);
+    return;
+  }
+  if (customSubs.length + pendingSubs.length >= LIBRARY_CAP) {
+    showSubError(`Your kept list is full (${LIBRARY_CAP}) - remove one with its ✕ first`);
     return;
   }
   clearSubError();
@@ -704,9 +774,11 @@ function onSubProbe(data) {
   pendingSubs = pendingSubs.filter((s) => !sameSub(s, name));
   if (data.ok) {
     const vc = Number.isFinite(data.videoCount) ? Number(data.videoCount) : null;
+    // A probe from THIS box is an add: the host kept it in the library and put it in the
+    // app-wide selection, so the pill comes up lit.
     const existing = customSubs.find((s) => sameSub(s.name, name));
-    if (existing) { existing.ok = true; existing.videoCount = vc; }
-    else customSubs.push({ name, ok: true, videoCount: vc });
+    if (existing) { existing.ok = true; existing.videoCount = vc; existing.selected = true; }
+    else customSubs.push({ name, ok: true, videoCount: vc, selected: true });
     clearSubError();
     const input = $('custom-sub-input');
     // Only clear the box if it still holds THIS sub - the user may already be typing
@@ -1172,7 +1244,7 @@ function onHostMessage(data) {
       settings.audioGlow = settings.audioGlow !== false;
       settings.windowOpacity = clampOpacity(settings.windowOpacity);
       onlineCatalog = Array.isArray(data.online?.niches) ? data.online.niches : [];
-      customSubs = normalizeCustomSubs(data.online?.customSubs);
+      customSubs = normalizeLibrary(data.online?.library, data.online?.customSubs);
       pendingSubs = [];
       // Consent is the source of truth for whether a non-library source can stand.
       if (!settings.onlineConsented && settings.source !== 'library') settings.source = 'library';
@@ -1271,6 +1343,15 @@ function onHostMessage(data) {
     }
     case 'sub-probe':
       onSubProbe(data);
+      break;
+    case 'library':
+      // The host pushes the whole library after any change to it (a probe elsewhere in the
+      // app, an X here or in the Assets tab, a restored settings file). Replace, never
+      // merge: the host is the owner and a half-applied diff is how two lists drift.
+      customSubs = normalizeCustomSubs(data.library);
+      pendingSubs = pendingSubs.filter((p) => !customSubs.some((s) => sameSub(s.name, p)));
+      updateOnlineUi();
+      pruneRemoteToChannels();
       break;
     case 'eyeStatus':
       eyeStatus = {

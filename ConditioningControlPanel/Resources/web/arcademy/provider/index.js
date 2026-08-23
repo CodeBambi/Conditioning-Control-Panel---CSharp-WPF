@@ -13,6 +13,14 @@
  *   pool.next('target') -> { url, remote }   the hunt target (its own slot)
  *   pool.release()
  *
+ * SECOND SHAPE, ADDITIVE (SORT, 2026-08-23): `claimTagged({sources, want,
+ * perSourceMin, seed, timeoutMs})` deals TWO PILES whose rows carry the `tag`
+ * the host stamped on them - see ./tagged.js for the laws. Nothing about
+ * `claim()` moves; every other class draws exactly the media it drew before.
+ * Beside it ride the DOOR's four reads/writes: `catalog()` (the niches, the
+ * player's sub library, their local folders and asset presets, projected on
+ * init), `probeSub(name)`, `removeLibrarySub(name)` and `onLibrary(cb)`.
+ *
  * LAWS
  *  - NEVER BLOCK A DRAW. A local candidate is always ready: the C#-supplied
  *    manifest, else the bundled mono-pink placeholder tiles in ./assets. Remote
@@ -39,6 +47,7 @@
 
 import { buildLocalPools, isLocalUrl, formatOk, kindOf, wantRemote } from './inventory.js';
 import { createRemoteChannel } from './remote.js';
+import { createTaggedPool, TAGGED } from './tagged.js';
 
 /** Bundled placeholder tiles (geometric mono-pink, no text). The floor. */
 export const PLACEHOLDER_FILES = Object.freeze([
@@ -165,6 +174,136 @@ export function createAssets(options = {}) {
       } catch { /* fall through to Image() */ }
       try { const img = new Image(); img.src = url; } catch { /* ignore */ }
     }
+  }
+
+  /* ==========================================================================
+   * THE DOOR'S SEAM (SORT). Four reads and two writes, all additive.
+   *
+   * The host projects the pickable world on `init.settings` and the shell hands
+   * it to us; `catalog()` is the sanitized view of it, so the door never parses
+   * a host bag itself and a field the host has not shipped yet is an empty list
+   * rather than a crash. `probeSub` / `removeLibrarySub` are the two writes, and
+   * `onLibrary` is how the page hears about a change made anywhere else (the
+   * Assets tab, the FYP popover, another probe) - the host pushes the whole
+   * fresh library and we re-emit it.
+   * ======================================================================= */
+  const bag = (opts.settings && typeof opts.settings === 'object') ? opts.settings : {};
+  const pickFirst = (...vals) => { for (const v of vals) if (v != null) return v; return null; };
+
+  function sanitizeCatalogRows(list) {
+    const out = [];
+    for (const e of (Array.isArray(list) ? list : [])) {
+      if (!e || typeof e !== 'object') continue;
+      const id = typeof e.id === 'string' ? e.id : '';
+      if (!id) continue;
+      out.push(Object.freeze({
+        id,
+        label: typeof e.label === 'string' ? e.label : id,
+        subs: Array.isArray(e.subs) ? e.subs.filter((s) => typeof s === 'string' && s) : [],
+      }));
+    }
+    return out;
+  }
+
+  function sanitizeLibrary(list) {
+    const out = [];
+    const seen = new Set();
+    for (const e of (Array.isArray(list) ? list : [])) {
+      const name = typeof e === 'string' ? e : (e && typeof e.name === 'string' ? e.name : '');
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;                 // the library is case-insensitively unique
+      seen.add(key);
+      out.push(Object.freeze({
+        name,
+        ok: e && typeof e === 'object' && e.ok != null ? !!e.ok : true,
+        videoCount: Math.max(0, (e && e.videoCount) | 0),
+        stillOnly: !!(e && e.stillOnly),
+      }));
+    }
+    return out;
+  }
+
+  function sanitizeFolders(list) {
+    const out = [];
+    for (const e of (Array.isArray(list) ? list : [])) {
+      if (!e || typeof e !== 'object') continue;
+      const path = typeof e.path === 'string' ? e.path.replace(/\\/g, '/') : '';
+      if (!path) continue;
+      out.push(Object.freeze({
+        path,
+        gifs: Math.max(0, e.gifs | 0),
+        stills: Math.max(0, e.stills | 0),
+        videos: Math.max(0, e.videos | 0),
+      }));
+    }
+    return out;
+  }
+
+  function sanitizePresets(list) {
+    const out = [];
+    for (const e of (Array.isArray(list) ? list : [])) {
+      if (!e || typeof e !== 'object') continue;
+      const id = e.id == null ? '' : String(e.id);
+      if (!id) continue;
+      out.push(Object.freeze({ id, name: typeof e.name === 'string' ? e.name : id }));
+    }
+    return out;
+  }
+
+  const remoteCatalog = sanitizeCatalogRows(pickFirst(opts.remoteCatalog, bag.remoteCatalog));
+  const localFolders = sanitizeFolders(pickFirst(opts.localFolders, bag.localFolders));
+  const assetPresets = sanitizePresets(pickFirst(opts.assetPresets, bag.assetPresets));
+  const remoteConsent = !!pickFirst(opts.remoteConsent, bag.remoteConsent, false);
+  const mediaSource = String(pickFirst(opts.mediaSource, bag.mediaSource, '') || '');
+  let subLibrary = sanitizeLibrary(pickFirst(opts.subLibrary, bag.subLibrary));
+
+  const libraryCbs = new Set();
+  const probes = new Map();          // reqId -> {resolve, timer}
+  let probeSeq = 0;
+  const PROBE_TIMEOUT_MS = 15000;    // a probe is a network round trip on the HOST
+  const LIBRARY_ECHO_MS = 4000;      // how long a remove waits for the host's push
+
+  function emitLibrary() {
+    const view = subLibrary.slice();
+    for (const fn of [...libraryCbs]) { try { fn(view); } catch { /* a bad listener never kills the seam */ } }
+  }
+
+  function onLibraryFrame(msg) {
+    const m = (msg && msg.detail) || msg;
+    if (!m) return;
+    if (!Array.isArray(m.subLibrary)) return;
+    subLibrary = sanitizeLibrary(m.subLibrary);
+    log('library push: ' + subLibrary.length + ' subs');
+    emitLibrary();
+  }
+
+  function onSubProbeFrame(msg) {
+    const m = (msg && msg.detail) || msg;
+    if (!m || !m.reqId) return;
+    const rec = probes.get(m.reqId);
+    if (!rec) return;                        // a stale/foreign verdict is not ours
+    probes.delete(m.reqId);
+    try { clearTimeout(rec.timer); } catch { /* noop */ }
+    const row = {
+      name: typeof m.name === 'string' ? m.name : rec.name,
+      ok: !!m.ok,
+      videoCount: Math.max(0, m.videoCount | 0),
+      stillOnly: !!m.stillOnly,
+    };
+    /* On an OK verdict the host has already added the sub to the library and is
+     * pushing the fresh list; folding it in here as well means the door can act
+     * on the verdict without waiting for a second frame. */
+    if (row.ok && !subLibrary.some((s) => s.name.toLowerCase() === row.name.toLowerCase())) {
+      subLibrary = subLibrary.concat([Object.freeze(row)]);
+      emitLibrary();
+    }
+    rec.resolve(row);
+  }
+
+  if (opts.bridge) {
+    try { channel.subscribe('library', onLibraryFrame); } catch { /* ignore */ }
+    try { channel.subscribe('sub-probe', onSubProbeFrame); } catch { /* ignore */ }
   }
 
   /**
@@ -303,8 +442,107 @@ export function createAssets(options = {}) {
     return pool;
   }
 
+  /* ==========================================================================
+   * claimTagged(spec) -> Promise<taggedPool>       (SORT; see ./tagged.js)
+   * The pools live in their own module because their rules are nothing like
+   * claim()'s: two cursors, a seeded dry re-serve, a resolve that is allowed to
+   * give up, and rows whose TAG is the game's only source of truth.
+   * ======================================================================= */
+  const taggedPools = new Set();
+
+  function claimTagged(spec = {}) {
+    if (disposed) return Promise.resolve(null);
+    return createTaggedPool({
+      spec,
+      channel,
+      platform,
+      prewarm,
+      log,
+      /* The remote gate is the app's, not the door's: with remote media off (or
+       * OfflineMode on) a remote source row simply never asks, the tag lands
+       * empty, and the door refuses to start on pool.empty(). A LOCAL row is
+       * never gated - a folder on disk is not a network call. */
+      remoteAllowed: remoteEnabled,
+    }).then((pool) => {
+      if (pool) {
+        taggedPools.add(pool);
+        const dispose = pool.dispose;
+        pool.dispose = () => { taggedPools.delete(pool); dispose(); };
+      }
+      return pool;
+    });
+  }
+
   return {
     claim,
+    claimTagged,
+    /** The pickable world, as projected on init.settings. Never null fields. */
+    catalog() {
+      return {
+        remoteCatalog: remoteCatalog.slice(),
+        subLibrary: subLibrary.slice(),
+        localFolders: localFolders.slice(),
+        assetPresets: assetPresets.slice(),
+        remoteConsent,
+        remoteMediaEnabled: remoteEnabled,
+        offlineMode,
+        mediaSource,
+      };
+    },
+    /**
+     * Ask the host to verify a sub. NEVER rejects: a silent host resolves
+     * `{ok:false, timeout:true}` after PROBE_TIMEOUT_MS, which the door shows as
+     * "not found" - a spinner that never stops is worse than a wrong no.
+     */
+    probeSub(name) {
+      const clean = String(name == null ? '' : name).trim();
+      if (!clean) return Promise.resolve({ name: '', ok: false, videoCount: 0, stillOnly: false });
+      if (!opts.bridge || disposed) {
+        return Promise.resolve({ name: clean, ok: false, videoCount: 0, stillOnly: false, offline: true });
+      }
+      probeSeq += 1;
+      const reqId = 'ae-probe-' + probeSeq + '-' + Math.floor(Date.now() % 1e7);
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          probes.delete(reqId);
+          resolve({ name: clean, ok: false, videoCount: 0, stillOnly: false, timeout: true });
+        }, PROBE_TIMEOUT_MS);
+        probes.set(reqId, { name: clean, resolve, timer });
+        if (!channel.sendRaw('probe-sub', { reqId, name: clean })) {
+          probes.delete(reqId);
+          try { clearTimeout(timer); } catch { /* noop */ }
+          resolve({ name: clean, ok: false, videoCount: 0, stillOnly: false, offline: true });
+        }
+      });
+    },
+    /**
+     * Delete a sub from the player's library - the host also drops its verdict
+     * and its feed selection ("added once, X everywhere"). Resolves on the
+     * host's fresh `library` push, or after LIBRARY_ECHO_MS either way: the
+     * door's pill has already gone and a promise that never settled would leave
+     * it spinning.
+     */
+    removeLibrarySub(name) {
+      const clean = String(name == null ? '' : name).trim();
+      if (!clean || !opts.bridge || disposed) return Promise.resolve();
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = () => { if (done) return; done = true; try { off(); } catch { /* noop */ } resolve(); };
+        const off = channel.subscribe('library', () => setTimeout(finish, 0));
+        setTimeout(finish, LIBRARY_ECHO_MS);
+        /* Optimistic locally as well: the host is the truth, but the pill the
+         * player just clicked must not sit there until a frame comes back. */
+        subLibrary = subLibrary.filter((s) => s.name.toLowerCase() !== clean.toLowerCase());
+        emitLibrary();
+        channel.sendRaw('library-remove', { name: clean });
+      });
+    },
+    /** Subscribe to library pushes. Returns an unsubscribe. */
+    onLibrary(fn) {
+      if (typeof fn !== 'function') return () => {};
+      libraryCbs.add(fn);
+      return () => libraryCbs.delete(fn);
+    },
     /** The shell may hand host 'assets' replies straight in (bridge-agnostic). */
     receive: (msg) => channel.receive(msg),
     /** Absorb urls the shell already has (e.g. an init-time remote batch). */
@@ -319,11 +557,27 @@ export function createAssets(options = {}) {
         placeholderFloor: !localPools.loop.length && !localPools.still.length,
         claims: claims.size,
         remoteEnabled, remoteRatio, offlineMode,
+        /* the SORT seam, read-only: live tagged pools and the pickable world */
+        taggedPools: taggedPools.size,
+        perSourceMinDefault: TAGGED.PER_SOURCE_MIN,
+        catalogNiches: remoteCatalog.length,
+        librarySubs: subLibrary.length,
+        folders: localFolders.length,
+        presets: assetPresets.length,
+        remoteConsent, mediaSource,
       };
     },
     dispose() {
       disposed = true;
       for (const p of [...claims]) p.release();
+      for (const p of [...taggedPools]) { try { p.dispose(); } catch { /* ignore */ } }
+      taggedPools.clear();
+      for (const rec of [...probes.values()]) {
+        try { clearTimeout(rec.timer); } catch { /* noop */ }
+        try { rec.resolve({ name: rec.name, ok: false, videoCount: 0, stillOnly: false, offline: true }); } catch { /* noop */ }
+      }
+      probes.clear();
+      libraryCbs.clear();
       channel.dispose();
       prewarmed = new Set();
     },

@@ -49,7 +49,14 @@ core/grades.js     §8 rubric + A-caps (PURE)
 core/store.js      meta-command client, local cache + write-through
 core/rng.js        makeRng/hash01            <- NOT ours (engine agent)
 core/caps.js       clampToCaps + heat curve  <- NOT ours (engine agent)
-shell/shell.js     screen router + THE class runner (ctx per §11)
+provider/index.js  createAssets: claim() (every class) + claimTagged() (SORT) +
+                   the DOOR seam catalog()/probeSub()/removeLibrarySub()/onLibrary()
+provider/remote.js the bridge mailbox: assets-request / local-sample-request by
+                   reqId, plus sendRaw/subscribe for probe-sub and library
+provider/tagged.js THE TAGGED POOL: two piles, per-tag cursors, a seeded dry
+                   re-serve, thin frozen at resolve / empty live (§3)
+shell/shell.js     screen router + THE class runner (ctx per §11) + THE SETUP
+                   DOOR hook (§5: create -> setup() -> beginPlay)
 shell/splitflap.js departure-board reveal
 shell/reportcard.js day summary + THE one share pipeline
 shell/settings.js  THE settings page (3 tiers) + SETTING_KEYS
@@ -111,6 +118,12 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    TRACKABILITY INVARIANT: occlusion hides at most ONE link of a swap chain and every
                    occlusion carries a tell) / grade / lex MD_LEX; keybinds pick1..pick5; md_stake_mode
                    ask|bank|ride (greed scored UPWARD only, ride cap 5), md_shell_skin themed|minimal|contrast
+  sort/            the two-pile swipe (tracking, 120s)   - room 201, the class that TOOK
+                   Misdirection's room when it was retired. Right = TARGET, left = NOISE, and
+                   the piles are the PLAYER'S OWN NICHES, picked at a setup DOOR that runs
+                   BEFORE the class clock (`manifest.setup` + `instance.setup()`, §5). Truth is
+                   the `tag` the host stamped on the row, never pixels; the deck comes from
+                   `ctx.assets.claimTagged` (§3), never `claim()`
   echo/            the Simon ring (memory, 105s)          - sequence (PURE: warm start 3..6 off bestLen, decoy
                    plan from tier 2 telegraphed) / grade / lex EC_LEX; keybinds pad1..pad6; six pads always live,
                    the TIER restricts the alphabet; tones = engine audio_trigger 'pad' x pitch (+1 semitone per
@@ -317,6 +330,41 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   field sounds exactly as before.
 - **Protocol** (`bridge.PROTOCOL = 1`) must match the host's `PROTOCOL` int. A mismatch
   fails the boot on purpose — a page mis-reading the projection would mis-clamp settings.
+- **`ctx.assets.claimTagged()` IS THE SECOND POOL SHAPE, AND IT IS ADDITIVE** (SORT,
+  2026-08-23). `claim()` answers "24 loops"; this answers "two piles, and every row
+  remembers which pile it came from". Nothing about `claim()` moved - every other class
+  draws exactly the media it drew before, and the old `assets-request` frame is
+  byte-for-byte what it was (no `tag`, no `subs`).
+  ```js
+  const pool = await ctx.assets.claimTagged({
+    sources: [ { tag:'target', kind:'remote', subs:['BambiSleep','sissyhypno'] },
+               { tag:'noise',  kind:'remote', subs:['pokemon'] } ],
+    //         or { tag, kind:'local', folders:[...] } / { tag, kind:'local', presetId }
+    want: { loops: 48, stills: 32 },  // totals across tags, a HINT
+    perSourceMin: 12,                 // resolve when EVERY tag has this many distinct rows
+    seed: 'string', timeoutMs: 6000,  // ...or the ask budget is spent, or this elapses
+  });
+  pool.next(tag, { prefer:'loop'|'still' })  // row {url, remote, kind, mime, tag, src} | null
+  pool.counts() / pool.thin(tag) / pool.empty(tag)
+  pool.prewarm(n) / pool.dealt() / pool.onUpdate(fn) / pool.dispose()
+  ```
+  Wire: remote rows go out as `assets-request {reqId, count, kind, subs, tag}`, local rows as
+  `local-sample-request {reqId, count, kind, folders?|presetId, tag}`, and BOTH are answered by
+  the same `assets {reqId, urls:[{url,kind,mime,tag,src}], done}` mailbox, keyed by reqId
+  (`src` = `r/<sub>` | `<folder rel path>` | `preset:<id>`). The host contract is unchanged:
+  ask again after every reply, MAX_ASKS **per tag** 8, RETRY_MS 1500, batch cap 24.
+- **THE DOOR'S OTHER FOUR VERBS** hang off the same object and are how SORT's setup screen
+  draws itself: `catalog()` (the sanitized `init.settings` projection - `remoteCatalog`
+  `[{id,label,subs}]`, `subLibrary` `[{name,ok,videoCount,stillOnly}]`, `localFolders`
+  `[{path,gifs,stills,videos}]`, `assetPresets` `[{id,name}]`, plus `remoteConsent`,
+  `remoteMediaEnabled`, `offlineMode`, `mediaSource`), `probeSub(name)` ->
+  `probe-sub {reqId,name}` / `sub-probe {reqId,name,ok,videoCount,stillOnly}`,
+  `removeLibrarySub(name)` -> `library-remove {name}`, and `onLibrary(cb)` for the host's
+  `library {subLibrary:[...]}` push (which any surface can cause - the Assets tab, the FYP
+  popover, another probe). `shell.js` passes the six new init fields into `createAssets`
+  beside `settings`; a host that predates them ships nothing and the catalog is simply empty.
+  **Neither probe nor library is media**, so they ride `remote.js`'s `sendRaw`/`subscribe`
+  rather than the reqId mailbox.
 - **`engine/index.js` `createEngine(opts)` / `provider/index.js` `createAssets(opts)`** are
   loaded *optionally* (intake's `loadOptional`). Missing or throwing → null object, and the
   class still runs, silent. Never make either a hard import.
@@ -742,16 +790,83 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     backwards, so a race between its own schedule and the host's answer can only ever
     add holes.
 
+52. **IN A SORT THE TAG IS THE ONLY TRUTH, SO ONE URL MAY BELONG TO ONE PILE ONLY.**
+    `provider/tagged.js` de-duplicates by url ACROSS tags and keeps the row for the tag that
+    saw it first. Two remote sources that overlap (a player picking "bimbo" as noise against
+    "hypno") really do serve the same file twice, and a card that is both piles at once is the
+    one lie a sort cannot survive - the player is marked wrong for being right. The door's job
+    is to strip the overlap BEFORE the claim; this is the floor under it.
+    Two flags with deliberately different lifetimes hang off the same pool: **`thin(tag)` is
+    FROZEN at resolve** (it is what the door warned about, and a warning that changed under the
+    player mid-class would be worse than no warning) while **`empty(tag)` is LIVE** (a late
+    batch may legitimately lift it, and the refusal to start is checked once, at the door).
+53. **A DRY TAG RE-SERVES; `next()` RETURNS null FOR EXACTLY ONE REASON.** When a tag's
+    distinct rows are spent it re-serves its OWN served list in a seeded shuffle (repeats are
+    fine in a sort - they are what makes a "seen this one" trickster free), so the only null a
+    caller can ever get is a tag with ZERO rows. A game that treats null as "out of media" and
+    stops dealing has misread the contract; a game that treats it as "this pile is empty" is
+    right. `prefer:'loop'|'still'` is a SWAP, not a skip - the wanted kind is pulled forward
+    into the cursor's slot and the row it displaced keeps its place, so a preference can never
+    starve a kind out of the pass.
+54. **THE NEW MEDIA FRAMES ARE ADDITIVE OR THEY ARE A REGRESSION IN NINE OTHER CLASSES.**
+    `assets-request` WITHOUT `subs` must stay byte-for-byte the ask it always was (the host's
+    app-wide pull), and `local-sample-request` is a SEPARATE type answered by the SAME `assets`
+    mailbox. Two things bite here: `provider/remote.js request()` grew five optional fields, so
+    a default that is not `undefined` would put a field on every other class's frame; and a
+    LOCAL sample is **not gated on remote consent or OfflineMode** (a folder on disk is not a
+    network call) while a remote row still is - one flag, `local:true`, on the request.
+55. **`setup()` FALSE IS THE ONLY WAY OUT OF A CLASS; EVERYTHING ELSE STARTS IT.** The shell
+    awaits `instance.setup()` between `create()` and `beginPlay()` and reads ONE value: a
+    resolved `false` walks to campus through the ordinary leave path. True, undefined, a throw
+    and a rejection all start the class - a door that broke must never be able to strand a
+    player on an empty stage. Consequences a game must handle: the class clock is armed in
+    `beginPlay` and nowhere else (so the door is free), the enrollment intro runs FIRST, Esc
+    while the door is up is the ordinary leave confirm - which FREEZES the class to ask, so
+    **`pause()` and `resume()` can be called before `start()` ever was** - and `destroy()` is
+    called on the way out, so a door that mounted anything owns tearing it down.
+56. **THE SHELL SUITE'S "229/229" IS NOT A PROPERTY OF THE REPO - IT IS A PROPERTY OF THE
+    WORKTREE ITS ABSOLUTE PATHS NAME.** `scratchpad/ir-variety/suite-a/shellsuite` hard-codes
+    `C:/wt-ccp-...` in five files (test-e2e's C# read, test-hostfixes' REPO, test-rake's
+    WEBROOT, test-timebar's CSS, run.sh's SRC). Re-pointed at `bb22ba34b` (origin/main) it
+    scores **215/229**: fourteen assertions were already red there, including the `[hidden]`
+    token grep in test-rake / test-hostfixes, which the comment added to `shell/shell.js`
+    trips. ALWAYS re-run the baseline from a pristine export (`git archive <sha> ... | tar -x`)
+    before attributing a red line to your change, and quote the baseline beside your run.
+57. **A REGISTRY ROW WITHOUT A MODULE IS A `class_suspended` ROW ON THE BOARD, NOT AN ABSENCE.**
+    `GAME_PATHS.sort` points at `./sort/index.js`; `loadGames` uses `Promise.allSettled`, so a
+    missing module is caught, logged and stubbed - the school still deals a board, but the
+    player gets a dead room in the rotation. The gate that makes a class ABSENT is
+    `RETIRED_GAMES` / a closed semester, and it is one line. So: never land a registry row
+    ahead of its module unless the same merge carries the module, and if a class has to ship
+    dark, retire it rather than leaving the row to stub.
+58. **A ROOM CAN CHANGE HANDS, AND THE LEXICON ROWS DO NOT GO WITH IT.** SORT took room 201
+    (rect, door, alley stop and number unchanged) when Misdirection was retired, so `ROOMS` has
+    a `sort` entry and no `misdirection` one - un-retiring that class now means giving it a
+    room. Its `campus_room_misdirection` / `campus_desc_misdirection` / `game_misdirection`
+    rows deliberately STAY: the host's `NeutralLexicon` is append-only and a retired class is
+    not a deleted one. (The scratch campus suite asserted "misdirection has a room now" as of
+    Semesters II/III - that line needs re-baselining onto `sort`, the LAW it protects, "a pool
+    game with no room is skipped, never a throw", is the line above it and still passes.)
+
 ## 5. The game module contract (short version)
 
 ```js
 export default {
   key, family, meaty, flagship, timeBudgetSec, title,
   manifest: { effectsConsumed:[], assetNeeds:{}, boardSizes:null, keybinds:null,
-              settings:[], peek:false },
-  create(ctx) { return { start(classSpec), pause(), resume(), suspend(on), destroy() }; },
+              settings:[], peek:false, setup:false },
+  create(ctx) { return { setup?(), start(classSpec), pause(), resume(), suspend(on), destroy() }; },
 };
 ```
+**THE SETUP DOOR** (`manifest.setup:true` + an `instance.setup()`, SORT 2026-08-23) is the one
+thing a class may put between `create()` and `start()`. The shell awaits it and reads exactly
+one value: **`false` means the player backed out** and walks to campus through the ordinary
+leave path (teardown, `class-left`, no grade); true, undefined, a throw and a rejection ALL
+start the class, because a broken door must never strand a player on an empty stage. The
+enrollment intro still runs FIRST (the school speaks before the game does), the class clock is
+still armed in `beginPlay` and nowhere else - so a door costs the class no time - and Esc while
+it is open is the ordinary leave confirm, one new rung above the pause rung. It is the FUNCTION
+that decides, not the flag: a mismatch between them is logged and the function wins.
 `ctx = { root, engine, assets, lexicon:t, caps, rng, settings, keys, peek, ceremonies,
 exits, store, endClass({metrics:{composite}, hardGates?, zen?, flavorXp?, share?, assists?}), log }`
 plus the additive read-only projection: `platform` (init's `{isTouch, hasHaptics, host}`),
@@ -816,6 +931,14 @@ bridge+boot 15, **e2e seams 14**, campus 23, **host fixes 20**, time bar + free 
 rake 44, **punch cards 47**), against the live `engine/` + `provider/` modules (the note line
 in the shell run says which). The four game suites (`games-dt`, `games-lf`, `games-dv`,
 `games-ic`) drive the REAL games and run green alongside it.
+
+`scratchpad/sort/suite-p/` (2026-08-23, LOT P) is the SORT seam's own: `test-tagged.mjs` (26
+cases) drives the real provider against a fake host - per-tag cursors, the seeded dry re-serve,
+perSourceMin vs the timeout, thin frozen / empty live, the local path, the prewarm cap, the
+probe/library round trip, and `claim()` proven untouched - and `test-setuphook.mjs` (12 cases)
+drives the real shell through the setup door (false -> campus, true/throw/reject -> beginPlay,
+the clock never armed, Esc = the leave confirm, the enrollment intro first) plus the registry /
+campus / lexicon rows. Both are node:test; `run.sh` copies the web root the same way.
 
 `test-punchcard.mjs` (2026-08-23) is the punch-card half: the store's refusal + self-heal,
 the 96-char cap on every one of the 30 flavour rows AND the 8 rotating card lines AND their

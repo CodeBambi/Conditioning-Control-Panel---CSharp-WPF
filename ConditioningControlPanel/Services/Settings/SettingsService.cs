@@ -225,6 +225,10 @@ namespace ConditioningControlPanel.Services
                         // Re-enable once; the Settings > System toggle lets it be turned back off.
                         settings.MigrateEnableCompositorOffThreadPresent();
 
+                        // Library vs selection (SORT): every custom sub the user kept before the
+                        // library existed joins it. One-way and idempotent - it only ever appends.
+                        settings.MigrateRemoteSubLibrary();
+
                         return settings;
                     }
                 }
@@ -343,6 +347,7 @@ namespace ConditioningControlPanel.Services
                     settings.MigrateLoudnessThreshold();
                     settings.MigrateEnableUnifiedOverlayHost();
                     settings.MigrateEnableCompositorOffThreadPresent();
+                    settings.MigrateRemoteSubLibrary();
 
                     // Record the restore: the backup restores progression wholesale, so sync must
                     // reconcile with the server before pushing any of it back up (#761).
