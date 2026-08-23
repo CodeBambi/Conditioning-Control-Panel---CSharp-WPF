@@ -543,4 +543,280 @@ internal static class InputCaptureObservations
             OverlayStillEarnsAvailable: rePresent is CapabilityState.Available,
             OverlayRePresentState: rePresent);
     }
+
+    /// <summary>How many threads enter the concurrent leg at once. More than the two the defect
+    /// needs, because the discriminating power of that leg comes from at least one loser arriving
+    /// while the winner is still INSIDE its prompt: with four released from one barrier, "no loser
+    /// ever overlapped" stops being a plausible reading of a green.</summary>
+    private const int Racers = 4;
+
+    private static readonly Lazy<SingleTenancyRun> LazySingleTenancy =
+        new(RunSingleTenancy, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>The one run that proves ONE card at a time on a shared presence.</summary>
+    internal static SingleTenancyRun SingleTenancy => LazySingleTenancy.Value;
+
+    /// <param name="MachineHasInteractiveDesktop">The machine fact every expectation is compared against.</param>
+    /// <param name="Window">The first card's handle, from the presence's native-handle surface.</param>
+    /// <param name="FirstCardIsLive">The first prompt ended with a card up (Available or Degraded).</param>
+    /// <param name="SecondPromptCode">The reason code the second prompt refused with.</param>
+    /// <param name="StillPromptingAfterSecond">The live card is still the presence's card.</param>
+    /// <param name="LastPromptUntouchedBySecond">The refusal did not overwrite what a panel renders
+    /// for the LIVE card (<c>Views/Pages/StudioPage.axaml.cs:1696</c>) — reference identity, so
+    /// nothing about the string matters.</param>
+    /// <param name="HitTestAtFirstCardsRectangle">Who the window manager routes the FIRST card's
+    /// centre to, read by the probe's own P/Invoke rather than by the product's.</param>
+    /// <param name="HitTestAtSecondCardsRectangle">Ditto for the rectangle the REFUSED prompt asked
+    /// for. Together they say the card did not move — and <c>_bounds</c> is assigned in the same
+    /// lock block as <c>_content</c> and <c>_onKeystroke</c>
+    /// (<c>Input/Win32InputPresence.cs</c>), so a card that did not move is a block that did not
+    /// run.</param>
+    /// <param name="KeyInjected">Whether the OS accepted the synthesised <c>VK_A</c>.</param>
+    /// <param name="KeyReachedTheFirstCard">Whether it arrived at the FIRST caller's callback —
+    /// the defect stated the way the user meets it: that module can still be answered.</param>
+    /// <param name="SecondCallbackEverFired">Whether the refused caller's callback ever ran. It was
+    /// never installed, so it must not have.</param>
+    /// <param name="ThirdPromptCode">A THIRD prompt while the first card is still up. The refused
+    /// second must not have RELEASED the live card's claim on its way out; the failure in that
+    /// direction is a card stealable by the caller after next.</param>
+    /// <param name="PromptAfterDismissCode">After the card comes down, the presence takes the next
+    /// one: the refusal is BUSY, not BROKEN.</param>
+    /// <param name="LateRefusalCode">What a prompt at an origin no window manager will honour
+    /// refused with, or <c>none</c> if it did not refuse.</param>
+    /// <param name="PromptingAfterLateRefusal">Whether a card survived that prompt.</param>
+    /// <param name="PromptAfterLateRefusalCode">Whether the NEXT prompt on that presence was
+    /// admitted. A refusal path that kept the claim would disable prompting for the process.</param>
+    /// <param name="RaceAdmitted">How many of <see cref="Racers"/> CONCURRENT prompts got PAST the
+    /// guard — the number an unsynchronised re-read of <c>_prompting</c> gets wrong, because that
+    /// field is not true until the confirmation read at the END of Prompt, so every thread that
+    /// tests it during another's prompt sees false and proceeds.</param>
+    /// <param name="RaceLiveCards">How many of them ended with a card up. Deliberately NOT the
+    /// headline: several admitted callers race on the presence's own <c>_window</c> field and all
+    /// but one end up refusing themselves, so a count of live cards hides the defect. The count of
+    /// ADMISSIONS is what shows it.</param>
+    /// <param name="RaceOutcomes">Every outcome, for the failure message.</param>
+    /// <param name="FirstPromptState">The full state, for failure messages.</param>
+    /// <param name="SecondPromptState">Ditto.</param>
+    /// <param name="LateRefusalState">Ditto.</param>
+    internal sealed record SingleTenancyRun(
+        bool MachineHasInteractiveDesktop,
+        nint Window,
+        bool FirstCardIsLive,
+        string SecondPromptCode,
+        bool StillPromptingAfterSecond,
+        bool LastPromptUntouchedBySecond,
+        nint HitTestAtFirstCardsRectangle,
+        nint HitTestAtSecondCardsRectangle,
+        bool KeyInjected,
+        bool KeyReachedTheFirstCard,
+        bool SecondCallbackEverFired,
+        string ThirdPromptCode,
+        string PromptAfterDismissCode,
+        string LateRefusalCode,
+        bool PromptingAfterLateRefusal,
+        string PromptAfterLateRefusalCode,
+        int RaceAdmitted,
+        int RaceLiveCards,
+        string RaceOutcomes,
+        CapabilityState FirstPromptState,
+        CapabilityState SecondPromptState,
+        CapabilityState LateRefusalState);
+
+    /// <summary>
+    /// Three legs, a presence each, and all three ask the same question: who owns the card that is
+    /// up.
+    ///
+    /// <para>Leg 1 is the reported defect — a second <c>Prompt</c> over a live card used to
+    /// overwrite the shared <c>_content</c> and <c>_onKeystroke</c>, so the first module's question
+    /// could never be answered. Leg 2 is the obligation that staking a claim on entry creates: a
+    /// prompt that ends with NO card must give the claim back, or the first refusal disables
+    /// prompting for the life of the process. Leg 3 is the only shape that can tell an ATOMIC claim
+    /// from an unsynchronised re-read of <c>_prompting</c>, and it has to be concurrent to do it:
+    /// outside a <c>Prompt</c> call the two are equal by construction, and the presence offers no
+    /// re-entrancy hook to observe one in flight (<c>InputPromptRequest</c> and
+    /// <c>InputPromptContent</c> are sealed records with non-virtual members, <c>InputBounds</c> is
+    /// a readonly struct, and <c>OnKeystroke</c> is raised only on message dispatch, which nothing
+    /// inside <c>Prompt</c> performs).</para>
+    /// </summary>
+    private static SingleTenancyRun RunSingleTenancy()
+    {
+        var firstKeystrokes = new List<InputKeystroke>();
+        var secondKeystrokes = new List<InputKeystroke>();
+
+        var firstBounds = CentreBounds;
+
+        // Somewhere the first card is NOT, on purpose: had the refused prompt reached the assignment
+        // block, _bounds would be this rectangle and the card would have moved there, which the
+        // probe's own hit test below would see.
+        var secondBounds = new InputBounds(8, 8, 220, 150);
+
+        var presence = new Win32InputPresence();
+        var first = presence.Prompt(new InputPromptRequest(
+            firstBounds,
+            new InputPromptContent(Question, "1 of 1", string.Empty, "Press Esc to close"),
+            firstKeystrokes.Add));
+        var window = presence.NativeHandles.Window;
+        var lastPromptAfterFirst = presence.LastPrompt;
+
+        var second = presence.Prompt(new InputPromptRequest(
+            secondBounds,
+            new InputPromptContent("HOW MANY BUBBLES", "1 of 1", string.Empty, "Press Esc to close"),
+            secondKeystrokes.Add));
+        var stillPrompting = presence.IsPrompting;
+        var lastPromptUntouched = ReferenceEquals(lastPromptAfterFirst, presence.LastPrompt);
+
+        var (firstX, firstY) = firstBounds.Centre;
+        var (secondX, secondY) = secondBounds.Centre;
+        var hitAtFirst = InputWindowProbe.HitTest(firstX, firstY);
+        var hitAtSecond = InputWindowProbe.HitTest(secondX, secondY);
+
+        // WHOSE CALLBACK THE KEYSTROKE REACHES. Gated on the OS genuinely holding the card, exactly
+        // as the lifecycle run gates its own delivery leg, so an injected key can never be typed into
+        // somebody else's window.
+        var injected = false;
+        var reachedFirst = false;
+        if (InputWindowProbe.Foreground() == window && InputWindowProbe.SystemKeyboardFocus() == window)
+        {
+            injected = InputWindowProbe.InjectKey(InputWindowProbe.VkA);
+            reachedFirst = InputWindowProbe.PumpUntil(() =>
+            {
+                presence.Pump(64);
+                return firstKeystrokes.Any(k => k.Kind == InputKeystrokeKind.Character && k.Character == 'a');
+            });
+        }
+
+        // A THIRD prompt, still over the live card: the refused second must not have handed the FIRST
+        // card's claim back on its way out.
+        var third = presence.Prompt(new InputPromptRequest(
+            secondBounds,
+            new InputPromptContent("THIRD", "1 of 1", string.Empty, "Press Esc to close"),
+            _ => { }));
+
+        presence.Dismiss();
+        var afterDismiss = presence.Prompt(new InputPromptRequest(
+            firstBounds,
+            new InputPromptContent("AFTER THE CARD CAME DOWN", "1 of 1", string.Empty, "Press Esc to close"),
+            _ => { }));
+        var secondCallbackFired = secondKeystrokes.Count > 0;
+        presence.Dismiss();
+        presence.Dispose();
+
+        // LEG 2. A prompt that refuses LATE — after the claim is staked and after a window exists —
+        // so the release under test is the one on a failure path rather than the one on a dismissal.
+        // The shape was chosen by measurement, not by taste: the request boundary already rejects
+        // zero and negative area (InputPromptRequest validates), an OFF-SCREEN card comes back
+        // Degraded rather than refused because WindowFromPoint walks the window tree and not the
+        // monitors, and a huge SIZE hangs the compositor. What is left is a SMALL window at an
+        // impossible ORIGIN: it costs the OS nothing and cannot survive the placement read-back,
+        // because the rectangle the OS holds is not the rectangle that was asked for.
+        var late = new Win32InputPresence();
+        var lateState = late.Prompt(new InputPromptRequest(
+            new InputBounds(2_000_000_000, 2_000_000_000, 320, 200),
+            new InputPromptContent("IMPOSSIBLE ORIGIN", "1 of 1", string.Empty, "Press Esc to close"),
+            _ => { }));
+        var promptingAfterLate = late.IsPrompting;
+        var afterLate = late.Prompt(new InputPromptRequest(
+            CentreBounds,
+            new InputPromptContent("AFTER A REFUSAL", "1 of 1", string.Empty, "Press Esc to close"),
+            _ => { }));
+        late.Dismiss();
+        late.Dispose();
+
+        var raceAdmitted = RunRace(out var raceLiveCards, out var raceOutcomes);
+
+        return new SingleTenancyRun(
+            MachineHasInteractiveDesktop: InputWindowProbe.MachineHasInteractiveDesktop,
+            Window: window,
+            FirstCardIsLive: first is CapabilityState.Available or CapabilityState.Degraded,
+            SecondPromptCode: CodeOf(second),
+            StillPromptingAfterSecond: stillPrompting,
+            LastPromptUntouchedBySecond: lastPromptUntouched,
+            HitTestAtFirstCardsRectangle: hitAtFirst,
+            HitTestAtSecondCardsRectangle: hitAtSecond,
+            KeyInjected: injected,
+            KeyReachedTheFirstCard: reachedFirst,
+            SecondCallbackEverFired: secondCallbackFired,
+            ThirdPromptCode: CodeOf(third),
+            PromptAfterDismissCode: CodeOf(afterDismiss),
+            LateRefusalCode: CodeOf(lateState),
+            PromptingAfterLateRefusal: promptingAfterLate,
+            PromptAfterLateRefusalCode: CodeOf(afterLate),
+            RaceAdmitted: raceAdmitted,
+            RaceLiveCards: raceLiveCards,
+            RaceOutcomes: raceOutcomes,
+            FirstPromptState: first,
+            SecondPromptState: second,
+            LateRefusalState: lateState);
+    }
+
+    /// <summary>
+    /// LEG 3. <see cref="Racers"/> threads, one presence, one barrier, and no wall-clock anywhere:
+    /// the rendezvous is a deterministic signal and the waiting is a bounded pump.
+    ///
+    /// <para><b>NEITHER RACER MAY DRIVE A WINDOW THIS THREAD OWNS</b>, and that is measured rather
+    /// than stylistic. <c>SetWindowPos(SWP_SHOWWINDOW)</c> and <c>SetForegroundWindow</c> SEND
+    /// messages to the thread that owns the window and block until it answers, so a warm-up prompt on
+    /// THIS thread followed by racers over its window would deadlock against this thread sitting in
+    /// <c>Join</c>. The presence therefore starts with no window at all and the racer that wins the
+    /// claim creates and drives its own; this thread pumps while they run so nothing the OS sends it
+    /// goes unanswered, and the <c>Join</c> is what waits.</para>
+    /// </summary>
+    private static int RunRace(out int liveCards, out string outcomeText)
+    {
+        var racer = new Win32InputPresence();
+
+        // Every racer asks for the SAME rectangle on purpose: with different rectangles two admitted
+        // callers would refuse EACH OTHER on the held-bounds read-back, and an unsynchronised guard
+        // would pass this leg for the wrong reason.
+        var raceBounds = CentreBounds;
+
+        var outcomes = new CapabilityState[Racers];
+        var finished = 0;
+        using (var rendezvous = new Barrier(Racers))
+        {
+            var threads = new Thread[Racers];
+            for (var i = 0; i < threads.Length; i++)
+            {
+                var slot = i;
+                threads[slot] = new Thread(() =>
+                {
+                    rendezvous.SignalAndWait();
+                    outcomes[slot] = racer.Prompt(new InputPromptRequest(
+                        raceBounds,
+                        new InputPromptContent($"RACER {slot}", "1 of 1", string.Empty, "Press Esc to close"),
+                        _ => { }));
+                    Interlocked.Increment(ref finished);
+                })
+                {
+                    IsBackground = true,
+                    Name = $"input single-tenancy racer {slot}",
+                };
+            }
+
+            foreach (var thread in threads)
+            {
+                thread.Start();
+            }
+
+            InputWindowProbe.PumpUntil(() => Volatile.Read(ref finished) == threads.Length);
+
+            foreach (var thread in threads)
+            {
+                thread.Join();
+            }
+        }
+
+        // The winning racer's thread has exited, and Windows destroys the windows a thread created
+        // when it ends — so this teardown is hygiene on an already-dead handle, not a claim.
+        racer.Dismiss();
+        racer.Dispose();
+
+        liveCards = outcomes.Count(o => o is CapabilityState.Available or CapabilityState.Degraded);
+        outcomeText = string.Join(" | ", outcomes.Select(Describe));
+        return outcomes.Count(o => CodeOf(o) != InputReasonCodes.InputAlreadyPrompting);
+    }
+
+    /// <summary>The refusal code, or <c>none</c> for anything that is not a refusal.</summary>
+    private static string CodeOf(CapabilityState state) =>
+        state is CapabilityState.Unavailable unavailable ? unavailable.Reason.Code : "none";
 }

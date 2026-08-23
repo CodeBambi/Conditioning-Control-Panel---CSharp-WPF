@@ -232,6 +232,14 @@ public interface IInputPresence : IDisposable
     /// inside it to it, places it above every ordinary window, and holds ink for it.
     /// <see cref="CapabilityState.Degraded"/> means the input is held and the card is blank.
     /// Anything else is a typed refusal naming the link that failed.
+    ///
+    /// <para><b>ONE CARD AT A TIME, and the presence is what enforces it.</b> A prompt that arrives
+    /// while this presence is already committed to one is refused with
+    /// <see cref="InputReasonCodes.InputAlreadyPrompting"/> — the live card keeps its rectangle, its
+    /// content and its keystroke callback, so the module that raised it can still be answered. This
+    /// instance is SHARED (<c>Effects/BubbleCountEffect.cs:75</c>) and its consumers ask from
+    /// different threads, so a caller-side "is one up?" test cannot hold across another caller's
+    /// prompt; refusing here is what makes the rule true rather than customary.</para>
     /// </summary>
     CapabilityState Prompt(InputPromptRequest request);
 
