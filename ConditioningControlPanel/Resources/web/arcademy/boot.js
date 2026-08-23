@@ -113,14 +113,14 @@ function armBootDeadline() {
 }
 
 /* ----------------------------------------------------------------------------
- * THE SPLASH DISMISSAL. The loader doubles as the ~1.2s intro splash (see
+ * THE SPLASH DISMISSAL. The loader doubles as the ~3s intro splash (see
  * index.html): a boot that lands early WAITS OUT the beat instead of cutting
  * it, a boot that lands late dismisses on arrival. `.is-done` plays the CSS
  * exit (fade + zoom-through); the `hidden` attribute stays the ground truth a
  * beat later. FAILURE PATHS NEVER WAIT - failBoot below still snaps
  * `hidden = true` directly, so an error card is never delayed by a celebration.
  * -------------------------------------------------------------------------- */
-const INTRO_MIN_MS = 1150;
+const INTRO_MIN_MS = 2950;
 const INTRO_EXIT_MS = 320;
 const introT0 = Date.now();
 
