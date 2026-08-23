@@ -332,6 +332,45 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     report, inject a solid test box into `.ae-front` and PrintWindow the app - if the box is
     on top, it is alpha.
 
+36. **A WEB PAGE'S FRAME BUDGET IS SPENT ON THREE THINGS, AND NONE OF THEM IS "TOO MANY
+    NODES."** Chromium trace of The Deep End, full screen, 16 live video tiles, RTX 3060 Ti:
+    the GPU process's main thread at **79% of a core**, in three roughly equal thirds.
+    - **RENDER SURFACES.** ~86 per frame. `isolation:isolate` + a `mix-blend-mode` pseudo on
+      every tile face is two surfaces *per tile*, and a blend surface must read back what is
+      under it before it can write. A `filter:` on a `<video>` is worse still: a full GPU pass
+      over a decoded 854x480 frame, per tile, per frame. **Tint with plain alpha and bake a
+      "desaturate" into the wash gradient; never put a filter on a live decode.**
+    - **PER-FRAME RE-RASTER.** `@keyframes { to { background-position: … } }` re-rasters the
+      WHOLE layer every frame; six full-screen sheets doing it is a third of the budget on
+      gradients that never changed shape. **PATTERNS DRIFT BY TRANSFORM, NEVER BY
+      BACKGROUND-POSITION** (the law is written into `the-deep-end/style.js`): oversize the
+      sheet by exactly one tile period on its trailing edge and `translate` it by exactly that
+      period, so the wrap lands on an identical pixel. One background layer per pseudo - two
+      layers with different tile sizes cannot share one transform. Corollary: a *travelling*
+      highlight needs a clipping box, and a `::before` cannot own a `::before`, so a sweep on
+      a pseudo (the old `g-de-sheen`, `g-de-scan`) either grows a real element or becomes an
+      `opacity` breathe. Prefer the breathe; a per-tile node to save raster is a bad trade.
+    - **VIDEO DECODES.** Scrolller's SMALLEST rendition IS 854x480, so asking for a smaller
+      file is not a lever - the **decoder COUNT** is the only one. Faces are frozen per TIER,
+      so a cap counted in tiles is meaningless (17 tier-1 tiles = 1 file, 17 decodes). The
+      Deep End caps **distinct animated tiers** (`FACE_CAP` 6) and keeps the numerous shallow
+      tiers on stills (`SHALLOW_STILL_MAX_TIER` 3) - *the shallows are still, depth is alive*.
+      The ENGINE shares one budget of its own: `engine/util.js` `budgetedKind('loop')` counts
+      the `<video>` nodes `mediaEl` has minted and hands `gif_rain` / `gif_burst` a **still**
+      once `VIDEO_BUDGET` (6; 2 under `.ae-lite`) is spent. Anything that mints a decoration
+      video must come through `mediaEl` and leave through `timers.release`/`kill`, or the
+      count leaks and the budget closes for the session.
+    **AND A LADDER, NOT A SWITCH:** under a 4x CPU throttle even an all-stills board fell to
+    40fps, so the whole frame has to get cheaper, not just the videos. `de_perf`
+    (`auto|full|lite`) is the pattern: `lite` = `.g-de-lite` on the game's stage **and
+    `.ae-lite` on `document.documentElement`** (the one seam a game and the engine share -
+    the engine never owns that class, it only reads it), and **both come off on destroy or
+    the lobby inherits a lit-down room**. `auto` samples rAF deltas for ~3s after the board is
+    dealt, skips the first 500ms of first-frame cost, and demotes **once, downward only** - a
+    room that changes its own look twice is worse than a room that is simply lighter. With no
+    `requestAnimationFrame` (node, the DOM double) the probe must **stay full**: a missing
+    frame clock is not evidence of a slow machine.
+
 ## 5. The game module contract (short version)
 
 ```js

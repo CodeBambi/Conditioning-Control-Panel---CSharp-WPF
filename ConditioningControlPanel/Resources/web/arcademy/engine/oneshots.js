@@ -23,7 +23,7 @@ import {
   NODE_CAPS, DUCK, subFlashSpec, glitchSpec, gifBurstSpec,
   burstCountForHeat, burstOpacityForHeat,
 } from './curves.js';
-import { rand, pickFrom, hasDom, mediaEl } from './util.js';
+import { rand, pickFrom, hasDom, mediaEl, budgetedKind } from './util.js';
 import { createEscapeGuard } from './escape.js';
 
 export function createOneshots(ctx) {
@@ -168,7 +168,12 @@ export function createOneshots(ctx) {
 
     function makeNode(genLeft, atX, atY) {
       if (cleared || live[counter] >= cap) return null;
-      const url = opts.url || ctx.assetUrlSync(opts.assetKind || (kind === 'gif_burst' ? 'loop' : 'still'));
+      /* THE DECODER BUDGET (util.js): a gif_burst asks for a loop, but once the
+       * shared budget is spent it is handed a still instead - the burst is the
+       * same size, the same count and the same hold, it just stops minting a
+       * 854x480 decoder per node. An explicit opts.url is the caller's own
+       * choice and is never second-guessed. */
+      const url = opts.url || ctx.assetUrlSync(budgetedKind(opts.assetKind || (kind === 'gif_burst' ? 'loop' : 'still')));
       // mediaEl: <img>, or a muted looping <video> when the pool handed us a
       // webm/mp4 loop (the only animated shape a remote provider has)
       const node = (url && mediaEl(url)) || document.createElement('div');

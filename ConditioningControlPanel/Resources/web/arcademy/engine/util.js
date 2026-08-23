@@ -27,16 +27,62 @@ export function el(tag, cls, styles) {
 export const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
 export const isVideoUrl = (url) => VIDEO_URL_RE.test(String(url || ''));
 
+/* ---- THE DECODER BUDGET (perf, measured 2026-08-23) -----------------------
+ * A Chromium trace of a full-screen board with sixteen live video tiles put the
+ * GPU process's main thread at 79% of a core, and roughly a third of that was
+ * simultaneous 854x480 decodes. Scrolller's SMALLEST rendition is 854x480, so
+ * there is no cheaper file to ask for: the only lever is the decoder COUNT.
+ *
+ * Decoration therefore shares one budget. `gif_rain` and `gif_burst` ask
+ * `budgetedKind('loop')` before they ask the pool for a url, and once the
+ * budget is spent they are handed a STILL instead - the shower keeps its node
+ * count and its rhythm, it just stops minting decoders. The counter lives here
+ * because `mediaEl` is the one door a decoration video comes in through and
+ * `createTimers` release/kill is the one door it leaves by.
+ *
+ * The lite rung reads `.ae-lite` on <html> (a game or the shell sets it; the
+ * engine never owns that class), because a machine that cannot paint the frame
+ * cannot decode six videos either. */
+export const VIDEO_BUDGET = 6;
+export const VIDEO_BUDGET_LITE = 2;
+let liveVideos = 0;
+/** How many decoration <video> nodes mediaEl has minted and not yet released. */
+export const liveVideoCount = () => liveVideos;
+export function videoBudget() {
+  try {
+    const html = hasDom() ? document.documentElement : null;
+    if (html && html.classList && html.classList.contains('ae-lite')) return VIDEO_BUDGET_LITE;
+  } catch { /* ignore */ }
+  return VIDEO_BUDGET;
+}
+/** The asset kind decoration may actually ask for. 'loop' until the budget is
+ *  spent, then 'still' - every other kind passes straight through. */
+export function budgetedKind(want) {
+  if (want !== 'loop') return want;
+  return liveVideos >= videoBudget() ? 'still' : 'loop';
+}
+/** Test seam only: the harness runs many cases in one process. */
+export function resetVideoBudget() { liveVideos = 0; }
+function forgetVideo(node) {
+  if (!node || node.__aeVideo !== true) return;
+  try { node.__aeVideo = false; } catch { /* ignore */ }
+  liveVideos = liveVideos > 0 ? liveVideos - 1 : 0;
+}
+
 /** The media node for a pool url: <img> for stills/gifs, a muted, looping,
  *  inline-autoplaying <video> for mp4/webm. Same class, same `src`, same
  *  object-fit rules - callers never branch. Returns null with no DOM; never
- *  throws (a DOM double without video semantics just gets a bare element). */
+ *  throws (a DOM double without video semantics just gets a bare element).
+ *  A <video> is COUNTED against the shared decoder budget from here until the
+ *  timer registry releases it. */
 export function mediaEl(url, cls) {
   if (!hasDom()) return null;
   const video = isVideoUrl(url);
   const n = document.createElement(video ? 'video' : 'img');
   if (cls) n.className = cls;
   if (video) {
+    liveVideos += 1;
+    try { n.__aeVideo = true; } catch { /* a double may be frozen; the count still holds */ }
     try {
       n.muted = true; n.loop = true; n.autoplay = true; n.playsInline = true;
       n.setAttribute('muted', ''); n.setAttribute('loop', ''); n.setAttribute('autoplay', '');
@@ -120,13 +166,14 @@ export function createTimers() {
   function release(node) {
     if (!node) return;
     nodes.delete(node);
+    forgetVideo(node);                       // give the decoder back to the budget
     try { if (node.parentNode) node.parentNode.removeChild(node); } catch { /* ignore */ }
   }
   function kill() {
     for (const id of timeouts) clearTimeout(id);
     for (const id of intervals) clearInterval(id);
     for (const h of rafs) { try { h.cancel(); } catch { /* ignore */ } }
-    for (const n of nodes) { try { if (n.parentNode) n.parentNode.removeChild(n); } catch { /* ignore */ } }
+    for (const n of nodes) { forgetVideo(n); try { if (n.parentNode) n.parentNode.removeChild(n); } catch { /* ignore */ } }
     timeouts = new Set(); intervals = new Set(); rafs = new Set(); nodes = new Set();
   }
   return {

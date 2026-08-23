@@ -145,6 +145,21 @@ export const STYLE_TEXT = `
   opacity:0;animation:ae-near 400ms ease-out forwards}
 @keyframes ae-near{0%{opacity:0}40%{opacity:var(--ae-alpha,.1)}100%{opacity:0}}
 
+/* ---- the lite rung: html.ae-lite ------------------------------------------
+   Set by whoever knows the frame budget (The Deep End's de_perf ladder today;
+   the engine never owns the class, it only reads it - the same seam
+   util.js's shared decoder budget uses). This is NOT reduced motion: the
+   effects still play, they just stop asking for the two things that cost a
+   weak machine a whole frame.
+     - a backdrop-filter is a full-screen read-back-and-blur, per frame, for as
+       long as the drain wash is up. The wash's own gradient carries the drain
+       on its own; only the blur goes.
+     - the spiral is a 150vmax square rotating forever: the biggest composited
+       layer the engine ever makes. It holds still instead of stopping, so a
+       held wash still reads as a wash. */
+.ae-lite .ae-wash-drain{backdrop-filter:none;-webkit-backdrop-filter:none}
+.ae-lite .ae-wash-spiral{animation:none}
+
 /* ---- reduced motion: neutralise EVERY animation -------------------------- */
 @media (prefers-reduced-motion: reduce){
   .ae-layer *{animation-duration:.01ms !important;animation-iteration-count:1 !important;

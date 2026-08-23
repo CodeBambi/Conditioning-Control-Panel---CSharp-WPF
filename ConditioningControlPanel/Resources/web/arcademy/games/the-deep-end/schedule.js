@@ -78,9 +78,42 @@ export const PLAYTEST = Object.freeze({
    *  direction that would move pulse once, for HINT_MS. */
   STUCK_MS: 6000,
   HINT_MS: 1100,
-  /** Pass 2 - FACES: past this many tiles wearing an animated face, a new
-   *  tier's face is dealt as a still. */
-  FACE_CAP: 16,
+  /** Pass 2 - FACES, re-dialled by PASS 5 (the perf trace). The cap counts
+   *  DISTINCT ANIMATED TIERS, not tiles: a tier's face url is frozen for the
+   *  class, so every tile of that tier shows the SAME url and (for a webm/mp4
+   *  loop) every one of them is its own decoder. Sixteen live 854x480 decodes
+   *  measured 79% of a GPU-process core on a 3060 Ti, and Scrolller's smallest
+   *  rendition IS 854x480 - the decoder COUNT is the only lever there is.
+   *  THE SHALLOWS ARE STILL, DEPTH IS ALIVE: tiers 1..SHALLOW_STILL_MAX_TIER
+   *  are the numerous ones (a board is mostly 1-3), so they always wear a
+   *  still; a loop is the reward for going deep, up to FACE_CAP tiers, and
+   *  past it the deep tiers wear stills too. */
+  FACE_CAP: 6,
+  SHALLOW_STILL_MAX_TIER: 3,
+  /** THE LITE RUNG (de_perf = lite, or auto's demote): half the loops, and the
+   *  shallows run five deep. Under a 4x CPU throttle even an all-stills board
+   *  fell to 40fps, so a weak machine needs a ladder, not a switch. */
+  FACE_CAP_LITE: 3,
+  SHALLOW_STILL_MAX_TIER_LITE: 5,
+
+  /** PASS 5 - THE AUTO PROBE. After the board is dealt we sample rAF deltas
+   *  for PERF_SAMPLE_MS, skipping PERF_WARMUP_MS of first-frame cost (style
+   *  injection, the first decodes, the opening spawn). A median over
+   *  PERF_MEDIAN_MS or more than PERF_SLOW_SHARE of frames over PERF_SLOW_MS
+   *  demotes the class to lite - ONCE, never back up: a class that flips its
+   *  own look twice is worse than a class that is simply lighter.
+   *  Dialled against a trace (0823): the deal window is the WORST window -
+   *  every new tier mints a decoder, and an RTX 3060 Ti showed 27-33% of
+   *  frames over 25ms in the first 3s of a deep test board while holding a
+   *  17ms median. A 500ms warm-up + 25% share demoted that box. So: warm up
+   *  past the decoder inits, sample longer, and demand that a share of slow
+   *  frames be a PATTERN (two in five) before it counts as evidence. */
+  PERF_WARMUP_MS: 2500,
+  PERF_SAMPLE_MS: 4000,
+  PERF_MIN_FRAMES: 20,
+  PERF_MEDIAN_MS: 20,
+  PERF_SLOW_MS: 25,
+  PERF_SLOW_SHARE: 0.4,
 
   /** Pass 3 - THE HAND: the drag distance (px) that leans the tiles all the
    *  way (--de-grab-x/y reach 1 here; style.js multiplies by --de-grab-max). */
