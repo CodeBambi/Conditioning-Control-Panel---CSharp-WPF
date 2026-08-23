@@ -34,6 +34,7 @@ export const GAME_PATHS = Object.freeze({
   deja_vu: './deja-vu/index.js',
   impulse_control: './impulse-control/index.js',
   misdirection: './misdirection/index.js',
+  sort: './sort/index.js',
   echo: './echo/index.js',
   instant_recall: './instant-recall/index.js',
   anomaly: './anomaly/index.js',
@@ -61,6 +62,11 @@ export const GAME_META = Object.freeze({
      Recall (core/lexicon.js has no family_recall/family_puzzle row yet, so the
      chip degrades to the de-snaked key - readable English, never a raw token). */
   misdirection: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120 },
+  /* SORT inherited Misdirection's family, not its room (lot 2 razed the
+     parlour; sort is room 203 by the Main Gate). Not meaty: 120s is the
+     class, and the pile-picking DOOR runs outside the clock (shell S3), so the
+     budget here is the sorting itself and nothing else. */
+  sort: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120 },
   echo: { family: 'memory', meaty: false, flagship: false, timeBudgetSec: 105 },
   // MEATY (ruled 2026-08-23): the third meaty class. With ten games no-repeat-3 binds again
   // and outranks the meaty preference, so two meaty classes left ~a third of nights with the
@@ -84,6 +90,7 @@ export const GAME_SEMESTER = Object.freeze({
   deja_vu: 1,
   impulse_control: 1,
   misdirection: 2,
+  sort: 2,
   echo: 2,
   instant_recall: 2,
   anomaly: 3,
@@ -104,8 +111,9 @@ export const OPEN_SEMESTERS = new Set([1, 2, 3]);
  * semester's games (no stub, no board row, no campus room - the wing stays
  * open for its neighbours), so the module can stay on disk while a
  * replacement is designed. Misdirection was retired as "boring" after the
- * owner's play-test; its room (201, The Parlour) is dark until something new
- * moves in. Remove a key from this set and the class is simply back.
+ * owner's play-test; the lot-2 geography rework then razed The Parlour
+ * outright (the front office stands there), so un-retiring a class now also
+ * means giving it a room in shell/campus.js ROOMS.
  */
 export const RETIRED_GAMES = new Set(['misdirection']);
 

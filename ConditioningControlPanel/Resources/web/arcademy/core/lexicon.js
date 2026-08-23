@@ -99,11 +99,17 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_desc_the_deep_end: 'Sink tile into tile. The deeper you go, the harder the board is to read.',
   /* Semesters II / III (2026-08-23) */
   campus_room_misdirection: 'The Parlour',
+  /* SORT holds room 203 now - the lot-2 rework gave Misdirection's old parlour
+     to the front office, so sort built new on the Entrance Hall's west span
+     (shell/campus.js). Misdirection's two rows stay: the host table is
+     append-only and the class is retired, not deleted. */
+  campus_room_sort: 'The Sorting Room',
   campus_room_echo: 'Music Room',
   campus_room_instant_recall: 'Lecture Hall',
   campus_room_anomaly: 'Darkroom',
   campus_room_composure: 'The Studio',
   campus_desc_misdirection: 'Keep your eyes on the one that matters. It will not make that easy.',
+  campus_desc_sort: 'Two piles, and you decide what goes in them. Yours to the right.',
   campus_desc_echo: 'It plays a line, you play it back. Then it adds one more, every time.',
   campus_desc_instant_recall: 'Watch the whole hour, then answer for it. You never hear it coming.',
   campus_desc_anomaly: 'Everything in here matches. One thing does not. Find it before it moves.',
@@ -131,7 +137,10 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_east_wing: 'East Wing',
   campus_west_wing: 'West Wing',
   campus_desc_east: 'You can hear hammering behind the tape.',
-  campus_desc_east_open: 'The tape is down. Wet paint, three new doors, nobody at the desk.',
+  /* LOT 2 (2026-08-23) made the east wing the FRONT OFFICE - it holds Records
+     and the Registrar now, not three new classrooms. Same key, new sentence;
+     campus.js carries the identical fallback. */
+  campus_desc_east_open: 'The front office. Two counters, one bell, and a queue that is always you.',
   campus_desc_west_open: 'Older boards, deeper rooms. Nobody in here is in any hurry.',
   campus_desc_west: 'The boards are older here.',
   campus_sealed: 'Sealed',
@@ -191,6 +200,7 @@ export const DEFAULT_LEXICON = Object.freeze({
   /* Semester II ghost labels behind the tape (unregistered games get their
    * game_<key> row here, same convention the registry uses once they ship). */
   game_misdirection: 'Misdirection',
+  game_sort: 'Sort',
   game_instant_recall: 'Instant Recall',
   game_echo: 'Echo',
 });

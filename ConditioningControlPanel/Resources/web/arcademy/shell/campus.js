@@ -39,6 +39,23 @@ const SVGNS = 'http://www.w3.org/2000/svg';
  * FIXED GEOGRAPHY - viewBox 0 0 1440 920, corridor y 430..510.
  * A game always lives in its room; a new semester adds rooms, it never moves
  * one. Coordinates are the mockup's, verbatim.
+ *
+ * THE ONE EXCEPTION, AND IT IS CLOSED AGAIN (owner ruling 2026-08-23, LIGHTS ON
+ * lot 2): "reserve the bigger rooms for the actual games and have the smaller
+ * ones for utility". The school was drawn before it had storefronts, so two of
+ * its biggest fronts held a filing cabinet and a settings desk while two classes
+ * shared a 112x66 broom cupboard with no room for their own art. The Arcademy is
+ * still dark (DoorAvailable = false), so that could be fixed once, and was:
+ *   - ECHO took the north-east front (RM 201) and INSTANT RECALL the south-east
+ *     one (RM 202) - the two rooms Records and the Registrar used to hold. Their
+ *     lexicon identity travelled with them: the Music Room is still the Music
+ *     Room, and both are ordinary corridor rooms now (side/door/stop defaults).
+ *   - RECORDS + THE REGISTRAR moved into the EAST WING, which stopped being a
+ *     semester and became the FRONT OFFICE: two compact rooms, a sign each.
+ *   - The WEST WING was rebuilt around a HORIZONTAL alley (the Main Hall simply
+ *     carries on west at y 450..490) so its two classes get storefronts deep
+ *     enough for a logo band instead of two 96-unit shelves.
+ * The plan is frozen again from here: a game never moves rooms.
  * -------------------------------------------------------------------------- */
 export const ROOMS = Object.freeze({
   daily_trigger: {
@@ -80,66 +97,90 @@ export const ROOMS = Object.freeze({
     descKey: 'campus_desc_the_deep_end',
     descEn: 'Sink tile into tile. The deeper you go, the harder the board is to read.',
   },
-  /* ---- EAST WING - Semester II ---------------------------------------------
-   * The wing hangs off the corridor's east end and its 20px alley (x 1240..1260)
-   * is the Pool's covered walk stood on its side: three rooms open on their WEST
-   * wall onto it. Three fields carry the difference, and nothing else moves:
-   *   `door` is the coordinate ALONG the wall - an x for a corridor room
-   *          (side n/s), a y for a wing room (side w/e);
-   *   `stop` pins the numbered badge in the wing alley, because the badge can no
-   *          longer stand in the Main Hall outside the door;
-   *   `via`  is the junction the route turns at - the polyline walks in off the
-   *          hall, touches the stop and walks back out.
-   * `neonX`/`neonY`/`nameY` pin the sign and the label INSIDE the room exactly
-   * the way the Pool pins its own (a wing room is small, so the label stack runs
-   * sign -> name -> room number instead of hanging off a corridor wall).
-   * THE SAFE BAND: the plan is `preserveAspectRatio slice`, so a window TALLER
-   * than 16:9 crops the LEFT AND RIGHT edges - 72 viewBox units a side at 16:10.
-   * The wings sit at those edges, so every wing room and every wing label is
-   * kept inside x 72..1368. Widen one and it clips on somebody's monitor. */
-  misdirection: {
-    rect: [1260, 358, 112, 66], side: 'w', door: 391, rm: '201', wing: 'east',
-    stop: [1250, 391], via: [1250, 470], neonX: 1316, neonY: 364, nameY: 398,
-    gameEn: 'Misdirection',
-    nameKey: 'campus_room_misdirection', nameEn: 'The Parlour',
-    descKey: 'campus_desc_misdirection',
-    descEn: 'Keep your eyes on the one that matters. It will not make that easy.',
+  /* ---- THE SORTING ROOM - Semester II's newest front (lot 3) ---------------
+   * SORT shipped after lot 2 gave Misdirection's old parlour to the front
+   * office, so the newest class got the last buildable lot on the map: the
+   * Entrance Hall's west span. The hall compacted to x 460..700 and the run
+   * x 700..740 became the GATE ALLEY - the Main Gate's double doors already
+   * met at x 720 and the nightly route has always entered on that line
+   * (M720,908 straight up to the Main Hall), so the alley costs the plan
+   * nothing: the walk between the hall and the Sorting Room IS the front walk.
+   * An ordinary south-corridor room otherwise: side/door only, badge in the
+   * Main Hall, plate on the corridor wall like Lost & Found across the way. */
+  sort: {
+    rect: [740, 510, 200, 220], side: 's', door: 840, rm: '203',
+    gameEn: 'Sort',
+    nameKey: 'campus_room_sort', nameEn: 'The Sorting Room',
+    descKey: 'campus_desc_sort',
+    descEn: 'Two piles, and you decide what goes in them. Yours to the right.',
   },
+  /* ---- THE EAST FRONTS - Semester II's two storefronts ---------------------
+   * Ordinary corridor rooms, and deliberately so: `side`/`door` are all they
+   * carry, which means doorFor(), stopAnchor() and routeFor() treat them exactly
+   * like Homeroom - the numbered badge stands in the Main Hall just inside the
+   * door and the route never leaves the hall's centre line to reach them.
+   * (Both fronts stop at x 1220, leaving the 20-unit run of hall that opens onto
+   * the front office's alley at x 1240.) */
   echo: {
-    rect: [1260, 430, 112, 66], side: 'w', door: 463, rm: '202', wing: 'east',
-    stop: [1250, 463], via: [1250, 470], neonX: 1316, neonY: 436, nameY: 470,
+    rect: [940, 210, 280, 220], side: 'n', door: 1080, rm: '201',
     gameEn: 'Echo',
     nameKey: 'campus_room_echo', nameEn: 'Music Room',
     descKey: 'campus_desc_echo',
     descEn: 'It plays a line, you play it back. Then it adds one more, every time.',
   },
   instant_recall: {
-    rect: [1260, 502, 112, 66], side: 'w', door: 535, rm: '203', wing: 'east',
-    stop: [1250, 535], via: [1250, 470], neonX: 1316, neonY: 508, nameY: 542,
+    rect: [960, 510, 260, 220], side: 's', door: 1040, rm: '202',
     gameEn: 'Instant Recall',
     nameKey: 'campus_room_instant_recall', nameEn: 'Lecture Hall',
     descKey: 'campus_desc_instant_recall',
     descEn: 'Watch the whole hour, then answer for it. You never hear it coming.',
   },
   /* ---- WEST WING - Semester III --------------------------------------------
-   * Same construction, mirrored: the alley is x 180..200 and the two rooms open
-   * on their EAST wall. Fewer, larger rooms - the slow end of the school. */
+   * THE HALL CARRIES ON WEST. The wing's alley is HORIZONTAL (x 54..200, y
+   * 450..490): a 40-unit spur of the Main Hall on the hall's own centre line,
+   * with one deep room above it and one below. That is what buys the two slow
+   * classes a storefront - a room bolted to a vertical alley could never be
+   * wider than the 126 units between the safe band and the corridor's west wall,
+   * and a class with no logo band is the thing lot 2 exists to fix.
+   * Four fields carry the difference from a corridor room, and nothing else:
+   *   `door`   is the coordinate ALONG the wall the room opens on - an x here,
+   *            because both these walls are horizontal, like the corridor's;
+   *   `wallY`  is WHICH horizontal wall (the spur's north edge for the room
+   *            above it, its south edge for the room below), because 430/510 are
+   *            the Main Hall's own walls and these rooms are nowhere near them;
+   *   `stop`   pins the numbered badge in the spur;
+   *   `neonX`/`neonY`/`nameY` pin the sign and the label stack INSIDE the room
+   *            the way the Pool pins its own.
+   * No `via`: the spur IS the hall's centre line, so the route walks straight
+   * west to the stop and straight back - one line, no junction, no dogleg.
+   * THE SAFE BAND: the plan is `preserveAspectRatio slice`, so a window TALLER
+   * than 16:9 crops the LEFT AND RIGHT edges - 72 viewBox units a side at 16:10.
+   * The wings sit at those edges, so every wing LABEL is kept inside x 72..1368
+   * and a room wall may cross it only by the ~10 units these two do (the logo,
+   * the sign and the plate are all centred and stay well inside). */
   anomaly: {
-    rect: [60, 366, 120, 96], side: 'e', door: 414, rm: '301', wing: 'west',
-    stop: [190, 414], via: [190, 470], neonX: 120, neonY: 378, nameY: 424,
+    rect: [62, 320, 130, 130], side: 'n', wallY: 450, door: 100, rm: '301', wing: 'west',
+    stop: [100, 470], neonX: 127, neonY: 328, nameY: 424,
     gameEn: 'Anomaly',
     nameKey: 'campus_room_anomaly', nameEn: 'Darkroom',
     descKey: 'campus_desc_anomaly',
     descEn: 'Everything in here matches. One thing does not. Find it before it moves.',
   },
   composure: {
-    rect: [60, 478, 120, 96], side: 'e', door: 526, rm: '302', wing: 'west',
-    stop: [190, 526], via: [190, 470], neonX: 120, neonY: 490, nameY: 536,
+    rect: [62, 490, 130, 130], side: 's', wallY: 490, door: 150, rm: '302', wing: 'west',
+    stop: [150, 470], neonX: 127, neonY: 498, nameY: 594,
     gameEn: 'Composure',
     nameKey: 'campus_room_composure', nameEn: 'The Studio',
     descKey: 'campus_desc_composure',
     descEn: 'Slide the picture back together while the room does its best to blur it.',
   },
+  /* MISDIRECTION HAS NO ROOM. It was retired from the deal on 2026-08-23
+   * (games/registry.js RETIRED_GAMES) and its berth in the old east wing is the
+   * front office's now. A room here would be a room nothing can ever open:
+   * `isOpenSemester` filters it out of the plan, the timetable never deals it,
+   * and its lexicon rows stay in core/lexicon.js for the day a replacement
+   * class moves in - which will mint its OWN room, in whatever space the school
+   * has then. The Parlour is not sitting empty; it is gone. */
 });
 
 /* ----------------------------------------------------------------------------
@@ -150,18 +191,31 @@ export const ROOMS = Object.freeze({
  * out of the pool is the same one that keeps its wing sealed.
  * -------------------------------------------------------------------------- */
 export const WINGS = Object.freeze({
+  /* THE EAST WING IS THE FRONT OFFICE. It holds no classes at all now - Records
+   * and the Registrar took the two compact rooms, and its caption says so
+   * instead of naming a semester it no longer contains. `office` is what tells
+   * the plan that: the wing draws the same floor and alley, and the caption is
+   * composed from the two rows the office already owns (NO new lexicon keys -
+   * lot 2 moves rooms, never the string table). */
   east: {
-    semester: 2, roman: 'II', rect: [1240, 350, 160, 240],
-    alleyX: 1250, mouthX: 1240, labelX: 1316, labelY: 612, sealedTone: 'pink', din: 180,
+    semester: 2, roman: 'II', rect: [1240, 360, 160, 220], office: true,
+    alley: [1240, 360, 20, 220], mouthX: 1240, mouth: [434, 506],
+    labelX: 1314, labelY: 602, sealedTone: 'pink', din: 180,
     nameKey: 'campus_east_wing', nameEn: 'East Wing',
     sealedKey: 'campus_opens_semester_2', sealedEn: 'Opens Semester II',
     sealedDescKey: 'campus_desc_east', sealedDescEn: 'You can hear hammering behind the tape.',
     openDescKey: 'campus_desc_east_open',
-    openDescEn: 'The tape is down. Wet paint, three new doors, nobody at the desk.',
+    openDescEn: 'The front office. Two counters, one bell, and a queue that is always you.',
   },
+  /* THE WEST WING IS A SPUR, not a side street: its alley runs WEST out of the
+   * Main Hall on the hall's own centre line (y 450..490) with a deep room above
+   * it and a deep room below. Its label hangs ABOVE the block rather than under
+   * it, because the block now reaches down to y 620 and the student ID card
+   * lives in that corner of the screen. */
   west: {
-    semester: 3, roman: 'III', rect: [40, 350, 160, 240],
-    alleyX: 190, mouthX: 200, labelX: 120, labelY: 612, sealedTone: 'dim', din: 210,
+    semester: 3, roman: 'III', rect: [40, 312, 160, 316],
+    alley: [62, 450, 138, 40], mouthX: 200, mouth: [450, 490],
+    labelX: 127, labelY: 288, sealedTone: 'dim', din: 210,
     nameKey: 'campus_west_wing', nameEn: 'West Wing',
     sealedKey: 'campus_semester_3', sealedEn: 'Semester III',
     sealedDescKey: 'campus_desc_west', sealedDescEn: 'The boards are older here.',
@@ -173,6 +227,29 @@ export const WINGS = Object.freeze({
 /** The room keys that live in a wing, in floor order. Pure. */
 export function wingRoomKeys(wingId) {
   return Object.keys(ROOMS).filter((k) => ROOMS[k].wing === wingId);
+}
+
+/** A wing's alley as a plain rect [x,y,w,h] - down for the east, west for the
+ * west. Falls back to the old 20-wide column at `alleyX` so a wing that has not
+ * declared one still paves something sane. Pure. */
+function alleyRect(w) {
+  if (w && Array.isArray(w.alley) && w.alley.length === 4) return w.alley;
+  const r = (w && w.rect) || [0, 0, 0, 0];
+  return [((w && w.alleyX) || r[0]) - 10, r[1], 20, r[3]];
+}
+
+/** The mouth's [y1,y2] where the wing opens onto the Main Hall. Pure. */
+function mouthSpan(w) {
+  const m = (w && Array.isArray(w.mouth) && w.mouth.length === 2) ? w.mouth : [434, 506];
+  return m;
+}
+
+/** A wing's second caption line. A wing that holds CLASSES is a semester; the
+ * front office is not one, so it says what it is instead - composed from the
+ * two rows it already owns, because lot 2 moves rooms and never mints a key. */
+function wingCaption(w) {
+  if (w && w.office) return t('campus_records', 'Records') + ' · ' + t('campus_registrar', 'Registrar');
+  return t('semester', 'Semester') + ' ' + ((w && w.roman) || 'I');
 }
 
 /** True when a wing's semester has opened (the tape comes off). Pure. */
@@ -189,6 +266,75 @@ export function currentSemester() {
 }
 
 const ROMAN = Object.freeze(['', 'I', 'II', 'III', 'IV']);
+
+/* ----------------------------------------------------------------------------
+ * LIGHTS ON - THE ROOM INHERITS THE CARD.
+ *
+ * The restyle is entirely in styles.css; what lives here is STRUCTURE, and the
+ * module's oldest law still holds without an exception: not one line below
+ * writes a colour. The per-room gradients are `<linearGradient>` nodes whose
+ * `<stop>`s carry a class and a `data-game`, and the stylesheet paints them off
+ * `--room-<key>-a/-b/-glow`; the logos are `<image>` nodes; the marquee bulbs,
+ * the cabinet trim and the powered-off scanlines are plain rects wearing class
+ * names. A mod palette therefore reskins the lit campus for free, exactly the
+ * way it already reskinned the blueprint one.
+ * -------------------------------------------------------------------------- */
+
+/**
+ * Where a class's keyed logo hangs INSIDE its own room, in viewBox units.
+ * A BOX, not a size: the `<image>` is `preserveAspectRatio="xMidYMid meet"`, so
+ * a wide wordmark and a squarer crest both land centred inside the same box and
+ * neither can ever reach the room plate drawn under it - the name and the RM
+ * number are the lexicon surface, and a logo that covered them would take the
+ * mod's own words off the map.
+ *
+ * Deliberately NOT a field on ROOMS: that table is frozen geography and this is
+ * dressing. A key with no entry (a retired class, a future one whose art has
+ * not been drawn) simply gets no `<image>` and keeps the blueprint room.
+ */
+const LOGO_BOX = Object.freeze({
+  /* corridor rooms - 158 of a 220-wide room (~72%), in the band above the plate */
+  daily_trigger:   [251, 244, 158, 96],
+  deja_vu:         [491, 244, 158, 96],
+  impulse_control: [731, 244, 158, 96],
+  lost_and_found:  [251, 586, 158, 96],
+  /* the two east fronts are WIDER rooms (280 / 260), so their boxes are wider
+   * in the same proportion - same band, same 96-unit height, same clearance
+   * over the plate. */
+  echo:            [980, 244, 200, 96],
+  instant_recall:  [992, 586, 196, 96],
+  /* the Pool is a WIDE, SHORT building: a letterbox over the water */
+  the_deep_end:    [349, 762, 242, 52],
+  /* THE WEST WING GETS ITS ART BACK. The first cut refused these two on the
+   * evidence - a logo hung in a 112x66 shelf turned the room name into noise
+   * and the RM number vanished under the sign's glow. That was a verdict on the
+   * ROOM, not on the art, and lot 2 rebuilt the room: 138x130 with the sign at
+   * the top, a 54-unit logo band under it and the plate on its own floor. The
+   * band is shallower than a corridor room's 96 and the boxes are letterboxes
+   * because of it - `xMidYMid meet` fits a wide wordmark into one without ever
+   * reaching the words underneath. */
+  anomaly:         [72, 352, 110, 54],
+  composure:       [72, 522, 110, 54],
+});
+
+/**
+ * THE ART BASE, resolved ONCE off this module - and it has to be, because a
+ * bare `art/campus/...` on an `<image href>` resolves against the DOCUMENT
+ * while the preload probe resolves against the MODULE. Those two agree only
+ * when the page happens to sit at the web root: mounted anywhere else (the
+ * verification rig serves the module under /arc/ and the page at /) the probe
+ * passed off the module base while every `<image>` 404'd, and nine rooms drew
+ * a broken-image glyph with `data-art` still saying "on". One base, both
+ * users, no way for them to disagree again.
+ */
+const LOGO_DIR = 'art/campus/';
+const ART_BASE = (function resolveArtBase() {
+  try { return new URL('../' + LOGO_DIR, import.meta.url).href; }
+  catch (e) { return LOGO_DIR; }        // no URL/import.meta (a DOM double): relative
+}());
+
+/** The keyed logo file for one class. */
+function logoUrl(key) { return ART_BASE + 'logo-' + key + '.png'; }
 
 /* ----------------------------------------------------------------------------
  * THE IDLE ATTRACT - tunables (Deck VI: demo, don't explain).
@@ -400,6 +546,48 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   pave.appendChild(svg('line', { x1: 0, y1: 0, x2: 0, y2: 26 }, 'campus-paveline'));
   pave.appendChild(svg('line', { x1: 0, y1: 0, x2: 26, y2: 0 }, 'campus-paveline'));
   defs.appendChild(pave);
+
+  /* THE MIDWAY CARPET - a drawn 48-unit tile of 90s arcade floor: a ground, two
+   * confetti triangles, two squiggles, three dots and two dashes. All vector,
+   * all class-styled, and NOTHING in it animates: a tiling background that
+   * moved would re-raster the whole hall every frame (trap 36's law). The
+   * stylesheet keeps the finished layer well under the route and the stops. */
+  const carpet = svg('pattern', {
+    id: 'campusCarpet', width: 48, height: 48, patternUnits: 'userSpaceOnUse',
+  });
+  carpet.appendChild(svg('rect', { x: 0, y: 0, width: 48, height: 48 }, 'campus-carpet-ground'));
+  carpet.appendChild(svg('path', { d: 'M7,9 L16,9 L11.5,17 Z' }, 'campus-carpet-p'));
+  carpet.appendChild(svg('path', { d: 'M33,29 L42,29 L37.5,37 Z' }, 'campus-carpet-p'));
+  carpet.appendChild(svg('path', { d: 'M2,33 q5,-6 10,0 t10,0' }, 'campus-carpet-l'));
+  carpet.appendChild(svg('path', { d: 'M26,5 q5,6 10,0' }, 'campus-carpet-l'));
+  carpet.appendChild(svg('circle', { cx: 41, cy: 13, r: 2.2 }, 'campus-carpet-g'));
+  carpet.appendChild(svg('circle', { cx: 21, cy: 24, r: 1.5 }, 'campus-carpet-g'));
+  carpet.appendChild(svg('circle', { cx: 6, cy: 44, r: 1.5 }, 'campus-carpet-p'));
+  carpet.appendChild(svg('rect', { x: 28, y: 17, width: 6, height: 2 }, 'campus-carpet-g'));
+  carpet.appendChild(svg('rect', { x: 13, y: 39, width: 2, height: 6 }, 'campus-carpet-p'));
+  defs.appendChild(carpet);
+
+  /* POWERED-OFF GLASS - the scanlines a dark room's dead screen keeps. */
+  const scan = svg('pattern', {
+    id: 'campusScan', width: 6, height: 6, patternUnits: 'userSpaceOnUse',
+  });
+  /* y 3, not y 0: a pattern clips to its own tile, so a 1-unit line on the tile
+   * edge would draw at half width and the scanlines would read as a grey haze
+   * instead of as lines. */
+  scan.appendChild(svg('line', { x1: 0, y1: 3, x2: 6, y2: 3 }, 'campus-scanline'));
+  defs.appendChild(scan);
+
+  /* ONE VERTICAL GRADIENT PER ROOM - the card, stood up as a cabinet front.
+   * The stops carry the class AND the game key, because a <stop> lives in
+   * <defs> and can never inherit a custom property from its room group. */
+  function roomGradientId(key) { return 'campusRoomG-' + key; }
+  Object.keys(ROOMS).forEach((key) => {
+    const lg = svg('linearGradient', { id: roomGradientId(key), x1: 0, y1: 0, x2: 0, y2: 1 });
+    lg.appendChild(svg('stop', { offset: '0', 'data-game': key }, 'campus-stop-a'));
+    lg.appendChild(svg('stop', { offset: '1', 'data-game': key }, 'campus-stop-b'));
+    defs.appendChild(lg);
+  });
+
   plan.appendChild(defs);
 
   /* grounds: trees, paths, lamps, fountain */
@@ -408,7 +596,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   grounds.appendChild(svg('line', { x1: 720, y1: 800, x2: 720, y2: 920, 'stroke-dasharray': '2 10' }, 'campus-path-mid'));
   const trees = svg('g', null, 'campus-trees');
   [[86, 756, 26], [112, 774, 19], [70, 778, 16], [146, 846, 22], [1368, 688, 24], [1394, 712, 15],
-   [1322, 856, 26], [1352, 878, 17], [262, 864, 20], [56, 628, 17]]
+   [1322, 856, 26], [1352, 878, 17], [262, 864, 20], [58, 726, 15]]
     .forEach(([cx, cy, r]) => trees.appendChild(svg('circle', { cx, cy, r })));
   grounds.appendChild(trees);
   [[662, 842, 17], [778, 842, 17], [1180, 782, 15]].forEach(([cx, cy, r]) => {
@@ -419,6 +607,19 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   grounds.appendChild(svg('circle', { cx: 1088, cy: 846, r: 9 }, 'campus-fountain-eye'));
   grounds.appendChild(svg('circle', { cx: 1088, cy: 846, r: 16 }, 'campus-ripple'));
   grounds.appendChild(svg('circle', { cx: 1088, cy: 846, r: 16 }, 'campus-ripple r2'));
+  /* THE TOKEN FOUNTAIN - five coins in the basin ring (every one of them clear
+   * of the r9 eye and inside the r26 coping), each with a one-dot highlight so
+   * it reads as struck metal rather than as another lamp. */
+  [[1078, 852, 2.6], [1094, 856, 2.2], [1082, 834, 2.0], [1100, 844, 2.4], [1074, 840, 1.8]]
+    .forEach(([cx, cy, r]) => {
+      grounds.appendChild(svg('circle', { cx, cy, r }, 'campus-coin'));
+      grounds.appendChild(svg('circle', {
+        cx: cx - r * 0.32, cy: cy - r * 0.32, r: r * 0.34,
+      }, 'campus-coin-hi'));
+    });
+  /* ONE glint, on a 17s cycle that is dark for sixteen and a half of them.
+   * SPARKLE BURST IS SCARCE BY LAW - a second one would make it wallpaper. */
+  grounds.appendChild(svg('path', { d: 'M1100,830 L1100,840 M1095,835 L1105,835' }, 'campus-sparkle'));
   grounds.appendChild(svgText(1088, 806, 'campus-groundlbl', t('campus_the_quad', 'The Quad').toUpperCase()));
   grounds.appendChild(svgText(756, 858, 'campus-groundlbl start', t('campus_front_path', 'Front Path').toUpperCase(),
     { 'text-anchor': 'start' }));
@@ -439,11 +640,31 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   /* corridor + entrance hall floors (+ paving texture overlays) */
   const floors = svg('g', null, 'campus-floors');
+  /* THE HALL IS CARPETED. Ground -> midway carpet -> paving lines: the carpet
+   * lays over the floor fill and the drawn paving still reads on top of it. */
   floors.appendChild(svg('rect', { x: 200, y: 430, width: 1040, height: 80 }, 'campus-ghall'));
+  floors.appendChild(svg('rect', { x: 200, y: 430, width: 1040, height: 80, fill: 'url(#campusCarpet)' }, 'campus-carpet'));
   floors.appendChild(svg('rect', { x: 200, y: 430, width: 1040, height: 80, fill: 'url(#campusPave)' }, 'campus-pave'));
-  floors.appendChild(svgText(252, 474, 'campus-rsub start wide', t('campus_main_hall', 'Main Hall').toUpperCase(), { 'text-anchor': 'start' }));
-  floors.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220 }, 'campus-ghall'));
-  floors.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
+  /* THE HALL'S OWN LABEL SITS ABOVE THE ROUTE'S LANE. It used to sit on the
+   * corridor's centre line (y 474) and got away with it because no route leg
+   * ever ran west of x 330; the west wing's spur is on that line now, so a
+   * night that deals a west class drew the marching pink dashes straight
+   * through the words. y 452 is the same floor, one row up. */
+  floors.appendChild(svgText(252, 452, 'campus-rsub start wide', t('campus_main_hall', 'Main Hall').toUpperCase(), { 'text-anchor': 'start' }));
+  floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220 }, 'campus-ghall'));
+  floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'url(#campusCarpet)' }, 'campus-carpet'));
+  floors.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
+  /* THE GATE ALLEY HAS A FLOOR. x 700..740 is the run between the Entrance
+   * Hall's east wall and the Sorting Room's west one, and the nightly route has
+   * always walked it (M720,908 straight up to the Main Hall) - but until lot 3
+   * built a room on the hall's west span there was a hall under it, and after
+   * lot 3 there was nothing: the marching pink dashes climbed a 40-unit strip
+   * of open sky between two buildings. Paved, it is what the plan always meant
+   * it to be, a front walk. CORRIDOR STONE, NOT CARPET: the midway tile is a
+   * 48-unit pattern and a 40-wide slot of it reads as noise, and this is the
+   * one run of the school a player is meant to walk THROUGH, never stand in. */
+  floors.appendChild(svg('rect', { x: 700, y: 510, width: 40, height: 220 }, 'campus-ghall'));
+  floors.appendChild(svg('rect', { x: 700, y: 510, width: 40, height: 220, fill: 'url(#campusPave)' }, 'campus-pave'));
   plan.appendChild(stag(floors, 60));
 
   /* ------------------------------ wings ---------------------------------- */
@@ -459,20 +680,30 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     g.appendChild(svg('rect', { x, y, width: ww, height: wh }, 'campus-gfloor' + (open ? '' : ' striped')));
 
     if (open) {
-      /* the wing's own alley - the spur every room in here opens onto */
-      const ax = w.alleyX - 10;
-      g.appendChild(svg('rect', { x: ax, y, width: 20, height: wh }, 'campus-ghall'));
-      g.appendChild(svg('rect', { x: ax, y, width: 20, height: wh, fill: 'url(#campusPave)' }, 'campus-pave'));
+      /* THE WING'S OWN ALLEY - the spur every room in here opens onto. It is a
+       * RECT, not a column: the east wing's runs down (20 x 220) and the west
+       * wing's runs west (146 x 40, on the Main Hall's own centre line), and
+       * carrying the whole rect in the wing means nothing below has to know
+       * which way a given wing points. */
+      const [ax, ay, aw, ah] = alleyRect(w);
+      g.appendChild(svg('rect', { x: ax, y: ay, width: aw, height: ah }, 'campus-ghall'));
+      g.appendChild(svg('rect', { x: ax, y: ay, width: aw, height: ah, fill: 'url(#campusPave)' }, 'campus-pave'));
       /* TWO LINES, not one: "EAST WING · SEMESTER II" is 184px of tracked mono
        * and would run off the cropped edge of the plan (see THE SAFE BAND). */
       g.appendChild(svgText(w.labelX, w.labelY, 'campus-rsub', t(w.nameKey, w.nameEn).toUpperCase()));
-      g.appendChild(svgText(w.labelX, w.labelY + 15, 'campus-rsub tiny',
-        (t('semester', 'Semester') + ' ' + w.roman).toUpperCase()));
+      /* ONE LINE FOR THE OFFICE. A wing that holds CLASSES names its semester
+       * under its own name; the front office would only be repeating the two
+       * signs standing twenty units above it (RECORDS, REGISTRAR), so it says
+       * what it is and stops. The pair is still the hover card's status line -
+       * wingCaption() is the one source for both. */
+      if (!w.office) {
+        g.appendChild(svgText(w.labelX, w.labelY + 15, 'campus-rsub tiny', wingCaption(w).toUpperCase()));
+      }
       /* An open wing is scenery, not a door: the ROOMS take the clicks. It keeps
        * its hover card so the alley still says where you are. */
       attachTip(g, () => ({
         name: t(w.nameKey, w.nameEn),
-        status: t('semester', 'Semester') + ' ' + w.roman,
+        status: wingCaption(w),
         desc: t(w.openDescKey, w.openDescEn),
       }));
       plan.appendChild(stag(g, w.din));
@@ -487,9 +718,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
         t('game_' + key, spec.gameEn || spec.nameEn).toUpperCase()));
     });
     const mx = w.mouthX;
-    g.appendChild(svg('line', { x1: mx, y1: 446, x2: mx, y2: 474 }, 'campus-tape2'));
-    g.appendChild(svg('line', { x1: mx - 7, y1: 452, x2: mx + 7, y2: 468 }, 'campus-tape'));
-    g.appendChild(svg('line', { x1: mx + 7, y1: 452, x2: mx - 7, y2: 468 }, 'campus-tape'));
+    /* THE WALL TAPE IS A CHEQUER. One stroked line can only ever be a dashed
+     * line, so the tape is TWO thin rows half a dash out of phase - which is
+     * the pink checkerboard an arcade tapes a doorway with. The second row is
+     * a new node; the first keeps its own coordinates exactly. */
+    /* Centred on the MOUTH, so a wing whose spur sits low in the corridor is
+     * taped across its own doorway rather than across the wall beside it. */
+    const my = (mouthSpan(w)[0] + mouthSpan(w)[1]) / 2;
+    g.appendChild(svg('line', { x1: mx, y1: my - 14, x2: mx, y2: my + 14 }, 'campus-tape2'));
+    g.appendChild(svg('line', { x1: mx + 2, y1: my - 14, x2: mx + 2, y2: my + 14 }, 'campus-tape2 b'));
+    g.appendChild(svg('line', { x1: mx - 7, y1: my - 8, x2: mx + 7, y2: my + 8 }, 'campus-tape'));
+    g.appendChild(svg('line', { x1: mx + 7, y1: my - 8, x2: mx - 7, y2: my + 8 }, 'campus-tape'));
     g.appendChild(svgText(w.labelX, w.labelY, 'campus-rsub ' + w.sealedTone,
       t(w.sealedKey, w.sealedEn).toUpperCase()));
     const sealedCard = () => ({
@@ -519,10 +758,15 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
    * only 20 wide and a 24-unit swing would cross it. */
   function doorFor(spec) {
     const d = spec.door;
+    /* WHICH WALL. 430 and 510 are the MAIN HALL's own walls, and every corridor
+     * room takes them by default; a room that opens onto a horizontal wing spur
+     * instead names its wall with `wallY` and gets the identical symbol there -
+     * gap plus a leaf swinging out into the hall it opens on. */
     if (spec.side === 'n') {
+      const wy = spec.wallY != null ? spec.wallY : 430;
       return [
-        svg('line', { x1: d - 12, y1: 430, x2: d + 12, y2: 430 }, 'campus-gap'),
-        svg('path', { d: 'M' + (d + 12) + ',430 A24,24 0 0 1 ' + (d - 12) + ',454 L' + (d - 12) + ',430' }, 'campus-door'),
+        svg('line', { x1: d - 12, y1: wy, x2: d + 12, y2: wy }, 'campus-gap'),
+        svg('path', { d: 'M' + (d + 12) + ',' + wy + ' A24,24 0 0 1 ' + (d - 12) + ',' + (wy + 24) + ' L' + (d - 12) + ',' + wy }, 'campus-door'),
       ];
     }
     if (spec.side === 'w' || spec.side === 'e') {
@@ -538,9 +782,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
         }, 'campus-door'),
       ];
     }
+    const wy = spec.wallY != null ? spec.wallY : 510;
     return [
-      svg('line', { x1: d - 12, y1: 510, x2: d + 12, y2: 510 }, 'campus-gap'),
-      svg('path', { d: 'M' + (d + 12) + ',510 A24,24 0 0 0 ' + (d - 12) + ',486 L' + (d - 12) + ',510' }, 'campus-door'),
+      svg('line', { x1: d - 12, y1: wy, x2: d + 12, y2: wy }, 'campus-gap'),
+      svg('path', { d: 'M' + (d + 12) + ',' + wy + ' A24,24 0 0 0 ' + (d - 12) + ',' + (wy - 24) + ' L' + (d - 12) + ',' + wy }, 'campus-door'),
     ];
   }
 
@@ -579,25 +824,35 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       // diving block on the west deck
       put(svg('rect', { x: 306, y: 774, width: 20, height: 14 }, 'campus-furnf'));
       put(svg('line', { x1: 326, y1: 774, x2: 326, y2: 788 }, 'campus-furn'));
-    } else if (key === 'misdirection') {
-      // three cups on a felt line, in the band between the sign and the name
-      put(svg('line', { x1: 1288, y1: 388, x2: 1344, y2: 388 }, 'campus-furn'));
-      [1298, 1316, 1334].forEach((cx) => put(svg('circle', { cx, cy: 384, r: 3.2 }, 'campus-furn')));
+    } else if (key === 'sort') {
+      /* A THREE-CARD FAN in the logo band (SORT has no keyed art yet, so the
+         fan is the room's interim art): the middle card square to the room,
+         its neighbours tipped left and right - the two piles and the one you
+         are holding. Scaled up from the parlour original to storefront size;
+         the rotations stay around each card's own centre. */
+      [[782, -14], [840, 0], [898, 14]].forEach(([cx, deg]) => {
+        const card = svg('rect', { x: cx - 21, y: 595, width: 42, height: 58, rx: 3 }, 'campus-furnf');
+        if (deg) card.setAttribute('transform', 'rotate(' + deg + ' ' + cx + ' 624)');
+        put(card);
+      });
+      // the felt line the fan sits on
+      put(svg('line', { x1: 762, y1: 668, x2: 918, y2: 668 }, 'campus-furn'));
     } else if (key === 'echo') {
-      // six pads in a row
-      [1292, 1302, 1312, 1322, 1332, 1342].forEach((x) => put(svg('rect', { x, y: 456, width: 6, height: 6 }, 'campus-furnf')));
+      // the ring, laid out along the top wall: six pads and the room's own line
+      [1013, 1037, 1061, 1085, 1109, 1133].forEach((x) => put(svg('rect', { x, y: 220, width: 14, height: 14 }, 'campus-furnf')));
+      put(svg('line', { x1: 1013, y1: 240, x2: 1147, y2: 240 }, 'campus-furn'));
     } else if (key === 'instant_recall') {
-      // a four-frame strip
-      put(svg('rect', { x: 1288, y: 526, width: 56, height: 9 }, 'campus-furn'));
-      [1302, 1316, 1330].forEach((x) => put(svg('line', { x1: x, y1: 526, x2: x, y2: 535 }, 'campus-furn')));
+      // the WALL: five frames on a rail, under the plate
+      [1019, 1049, 1079, 1109, 1139].forEach((x) => put(svg('rect', { x, y: 520, width: 22, height: 16 }, 'campus-furnf')));
+      put(svg('line', { x1: 1019, y1: 540, x2: 1161, y2: 540, 'stroke-dasharray': '4 6' }, 'campus-furn'));
     } else if (key === 'anomaly') {
       // a contact sheet: eight identical frames, one of them isn't
-      [398, 407].forEach((y) => [104, 114, 124, 134].forEach((x) => put(svg('rect', { x, y, width: 6, height: 6 }, 'campus-furnf'))));
+      [368, 382].forEach((y) => [101, 116, 131, 146].forEach((x) => put(svg('rect', { x, y, width: 6, height: 6 }, 'campus-furnf'))));
     } else if (key === 'composure') {
       // a sliding frame, three across
-      put(svg('rect', { x: 102, y: 510, width: 36, height: 18 }, 'campus-furn'));
-      [114, 126].forEach((x) => put(svg('line', { x1: x, y1: 510, x2: x, y2: 528 }, 'campus-furn')));
-      put(svg('line', { x1: 102, y1: 519, x2: 138, y2: 519 }, 'campus-furn'));
+      put(svg('rect', { x: 109, y: 540, width: 36, height: 18 }, 'campus-furn'));
+      [121, 133].forEach((x) => put(svg('line', { x1: x, y1: 540, x2: x, y2: 558 }, 'campus-furn')));
+      put(svg('line', { x1: 109, y1: 549, x2: 145, y2: 549 }, 'campus-furn'));
     }
   }
 
@@ -605,11 +860,48 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const spec = ROOMS[key];
     const [x, y, w, h] = spec.rect;
     const g = svg('g', null, 'campus-room');
+    /* THE ROOM IS THE CARD. `data-game` is the only new attribute update() has
+     * to leave alone, and it does - update() rewrites `class`, never this. It
+     * hands the room its three identity tokens in the stylesheet. */
+    g.setAttribute('data-game', key);
+    /* EVERY GAME ROOM IS A FULL ROOM NOW (lot 2). The old `data-wing` hook that
+     * dimmed a cupboard's sign and withheld its logo is gone from here - it was
+     * a compromise for a 112x66 room and there are none left. The stylesheet
+     * still owns the compact treatment; the FRONT OFFICE wears it (see
+     * facility({compact:true}) and `[data-compact]`), which is what that rule
+     * always meant. */
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-gfloor'));
+    /* the cabinet front: a second floor rect wearing the room's own gradient.
+     * `fill` is a REFERENCE, not a hue - the stops are painted from CSS. This
+     * is the same seam .campus-pave has used since the first campus. */
+    g.appendChild(svg('rect', {
+      x, y, width: w, height: h, fill: 'url(#' + roomGradientId(key) + ')',
+    }, 'campus-cabinet'));
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-lit'));
     furnitureFor(key, g);
-    /* The sign's centre line: the door x for a corridor room, an explicit pin for
-     * a wing room whose `door` is a y. Unchanged for every Semester-1 room. */
+    /* THE LOGO - over the furniture, under every label. Optional: the art probe
+     * below flips the stage to data-art="off" and CSS drops all of these. */
+    const box = LOGO_BOX[key];
+    if (box) {
+      const logo = svg('image', {
+        x: box[0], y: box[1], width: box[2], height: box[3],
+        href: logoUrl(key),
+        preserveAspectRatio: 'xMidYMid meet',
+      }, 'campus-logo');
+      logo.setAttribute('pointer-events', 'none');
+      g.appendChild(logo);
+    }
+    /* the lit cabinet's bezel (open/retake only - CSS holds it at 0 otherwise)
+     * and the powered-off cabinet's scanlines (dark only, same deal). */
+    g.appendChild(svg('rect', {
+      x: x + 5, y: y + 5, width: Math.max(0, w - 10), height: Math.max(0, h - 10), rx: 3,
+    }, 'campus-trim'));
+    g.appendChild(svg('rect', {
+      x, y, width: w, height: h, fill: 'url(#campusScan)',
+    }, 'campus-scan'));
+    /* The sign's centre line: the door x for a corridor room, an explicit pin
+     * for a room whose door is off-centre in its own wall (the west wing's
+     * two). Unchanged for every Semester-1 room. */
     const signX = spec.neonX != null ? spec.neonX : spec.door;
     const ping = svg('circle', { cx: signX, cy: y + h / 2, r: 12 }, 'campus-ping');
     g.appendChild(ping);
@@ -617,19 +909,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     // building (the Pool) and a WING room pin their own, because y + 46 would land
     // in the lawn or straight through the sign.
     const nameY = spec.nameY != null ? spec.nameY : (spec.side === 'n' ? y + 156 : y + 46);
-    const nameNode = svgText(x + w / 2, nameY, 'campus-rname', t(spec.nameKey, spec.nameEn).toUpperCase());
-    /* A wing room is half a corridor room wide, so its plate steps down a size.
-     * This is the ONE inline style the campus writes and it is a metric, never a
-     * colour - the .campus-rname rule (and every token in it) still applies. */
-    if (spec.wing) nameNode.setAttribute('style', 'font-size:11px');
-    g.appendChild(nameNode);
-    /* ...and its number row carries the ROOM NUMBER alone. "RM 203 · INSTANT
-     * RECALL" is 150px of text in a 112px room and would run straight off the
-     * cropped edge of the plan; the neon sign, the hover card, the door card and
-     * the hanging board all still name the class. */
-    g.appendChild(svgText(x + w / 2, nameY + (spec.wing ? 16 : 18),
-      spec.wing ? 'campus-rsub tiny' : 'campus-rsub',
-      (spec.wing
+    g.appendChild(svgText(x + w / 2, nameY, 'campus-rname', t(spec.nameKey, spec.nameEn).toUpperCase()));
+    /* THE NUMBER ROW IS SIZED BY THE ROOM, not by which wing it is in. A wide
+     * front carries "RM 201 · ECHO"; a deeper, narrower room carries the number
+     * alone, because a mod may re-voice a class into something long and 22
+     * characters of tracked mono is 145 units - wider than the west wing's own
+     * rooms. The neon sign, the hover card, the door card and the hanging board
+     * all still name the class either way. */
+    const tight = w < 170;
+    g.appendChild(svgText(x + w / 2, nameY + (tight ? 16 : 18),
+      tight ? 'campus-rsub tiny' : 'campus-rsub',
+      (tight
         ? t('campus_rm', 'RM') + ' ' + spec.rm
         : t('campus_rm', 'RM') + ' ' + spec.rm + ' · ' + name(key)).toUpperCase()));
     doorFor(spec).forEach((n) => g.appendChild(n));
@@ -639,6 +929,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     const neonText = svgText(signX, neonY + 11, null, '');
     neon.appendChild(neonRect);
     neon.appendChild(neonText);
+    /* THE MARQUEE BULBS. Same rect, deliberately WITHOUT the sign's rx: an
+     * un-rounded 94x16 has a perimeter of exactly 220, which divides by the
+     * stylesheet's 11-unit bulb pitch into twenty dots with no seam at the
+     * path start. The chase itself is one CSS animation shared by every open
+     * room - there is no per-bulb node and no JS timer anywhere near it. */
+    neon.appendChild(svg('rect', {
+      x: signX - 47, y: neonY, width: 94, height: 16,
+    }, 'campus-marquee'));
     g.appendChild(neon);
     roomRefs[key] = { g, neon, neonText, ping, spec };
     g.addEventListener('click', () => openClassCard(key));
@@ -653,77 +951,139 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     .forEach((key, i) => stag(buildClassRoom(key), 250 + i * 110));
 
   /* ------------------------------ facilities ----------------------------- */
-  function facility(rect, door, side, nameText, subText, onClick, tip) {
-    const [x, y, w, h] = rect;
+  /**
+   * A UTILITY ROOM IS A SIGN, NOT A CABINET. A facility never wears the card
+   * treatment a class gets (no gradient, no logo, no marquee, no mood) - it is
+   * lit lavender, it has a name and it opens.
+   *
+   * `compact` is the FRONT OFFICE rung, and it is the honest heir of the old
+   * `data-wing` hook: a small room whose sign, name and number stack inside 84
+   * units. It is a property of the ROOM's size, never of which wing it stands
+   * in, and the one thing the stylesheet is told - it holds the sign's bloom in
+   * so the plate under it survives. A compact facility also carries a LIT SIGN
+   * of its own, which a big facility never needed: a room this small is read at
+   * map distance by its sign first.
+   *
+   * @param {Object} o {rect, door, side, wallY, name, sub, sign, rm, compact,
+   *   nameY, neonY, onClick, tip}
+   */
+  function facility(o) {
+    const [x, y, w, h] = o.rect;
     const g = svg('g', null, 'campus-room facility');
+    if (o.compact) g.setAttribute('data-compact', '1');
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-gfloor'));
     g.appendChild(svg('rect', { x, y, width: w, height: h }, 'campus-lit'));
-    const nameY = side === 'n' ? y + 156 : y + 176;
-    g.appendChild(svgText(x + w / 2, nameY, 'campus-rname', nameText.toUpperCase()));
-    if (subText) g.appendChild(svgText(x + w / 2, nameY + 18, 'campus-rsub', subText.toUpperCase()));
-    if (door != null) doorFor({ door, side }).forEach((n) => g.appendChild(n));
-    if (onClick) g.addEventListener('click', onClick);
-    if (tip) attachTip(g, tip);
+    const cx = x + w / 2;
+    if (o.sign) {
+      const neonY = o.neonY != null ? o.neonY : y + 8;
+      const neon = svg('g', null, 'campus-neon');
+      neon.appendChild(svg('rect', { x: cx - 47, y: neonY, width: 94, height: 16, rx: 3 }));
+      neon.appendChild(svgText(cx, neonY + 11, null, o.sign.toUpperCase()));
+      /* No marquee rect: the bulb chase is a CABINET's, and an office that
+       * chased its bulbs would be advertising a class it does not teach. */
+      g.appendChild(neon);
+    }
+    const nameY = o.nameY != null ? o.nameY : (o.side === 'n' ? y + 156 : y + 176);
+    g.appendChild(svgText(cx, nameY, 'campus-rname', String(o.name || '').toUpperCase()));
+    const sub = o.rm
+      ? (t('campus_rm', 'RM') + ' ' + o.rm + (o.sub ? ' · ' + o.sub : ''))
+      : (o.sub || '');
+    if (sub) {
+      g.appendChild(svgText(cx, nameY + (o.compact ? 16 : 18),
+        o.compact ? 'campus-rsub tiny' : 'campus-rsub', sub.toUpperCase()));
+    }
+    if (o.door != null) doorFor({ door: o.door, side: o.side, wallY: o.wallY, rect: o.rect }).forEach((n) => g.appendChild(n));
+    if (o.onClick) g.addEventListener('click', o.onClick);
+    if (o.tip) attachTip(g, o.tip);
     plan.appendChild(g);
     return g;
   }
 
-  /* Records (report card) - north-east */
-  const recordsG = facility([940, 210, 280, 220], 1080, 'n',
-    t('campus_records', 'Records'),
-    // THE OFFICE, not just the report card: the punch-card wall lives here now
-    // (PUNCHCARD §6) and the door plate should say so before it is opened.
-    t('punchcard', 'Punch Card') + ' · ' + t('report_card', 'Report Card'),
-    () => { if (handlers.records) handlers.records(); },
-    () => ({
-      name: t('campus_records', 'Records'),
-      status: t('report_card', 'Report Card'),
-      desc: t('campus_desc_records', 'Report card, attendance ledger, grades. Your whole term, in ink.'),
-      // (the desc row is unchanged on purpose - it already describes the office)
-    }));
-  [228, 262, 296, 330].forEach((y) => recordsG.appendChild(svg('rect', { x: 1196, y, width: 14, height: 26 }, 'campus-furnf')));
-  recordsG.appendChild(svg('rect', { x: 1044, y: 264, width: 66, height: 24 }, 'campus-furnf'));
-  recordsG.appendChild(svg('rect', { x: 1006, y: 308, width: 140, height: 52, 'stroke-dasharray': '3 5' }, 'campus-furn'));
+  /* ---- THE FRONT OFFICE -----------------------------------------------------
+   * Two counters at the east end of the hall, in the wing that used to be a
+   * semester. They are the SMALL rooms on purpose (owner ruling, lot 2): a
+   * utility only ever needed a sign, and the fronts they used to hold are Echo's
+   * and Instant Recall's now. Both open WEST onto the office alley, both keep
+   * their handler, their mood and their tip exactly as they were - the geography
+   * moved, nothing about what they DO did. */
 
-  /* Registrar (settings) - south-east */
-  const regG = facility([960, 510, 260, 220], 1040, 's',
-    t('campus_registrar', 'Registrar'),
-    t('settings', 'Settings'),
-    () => { if (handlers.registrar) handlers.registrar(); },
-    () => ({
+  /* Records (the punch-card wall + the report card) - office, upper counter */
+  const recordsG = facility({
+    rect: [1260, 380, 108, 84], door: 422, side: 'w', compact: true,
+    neonY: 388, nameY: 426,
+    sign: t('report_card', 'Report Card'),
+    name: t('campus_records', 'Records'),
+    rm: '001',
+    onClick: () => { if (handlers.records) handlers.records(); },
+    tip: () => ({
+      name: t('campus_records', 'Records'),
+      // THE OFFICE, not just the report card: the punch-card wall lives here
+      // (PUNCHCARD §6) and the card should say so before the door is opened.
+      status: t('punchcard', 'Punch Card') + ' · ' + t('report_card', 'Report Card'),
+      desc: t('campus_desc_records', 'Report card, attendance ledger, grades. Your whole term, in ink.'),
+    }),
+  });
+  /* THE TROPHY-CASE LIGHT. Records keeps the whole facility contract (same
+   * class, same click, same tip) and gains ONE modifier the stylesheet uses to
+   * warm its existing bloom rect from lavender to gold. update() never touches
+   * a facility's class - roomRefs holds game rooms only - so this is stable. */
+  recordsG.setAttribute('class', 'campus-room facility records');
+  /* a bank of drawers along the counter's own wall - the whole term, in ink */
+  [1278, 1302, 1326].forEach((x) => recordsG.appendChild(svg('rect', { x, y: 448, width: 20, height: 12 }, 'campus-furnf')));
+
+  /* Registrar (settings) - office, lower counter */
+  const regG = facility({
+    rect: [1260, 476, 108, 84], door: 518, side: 'w', compact: true,
+    neonY: 484, nameY: 522,
+    sign: t('settings', 'Settings'),
+    name: t('campus_registrar', 'Registrar'),
+    rm: '002',
+    onClick: () => { if (handlers.registrar) handlers.registrar(); },
+    tip: () => ({
       name: t('campus_registrar', 'Registrar'),
       status: t('settings', 'Settings'),
       desc: t('campus_desc_registrar', 'Every setting is a form. Every consent, a waiver with a stamp.'),
-    }));
-  regG.appendChild(svg('rect', { x: 992, y: 560, width: 90, height: 14 }, 'campus-furnf'));
-  regG.appendChild(svg('rect', { x: 992, y: 560, width: 14, height: 70 }, 'campus-furnf'));
-  [[1124, 586], [1140, 600], [1156, 614]].forEach(([cx, cy]) => regG.appendChild(svg('circle', { cx, cy, r: 3 }, 'campus-furn')));
-  regG.appendChild(svg('line', { x1: 1116, y1: 578, x2: 1164, y2: 622, 'stroke-dasharray': '2 5' }, 'campus-furn'));
-  [640, 674].forEach((y) => regG.appendChild(svg('rect', { x: 1188, y, width: 14, height: 26 }, 'campus-furnf')));
+    }),
+  });
+  /* the counter, the bell and the stamp */
+  regG.appendChild(svg('rect', { x: 1276, y: 548, width: 76, height: 7 }, 'campus-furnf'));
+  regG.appendChild(svg('circle', { cx: 1282, cy: 543, r: 3 }, 'campus-furn'));
+  regG.appendChild(svg('rect', { x: 1338, y: 540, width: 10, height: 7 }, 'campus-furnf'));
   stag(recordsG, 700);
   stag(regG, 780);
 
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');
-  hall.appendChild(svg('circle', { cx: 700, cy: 622, r: 46, 'stroke-dasharray': '4 6' }, 'campus-crestring'));
-  hall.appendChild(svgText(700, 638, 'campus-crestA', 'A'));
+  hall.appendChild(svg('circle', { cx: 582, cy: 622, r: 46, 'stroke-dasharray': '4 6' }, 'campus-crestring'));
+  hall.appendChild(svgText(582, 638, 'campus-crestA', 'A'));
+  /* THE NOTICE BOARD is corkboard under a lamp now: a felt backing behind the
+   * existing board, and a gold plate instead of a chalk one. The board rect,
+   * its four pins and their coordinates are untouched. */
+  hall.appendChild(svg('rect', { x: 496, y: 512, width: 138, height: 18 }, 'campus-felt'));
   hall.appendChild(svg('rect', { x: 500, y: 516, width: 130, height: 10 }, 'campus-furnf'));
   [[516, 'p1'], [548, 'p2'], [583, 'p3'], [612, 'p4']].forEach(([cx, k]) => hall.appendChild(svg('circle', { cx, cy: 521, r: 1.6 }, 'campus-pin ' + k)));
-  hall.appendChild(svgText(565, 542, 'campus-rsub tiny', t('campus_notice_board', 'Notice Board').toUpperCase()));
-  hall.appendChild(svg('rect', { x: 916, y: 548, width: 12, height: 150 }, 'campus-furnf'));
-  [[566, 'gold'], [596, 'gold'], [626, 'lav'], [656, 'dim']].forEach(([cy, k]) => hall.appendChild(svg('circle', { cx: 922, cy, r: 2.4 }, 'campus-trophy ' + k)));
-  hall.appendChild(svgText(893, 628, 'campus-rsub tiny', t('campus_trophy_case', 'Trophy Case').toUpperCase(), { transform: 'rotate(-90 893 628)' }));
-  hall.appendChild(svg('rect', { x: 472, y: 600, width: 46, height: 86 }, 'campus-furnf'));
-  hall.appendChild(svg('line', { x1: 480, y1: 616, x2: 510, y2: 616 }, 'campus-furn'));
-  hall.appendChild(svg('line', { x1: 480, y1: 632, x2: 510, y2: 632 }, 'campus-furn'));
-  hall.appendChild(svg('circle', { cx: 495, cy: 662, r: 3 }, 'campus-lamp'));
-  hall.appendChild(svgText(452, 644, 'campus-rsub tiny', t('campus_admissions', 'Admissions').toUpperCase(), { transform: 'rotate(-90 452 644)' }));
+  hall.appendChild(svgText(565, 542, 'campus-rsub tiny gold', t('campus_notice_board', 'Notice Board').toUpperCase()));
+  hall.appendChild(svg('rect', { x: 662, y: 548, width: 12, height: 150 }, 'campus-furnf'));
+  [[566, 'gold'], [596, 'gold'], [626, 'lav'], [656, 'dim']].forEach(([cy, k]) => hall.appendChild(svg('circle', { cx: 668, cy, r: 2.4 }, 'campus-trophy ' + k)));
+  hall.appendChild(svgText(639, 628, 'campus-rsub tiny', t('campus_trophy_case', 'Trophy Case').toUpperCase(), { transform: 'rotate(-90 639 628)' }));
+  /* THE ADMISSIONS DESK, SHIFTED EIGHT UNITS EAST - and its rotated sign with
+   * it. The label used to hang at x 452, twenty units clear of the desk and
+   * twenty units OUTSIDE the hall, which the old 480-wide hall could afford
+   * because nothing stood there. The Pool's covered walk does: its two roof
+   * lines run x 443..457 all the way down to the water, and the sign was
+   * standing in the middle of the walkway. Inside the wall it goes; the desk
+   * moves with it so the sign still reads as the counter's own. */
+  hall.appendChild(svg('rect', { x: 480, y: 600, width: 46, height: 86 }, 'campus-furnf'));
+  hall.appendChild(svg('line', { x1: 488, y1: 616, x2: 518, y2: 616 }, 'campus-furn'));
+  hall.appendChild(svg('line', { x1: 488, y1: 632, x2: 518, y2: 632 }, 'campus-furn'));
+  hall.appendChild(svg('circle', { cx: 503, cy: 662, r: 3 }, 'campus-lamp'));
+  hall.appendChild(svgText(472, 644, 'campus-rsub tiny', t('campus_admissions', 'Admissions').toUpperCase(), { transform: 'rotate(-90 472 644)' }));
   plan.appendChild(stag(hall, 600));
 
   /* Entrance hall as a facility hit-area (notices card) */
   const hallG = svg('g', null, 'campus-room facility');
-  hallG.appendChild(svg('rect', { x: 460, y: 510, width: 480, height: 220, fill: 'transparent', stroke: 'none' }, 'campus-hit'));
-  hallG.appendChild(svgText(700, 700, 'campus-rname dim', t('campus_entrance_hall', 'Entrance Hall').toUpperCase()));
+  hallG.appendChild(svg('rect', { x: 460, y: 510, width: 240, height: 220, fill: 'transparent', stroke: 'none' }, 'campus-hit'));
+  hallG.appendChild(svgText(582, 704, 'campus-rname dim', t('campus_entrance_hall', 'Entrance Hall').toUpperCase()));
   hallG.addEventListener('click', () => openFacilityCard({
     name: t('campus_entrance_hall', 'Entrance Hall'),
     status: t('campus_notice_board', 'Notice Board'),
@@ -739,8 +1099,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   plan.appendChild(stag(hallG, 860));
 
   /* corridor <-> entrance opening + main gate */
-  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 738, y2: 510 }, 'campus-gap'));
-  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 738, y2: 510, 'stroke-dasharray': '3 6' }, 'campus-opening'));
+  /* THE OPENING NOW RUNS TO THE ALLEY'S FAR JAMB. It used to stop at 738 and
+   * nobody could tell, because until lot 3 there was 200 more units of Entrance
+   * Hall behind it; with the Sorting Room's west wall standing at 740 those two
+   * units were a sliver of corridor wall left hanging across the mouth of the
+   * gate alley. Flush with the jamb, the hall's own 38-unit doorway and the
+   * alley's 40 read as the one wide opening they are. */
+  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 740, y2: 510 }, 'campus-gap'));
+  plan.appendChild(svg('line', { x1: 662, y1: 510, x2: 740, y2: 510, 'stroke-dasharray': '3 6' }, 'campus-opening'));
   plan.appendChild(svg('line', { x1: 682, y1: 730, x2: 758, y2: 730 }, 'campus-gap'));
   plan.appendChild(svg('path', { d: 'M682,730 A38,38 0 0 0 720,768' }, 'campus-door'));
   plan.appendChild(svg('path', { d: 'M758,730 A38,38 0 0 1 720,768' }, 'campus-door'));
@@ -752,8 +1118,12 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   Object.keys(WINGS).forEach((id) => {
     if (!wingIsOpen(id)) return;
     const mx = WINGS[id].mouthX;
-    plan.appendChild(svg('line', { x1: mx, y1: 434, x2: mx, y2: 506 }, 'campus-gap'));
-    plan.appendChild(svg('line', { x1: mx, y1: 434, x2: mx, y2: 506, 'stroke-dasharray': '3 6' }, 'campus-opening'));
+    /* The cut is as tall as the ALLEY behind it, not as tall as the corridor:
+     * the west wing's spur is 40 units of hall, and a 72-unit hole in the wall
+     * in front of it would be a wall with nothing behind two thirds of it. */
+    const [my1, my2] = mouthSpan(WINGS[id]);
+    plan.appendChild(svg('line', { x1: mx, y1: my1, x2: mx, y2: my2 }, 'campus-gap'));
+    plan.appendChild(svg('line', { x1: mx, y1: my1, x2: mx, y2: my2, 'stroke-dasharray': '3 6' }, 'campus-opening'));
   });
 
   /* stop badges live above everything in the plan */
@@ -761,6 +1131,37 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   plan.appendChild(stopsLayer);
 
   root.appendChild(plan);
+
+  /* ------------------------------ THE ART PROBE -------------------------- */
+  /* Room logos are OPTIONAL, on exactly the terms punchcard.js's face geometry
+   * is: the stage starts on `data-art="on"` and ONE preload decides. No file,
+   * no decoder, a 404 or a corrupt png and the attribute flips to "off" - CSS
+   * then hides every `<image>` and what is left is the drawn blueprint the
+   * campus has always been. WHOLE, not holed: nothing else in the treatment
+   * depends on the art, so a room with no logo still wears its card gradient,
+   * its gold trim, its marquee and its plate.
+   * ONE probe, not nine: the nine files ship together or not at all, and nine
+   * preloads on a screen that is always up is nine decodes to learn one fact. */
+  try { root.setAttribute('data-art', 'on'); } catch (e) { /* noop */ }
+  (function probeArt() {
+    const artOff = (why) => {
+      try { root.setAttribute('data-art', 'off'); } catch (e) { /* noop */ }
+      say('campus: no room art (' + why + ') - drawing the blueprint');
+    };
+    try {
+      const first = Object.keys(LOGO_BOX)[0];
+      if (!first) return;
+      if (typeof Image !== 'function') { artOff('no Image'); return; }
+      const probe = new Image();
+      probe.onerror = () => { if (!destroyed) artOff('preload failed'); };
+      /* Resolved against THIS module the way loadFaceGeometry resolves its
+       * json, so the file:// suites fail fast into the fallback instead of
+       * hanging on a path that only exists behind the host's origin. */
+      probe.src = logoUrl(first);
+    } catch (e) {
+      artOff((e && e.message) || e);
+    }
+  }());
 
   /* ------------------------------ fireflies ------------------------------ */
   [['18%', '78%', '9s', '0s', ''], ['26%', '84%', '11s', '2s', 'p'], ['64%', '88%', '8s', '1s', ''],

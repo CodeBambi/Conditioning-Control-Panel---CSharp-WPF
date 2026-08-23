@@ -297,8 +297,36 @@ const NULL_ENGINE_FACTORY = () => ({
   setpiece() {}, beat() {}, ceremony() { return false; }, suspend() {}, dispose() {},
 });
 
+/* A provider that failed to load must still answer every verb a class can call,
+ * or "the media agent's module threw" becomes "the class threw". The tagged half
+ * (SORT's door) answers an EMPTY pool rather than null: `empty('target')` is
+ * true, which is exactly the state the door already knows how to refuse. */
 const NULL_ASSETS_FACTORY = () => ({
   claim() { return Promise.resolve({ next() { return null; }, release() {} }); },
+  claimTagged() {
+    return Promise.resolve({
+      next() { return null; },
+      counts() { return { target: { distinct: 0, served: 0 }, noise: { distinct: 0, served: 0 } }; },
+      thin() { return true; },
+      empty() { return true; },
+      prewarm() { return 0; },
+      dealt() { return []; },
+      onUpdate() { return () => {}; },
+      stats() { return { resolved: true, tags: [] }; },
+      dispose() {},
+    });
+  },
+  catalog() {
+    return {
+      remoteCatalog: [], subLibrary: [], localFolders: [], assetPresets: [],
+      remoteConsent: false, remoteMediaEnabled: false, offlineMode: true, mediaSource: '',
+    };
+  },
+  probeSub(name) {
+    return Promise.resolve({ name: String(name || ''), ok: false, videoCount: 0, stillOnly: false, offline: true });
+  },
+  removeLibrarySub() { return Promise.resolve(); },
+  onLibrary() { return () => {}; },
 });
 
 /* ============================================================================
@@ -442,6 +470,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // inventory as `localAssets` riding init.settings; the provider reads it
       // off this very object (provider/index.js resolveManifest).
       settings: src.settings,
+      /* THE PICKABLE WORLD (SORT's setup door). Same bag, but named through
+       * rather than scraped: these four lists plus the two flags are what the
+       * door draws its chips, pills, folders and presets from, and a host that
+       * predates them ships nothing, which the provider reads as an empty
+       * catalog (the door then offers QUICK SORT). See provider catalog(). */
+      remoteCatalog: src.settings && src.settings.remoteCatalog,
+      subLibrary: src.settings && src.settings.subLibrary,
+      localFolders: src.settings && src.settings.localFolders,
+      assetPresets: src.settings && src.settings.assetPresets,
+      remoteConsent: !!(src.settings && src.settings.remoteConsent),
+      mediaSource: (src.settings && src.settings.mediaSource) || '',
       // Seeded so the same UTC day serves the same media order to everyone, and
       // logged straight to Serilog instead of the CustomEvent seam.
       rng: makeRng(utcDateSeed + '|assets'),
@@ -1780,6 +1819,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       cls, gradeTier, instance, engine, keys, peek, ceremonies: classCeremonies,
       panel: chrome.panel, root: chrome.root, paused: false, pauseEl: null,
       suspendEl: null, confirmEl: null, confirmRestore: null, enrollEl: null,
+      // true while a game's setup() door is open (S3) - the clock is not armed
+      // yet and Esc means "leave", not "pause".
+      inSetup: false,
       pill: chrome.pill, timeBudgetSec, endless,
       // the shell's own class clock (S1) - see timeBar* above
       timebar: chrome.timebar, timefill: chrome.timefill,
@@ -1822,6 +1864,59 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (suspendedGlobally) applySuspend(true, 'video');
     }
 
+    /* ---------------------- THE SETUP DOOR (S3) --------------------------
+     * A class may own a DOOR that runs BEFORE its clock: `manifest.setup:true`
+     * plus an `instance.setup()` on the object create() returned. SORT's is the
+     * pile picker - which piles you are sorting is the whole game, so asking it
+     * inside the 120s would charge the player for reading their own question.
+     *
+     * Four things make this safe to hand a game:
+     *   - THE CLOCK IS STILL ARMED IN beginPlay AND NOWHERE ELSE, so a door
+     *     that takes a minute costs the class nothing.
+     *   - `false` IS THE ONLY WAY OUT. A resolved `false` means "the player
+     *     backed out" and walks to campus through the ordinary path (which
+     *     tears the class down and posts class-left). Any other value - true,
+     *     undefined, a throw, a rejection - starts the class, because a door
+     *     that breaks must never be able to strand a player on an empty stage.
+     *   - IT RUNS AFTER THE ENROLLMENT INTRO, never instead of it: the intro is
+     *     the school's, the door is the game's, and the school speaks first.
+     *   - Esc while it is up is the ordinary LEAVE CONFIRM (see escapeStep):
+     *     there is no class to pause yet, so "get me out of here" is the only
+     *     honest reading of the key.
+     * A game with no setup() is untouched - beginPlay is still called directly.
+     * ------------------------------------------------------------------- */
+    function runSetup() {
+      // Same guard beginPlay carries: the stage can be gone by now.
+      if (!active || active.instance !== instance) return;
+      const declared = manifest.setup === true;
+      const has = typeof instance.setup === 'function';
+      if (declared !== has) {
+        say('game ' + cls.gameKey + ': manifest.setup=' + declared + ' but setup() '
+          + (has ? 'exists' : 'is missing') + ' - the FUNCTION decides');
+      }
+      if (!has) { beginPlay(); return; }
+      active.inSetup = true;
+      const go = (why) => {
+        if (!active || active.instance !== instance) return;
+        active.inSetup = false;
+        if (why) say('game ' + cls.gameKey + ' setup() ' + why);
+        beginPlay();
+      };
+      let p;
+      try { p = Promise.resolve(instance.setup()); }
+      catch (e) { go('threw (' + ((e && e.message) || e) + ') - starting anyway'); return; }
+      p.then((ok) => {
+        if (!active || active.instance !== instance) return;
+        active.inSetup = false;
+        if (ok === false) {
+          say('game ' + cls.gameKey + ' setup() declined - back to campus');
+          showBoard();
+          return;
+        }
+        beginPlay();
+      }, (e) => go('rejected (' + ((e && e.message) || e) + ') - starting anyway'));
+    }
+
     if (enrolling) {
       /* Mounted on the class ROOT, not over the whole stage: the proctor strip
        * (and the campus pill on it) stays live, so the way out is exactly where
@@ -1833,12 +1928,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         name: gameName(cls.gameKey),
         hideTutorial: !!src.hideTutorial,
         reducedMotion,
-        onDone: () => { if (active) active.enrollEl = null; beginPlay(); },
+        onDone: () => { if (active) active.enrollEl = null; runSetup(); },
         log: say,
       });
-      if (!active.enrollEl) beginPlay();
+      if (!active.enrollEl) runSetup();
     } else {
-      beginPlay();
+      runSetup();
     }
   }
 
@@ -2396,6 +2491,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // verified live 3/3). Consume the press and change nothing; the overlay's
       // own Resume / Leave class buttons remain the page-side way out.
       if (active && active.suspendEl) return true;
+      /* A SETUP DOOR IS NOT A CLASS YET (S3). Nothing has started, so "pause"
+       * would be a card over a question - the honest reading of Esc here is
+       * "let me out", which is the pill's own confirm, asked from the one place
+       * it is ever asked. Cancel puts the door back exactly as it was. */
+      if (active && active.inSetup && !active.confirmEl) { askLeaveClass(); return true; }
       if (active && !active.paused) { pauseClass(true); return true; }
       if (active && active.paused) {
         // DECK V: say what it costs on the way past, then go. The rung itself
