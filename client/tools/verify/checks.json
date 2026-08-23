@@ -414,6 +414,76 @@
       "expectedColor": "#141018",
       "tolerance": 4,
       "minPixelFraction": 0.90
+    },
+
+    // THE IN-APP TOAST. Both captures are 18 DIP wide from the toast's own left edge, taken across
+    // the middle half of the message's line: the 4 DIP accent bar and the 14 DIP of padding behind
+    // the text, and nothing else. The two states are the SAME control with the SAME geometry, so
+    // the accent is the only thing in the band that can differ - and it is chosen by the TYPED
+    // outcome (Views/Pages/PhraseBackupNotices.cs), never by the page.
+    //
+    // THE ACCENTS ARE UPSTREAM'S OWN (Services/Notifications/NotificationService.cs:122-124):
+    // #4CAF50 for a Success and #FF6B6B for an Error. They are 179 apart on red, so at tolerance 8
+    // neither check can accept the other's capture - and neither can accept the plate they are both
+    // drawn against (#241E2A, MainWindow.axaml:128), which is 39/141/38 from the green and 219/77/
+    // 149 from the red. ToastPresentationTests asserts that separation mechanically over this file.
+    //
+    // THE PLATE CHECKS ARE NOT A SECOND OPINION ABOUT THE STATE - they pass in both, deliberately.
+    // What they establish is that the capture is really of a TOAST: an accent bar alone could be
+    // any coloured edge on the page, and the plate beside it at a proved offset is what says the
+    // band is the left inset of a message plate. minPixelFraction 0.98 because that region is flat
+    // fill with no glyph and no antialiasing in it, which capture.ps1 proves before it reads. Both
+    // still score 0.000 on a real capture of the dashboard, which is where their bite is.
+    //
+    // NEITHER REGION TOUCHES COLUMN 0, AND THAT IS MEASURED. The toast's left edge is derived from
+    // the DIFFERENCE of two independently layout-rounded UIA rects, so it carries +/-1 px: the
+    // first run of this surface put the band one pixel left of the accent bar and read the window
+    // ground in column 0 - 70/84, a check with every other pixel right. capture.ps1 proves both
+    // fractions against the measured bar on every run, and ToastPresentationTests asserts that the
+    // fractions here are the ones it proves.
+    {
+      "name": "toast-saved-accent",
+      "surface": "toast",
+      "state": "saved",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.09, "y": 0.0, "w": 0.09, "h": 1.0 } },
+      "expectedColor": "#4CAF50",
+      "tolerance": 8,
+      "minPixelFraction": 0.95
+    },
+    {
+      "name": "toast-saved-plate",
+      "surface": "toast",
+      "state": "saved",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.40, "y": 0.0, "w": 0.50, "h": 1.0 } },
+      "expectedColor": "#241E2A",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "toast-refused-accent",
+      "surface": "toast",
+      "state": "refused",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.09, "y": 0.0, "w": 0.09, "h": 1.0 } },
+      "expectedColor": "#FF6B6B",
+      "tolerance": 8,
+      "minPixelFraction": 0.95
+    },
+    {
+      "name": "toast-refused-plate",
+      "surface": "toast",
+      "state": "refused",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.40, "y": 0.0, "w": 0.50, "h": 1.0 } },
+      "expectedColor": "#241E2A",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
     }
   ]
 }

@@ -102,8 +102,8 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'toast')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'saved', 'refused')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -193,6 +193,12 @@ $statesFor = @{
     # `admitted` is what she gets after pressing the master switch once. A check that passed on both
     # would be saying the default is not a default.
     'companion-permissions' = @('closed', 'admitted')
+    # THE IN-APP TOAST, AND ITS TWO STATES ARE TWO REAL OUTCOMES OF TWO REAL FILE DIALOGS: `saved`
+    # is a phrase export that really wrote a file the user chose, `refused` is an import handed a
+    # file that is not a backup. Same control, same derived band; the only thing that differs is the
+    # accent, which is chosen by the TYPED outcome. A check that passed on both would be saying the
+    # type of a message is decoration.
+    'toast' = @('saved', 'refused')
 }
 if ($statesFor[$Surface] -notcontains $State) {
     Write-Output "FAIL: surface '$Surface' has no state '$State' (it has: $($statesFor[$Surface] -join ', '))"
@@ -218,6 +224,13 @@ public class VerifyNative {
     // this script actually found, so the close targets the window it means.
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
     public const uint WM_CLOSE = 0x0010;
+    // The keyboard, for the one control this harness has to press that the PRODUCT did not build:
+    // the Windows common item dialog's default action. Measured rather than chosen — its OPEN
+    // variant exposes no IDOK-shaped control in the UIA tree at all (only Cancel, id 2), so there
+    // is nothing to Invoke, while ENTER on the focused file-name edit commits BOTH variants.
+    [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
+    public const byte VK_RETURN = 0x0D;
+    public const uint KEYUP = 0x0002;
     public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004;
     public const uint RIGHTDOWN = 0x0008, RIGHTUP = 0x0010;
     // The wheel, for the one surface that has to be scrolled into view. WHEEL_DOWN is
@@ -597,6 +610,70 @@ function Find-Element($window, [string]$automationId) {
 function Get-Toggle($element) {
     $pattern = $element.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
     return $pattern.Current.ToggleState
+}
+
+# ---------------------------------------------------------------------------------------------
+# THE OS FILE DIALOG. The only control in this harness that the PRODUCT did not build: it is the
+# Windows common item dialog, opened by Avalonia's Win32StorageProvider through IFileDialog.
+#
+# Driven through UIA PATTERNS rather than through coordinates, and that is a deliberate exception
+# to this file's real-input rule. The rule exists because a click is what a user does and what a
+# regression breaks; the thing under test HERE is that the port opens a real system dialog and reads
+# a real file back, not that Windows' own dialog can be clicked. Coordinates would also have to
+# cope with a dialog this script does not lay out, at whatever size the shell's owner rect gives it.
+# Both halves refuse BY NAME when the control is missing, so a dialog that changed shape is a
+# finding rather than a silent no-op.
+# ---------------------------------------------------------------------------------------------
+function Submit-DialogPath($dialog, [string]$path, [string]$caption, [int]$processId) {
+    $edit = Get-DialogFileNameEdit $dialog
+    $edit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($path)
+    Write-Output "dialog: typed the chosen path into '$($edit.Current.Name)' (id $($edit.Current.AutomationId))"
+
+    # A REAL ENTER on the focused file-name edit, rather than an Invoke on IDOK, and that is
+    # measured rather than preferred: the SAVE variant exposes IDOK as a Button with an EMPTY Name,
+    # and the OPEN variant exposes NO pressable control with id 1 at all - its whole button set is
+    # Help, Organize, New folder, the scrollbars, the column filters and Cancel (id 2). An id-only
+    # search across every control type is worse still: the file browser gives each ITEM in the
+    # current folder a numeric AutomationId, so 'id = 1' matched a ListItem named 'Adobe' and
+    # invoked THAT. Enter commits both variants, and it is what a user does.
+    $edit.SetFocus()
+    Start-Sleep -Milliseconds 250
+    [VerifyNative]::keybd_event([VerifyNative]::VK_RETURN, 0, 0, [IntPtr]::Zero)
+    [VerifyNative]::keybd_event([VerifyNative]::VK_RETURN, 0, [VerifyNative]::KEYUP, [IntPtr]::Zero)
+
+    # A dialog still up means the commit did not take - a wrong path, a filter that hid the file, a
+    # focus that went elsewhere. Reported as itself rather than as "no toast appeared" 20 s later.
+    $deadline = [Diagnostics.Stopwatch]::StartNew()
+    while ($deadline.Elapsed.TotalSeconds -lt 20) {
+        if ($null -eq (Get-NamedWindow $processId $caption)) {
+            Write-Output ("dialog: '$caption' committed with ENTER and closed after " +
+    "$([math]::Round($deadline.Elapsed.TotalSeconds, 1))s")
+            return
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    Fail "the '$caption' dialog was still open $([int]$deadline.Elapsed.TotalSeconds)s after ENTER; the commit did not take"
+}
+
+function Get-DialogFileNameEdit($dialog) {
+    $isEdit = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Edit)
+    $edits = $dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants, $isEdit)
+    $seen = @()
+    foreach ($e in $edits) {
+        $seen += "'$($e.Current.Name)' (id '$($e.Current.AutomationId)')"
+        # THE CONTROL ID, NOT THE CAPTION: the caption is localized, the id is not. 1001 is what
+        # this desktop's common item dialog reports for the file-name edit; 1148 is the id the older
+        # shell shape uses, kept because it costs one comparison and a machine that has it would
+        # otherwise fail for a reason that has nothing to do with the port. Matched by id rather
+        # than by position so the browser's column headers and the Search Box - which is also an
+        # Edit, and comes back in the same enumeration - can never be typed into by accident.
+        if ($e.Current.AutomationId -eq '1001' -or $e.Current.AutomationId -eq '1148') {
+            return $e
+        }
+    }
+    Fail "the '$($dialog.Current.Name)' dialog has no file-name edit with AutomationId 1001 or 1148 (it has: $($seen -join ', '))"
 }
 
 function Assert-Route($window, [string]$route) {
@@ -983,6 +1060,186 @@ elseif ($Surface -eq 'trainer-card') {
     "640 DIP text column ending at $textRight")
 
     $capX = $card.X; $capY = $card.Y; $capW = $card.W; $capH = $card.H
+}
+elseif ($Surface -eq 'toast') {
+    # =============================================================================================
+    # THE IN-APP TOAST, AND THE FIRST FILE DIALOG THIS PORT HAS EVER OPENED.
+    #
+    # Two states, ONE control, ONE geometry: `saved` is what the app says after a phrase export
+    # really wrote a file, `refused` is what it says after an import was handed something that is
+    # not a backup. The captured band is derived identically in both, and the ONLY thing that
+    # differs in it is the accent - which is chosen by the TYPED OUTCOME
+    # (Views/Pages/PhraseBackupNotices.cs), so a check that passed on both would be saying the type
+    # of a message is decoration.
+    #
+    # Both states drive a REAL Windows common item dialog to completion. That is not incidental to
+    # this capture: the board row that admitted the file-picker seam recorded six lines nobody had
+    # ever executed - the capability probe against a real provider, both picker calls, cancellation
+    # mapping and IStorageItem.Dispose - because Avalonia marks IStorageProvider
+    # [NotClientImplementable] and no test can reach them. Four of the six run here, on this
+    # desktop, for the first time.
+    # =============================================================================================
+    $systemDoor = Get-DoorRect $window 'system'
+    $scale = $systemDoor.Scale
+    Click-Rect $systemDoor
+    Assert-Route $window 'system'
+    Write-Output "state drive: left-click on the System door -> route: system (probe: $($systemDoor.Raw))"
+
+    # (1) THE MODULE'S OWN TEXT, before anything is pressed. The page mounts on navigation, but a
+    # module that failed to render photographs as a perfectly plausible rectangle.
+    $moduleTitle = (Get-Element $window 'PhraseBackupTitle').Current.Name
+    if ($moduleTitle -ne 'Phrase backup') { Fail "the phrase-backup module's title reads '$moduleTitle'" }
+    $blurb = (Get-Element $window 'PhraseBackupBlurb').Current.Name
+    if ($blurb -notlike '*Back them up before an update or when moving to a new PC.*') {
+        Fail "the phrase-backup module does not say why it exists: '$blurb'"
+    }
+    if ($null -ne (Find-Element $window 'ToastMessage')) {
+        Fail 'a toast is already on screen before anything was pressed; this capture would photograph the wrong message'
+    }
+    Write-Output "module gate: '$moduleTitle' present, blurb reads '$blurb', no toast on screen yet"
+
+    # (2) A CLEAN PLACE TO PUT A FILE. Never a remembered path and never the app's choice: the
+    # dialog is what asks, and this is what a user would type into it.
+    $verifyDir = Join-Path ([IO.Path]::GetTempPath()) 'ccp-verify-phrases'
+    if (Test-Path $verifyDir) { Remove-Item $verifyDir -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $verifyDir | Out-Null
+
+    if ($State -eq 'saved') {
+        $target = Join-Path $verifyDir 'headed-export.ccpphrases.json'
+        Click-Rect (Get-Rect (Get-Element $window 'ExportPhrasesButton'))
+        $dialog = Wait-NamedWindow $script:proc.Id 'Export Phrases' 20
+        Write-Output "dialog: 'Export Phrases' opened (upstream's own title, MainWindow/MainWindow.PresetIO.cs:70)"
+        Submit-DialogPath $dialog $target 'Export Phrases' $script:proc.Id
+
+        # THE BYTES ON DISK ARE THE PROOF THE DIALOG REALLY RETURNED A FILE. A toast alone could be
+        # produced by a seam that never wrote anything.
+        $writeDeadline = [Diagnostics.Stopwatch]::StartNew()
+        while ($writeDeadline.Elapsed.TotalSeconds -lt 20 -and -not (Test-Path $target)) {
+            Start-Sleep -Milliseconds 200
+        }
+        if (-not (Test-Path $target)) { Fail "the export dialog closed but nothing was written to the chosen destination" }
+        $written = Get-Content $target -Raw
+        if ($written -notlike '*ccp-phrases/v1*') {
+            Fail "the exported file is not a phrase backup envelope (Services/PhraseBackupService.cs:72-78)"
+        }
+        Write-Output "wrote $((Get-Item $target).Length) bytes through the real picker, and they carry upstream's schema"
+        $expected = '^Saved \d+ phrases?\.$'
+    }
+    else {
+        # A REAL FILE THAT IS REALLY NOT A BACKUP. Upstream refuses it before ever asking the user
+        # to confirm a replacement (MainWindow/MainWindow.PresetIO.cs:107-118) and so does this.
+        $target = Join-Path $verifyDir 'not-a-backup.ccpphrases.json'
+        Set-Content -Path $target -Value 'this file is not JSON at all' -NoNewline
+        Click-Rect (Get-Rect (Get-Element $window 'ImportPhrasesButton'))
+        $dialog = Wait-NamedWindow $script:proc.Id 'Import Phrases' 20
+        Write-Output "dialog: 'Import Phrases' opened (MainWindow/MainWindow.PresetIO.cs:101)"
+        Submit-DialogPath $dialog $target 'Import Phrases' $script:proc.Id
+        $expected = '^That file isn''t a phrase backup: the bytes are not JSON\.$'
+    }
+
+    # (3) THE TOAST'S OWN TEXT, gated BEFORE any pixel. There must be exactly one - two would make
+    # the derived rect belong to whichever one UIA returned first.
+    $toastDeadline = [Diagnostics.Stopwatch]::StartNew()
+    $message = $null
+    while ($toastDeadline.Elapsed.TotalSeconds -lt 20) {
+        $message = Find-Element $window 'ToastMessage'
+        if ($null -ne $message) { break }
+        Start-Sleep -Milliseconds 200
+    }
+    if ($null -eq $message) { Fail "no toast appeared within $([int]$toastDeadline.Elapsed.TotalSeconds)s of the dialog closing" }
+
+    $said = $message.Current.Name
+    if ($said -notmatch $expected) { Fail "the toast reads '$said', which does not match /$expected/" }
+    $allToasts = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+        (New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'ToastMessage')))
+    if ($allToasts.Count -ne 1) { Fail "$($allToasts.Count) toasts are on screen; this capture needs exactly one" }
+    $dismiss = Get-Element $window 'ToastDismiss'   # every toast carries its own way out (NotificationService.cs:200-212)
+    Write-Output "toast gate: one toast, dismissable, reading '$said'"
+
+    # THE SEAM'S RULE, READ OFF THE REAL SCREEN. Upstream prints the full path in the same sentence
+    # (MainWindow/MainWindow.PresetIO.cs:82); the port may not, and this is the only place that
+    # claim is checked against what a user is actually looking at rather than against a return value.
+    if ($said -match '[\\/]' -or $said -match 'ccpphrases') {
+        Fail "the toast names a path, a separator or the file's extension: '$said'"
+    }
+    Write-Output 'seam gate: the sentence on screen carries no path, no separator and no file name'
+
+    # (4) THE RECT. A Border has no automation peer (harness surprise #1), so the toast's own edges
+    # are derived from the two children that DO have one - its message and its dismiss button - plus
+    # the padding and border thickness ToastHost.axaml declares (BorderThickness 4,1,1,1 and
+    # Padding 14,10,10,10). Cross-checked against the 360 DIP MaxWidth upstream sets
+    # (Services/Notifications/NotificationService.cs:136), so a layout change fails here rather than
+    # aiming the capture at a rectangle that merely looks right.
+    $msgRect = Get-Rect $message
+    $dismissRect = Get-Rect $dismiss
+    $leftInset = [int][math]::Round(18 * $scale)    # 4 accent + 14 padding
+    $rightInset = [int][math]::Round(11 * $scale)   # 10 padding + 1 border
+    $toast = @{
+        X = $msgRect.X - $leftInset
+        Y = $msgRect.Y - [int][math]::Round(11 * $scale)
+        W = ($dismissRect.X + $dismissRect.W + $rightInset) - ($msgRect.X - $leftInset)
+        H = $msgRect.H + [int][math]::Round(22 * $scale)
+    }
+    $maxWidth = [int][math]::Round(361 * $scale)
+    if ($toast.W -le 0 -or $toast.W -gt $maxWidth) {
+        Fail ("the derived toast is $($toast.W) px wide, which is not between 0 and the 360 DIP MaxWidth " +
+    "($maxWidth px at scale $scale); the message at $($msgRect.X) and the dismiss button at " +
+    "$($dismissRect.X)+$($dismissRect.W) do not bound a toast")
+    }
+    Assert-Inside $toast $windowRect 'the toast' 'the shell window'
+    Write-Output ("toast rect $($toast.X),$($toast.Y) $($toast.W)x$($toast.H) @ scale $scale (derived: message " +
+    "$($msgRect.X),$($msgRect.Y) $($msgRect.W)x$($msgRect.H) + dismiss $($dismissRect.X)x$($dismissRect.W))")
+
+    # (5) THE BAND. 18 DIP wide from the toast's own left edge - the 4 DIP accent and the 14 DIP of
+    # padding behind the text - taken across the MIDDLE HALF of the message's line, which is well
+    # clear of the 8 DIP corner radius at both ends. Deliberately narrower than the message's own
+    # left edge so no glyph can ever enter it.
+    $capX = $toast.X
+    $capW = [int][math]::Round(18 * $scale)
+    $capY = $msgRect.Y + [int][math]::Round($msgRect.H / 4)
+    $capH = [math]::Max(1, [int][math]::Round($msgRect.H / 2))
+
+    # THE TWO REGIONS checks.json SAMPLES, PROVED AGAINST THE MEASURED LAYOUT. A fraction is only
+    # evidence if the thing it names is really at that fraction. Widen either past what is proved
+    # here and ToastPresentationTests reddens, because it reads both files and compares them.
+    #
+    # NEITHER REGION TOUCHES THE OUTERMOST COLUMN, AND THAT IS MEASURED RATHER THAN CAUTIOUS. This
+    # left edge is the DIFFERENCE of two independently layout-rounded rects, so it carries +/-1 px:
+    # the first run of this surface derived 1724 for an accent bar that really began at 1725, and
+    # column 0 came back as the window ground #141018 - 70/84 on a check that had every other pixel
+    # right. So both regions are inset by a column and the arithmetic below proves they survive the
+    # error in EITHER direction.
+    $accentPx = [int][math]::Round(4 * $scale)
+    $accentLeft = [int][math]::Round(0.09 * $capW)         # toast-*-accent: x 0.09 .. 0.18
+    $accentRight = [int][math]::Round(0.18 * $capW)
+    $plateLeft = [int][math]::Round(0.40 * $capW)          # toast-*-plate:  x 0.40 .. 0.90
+    $plateRight = [int][math]::Round(0.90 * $capW)
+    if ($accentLeft -lt 1) {
+        Fail "the accent band starts at column $accentLeft, which is the +/-1 px edge this derivation cannot place"
+    }
+    if ($accentRight -gt $accentPx) {
+        Fail ("the accent band x 0.09..0.18 of this capture is $accentLeft..$accentRight px, but the accent bar is " +
+    "only $accentPx px wide at scale $scale; those pixels are no longer all accent")
+    }
+    if ($plateLeft -le $accentPx) {
+        Fail "the plate band starts at $plateLeft px, which a ${accentPx}px accent bar can still reach"
+    }
+    if ($plateRight -ge $capW) {
+        Fail "the plate band ends at $plateRight px, which is outside this ${capW}px capture"
+    }
+    if (($capX + $capW) -gt ($msgRect.X + 1)) {
+        Fail ("the band ends at $($capX + $capW) and the message's own line starts at $($msgRect.X); the region " +
+    'checks.json samples for flat plate would contain the toast''s own text')
+    }
+    if ($capY -lt $msgRect.Y -or ($capY + $capH) -gt ($msgRect.Y + $msgRect.H)) {
+        Fail ("the band y $capY..$($capY + $capH) is not inside the message's line at " +
+    "$($msgRect.Y)..$($msgRect.Y + $msgRect.H); it would reach the toast's rounded corners")
+    }
+    Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $toast 'the toast sample band' 'the toast'
+    Write-Output ("regions proved: accent $accentLeft..$accentRight px inside the ${accentPx}px accent bar; plate " +
+    "$plateLeft..$plateRight px, clear of it and inside the ${capW}px capture; band right edge " +
+    "$($capX + $capW) at the message's line at $($msgRect.X)")
 }
 elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     # =========================================================================================

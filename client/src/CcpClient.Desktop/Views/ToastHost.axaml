@@ -1,0 +1,78 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="CcpClient.Desktop.Views.ToastHost"
+             Background="{x:Null}">
+  <!--
+    THE IN-APP TOAST SURFACE (census #54, merged with #83). Upstream:
+    Services/Notifications/NotificationService.cs, hosted at the top-right of the shell's root
+    (MainWindow/MainWindow.xaml:3217-3219).
+
+    BACKGROUND IS EXPLICITLY NULL, ON BOTH THE CONTROL AND THE STACK, AND IT IS BEHAVIOUR RATHER
+    THAN STYLE. Upstream states the rule in its own words: "The host panel has no Background, so
+    empty space is click-through - only the toast bodies themselves capture clicks"
+    (NotificationService.cs:16-18, MainWindow.xaml:3210-3213). Avalonia holds the identical rule -
+    a null Background is not hit-tested while Transparent is - so a surface that floats over a
+    whole page must declare it, or it would swallow every click on the page underneath.
+    ToastHostHeadlessTests pins it by hit-testing a point in the empty area.
+  -->
+  <UserControl.Styles>
+    <!-- The plate. Upstream's is #252542 with a 1px accent border all round
+         (NotificationService.cs:130-135); this port uses its OWN notice plate (#FF241E2A,
+         MainWindow.axaml:128) and thickens the LEFT edge to 4 so the type is legible at a glance
+         and readable by the headed harness - the same accent-marker grammar
+         RadioButton.rack-row:checked already uses (MainWindow.axaml:104). Upstream's padding,
+         corner radius, stack gap and max width are kept as they are (:132-136). -->
+    <Style Selector="Border.toast">
+      <Setter Property="Background" Value="#FF241E2A" />
+      <Setter Property="BorderThickness" Value="4,1,1,1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="14,10,10,10" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+      <Setter Property="MaxWidth" Value="360" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="BoxShadow" Value="0 2 16 0 #66000000" />
+    </Style>
+
+    <!-- The four types and their accents, verbatim from upstream's switch
+         (NotificationService.cs:120-126: Success #4CAF50, Warning #FFB347, Error #FF6B6B, and
+         Info's #FF69B4 as the default arm). The four are what makes a refusal readable as a
+         refusal without reading it. -->
+    <Style Selector="Border.toast.info">
+      <Setter Property="BorderBrush" Value="#FFFF69B4" />
+    </Style>
+    <Style Selector="Border.toast.success">
+      <Setter Property="BorderBrush" Value="#FF4CAF50" />
+    </Style>
+    <Style Selector="Border.toast.warning">
+      <Setter Property="BorderBrush" Value="#FFFFB347" />
+    </Style>
+    <Style Selector="Border.toast.error">
+      <Setter Property="BorderBrush" Value="#FFFF6B6B" />
+    </Style>
+
+    <Style Selector="TextBlock.toast-message">
+      <Setter Property="Foreground" Value="#FFFFFFFF" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+
+    <!-- The dismiss affordance every toast carries (NotificationService.cs:200-212). -->
+    <Style Selector="Button.toast-dismiss">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#FFB0B0C0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="Width" Value="24" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+  </UserControl.Styles>
+
+  <StackPanel x:Name="ToastStack" Background="{x:Null}" />
+</UserControl>
