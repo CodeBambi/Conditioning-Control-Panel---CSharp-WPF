@@ -83,6 +83,20 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <!-- Arcademy payload serving: the SIXTH linked read-only glob, identical in shape to the
+         five above. 91 files / 2.8 MB stay OWNED by the legacy tree; zero bytes are forked.
+         THE TREE DOES NOT STAND ALONE and that is why the serving root is the payload MIRROR
+         rather than this folder: the shell borrows DTRH's spirals by RELATIVE url
+         (arcademy/shell/shell.js:76 `../../dtrh/assets/bubbles/effects/spirals/`,
+         games/the-deep-end/pressure.js:182 `../../../dtrh/…`), which only resolves when the
+         whole Resources/web root is reachable — exactly what payload/ already is once this
+         glob lands beside dtrh/intake/tunnel/goon/vendor. Served through
+         Features/Arcademy/ArcademyParticipant.cs; presence probed by ArcademyServingRoots. -->
+    <Content Include="..\..\..\ConditioningControlPanel\Resources\web\arcademy\**\*">
+      <Link>payload\arcademy\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <Content Include="..\..\..\ConditioningControlPanel\Resources\web\vendor\**\*">
       <Link>payload\vendor\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

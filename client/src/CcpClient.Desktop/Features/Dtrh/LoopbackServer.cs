@@ -19,8 +19,18 @@ namespace CcpClient.Desktop.Features.Dtrh;
 /// </summary>
 public sealed class LoopbackServer : IDisposable
 {
-    /// <summary>The §4.4-pinned allowlist: exactly the 9 extensions in the trust-anchored
-    /// tree (css 1, gif 6, html 2, js 74, json 1, mp3 1306, png 129, webm 1, webp 16).</summary>
+    /// <summary>The §4.4-pinned allowlist: the 9 extensions of the trust-anchored dtrh tree
+    /// (css 1, gif 6, html 2, js 74, json 1, mp3 1306, png 129, webm 1, webp 16), plus
+    /// <c>.svg</c> — the arcademy tree's 6 bundled placeholder tiles
+    /// (<c>provider/assets/ae-ph-1..6.svg</c>, drawn as image URLs at
+    /// <c>arcademy/engine/index.js:184</c>), which 415'd before that tree was served.
+    ///
+    /// <para><b>Deny-by-default is unchanged and the table is still PAYLOAD-ONLY.</b> The
+    /// arcademy tree's own <c>.md</c> file still 415s, and every other extension still does;
+    /// only a sweep of a trust-anchored tree may add a row. <c>.svg</c> is deliberately NOT in
+    /// <see cref="UserMime"/>: an SVG served as a document can carry script, so the type is
+    /// allowed for read-only payload bytes the legacy tree owns and never for a file a user
+    /// dropped in their media folder.</para></summary>
     private static readonly Dictionary<string, string> Mime = new(StringComparer.OrdinalIgnoreCase)
     {
         [".css"] = "text/css; charset=utf-8",
@@ -30,6 +40,7 @@ public sealed class LoopbackServer : IDisposable
         [".json"] = "application/json; charset=utf-8",
         [".mp3"] = "audio/mpeg",
         [".png"] = "image/png",
+        [".svg"] = "image/svg+xml",
         [".webm"] = "video/webm",
         [".webp"] = "image/webp",
     };
