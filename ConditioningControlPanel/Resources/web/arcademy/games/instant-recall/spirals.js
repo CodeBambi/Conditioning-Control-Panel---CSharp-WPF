@@ -33,17 +33,18 @@
 
 import { makeTaggedRoll, shuffled } from '../../core/rng.js';
 
-/** Which bundled files LOOK like each other. Data, refinable by eye: the five
- *  gifs were viewed, the two webps were not (they would not decode in the
- *  session's tooling) and are therefore honestly filed as 'other'. */
+/** Which bundled files LOOK like each other. Data, filed by eye (all seven
+ *  viewed 2026-08-23): sp1/sp7 monochrome ring tunnels, sp2 a green/magenta
+ *  ring tunnel, sp5/sp6 pink heart tunnels, sp3 a colour kaleidoscope, sp4 a
+ *  rainbow pinwheel (arms, not rings - it keeps the kaleidoscope company). */
 export const SPIRAL_KIN = Object.freeze({
   'sp1.gif': 'rings',
   'sp7.gif': 'rings',
+  'sp2.webp': 'rings',
   'sp5.gif': 'hearts',
   'sp6.gif': 'hearts',
   'sp3.gif': 'kaleido',
-  'sp2.webp': 'other',
-  'sp4.webp': 'other',
+  'sp4.webp': 'kaleido',
 });
 
 const LOOM_RE = /^https:\/\/ccp\.spirals\/loom_/;
