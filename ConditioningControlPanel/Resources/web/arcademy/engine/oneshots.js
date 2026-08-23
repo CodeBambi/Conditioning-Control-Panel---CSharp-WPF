@@ -24,6 +24,20 @@
  * caller that never passes it sees byte-identical behaviour, so no existing
  * class moves. Every other law still applies (the node cap, the decoder budget
  * through budgetedKind, the alpha ceiling, clickSafe, the timer registry).
+ *
+ * ADDITIVE (2026-08-23, Instant Recall's variety pass): `holdMs` on sub_flash
+ * LENGTHENS the blip without touching its alpha. `ae-sub-blip`'s plateau is
+ * 22%-70% of the duration, so a 320-400ms spec word sits at full alpha for only
+ * ~170ms - unreadable over a bright moving wall. A class that QUIZZES the player
+ * on the word needs it legible, and the honest lever is TIME, not intensity:
+ * alpha still comes from the clamped `subDensity` channel and nothing here may
+ * raise it (THE CEILING RULE). `dur = clamp(holdMs, spec.durMs, SUB_HOLD_MAX_MS)`
+ * - it can only ever make the word last LONGER than the spec, never shorter, and
+ * never longer than 1400ms. The release timer moves with it (`dur + 320`) and the
+ * handle answers `holdMs: dur`. Absent -> byte-identical: no field on the handle,
+ * `--ae-dur` is `spec.durMs` and the release is `spec.durMs + 320`, exactly as
+ * before. A caller that lengthens a word must also widen its own cadence, or two
+ * words overlap (Instant Recall raised `CADENCE.subliminal.min` to 1400 for this).
  * ==========================================================================*/
 
 import { clamp01 } from '../core/caps.js';
@@ -33,6 +47,11 @@ import {
 } from './curves.js';
 import { rand, pickFrom, hasDom, mediaEl, budgetedKind } from './util.js';
 import { createEscapeGuard } from './escape.js';
+
+/** The ceiling on a lengthened sub_flash. A word that outlives this stops being
+ *  a subliminal and becomes a caption; the class asking about it still has to
+ *  read it off the wall, not off a billboard. */
+export const SUB_HOLD_MAX_MS = 1400;
 
 export function createOneshots(ctx) {
   const live = { flash: 0, gifBurst: 0, sub: 0 };
@@ -116,7 +135,15 @@ export function createOneshots(ctx) {
     })();
     if (!node) return null;
 
-    node.style.setProperty('--ae-dur', spec.durMs + 'ms');
+    /* ADDITIVE: an opt-in LONGER hold. Never shorter than the spec, never over
+     * SUB_HOLD_MAX_MS, and never a word on the alpha - see the header. */
+    const wantHold = Number(opts.holdMs);
+    const held = Number.isFinite(wantHold);
+    const durMs = held
+      ? Math.round(Math.max(spec.durMs, Math.min(SUB_HOLD_MAX_MS, wantHold)))
+      : spec.durMs;
+
+    node.style.setProperty('--ae-dur', durMs + 'ms');
     node.style.setProperty('--ae-alpha', String(alpha));
     if (variant.name === 'scatter') {
       node.style.setProperty('--ae-x', Math.round(rand(ctx.rng, 18, 82)) + '%');
@@ -127,10 +154,12 @@ export function createOneshots(ctx) {
     host.appendChild(node);
     live.sub += 1;
     ctx.fx('sub_flash', variant.name);
-    ctx.timers.after(spec.durMs + 320, () => { ctx.timers.release(node); live.sub = Math.max(0, live.sub - 1); });
+    ctx.timers.after(durMs + 320, () => { ctx.timers.release(node); live.sub = Math.max(0, live.sub - 1); });
     ctx.timers.own(node);
     if (opts.sfx) ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'whisper', 0.25 + 0.35 * strength, { duck: 'voice' });
-    return { kind: 'sub_flash', variant: variant.name, text: word || null, durMs: spec.durMs };
+    const handle = { kind: 'sub_flash', variant: variant.name, text: word || null, durMs };
+    if (held) handle.holdMs = durMs;
+    return handle;
   }
 
   /* ---- burst core (flash_burst + gif_burst share the node builder) -------- */

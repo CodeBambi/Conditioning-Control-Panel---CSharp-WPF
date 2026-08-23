@@ -15,6 +15,14 @@
  *   - reduced motion / motionLevel 0: drift becomes slow opacity breathing, the
  *     spiral wash freezes to a static veil, rain and crt roll are skipped;
  *   - clickable bubbles are a blocking effect -> escape guard.
+ *
+ * ADDITIVE (2026-08-23, Instant Recall's variety pass): the wash handle answers
+ * `url` - the url that was actually written to the element's backgroundImage
+ * (`opts.url`, else `ctx.spiralUrl()` for a spiral), or `null` when the wash kept
+ * its CSS gradient. Nothing else moved: this is a READ of what already happened,
+ * so every existing caller is byte-identical and simply ignores a new field.
+ * It exists because a class may only record what the engine DID (Law I), and
+ * "which spiral did you just see" is unanswerable off the request alone.
  * ==========================================================================*/
 
 import { clamp01 } from '../core/caps.js';
@@ -75,9 +83,15 @@ export function createSustained(ctx) {
     const alpha = Math.min(spec.alpha, clamp01(opts.alpha == null ? spec.alpha : ctx.pct(opts.alpha))) * (ctx.reduced() ? 0.7 : 1);
     const holdMs = opts.holdMs == null ? spec.holdMs : Math.max(120, opts.holdMs | 0);
 
+    /* THE URL THE WASH ACTUALLY WORE. `opts.url` is a REQUEST; what lands on the
+     * element is this, and a class that quizzes the player on "which spiral did
+     * you just see" must read the ANSWER off the handle, never off the request
+     * (Law I: the ledger records what the engine did). `null` when nothing was
+     * written - a pink/drain wash with no url keeps its CSS gradient. */
+    let wroteUrl = null;
     if (opts.url || (washKind === 'spiral' && ctx.spiralUrl)) {
       const url = opts.url || ctx.spiralUrl();
-      if (url) h.el.style.backgroundImage = 'url("' + url + '")';
+      if (url) { h.el.style.backgroundImage = 'url("' + url + '")'; wroteUrl = String(url); }
     }
     if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; }
     h.el.style.opacity = String(alpha);
@@ -100,7 +114,7 @@ export function createSustained(ctx) {
     ctx.fx('wash', washKind);
     if (opts.sfx) ctx.sfx(typeof opts.sfx === 'string' ? opts.sfx : 'wash', 0.2 + 0.3 * strength, { duck: 'voice' });
     return {
-      kind: 'wash', variant: washKind, alpha, holdMs,
+      kind: 'wash', variant: washKind, alpha, holdMs, url: wroteUrl,
       retune() { /* alpha follows the next trigger; nothing to animate */ },
       stop() { if (h.hideTimer) { ctx.timers.cancel(h.hideTimer); h.hideTimer = 0; } h.forever = false; h.heldAlpha = 0; h.el.style.opacity = '0'; },
     };
