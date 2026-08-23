@@ -41,6 +41,7 @@ import { createSettingsPage, boardSizeKey, SETTING_KEYS, isGlobalSettingKey } fr
 import { createCeremonies } from './ceremonies.js';
 import { createPeek } from './peek.js';
 import { createKeybinds } from './keybinds.js';
+import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
 
 const FLAVOR_XP_CAP = 15;          // BUILD-CONTRACT §8 - the page clamps too
 const MEATY_MAX_SEC = 300;
@@ -929,17 +930,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     again.addEventListener('click', () => doRetake());
     actions.appendChild(again);
 
+    /* THE EXITS. They keep their small footprint and their fixed row height -
+     * the retake above is still the lit, pre-focused, pulsing one - but they no
+     * longer hide: each wears the QUIET sign (an arrow and a glow, no bulbs, so
+     * it cannot out-shout the retake) and the row is sticky, so a tall card on
+     * a short window can never park them below the fold. Law VI says exits are
+     * sacred; dim was a step too far and real players lost them. */
     const exits = el('div', 'arc-endcard-exits');
-    // The report card is UNDER this overlay, so the way to it is one dim press
-    // - the card may sit on top of the report, never in place of it.
+    // The report card is UNDER this overlay, so the way to it is one press -
+    // the card may sit on top of the report, never in place of it.
     const toReport = el('button', 'btn ghost arc-endcard-small', t('report_card', 'Report Card'));
     toReport.type = 'button';
     toReport.addEventListener('click', () => dismissEndCard());
+    signExit(toReport, { dir: 'back', quiet: true });
     exits.appendChild(toReport);
 
     const out = el('button', 'btn ghost arc-endcard-small', t('rake_back_to_campus', 'Back to campus'));
     out.type = 'button';
     out.addEventListener('click', () => { dismissEndCard(); showBoard(); });
+    signExit(out, { dir: 'back', quiet: true });
     exits.appendChild(out);
     actions.appendChild(exits);
     card.appendChild(actions);
@@ -1026,10 +1035,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     panel.appendChild(root);
 
     const bar = el('div', 'arc-proctor');
-    const back = el('button', 'btn ghost', t('leave_class', 'Leave class'));
-    back.type = 'button';
-    back.addEventListener('click', () => showBoard());
-    bar.appendChild(back);
+    /* THE CAMPUS PILL (shell/exits.js). The way home, in the same corner of
+     * every one of the ten classes, for as long as the class is up. It replaces
+     * the old ghost "Leave class" button in the same slot on purpose: the strip
+     * already reserves the top ~56px of the stage and every game already draws
+     * clear of it, so the pill collides with nothing and costs no game a pixel.
+     * CALM by design (no bulbs, no pulse - see the sign, which is for terminal
+     * screens), and it asks before it takes anything: a class in progress is
+     * work, and one stray click must not be able to bin it. */
+    const pill = campusPill({
+      label: t('arcademy', 'The Arcademy'),
+      onActivate: () => askLeaveClass(),
+    });
+    bar.appendChild(pill);
     bar.appendChild(el('span', 'arc-title', gameName(cls.gameKey)));
     bar.appendChild(el('span', 'chip year', tierLabel(gradeTier)));
     bar.appendChild(el('span', 'chip', t('family_' + cls.family, cls.family)));
@@ -1043,7 +1061,83 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     bar.appendChild(clock);
     panel.appendChild(bar);
 
-    return { panel, root, clock, timebar, timefill };
+    return { panel, root, clock, timebar, timefill, pill };
+  }
+
+  /* ---------------------- the leave-class confirm -----------------------
+   * ONE question, asked from ONE place. The pill is the only caller today;
+   * Esc's ladder is deliberately NOT routed through here (trap 29's corollary
+   * keeps that walk byte-for-byte what it was), and neither are the pause card
+   * or the suspend overlay, which already show what leaving costs.
+   * -------------------------------------------------------------------- */
+
+  /** Drop the confirm if it is up and put the class back the way it was.
+   *  Idempotent; every path out funnels here (cancel, Esc, a host suspend,
+   *  teardown), which is why the undo lives ON the dialog rather than in four
+   *  copies at the call sites. */
+  function dismissConfirm() {
+    if (!active || !active.confirmEl) return false;
+    try { active.confirmEl.close(); } catch (e) { /* noop */ }
+    active.confirmEl = null;
+    const restore = active.confirmRestore;
+    active.confirmRestore = null;
+    if (restore) { try { restore(); } catch (e) { /* noop */ } }
+    return true;
+  }
+
+  /**
+   * Ask, then go. The class freezes while the question is up (the clock, the
+   * game and every effect all ride pauseClass), and CANCEL puts it back exactly
+   * as it was - including leaving it paused if it already was.
+   */
+  function askLeaveClass() {
+    if (!active || active.confirmEl) return;
+    // A host suspend owns the screen and its overlay carries its own Leave
+    // class button. A second, competing door on top of it would be the exact
+    // ~60ms card-destroying race trap 29 was written about.
+    if (active.suspendEl) return;
+
+    const wasPaused = !!active.paused;
+    if (!wasPaused) pauseClass(true);
+    /* ONE CARD ON SCREEN AT A TIME. pauseClass mints the Paused overlay with its
+     * own Resume / Leave class buttons, and two stacked cards asking two
+     * different versions of the same question is worse than either alone (it
+     * also reads as a bug). The pause card steps behind the hidden attribute
+     * while the question is up and comes back if the player stays - and the
+     * `[hidden]` reset at the top of styles.css is exactly what makes that work
+     * on a display:flex node (trap 27). */
+    if (active.pauseEl) active.pauseEl.hidden = true;
+
+    /** Put the class back the way the pill found it. */
+    const restore = () => {
+      if (!active) return;
+      active.confirmEl = null;
+      active.confirmRestore = null;
+      if (!wasPaused) pauseClass(false);
+      else if (active.pauseEl) active.pauseEl.hidden = false;
+    };
+
+    const dialog = createConfirm({
+      mount: active.root,
+      title: t('leave_confirm_title', 'Head back to campus?'),
+      body: t('leave_confirm_body',
+        'This class is not finished. Nothing from it is saved.'),
+      confirmLabel: t('back_to_campus', 'Back to campus'),
+      cancelLabel: t('leave_confirm_stay', 'Stay in class'),
+      // What leaving actually costs, in the HOST's own attendance numbers.
+      // Unknown numbers print nothing at all - never invent jeopardy.
+      note: jeopardyLine(),
+      onConfirm: () => {
+        // No toast on the way out: the card's own note has already said what
+        // this costs, and saying it twice reads as a scold.
+        if (active) { active.confirmEl = null; active.confirmRestore = null; }
+        showBoard();
+      },
+      onCancel: restore,
+    });
+    if (!dialog) { restore(); return; }
+    active.confirmEl = dialog;
+    active.confirmRestore = restore;
   }
 
   /* ---------------------- the class clock (S1) --------------------------
@@ -1326,6 +1420,28 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       absorb: absorbWord,
       sessionWords,
 
+      /* ---- THE EXITS (shell/exits.js) ------------------------------------
+       * A shell PRIMITIVE, like peek and ceremonies: a class never mints its
+       * own way out, it borrows the school's. Two calls, and both are pure
+       * decoration - neither wires a handler, neither can move a screen.
+       *
+       *   exits.sign(btn, {dir:'back'|'go', quiet})  dress a button as the lit
+       *       arrow board. TERMINAL SCREENS ONLY (a class-rules sheet, a
+       *       debrief) - a sign on a live board would fight the board.
+       *   exits.bar([nodes], {card:true})            a sticky footer row, so a
+       *       card that scrolls can never park its own dismiss below the fold.
+       *
+       * The CSS is the shell's (styles.css, the EXITS section), so a class gets
+       * the look for free and ten classes cannot drift apart. */
+      exits: {
+        sign: (btn, o) => { try { return signExit(btn, o); } catch (e) { return btn; } },
+        bar: (children, o) => {
+          const b = exitBar(children, o);
+          if (o && o.card) b.className += ' arc-exitbar-card';
+          return b;
+        },
+      },
+
       log: (m) => say('[' + cls.gameKey + '] ' + m),
       endClass: (result) => {
         if (ended) { say('[' + cls.gameKey + '] endClass called twice - ignored'); return; }
@@ -1346,7 +1462,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     active = {
       cls, gradeTier, instance, engine, keys, peek, ceremonies: classCeremonies,
       panel: chrome.panel, root: chrome.root, paused: false, pauseEl: null,
-      suspendEl: null, timeBudgetSec, endless,
+      suspendEl: null, confirmEl: null, confirmRestore: null,
+      pill: chrome.pill, timeBudgetSec, endless,
       // the shell's own class clock (S1) - see timeBar* above
       timebar: chrome.timebar, timefill: chrome.timefill,
       clockTimer: 0, clockElapsedMs: 0, clockLastAt: NaN,
@@ -1681,6 +1798,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         try { active.instance.pause(); } catch (e) { say('game.pause threw: ' + ((e && e.message) || e)); }
       }
       if (on) {
+        // THE HOST'S WORD BEATS THE QUESTION. A suspend overlay carries its own
+        // Leave class button, so a confirm still sitting under it would be a
+        // second, conflicting door - drop it and retire the pill until the
+        // class is the player's again.
+        dismissConfirm();
+        if (active.pill) active.pill.disabled = true;
         pauseClass(true);
         showSuspendedOverlay(reason === 'audio-only'
           ? 'An audio-only session started. Your attendance is safe.'
@@ -1689,6 +1812,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       } else if (active.suspendEl) {
         active.suspendEl.remove();
         active.suspendEl = null;
+        if (active.pill) active.pill.disabled = false;
       }
     }
     renderTopbar();
@@ -1697,6 +1821,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   function teardownClass() {
     if (!active) return;
+    // The question dies with the class it was asked about - a dialog that
+    // outlived its stage would be a second, invisible Esc rung.
+    dismissConfirm();
     const a = active;
     // NO RAW TIMER OUTLIVES A CLASS. The class clock is the shell's only
     // interval per class and it dies here, before `active` is dropped - a tick
@@ -1775,6 +1902,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * boot.js only reaches for fullscreen/exit once the page has nothing to close.
      */
     escapeStep() {
+      // THE CONFIRM IS THE INNERMOST RUNG. It is a modal the player opened one
+      // press ago, so Esc closing it first is the only answer that is not a
+      // surprise - and it is the ONE rung this wave added. Everything below is
+      // byte-for-byte the ladder it always was (trap 29's corollary).
+      // dismissConfirm carries the undo: it unfreezes a class the pill froze,
+      // and hands a class that was ALREADY paused its pause card back.
+      if (active && active.confirmEl) { dismissConfirm(); return true; }
       // The campus door card is the outermost thing a tap can close.
       if (screen === 'board' && campus) {
         try { if (campus.closeCard()) return true; } catch (e) { /* noop */ }

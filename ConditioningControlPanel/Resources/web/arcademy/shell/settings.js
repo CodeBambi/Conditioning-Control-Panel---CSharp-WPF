@@ -28,6 +28,7 @@
 
 import { t } from '../core/lexicon.js';
 import { keyLabel, keyGlyph, keyGlyphWide } from './keybinds.js';
+import { exitBar, sign as signExit } from './exits.js';
 
 /* ----------------------------------------------------------------------------
  * THE KEY MAP (cross-agent contract - keep in sync with ArcademyHostService's
@@ -478,10 +479,11 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
   /* ---------------------- assemble -------------------------------------- */
   function build() {
     root.textContent = '';
+    const close = () => { try { if (onClose) onClose(); } catch (e) { /* noop */ } };
     const head = el('div', 'arc-classbar');
     const back = el('button', 'btn ghost', t('back', 'Back'));
     back.type = 'button';
-    back.addEventListener('click', () => { try { if (onClose) onClose(); } catch (e) { /* noop */ } });
+    back.addEventListener('click', close);
     head.appendChild(back);
     head.appendChild(el('span', 'arc-title', t('settings', 'Settings')));
     root.appendChild(head);
@@ -497,6 +499,20 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
       }
       root.appendChild(buildGame(entry));
     }
+
+    /* THE STICKY WAY OUT. This page is ten classes long - three ceiling rows,
+     * the whole global tier, then a group per class with its keybind slots - so
+     * the Back at the top scrolls out of reach inside a screen or two and the
+     * only way back to it is to scroll all the way up again. The lit sign below
+     * rides the bottom of the viewport for as long as the page is up, which is
+     * the same guarantee every other Arcademy screen now makes. */
+    const out = el('button', 'btn primary', t('back', 'Back'));
+    out.type = 'button';
+    out.addEventListener('click', close);
+    signExit(out, { dir: 'back' });
+    const bar = exitBar([out]);
+    bar.className += ' arc-settings-exit';
+    root.appendChild(bar);
     return root;
   }
 

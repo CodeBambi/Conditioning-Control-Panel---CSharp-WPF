@@ -812,6 +812,13 @@ internal static class ArcademyHostService
         ["back"] = "Back",
         ["begin_class"] = "Begin",
         ["leave_class"] = "Leave class",
+        // ---- the exits (shell/exits.js: the campus pill + its confirm) ------------------
+        // Every value stays well under MergeModTable's 96-char cap so a mod can re-voice
+        // all of them (trap 26 - the long ic_* rows are the cautionary tale).
+        ["back_to_campus"] = "Back to campus",
+        ["leave_confirm_title"] = "Head back to campus?",
+        ["leave_confirm_body"] = "This class is not finished. Nothing from it is saved.",
+        ["leave_confirm_stay"] = "Stay in class",
         ["replay_board"] = "Flip the board again",
         ["share"] = "Copy share card",
         ["shared"] = "Copied to clipboard",

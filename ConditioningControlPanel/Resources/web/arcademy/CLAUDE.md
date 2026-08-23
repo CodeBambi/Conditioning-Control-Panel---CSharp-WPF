@@ -53,6 +53,9 @@ shell/splitflap.js departure-board reveal
 shell/reportcard.js day summary + THE one share pipeline
 shell/settings.js  THE settings page (3 tiers) + SETTING_KEYS
 shell/ceremonies.js stamp / 10-segment meter / reward beats (engine-delegated)
+shell/exits.js     THE WAY OUT: the campus pill + its confirm, the sticky exit
+                   bar, and the casino arrow SIGN. Every back/leave/done in the
+                   school is minted here (games borrow it through ctx.exits)
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
@@ -473,6 +476,41 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
       hardware-protective and cheap; do not "fix" it by dropping the maxTouchPoints probe,
       which is the only signal a webview that answers no media query has.
 
+43. **AN EXIT THAT SCROLLS AWAY IS NOT AN EXIT.** The settings page is ten classes
+    long, the report paper is taller than a short window, and eight of the ten
+    class-rules sheets declared `max-height` + `overflow:auto` **and**
+    `pointer-events:none` in the same rule - and a box the pointer cannot hit is a box
+    the wheel cannot scroll, so on a short window GO sat below a fold that nothing on
+    the page could reach and the class simply could not be entered. `shell/exits.js`
+    is the answer and `.arc-exitbar` (sticky, bottom:0) is the pattern: it binds to
+    whatever scrolls - the document for settings, `.arc-reportstage` for the report,
+    an overlay's own box for a card - so no screen has to know what its scroller is.
+    Two things that bite:
+    - **The sign is `.arc-exitsign.arc-exitsign` on purpose.** Callers sign buttons
+      that already wear `.btn.primary` / `.btn.ghost`, and a single class LOSES to two.
+      The doubled class buys the specificity with no `!important`.
+    - **The bulbs do not move; the light does.** `.arc-sign-lamps` carries the bulb
+      mask and a dim fill, and its CHILD `.arc-sign-chase` translates by exactly one
+      period (52px = four 13px bulbs). Transforming the masked layer would drag the
+      bulbs along with the light, and a pseudo-element cannot own a child - which is
+      why the chase is a real node. Never animate its `background-position` (trap 36).
+44. **THE PILL AND THE PAUSE CARD MUST NOT BOTH BE UP.** `askLeaveClass()` freezes the
+    class to ask, and `pauseClass(true)` mints the Paused overlay with its own Resume /
+    Leave class buttons - two stacked cards asking two versions of one question, which
+    reads as a bug (it looked like one in the first capture). The pause card steps
+    behind the hidden attribute while the confirm is up and comes back if the player
+    stays; `dismissConfirm()` carries that undo so all four exits from the dialog
+    (cancel, Esc, a host suspend, teardown) restore the same state. The `[hidden]`
+    reset at the top of `styles.css` is what makes hiding a `display:flex` node work at
+    all - trap 27, used on purpose this time.
+45. **THE CONFIRM ADDS EXACTLY ONE ESC RUNG, AT THE TOP.** It is a modal the player
+    opened one press ago, so Esc closing it first is the only answer that is not a
+    surprise. Everything below it in `escapeStep()` is byte-for-byte the ladder it
+    always was, the suspend rung still owns the key while a suspend overlay is up
+    (trap 29's corollary), and the pill REFUSES to open while `active.suspendEl` is
+    live - that overlay carries its own Leave class and a second door on top of it is
+    the exact race trap 29 was written about.
+
 ## 5. The game module contract (short version)
 
 ```js
@@ -484,12 +522,17 @@ export default {
 };
 ```
 `ctx = { root, engine, assets, lexicon:t, caps, rng, settings, keys, peek, ceremonies,
-store, endClass({metrics:{composite}, hardGates?, zen?, flavorXp?, share?, assists?}), log }`
+exits, store, endClass({metrics:{composite}, hardGates?, zen?, flavorXp?, share?, assists?}), log }`
 plus the additive read-only projection: `platform` (init's `{isTouch, hasHaptics, host}`),
 `motion` (`{reducedMotion, motionLevel}`), `audioAudible` (resolved `SubAudioAudible` - FALSE
 means a cue is mixed but inaudible, so carry a visual tell), `words` (a COPY of the day pool),
 `absorb(word)` / `sessionWords` (trap 24), and `keys.panicKey` (the projected panic key name,
 a launch-time snapshot - see trap 19).
+`ctx.exits` is a shell PRIMITIVE like peek and ceremonies, and it is pure decoration -
+neither call wires a handler or can move a screen: `exits.sign(btn, {dir, quiet})` dresses
+a button as the lit arrow board (TERMINAL screens only - a rules sheet, a debrief; a sign
+on a live board fights the board) and `exits.bar(nodes, {card:true})` returns a sticky
+footer row. The CSS is the shell's, so ten classes cannot drift apart (trap 43).
 `classSpec = { gradeTier 1..4, seed, timeBudgetSec, retake }` - `retake` is true when today
 already has a row for this class (trap 23). The seed is unchanged on a retake, on purpose:
 the day's script IS the day's script.

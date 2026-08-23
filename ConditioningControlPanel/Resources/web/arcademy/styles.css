@@ -1229,6 +1229,274 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
   .campus-crest { display:none; }
 }
 
+/* ============================ EXITS ======================================
+   THE WAY OUT, in one place (shell/exits.js mints every node below).
+
+   Three pieces, three jobs:
+     .arc-campuspill   the crest shrunk into a chip, top-left of a live class.
+                       CALM: no bulbs, no pulse. It must be findable without
+                       ever being the loudest thing on a board you are meant to
+                       be watching.
+     .arc-exitbar      a sticky footer. The bug this wave exists to kill is a
+                       Back button at the TOP of a page that scrolls, so the
+                       guaranteed exit now rides the bottom of the viewport for
+                       as long as the screen is up.
+     .arc-exitsign     the casino arrow board. TERMINAL SCREENS ONLY (report,
+                       end card, settings, a class-rules sheet) - never
+                       something a live class has to compete with.
+
+   THE BULBS DO NOT MOVE; THE LIGHT DOES. `.arc-sign-lamps` carries the bulb
+   MASK and a dim fill, and its child `.arc-sign-chase` carries an oversized
+   repeating band that translates by exactly one period (52px = four 13px
+   bulbs), so the wrap lands on an identical pixel. Transforming the masked
+   layer itself would drag the bulbs along with the light, and animating
+   `background-position` would re-raster the strip every frame (trap 36's law:
+   patterns drift by TRANSFORM). That is why the chase is a real element and
+   not a pseudo - a pseudo-element cannot own a child.
+
+   Nothing here is toggled with the hidden attribute: the confirm dialog is
+   REMOVED when it closes, and the global reset at the top of this file covers
+   anything a game hides that way (trap 27). */
+
+/* ---- the campus pill --------------------------------------------------- */
+.arc-campuspill {
+  display:inline-flex; align-items:center; gap:9px;
+  padding:5px 13px 5px 9px;
+  background:color-mix(in srgb, var(--navy), transparent 22%);
+  border:1px solid color-mix(in srgb, var(--lav), transparent 62%);
+  border-radius:999px;
+  color:var(--ink-dim); cursor:pointer;
+  transition:border-color .18s, color .18s, box-shadow .18s, background .18s;
+}
+.arc-campuspill:hover {
+  color:var(--ink);
+  border-color:var(--lav);
+  background:color-mix(in srgb, var(--panel), transparent 10%);
+  box-shadow:0 0 18px color-mix(in srgb, var(--lav), transparent 72%);
+}
+.arc-campuspill:focus-visible { outline:2px solid var(--lav); outline-offset:3px; }
+.arc-campuspill:active { transform:translateY(1px); }
+.arc-campuspill-chev {
+  font-size:19px; line-height:1; color:var(--lav);
+  transition:transform .18s;
+}
+.arc-campuspill:hover .arc-campuspill-chev { transform:translateX(-2px); }
+.arc-campuspill-wrap { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+/* The hub's crest, at chip scale - same face, same tracking, same rule under
+   it, so the way home LOOKS like home. */
+.arc-campuspill-name {
+  font-family:var(--disp); font-size:10.5px; letter-spacing:.26em; line-height:1;
+  text-transform:uppercase; white-space:nowrap;
+}
+.arc-campuspill-rule {
+  width:100%; height:1px;
+  background:linear-gradient(90deg, color-mix(in srgb, var(--lav), transparent 40%), transparent);
+}
+/* A host suspend owns the screen and its overlay carries its own Leave class -
+   the pill steps back rather than offering a second, conflicting door. */
+.arc-campuspill[disabled] { opacity:.4; cursor:default; }
+@media (max-width:520px) {
+  .arc-campuspill-rule { display:none; }
+  .arc-campuspill-name { font-size:9.5px; letter-spacing:.18em; }
+}
+
+/* ---- the confirm dialog ------------------------------------------------ */
+/* Above the pause card (z 35) on purpose: the pill can be pressed while the
+   class is already paused, and the question must land on top of the answer. */
+.arc-confirm {
+  position:absolute; inset:0; z-index:36;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(14px, 4vh, 40px); overflow:auto;
+  background:color-mix(in srgb, var(--ground), transparent 12%);
+  backdrop-filter:blur(7px);
+  animation:arc-confirm-in .16s ease-out both;
+}
+@keyframes arc-confirm-in { from { opacity:0; } to { opacity:1; } }
+.arc-confirm-card {
+  width:min(440px, 92vw); margin:auto;
+  display:flex; flex-direction:column; align-items:center; gap:13px;
+  text-align:center; padding:24px 26px 20px;
+  background:linear-gradient(168deg, var(--panel), var(--navy) 78%);
+  border:var(--hairline); border-radius:var(--radius);
+  box-shadow:0 30px 80px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06);
+  animation:arc-confirm-rise .26s cubic-bezier(.2,1.2,.4,1) both;
+}
+@keyframes arc-confirm-rise {
+  from { transform:translateY(16px) scale(.97); opacity:0; }
+  to   { transform:none; opacity:1; }
+}
+.arc-confirm-card .arc-h2 { margin:0; font-size:19px; letter-spacing:.13em; color:var(--gold); }
+.arc-confirm-body { margin:0; max-width:38ch; font-size:13px; }
+.arc-confirm-actions {
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
+  gap:12px; margin-top:4px;
+}
+.arc-confirm-stay { min-width:150px; padding:10px 20px; font-size:12px; letter-spacing:.14em; }
+.arc-confirm-note { margin:0; font-size:11px; color:var(--ink-faint); max-width:40ch; }
+
+/* ---- the sticky exit bar ----------------------------------------------- */
+/* `sticky` binds to whatever scrolls - the document on the settings page, the
+   report stage under the paper, an overlay's own box on a card - so one class
+   covers every screen without any of them needing to know what its scroller is.
+   The fade underneath keeps text legible as it slides beneath the bar. */
+.arc-exitbar {
+  position:sticky; bottom:0; z-index:12;
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
+  gap:11px; margin-top:16px;
+  padding:13px 8px calc(11px + env(safe-area-inset-bottom, 0px));
+  background:linear-gradient(180deg,
+    transparent,
+    color-mix(in srgb, var(--ground), transparent 22%) 38%,
+    color-mix(in srgb, var(--ground), transparent 4%));
+}
+/* For a screen whose content does not scroll in a box of its own. */
+.arc-exitbar-fixed {
+  position:fixed; left:0; right:0; bottom:0; z-index:32; margin-top:0;
+}
+.arc-exitbar .chip { flex:none; }
+
+/* ---- the sign ---------------------------------------------------------- */
+/* THE DOUBLED CLASS IS DELIBERATE. Every caller signs a button that already
+   wears .btn plus one of .btn.primary / .btn.ghost, and those are TWO classes -
+   a single .arc-exitsign loses the cascade to them and the sign renders as a
+   plain pink slab (caught in a capture, not by a test). Doubling the class buys
+   the specificity without an !important and without touching the button
+   vocabulary every other screen depends on. */
+.arc-exitsign.arc-exitsign {
+  position:relative; overflow:hidden;
+  display:inline-flex; align-items:center; justify-content:center; gap:10px;
+  min-width:210px; padding:12px 24px;
+  font-family:var(--disp); font-size:12.5px; letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--gold);
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--panel), var(--gold) 6%),
+    color-mix(in srgb, var(--navy), black 14%));
+  border:1px solid color-mix(in srgb, var(--gold), transparent 42%);
+  border-radius:10px;
+  box-shadow:
+    0 0 20px color-mix(in srgb, var(--gold), transparent 74%),
+    inset 0 0 22px color-mix(in srgb, var(--gold), transparent 88%);
+  cursor:pointer;
+}
+.arc-exitsign.arc-exitsign:hover:not(:disabled) {
+  color:var(--ink);
+  border-color:var(--gold);
+  box-shadow:
+    0 0 30px color-mix(in srgb, var(--gold), transparent 58%),
+    inset 0 0 26px color-mix(in srgb, var(--gold), transparent 80%);
+}
+.arc-exitsign.arc-exitsign:focus-visible { outline:2px solid var(--ink); outline-offset:3px; }
+.arc-exitsign.arc-exitsign:active { transform:translateY(1px); }
+.arc-sign-label { position:relative; z-index:2; }
+.arc-sign-arrow {
+  position:relative; z-index:2; font-size:14px; line-height:1;
+  color:color-mix(in srgb, var(--gold), var(--ink) 30%);
+  animation:arc-sign-blink 1.04s steps(1, end) infinite;
+}
+@keyframes arc-sign-blink { 0%, 55% { opacity:1; } 56%, 100% { opacity:.34; } }
+
+/* THE BULBS. Two rows, top and bottom, drawn by masking a dim gold fill with a
+   repeating dot. 13px pitch; the chase period below is exactly four of them. */
+.arc-sign-lamps {
+  position:absolute; inset:0; z-index:1; overflow:hidden;
+  border-radius:inherit; pointer-events:none;
+  background:color-mix(in srgb, var(--gold), transparent 62%);
+  --arc-bulb:radial-gradient(circle at 50% 50%, #000 0 40%, transparent 46%);
+  -webkit-mask-image:var(--arc-bulb), var(--arc-bulb);
+  mask-image:var(--arc-bulb), var(--arc-bulb);
+  -webkit-mask-size:13px 7px; mask-size:13px 7px;
+  -webkit-mask-repeat:repeat-x; mask-repeat:repeat-x;
+  -webkit-mask-position:6px 3px, 6px calc(100% - 3px);
+  mask-position:6px 3px, 6px calc(100% - 3px);
+}
+/* THE LIGHT. Oversized by exactly one period on its trailing edge and
+   translated by exactly that period, so the loop lands on an identical pixel. */
+.arc-sign-chase {
+  position:absolute; top:0; bottom:0;
+  background-image:repeating-linear-gradient(90deg,
+    rgba(255,246,214,1) 0 13px, rgba(255,246,214,0) 13px 52px);
+}
+.arc-sign-back .arc-sign-chase {
+  left:0; right:-52px;
+  animation:arc-sign-chase-l 1.04s linear infinite;
+}
+.arc-sign-go .arc-sign-chase, .arc-sign-up .arc-sign-chase {
+  left:-52px; right:0;
+  animation:arc-sign-chase-r 1.04s linear infinite;
+}
+@keyframes arc-sign-chase-l { from { transform:translateX(0); } to { transform:translateX(-52px); } }
+@keyframes arc-sign-chase-r { from { transform:translateX(0); } to { transform:translateX(52px); } }
+
+/* The quiet sign: the glow and the arrow, no bulbs. For a secondary exit that
+   still has to be findable but must not out-shout the primary one beside it. */
+.arc-exitsign.arc-exitsign.arc-sign-quiet {
+  min-width:0; padding:8px 15px; font-size:10.5px; letter-spacing:.13em;
+  color:var(--ink-dim);
+  background:color-mix(in srgb, var(--panel), transparent 15%);
+  border-color:color-mix(in srgb, var(--lav), transparent 55%);
+  box-shadow:none;
+}
+.arc-exitsign.arc-exitsign.arc-sign-quiet:hover:not(:disabled) {
+  color:var(--ink); border-color:var(--lav);
+  box-shadow:0 0 16px color-mix(in srgb, var(--lav), transparent 72%);
+}
+.arc-exitsign.arc-exitsign.arc-sign-quiet .arc-sign-arrow { color:var(--lav); font-size:11px; }
+
+/* Reduced motion: the sign still reads as lit, it just stops running. The
+   global freeze at the bottom of this file would otherwise leave the chase
+   parked wherever .001s put it, which is a flicker, not a stop. */
+html.arc-reduced .arc-sign-chase,
+html.arc-reduced .arc-sign-arrow { animation:none; }
+html.arc-reduced .arc-sign-chase { opacity:.55; }
+@media (prefers-reduced-motion: reduce) {
+  .arc-sign-chase, .arc-sign-arrow { animation:none; }
+  .arc-sign-chase { opacity:.55; }
+}
+
+/* ---- the screens the bar lands on -------------------------------------- */
+/* SETTINGS. The page is ten classes long; its head Back scrolls away within a
+   screen or two, which is the whole complaint. The bar below never does. */
+.arc-settings-exit { margin-top:22px; }
+/* THE REPORT. The paper scrolls inside .arc-reportstage, so Done sticks to the
+   bottom of the stage instead of to the bottom of the paper. */
+.arc-reportstage .arc-exitbar {
+  margin:18px -36px -26px; padding-left:36px; padding-right:36px;
+  border-radius:0 0 6px 6px;
+  background:linear-gradient(180deg,
+    transparent, color-mix(in srgb, var(--panel), transparent 30%) 40%, var(--panel));
+}
+/* THE END CARD. Law VI said the exits were dim on purpose; that read as
+   "hidden" to real players, so they keep their small footprint and their fixed
+   row height but wear the quiet sign - and the row now sticks. The retake above
+   is untouched and still the pre-focused, pulsing one. */
+.arc-endcard-actions .arc-endcard-exits {
+  position:sticky; bottom:0; z-index:3;
+  padding:8px 0 2px;
+  background:linear-gradient(180deg, transparent, var(--navy) 45%);
+}
+.arc-endcard-exits .arc-endcard-small { opacity:1; }
+/* THE PAUSE / SUSPEND CARD. It centres its content, so a short window used to
+   push its buttons off the bottom edge with no way to reach them. */
+.arc-suspended { overflow-y:auto; }
+.arc-suspended .arc-classbar {
+  position:sticky; bottom:0; z-index:2;
+  padding:10px 0 4px;
+  background:linear-gradient(180deg, transparent, rgba(20,20,43,.94) 50%);
+}
+/* THE DOOR CARD on the campus. Short window, tall card, clipped ✕. */
+.campus-scrim { overflow:auto; padding:clamp(10px, 3vh, 32px) 0; }
+.campus-scrim .campus-classcard { margin:auto; }
+
+/* THE CLASS-RULES SHEETS the games draw. They are the shell's guests: a game
+   marks its dismiss row `arc-exitbar` and its dismiss button gets signed
+   through ctx.exits, and both are styled from here so ten classes cannot drift
+   apart. The bar sits inside the card's own scroller. */
+.arc-exitbar.arc-exitbar-card {
+  margin-top:10px; padding-bottom:11px;
+  background:linear-gradient(180deg, transparent, color-mix(in srgb, var(--navy), transparent 6%) 45%, var(--navy));
+}
+
 /* ============================ A11Y / MOTION ============================== */
 .arc-sr {
   position:absolute; width:1px; height:1px; padding:0; margin:-1px;
