@@ -25,6 +25,17 @@
                 AutomationProperties.Name="open companion button"
                 HorizontalAlignment="Left"
                 Content="Show companion" />
+        <!-- Where the permissions live, said out loud on the door.
+             Upstream's AI-permissions grid sits on the companion PAGE
+             (Views/Controls/Companion/AiPermissionsGrid.xaml, inside CompanionTabView); this
+             port's page is a door and its companion surface is the window, which is where
+             every other companion consent already is. Rather than split the consent surface
+             in two, the grid went to the window and the door names it — a user who came here
+             looking for it is one click away instead of lost. -->
+        <TextBlock x:Name="PermissionsPointer"
+                   Classes="page-blurb" TextWrapping="Wrap"
+                   AutomationProperties.AutomationId="PermissionsPointer"
+                   Text="What she is allowed to do to your screen — the master switch and the ten per-effect permissions — is inside that window, with the rest of her consent settings. Nothing is admitted until you say so." />
       </StackPanel>
     </Border>
   </StackPanel>

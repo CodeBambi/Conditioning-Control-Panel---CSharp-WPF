@@ -173,11 +173,77 @@
                          ToolTip.Tip="Loop-protection cooldown (placeholder baseline)"
                          AutomationProperties.Name="loop protection cooldown seconds" />
         </Grid>
+        <!-- WHAT SHE'S ALLOWED TO DO. Upstream's one AI-permissions surface, ported by
+             outcome: a master switch, and beneath it the ten per-effect switches that only
+             appear while the master is on (Views/Controls/Companion/AiPermissionsGrid.xaml:160-200,
+             shown/hidden at MainWindow/MainWindow.Patreon.cs:1477). It lives on the companion
+             surface because that is where every other companion consent already lives — the
+             awareness and memory toggles two rows up — and a consent surface split across two
+             doors is one the user has to find twice.
+
+             THE DEFAULT IS CLOSED: master off, zero ticks, and the ticks are session-scoped
+             (AiEffectPermissions). Upstream ships bubbles/subliminal/bounce pre-ticked
+             (Models/CompanionPromptSettings.cs:103-110); this port admits nothing until the
+             user says so, which is the divergence AiExecutionGates.NoneAdmitted already
+             recorded. -->
+        <Grid ColumnDefinitions="Auto,Auto,*">
+          <TextBlock Text="Effect control" FontSize="12" Foreground="#FFE8E0EE" VerticalAlignment="Center" />
+          <CheckBox Grid.Column="1" x:Name="EffectsMasterToggle" Margin="10,0,0,0"
+                    Content="Let her drive effects"
+                    IsChecked="{Binding EffectsMasterEnabled}"
+                    Foreground="#FFE8E0EE" FontSize="12" VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="EffectsMasterToggle"
+                    AutomationProperties.Name="effect control master toggle"
+                    ToolTip.Tip="Master switch. While this is off she can drive nothing, whatever the switches below say." />
+        </Grid>
+        <Border x:Name="EffectPermissionsPanel"
+                IsVisible="{Binding EffectsMasterEnabled}"
+                BorderBrush="#FFFFC107" BorderThickness="1" CornerRadius="4"
+                Background="#FF1E1822" Padding="8,6"
+                AutomationProperties.AutomationId="EffectPermissionsPanel">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Effect permissions" FontSize="11" FontWeight="SemiBold" Foreground="#FFFFC107" />
+            <ItemsControl ItemsSource="{Binding EffectPermissions}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="companion:CompanionPermissionRow">
+                  <StackPanel Orientation="Horizontal" Width="210" Margin="0,1">
+                    <CheckBox Content="{Binding Label}"
+                              IsChecked="{Binding Allowed}"
+                              Foreground="#FFE8E0EE" FontSize="12" VerticalAlignment="Center"
+                              AutomationProperties.AutomationId="{Binding Id}"
+                              AutomationProperties.Name="{Binding Label}" />
+                    <!-- The named absence, in one word on screen and in full on hover. A ticked
+                         switch over an absent backend records consent; it never claims a
+                         capability (CompanionPermissionRow). -->
+                    <TextBlock Text="· not in this build"
+                               IsVisible="{Binding BackendNoteVisible}"
+                               VerticalAlignment="Center" Margin="4,0,0,0"
+                               FontSize="10" Foreground="#FF9A8FA3"
+                               ToolTip.Tip="{Binding BackendNote}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
         <!-- The honesty line (pre-approach consult #6): state exactly what memory
              does — saved, clearable, consumed as context ONLY under the consent typed state.
              Never imply recall under the Denied placeholder default. -->
-        <TextBlock Text="Memory is saved, can be cleared here, and is used as conversation context while memory consent is on. Consent and cooldowns are session-scoped placeholders pending owner decisions."
+        <TextBlock Text="Memory is saved, can be cleared here, and is used as conversation context while memory consent is on. Consent, effect permissions and cooldowns are session-scoped placeholders pending owner decisions."
                    FontSize="10" Opacity="0.6" Foreground="#FFE8E0EE" TextWrapping="Wrap" />
+        <!-- The second honesty line, and it is the one that keeps this whole panel from
+             over-claiming: her replies do not reach the command executor in this build at all
+             (AiOperationPipeline.cs:340-346 refuses envelope-shaped replies). These switches
+             decide what WOULD be admitted; nothing dispatches yet. -->
+        <TextBlock x:Name="EffectDispatchNotice"
+                   Text="Nothing dispatches yet: her replies are not read as commands in this build, so these switches decide what would be admitted, not what is happening."
+                   FontSize="10" Opacity="0.6" Foreground="#FFE8E0EE" TextWrapping="Wrap"
+                   AutomationProperties.AutomationId="EffectDispatchNotice" />
       </StackPanel>
     </Border>
 
