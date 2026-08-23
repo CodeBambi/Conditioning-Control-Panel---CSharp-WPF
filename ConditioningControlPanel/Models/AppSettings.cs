@@ -36,6 +36,39 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// One subreddit the user has KEPT (the library), as opposed to one they currently feed
+    /// from (the selection, <see cref="AppSettings.FypOnlineCustomSubs"/>). Splitting the two
+    /// is what lets a name be added once and used from several surfaces: the Arcademy's SORT
+    /// door can sort against r/pokemon without r/pokemon flashing on the desktop.
+    /// </summary>
+    public class RemoteSubLibraryEntry
+    {
+        /// <summary>Bare sanitized subreddit name, no "r/".</summary>
+        [JsonProperty] public string Name { get; set; } = "";
+
+        /// <summary>When the name first entered the library (UTC). Display order only.</summary>
+        [JsonProperty] public DateTime AddedAtUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// One library row as the pickers want it: the kept name joined with its probe verdict and
+    /// with whether the app-wide feed selection currently includes it. Built by
+    /// <see cref="AppSettings.BuildRemoteSubLibraryView"/> so the Assets tab, the For You
+    /// popover and the Arcademy host cannot drift in how they read the same two lists.
+    /// </summary>
+    public sealed class RemoteSubLibraryRow
+    {
+        public string Name { get; init; } = "";
+        /// <summary>Null = never probed (unproven, still usable), true/false = a real verdict.</summary>
+        public bool? Ok { get; init; }
+        public int? VideoCount { get; init; }
+        /// <summary>Probed ok with zero clips: the sub exists but has stills only.</summary>
+        public bool StillOnly { get; init; }
+        /// <summary>In <see cref="AppSettings.FypOnlineCustomSubs"/> right now.</summary>
+        public bool Selected { get; init; }
+    }
+
+    /// <summary>
     /// What we learned the last time a custom subreddit was probed against the remote media
     /// provider: does it resolve, and how much video does it hold. Persisted with the sub
     /// (AppSettings.FypOnlineSubVerdicts) so a verified pill survives a relaunch instead of
@@ -3418,6 +3451,162 @@ namespace ConditioningControlPanel.Models
             set { _fypOnlineCustomSubs = value ?? new List<string>(); OnPropertyChanged(); }
         }
 
+        /// <summary>Ceiling on the KEPT names. Twice the selection cap on purpose: a library is
+        /// meant to outlive any one surface's 20-channel feed.</summary>
+        public const int RemoteSubLibraryCap = 40;
+
+        private List<RemoteSubLibraryEntry> _remoteSubLibrary = new();
+        /// <summary>
+        /// Every subreddit the user has KEPT, across every surface (the Assets tab, the For You
+        /// popover, the Arcademy's SORT door). This is the LIBRARY;
+        /// <see cref="FypOnlineCustomSubs"/> stays what it always was, the app-wide FEED
+        /// SELECTION, and is a subset of this by convention rather than by force (a hand-edited
+        /// file that disagrees still feeds every existing consumer exactly as before).
+        ///
+        /// <para>"Added once, X everywhere": adding a name from any picker lands it here, only
+        /// the picker you are on toggles its own selection, and removing it here
+        /// (<see cref="RemoveLibrarySub"/>) takes the verdict and the feed selection with it.</para>
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<RemoteSubLibraryEntry> RemoteSubLibrary
+        {
+            get => _remoteSubLibrary;
+            // Normalised on every set, because a synced or hand-edited file is the one place a
+            // duplicate (or a 400-entry blob) can come from: blanks dropped, case-insensitively
+            // unique, capped. Never throws on a bad row - it drops it.
+            set
+            {
+                var next = new List<RemoteSubLibraryEntry>();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (value != null)
+                {
+                    foreach (var entry in value)
+                    {
+                        var name = entry?.Name?.Trim();
+                        if (string.IsNullOrEmpty(name)) continue;
+                        if (!seen.Add(name)) continue;
+                        next.Add(new RemoteSubLibraryEntry
+                        {
+                            Name = name,
+                            AddedAtUtc = entry!.AddedAtUtc == default ? DateTime.UtcNow : entry.AddedAtUtc,
+                        });
+                        if (next.Count >= RemoteSubLibraryCap) break;
+                    }
+                }
+                _remoteSubLibrary = next;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>The library as bare names, in stored order. Read-only view for pickers.</summary>
+        [JsonIgnore]
+        public IReadOnlyList<string> LibrarySubs
+        {
+            get
+            {
+                var names = new List<string>(_remoteSubLibrary.Count);
+                foreach (var e in _remoteSubLibrary)
+                    if (!string.IsNullOrWhiteSpace(e?.Name)) names.Add(e!.Name);
+                return names;
+            }
+        }
+
+        /// <summary>True when this name is already kept (case-insensitive, sanitized).</summary>
+        public bool LibraryHasSub(string? rawName)
+        {
+            var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(rawName);
+            if (clean == null) return false;
+            foreach (var e in _remoteSubLibrary)
+                if (string.Equals(e?.Name, clean, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Keep a name. Returns true when the library actually grew (so a caller knows whether to
+        /// save and push); false for an unusable name, a duplicate, or a full library. Adding to
+        /// the library NEVER touches the feed selection - that is the whole point of the split.
+        /// </summary>
+        public bool TryAddLibrarySub(string? rawName)
+        {
+            var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(rawName);
+            if (clean == null) return false;
+            if (LibraryHasSub(clean)) return false;
+            if (_remoteSubLibrary.Count >= RemoteSubLibraryCap) return false;
+            _remoteSubLibrary.Add(new RemoteSubLibraryEntry { Name = clean, AddedAtUtc = DateTime.UtcNow });
+            OnPropertyChanged(nameof(RemoteSubLibrary));
+            return true;
+        }
+
+        /// <summary>
+        /// The X on a library pill: one gesture, gone everywhere. Drops the library entry, its
+        /// probe verdict, and the name from the feed selection (a sub the user deleted must not
+        /// keep feeding flashes). Returns true when anything changed. Callers persist and reset
+        /// the rotation themselves - this model has no opinion about either.
+        /// </summary>
+        public bool RemoveLibrarySub(string? rawName)
+        {
+            var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(rawName) ?? rawName?.Trim();
+            if (string.IsNullOrEmpty(clean)) return false;
+
+            bool changed = false;
+            var kept = new List<RemoteSubLibraryEntry>(_remoteSubLibrary.Count);
+            foreach (var e in _remoteSubLibrary)
+            {
+                if (string.Equals(e?.Name, clean, StringComparison.OrdinalIgnoreCase)) { changed = true; continue; }
+                kept.Add(e!);
+            }
+            if (changed)
+            {
+                _remoteSubLibrary = kept;
+                OnPropertyChanged(nameof(RemoteSubLibrary));
+            }
+
+            if (_fypOnlineSubVerdicts.Remove(clean!)) changed = true;
+
+            var subs = new List<string>(_fypOnlineCustomSubs.Count);
+            bool droppedSelection = false;
+            foreach (var name in _fypOnlineCustomSubs)
+            {
+                if (string.Equals(name, clean, StringComparison.OrdinalIgnoreCase)) { droppedSelection = true; continue; }
+                subs.Add(name);
+            }
+            if (droppedSelection)
+            {
+                FypOnlineCustomSubs = subs;   // through the property, so listeners hear it
+                changed = true;
+            }
+            return changed;
+        }
+
+        /// <summary>
+        /// ONE-WAY and IDEMPOTENT: every name in the feed selection that is not in the library is
+        /// appended to the library. Never the reverse, and it never empties anything - a bad blob
+        /// must not be able to cost someone their feed. Safe to run on every load (and it is: a
+        /// name added by an older build, or by a machine that synced its settings from one, joins
+        /// the library the next time the app opens).
+        /// </summary>
+        internal void MigrateRemoteSubLibrary()
+        {
+            try
+            {
+                foreach (var name in _fypOnlineCustomSubs)
+                {
+                    if (_remoteSubLibrary.Count >= RemoteSubLibraryCap) break;
+                    if (string.IsNullOrWhiteSpace(name) || LibraryHasSub(name)) continue;
+                    var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(name);
+                    if (clean == null) continue;
+                    // AddedAtUtc backdated by a tick so migrated names sort ahead of anything the
+                    // user adds after this load, which is the order they were really added in.
+                    _remoteSubLibrary.Add(new RemoteSubLibraryEntry
+                    {
+                        Name = clean,
+                        AddedAtUtc = DateTime.UtcNow.AddSeconds(-1),
+                    });
+                }
+            }
+            catch { /* a migration must never be the reason settings fail to load */ }
+        }
+
         private Dictionary<string, RemoteSubVerdict> _fypOnlineSubVerdicts =
             new(StringComparer.OrdinalIgnoreCase);
         /// <summary>Last probe result per custom sub, keyed by the SANITIZED bare name
@@ -3443,6 +3632,32 @@ namespace ConditioningControlPanel.Models
                 _fypOnlineSubVerdicts = next;
                 OnPropertyChanged();
             }
+        }
+
+        /// <summary>
+        /// The library joined with the verdict store and the feed selection - the one shape every
+        /// picker renders from (see <see cref="RemoteSubLibraryRow"/>). Ordered exactly like
+        /// <see cref="RemoteSubLibrary"/>.
+        /// </summary>
+        public List<RemoteSubLibraryRow> BuildRemoteSubLibraryView()
+        {
+            var selected = new HashSet<string>(_fypOnlineCustomSubs, StringComparer.OrdinalIgnoreCase);
+            var rows = new List<RemoteSubLibraryRow>(_remoteSubLibrary.Count);
+            foreach (var e in _remoteSubLibrary)
+            {
+                var name = e?.Name;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                _fypOnlineSubVerdicts.TryGetValue(name!, out var verdict);
+                rows.Add(new RemoteSubLibraryRow
+                {
+                    Name = name!,
+                    Ok = verdict == null ? null : verdict.Ok,
+                    VideoCount = verdict?.VideoCount,
+                    StillOnly = verdict != null && verdict.Ok && verdict.VideoCount.GetValueOrDefault() == 0,
+                    Selected = selected.Contains(name!),
+                });
+            }
+            return rows;
         }
 
         /// <summary>How long a probe verdict is trusted before the pickers re-ask.</summary>

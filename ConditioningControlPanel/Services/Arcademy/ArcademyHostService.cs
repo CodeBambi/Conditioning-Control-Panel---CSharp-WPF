@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
@@ -538,6 +539,15 @@ internal static class ArcademyHostService
             case "assets-request":
                 OnAssetsRequest(o);
                 break;
+            case "local-sample-request":
+                OnLocalSampleRequest(o);
+                break;
+            case "probe-sub":
+                OnProbeSub(o);
+                break;
+            case "library-remove":
+                OnLibraryRemove(o);
+                break;
             case "exit":       // page-initiated (Esc held): it winds itself down, then exit-done
                 _exiting = true;
                 App.Logger?.Information("ArcademyHost: page exit ({Reason})", (string?)o["reason"]);
@@ -828,7 +838,133 @@ internal static class ArcademyHostService
                 .Select(sp => (object)$"https://ccp.spirals/loom_{sp.Slug}.gif").ToArray());
         }
         catch (Exception ex) { App.Logger?.Debug("ArcademyHost.BuildSettingsBag loom: {E}", ex.Message); }
+
+        // ---- what a game needs to let the player CHOOSE its media (SORT's setup door) ----
+        // Projected once, already resolved, like everything else here: the page never sees a raw
+        // consent flag it could recombine into a gate we did not open. Every one of these is
+        // wrapped on its own so a single bad folder cannot cost the page its whole settings bag.
+        try
+        {
+            var catalog = new JArray();
+            foreach (var n in FypOnlineCoordinator.Catalog)
+                catalog.Add(new JObject
+                {
+                    ["id"] = n.Id,
+                    ["label"] = n.Label,
+                    ["subs"] = new JArray(n.Subs ?? Array.Empty<string>()),
+                });
+            bag["remoteCatalog"] = catalog;
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.BuildSettingsBag catalog: {E}", ex.Message); }
+
+        try { bag["subLibrary"] = JArray.FromObject(BuildSubLibrary()); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.BuildSettingsBag library: {E}", ex.Message); }
+
+        try { bag["localFolders"] = BuildLocalFolders(); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.BuildSettingsBag folders: {E}", ex.Message); }
+
+        try
+        {
+            var presets = new JArray();
+            foreach (var p in s?.AssetPresets ?? new List<Models.AssetPreset>())
+            {
+                if (p == null || string.IsNullOrWhiteSpace(p.Id)) continue;
+                presets.Add(new JObject { ["id"] = p.Id, ["name"] = p.Name ?? "" });
+            }
+            bag["assetPresets"] = presets;
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.BuildSettingsBag presets: {E}", ex.Message); }
+
+        try
+        {
+            // remoteMediaEnabled is projected at the top level too (BUILD-CONTRACT §4.1); it rides
+            // here as well so a game reading its own media options finds them in one bag.
+            bag["remoteMediaEnabled"] = RemoteMediaEnabled();
+            bag["remoteConsent"] = s?.HasRemoteMediaConsent ?? false;
+            bag["mediaSource"] = s?.MediaSource ?? "local";
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.BuildSettingsBag source: {E}", ex.Message); }
+
         return bag;
+    }
+
+    /// <summary>Folders under the assets root that actually hold media, with RECURSIVE counts per
+    /// kind, so a picker can say "images/bambi - 412 gifs" without a round trip. Paths are relative
+    /// to the assets root with forward slashes; the two roots ("images", "videos") are always
+    /// listed when they exist. Honours the same deselection blacklist the samples do, so a count
+    /// never promises files the sample would refuse to serve.</summary>
+    private const int LocalFolderCap = 400;
+
+    private static JArray BuildLocalFolders()
+    {
+        var arr = new JArray();
+        var root = App.EffectiveAssetsPath;
+        if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return arr;
+
+        var rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+        var disabled = Quiz.IntakeHostService.BuildDisabledAssetSet(App.Settings?.Current?.DisabledAssetPaths);
+        var counts = new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase);   // [gifs, stills, videos]
+
+        int[] Slot(string rel)
+        {
+            if (!counts.TryGetValue(rel, out var slot)) counts[rel] = slot = new int[3];
+            return slot;
+        }
+
+        foreach (var top in new[] { "images", "videos" })
+        {
+            var topAbs = Path.Combine(rootFull, top);
+            if (!Directory.Exists(topAbs)) continue;
+            Slot(top);   // a root with nothing in it is still a real choice ("all of my images")
+
+            IEnumerable<string> files;
+            try { files = Directory.EnumerateFiles(topAbs, "*", SearchOption.AllDirectories); }
+            catch (Exception ex) { App.Logger?.Debug("ArcademyHost.BuildLocalFolders {Top}: {E}", top, ex.Message); continue; }
+
+            foreach (var file in files)
+            {
+                var ext = Path.GetExtension(file).ToLowerInvariant();
+                int bucket = ext switch
+                {
+                    ".gif" => 0,
+                    ".png" or ".jpg" or ".jpeg" or ".webp" => 1,
+                    ".mp4" or ".webm" => 2,
+                    _ => -1,
+                };
+                if (bucket < 0) continue;
+                if (!Quiz.IntakeHostService.IsAssetActive(disabled, rootFull, file)) continue;
+
+                // Credit the file to its own folder AND to every folder above it up to the root:
+                // "recursive counts" is what makes picking "images" a legal, honest choice.
+                var dir = Path.GetDirectoryName(file);
+                while (!string.IsNullOrEmpty(dir))
+                {
+                    string rel;
+                    try { rel = Path.GetRelativePath(rootFull, dir).Replace('\\', '/'); }
+                    catch { break; }
+                    if (rel.Length == 0 || rel == "." || rel.StartsWith("..", StringComparison.Ordinal)) break;
+                    Slot(rel)[bucket]++;
+                    if (string.Equals(rel, top, StringComparison.OrdinalIgnoreCase)) break;
+                    dir = Path.GetDirectoryName(dir);
+                }
+            }
+        }
+
+        var keys = new List<string>(counts.Keys);
+        keys.Sort(StringComparer.OrdinalIgnoreCase);
+        foreach (var rel in keys)
+        {
+            var slot = counts[rel];
+            arr.Add(new JObject
+            {
+                ["path"] = rel,
+                ["gifs"] = slot[0],
+                ["stills"] = slot[1],
+                ["videos"] = slot[2],
+            });
+            if (arr.Count >= LocalFolderCap) break;
+        }
+        return arr;
     }
 
     private const int LocalAssetSample = 60;
@@ -2274,7 +2410,10 @@ internal static class ArcademyHostService
     // request is satisfied or the pool is dry. A closed gate answers with an empty array rather
     // than silence, because silence is what leaves a page spinning.
 
-    private sealed record AssetUrl(string Url, string Kind, string Mime);
+    /// <summary>One servable row. <c>Tag</c> and <c>Src</c> are null on the app-wide path (the
+    /// reply there is byte-for-byte what it always was) and set on the tagged path, where the tag
+    /// IS the answer key the class grades on.</summary>
+    private sealed record AssetUrl(string Url, string Kind, string Mime, string? Tag = null, string? Src = null);
 
     private static void OnAssetsRequest(JObject o)
     {
@@ -2282,6 +2421,12 @@ internal static class ArcademyHostService
         int count = Math.Clamp((int?)o["count"] ?? 8, 1, RemoteBatchCap);
         var kind = ((string?)o["kind"] ?? "still").Trim();
         if (kind != "loop" && kind != "still") kind = "still";
+
+        // OPT-IN, and it has to be: a request that names its own subs is SORT asking for one of
+        // the two piles the player picked, and it is served from that pile alone. Everything
+        // without a `subs` array falls through to the app-wide pull below, unchanged.
+        var subs = ReadRequestSubs(o);
+        if (subs != null) { OnTaggedAssetsRequest(o, reqId, count, kind, subs); return; }
 
         // The niche taxonomy is shared app-wide by design (GROUND-RULES §8): a per-request niche
         // list would fork it. The field is accepted and ignored, loudly once.
@@ -2312,12 +2457,15 @@ internal static class ArcademyHostService
 
     private static bool _nichesIgnoredLogged;
 
-    private static List<AssetUrl> TakeBuffered(string kind, int count)
+    /// <summary>Drain up to <paramref name="count"/> prewarmed rows. The key is the media kind on
+    /// the app-wide path and <c>tag|kind</c> on the tagged one - one dictionary, two namespaces,
+    /// so a pile can never be answered out of the app-wide buffer.</summary>
+    private static List<AssetUrl> TakeBuffered(string key, int count)
     {
         var taken = new List<AssetUrl>();
         lock (RemoteBuffer)
         {
-            if (!RemoteBuffer.TryGetValue(kind, out var buf)) return taken;
+            if (!RemoteBuffer.TryGetValue(key, out var buf)) return taken;
             while (buf.Count > 0 && taken.Count < count)
             {
                 taken.Add(buf[0]);
@@ -2414,6 +2562,583 @@ internal static class ArcademyHostService
             ".jpg" or ".jpeg" => "image/jpeg",
             _ => kind == "loop" ? "video/mp4" : "image/jpeg",
         };
+    }
+
+    // ======================= tagged assets (SORT: the piles the player picked) =======================
+    //
+    // SORT (room 201) is the one class whose media has to be TRUE: the right pile is the player's
+    // own niches, the left pile is the noise they chose, and the row's `tag` is the answer key the
+    // swipe is graded against. So a request that carries `subs` is served from THOSE SUBS ONLY, out
+    // of its own buffer, off its own rotation tenant, with every row stamped with the tag it was
+    // asked for and the subreddit it really came from.
+    //
+    // Opt-in per request, deliberately (pitch 11): honouring a pile list unconditionally would move
+    // every other class off the app-wide pull, which is exactly the regression this design must not
+    // ship. No `subs` field = the code path above, untouched.
+
+    /// <summary>Subs one request may name. Matches the coordinator's own channel ceiling.</summary>
+    private const int TaggedSubCap = 64;
+
+    /// <summary>Live sub list per tag, read by that tag's channel provider. The coordinator caches
+    /// the FIRST provider it is handed for a consumer id and keeps it forever, so the provider has
+    /// to close over THIS table rather than over one request's list - otherwise night two's sort
+    /// would quietly deal night one's subs.</summary>
+    private static readonly Dictionary<string, List<string>> TaggedChannels = new(StringComparer.Ordinal);
+
+    /// <summary>Buffer keys with a fetch in the air. Per key rather than the single
+    /// <see cref="_remoteFetchInFlight"/> latch the app-wide path uses: target and noise are two
+    /// different asks, and one must not end the other's exchange with an empty reply.</summary>
+    private static readonly HashSet<string> TaggedFetchesInFlight = new(StringComparer.Ordinal);
+
+    private static bool _taggedSubsEmptyLogged;
+
+    /// <summary>The request's sub list, sanitized and de-duplicated; null when the message carries
+    /// no <c>subs</c> array at all (which is what keeps every other class on the old path), and an
+    /// EMPTY list when it carried one that sanitized away to nothing.</summary>
+    internal static List<string>? ReadRequestSubs(JObject o)
+    {
+        var field = o["subs"];
+        if (field == null || field.Type == JTokenType.Null) return null;
+        // Present but malformed (a bare string, an object) is REFUSED, not waved through to the
+        // app-wide pull: a pile dealt from subs the player never picked is a lie, not a fallback.
+        if (field is not JArray arr) return new List<string>();
+        var clean = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in arr)
+        {
+            var name = FypOnlineCoordinator.SanitizeSub((string?)t);
+            if (name == null || !seen.Add(name)) continue;
+            clean.Add(name);
+            if (clean.Count >= TaggedSubCap) break;
+        }
+        return clean;
+    }
+
+    /// <summary>The pile name, normalised to something safe to use as a dictionary key and as a
+    /// tenant id suffix. 'target' / 'noise' in practice; anything else is honoured as its own pile
+    /// rather than rejected, because the tag is the page's vocabulary, not ours.</summary>
+    internal static string ReadTag(JObject o)
+    {
+        var raw = ((string?)o["tag"] ?? "").Trim().ToLowerInvariant();
+        var kept = new string(raw.Where(ch => char.IsLetterOrDigit(ch) || ch == '_' || ch == '-').ToArray());
+        if (kept.Length == 0) return "untagged";
+        return kept.Length > 24 ? kept[..24] : kept;
+    }
+
+    internal static string TaggedBufferKey(string tag, string kind) => "sort:" + tag + "|" + kind;
+
+    private static FypOnlineCoordinator TaggedCoordinator(string tag)
+        => FypOnlineCoordinator.For(RemoteConsumerId + ":sort:" + tag, () => TaggedChannelsFor(tag), FeedMediaKind.Any);
+
+    private static IReadOnlyList<string> TaggedChannelsFor(string tag)
+    {
+        lock (TaggedChannels)
+        {
+            return TaggedChannels.TryGetValue(tag, out var subs)
+                ? new List<string>(subs)
+                : (IReadOnlyList<string>)Array.Empty<string>();
+        }
+    }
+
+    /// <summary>Point a pile at its subs. When the set actually changes, the pile's prewarmed rows
+    /// go with it: those rows carry the OLD <c>src</c>, and <c>src</c> is what the class grades on.</summary>
+    private static void SetTaggedChannels(string tag, List<string> subs)
+    {
+        bool changed;
+        lock (TaggedChannels)
+        {
+            changed = !TaggedChannels.TryGetValue(tag, out var current) || !SameChannelSet(current, subs);
+            if (changed) TaggedChannels[tag] = new List<string>(subs);
+        }
+        if (!changed) return;
+
+        lock (RemoteBuffer)
+        {
+            RemoteBuffer.Remove(TaggedBufferKey(tag, "loop"));
+            RemoteBuffer.Remove(TaggedBufferKey(tag, "still"));
+        }
+        try { TaggedCoordinator(tag).ResetChannels(); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost: tagged rotation reset failed: {E}", ex.Message); }
+        App.Logger?.Information("ArcademyHost: pile '{Tag}' = {Subs}", tag, string.Join(", ", subs));
+    }
+
+    private static bool SameChannelSet(List<string> a, List<string> b)
+    {
+        if (a.Count != b.Count) return false;
+        for (int i = 0; i < a.Count; i++)
+            if (!string.Equals(a[i], b[i], StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
+    }
+
+    private static void OnTaggedAssetsRequest(JObject o, string reqId, int count, string kind, List<string> subs)
+    {
+        var tag = ReadTag(o);
+
+        if (!RemoteMediaEnabled() || App.Settings?.Current?.OfflineMode == true)
+        {
+            PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true);
+            return;
+        }
+        if (subs.Count == 0)
+        {
+            // An empty pile is answered empty rather than silently falling back to the app-wide
+            // pull: a sort dealt from subs the player never picked is a lie, not a fallback.
+            if (!_taggedSubsEmptyLogged)
+            {
+                _taggedSubsEmptyLogged = true;
+                App.Logger?.Information("ArcademyHost: tagged assets-request '{Tag}' carried no usable subs", tag);
+            }
+            PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true);
+            return;
+        }
+
+        SetTaggedChannels(tag, subs);
+
+        var key = TaggedBufferKey(tag, kind);
+        var served = TakeBuffered(key, count);
+        bool satisfied = served.Count >= count;
+        PostTaggedAssets(reqId, tag, served, satisfied);
+        if (!satisfied) ServeTaggedBatch(reqId, tag, kind, count - served.Count);
+    }
+
+    /// <summary>The tagged reply. Same <c>assets</c> envelope the app-wide path posts, with
+    /// <c>tag</c> and <c>src</c> on every row (and a top-level tag for the log's sake).</summary>
+    private static void PostTaggedAssets(string reqId, string tag, IReadOnlyList<AssetUrl> rows, bool done)
+    {
+        _host?.Post(new
+        {
+            type = "assets",
+            reqId,
+            tag,
+            urls = rows.Select(u => new
+            {
+                url = u.Url,
+                kind = u.Kind,
+                mime = u.Mime,
+                tag = u.Tag ?? tag,
+                src = u.Src ?? "",
+            }).ToArray(),
+            done,
+        });
+    }
+
+    /// <summary>Fetch one batch for a pile and post it under the original reqId. Mirrors
+    /// <see cref="ServeRemoteBatch"/> - same generation guard, same "always terminate the exchange"
+    /// posture - with the pile's own tenant, buffer and in-flight latch.</summary>
+    private static async void ServeTaggedBatch(string reqId, string tag, string kind, int want)
+    {
+        int epoch = Volatile.Read(ref _generation);
+        var key = TaggedBufferKey(tag, kind);
+
+        lock (TaggedFetchesInFlight)
+        {
+            if (!TaggedFetchesInFlight.Add(key))
+            {
+                // End THIS exchange rather than leaving the page's latch open; the pool it wanted
+                // is one ask away (the page asks again after every reply).
+                PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true);
+                return;
+            }
+        }
+        try
+        {
+            var allowed = new HashSet<string>(TaggedChannelsFor(tag), StringComparer.OrdinalIgnoreCase);
+            if (allowed.Count == 0)
+            {
+                PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true);
+                return;
+            }
+
+            var mediaKind = kind == "loop" ? FeedMediaKind.Video : FeedMediaKind.Image;
+            var coord = TaggedCoordinator(tag);
+            var (entries, error) = await coord.FetchBatchAsync(mediaKind, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            var fresh = new List<AssetUrl>();
+            foreach (var e in entries)
+            {
+                if (!RemoteMediaFormats.Validate(e, mediaKind, out var reason))
+                {
+                    App.Logger?.Debug("ArcademyHost: rejected tagged entry {Id}: {Reason}", e.Id, reason);
+                    continue;
+                }
+                // ScrolllerSource stamps Folder as "r/<sub>" - that IS the src the page shows and
+                // the door de-duplicates on. A row we cannot place in the pile is dropped: the
+                // rotation only holds this pile's channels, and this is the belt to that braces.
+                var folder = (e.Folder ?? "").Trim();
+                var bare = folder.StartsWith("r/", StringComparison.OrdinalIgnoreCase) ? folder[2..] : folder;
+                if (bare.Length == 0 || !allowed.Contains(bare)) continue;
+                fresh.Add(new AssetUrl(e.Url, kind, MimeFor(e.Url, kind), tag, "r/" + bare));
+                if (fresh.Count >= RemoteBatchCap) break;
+            }
+
+            var win = _host?.Window;
+            if (win == null) return;                                  // the Arcademy closed while fetching
+            if (Volatile.Read(ref _generation) != epoch) return;      // ...or closed and relaunched
+            await win.Dispatcher.InvokeAsync(() =>
+            {
+                if (_host == null || Volatile.Read(ref _generation) != epoch) return;
+                var send = fresh.Take(want).ToList();
+                lock (RemoteBuffer)
+                {
+                    if (!RemoteBuffer.TryGetValue(key, out var buf)) RemoteBuffer[key] = buf = new List<AssetUrl>();
+                    buf.AddRange(fresh.Skip(send.Count));
+                    if (buf.Count > 120) buf.RemoveRange(0, buf.Count - 120);
+                }
+                if (error != null) App.Logger?.Debug("ArcademyHost: tagged batch '{Tag}' error {E}", tag, error);
+                PostTaggedAssets(reqId, tag, send, true);
+            });
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("ArcademyHost: tagged batch failed: {E}", ex.Message);
+            if (Volatile.Read(ref _generation) == epoch)
+            {
+                try { PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true); } catch { }
+            }
+        }
+        finally { lock (TaggedFetchesInFlight) TaggedFetchesInFlight.Remove(key); }
+    }
+
+    // ======================= local sample (the other kind of pile) =======================
+    //
+    // The page cannot enumerate a virtual host, so a local pile is sampled here: a folder list (or
+    // one asset preset) in, `assets` rows out on the same envelope the remote path uses. Same
+    // deselection blacklist the flash pool honours, and the same ccp.assets urls BuildLocalAssets
+    // hands out - a row's src is the folder it really came from.
+
+    private static readonly string[] LocalLoopExts = { ".gif", ".mp4", ".webm" };
+    private static readonly string[] LocalStillExts = { ".png", ".jpg", ".jpeg", ".webp" };
+
+    private static async void OnLocalSampleRequest(JObject o)
+    {
+        var reqId = (string?)o["reqId"] ?? "";
+        int count = Math.Clamp((int?)o["count"] ?? 8, 1, RemoteBatchCap);
+        var kind = ((string?)o["kind"] ?? "still").Trim();
+        if (kind != "loop" && kind != "still") kind = "still";
+        var tag = ReadTag(o);
+        var folders = ReadStringArray(o["folders"]);
+        var presetId = ((string?)o["presetId"] ?? "").Trim();
+        int epoch = Volatile.Read(ref _generation);
+
+        List<AssetUrl> rows;
+        try
+        {
+            // A big library is a slow walk and the UI thread is holding a webview: enumerate off it.
+            rows = await Task.Run(() => SampleLocalAssets(reqId, count, kind, tag, folders, presetId))
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("ArcademyHost: local sample failed: {E}", ex.Message);
+            rows = new List<AssetUrl>();
+        }
+
+        var win = _host?.Window;
+        if (win == null) return;
+        if (Volatile.Read(ref _generation) != epoch) return;
+        await win.Dispatcher.InvokeAsync(() =>
+        {
+            if (_host == null || Volatile.Read(ref _generation) != epoch) return;
+            PostTaggedAssets(reqId, tag, rows, true);
+        });
+    }
+
+    private static List<string> ReadStringArray(JToken? token)
+    {
+        var list = new List<string>();
+        if (token is not JArray arr) return list;
+        foreach (var t in arr)
+        {
+            var s = ((string?)t ?? "").Trim();
+            if (s.Length > 0) list.Add(s);
+        }
+        return list;
+    }
+
+    private static List<AssetUrl> SampleLocalAssets(string reqId, int count, string kind, string tag,
+        List<string> folders, string presetId)
+    {
+        var rows = new List<AssetUrl>();
+        var root = App.EffectiveAssetsPath;
+        if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return rows;
+
+        var exts = kind == "loop" ? LocalLoopExts : LocalStillExts;
+
+        // Which deselection list applies: a named preset brings its own, otherwise the tree the
+        // user is looking at right now (identical to what BuildLocalAssets serves).
+        IEnumerable<string>? disabledPaths = App.Settings?.Current?.DisabledAssetPaths;
+        string? presetSrc = null;
+        if (presetId.Length > 0)
+        {
+            foreach (var p in App.Settings?.Current?.AssetPresets ?? new List<Models.AssetPreset>())
+            {
+                if (p == null || !string.Equals(p.Id, presetId, StringComparison.Ordinal)) continue;
+                disabledPaths = p.DisabledAssetPaths;
+                presetSrc = "preset:" + p.Id;
+                break;
+            }
+            if (presetSrc == null)
+                App.Logger?.Debug("ArcademyHost: local sample named unknown preset {Id}", presetId);
+        }
+        var disabled = Quiz.IntakeHostService.BuildDisabledAssetSet(disabledPaths);
+
+        var searchRoots = new List<string>();
+        foreach (var rel in folders)
+        {
+            var abs = ResolveAssetsFolder(root, rel);
+            if (abs != null) searchRoots.Add(abs);
+        }
+        if (searchRoots.Count == 0)
+        {
+            foreach (var top in new[] { "images", "videos" })
+            {
+                var abs = Path.Combine(root, top);
+                if (Directory.Exists(abs)) searchRoots.Add(abs);
+            }
+        }
+
+        var pool = new List<string>();
+        var seenFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dir in searchRoots)
+        {
+            IEnumerable<string> files;
+            try { files = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories); }
+            catch (Exception ex) { App.Logger?.Debug("ArcademyHost: local sample walk of {Dir} failed: {E}", dir, ex.Message); continue; }
+            foreach (var file in files)
+            {
+                var ext = Path.GetExtension(file).ToLowerInvariant();
+                if (Array.IndexOf(exts, ext) < 0) continue;
+                if (!Quiz.IntakeHostService.IsAssetActive(disabled, root, file)) continue;
+                if (!seenFiles.Add(file)) continue;   // two picked folders can nest
+                pool.Add(file);
+            }
+        }
+        if (pool.Count == 0) return rows;
+
+        // Seeded off the reqId so a retake of the same ask deals the same slice; partial
+        // Fisher-Yates, the same random-slice trick BuildLocalAssets uses.
+        var rng = new Random(StableSeed(reqId));
+        int take = Math.Min(count, pool.Count);
+        for (int i = 0; i < take; i++)
+        {
+            int j = rng.Next(i, pool.Count);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
+        }
+        for (int i = 0; i < take; i++)
+        {
+            var file = pool[i];
+            var url = ToAssetsUrl(file);
+            rows.Add(new AssetUrl(url, kind, MimeFor(url, kind), tag, presetSrc ?? RelativeFolder(root, file)));
+        }
+        return rows;
+    }
+
+    /// <summary>A page-supplied folder resolved under the assets root, or null when it does not
+    /// exist or tries to climb out of it. Never trust a path that arrived over the bridge.</summary>
+    internal static string? ResolveAssetsFolder(string root, string rel)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(rel)) return null;
+            var cleaned = rel.Replace('\\', '/').Trim('/');
+            if (cleaned.Length == 0) return null;
+            var rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+            var abs = Path.GetFullPath(Path.Combine(rootFull, cleaned));
+            if (!abs.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(abs, rootFull, StringComparison.OrdinalIgnoreCase))
+            {
+                App.Logger?.Warning("ArcademyHost: local sample refused a path outside the assets root: {Rel}", rel);
+                return null;
+            }
+            return Directory.Exists(abs) ? abs : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>The file's own folder, relative to the assets root, forward slashes - the same
+    /// shape <c>localFolders</c> projects, so a src can be matched back to a folder chip.</summary>
+    private static string RelativeFolder(string root, string file)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(file);
+            if (string.IsNullOrEmpty(dir)) return "";
+            return Path.GetRelativePath(root, dir).Replace('\\', '/');
+        }
+        catch { return ""; }
+    }
+
+    /// <summary>FNV-1a over the reqId: a stable seed, so the same ask deals the same slice.</summary>
+    private static int StableSeed(string s)
+    {
+        unchecked
+        {
+            uint h = 2166136261;
+            foreach (var ch in s ?? "")
+            {
+                h ^= ch;
+                h *= 16777619;
+            }
+            return (int)(h & 0x7FFFFFFF);
+        }
+    }
+
+    // ======================= the sub library (probe / remove / push) =======================
+
+    private static readonly HashSet<string> ProbesInFlight = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The SORT door's search box: is r/&lt;name&gt; real, and how much video does it hold. Same
+    /// upstream question the two shipped pickers ask (<c>FypHostService.ProbeCustomSub</c>), with
+    /// two differences that matter here: the answer is keyed by <c>reqId</c> (the door awaits a
+    /// promise, so every path MUST reply), and a verified name lands in the LIBRARY ONLY.
+    ///
+    /// <para>It never touches <c>FypOnlineCustomSubs</c>: noise the player picked to sort against
+    /// must not start flashing on their desktop. That split is the whole point of the library.</para>
+    ///
+    /// <para>BRIGHT LINE, as everywhere on this path: the probe goes straight from this machine to
+    /// the provider. Nothing routes through CC Labs infrastructure.</para>
+    /// </summary>
+    private static async void OnProbeSub(JObject o)
+    {
+        var reqId = (string?)o["reqId"] ?? "";
+        var raw = (string?)o["name"] ?? (string?)o["sub"] ?? "";
+        var clean = FypOnlineCoordinator.SanitizeSub(raw);
+        if (clean == null)
+        {
+            PostSubProbe(reqId, (raw ?? "").Trim(), false, null, "invalid");
+            return;
+        }
+
+        var s = App.Settings?.Current;
+        // Cached for a week, the same window both pickers trust (AppSettings.SubVerdictMaxAgeDays):
+        // a door re-opened every night must not spend a round trip per chip.
+        if (s != null && !s.SubVerdictIsStale(clean)
+            && s.FypOnlineSubVerdicts.TryGetValue(clean, out var cached) && cached != null)
+        {
+            if (cached.Ok && s.TryAddLibrarySub(clean)) { App.Settings?.Save(); PushLibrary(); }
+            PostSubProbe(reqId, clean, cached.Ok, cached.VideoCount, null);
+            return;
+        }
+
+        if (!RemoteMediaEnabled() || App.Settings?.Current?.OfflineMode == true)
+        {
+            PostSubProbe(reqId, clean, false, null, "offline");
+            return;
+        }
+
+        lock (ProbesInFlight)
+        {
+            if (!ProbesInFlight.Add(clean))
+            {
+                // Answer rather than drop: the door is awaiting this reqId, and a silent duplicate
+                // is a promise that never settles.
+                PostSubProbe(reqId, clean, false, null, "busy");
+                return;
+            }
+        }
+
+        int epoch = Volatile.Read(ref _generation);
+        try
+        {
+            var probe = await Task.Run(() => FypOnlineCoordinator.ProbeSubAsync(clean, CancellationToken.None))
+                .ConfigureAwait(false);
+
+            var win = _host?.Window;
+            if (win == null) return;
+            if (Volatile.Read(ref _generation) != epoch) return;
+            await win.Dispatcher.InvokeAsync(() =>
+            {
+                if (_host == null || Volatile.Read(ref _generation) != epoch) return;
+                var st = App.Settings?.Current;
+                bool libraryMoved = false;
+                // A transport failure taught us nothing about the sub, so no verdict is written.
+                if (st != null && probe.Error == null)
+                {
+                    st.FypOnlineSubVerdicts[clean] = new Models.RemoteSubVerdict
+                    {
+                        Ok = probe.Ok,
+                        VideoCount = probe.VideoCount,
+                        CheckedAtUtc = DateTime.UtcNow,
+                    };
+                    if (probe.Ok)
+                    {
+                        libraryMoved = st.TryAddLibrarySub(clean);
+                        if (libraryMoved)
+                            App.Logger?.Information("ArcademyHost: r/{Sub} verified ({N} videos) and kept in the library",
+                                clean, probe.VideoCount);
+                    }
+                    App.Settings?.Save();
+                }
+                PostSubProbe(reqId, clean, probe.Ok, probe.VideoCount, probe.Error);
+                if (libraryMoved) PushLibrary();
+            });
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("ArcademyHost: sub probe failed: {E}", ex.Message);
+            if (Volatile.Read(ref _generation) == epoch)
+            {
+                try { PostSubProbe(reqId, clean, false, null, "offline"); } catch { }
+            }
+        }
+        finally { lock (ProbesInFlight) ProbesInFlight.Remove(clean); }
+    }
+
+    private static void PostSubProbe(string reqId, string name, bool ok, int? videoCount, string? error)
+        => _host?.Post(new
+        {
+            type = "sub-probe",
+            reqId,
+            name,
+            ok,
+            videoCount,
+            // videoCount 0 with ok:true is a real answer - the sub exists and has stills only.
+            stillOnly = ok && videoCount.GetValueOrDefault() == 0,
+            error,
+        });
+
+    /// <summary>The X on a library pill: the entry, its verdict and its feed membership go
+    /// together (AppSettings.RemoveLibrarySub). One gesture, gone everywhere.</summary>
+    private static void OnLibraryRemove(JObject o)
+    {
+        try
+        {
+            var name = (string?)o["name"] ?? (string?)o["sub"] ?? "";
+            var s = App.Settings?.Current;
+            if (s == null || string.IsNullOrWhiteSpace(name)) { PushLibrary(); return; }
+            if (s.RemoveLibrarySub(name))
+            {
+                App.Settings?.Save();
+                // The name may have been a live channel for every consumer, not just this page.
+                FypOnlineCoordinator.ResetAllChannels();
+                App.Logger?.Information("ArcademyHost: r/{Sub} removed from the library", name.Trim());
+            }
+            PushLibrary();
+        }
+        catch (Exception ex) { App.Logger?.Warning("ArcademyHost: library remove failed: {E}", ex.Message); }
+    }
+
+    /// <summary>Push the whole library after any change. Replace, never patch: the page holds one
+    /// list and a diff protocol would be a second source of truth.</summary>
+    private static void PushLibrary()
+    {
+        try { _host?.Post(new { type = "library", subLibrary = BuildSubLibrary() }); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PushLibrary: {E}", ex.Message); }
+    }
+
+    /// <summary>The kept subs joined with their verdicts (and with whether the app-wide feed
+    /// currently uses them, which the door renders as a quiet hint, never as a gate).</summary>
+    private static object[] BuildSubLibrary()
+    {
+        var s = App.Settings?.Current;
+        if (s == null) return Array.Empty<object>();
+        var rows = s.BuildRemoteSubLibraryView();
+        var outRows = new List<object>(rows.Count);
+        foreach (var r in rows)
+            outRows.Add(new { name = r.Name, ok = r.Ok, videoCount = r.VideoCount, stillOnly = r.StillOnly, selected = r.Selected });
+        return outRows.ToArray();
     }
 
     /// <summary>True when remote media may appear anywhere in the app. Copied verbatim from
@@ -2598,6 +3323,8 @@ internal static class ArcademyHostService
             try { _host?.Post(new { type = "setting", key, value }); }
             catch (Exception ex) { App.Logger?.Debug("ArcademyHost: re-echo {Key} failed: {E}", key, ex.Message); }
         }
+        // The library is not a `setting` key, and a restored instance can carry a different one.
+        PushLibrary();
     }
 
     private static readonly string[] ProjectedProperties =
@@ -2642,6 +3369,16 @@ internal static class ArcademyHostService
                     App.Logger?.Debug("ArcademyHost: audio-only ended but a panic suspend still stands");
                 }
                 else Suspend(false, "audio-only");
+                return;
+            }
+
+            // The library is a LIST, not a projected scalar, so it rides its own message rather
+            // than the `setting` echo. Pushed on both properties: the Assets tab can add a name
+            // (library) or change what the feed uses (selection), and the page renders both.
+            if (e.PropertyName == nameof(Models.AppSettings.RemoteSubLibrary)
+                || e.PropertyName == nameof(Models.AppSettings.FypOnlineCustomSubs))
+            {
+                PushLibrary();
                 return;
             }
 
@@ -2819,6 +3556,9 @@ internal static class ArcademyHostService
             _lastPanicPressUtc = DateTime.MinValue;
             _initPosted = false;
             lock (RemoteBuffer) RemoteBuffer.Clear();
+            // The piles belong to the class that picked them; the next launch names its own.
+            lock (TaggedChannels) TaggedChannels.Clear();
+            _taggedSubsEmptyLogged = false;
             try { _host?.Dispose(); } catch { }
             _host = null;
             _exiting = false;
