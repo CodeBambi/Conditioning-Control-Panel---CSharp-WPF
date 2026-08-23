@@ -220,7 +220,7 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
             Withdraw();
             return new CapabilityState.Unavailable(new CapabilityReason(
                 EffectReasonCodes.SpiralNotDecoded,
-                $"this build could not decode the spiral at '{Path.GetFileName(spiralPath)}', so nothing was "
+                $"this build could not decode the spiral at '{PortablePath.FileName(spiralPath)}', so nothing was "
                 + "drawn — the file may be missing, corrupt, or in a format with no codec here"));
         }
 
@@ -230,7 +230,7 @@ public sealed class SpiralSurfacePresenter : ISpiralSurface, IDisposable
             Withdraw();
             return new CapabilityState.Unavailable(new CapabilityReason(
                 EffectReasonCodes.SpiralNotDecoded,
-                $"the spiral at '{Path.GetFileName(spiralPath)}' opened but produced no frame {FrameIndex}, so "
+                $"the spiral at '{PortablePath.FileName(spiralPath)}' opened but produced no frame {FrameIndex}, so "
                 + "nothing was drawn"));
         }
 

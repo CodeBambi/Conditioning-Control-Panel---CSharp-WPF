@@ -42,10 +42,17 @@ public sealed class IntakeDraftSink
     }
 
     /// <summary>Host-built filename (page/run strings never become paths raw): invalid
-    /// filename chars → '_'.</summary>
+    /// filename chars → '_'.
+    ///
+    /// <para>The set is <see cref="PortablePath.InvalidFileNameChars"/>, NOT
+    /// <c>Path.GetInvalidFileNameChars()</c>: on Linux the framework set is only NUL and
+    /// '/', so a run named <c>a/b\c</c> sank as <c>a_b\c</c> — a separator left standing
+    /// inside a filename, and a different file from the one the same run produces on
+    /// Windows. The WPF answer (<c>SessionFileService.cs:311-315</c>, the Windows invalid
+    /// set) is the answer on both platforms.</para></summary>
     public static string SanitizeFileName(string name)
     {
-        var invalid = Path.GetInvalidFileNameChars();
+        var invalid = PortablePath.InvalidFileNameChars;
         var chars = name.Trim().Select(c => invalid.Contains(c) ? '_' : c).ToArray();
         var cleaned = new string(chars);
         return string.IsNullOrWhiteSpace(cleaned) ? "intake-draft" : cleaned;

@@ -320,6 +320,16 @@ public class SpiralSurfacePresenterTests
         // The DETAIL names the file and no more. A path is media the panel must not print.
         Assert.Contains("classic.gif", refusal.Reason.Detail, StringComparison.Ordinal);
         Assert.DoesNotContain(@"C:\spirals", refusal.Reason.Detail, StringComparison.Ordinal);
+
+        // NEITHER separator, and no drive letter — the leak this rejects is not a Windows one.
+        // The first Linux run of the port failed exactly here: Path.GetFileName splits on '\'
+        // only where the OS calls it a separator, so on Linux the whole absolute path went into
+        // a sentence a user reads, drive letter and all, on a machine with no C: drive. The
+        // presenter builds the display name with PortablePath.FileName now
+        // (Effects/SpiralSurfacePresenter.cs), which gives the same answer on both platforms.
+        Assert.DoesNotContain("\\", refusal.Reason.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("/", refusal.Reason.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("C:", refusal.Reason.Detail, StringComparison.Ordinal);
     }
 
     [Fact]
