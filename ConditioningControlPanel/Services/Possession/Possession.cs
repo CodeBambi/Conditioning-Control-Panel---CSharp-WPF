@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 
 namespace ConditioningControlPanel.Services.Possession;
 
@@ -66,4 +66,27 @@ public static class Possession
 
     public static string GetName(DependencyObject element)
         => element == null ? string.Empty : (element.GetValue(NameProperty) as string) ?? string.Empty;
+
+    /// <summary>
+    /// "Never a target, whatever the auto-tagger thinks." Wave 2 walks the live visual tree and infers
+    /// a role from the control TYPE, which is exactly the right default for a room full of buttons and
+    /// exactly the wrong one for the three controls a haunted user needs to stay trustworthy: the
+    /// Emergency Exit button, the secret exit box and the lockdown badge. Those carry
+    /// <c>poss:Possession.Exclude="True"</c> and are skipped before any inference runs.
+    ///
+    /// <para>Inherits is TRUE here (unlike Role): excluding a container has to exclude what is inside
+    /// it, or a panel marked safe would still leak its own buttons into the deck.</para>
+    /// </summary>
+    public static readonly DependencyProperty ExcludeProperty =
+        DependencyProperty.RegisterAttached(
+            "Exclude",
+            typeof(bool),
+            typeof(Possession),
+            new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.Inherits));
+
+    public static void SetExclude(DependencyObject element, bool value)
+        => element?.SetValue(ExcludeProperty, value);
+
+    public static bool GetExclude(DependencyObject element)
+        => element != null && element.GetValue(ExcludeProperty) is bool b && b;
 }

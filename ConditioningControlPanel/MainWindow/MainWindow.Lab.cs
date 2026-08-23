@@ -731,6 +731,10 @@ namespace ConditioningControlPanel
                     // Swap UI panels
                     if (LockdownTab.LockdownSetupPanel != null) LockdownTab.LockdownSetupPanel.Visibility = Visibility.Collapsed;
                     if (LockdownTab.LockdownActivePanel != null) LockdownTab.LockdownActivePanel.Visibility = Visibility.Visible;
+                    LockdownTab.StartEmergencyExitPulse();
+
+                    // The badge: the exit affordance for every tab that is not this one.
+                    SetLockdownBadge(true, App.Lockdown?.Remaining ?? TimeSpan.Zero);
 
                     // Reset secret exit state
                     _lockdownTimerClickCount = 0;
@@ -747,6 +751,7 @@ namespace ConditioningControlPanel
                     PlayLockdownActivationAnimation();
 
                     HookPossessionReadout();
+                    HookLockdownRestart();
                     ShowPossessionRulesIfFirstTime();
 
                     App.Logger?.Information("Lockdown UI activated");
@@ -777,6 +782,7 @@ namespace ConditioningControlPanel
                     }
 
                     UnhookPossessionReadout();
+                    UnhookLockdownRestart();
 
                     // Restore strict lock and panic key toggles unconditionally: greying is
                     // conditional on activate, un-greying must not be, or a lockdown run with a
@@ -797,8 +803,11 @@ namespace ConditioningControlPanel
                     }
 
                     // Swap UI panels back
+                    LockdownTab.StopEmergencyExitPulse();
                     if (LockdownTab.LockdownSetupPanel != null) LockdownTab.LockdownSetupPanel.Visibility = Visibility.Visible;
                     if (LockdownTab.LockdownActivePanel != null) LockdownTab.LockdownActivePanel.Visibility = Visibility.Collapsed;
+
+                    SetLockdownBadge(false, TimeSpan.Zero);
 
                     // Hide secret exit
                     if (LockdownTab.TxtLockdownExit != null)
@@ -821,13 +830,53 @@ namespace ConditioningControlPanel
             Dispatcher.BeginInvoke(() =>
             {
                 if (LockdownTab.TxtLockdownTimer != null)
-                {
-                    if (remaining.TotalHours >= 1)
-                        LockdownTab.TxtLockdownTimer.Text = remaining.ToString(@"h\:mm\:ss");
-                    else
-                        LockdownTab.TxtLockdownTimer.Text = remaining.ToString(@"mm\:ss");
-                }
+                    LockdownTab.TxtLockdownTimer.Text = FormatLockdownClock(remaining);
+                if (TxtLockdownBadgeTime != null)
+                    TxtLockdownBadgeTime.Text = FormatLockdownClock(remaining);
             });
+        }
+
+        private static string FormatLockdownClock(TimeSpan remaining) =>
+            remaining.TotalHours >= 1 ? remaining.ToString(@"h\:mm\:ss") : remaining.ToString(@"mm\:ss");
+
+        // --- The lockdown badge -------------------------------------------------------
+        // A crimson pill in the title bar's status row. It exists because the Lockdown page is the
+        // only place the timer and the Emergency Exit live, and a haunted user on the Assets tab
+        // should not have to remember which door leads back. One click, every tab, always the same
+        // destination.
+
+        /// <summary>Shows or hides the badge and seeds its clock.</summary>
+        private void SetLockdownBadge(bool active, TimeSpan remaining)
+        {
+            try
+            {
+                if (LockdownBadge != null)
+                    LockdownBadge.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+                if (active && TxtLockdownBadgeTime != null)
+                    TxtLockdownBadgeTime.Text = FormatLockdownClock(remaining);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: badge visibility failed");
+            }
+        }
+
+        /// <summary>
+        /// The badge is a signpost, not a button that ends anything: it navigates to the Lockdown
+        /// page, where the huge Emergency Exit and the secret phrase both live. Nothing here can
+        /// end a lockdown, which is what lets it sit one pixel from the window's close button.
+        /// </summary>
+        private void LockdownBadge_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            try
+            {
+                e.Handled = true;
+                ShowTab("lockdown");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: badge navigation failed");
+            }
         }
 
         internal void TxtLockdownTimer_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -887,6 +936,16 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Drop any stale subscription FIRST. This used to be a call to
+                // UnhookPossessionReadout() placed after the paint below, which is what made the
+                // readout invisible for the whole of every lockdown: Unhook does not only
+                // unsubscribe, it also blanks the text and collapses both controls, so the row was
+                // painted and then immediately hidden again on the very same pass. Nothing ever
+                // put it back, because UpdatePossessionReadout only wrote Text and pip colours.
+                // Splitting the unsubscribe out is the fix; the defensive un-collapse in
+                // UpdatePossessionReadout is the belt to its braces.
+                DetachPossessionRungHandler();
+
                 var on = App.Settings?.Current?.LockdownPossessionEnabled == true;
 
                 if (LockdownTab.TxtPossessionRung != null)
@@ -902,7 +961,6 @@ namespace ConditioningControlPanel
 
                 if (App.Possession == null) return;
 
-                UnhookPossessionReadout();
                 _possessionRungHandler = rung => Dispatcher.BeginInvoke(() => UpdatePossessionReadout(rung));
                 App.Possession.RungChanged += _possessionRungHandler;
             }
@@ -912,13 +970,27 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void UnhookPossessionReadout()
+        /// <summary>Unsubscribe only. Never touches the visuals - see the note in
+        /// HookPossessionReadout for what happens when those two jobs share one method.</summary>
+        private void DetachPossessionRungHandler()
         {
             try
             {
                 if (_possessionRungHandler != null && App.Possession != null)
                     App.Possession.RungChanged -= _possessionRungHandler;
                 _possessionRungHandler = null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Possession: failed to detach the rung handler");
+            }
+        }
+
+        private void UnhookPossessionReadout()
+        {
+            try
+            {
+                DetachPossessionRungHandler();
 
                 if (LockdownTab.TxtPossessionRung != null)
                 {
@@ -945,8 +1017,15 @@ namespace ConditioningControlPanel
                 var index = (int)rung;
 
                 if (LockdownTab.TxtPossessionRung != null)
+                {
                     LockdownTab.TxtPossessionRung.Text =
                         Loc.GetF("lockdown_poss_readout_fmt", Loc.Get("lockdown_poss_rung_" + index));
+                    // Paint implies show. A rung change that lands on a collapsed row is the exact
+                    // shape of the bug this readout shipped with, and it costs nothing to refuse it.
+                    LockdownTab.TxtPossessionRung.Visibility = Visibility.Visible;
+                }
+                if (LockdownTab.PossessionPips != null)
+                    LockdownTab.PossessionPips.Visibility = Visibility.Visible;
 
                 if (LockdownTab.PossessionPips == null) return;
                 for (int i = 0; i < LockdownTab.PossessionPips.Children.Count; i++)
@@ -958,6 +1037,112 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Possession: failed to paint the rung readout");
+            }
+        }
+
+        // --- Timer restart (Emergency Exit "sendback") --------------------------------
+        // RestartTimer rewinds the clock to its FULL duration without ending the lockdown, so every
+        // readout that caches a number has to be told. CountdownTick would repaint the digits within
+        // a second on its own; the point of doing it here is that the second in between must not
+        // show the OLD remaining time next to a room that has just reset itself to Settle.
+
+        /// <summary>Same delegate-identity discipline as the rung handler.</summary>
+        private Action<string>? _lockdownRestartHandler;
+
+        private void HookLockdownRestart()
+        {
+            try
+            {
+                UnhookLockdownRestart();
+                if (App.Lockdown == null) return;
+
+                _lockdownRestartHandler = reason => Dispatcher.BeginInvoke(() => OnLockdownTimerRestarted(reason));
+                App.Lockdown.TimerRestarted += _lockdownRestartHandler;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: failed to hook TimerRestarted");
+            }
+        }
+
+        private void UnhookLockdownRestart()
+        {
+            try
+            {
+                if (_lockdownRestartHandler != null && App.Lockdown != null)
+                    App.Lockdown.TimerRestarted -= _lockdownRestartHandler;
+                _lockdownRestartHandler = null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: failed to unhook TimerRestarted");
+            }
+        }
+
+        /// <summary>
+        /// The clock went back to full and the director dropped its rung to Settle. Repaint both,
+        /// plus the badge, so the page and the title bar agree with the room in the same frame.
+        /// </summary>
+        private void OnLockdownTimerRestarted(string reason)
+        {
+            try
+            {
+                var remaining = App.Lockdown?.Remaining ?? TimeSpan.Zero;
+
+                if (LockdownTab.TxtLockdownTimer != null)
+                    LockdownTab.TxtLockdownTimer.Text = FormatLockdownClock(remaining);
+                if (TxtLockdownBadgeTime != null)
+                    TxtLockdownBadgeTime.Text = FormatLockdownClock(remaining);
+
+                if (App.Settings?.Current?.LockdownPossessionEnabled == true)
+                    UpdatePossessionReadout(PossessionRung.Settle);
+
+                App.Logger?.Information("Lockdown: timer restarted ({Reason}) - readout reset to Settle", reason);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: failed to repaint after a timer restart");
+            }
+        }
+
+        /// <summary>
+        /// PREVIEW ONLY (Services/Dev/PossessionPreview.cs). Dresses the Lockdown card and the title
+        /// bar exactly as a running lockdown would, so the huge Emergency Exit button, the rung
+        /// readout and the badge can be photographed - WITHOUT touching LockdownService. No keyboard
+        /// hook, no safeties, no timer: the numbers are props and every call is reversible.
+        /// </summary>
+        internal void PreviewShowLockdownActivePanel(bool on)
+        {
+            try
+            {
+                if (LockdownTab.LockdownSetupPanel != null)
+                    LockdownTab.LockdownSetupPanel.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+                if (LockdownTab.LockdownActivePanel != null)
+                    LockdownTab.LockdownActivePanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+
+                if (on)
+                {
+                    if (LockdownTab.TxtLockdownTimer != null) LockdownTab.TxtLockdownTimer.Text = "09:41";
+                    LockdownTab.StartEmergencyExitPulse();
+
+                    if (LockdownTab.TxtPossessionRung != null)
+                        LockdownTab.TxtPossessionRung.Visibility = Visibility.Visible;
+                    if (LockdownTab.PossessionPips != null)
+                        LockdownTab.PossessionPips.Visibility = Visibility.Visible;
+                    UpdatePossessionReadout(PossessionRung.Melt);
+
+                    SetLockdownBadge(true, TimeSpan.FromSeconds(581));
+                }
+                else
+                {
+                    LockdownTab.StopEmergencyExitPulse();
+                    UnhookPossessionReadout();
+                    SetLockdownBadge(false, TimeSpan.Zero);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "PossessionPreview: could not dress the lockdown active panel");
             }
         }
 

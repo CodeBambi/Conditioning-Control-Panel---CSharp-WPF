@@ -47,16 +47,129 @@ Anything that fails the one-second test in play-test gets cut or gets a bark.
 
 | Rung | Name      | Window   | Feel                                            | Cadence (Eerie) |
 |------|-----------|----------|-------------------------------------------------|-----------------|
-| R0   | Settle    | 0-10%    | deniable in WHAT, never in WHO: 1-px nudges, one glyph typo for 2 s, a toggle that takes a beat to respond, cursor ring flickers once | ~60-90 s |
-| R1   | Drift     | 10-35%   | Start/Stop buttons swap, the X dodges the cursor, labels drift a few px, a letter slips | ~30-45 s |
-| R2   | Melt      | 35-60%   | cards sag/melt on hover, toggles crumble to ash when clicked (and re-form), timer digits wobble (value stays TRUE) | ~20-30 s |
-| R3   | Collapse  | 60-85%   | letters fall out of titles to the rubble floor, a card falls off its column, window-edge pulses, warden knocks things over | ~12-20 s |
-| R4   | It knows  | 85-100%  | (Full Doki only) title bar retitles in-character, empty tube, themed fake "crash"/"deletion" dialog, the room stares back | ~8-15 s |
+| R0   | Settle    | 0-10%    | deniable in WHAT, never in WHO: 3-4 px nudges with an overshoot, one glyph typo held 4 s, a card breathing 3 %, a toggle that takes a beat to respond | 20-30 s |
+| R1   | Drift     | 10-35%   | Start/Stop buttons swap, the X dodges the cursor, labels drift 6-8 px, a letter slips | 12-18 s |
+| R2   | Melt      | 35-60%   | cards sag/melt on hover, toggles crumble to ash when clicked (and re-form), timer digits wobble (value stays TRUE), SCENES begin | 8-12 s |
+| R3   | Collapse  | 60-85%   | letters fall out of titles to the rubble floor, a card falls off its column, window-edge pulses, warden knocks things over | 5-8 s |
+| R4   | It knows  | 85-100%  | (Full Doki only) title bar retitles in-character, empty tube, themed fake "crash"/"deletion" dialog, the room stares back | 4-6 s |
 
-Caps: Gentle never passes R2 and halves cadence; Eerie caps at R3; Full Doki reaches R4.
-Concurrency: max live ghosts 1 (R0-R1), 2 (R2), 3 (R3+). Per-target cooldown 90 s. Never possess
-the same target twice in a row. The rung change itself gets an `EdgePulse` + `PossessionRungChanged`
-bark (1 per rung, no repeat).
+Caps: Gentle never passes R2 and doubles the cadence; Eerie caps at R3; Full Doki reaches R4 and takes
+0.8x. First haunt: no sooner than **20 s** after activation (`PossessionDeck.FirstWait`).
+Concurrency: max live ghosts **2** (R0-R1), **3** (R2), **4** (R3+); a scene counts as its beat count.
+Per-target cooldown **45 s**. Never possess the same target twice in a row. The rung change itself gets
+an `EdgePulse` + `PossessionRungChanged` bark (1 per rung, no repeat).
+
+> These numbers are wave 2 (2026-08-23). Wave 1 shipped 60-90 / 30-45 / 20-30 / 12-20 / 8-15 with a
+> 45 s first wait, 90 s cooldown and MaxLive 1/1/2/3/3, and the owner's first live 10-minute Eerie run
+> produced **two named effects in nine minutes**. Density is not a polish item here: below some rate the
+> feature reads as an intermittent bug rather than as a room. `PossessionDeckTests` pins every row.
+
+## The target registry (auto-tag)
+
+`MainWindow.Possession.cs` walks the live visual tree and INFERS a role from the control type. Hand
+tags (`poss:Possession.Role` / `poss:Possession.Name`) always win; `poss:Possession.Exclude="True"`
+takes an element and its whole subtree out of the deck (it Inherits, unlike Role).
+
+| Type | Role | Note |
+|---|---|---|
+| `ToggleButton` / `CheckBox` / `RadioButton` / switch-styled toggles | Toggle | checked BEFORE ButtonBase - they are ButtonBase too |
+| `ButtonBase` (incl. the custom title-bar close / minimize / maximize) | Button | the X may dodge, it must stay clickable where it lands |
+| `Slider` | Slider | |
+| `ComboBox` | Combo | |
+| `TextBox` / `PasswordBox` | TextBox | never `TxtLockdownExit` |
+| `ScrollViewer` with `ScrollableHeight > 0` | Scroll | |
+| `ProgressBar` | Progress | |
+| `Image` >= 48 px | Image | |
+| `TextBlock` with `FontSize >= 18` | Title | |
+| other `TextBlock` with 3-40 chars | Label | capped to the 24 nearest the cursor |
+| `Border`: CornerRadius > 0, non-null Background, >= 60x60, contains an interactive control, contains no other qualifying card | Card | innermost card wins |
+
+**The leaf rule** is what keeps this cheap and correct: once an element resolves to an interactive
+role we do not descend into it. WPF's visual tree walks straight through control TEMPLATES, so
+without it a ScrollBar contributes two RepeatButtons and a Thumb, a ComboBox its toggle button, and
+every button its caption TextBlock. Cards and ScrollViewers are the exceptions (we need their
+contents). Filters: `IsVisible`, `IsEnabled`, `IsHitTestVisible`, >= 8x8 **in window pixels** (the UI
+lives in a Viewbox over a 1585x901 design canvas, so `ActualWidth` is design units), and on-screen.
+
+Never enrolled, subtree and all: `Possession.Exclude`, the GhostLayer / RubbleFloor, and the names
+`TxtLockdownTimer`, `TxtLockdownExit`, `BtnEmergencyExit`, `EERoot`, `LockdownGate`,
+`TxtPossessionRung`, `PossessionPips`. Other windows (avatar tube, playback, content) are separate
+visual trees and are unreachable from this walk by construction; popups likewise.
+
+Names: `Possession.Name` -> string `Content` -> `ToolTip` string -> `AutomationProperties.Name` ->
+"that button". Keys: `x:Name` when there is one, else role + a stable hash of the visual path.
+
+Caching: rebuilt lazily, at most once per 750 ms, invalidated by a throttled `LayoutUpdated` (which
+covers tab switches, expanding cards and filling lists without this file knowing about any view) and
+force-refreshed after 10 s. The walk time is logged at Debug and is typically well under 5 ms.
+
+## PossessionPointer
+
+`Services/Possession/PossessionPointer.cs` is a static fed from the window's `PreviewMouseMove` /
+`PreviewMouseDown` (attached from `MainWindow.Possession.cs`): `Position`, smoothed `Velocity`,
+`Hovered`, `LastClicked` / `LastClickAt`, plus `Pressed` / `HoverChanged` events. It is a plain static
+rather than a service because it is written dozens of times a second and read inside the pick.
+Everything on it is a HINT - a stale reading only costs one slightly-off victim.
+
+**Proximity (A5):** half the picks (`PossessionDeck.ShouldUseProximity`) restrict the candidate victims
+to those within `ProximityRadius` (160 px) of the cursor, and fall back to the full pool when fewer
+than two qualify or nothing there may run. Targetless effects sit out proximity rounds - a title typo
+has no coordinates to be near.
+
+## Scenes (R2+)
+
+`Services/Possession/Scenes/` - `IPossessionScene` is 3-5 BEATS across several controls over 4-8 s.
+An effect is a word; a scene is a sentence, and from Melt upwards the room is supposed to feel
+authored. Every beat speaks the same grammar (charge -> possess -> move -> undo) and the warden names
+the scene ONCE at the top, so the whole choreography is attributed as one act.
+
+| Scene | What happens |
+|---|---|
+| `scene_rail_sweep` | the ember charge walks the nav doors left to right; each door it touches sags and loses a letter; edge pulse at the end |
+| `scene_where_you_are` | the card nearest the pointer breathes twice, then the breath does not come back: it sags, leans and settles wrong |
+| `scene_the_count` | the version tag and level readout drift apart in opposite directions, then the heading above them mis-spells itself |
+
+From R2 one pick in three is a scene. It is handed to the director through `PossessionSceneEffect`, an
+`IPossessionEffect` adapter, so scenes inherit the existing cancellation, live-ghost ledger, cooldowns,
+reassembly exit and crash-safe `UndoAll` rather than growing a second lifecycle. A scene counts as its
+`Beats` against the concurrency cap, and claims victims through a director-supplied booking callback
+(so they get their cooldown like any other victim when the scene ends).
+
+`WhereYouAreScene` deliberately does NOT borrow `MeltEffect`: melt is hover-driven (it arms a
+MouseEnter handler and only bites when the pointer arrives), so inside a scene it would mostly do
+nothing, and reusing the catalog's shared instance would fight the director's `IsLive` bookkeeping.
+
+## Event-driven ghosts (B15)
+
+`PossessionEvents.cs`, subscribed on `AttachHost` and dropped on `DetachHost`. The cadence ladder is a
+metronome that fires whether or not anyone is in the room; this closes the loop so the haunt answers
+what the user DOES.
+
+| The user... | ...the room answers | From |
+|---|---|---|
+| presses a card | that card breathes | R0 |
+| changes a setting | the Label nearest the cursor mis-types itself | R1 |
+| hovers a Start / Stop button | it dodges | R1 |
+| clicks a nav door | a letter drops out of it | R3 |
+
+Everything routes through `PossessionDirector.RequestReactive(effectId, target, minRung)`, which
+applies a **6 s** floor between reactive ghosts, the concurrency cap, the rung gate, the intensity and
+photosafe gates and the per-target cooldown. Callers never check anything. The Possession settings
+themselves are exempt from the SettingChanged reaction: answering "the user just turned the haunt
+down" by haunting them is the one joke that reads as the app ignoring consent.
+
+## Timer restart (Emergency Exit sent them back)
+
+`LockdownService.TimerRestarted` (see `EMERGENCY_EXIT.md`, verdict `sendback`) rewinds the clock to its
+FULL duration. The director drops `CurrentRung` back to whatever the new elapsed fraction says (Settle),
+clears `_barkedRungs` so every rung can announce itself again, undoes every live ghost over about a
+second (the reassembly path, but quick - this is a reset, not a curtain call), pulses the edge at 0.6,
+and sets `_nextDue` to a full `FirstDelay` so there is a silence to notice before it all starts again.
+
+**Open wiring:** the bark trigger `PossessionBarkTriggers.TimerRestarted` exists but its BarkService
+wrapper does not. The director probes for `NotifyPossessionTimerRestarted(string reason, int restart)`
+once and logs a Warning when it is absent; adding that wrapper is all it takes to make the moment
+speak. Replace the probe with a direct call when it lands.
 
 ## Tripwires (escape attempts)
 
@@ -144,7 +257,10 @@ Hard rules for every file:
   exit box, the premium gate, the warning dialog, anything inside playback/content windows, the
   avatar tube's own chrome, the title bar's real close/minimize buttons' HIT-TESTING (the X may
   dodge, it must stay clickable where it lands).
-- Never start an effect while `IPossessionHost.IsUsable` is false; live effects may finish.
+- Never start an effect while `IPossessionHost.IsUsable` is false; live effects may finish. A playing
+  video is NOT a reason to stop (wave 2, A3): a lockdown run is mostly video, so the old pause meant
+  the haunt spent most of its life asleep. What still stops it: minimized / not loaded, a content
+  window that has taken the screen (DTRH, Loom, Arcademy), and an open Lock Card.
 - Everything dispatcher-safe (`Application.Current?.Dispatcher`), wrapped in try/catch, logs via
   `App.Logger` at Debug for routine picks and Warning for failures. A failing effect undoes itself.
 - Photosafe + `SystemParameters.ClientAreaAnimation == false` = no flicker effects, static charge.
@@ -177,6 +293,10 @@ Lockdown card, which is HIDDEN while a lockdown runs; the haunt paused whenever 
 2 big effects named in 9 minutes; every warden bark after the first was muted by the global bark
 gap (fixed in 3a0eaaddc). Owner-approved wave (picker 2026-08-23), per-owner file ownership:
 
+Foundation rows (A1, A2, A3, A5, A6, A7, B15, timer restart) landed 2026-08-23; the ladder table,
+target registry, PossessionPointer, Scenes, event-driven ghosts and timer-restart sections above are
+the shipped behaviour, not the plan.
+
 | Item | Owner | Files |
 |---|---|---|
 | A1 auto-tag the visible window by control type (Button/Toggle/CheckBox/Slider/Combo/card Border/door/title-bar X+min/ScrollViewer/ProgressBar/TextBox), names from Content/ToolTip/AutomationId; the hand tags stay as overrides | Opus FOUNDATION | `MainWindow/MainWindow.Possession.cs`, `Services/Possession/Possession.cs` |
@@ -197,3 +317,65 @@ REJECTED by owner: B6 name drop (sensitive userbase - never use the Windows user
 
 Rules that do not move: ember only for Possession; Undo restores EXACTLY; never the timer VALUE, the
 secret exit box, the Emergency Exit button's hit-testing, the premium gate, content windows.
+
+### Companion wave (B12, B13, C2, C3, C4) - shipped
+
+The four things the COMPANION owns in wave 2. Everything here obeys the rules above; what follows is
+only what a reader cannot infer from them.
+
+**B12 chat knows** - `Services/Companion/Brain/PromptAssembler.cs`. While `App.Lockdown.IsActive`, the
+chat and reaction prompts carry one line: minutes left, rung, intensity, how many escape attempts, and
+the warden brief (tease them about wanting out, stay in the mod voice, never reveal or hint at the
+secret exit phrase, never promise to end it, keep it short). It goes in the DYNAMIC TAIL, right after
+the anti-fixation exclusion set - never in the stable prefix, which is cached until a mod switch and
+would keep briefing her as the warden an hour after the lockdown ended. `AiPurpose.Chat` and
+`Reaction` only: `Memory` writes durable facts and `Summary` writes prose about the conversation, and
+a "you are the warden" instruction in either would be recorded as something the USER believes.
+Injectable as a ctor `Func<string?>` for tests. Escape count comes from `PossessionRemember`, which
+counts `EscapeAttempted.Total` (LockdownService keeps its own total private).
+
+**B13 audio tics** - `Services/Possession/PossessionAudio.cs`, gated by the new
+`AppSettings.LockdownAudioTics` (bool, default true). Two synthesized cues, rendered once into
+`%LOCALAPPDATA%/ConditioningControlPanel/possession/` and played through `AudioService.PlayOneShot`
+like any bubble pop, so device selection, the one-shot cap, the endpoint circuit breaker and disposal
+are unchanged. A ~50 ms ember tick at -18 dBFS on every BIG effect (`EffectStarted`, throttled 1 per
+1.5 s); a 300 ms dip at a rung change and at tripwire repeat >= 3 (throttled 1 per 5 s). The dip is
+`AudioService.Duck(60)` for 300 ms under an 80 Hz stinger, NOT a pitch wobble: there is no shared
+master graph to wobble (one `WaveOutEvent` per clip, and `LayeredAudioService`'s mixer has no
+pitch/varispeed stage), so a -2 semitone dip would mean re-plumbing every audio path for a 300 ms
+effect. Deliberately NOT gated on `LockdownPhotosafe` - photosafe is a visual accommodation. The
+service subscribes to the director only while a lockdown runs; the setting is re-read at PLAY time so
+flipping it mid-lockdown takes effect at once.
+
+**C2 it remembers** - `Services/Possession/PossessionRemember.cs` +
+`AppSettings.LockdownPossessionRememberPending` (bool, default false). Set when a lockdown ends and the
+intensity WAS Full Doki (read at deactivate time, not next launch). About 20 s after the main window is
+up on the next launch, the Lockdown door takes one ember charge (its own `EmberAttribution` over
+MainWindow-as-host; the director never exposes its own) and the companion says one line, bark trigger
+`PossessionRemember`. Nothing moves, no effect starts, and it is skipped if a lockdown is running or
+there is no tube. The flag is cleared the instant the service reads it, before anything is scheduled,
+so a crash can never leave it charging every launch.
+
+**C3 glitchportrait** - `Effects/GlitchPortraitEffect.cs`, registered in
+`Effects/PossessionEffectCatalog.WaveC.cs` at weight 2. R4, Full Doki, `UsesFlicker` true (so photosafe
+skips it; there is no still variant, because a static torn portrait is a rendering bug rather than a
+glitch), `IsBig` false, no charge ripple (the victim is in another window, so the ember tint ON the torn
+bands is the attribution). `AvatarTubeWindow.GlitchPortrait(ms)` draws three clipped, offset copies of
+the current portrait into `PossessionGlitchLayer`, a sibling of the avatar images inside
+`AvatarBounceHost` - same layout slot, so a copy lines up without measuring anything. The real emote /
+pose / crossfade pipeline is never written to.
+
+**C4 retitle at R3 + the note** - `RetitleEffect.MinRung` is now `Collapse`, not `ItKnows` (still Full
+Doki via MinIntensity). At R4 the loudest thing the mode owns did not exist until the last 15 % of the
+timer, which on a one-hour lockdown meant minute 51. `Warden.LeaveAsync` now leaves a small crimson
+note card in the empty tube (`AvatarTubeWindow.ShowPossessionNote`, three variants, loc keys
+`possession_tube_note_1..3`); `ReturnAsync` clears it unconditionally and first, so reassembly during
+app shutdown cannot leave one behind. Crimson, not ember: ember is the verb, and a note is the opposite
+of something happening.
+
+Verified: full `--possession-preview` pass, 24 effects, undo-exactness failures 0, retitle confirmed
+firing at Collapse. The synthesized buffers are checked standalone (length, bounded, finite, peak at
+the intended dBFS, non-silent, zero at both boundaries, decaying, deterministic, valid RIFF header).
+Note for whoever touches the rig next: `PossessionPreview.Order` is a hand-written id list, so
+`glitchportrait` will not appear in a report until it is added there - and it needs a tube, which the
+rig does not photograph.

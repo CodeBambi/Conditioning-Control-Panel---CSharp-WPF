@@ -168,4 +168,5 @@ public static class PossessionBarkTriggers
     public const string Warden = "PossessionWarden";             // ctx: verb (knock|stare|leave|return)
     public const string Rules = "PossessionRules";               // first-run: the warden states the rules
     public const string TimerRestarted = "PossessionTimerRestarted"; // ctx: reason, restart (count) - Emergency Exit sent them back in
+    public const string Remember = "PossessionRemember";             // next launch after a Full Doki lockdown: "I remember."
 }

@@ -3,6 +3,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -210,6 +213,118 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.TxtLockdownTimer_Click(sender, e);
+        }
+
+        // ==== Emergency Exit =============================================================
+        // The huge button's own motion. Deliberately NOT routed through Possession: this is the
+        // one control on the page that must behave exactly the same every second of a lockdown,
+        // so its animations live here, on the view, and answer only to the photosafe setting.
+
+        private Storyboard? _eePulse;
+
+        /// <summary>
+        /// Starts the slow ember breath under the slab. Called when the active panel is shown
+        /// (MainWindow.Lab.cs). Silent no-op under LockdownPhotosafe, where the glow simply
+        /// holds at its resting value - POSSESSION.md: photosafe means no flicker, not no colour.
+        /// </summary>
+        internal void StartEmergencyExitPulse()
+        {
+            try
+            {
+                StopEmergencyExitPulse();
+                if (EEGlow == null) return;
+                if (App.Settings?.Current?.LockdownPhotosafe == true) return;
+                if (!SystemParameters.ClientAreaAnimation) return;
+
+                var opacity = new DoubleAnimation(0.26, 0.62, new Duration(TimeSpan.FromMilliseconds(1500)))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                };
+                var blur = new DoubleAnimation(24, 42, new Duration(TimeSpan.FromMilliseconds(1500)))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                };
+
+                _eePulse = new Storyboard();
+                Storyboard.SetTarget(opacity, EEGlow);
+                Storyboard.SetTargetProperty(opacity, new PropertyPath(DropShadowEffect.OpacityProperty));
+                Storyboard.SetTarget(blur, EEGlow);
+                Storyboard.SetTargetProperty(blur, new PropertyPath(DropShadowEffect.BlurRadiusProperty));
+                _eePulse.Children.Add(opacity);
+                _eePulse.Children.Add(blur);
+                _eePulse.Begin();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EmergencyExit: idle pulse failed to start");
+            }
+        }
+
+        /// <summary>Stops the breath and puts the glow back where the XAML left it.</summary>
+        internal void StopEmergencyExitPulse()
+        {
+            try
+            {
+                _eePulse?.Stop();
+                _eePulse = null;
+                if (EEGlow == null) return;
+                // BeginAnimation(null) hands the property back to its local value; Stop() alone
+                // leaves the storyboard's hold in place on some paths.
+                EEGlow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+                EEGlow.BeginAnimation(DropShadowEffect.BlurRadiusProperty, null);
+                EEGlow.Opacity = 0.32;
+                EEGlow.BlurRadius = 28;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EmergencyExit: idle pulse failed to stop");
+            }
+        }
+
+        private void BtnEmergencyExit_Down(object sender, MouseButtonEventArgs e) => PressEmergencyExit(true);
+
+        private void BtnEmergencyExit_Up(object sender, MouseEventArgs e) => PressEmergencyExit(false);
+
+        /// <summary>The slab sinks under the finger and comes back. 60 ms down, 140 ms up.</summary>
+        private void PressEmergencyExit(bool down)
+        {
+            try
+            {
+                if (EEScale == null) return;
+                var to = down ? 0.965 : 1.0;
+                var dur = new Duration(TimeSpan.FromMilliseconds(down ? 60 : 140));
+                var anim = new DoubleAnimation(to, dur)
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = down ? EasingMode.EaseOut : EasingMode.EaseInOut },
+                };
+                EEScale.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+                EEScale.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EmergencyExit: press animation failed");
+            }
+        }
+
+        /// <summary>
+        /// Opens the Emergency Exit games. The host owns everything after this line - the
+        /// tripwire, the game pick, the verdict and whether the lockdown actually ends
+        /// (Services/EmergencyExit/EMERGENCY_EXIT.md).
+        /// </summary>
+        private void BtnEmergencyExit_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.EmergencyExit.EmergencyExitHostService.Open();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "EmergencyExit: could not open the exit games");
+            }
         }
     }
 }

@@ -8,9 +8,21 @@ using System.Windows.Media;
 namespace ConditioningControlPanel.Services.Possession.Effects;
 
 /// <summary>
-/// R1 "swap" - two buttons that live in the same panel glide into each other's seats and STAY there,
-/// clickable where they land. The glide is deliberately slow (550 ms, cubic) so nobody can mistake it
-/// for a layout pass: you watch Start walk over to where Stop was.
+/// R1 "swap" - two buttons glide into each other's seats and STAY there, clickable where they land.
+/// The glide is deliberately slow (550 ms, cubic) so nobody can mistake it for a layout pass: you
+/// watch Start walk over to where Stop was.
+///
+/// <para><b>Wave 2 - who is a fair partner.</b> The old rule was "same Parent", which in a window
+/// built out of cards, rails and templated rows almost never matched: the two buttons a user sees
+/// side by side usually live in different panels. The rule is now what the EYE uses instead - close
+/// together (centres within ~220 px) and about the same size (each dimension inside a 1.6 ratio) - so
+/// a swap looks like two neighbours trading places rather than a button teleporting across the room.
+/// A Start/Stop pair is preferred over every other candidate, because that is the swap that costs
+/// something: the one where muscle memory presses the wrong one.</para>
+///
+/// <para>The window chrome is still excluded here (unlike dodge). A dodging X is friction you can see
+/// and beat; an X sitting in the minimize slot means the button under your cursor quietly does
+/// something else, which is the one thing POSSESSION.md never allows.</para>
 /// </summary>
 public sealed class SwapEffect : PossessionEffectBase
 {
@@ -35,7 +47,9 @@ public sealed class SwapEffect : PossessionEffectBase
     protected override bool ChargeOnApply => false;
 
     protected override bool CanApplyCore(PossessionContext ctx, PossessionTarget? target)
-        => target != null && FindPartner(ctx, target) != null;
+        => target != null
+           && !PossessionVisual.IsWindowChrome(target.Element)
+           && FindPartner(ctx, target) != null;
 
     protected override async Task ApplyCoreAsync(PossessionContext ctx, PossessionTarget? target, CancellationToken ct)
     {
@@ -119,20 +133,30 @@ public sealed class SwapEffect : PossessionEffectBase
         catch (Exception ex) { App.Logger?.Warning("Possession swap partner charge failed: {Error}", ex.Message); }
     }
 
-    /// <summary>A visible, idle sibling button under the same panel. Nothing else is a fair swap.</summary>
+    /// <summary>How far apart two buttons may be and still read as neighbours trading places.</summary>
+    private const double MaxPairDistance = 220;
+
+    /// <summary>How different two buttons may look and still read as a swap rather than a resize.</summary>
+    private const double MaxSizeRatio = 1.6;
+
+    /// <summary>
+    /// A visible, idle button close to this one and roughly its size. A Start/Stop pair wins over any
+    /// other candidate; after that, the nearest one does.
+    /// </summary>
     private static PossessionTarget? FindPartner(PossessionContext ctx, PossessionTarget target)
     {
         try
         {
             var el = target.Element;
             if (el == null) return null;
-            var parent = el.Parent;
-            if (parent == null) return null;
 
             var origin = PossessionVisual.BoundsOf(ctx.Host, el);
-            if (origin.IsEmpty) return null;
+            if (origin.IsEmpty || origin.Width <= 0 || origin.Height <= 0) return null;
+            var originCentre = new Point(origin.X + origin.Width / 2, origin.Y + origin.Height / 2);
+            bool originIsStartStop = LooksStartStop(el);
+
             PossessionTarget? best = null;
-            double bestDist = double.MaxValue;
+            double bestScore = double.MaxValue;
 
             foreach (var t in ctx.Host.Targets)
             {
@@ -142,17 +166,82 @@ public sealed class SwapEffect : PossessionEffectBase
                 var other = t.Element;
                 if (other == null || ReferenceEquals(other, el)) continue;
                 if (!other.IsVisible || other.ActualWidth <= 0 || other.ActualHeight <= 0) continue;
-                if (!ReferenceEquals(other.Parent, parent)) continue;
                 if (PossessionVisual.IsWindowChrome(other)) continue;
                 if (TransformLease.IsLeased(other)) continue;
 
                 var p = PossessionVisual.BoundsOf(ctx.Host, other);
-                if (p.IsEmpty) continue;
-                double d = Math.Abs(p.X - origin.X) + Math.Abs(p.Y - origin.Y);
-                if (d < 4) continue;              // stacked on top of each other: no visible swap
-                if (d < bestDist) { bestDist = d; best = t; }
+                if (p.IsEmpty || p.Width <= 0 || p.Height <= 0) continue;
+
+                var centre = new Point(p.X + p.Width / 2, p.Y + p.Height / 2);
+                double d = (centre - originCentre).Length;
+                if (d < 8) continue;                    // stacked on top of each other: no visible swap
+                if (d > MaxPairDistance) continue;
+                if (Ratio(origin.Width, p.Width) > MaxSizeRatio) continue;
+                if (Ratio(origin.Height, p.Height) > MaxSizeRatio) continue;
+
+                // Distance is the score; a Start/Stop pair simply beats everything in range.
+                double score = d;
+                if (originIsStartStop && LooksStartStop(other)) score -= 10000;
+
+                if (score < bestScore) { bestScore = score; best = t; }
             }
             return best;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// "Is this the Start or the Stop button." What it SAYS first (including the localized words, via
+    /// RelabelEffect), then what it is CALLED - an icon-only transport button has no text at all, but
+    /// its x:Name or AutomationId almost always carries start / stop.
+    /// </summary>
+    private static bool LooksStartStop(FrameworkElement? el)
+    {
+        try
+        {
+            if (el == null) return false;
+            if (RelabelEffect.IsStartOrStop(LabelOf(el))) return true;
+
+            var names = new[]
+            {
+                el.Name,
+                System.Windows.Automation.AutomationProperties.GetAutomationId(el),
+                System.Windows.Automation.AutomationProperties.GetName(el),
+            };
+            foreach (var n in names)
+            {
+                if (string.IsNullOrWhiteSpace(n)) continue;
+                if (n.IndexOf("start", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (n.IndexOf("stop", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    private static double Ratio(double a, double b)
+    {
+        if (a <= 0 || b <= 0) return double.MaxValue;
+        return a > b ? a / b : b / a;
+    }
+
+    /// <summary>What the button says: its string Content first, then whatever text it renders, then
+    /// the accessibility name a templated icon button carries instead.</summary>
+    private static string? LabelOf(FrameworkElement? el)
+    {
+        try
+        {
+            if (el == null) return null;
+            var content = RewriteEffect.StringContentOf(el);
+            if (!string.IsNullOrWhiteSpace(content)) return content;
+
+            var tb = PossessionVisual.FindTextBlock(el);
+            if (tb != null && !string.IsNullOrWhiteSpace(tb.Text)) return tb.Text;
+
+            var automation = System.Windows.Automation.AutomationProperties.GetName(el);
+            if (!string.IsNullOrWhiteSpace(automation)) return automation;
+
+            return string.IsNullOrWhiteSpace(el.Name) ? null : el.Name;
         }
         catch { return null; }
     }

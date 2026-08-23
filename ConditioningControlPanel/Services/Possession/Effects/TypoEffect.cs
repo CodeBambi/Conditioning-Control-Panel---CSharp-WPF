@@ -31,7 +31,9 @@ public sealed class TypoEffect : PossessionEffectBase
     public override PossessionIntensity MinIntensity => PossessionIntensity.Gentle;
     public override bool IsBig => false;
     public override double Weight => 3;
-    public override TimeSpan HoldFor => TimeSpan.FromMilliseconds(2500);
+    // Wave 2: 2.5 s was shorter than the time it takes to look away from what you were doing, glance
+    // at the label and read it. Four seconds is "long enough that you are sure you read it right".
+    public override TimeSpan HoldFor => TimeSpan.FromSeconds(4);
     public override IReadOnlyList<PossessionRole> Roles => _roles;
 
     protected override bool CanApplyCore(PossessionContext ctx, PossessionTarget? target)

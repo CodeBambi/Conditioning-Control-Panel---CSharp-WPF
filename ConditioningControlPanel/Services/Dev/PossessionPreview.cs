@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -42,11 +42,12 @@ internal static class PossessionPreview
     /// <summary>The ladder, bottom to top. Names must match IPossessionEffect.Id.</summary>
     private static readonly string[] Order =
     {
-        "nudge", "typo", "breathe",              // R0 Settle
-        "drift", "swap", "dodge",                // R1 Drift
-        "melt", "wobble", "dissolve",            // R2 Melt
-        "drop", "fall", "crack",                 // R3 Collapse
-        "retitle", "dokidialog",                 // R4 It knows
+        "nudge", "typo", "breathe", "slidercreep",          // R0 Settle
+        "drift", "swap", "dodge", "ghostcursor", "rewrite", "toast", // R1 Drift
+        "melt", "wobble", "dissolve", "relabel", "togglelie", "glyphrot",
+        "xpdrain", "misroute", "scrollhijack",   // R2 Melt
+        "drop", "fall", "crack", "stealcard", "roomwarp", "reorderdoors", // R3 Collapse
+        "retitle", "dokidialog", "deletedialog", // R4 It knows
     };
 
     /// <summary>Effects that arm a hover handler on Apply and only bite when the pointer arrives.
@@ -117,6 +118,31 @@ internal static class PossessionPreview
             report.Add($"nav: DoorPlay={(doorOk ? "ok" : "FAILED")} BtnNavLockdown={(railOk ? "ok" : "FAILED")} LockdownTab.Visibility={tabState}");
 
             if (Capture(window, Path.Combine(outDir, "00-lockdown-card.png"))) shots++;
+
+            // ---- 1b. the exit affordances --------------------------------------------------
+            // The active panel (huge Emergency Exit button + rung readout) and the title-bar badge
+            // are only ever visible while a lockdown runs, which this rig must never start. So it
+            // DRESSES them instead: PreviewShowLockdownActivePanel flips the same Visibility the
+            // real activation flips and paints prop numbers, touching nothing in LockdownService.
+            if (window is MainWindow mwEE)
+            {
+                try
+                {
+                    mwEE.PreviewShowLockdownActivePanel(true);
+                    await Task.Delay(700).ConfigureAwait(true);
+                    if (Capture(window, Path.Combine(outDir, "00b-emergency-exit.png"))) shots++;
+                    report.Add("emergency exit: active panel + badge dressed and photographed (LockdownService untouched)");
+                }
+                catch (Exception ex)
+                {
+                    report.Add("emergency exit: dressing FAILED - " + ex.GetType().Name + ": " + ex.Message);
+                }
+                finally
+                {
+                    try { mwEE.PreviewShowLockdownActivePanel(false); } catch { }
+                    await Task.Delay(300).ConfigureAwait(true);
+                }
+            }
 
             if (window is not IPossessionHost host)
             {

@@ -187,6 +187,10 @@ public sealed class Warden : IPossessionWarden
             await tube.GlideToScreenPointAsync(new Point(self.X, wa.Bottom), token, clampToWorkArea: false)
                       .ConfigureAwait(true);
 
+            // The note goes up AFTER the glide, so it appears in a frame that is already empty rather
+            // than riding down the screen with her.
+            LeaveNote();
+
             NameIt("leave");
         }
         catch (OperationCanceledException) { /* lockdown ended mid-exit; ReturnAsync still restores */ }
@@ -201,6 +205,11 @@ public sealed class Warden : IPossessionWarden
     {
         var tube = Tube;
         if (tube == null) { _hasLeft = false; return; }
+
+        // Unconditionally, and BEFORE the glide: reassembly may be running because the app is closing,
+        // and a note left in the tube after the lockdown ended would outlive the whole feature. It is a
+        // no-op when there was never a note.
+        ClearNote();
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(VerbTimeout);
@@ -242,6 +251,66 @@ public sealed class Warden : IPossessionWarden
             }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
         catch { /* ct already disposed by a torn-down director */ }
+    }
+
+    // =================================================================================================
+    //  THE NOTE - what is in the tube while the companion is not (wave 2, item C4).
+    //
+    //  LeaveAsync used to leave an empty frame, which reads as "the avatar broke" rather than "she went
+    //  somewhere". A note fixes the attribution in one line: something left, on purpose, and it expects
+    //  to come back. Crimson, not ember - ember is the verb (the room is DOING something right now), and
+    //  a note is the opposite of that; it is the Lockdown theme sitting still.
+    //
+    //  Three variants, localized (loc-additions/companion.json, all 9 languages). They are loc keys and
+    //  not bark lines because the note is TEXT ON SCREEN with no audio and no per-mod substitution - the
+    //  bark packs own what she SAYS, the language files own what the room WRITES.
+    // =================================================================================================
+
+    private static readonly string[] NoteKeys =
+    {
+        "possession_tube_note_1",
+        "possession_tube_note_2",
+        "possession_tube_note_3",
+    };
+
+    /// <summary>English fallbacks, for the case where the key is missing from a language file.</summary>
+    private static readonly string[] NoteFallbacks =
+    {
+        "back soon. you are not.",
+        "stepped out. you did not.",
+        "gone a moment. you have longer.",
+    };
+
+    private static readonly Random NoteRng = new();
+
+    /// <summary>Put the note in the empty tube. Safe with no tube, and safe to call twice.</summary>
+    private static void LeaveNote()
+    {
+        try
+        {
+            var tube = Tube;
+            if (tube == null) return;
+
+            int i = NoteRng.Next(NoteKeys.Length);
+            string text;
+            try { text = Localization.Loc.Get(NoteKeys[i]); }
+            catch { text = string.Empty; }
+
+            // Loc.Get hands back the KEY when a language file is missing it; a card reading
+            // "possession_tube_note_2" would be the single least in-character thing in the feature.
+            if (string.IsNullOrWhiteSpace(text) || string.Equals(text, NoteKeys[i], StringComparison.Ordinal))
+                text = NoteFallbacks[i];
+
+            tube.ShowPossessionNote(text);
+        }
+        catch (Exception ex) { App.Logger?.Debug("Possession warden note failed: {Error}", ex.Message); }
+    }
+
+    /// <summary>Take the note down. Safe when there never was one, and safe to call twice.</summary>
+    private static void ClearNote()
+    {
+        try { Tube?.HidePossessionNote(); }
+        catch (Exception ex) { App.Logger?.Debug("Possession warden note removal failed: {Error}", ex.Message); }
     }
 
     /// <summary>The element's bounds in PHYSICAL screen pixels - the space the tube moves in.

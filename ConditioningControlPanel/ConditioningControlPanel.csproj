@@ -263,6 +263,10 @@
     <Resource Include="Resources\speechbubble2.png" />
     <Resource Include="Resources\discord.png" />
     <Resource Include="Resources\lockdown_icon.png" />
+    <!-- The Emergency Exit button face (Views\Tabs\LockdownTabView.xaml). No Resources\**\*.png
+         glob exists, so this line is what keeps the pack:// URI resolvable; without it the
+         Image simply renders nothing and the XAML-drawn slab underneath carries the button. -->
+    <Resource Include="Resources\lockdown\emergency_exit.png" />
     <Resource Include="Resources\spiral.gif" />
     <Resource Include="Resources\Patreon tier1.png" />
     <Resource Include="Resources\Patreon tier2.png" />

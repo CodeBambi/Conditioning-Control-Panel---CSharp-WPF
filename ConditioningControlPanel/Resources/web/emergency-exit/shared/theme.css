@@ -1,0 +1,269 @@
+/* ============================================================================
+ * shared/theme.css - Emergency Exit theme tokens + shell chrome.
+ *
+ * Tokens (EMERGENCY_EXIT.md "Shell API"): bg #1A1A2E, card #252542,
+ * crimson #DC143C (the Lockdown theme colour: the room is red), ember #FF8A5C
+ * (the verb: the room is DOING something), pink #FF69B4. Segoe UI only, no
+ * external fonts, no CDNs. The window is 960x640; everything tolerates 800x560.
+ *
+ * Games own their own component styles in games/<id>.css and must use these
+ * tokens (var(--ee-*)) instead of literal colours.
+ *
+ * Photosafe: the shell adds `ee-photosafe` to <html> when init.photosafe is
+ * true. Every keyframe that flickers/strobes has a calm counterpart under
+ * `.ee-photosafe` (or is disabled). Games follow the same rule.
+ * ==========================================================================*/
+
+:root {
+  --ee-bg: #1A1A2E;
+  --ee-bg-deep: #120f20;
+  --ee-card: #252542;
+  --ee-card-2: #2d2d52;
+  --ee-crimson: #DC143C;
+  --ee-crimson-soft: rgba(220, 20, 60, 0.35);
+  --ee-crimson-glow: rgba(220, 20, 60, 0.55);
+  --ee-ember: #FF8A5C;
+  --ee-ember-soft: rgba(255, 138, 92, 0.35);
+  --ee-ember-glow: rgba(255, 138, 92, 0.6);
+  --ee-pink: #FF69B4;
+  --ee-text: #F3E9F6;
+  --ee-dim: #A99CC0;
+  --ee-mute: #6E6690;
+  --ee-radius: 14px;
+  --ee-font: 'Segoe UI', 'Segoe UI Variable Text', system-ui, -apple-system, sans-serif;
+  --ee-hud-h: 52px;
+  --ee-say-h: 34px;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: radial-gradient(120% 120% at 50% 0%, var(--ee-bg), var(--ee-bg-deep));
+  color: var(--ee-text);
+  font-family: var(--ee-font);
+  font-size: 16px; font-weight: 600;
+  -webkit-user-select: none; user-select: none;
+  touch-action: manipulation;
+}
+button, input { font-family: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--ee-ember); outline-offset: 2px;
+}
+
+/* --- page frame ----------------------------------------------------------- */
+.ee-root {
+  position: fixed; inset: 0;
+  display: grid;
+  grid-template-rows: var(--ee-hud-h) var(--ee-say-h) 1fr;
+}
+
+/* Crimson edge vignette: the room is red. Static, click-through. */
+.ee-root::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(110% 100% at 50% 50%, rgba(220,20,60,0) 55%, rgba(220,20,60,.16) 100%);
+}
+
+/* --- HUD ------------------------------------------------------------------ */
+.ee-hud {
+  position: relative; z-index: 5;
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 18px 0 20px;
+  background: linear-gradient(180deg, rgba(37,37,66,.92), rgba(37,37,66,.72));
+  border-bottom: 1px solid var(--ee-crimson-soft);
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+.ee-hud-sign {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 15px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ee-crimson);
+  white-space: nowrap;
+}
+.ee-hud-sign::before {
+  content: ""; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--ee-crimson); box-shadow: 0 0 10px var(--ee-crimson-glow);
+  animation: ee-beacon 2.4s ease-in-out infinite;
+}
+.ee-photosafe .ee-hud-sign::before { animation: none; opacity: .9; }
+@keyframes ee-beacon {
+  0%, 100% { opacity: .55; box-shadow: 0 0 6px var(--ee-crimson-glow); }
+  50% { opacity: 1; box-shadow: 0 0 14px var(--ee-crimson-glow); }
+}
+.ee-hud-text {
+  flex: 1; min-width: 0;
+  font-size: 14px; font-weight: 600; color: var(--ee-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ee-hud-lock {
+  font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ee-mute); white-space: nowrap;
+}
+.ee-hud-lock b { color: var(--ee-dim); font-variant-numeric: tabular-nums; }
+.ee-hud-timer {
+  min-width: 68px; text-align: center;
+  font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: var(--ee-ember); text-shadow: 0 0 12px var(--ee-ember-soft);
+  padding: 2px 10px; border-radius: 8px;
+  background: rgba(26,26,46,.6); border: 1px solid var(--ee-ember-soft);
+}
+.ee-hud-timer[hidden] { display: none; }
+.ee-hud-timer.is-low { color: var(--ee-crimson); border-color: var(--ee-crimson-soft); animation: ee-timer-pulse 1s ease-in-out infinite; }
+.ee-photosafe .ee-hud-timer.is-low { animation: none; }
+@keyframes ee-timer-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+.ee-hud-close {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--ee-crimson-soft); background: rgba(26,26,46,.5);
+  color: var(--ee-dim); font-size: 18px; line-height: 1; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s ease, color .15s ease, transform .15s ease;
+}
+.ee-hud-close:hover { background: var(--ee-crimson); color: #fff; transform: rotate(90deg); }
+.ee-hud-close:disabled { opacity: .35; cursor: default; transform: none; background: rgba(26,26,46,.5); color: var(--ee-dim); }
+
+/* --- warden line strip ---------------------------------------------------- */
+.ee-say {
+  position: relative; z-index: 4;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 20px;
+  font-size: 14px; font-style: italic; font-weight: 600; color: var(--ee-pink);
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(18,15,32,.55);
+  border-bottom: 1px solid rgba(255,105,180,.12);
+  opacity: 0; transition: opacity .25s ease;
+}
+.ee-say.is-on { opacity: 1; }
+.ee-say.is-fresh { animation: ee-say-in .35s ease; }
+@keyframes ee-say-in { from { transform: translateY(-4px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* --- game mount ----------------------------------------------------------- */
+.ee-stage {
+  position: relative; z-index: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 14px 18px 18px;
+}
+.ee-stage.is-locked { pointer-events: none; }
+
+/* Generic bits games may reuse */
+.ee-card {
+  background: var(--ee-card);
+  border: 1px solid var(--ee-crimson-soft);
+  border-radius: var(--ee-radius);
+  box-shadow: 0 18px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04);
+}
+.ee-btn {
+  appearance: none; border: 1px solid var(--ee-crimson-soft);
+  background: linear-gradient(180deg, var(--ee-card-2), var(--ee-card));
+  color: var(--ee-text); font-size: 15px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  padding: 10px 22px; border-radius: 10px;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, opacity .12s ease;
+}
+.ee-btn:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--ee-ember); box-shadow: 0 0 16px var(--ee-ember-soft); }
+.ee-btn:active:not(:disabled) { transform: translateY(0); }
+.ee-btn:disabled { opacity: .4; cursor: not-allowed; }
+.ee-btn.is-primary { background: linear-gradient(180deg, #ff3b66, var(--ee-crimson)); border-color: transparent; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.3); }
+.ee-btn.is-primary:hover:not(:disabled) { box-shadow: 0 0 22px var(--ee-crimson-glow); }
+
+/* --- loader / boot error -------------------------------------------------- */
+.ee-loader {
+  position: fixed; inset: 0; z-index: 20;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  background: var(--ee-bg-deep); color: var(--ee-dim); font-size: 14px; letter-spacing: .1em; text-transform: uppercase;
+  transition: opacity .3s ease;
+}
+.ee-loader[hidden] { display: none; }
+.ee-loader-ring {
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 3px solid var(--ee-crimson-soft); border-top-color: var(--ee-crimson);
+  animation: ee-spin .9s linear infinite;
+}
+.ee-photosafe .ee-loader-ring { animation-duration: 1.6s; }
+@keyframes ee-spin { to { transform: rotate(360deg); } }
+.ee-nope {
+  position: fixed; inset: 0; z-index: 21;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  background: var(--ee-bg-deep); text-align: center; padding: 24px;
+}
+.ee-nope[hidden] { display: none; }
+.ee-nope h1 { margin: 0; color: var(--ee-crimson); font-size: 26px; letter-spacing: .08em; text-transform: uppercase; }
+.ee-nope p { margin: 0; color: var(--ee-dim); }
+.ee-nope kbd { font-family: inherit; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--ee-crimson-soft); color: var(--ee-text); }
+
+/* --- outro (verdict) card ------------------------------------------------- */
+.ee-outro {
+  position: fixed; inset: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(18,15,32,.82);
+  opacity: 0; transition: opacity .35s ease;
+}
+.ee-outro[hidden] { display: none; }
+.ee-outro.is-on { opacity: 1; }
+.ee-outro-card {
+  width: min(560px, 88vw);
+  padding: 34px 36px 28px; text-align: center;
+  background: var(--ee-card);
+  border: 1px solid var(--ee-crimson-soft);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.03) inset;
+  transform: translateY(10px) scale(.98);
+  transition: transform .4s cubic-bezier(.2,.9,.3,1.2);
+}
+.ee-outro.is-on .ee-outro-card { transform: none; }
+.ee-outro-kicker {
+  font-size: 12px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--ee-mute); margin: 0 0 8px;
+}
+.ee-outro-title {
+  margin: 0 0 18px; font-size: 34px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase;
+  line-height: 1.1;
+}
+.ee-outro.is-escape .ee-outro-title { color: var(--ee-pink); text-shadow: 0 0 18px rgba(255,105,180,.4); }
+.ee-outro.is-sendback .ee-outro-title { color: var(--ee-crimson); text-shadow: 0 0 18px var(--ee-crimson-glow); }
+.ee-outro-remark {
+  margin: 0 0 22px; font-size: 19px; font-weight: 600; font-style: italic; line-height: 1.45;
+  color: var(--ee-text);
+}
+.ee-outro-count {
+  display: flex; align-items: baseline; justify-content: center; gap: 10px;
+  font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ee-dim);
+}
+.ee-outro-count b {
+  display: inline-block; min-width: 40px;
+  font-size: 30px; font-weight: 900; font-variant-numeric: tabular-nums;
+  color: var(--ee-ember); text-shadow: 0 0 14px var(--ee-ember-soft);
+}
+.ee-outro-count b.is-tick { animation: ee-count-tick .5s ease; }
+.ee-photosafe .ee-outro-count b.is-tick { animation: none; }
+@keyframes ee-count-tick { from { transform: scale(1.35); opacity: .4; } to { transform: none; opacity: 1; } }
+.ee-outro-hint { margin: 14px 0 0; font-size: 12px; color: var(--ee-mute); }
+
+/* --- waiting-for-verdict veil (between game-finished and verdict) --------- */
+.ee-veil {
+  position: fixed; inset: 0; z-index: 25; pointer-events: none;
+  background: rgba(18,15,32,0); transition: background .4s ease;
+}
+.ee-veil[hidden] { display: none; }
+.ee-veil.is-on { background: rgba(18,15,32,.35); }
+
+/* --- shared glitch helpers (games may add these classes) ------------------ */
+/* Ember glitch: a short chromatic jitter. Photosafe: a soft ember tint instead. */
+.ee-glitch { animation: ee-glitch .32s steps(2, end) 1; }
+.ee-photosafe .ee-glitch { animation: ee-glitch-soft .5s ease 1; }
+@keyframes ee-glitch {
+  0%   { transform: translate(0,0); filter: none; }
+  25%  { transform: translate(-2px,1px); filter: drop-shadow(2px 0 0 var(--ee-crimson)) drop-shadow(-2px 0 0 var(--ee-ember)); }
+  50%  { transform: translate(2px,-1px); filter: drop-shadow(-2px 0 0 var(--ee-crimson)) drop-shadow(2px 0 0 var(--ee-ember)); }
+  75%  { transform: translate(-1px,0); filter: drop-shadow(1px 0 0 var(--ee-ember)); }
+  100% { transform: none; filter: none; }
+}
+@keyframes ee-glitch-soft {
+  0%, 100% { filter: none; }
+  50% { filter: drop-shadow(0 0 6px var(--ee-ember)); }
+}
+.ee-ember-flash { animation: ee-ember-flash .45s ease 1; }
+.ee-photosafe .ee-ember-flash { animation: ee-ember-flash-soft .8s ease 1; }
+@keyframes ee-ember-flash { 0% { box-shadow: 0 0 0 0 var(--ee-ember-glow); } 100% { box-shadow: 0 0 0 14px rgba(255,138,92,0); } }
+@keyframes ee-ember-flash-soft { 0%, 100% { box-shadow: none; } 50% { box-shadow: 0 0 18px var(--ee-ember-soft); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ee-hud-sign::before, .ee-hud-timer.is-low, .ee-glitch, .ee-ember-flash, .ee-outro-count b.is-tick { animation: none !important; }
+}

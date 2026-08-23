@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Views.Tabs.LockdownTabView"
+﻿<UserControl x:Class="ConditioningControlPanel.Views.Tabs.LockdownTabView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -60,6 +60,36 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- ===== EMERGENCY EXIT ================================================================
+             The one honest affordance on a haunted page, so it is DRAWN rather than themed: a
+             tiled hazard border around a crimson mushroom-button slab. LOCAL literals only, same
+             reason as everything else in this dictionary (see the header note).
+
+             The tile is 20x20 and the two figures are each other's wrap, so the diagonal band runs
+             unbroken across a border of any thickness or length. -->
+        <DrawingBrush x:Key="EEHazardBrush" TileMode="Tile" Stretch="None"
+                      Viewport="0,0,20,20" ViewportUnits="Absolute">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#1C0810">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="0,0,20,20"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="#FF8A5C">
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry Figures="M 0,20 L 20,0 L 20,10 L 10,20 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="#FF8A5C">
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry Figures="M 0,0 L 10,0 L 0,10 Z"/>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -362,7 +392,127 @@
                                                     <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,5,0" Background="#33FF8A5C"/>
                                                 </StackPanel>
                                             </StackPanel>
+                                            <!-- ===== THE HUGE BUTTON ==========================
+                                                 Comically large on purpose: while the room is
+                                                 misbehaving, the way out must be the single
+                                                 loudest object on the page, readable from across
+                                                 the room, and impossible to mistake for one of
+                                                 the ghosts. Hence poss:Possession.Exclude - it
+                                                 inherits, so nothing inside this button can ever
+                                                 be auto-tagged into the deck by Wave 2's
+                                                 type-based tagger.
+
+                                                 Template is a bare ContentPresenter so the named
+                                                 visuals below live in the UserControl's own
+                                                 namescope and the code-behind can animate them.
+                                                 The press and idle animations are in
+                                                 LockdownTabView.xaml.cs (the idle pulse is
+                                                 suppressed under LockdownPhotosafe).
+
+                                                 The art is the mushroom dome ONLY, deliberately
+                                                 cropped clear of any baked-in lettering, so the
+                                                 words stay a loc key. If the resource is missing
+                                                 the Image renders nothing and the crimson slab
+                                                 alone still reads as the button. -->
+                                            <Button x:Name="BtnEmergencyExit" x:FieldModifier="internal"
+                                                    poss:Possession.Exclude="True"
+                                                    Cursor="Hand" Background="Transparent" BorderThickness="0"
+                                                    Padding="0" Margin="0,16,0,2" MinHeight="150"
+                                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                                    ToolTip="{loc:Str lockdown_ee_tooltip}"
+                                                    Click="BtnEmergencyExit_Click"
+                                                    PreviewMouseLeftButtonDown="BtnEmergencyExit_Down"
+                                                    PreviewMouseLeftButtonUp="BtnEmergencyExit_Up"
+                                                    MouseLeave="BtnEmergencyExit_Up">
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <ContentPresenter/>
+                                                    </ControlTemplate>
+                                                </Button.Template>
+
+                                                <Grid x:Name="EERoot" x:FieldModifier="internal" RenderTransformOrigin="0.5,0.5">
+                                                    <Grid.RenderTransform>
+                                                        <ScaleTransform x:Name="EEScale" x:FieldModifier="internal" ScaleX="1" ScaleY="1"/>
+                                                    </Grid.RenderTransform>
+
+                                                    <!-- Hazard plate -->
+                                                    <Border CornerRadius="20" BorderThickness="7" Background="#160810"
+                                                            BorderBrush="{StaticResource EEHazardBrush}">
+                                                        <Border.Effect>
+                                                            <DropShadowEffect x:Name="EEGlow" x:FieldModifier="internal"
+                                                                              Color="#FF8A5C" BlurRadius="28"
+                                                                              ShadowDepth="0" Opacity="0.32"/>
+                                                        </Border.Effect>
+
+                                                        <Border x:Name="EESlab" x:FieldModifier="internal"
+                                                                CornerRadius="13" Margin="7" ClipToBounds="True">
+                                                            <Border.Background>
+                                                                <RadialGradientBrush GradientOrigin="0.42,0.2" Center="0.42,0.3"
+                                                                                     RadiusX="1.05" RadiusY="1.25">
+                                                                    <GradientStop Color="#FF3E5C" Offset="0"/>
+                                                                    <GradientStop Color="#DC143C" Offset="0.5"/>
+                                                                    <GradientStop Color="#780A1E" Offset="1"/>
+                                                                </RadialGradientBrush>
+                                                            </Border.Background>
+
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <!-- An ImageBrush on a rounded Border rather than an
+                                                                     Image: Border does not clip its children, so the only
+                                                                     way to get the art's own corners rounded is to make it
+                                                                     the background. Reads as an inset plate instead of a
+                                                                     square pasted onto the slab. -->
+                                                                <Border Grid.Column="0" x:Name="EEFacePlate" x:FieldModifier="internal"
+                                                                        Width="128" Margin="14,10,8,10" CornerRadius="10"
+                                                                        BorderBrush="#4D000000" BorderThickness="1">
+                                                                    <Border.Background>
+                                                                        <ImageBrush Stretch="UniformToFill"
+                                                                                    RenderOptions.BitmapScalingMode="HighQuality"
+                                                                                    ImageSource="pack://application:,,,/Resources/lockdown/emergency_exit.png"/>
+                                                                    </Border.Background>
+                                                                </Border>
+
+                                                                <StackPanel Grid.Column="1" VerticalAlignment="Center"
+                                                                            HorizontalAlignment="Center" Margin="4,0,18,0">
+                                                                    <TextBlock Text="{loc:Str lockdown_ee_button}"
+                                                                               FontSize="40" FontWeight="Bold" Foreground="White"
+                                                                               TextAlignment="Center" TextWrapping="Wrap"
+                                                                               LineHeight="42">
+                                                                        <TextBlock.Effect>
+                                                                            <DropShadowEffect Color="#99000000" BlurRadius="10"
+                                                                                              ShadowDepth="2" Direction="270" Opacity="0.9"/>
+                                                                        </TextBlock.Effect>
+                                                                    </TextBlock>
+                                                                    <TextBlock Text="{loc:Str lockdown_ee_sub}"
+                                                                               FontSize="12.5" Foreground="#FFDCE2"
+                                                                               TextAlignment="Center" TextWrapping="Wrap"
+                                                                               Opacity="0.9" Margin="0,4,0,0"/>
+                                                                </StackPanel>
+
+                                                                <!-- Gloss last so it lies over art AND text. -->
+                                                                <Border Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="13"
+                                                                        IsHitTestVisible="False">
+                                                                    <Border.Background>
+                                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                                            <GradientStop Color="#3DFFFFFF" Offset="0"/>
+                                                                            <GradientStop Color="#00FFFFFF" Offset="0.42"/>
+                                                                            <GradientStop Color="#00000000" Offset="0.6"/>
+                                                                            <GradientStop Color="#3D000000" Offset="1"/>
+                                                                        </LinearGradientBrush>
+                                                                    </Border.Background>
+                                                                </Border>
+                                                            </Grid>
+                                                        </Border>
+                                                    </Border>
+                                                </Grid>
+                                            </Button>
+
                                             <TextBox x:Name="TxtLockdownExit" x:FieldModifier="internal" Visibility="Collapsed"
+                                                     poss:Possession.Exclude="True"
                                                      Background="#1A0A0A" Foreground="#DC143C" BorderBrush="#DC143C" BorderThickness="1"
                                                      FontSize="13" Padding="8,6" Margin="0,8,0,0"
                                                      KeyDown="TxtLockdownExit_KeyDown"/>

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using ConditioningControlPanel.Services.Arcademy;
 using ConditioningControlPanel.Services.Chaos;
@@ -60,6 +62,7 @@ namespace ConditioningControlPanel
                     try
                     {
                         EnsurePossessionLayers();
+                        Services.Possession.PossessionPointer.Attach(this);
                         App.Possession?.AttachHost(this);
                     }
                     catch (Exception ex)
@@ -78,6 +81,7 @@ namespace ConditioningControlPanel
                 if (IsLoaded)
                 {
                     EnsurePossessionLayers();
+                    Services.Possession.PossessionPointer.Attach(this);
                     App.Possession?.AttachHost(this);
                 }
             }
@@ -128,6 +132,39 @@ namespace ConditioningControlPanel
                 Panel.SetZIndex(_possessionRubbleFloor, 8999);
                 RootGrid.Children.Add(_possessionRubbleFloor);
             }
+
+            HookPossessionInvalidation();
+        }
+
+        /// <summary>
+        /// The auto-tag cache goes stale whenever the room changes shape: a tab switch, a card that
+        /// expands, a list that fills in. LayoutUpdated is the one signal that catches all of them
+        /// without this file having to know about the nav rail, the tab keys or any view.
+        ///
+        /// <para>It also fires on every animation frame, which is why it only ever sets a FLAG - the
+        /// rebuild itself is rate-limited in GetPossessionTargets (PossessionRebuildFloor). Marking
+        /// dirty is a field write; doing the walk here would put a visual-tree crawl on the compositor
+        /// path of a window that is, at that exact moment, animating a ghost.</para>
+        /// </summary>
+        private void HookPossessionInvalidation()
+        {
+            if (_possessionLayoutHooked) return;
+            _possessionLayoutHooked = true;
+            try
+            {
+                LayoutUpdated += (_, _) =>
+                {
+                    try
+                    {
+                        var now = DateTime.Now;
+                        if (now - _possessionLayoutSeenAt < TimeSpan.FromMilliseconds(250)) return;
+                        _possessionLayoutSeenAt = now;
+                        _possessionCacheDirty = true;
+                    }
+                    catch { }
+                };
+            }
+            catch (Exception ex) { App.Logger?.Debug(ex, "Possession: layout invalidation hook failed"); }
         }
 
         // ==== IPossessionHost ===========================================================
@@ -152,78 +189,360 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>
-        /// Rebuilt on every read on purpose. The director asks once per pick (tens of seconds apart at
-        /// the fastest cadence), and the alternative - a cached list kept in sync with tab switches,
-        /// mod swaps and the nav rail - is a whole invalidation problem bought for nothing. The TARGET
-        /// OBJECTS are cached (see _possessionTargets), so cooldowns and IsLive survive the rebuild;
-        /// only the walk is redone.
-        /// </summary>
-        IReadOnlyList<PossessionTarget> IPossessionHost.Targets
+        // ==== A1 auto-tag (wave 2) ======================================================
+        // The first live lockdown had ELEVEN possessable controls in the whole window, because every
+        // other hand tag sat on the Lockdown card - which is hidden while a lockdown runs. Hand-tagging
+        // the rest was never going to scale: the window is thousands of elements across a dozen tabs,
+        // and a curated list rots the moment anyone edits a view. So the host now INFERS a role from
+        // the control type and keeps the hand tags as overrides (an author who says "this is a card"
+        // always wins). The blocklist that curation used to give us for free is now explicit:
+        // Possession.Exclude, the never-touch names below, and the leaf rule.
+        //
+        // THE LEAF RULE, which is what keeps this cheap and sane: once an element resolves to an
+        // interactive role we do not descend into it. WPF's visual tree walks straight through control
+        // TEMPLATES, so a ScrollBar would otherwise contribute two RepeatButtons and a Thumb, a ComboBox
+        // its toggle button, and every button its caption TextBlock. Stopping at the control means the
+        // deck sees "a button", which is what the user sees too.
+
+        private List<PossessionTarget>? _possessionTargetCache;
+        private DateTime _possessionCacheAt = DateTime.MinValue;
+        private bool _possessionCacheDirty = true;
+        private DateTime _possessionLayoutSeenAt = DateTime.MinValue;
+        private bool _possessionLayoutHooked;
+
+        /// <summary>A rebuild is at most this often even while the layout is churning (a live haunt
+        /// animates transforms, which raises LayoutUpdated on every frame).</summary>
+        private static readonly TimeSpan PossessionRebuildFloor = TimeSpan.FromMilliseconds(750);
+
+        /// <summary>And at least this often, so a tab switch that somehow raised no layout pass still
+        /// gets picked up before the next haunt.</summary>
+        private static readonly TimeSpan PossessionCacheMaxAge = TimeSpan.FromSeconds(10);
+
+        /// <summary>Never a victim, subtree and all. The timer VALUE and the secret exit box are
+        /// POSSESSION.md hard rules; the Emergency Exit button is the friction door (EMERGENCY_EXIT.md)
+        /// and has to stay exactly where the user last saw it; the gate is the premium wall; the rung
+        /// readout and pips are the feature's own instrumentation - haunting the dial that tells you how
+        /// haunted you are is a joke that reads as a bug.</summary>
+        private static readonly HashSet<string> PossessionNeverNames = new(StringComparer.Ordinal)
         {
-            get
+            "TxtLockdownTimer", "TxtLockdownExit", "BtnEmergencyExit", "EERoot",
+            "LockdownGate", "TxtPossessionRung", "PossessionPips",
+        };
+
+        /// <summary>Labels are the one role that can run to the hundreds on a dense tab, and a deck full
+        /// of them buries the buttons and cards that carry the joke. Keep the ones nearest the cursor.</summary>
+        private const int MaxAutoLabels = 24;
+
+        private const double MinTargetPx = 8;
+
+        /// <summary>
+        /// Rebuilt lazily rather than on every read: the walk is a few hundred elements with a transform
+        /// per candidate, which is cheap (measured at Debug, typically well under 5 ms) but not free, and
+        /// the reactive ghosts (B15) read this on mouse events rather than once a minute. The TARGET
+        /// OBJECTS are cached in _possessionTargets regardless, so cooldowns and IsLive survive every
+        /// rebuild; only the walk is redone.
+        /// </summary>
+        IReadOnlyList<PossessionTarget> IPossessionHost.Targets => GetPossessionTargets();
+
+        internal IReadOnlyList<PossessionTarget> GetPossessionTargets()
+        {
+            try
             {
+                var now = DateTime.Now;
+                var age = now - _possessionCacheAt;
+                var stale = _possessionTargetCache == null
+                            || age > PossessionCacheMaxAge
+                            || (_possessionCacheDirty && age > PossessionRebuildFloor);
+                if (!stale) return _possessionTargetCache!;
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 var found = new List<PossessionTarget>();
-                try
-                {
-                    var seenPerRole = new Dictionary<PossessionRole, int>();
-                    CollectPossessionTargets(this, found, seenPerRole, 0);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "Possession: target walk failed");
-                }
+                var labels = new List<PossessionTarget>();
+
+                var root = Content as DependencyObject ?? RootGrid;
+                if (root != null) WalkPossession(root, found, labels, 0, 17);
+
+                if (labels.Count > MaxAutoLabels) TrimLabels(labels);
+                found.AddRange(labels);
+
+                _possessionTargetCache = found;
+                _possessionCacheAt = now;
+                _possessionCacheDirty = false;
+                sw.Stop();
+                App.Logger?.Debug("Possession: auto-tag walk found {Count} targets in {Ms:F1} ms",
+                    found.Count, sw.Elapsed.TotalMilliseconds);
                 return found;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Possession: target walk failed");
+                return _possessionTargetCache ?? (IReadOnlyList<PossessionTarget>)Array.Empty<PossessionTarget>();
             }
         }
 
-        private void CollectPossessionTargets(DependencyObject node, List<PossessionTarget> into,
-                                              Dictionary<PossessionRole, int> seenPerRole, int depth)
+        /// <summary>Keep the labels nearest the cursor (the haunt should happen where the user is
+        /// looking); with no cursor reading yet, keep the biggest, which are the headings.</summary>
+        private void TrimLabels(List<PossessionTarget> labels)
         {
-            // The visual tree of this window is deep (nav rail -> doors -> panels -> tab views ->
-            // cards); the guard is a cheap insurance against a templated control that manages to
-            // present itself as its own child rather than a real depth limit anyone should hit.
-            if (node == null || depth > 64) return;
+            try
+            {
+                var origin = Services.Possession.PossessionPointer.Position;
+                bool haveCursor = origin.X > 0 || origin.Y > 0;
 
-            // The ghost layer's own contents are props, not victims - never possess a ghost.
+                double Score(PossessionTarget t)
+                {
+                    try
+                    {
+                        if (!TryWindowBounds(t.Element, out var r)) return double.MaxValue;
+                        if (!haveCursor) return -(r.Width * r.Height);         // biggest first
+                        var dx = r.X + r.Width / 2 - origin.X;
+                        var dy = r.Y + r.Height / 2 - origin.Y;
+                        return dx * dx + dy * dy;                              // nearest first
+                    }
+                    catch { return double.MaxValue; }
+                }
+
+                labels.Sort((a, b) => Score(a).CompareTo(Score(b)));
+            }
+            catch { }
+
+            if (labels.Count > MaxAutoLabels) labels.RemoveRange(MaxAutoLabels, labels.Count - MaxAutoLabels);
+        }
+
+        /// <summary>What a subtree contributed, so a Border can decide whether it is a CARD: a card holds
+        /// something you can use, and when cards nest we keep the innermost one (the outer one is a
+        /// column, and sagging a whole column reads as a layout bug rather than a haunt).</summary>
+        private readonly record struct PossessionSubtree(bool Interactive, bool Card);
+
+        private PossessionSubtree WalkPossession(DependencyObject node, List<PossessionTarget> into,
+                                                 List<PossessionTarget> labels, int depth, int pathHash)
+        {
+            if (node == null || depth > 64) return default;
             if (ReferenceEquals(node, _possessionGhostLayer) || ReferenceEquals(node, _possessionRubbleFloor))
-                return;
+                return default;
 
-            if (node is FrameworkElement fe)
+            FrameworkElement? fe = node as FrameworkElement;
+            if (fe != null)
             {
                 // A collapsed tab is a whole subtree of invisible controls; stopping here rather than
                 // filtering leaf by leaf is what keeps the walk cheap.
-                if (!fe.IsVisible) return;
+                if (!fe.IsVisible) return default;
+                if (Services.Possession.Possession.GetExclude(fe)) return default;
+                if (!string.IsNullOrEmpty(fe.Name) && PossessionNeverNames.Contains(fe.Name)) return default;
+            }
 
-                var role = Services.Possession.Possession.GetRole(fe);
-                if (role != PossessionRole.None && fe.ActualWidth > 0 && fe.ActualHeight > 0)
+            // Hand tags win, always: an author who wrote poss:Possession.Role said something the type
+            // system cannot.
+            var handRole = fe != null ? Services.Possession.Possession.GetRole(fe) : PossessionRole.None;
+            var role = handRole;
+            if (fe != null && role == PossessionRole.None) role = InferLeafRole(fe);
+
+            var leaf = role != PossessionRole.None && role != PossessionRole.Card && role != PossessionRole.Scroll;
+            var interactive = IsInteractiveRole(role);
+
+            PossessionSubtree below = default;
+            if (!leaf)
+            {
+                var count = VisualTreeHelper.GetChildrenCount(node);
+                for (int i = 0; i < count; i++)
                 {
-                    seenPerRole.TryGetValue(role, out var index);
-                    seenPerRole[role] = index + 1;
-
-                    if (!_possessionTargets.TryGetValue(fe, out var target))
-                    {
-                        var name = Services.Possession.Possession.GetName(fe);
-                        target = new PossessionTarget
-                        {
-                            Element = fe,
-                            Role = role,
-                            // x:Name first: it is stable across rebuilds AND across a layout change
-                            // that reorders siblings, which the role+index fallback is not. The
-                            // fallback only has to be stable enough for one lockdown.
-                            Key = !string.IsNullOrEmpty(fe.Name) ? fe.Name : role + "#" + index,
-                            DisplayName = !string.IsNullOrWhiteSpace(name) ? name : FallbackDisplayName(role),
-                        };
-                        _possessionTargets.Add(fe, target);
-                    }
-
-                    into.Add(target);
+                    var child = VisualTreeHelper.GetChild(node, i);
+                    var h = unchecked(pathHash * 31 + i * 7 + (child?.GetType().Name.Length ?? 0));
+                    var r = WalkPossession(child, into, labels, depth + 1, h);
+                    if (r.Interactive) below = below with { Interactive = true };
+                    if (r.Card) below = below with { Card = true };
                 }
             }
 
-            var count = VisualTreeHelper.GetChildrenCount(node);
-            for (int i = 0; i < count; i++)
-                CollectPossessionTargets(VisualTreeHelper.GetChild(node, i), into, seenPerRole, depth + 1);
+            if (fe == null) return below;
+
+            // The card heuristic, applied bottom-up so "innermost wins" is decidable.
+            if (role == PossessionRole.None && below.Interactive && !below.Card && IsCardBorder(fe))
+                role = PossessionRole.Card;
+
+            if (role != PossessionRole.None && (handRole != PossessionRole.None || PassesSizeAndPlacement(fe)))
+            {
+                var t = TargetFor(fe, role, pathHash);
+                if (t != null)
+                {
+                    if (role == PossessionRole.Label && handRole == PossessionRole.None) labels.Add(t);
+                    else into.Add(t);
+                    if (role == PossessionRole.Card) below = below with { Card = true };
+                }
+            }
+
+            return new PossessionSubtree(interactive || below.Interactive, below.Card);
+        }
+
+        private PossessionTarget? TargetFor(FrameworkElement fe, PossessionRole role, int pathHash)
+        {
+            try
+            {
+                if (_possessionTargets.TryGetValue(fe, out var existing)) return existing;
+                var target = new PossessionTarget
+                {
+                    Element = fe,
+                    Role = role,
+                    // x:Name first: stable across rebuilds AND across a layout change that reorders
+                    // siblings. The path hash is the fallback and only has to hold for one lockdown.
+                    Key = !string.IsNullOrEmpty(fe.Name) ? fe.Name : role + "#" + pathHash.ToString("x8"),
+                    DisplayName = DisplayNameFor(fe, role),
+                };
+                _possessionTargets.Add(fe, target);
+                return target;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Role from the control TYPE. Returns None for anything we do not want in the deck;
+        /// Card is decided by the caller because it needs the subtree.</summary>
+        private static PossessionRole InferLeafRole(FrameworkElement fe)
+        {
+            // ToggleButton first: CheckBox, RadioButton and every switch-styled toggle in this app are
+            // ButtonBase too, and "a toggle crumbles to ash when clicked" is a different joke from
+            // "the button moved".
+            if (fe is ToggleButton) return PossessionRole.Toggle;
+            if (fe is ButtonBase)
+            {
+                // A RepeatButton that is part of a ScrollBar/Slider template is chrome, not a control;
+                // the leaf rule normally hides it, but a bare ScrollBar can still expose one.
+                if (fe is RepeatButton && IsInsideScrollBar(fe)) return PossessionRole.None;
+                return PossessionRole.Button;
+            }
+            if (fe is Slider) return PossessionRole.Slider;
+            if (fe is ComboBox) return PossessionRole.Combo;
+            if (fe is TextBox or PasswordBox) return PossessionRole.TextBox;
+            if (fe is ProgressBar) return PossessionRole.Progress;
+            if (fe is ScrollViewer sv)
+            {
+                double scrollable;
+                try { scrollable = sv.ScrollableHeight; } catch { scrollable = 0; }
+                return scrollable > 0 ? PossessionRole.Scroll : PossessionRole.None;
+            }
+            if (fe is Image img)
+                return (img.ActualWidth >= 48 && img.ActualHeight >= 48) ? PossessionRole.Image : PossessionRole.None;
+            if (fe is TextBlock tb)
+            {
+                double size;
+                try { size = tb.FontSize; } catch { size = 0; }
+                if (size >= 18) return PossessionRole.Title;
+                var text = tb.Text;
+                if (string.IsNullOrWhiteSpace(text)) return PossessionRole.None;
+                var trimmed = text.Trim();
+                return trimmed.Length is >= 3 and <= 40 ? PossessionRole.Label : PossessionRole.None;
+            }
+            return PossessionRole.None;
+        }
+
+        private static bool IsInsideScrollBar(DependencyObject? node)
+        {
+            try
+            {
+                for (int i = 0; node != null && i < 6; i++)
+                {
+                    if (node is ScrollBar) return true;
+                    node = VisualTreeHelper.GetParent(node);
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static bool IsInteractiveRole(PossessionRole role) => role is PossessionRole.Button
+            or PossessionRole.Toggle or PossessionRole.Slider or PossessionRole.Combo or PossessionRole.TextBox;
+
+        /// <summary>The documented card heuristic: a rounded Border that PAINTS something, is big enough
+        /// to read as a panel, and holds at least one control. Every card in this app is drawn exactly
+        /// that way (the CardBorder style family in MainWindow.xaml), and the "no qualifying card inside
+        /// me" test in the caller keeps us on the innermost one.</summary>
+        private static bool IsCardBorder(FrameworkElement fe)
+        {
+            try
+            {
+                if (fe is not Border b) return false;
+                if (b.Background == null) return false;
+                var cr = b.CornerRadius;
+                if (cr.TopLeft <= 0 && cr.TopRight <= 0 && cr.BottomLeft <= 0 && cr.BottomRight <= 0) return false;
+                return b.ActualHeight >= 60 && b.ActualWidth >= 60;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Big enough to see move, enabled, hit-testable, and actually inside the window. Sizes
+        /// are taken in WINDOW pixels, not the element's own ActualWidth: the UI lives in a Viewbox over
+        /// a 1585x901 design canvas, so design units and screen pixels are different currencies.</summary>
+        private bool PassesSizeAndPlacement(FrameworkElement fe)
+        {
+            try
+            {
+                if (!fe.IsEnabled || !fe.IsHitTestVisible) return false;
+                if (fe.ActualWidth <= 0 || fe.ActualHeight <= 0) return false;
+                if (!TryWindowBounds(fe, out var r)) return false;
+                if (r.Width < MinTargetPx || r.Height < MinTargetPx) return false;
+
+                var w = ActualWidth;
+                var h = ActualHeight;
+                if (w <= 0 || h <= 0) return false;
+                // Fully off-screen (a virtualised row scrolled out, a panel parked outside the clip).
+                return r.Right > 0 && r.Bottom > 0 && r.Left < w && r.Top < h;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>The element's rectangle in WINDOW coordinates (Viewbox scale included).</summary>
+        internal bool TryWindowBounds(FrameworkElement fe, out Rect bounds)
+        {
+            bounds = default;
+            try
+            {
+                var t = fe.TransformToVisual(this);
+                bounds = t.TransformBounds(new Rect(0, 0, fe.ActualWidth, fe.ActualHeight));
+                return !bounds.IsEmpty && !double.IsNaN(bounds.X) && !double.IsNaN(bounds.Y);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Possession.Name, then a string Content, then a ToolTip, then AutomationProperties.Name,
+        /// then the role's own noun. Written the way the bark lines need it ("oops, the Start button
+        /// moved") - see the note on Possession.NameProperty for why this is not a loc key.</summary>
+        private static string DisplayNameFor(FrameworkElement fe, PossessionRole role)
+        {
+            try
+            {
+                var hand = Services.Possession.Possession.GetName(fe);
+                if (!string.IsNullOrWhiteSpace(hand)) return hand;
+
+                var text = Tidy(fe is ContentControl cc ? cc.Content as string : null)
+                           ?? Tidy(fe is TextBlock tb ? tb.Text : null)
+                           ?? Tidy(fe.ToolTip as string)
+                           ?? Tidy(AutomationProperties.GetName(fe));
+
+                if (string.IsNullOrEmpty(text)) return FallbackDisplayName(role);
+
+                return role switch
+                {
+                    PossessionRole.Button => "the " + text + " button",
+                    PossessionRole.Toggle => "the " + text + " toggle",
+                    PossessionRole.TabHeader => "the " + text + " tab",
+                    PossessionRole.Slider => "the " + text + " slider",
+                    PossessionRole.Combo => "the " + text + " dropdown",
+                    PossessionRole.Card => "the " + text + " card",
+                    PossessionRole.Title => "the " + text + " heading",
+                    PossessionRole.Label => "the " + text + " label",
+                    _ => "the " + text,
+                };
+            }
+            catch { return FallbackDisplayName(role); }
+        }
+
+        /// <summary>One line, no runs of whitespace, short enough to drop into a spoken sentence.</summary>
+        private static string? Tidy(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            var s = raw.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ').Trim();
+            while (s.Contains("  ", StringComparison.Ordinal)) s = s.Replace("  ", " ", StringComparison.Ordinal);
+            if (s.Length is < 2 or > 32) return null;
+            return s;
         }
 
         /// <summary>Last resort so the warden never says "oops, the moved". Untranslated by design -
@@ -240,6 +559,9 @@ namespace ConditioningControlPanel
             PossessionRole.Slider => "that slider",
             PossessionRole.Combo => "that dropdown",
             PossessionRole.Image => "that picture",
+            PossessionRole.Scroll => "that list",
+            PossessionRole.Progress => "that bar",
+            PossessionRole.TextBox => "that box",
             _ => "something",
         };
 
@@ -285,13 +607,18 @@ namespace ConditioningControlPanel
                 try
                 {
                     if (!IsLoaded || WindowState == WindowState.Minimized || !IsVisible) return false;
-                    if (App.Video?.IsPlaying == true) return false;
 
-                    // The content rooms stay clean (owner decision 5): while one of these owns the
-                    // screen, the main window is either behind it or is the thing it took over.
+                    // A3 (wave 2): a playing video is NOT a reason to stop. The old rule paused the
+                    // haunt for the whole of any video, which in a session-heavy lockdown meant most of
+                    // it - the owner's first live run felt empty largely because of this line. The room
+                    // is haunted whether or not something is playing in it; what still stops us is a
+                    // window that has TAKEN OVER the screen, because an ember ripple painted on a
+                    // window nobody can see is a bark about a button nobody is looking at.
                     if (DtrhHostService.IsActive) return false;
                     if (LoomHostService.IsActive) return false;
                     if (ArcademyHostService.IsActive) return false;
+                    // The Lock Card owns the user's attention (and their input) while it is up.
+                    if (LockCardWindow.IsAnyOpen()) return false;
 
                     return true;
                 }

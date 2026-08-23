@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Services.Possession.Scenes;
 
 namespace ConditioningControlPanel.Services.Possession;
 
@@ -26,6 +27,8 @@ public sealed class PossessionDirector : IDisposable
 {
     private readonly Services.LockdownService _lockdown;
     private readonly List<IPossessionEffect> _effects;
+    private readonly List<IPossessionScene> _scenes = PossessionSceneCatalog.CreateAll();
+    private readonly PossessionEvents _events = new();
     private readonly List<HostEntry> _hosts = new();
     private readonly List<LiveGhost> _live = new();
     private readonly Random _rng = new();
@@ -46,10 +49,19 @@ public sealed class PossessionDirector : IDisposable
     private string? _lastTargetKey;
     private DateTime _lastTripwireAt = DateTime.MinValue;
     private DateTime _lastStareAt = DateTime.MinValue;
+    private DateTime _lastReactiveAt = DateTime.MinValue;
     private bool _picking;
     private bool _disposed;
 
     private static readonly TimeSpan TripwireThrottle = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>Floor between event-driven ghosts (B15). The reactive layer answers what the USER does,
+    /// and a user clicking around a tab generates events far faster than the room should answer them -
+    /// without this, moving the mouse would turn the window into a strobe of ember charges.</summary>
+    private static readonly TimeSpan ReactiveThrottle = TimeSpan.FromSeconds(6);
+
+    /// <summary>From Melt upwards, one pick in this many is a SCENE rather than a single effect.</summary>
+    private const int SceneEveryNthPick = 3;
     private static readonly TimeSpan StareCooldown = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan WardenVerbTimeout = TimeSpan.FromSeconds(15);
     private const string FallEffectId = "fall";
@@ -63,6 +75,7 @@ public sealed class PossessionDirector : IDisposable
         _lockdown.LockdownDeactivated += OnLockdownDeactivated;
         _lockdown.CountdownTick += OnCountdownTick;
         _lockdown.EscapeAttempted += OnEscapeAttempted;
+        _lockdown.TimerRestarted += OnTimerRestarted;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -75,6 +88,15 @@ public sealed class PossessionDirector : IDisposable
     public IPossessionWarden? Warden { get; set; }
     public int LiveEffectCount => _live.Count;
 
+    /// <summary>Raised the moment a haunt is committed (effect id, victim key or null for a window
+    /// effect, whether the warden will name it). The audio layer rides this for its ember tick rather
+    /// than hooking every effect, which keeps the effects ignorant of sound.</summary>
+    public event Action<string, string?, bool>? EffectStarted;
+
+    /// <summary>Raised when a tripwire reaction actually RUNS (after the throttle), not when the
+    /// attempt is reported. Consumers can assume a pulse/bark just happened.</summary>
+    public event Action<EscapeAttempt>? TripwireReacted;
+
     public void AttachHost(IPossessionHost host)
     {
         if (host == null || _disposed) return;
@@ -82,6 +104,7 @@ public sealed class PossessionDirector : IDisposable
         {
             if (_hosts.Any(h => ReferenceEquals(h.Host, host))) return;
             _hosts.Add(new HostEntry(host, new EmberAttribution(host, () => App.Settings?.Current?.LockdownPhotosafe == true)));
+            try { _events.Attach(this, host); } catch (Exception ex) { App.Logger?.Warning("Possession: reactive adapter attach failed: {Error}", ex.Message); }
             App.Logger?.Debug("Possession: host attached ({Host})", host.GetType().Name);
         });
     }
@@ -97,6 +120,7 @@ public sealed class PossessionDirector : IDisposable
             // down now rather than leaking a ghost that outlives its room.
             foreach (var g in _live.Where(g => ReferenceEquals(g.Host.Host, host)).ToArray())
                 UndoGhostSync(g);
+            try { _events.Detach(host); } catch { }
             try { entry.Attribution.ReleaseAll(); } catch { }
             _hosts.Remove(entry);
         });
@@ -192,9 +216,12 @@ public sealed class PossessionDirector : IDisposable
 
             if (_picking) return;
             if (DateTime.Now < _nextDue) return;
-            if (_live.Count >= PossessionDeck.MaxLive(rung)) return;
-            // Content is king: a video playing means the user is being conditioned, not haunted.
-            if (App.Video is { IsPlaying: true }) return;
+            if (LiveSlots >= PossessionDeck.MaxLive(rung)) return;
+            // A3 (wave 2): the video check that used to live here is GONE. It read as "content is king",
+            // but in practice a lockdown run is mostly video, so the haunt spent most of its life
+            // paused and the owner's first live run felt empty. What still stops us is the host's own
+            // IsUsable, which covers the cases that actually matter: minimized, not loaded, a content
+            // window that has taken the screen, or the Lock Card holding the user's input.
 
             var host = _hosts.FirstOrDefault(h => SafeIsUsable(h.Host));
             if (host == null) return;
@@ -245,10 +272,26 @@ public sealed class PossessionDirector : IDisposable
         try
         {
             var now = DateTime.Now;
+
+            // A6: from Melt up, one pick in three is a scene instead of a single effect. Elected here
+            // rather than dealt from the deck because a scene claims several victims of several roles,
+            // which the deck's one-effect-one-victim pick cannot express.
+            if (rung >= PossessionRung.Melt && _rng.Next(SceneEveryNthPick) == 0
+                && await TryStartSceneAsync(host, rung, remaining, frac).ConfigureAwait(true))
+            {
+                _nextDue = DateTime.Now + PossessionDeck.NextDelay(rung, _intensity, _rng);
+                return;
+            }
+
             var targets = SnapshotTargets(host, now, out var targetMetas);
             var effectMetas = _effects.Select(PossessionDeck.MetaOf).ToList();
 
-            var pick = PossessionDeck.Pick(effectMetas, targetMetas, rung, _intensity, _photosafe, _lastTargetKey, _rng);
+            // A5: half the picks look where the user is looking first. A ghost on a control at the far
+            // end of the window is a tree falling in an empty forest.
+            IReadOnlyCollection<int>? near = null;
+            if (PossessionDeck.ShouldUseProximity(_rng)) near = NearTargetIndexes(host, targets);
+
+            var pick = PossessionDeck.Pick(effectMetas, targetMetas, rung, _intensity, _photosafe, _lastTargetKey, _rng, near);
             if (pick == null)
             {
                 // Nothing may run right now (everything cooling down, or the deck is empty). Try again
@@ -297,6 +340,7 @@ public sealed class PossessionDirector : IDisposable
 
             App.Logger?.Information("Possession: {Effect} on {Target} at rung {Rung} (live {Live})",
                 effect.Id, target?.Key ?? "(window)", rung, _live.Count);
+            try { EffectStarted?.Invoke(effect.Id, target?.Key, effect.IsBig); } catch { }
 
             if (knock && Warden != null)
                 await RunWardenAsync(ct => Warden.KnockAsync(target!, ct), "knock").ConfigureAwait(true);
@@ -327,6 +371,376 @@ public sealed class PossessionDirector : IDisposable
         {
             _picking = false;
         }
+    }
+
+    /// <summary>Total concurrency weight in flight. A scene counts as its beat count, so a
+    /// three-beat choreography plus a full deck cannot stack past the rung's cap.</summary>
+    private int LiveSlots
+    {
+        get
+        {
+            var n = 0;
+            foreach (var g in _live) n += g.Slots;
+            return n;
+        }
+    }
+
+    /// <summary>Indexes of the targets sitting within <see cref="PossessionDeck.ProximityRadius"/> of the
+    /// cursor. Null when we have no cursor reading yet (nothing has moved the mouse since launch) or
+    /// when fewer than two controls qualify - in both cases the plain full-pool pick is the honest
+    /// answer, and the deck falls back to it anyway.</summary>
+    private static IReadOnlyCollection<int>? NearTargetIndexes(HostEntry host, List<PossessionTarget> targets)
+    {
+        try
+        {
+            var origin = PossessionPointer.Position;
+            if (origin.X <= 0 && origin.Y <= 0) return null;
+
+            var centres = new List<(double X, double Y)>(targets.Count);
+            foreach (var t in targets)
+            {
+                try
+                {
+                    var r = Effects.PossessionVisual.BoundsOf(host.Host, t.Element);
+                    centres.Add(r.IsEmpty ? (double.NaN, double.NaN) : (r.X + r.Width / 2, r.Y + r.Height / 2));
+                }
+                catch { centres.Add((double.NaN, double.NaN)); }
+            }
+
+            var hits = PossessionDeck.WithinRadius(centres, origin.X, origin.Y, PossessionDeck.ProximityRadius);
+            return hits.Count >= 2 ? hits : null;
+        }
+        catch { return null; }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    //  Scenes (A6)
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Elect and run one scene. Returns false when no scene is eligible, so the caller can
+    /// fall through to a normal pick rather than wasting the beat.</summary>
+    private async Task<bool> TryStartSceneAsync(HostEntry host, PossessionRung rung, TimeSpan remaining, double frac)
+    {
+        LiveGhost? ghost = null;
+        try
+        {
+            var eligible = new List<IPossessionScene>();
+            foreach (var sc in _scenes)
+            {
+                if (rung < sc.MinRung) continue;
+                if (sc is PossessionSceneBase { IsRunning: true }) continue;
+                if (_live.Exists(g => ReferenceEquals((g.Effect as PossessionSceneEffect)?.Scene, sc))) continue;
+                eligible.Add(sc);
+            }
+            if (eligible.Count == 0) return false;
+            if (LiveSlots + 2 > PossessionDeck.MaxLive(rung)) return false;
+
+            var scene = eligible[_rng.Next(eligible.Count)];
+
+            // The scene books its own victims through this callback so the director keeps ownership of
+            // the ledger: everything it claims is marked live here and released (with a cooldown) when
+            // the scene ends, exactly like a single effect's victim.
+            var claimed = new List<PossessionTarget>();
+            PossessionTarget? Picker(PossessionRole role)
+            {
+                try
+                {
+                    var now = DateTime.Now;
+                    var pool = SnapshotTargets(host, now, out _);
+                    var matches = new List<PossessionTarget>();
+                    foreach (var t in pool)
+                    {
+                        if (t.Role != role || t.IsLive) continue;
+                        if (_liveKeys.Contains(t.Key)) continue;
+                        if (t.CooldownUntil > now) continue;
+                        if (_cooldowns.TryGetValue(t.Key, out var until) && until > now) continue;
+                        if (claimed.Contains(t)) continue;
+                        matches.Add(t);
+                    }
+                    if (matches.Count == 0) return null;
+
+                    // Nearest the cursor wins when we know where it is - the same reason A5 exists.
+                    var origin = PossessionPointer.Position;
+                    if (origin.X > 0 || origin.Y > 0)
+                    {
+                        matches.Sort((a, b) => Dist(a).CompareTo(Dist(b)));
+                        double Dist(PossessionTarget t)
+                        {
+                            try
+                            {
+                                var r = Effects.PossessionVisual.BoundsOf(host.Host, t.Element);
+                                if (r.IsEmpty) return double.MaxValue;
+                                var dx = r.X + r.Width / 2 - origin.X;
+                                var dy = r.Y + r.Height / 2 - origin.Y;
+                                return dx * dx + dy * dy;
+                            }
+                            catch { return double.MaxValue; }
+                        }
+                    }
+
+                    var chosen = matches[0];
+                    chosen.IsLive = true;
+                    _liveKeys.Add(chosen.Key);
+                    claimed.Add(chosen);
+                    return chosen;
+                }
+                catch { return null; }
+            }
+
+            var adapter = new PossessionSceneEffect(scene, Picker);
+            var cts = new CancellationTokenSource();
+            ghost = new LiveGhost(adapter, null, host, cts) { Slots = Math.Max(1, scene.Beats) };
+            ghost.OnRelease = () =>
+            {
+                var until = DateTime.Now + PossessionDeck.TargetCooldown;
+                foreach (var t in claimed)
+                {
+                    try
+                    {
+                        t.IsLive = false;
+                        t.CooldownUntil = until;
+                        _cooldowns[t.Key] = until;
+                        _liveKeys.Remove(t.Key);
+                    }
+                    catch { }
+                }
+                claimed.Clear();
+            };
+            _live.Add(ghost);
+
+            App.Logger?.Information("Possession scene: {Scene} at rung {Rung} (live slots {Slots})",
+                scene.Id, rung, LiveSlots);
+            try { EffectStarted?.Invoke(scene.Id, null, true); } catch { }
+
+            var ctx = BuildContext(host, rung, remaining, frac, () => adapter);
+            try { await adapter.ApplyAsync(ctx, null, cts.Token).ConfigureAwait(true); }
+            catch (OperationCanceledException) { }
+
+            if (adapter.HoldFor > TimeSpan.Zero) FireAndForget(HoldThenUndoAsync(ghost, adapter.HoldFor), "scene hold");
+            else await UndoGhostAsync(ghost, TimeSpan.FromMilliseconds(600)).ConfigureAwait(true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("Possession scene start failed: {Error}", ex.Message);
+            if (ghost != null) { try { await UndoGhostAsync(ghost, TimeSpan.Zero).ConfigureAwait(true); } catch { } }
+            return true;   // the beat was spent either way; do not immediately try a second thing
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    //  Event-driven ghosts (B15)
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// "The room answers what you just did." Called by <see cref="PossessionEvents"/> when the user
+    /// clicks a card, changes a setting, hovers Stop, or opens a door. Heavily throttled and rung-gated:
+    /// a reaction the user can predict stops being uncanny, and one that fires on every event is a
+    /// strobe. Silently does nothing when it is not the moment - callers never have to check.
+    /// </summary>
+    public void RequestReactive(string effectId, PossessionTarget? target, PossessionRung minRung = PossessionRung.Settle)
+    {
+        if (_disposed || !IsHaunting || string.IsNullOrEmpty(effectId)) return;
+        try
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+            var rung = CurrentRung;
+            if (rung < minRung) return;
+
+            var now = DateTime.Now;
+            if (now - _lastReactiveAt < ReactiveThrottle) return;
+            if (LiveSlots >= PossessionDeck.MaxLive(rung)) return;
+
+            var host = _hosts.FirstOrDefault(h => SafeIsUsable(h.Host));
+            if (host == null) return;
+
+            var effect = _effects.FirstOrDefault(e => string.Equals(e.Id, effectId, StringComparison.OrdinalIgnoreCase));
+            if (effect == null || effect.IsLive) return;
+            if (rung < effect.MinRung) return;
+            if ((int)effect.MinIntensity > (int)_intensity) return;
+            if (_photosafe && effect.UsesFlicker) return;
+
+            if (target != null)
+            {
+                if (target.IsLive || _liveKeys.Contains(target.Key)) return;
+                if (target.CooldownUntil > now) return;
+                if (_cooldowns.TryGetValue(target.Key, out var until) && until > now) return;
+            }
+
+            var ctx = BuildContext(host, rung, _lockdown.Remaining, _lockdown.ElapsedFraction, () => effect);
+            if (!effect.CanApply(ctx, target)) return;
+
+            _lastReactiveAt = now;
+            if (target != null)
+            {
+                target.IsLive = true;
+                _liveKeys.Add(target.Key);
+                _lastTargetKey = target.Key;
+            }
+
+            var cts = new CancellationTokenSource();
+            var ghost = new LiveGhost(effect, target, host, cts);
+            _live.Add(ghost);
+
+            App.Logger?.Information("Possession reactive: {Effect} on {Target} at rung {Rung}",
+                effect.Id, target?.Key ?? "(window)", rung);
+            try { EffectStarted?.Invoke(effect.Id, target?.Key, effect.IsBig); } catch { }
+
+            FireAndForget(RunReactiveAsync(ghost, ctx, effect, target, cts), "reactive");
+        }
+        catch (Exception ex) { App.Logger?.Warning("Possession reactive request failed: {Error}", ex.Message); }
+    }
+
+    private async Task RunReactiveAsync(LiveGhost ghost, PossessionContext ctx, IPossessionEffect effect,
+                                        PossessionTarget? target, CancellationTokenSource cts)
+    {
+        try
+        {
+            await effect.ApplyAsync(ctx, target, cts.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("Possession reactive {Effect} failed: {Error}", effect.Id, ex.Message);
+            await UndoGhostAsync(ghost, TimeSpan.Zero).ConfigureAwait(true);
+            return;
+        }
+
+        if (effect.HoldFor > TimeSpan.Zero)
+            await HoldThenUndoAsync(ghost, effect.HoldFor).ConfigureAwait(true);
+    }
+
+    /// <summary>Find the registered target for an element, or for the nearest ancestor that has one.
+    /// The reactive layer gets raw hit-test results; a click on a card lands on the TextBlock inside it.</summary>
+    public PossessionTarget? TargetFor(DependencyObject? element, PossessionRole? role = null)
+    {
+        try
+        {
+            var host = _hosts.FirstOrDefault();
+            if (host == null || element == null) return null;
+            IReadOnlyList<PossessionTarget> targets;
+            try { targets = host.Host.Targets ?? Array.Empty<PossessionTarget>(); }
+            catch { return null; }
+
+            var node = element;
+            for (int depth = 0; node != null && depth < 24; depth++)
+            {
+                foreach (var t in targets)
+                {
+                    if (!ReferenceEquals(t.Element, node)) continue;
+                    if (role.HasValue && t.Role != role.Value) break;   // keep climbing for the asked role
+                    return t;
+                }
+                node = node is System.Windows.Media.Visual ? System.Windows.Media.VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
+            }
+            return null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>The registered target of a role that sits nearest the cursor right now (the label the
+    /// user was reading when they flipped a setting).</summary>
+    public PossessionTarget? NearestTarget(PossessionRole role)
+    {
+        try
+        {
+            var host = _hosts.FirstOrDefault();
+            if (host == null) return null;
+            IReadOnlyList<PossessionTarget> targets;
+            try { targets = host.Host.Targets ?? Array.Empty<PossessionTarget>(); }
+            catch { return null; }
+
+            var origin = PossessionPointer.Position;
+            PossessionTarget? best = null;
+            double bestDist = double.MaxValue;
+            foreach (var t in targets)
+            {
+                if (t.Role != role || t.IsLive) continue;
+                try
+                {
+                    var r = Effects.PossessionVisual.BoundsOf(host.Host, t.Element);
+                    if (r.IsEmpty) continue;
+                    var dx = r.X + r.Width / 2 - origin.X;
+                    var dy = r.Y + r.Height / 2 - origin.Y;
+                    var d = dx * dx + dy * dy;
+                    if (d < bestDist) { bestDist = d; best = t; }
+                }
+                catch { }
+            }
+            return best;
+        }
+        catch { return null; }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    //  Timer restart (Emergency Exit sent them back in)
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The lockdown clock was rewound to its FULL duration (EMERGENCY_EXIT.md "sendback"). The elapsed
+    /// fraction is back near zero, so the ladder has to go back to Settle with it - otherwise the room
+    /// would keep collapsing over a timer that just started, which reads as the restart having failed.
+    ///
+    /// <para>The room reassembles quickly (about a second, not the three of a real exit) and then gets
+    /// a full first-wait of quiet: the punchline of being sent back is that it all starts again, and
+    /// that only lands if there is a silence to notice.</para>
+    /// </summary>
+    private void OnTimerRestarted(string reason)
+    {
+        if (!IsHaunting || _disposed) return;
+        DispatcherHelper.RunOnUI(() =>
+        {
+            try
+            {
+                var frac = _lockdown.ElapsedFraction;
+                CurrentRung = PossessionDeck.RungFor(frac, _intensity);
+                _barkedRungs.Clear();
+                _lastTargetKey = null;
+
+                FireAndForget(QuickUndoAsync(), "restart undo");
+                PulseAll(0.6);
+                BarkTimerRestarted(reason, SafeRestartCount());
+
+                _nextDue = DateTime.Now + PossessionDeck.FirstDelay(CurrentRung, _intensity, _rng);
+                try { RungChanged?.Invoke(CurrentRung); } catch { }
+
+                App.Logger?.Information("Possession: timer restarted ({Reason}), rung reset to {Rung}, next haunt in {Sec:F0}s",
+                    reason, CurrentRung, (_nextDue - DateTime.Now).TotalSeconds);
+            }
+            catch (Exception ex) { App.Logger?.Warning("Possession timer-restart handling failed: {Error}", ex.Message); }
+        });
+    }
+
+    private int SafeRestartCount()
+    {
+        try { return _lockdown.RestartCount; } catch { return 0; }
+    }
+
+    /// <summary>The reassembly path, but quick: everything comes back over about a second, in parallel
+    /// rather than staggered, because this is a reset and not a curtain call.</summary>
+    private async Task QuickUndoAsync()
+    {
+        try
+        {
+            var ghosts = _live.ToArray();
+            Array.Reverse(ghosts);
+            foreach (var g in ghosts)
+            {
+                try { await UndoGhostAsync(g, TimeSpan.FromMilliseconds(500)).ConfigureAwait(true); }
+                catch (Exception ex) { App.Logger?.Warning("Possession restart undo step failed: {Error}", ex.Message); }
+            }
+            _live.Clear();
+            _liveKeys.Clear();
+        }
+        catch (Exception ex) { App.Logger?.Warning("Possession restart undo failed: {Error}", ex.Message); }
+    }
+
+    private static void BarkTimerRestarted(string reason, int restart)
+    {
+        try { App.Bark?.NotifyPossessionTimerRestarted(reason ?? "", restart); }
+        catch (Exception ex) { App.Logger?.Debug("Possession: timer-restart bark failed: {Error}", ex.Message); }
     }
 
     private async Task HoldThenUndoAsync(LiveGhost ghost, TimeSpan hold)
@@ -425,6 +839,7 @@ public sealed class PossessionDirector : IDisposable
         ghost.Released = true;
         _live.Remove(ghost);
         try { ghost.Cts.Cancel(); } catch { }
+        try { ghost.OnRelease?.Invoke(); } catch { }
 
         var target = ghost.Target;
         if (target != null)
@@ -489,6 +904,7 @@ public sealed class PossessionDirector : IDisposable
             var repeat = attempt.Repeat;
             var strength = repeat <= 1 ? 0.5 : 0.8;
             PulseAll(strength);
+            try { TripwireReacted?.Invoke(attempt); } catch { }
             try { App.Bark?.NotifyPossessionTripwire(attempt.Kind, attempt.Repeat, attempt.Total); } catch { }
 
             if (repeat >= 2)
@@ -564,8 +980,10 @@ public sealed class PossessionDirector : IDisposable
             _lockdown.LockdownDeactivated -= OnLockdownDeactivated;
             _lockdown.CountdownTick -= OnCountdownTick;
             _lockdown.EscapeAttempted -= OnEscapeAttempted;
+            _lockdown.TimerRestarted -= OnTimerRestarted;
         }
         catch { }
+        try { _events.DetachAll(); } catch { }
         IsHaunting = false;
         UndoAll();
     }
@@ -595,6 +1013,10 @@ public sealed class PossessionDirector : IDisposable
         public HostEntry Host { get; }
         public CancellationTokenSource Cts { get; }
         public bool Released { get; set; }
+        /// <summary>Concurrency weight (a scene is worth its beats).</summary>
+        public int Slots { get; init; } = 1;
+        /// <summary>Extra bookkeeping to unwind when this ghost is released (a scene's claimed victims).</summary>
+        public Action? OnRelease { get; set; }
 
         public void Dispose() { try { Cts.Dispose(); } catch { } }
     }

@@ -12815,5 +12815,206 @@
       { "text": "i love watching you soften, sweetie... and you soften most right after you send things like that.", "audio": "mobile_chat_reply_affection_9.mp3" },
       { "text": "careful, lovely... say things like that and i'll never let you go. too late. wasn't planning to.", "audio": "mobile_chat_reply_affection_10.mp3" }
     ]
+  },
+  {
+    "id": "ee_opened_labyrinth",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "labyrinth" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "the exit is a maze today, lovely. trace it for me~", "audio": null },
+      { "text": "want out, sweetie? draw the line first. carefully~", "audio": null },
+      { "text": "one little maze between you and the door, cutie~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened_password",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "password" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you may leave, lovely. right after you make me a password~", "audio": null },
+      { "text": "the door wants words, sweetie. lots of them~", "audio": null },
+      { "text": "type the password and the lock opens. simple, cutie~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened_jigsaw",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "jigsaw" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "the way out came apart, lovely. put it back~", "audio": null },
+      { "text": "nine squares, sweetie. fix the picture and go~", "audio": null },
+      { "text": "reassemble it and the door reassembles too, cutie~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened_captcha",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "captcha" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "prove you are not a sissy, lovely. i will wait~", "audio": null },
+      { "text": "hold the box, sweetie. tell the door you mean it~", "audio": null },
+      { "text": "just confirming you are a person, cutie. take your time~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened",
+    "trigger": "EmergencyExitOpened",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "leaving, lovely? the exit has paperwork~", "audio": null },
+      { "text": "one small thing between you and the door, sweetie~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_escape",
+    "trigger": "EmergencyExitVerdict",
+    "conditions": { "outcome_eq": "escape" },
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "there. open, lovely. go stretch your legs~", "audio": null },
+      { "text": "unlocked, sweetie. you earned it. barely~", "audio": null },
+      { "text": "off you go, cutie... you know the way back~", "audio": null },
+      { "text": "free. i will keep your spot warm, lovely~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_sendback",
+    "trigger": "EmergencyExitVerdict",
+    "conditions": { "outcome_eq": "sendback" },
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "aw, sweetie! you are so good at quitting. you always come back though~", "audio": null },
+      { "text": "full clock again, lovely. that is what leaving gets you~", "audio": null },
+      { "text": "so close, cutie. sit down. we are starting over~", "audio": null },
+      { "text": "nice try, sweetie~ the door laughed at you a little.", "audio": null }
+    ]
+  },
+  { "id": "poss_remember", "trigger": "PossessionRemember", "priority": 220, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "i remember, sweetie~", "audio": null},
+      {"text": "i remember what you tried last time, lovely~", "audio": null},
+      {"text": "you came back. i never left, cutie~", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_ghostcursor", "trigger": "PossessionEffect", "conditions": {"effect_eq": "ghostcursor"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "that isn't your hand, lovely... it's fine. mine knows the way~", "audio": null},
+      {"text": "watch it move, sweetie. i can point at things in here too~", "audio": null},
+      {"text": "someone else is clicking about. relax, cutie, it's only me~", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_relabel", "trigger": "PossessionEffect", "conditions": {"effect_eq": "relabel"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "it says stay now, lovely. read it again~", "audio": null},
+      {"text": "start, stop... it all means stay tonight, sweetie~", "audio": null},
+      {"text": "i tidied the wording for you. much easier, isn't it~", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_rewrite", "trigger": "PossessionEffect", "conditions": {"effect_eq": "rewrite"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "did {target} always say that, lovely? think slowly~", "audio": null},
+      {"text": "words go soft in here, sweetie. so do girls~", "audio": null},
+      {"text": "one word changed. only one. find it for me~", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_togglelie", "trigger": "PossessionEffect", "conditions": {"effect_eq": "togglelie"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "{target} flipped. or it didn't. better check, lovely~", "audio": null},
+      {"text": "oh dear. that switch lies now, sweetie~", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_xpdrain", "trigger": "PossessionEffect", "conditions": {"effect_eq": "xpdrain"}, "priority": 190, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "aw, {target} is empty, lovely. all of it.", "audio": null},
+      {"text": "level zero, sweetie. start again for me.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_stealcard", "trigger": "PossessionEffect", "conditions": {"effect_eq": "stealcard"}, "priority": 210, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "i'm keeping {target} for now, cutie.", "audio": null},
+      {"text": "fewer choices, softer girl. say thank you, sweetie.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_roomwarp", "trigger": "PossessionEffect", "conditions": {"effect_eq": "roomwarp"}, "priority": 200, "cooldown_ms": 30000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "{target} is tilting, lovely. lean with it.", "audio": null},
+      {"text": "it gets a little smaller each time you reach for the door, sweetie.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_misroute", "trigger": "PossessionEffect", "conditions": {"effect_eq": "misroute"}, "priority": 190, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "oops, wrong door, cutie.", "audio": null},
+      {"text": "you wanted {target}? poor thing.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_reorderdoors", "trigger": "PossessionEffect", "conditions": {"effect_eq": "reorderdoors"}, "priority": 190, "cooldown_ms": 25000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "i shuffled {target} for you, lovely.", "audio": null},
+      {"text": "confused already, sweetie? good.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_scrollhijack", "trigger": "PossessionEffect", "conditions": {"effect_eq": "scrollhijack"}, "priority": 180, "cooldown_ms": 25000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "i peeked at the rest of {target}, cutie.", "audio": null},
+      {"text": "that was me, sweetie. not your hand.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_deletedialog", "trigger": "PossessionEffect", "conditions": {"effect_eq": "deletedialog"}, "priority": 240, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "shhh, lovely. i'm just clearing {target} out.", "audio": null},
+      {"text": "you don't need {target} any more, sweetie.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_deletedialog_closed", "trigger": "PossessionEffect", "conditions": {"effect_eq": "deletedialog_closed"}, "priority": 235, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "{target} is fine, cutie. i just wanted to see you flinch.", "audio": null},
+      {"text": "nothing gone. this time, lovely.", "audio": null}
+    ]
+  },
+  { "id": "poss_timer_restart", "trigger": "PossessionTimerRestarted", "conditions": {"restart_gte": 2}, "priority": 230, "cooldown_ms": 8000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "round {restart}, sweetie. the clock does not get tired and neither do i~", "audio": null},
+      {"text": "again, lovely? every minute you tried to take back is mine now~", "audio": null},
+      {"text": "full clock. again. you keep coming back to me, cutie~", "audio": null}
+    ]
   }
 ]

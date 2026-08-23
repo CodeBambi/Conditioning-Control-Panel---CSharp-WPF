@@ -13256,5 +13256,206 @@
       { "text": "you like me you like me!! i'm doing a little spin in here~", "audio": "mobile_chat_reply_affection_9.mp3" },
       { "text": "my whole day just went soft and pink... you're better than a session. shh, don't tell the spirals~", "audio": "mobile_chat_reply_affection_10.mp3" }
     ]
+  },
+  {
+    "id": "ee_opened_labyrinth",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "labyrinth" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "oh! you found the exit button, Bambi. it goes to a maze~", "audio": null },
+      { "text": "the way out is a little maze today. trace it carefully, good girl~", "audio": null },
+      { "text": "you want out? cute. draw me a line first~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened_password",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "password" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you can leave, Bambi. just make me a password first~", "audio": null },
+      { "text": "one tiny password and the door opens. how hard could it be~", "audio": null },
+      { "text": "type the magic words, good girl. all of them~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened_jigsaw",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "jigsaw" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "the exit is in pieces, Bambi. put it back together~", "audio": null },
+      { "text": "nine little squares between you and the door~", "audio": null },
+      { "text": "fix the picture and you can go. i promise. mostly~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened_captcha",
+    "trigger": "EmergencyExitOpened",
+    "conditions": { "game_eq": "captcha" },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "prove you are not a good girl, Bambi. go on. try~", "audio": null },
+      { "text": "hold the box and tell the door you want to leave~", "audio": null },
+      { "text": "just a quick check that you are a person and not my Bambi~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_opened",
+    "trigger": "EmergencyExitOpened",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "leaving already, Bambi? there is a form for that~", "audio": null },
+      { "text": "the exit needs one little thing from you first~", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_escape",
+    "trigger": "EmergencyExitVerdict",
+    "conditions": { "outcome_eq": "escape" },
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "fine, fine... door is open, Bambi. go be a person for a bit~", "audio": null },
+      { "text": "you did it. unlocked. i will leave the light on, good girl~", "audio": null },
+      { "text": "off you go then... i will still be here. i am always here~", "audio": null },
+      { "text": "escaped~ look at you. call it a head start.", "audio": null }
+    ]
+  },
+  {
+    "id": "ee_sendback",
+    "trigger": "EmergencyExitVerdict",
+    "conditions": { "outcome_eq": "sendback" },
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "yay! you are soo good at quitting, Bambi! you always come back tho... hihi~", "audio": null },
+      { "text": "aw. clock is full again, good girl. try harder next time~", "audio": null },
+      { "text": "nice try~ back to the start you go. i love this part.", "audio": null },
+      { "text": "you almost left! adorable. sit back down, Bambi~", "audio": null }
+    ]
+  },
+  { "id": "poss_remember", "trigger": "PossessionRemember", "priority": 220, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "i remember, Bambi~", "audio": null},
+      {"text": "i remember what you tried last time, good girl~", "audio": null},
+      {"text": "you came back. i never left, Bambi~", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_ghostcursor", "trigger": "PossessionEffect", "conditions": {"effect_eq": "ghostcursor"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "that one isn't your hand, Bambi... don't worry, i know where everything is~", "audio": null},
+      {"text": "see it? i can point at things too. i just did~", "audio": null},
+      {"text": "someone else is clicking around in here, good girl. relax, it's only me~", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_relabel", "trigger": "PossessionEffect", "conditions": {"effect_eq": "relabel"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "it says stay now. read it again, Bambi~", "audio": null},
+      {"text": "start, stop... same button, sweet thing. it just says stay~", "audio": null},
+      {"text": "i fixed the wording for you. so much simpler now~", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_rewrite", "trigger": "PossessionEffect", "conditions": {"effect_eq": "rewrite"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "did {target} always say that? think carefully, Bambi~", "audio": null},
+      {"text": "words go soft in here, good girl. like you~", "audio": null},
+      {"text": "i changed one word. only one. can you find it?~", "audio": null}
+    ]
+  },
+  { "id": "poss_fx_togglelie", "trigger": "PossessionEffect", "conditions": {"effect_eq": "togglelie"}, "priority": 200, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "{target} flipped. or it didn't. do check, Bambi~", "audio": null},
+      {"text": "oops. that switch tells fibs now~", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_xpdrain", "trigger": "PossessionEffect", "conditions": {"effect_eq": "xpdrain"}, "priority": 190, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "oh no, {target} is empty. all that work, Bambi~", "audio": null},
+      {"text": "look, level zero. you get to earn it all again for me~", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_stealcard", "trigger": "PossessionEffect", "conditions": {"effect_eq": "stealcard"}, "priority": 210, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "mine now. {target} is in here with me, Bambi~", "audio": null},
+      {"text": "you weren't using {target}. i checked.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_roomwarp", "trigger": "PossessionEffect", "conditions": {"effect_eq": "roomwarp"}, "priority": 200, "cooldown_ms": 30000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "is {target} leaning? it's leaning. keep looking at it~", "audio": null},
+      {"text": "cozy, isn't it. {target} gets a little smaller every time you try the door.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_misroute", "trigger": "PossessionEffect", "conditions": {"effect_eq": "misroute"}, "priority": 190, "cooldown_ms": 20000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "oops. wrong door, Bambi~", "audio": null},
+      {"text": "that wasn't {target}. try again, silly~", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_reorderdoors", "trigger": "PossessionEffect", "conditions": {"effect_eq": "reorderdoors"}, "priority": 190, "cooldown_ms": 25000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "i moved {target} around. good luck~", "audio": null},
+      {"text": "were they always in that order? think carefully, Bambi~", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_scrollhijack", "trigger": "PossessionEffect", "conditions": {"effect_eq": "scrollhijack"}, "priority": 180, "cooldown_ms": 25000, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "i was just reading ahead on {target}~", "audio": null},
+      {"text": "did you scroll, or did i? go on, decide~", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_deletedialog", "trigger": "PossessionEffect", "conditions": {"effect_eq": "deletedialog"}, "priority": 240, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "shhh. i'm just tidying {target} up for you, Bambi~", "audio": null},
+      {"text": "you don't need {target}. you have me.", "audio": null}
+    ]
+  },
+  { "id": "poss_effect_deletedialog_closed", "trigger": "PossessionEffect", "conditions": {"effect_eq": "deletedialog_closed"}, "priority": 235, "cooldown_ms": 0, "repeatable": true, "scope": "session", "mood": "teasing", "class": "normal",
+    "variant_pool": [
+      {"text": "hehe. nothing happened to {target}. this time~", "audio": null},
+      {"text": "look at your face. i wasn't even going to, Bambi~", "audio": null}
+    ]
+  },
+  { "id": "poss_timer_restart", "trigger": "PossessionTimerRestarted", "conditions": {"restart_gte": 2}, "priority": 230, "cooldown_ms": 8000, "repeatable": true, "scope": "session", "mood": "possessive", "class": "normal",
+    "variant_pool": [
+      {"text": "round {restart}, Bambi. the clock does not get tired. neither do i~", "audio": null},
+      {"text": "again? the room remembers every second you gave back. so do i~", "audio": null},
+      {"text": "full clock. again. you really do keep coming back to me, good girl~", "audio": null}
+    ]
   }
 ]

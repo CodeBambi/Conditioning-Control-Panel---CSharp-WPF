@@ -8,8 +8,11 @@ using System.Windows.Media;
 namespace ConditioningControlPanel.Services.Possession.Effects;
 
 /// <summary>
-/// R0 "breathe" - the card is alive. A 1.5% swell in and out from the centre for the length of the
+/// R0 "breathe" - the card is alive. A 3% swell in and out from the centre for the length of the
 /// hold. You never catch it moving, you only notice that it is breathing.
+///
+/// <para>Wave 2 floor: 1.5% on a card inside a scaled Viewbox was under a pixel of travel at the
+/// edges. 3% is the smallest swell that survives the scale and still never reads as a hover state.</para>
 /// </summary>
 public sealed class BreatheEffect : PossessionEffectBase
 {
@@ -29,7 +32,7 @@ public sealed class BreatheEffect : PossessionEffectBase
         if (lease == null) return Task.CompletedTask;
 
         lease.SetOrigin(new Point(0.5, 0.5));
-        double peak = 1.0 + Amp(0.015);
+        double peak = 1.0 + Amp(0.03);
 
         PossAnim.Oscillate(lease.Scale, ScaleTransform.ScaleXProperty, 1.0, peak, 1600, PossAnim.Sine);
         PossAnim.Oscillate(lease.Scale, ScaleTransform.ScaleYProperty, 1.0, peak, 1600, PossAnim.Sine);

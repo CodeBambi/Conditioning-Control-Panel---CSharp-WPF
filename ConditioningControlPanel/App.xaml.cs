@@ -2320,6 +2320,11 @@ namespace ConditioningControlPanel
             // and LockdownPossessionEnabled is on, so constructing it here costs nothing.
             Possession = new Services.Possession.PossessionDirector(Lockdown, Services.Possession.Effects.PossessionEffectCatalog.CreateAll());
             Possession.Warden = new Services.Possession.Warden();
+            // Companion wave (POSSESSION.md): the ember tick / dip cues, and the one remembered charge a
+            // Full Doki lockdown leaves for the next launch. Both only subscribe; neither costs anything
+            // until a lockdown runs (or, for the charge, until the flag from the last one is spent).
+            Services.Possession.PossessionAudio.Install();
+            Services.Possession.PossessionRemember.Install();
             // Quest credit: each completed lockdown (Patreon-exclusive quest category).
             Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch { } };
 
@@ -2478,6 +2483,16 @@ namespace ConditioningControlPanel
                     ? e.Args[pidx + 1]
                     : Path.Combine(AppContext.BaseDirectory, "logs", "possession-preview");
                 Services.Dev.PossessionPreview.Run(mainWindow, possDir);
+            }
+
+            // `--emergency-exit-preview <game>`: open the REAL Emergency Exit window against the real
+            // page (labyrinth | password | jigsaw | captcha) with a synthetic init and NO lockdown, so
+            // the friction door can be verified without arming one. The host refuses to apply verdicts
+            // in preview mode - they are rolled and logged only. See Services/Dev/EmergencyExitPreview.cs.
+            // Dead code in every normal launch.
+            if (e.Args.Contains("--emergency-exit-preview"))
+            {
+                Services.Dev.EmergencyExitPreview.Run(mainWindow, Services.Dev.EmergencyExitPreview.ResolveGame(e.Args));
             }
 
             // `--overlay-host`: force the unified overlay host ON for this launch only (in-memory,
@@ -4533,6 +4548,11 @@ Application State:
             // exit-done, and that timer can never tick from inside OnExit - so the flush it guards
             // never happened and the last class's grades/streak went with the process.
             try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch { }
+
+            // The Emergency Exit's friction door: a WebView2 process outliving the app is a leak, and
+            // Close() is safe from here - it has no state to flush and never touches the lockdown (any
+            // verdict was applied the moment it was rolled).
+            try { Services.EmergencyExit.EmergencyExitHostService.Close(); } catch { }
 
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it

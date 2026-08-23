@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -293,6 +293,64 @@ namespace ConditioningControlPanel
             if (SettingsTab.TxtLockdownCountdown != null)
                 SettingsTab.TxtLockdownCountdown.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
             if (active) UpdateLockdownCountdown(App.Lockdown?.Remaining ?? TimeSpan.Zero);
+            WireLockdownChipNav(active);
+        }
+
+        /// <summary>The chip's own tooltip, cached the first time we swap it so the inactive card
+        /// gets its authored text back rather than a hard-coded copy of it.</summary>
+        private object? _lockdownChipToolTip;
+        private MouseButtonEventHandler? _lockdownChipNavHandler;
+
+        /// <summary>
+        /// While a lockdown runs, the Lockdown chip stops being a launcher and becomes a signpost:
+        /// clicking anywhere on the card body opens the Lockdown page, where the timer, the huge
+        /// Emergency Exit and the secret phrase all live. The +/- and "Lock in" controls are already
+        /// collapsed by SetLockdownActiveUi at that point, so nothing is being overridden - the card
+        /// is simply inert otherwise, and an inert card that shows a running countdown is exactly the
+        /// thing a user tries to click.
+        ///
+        /// <para>Wired from code rather than XAML so the chip markup (Views/Tabs/SettingsTabView.xaml)
+        /// stays owned by whoever owns the rail. PREVIEW-tunnelled so the handler runs whether or not
+        /// a child swallows the click.</para>
+        /// </summary>
+        private void WireLockdownChipNav(bool active)
+        {
+            try
+            {
+                var card = SettingsTab?.CardLockdown;
+                if (card == null) return;
+
+                if (_lockdownChipNavHandler != null)
+                {
+                    card.PreviewMouseLeftButtonDown -= _lockdownChipNavHandler;
+                    _lockdownChipNavHandler = null;
+                }
+
+                if (!active)
+                {
+                    card.Cursor = null;
+                    if (_lockdownChipToolTip != null) card.ToolTip = _lockdownChipToolTip;
+                    return;
+                }
+
+                _lockdownChipToolTip ??= card.ToolTip;
+                _lockdownChipNavHandler = (_, e) =>
+                {
+                    try
+                    {
+                        e.Handled = true;
+                        ShowTab("lockdown");
+                    }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "Lockdown: chip navigation failed"); }
+                };
+                card.PreviewMouseLeftButtonDown += _lockdownChipNavHandler;
+                card.Cursor = Cursors.Hand;
+                card.ToolTip = Localization.Loc.Get("lockdown_chip_active_tooltip");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Lockdown: could not rewire the rail chip");
+            }
         }
 
         private void UpdateLockdownCountdown(TimeSpan ts)

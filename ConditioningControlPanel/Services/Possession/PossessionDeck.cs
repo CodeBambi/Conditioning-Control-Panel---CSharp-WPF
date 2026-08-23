@@ -41,11 +41,17 @@ public readonly record struct PossessionPick(int EffectIndex, int TargetIndex);
 public static class PossessionDeck
 {
     /// <summary>The room gets to settle before the first haunt, whatever the cadence says. A user who
-    /// just hit Start should have time to sit down before the first thing twitches.</summary>
-    public static readonly TimeSpan FirstWait = TimeSpan.FromSeconds(45);
+    /// just hit Start should have time to sit down before the first thing twitches.
+    ///
+    /// <para>Wave 2 (owner play-test 2026-08-23, "not dense"): 45 s of nothing at the top of a 10 min
+    /// lockdown is a quarter of the Settle band spent proving the feature is off. 20 s is still long
+    /// enough to sit down.</para></summary>
+    public static readonly TimeSpan FirstWait = TimeSpan.FromSeconds(20);
 
-    /// <summary>How long a possessed control is left alone after it is released.</summary>
-    public static readonly TimeSpan TargetCooldown = TimeSpan.FromSeconds(90);
+    /// <summary>How long a possessed control is left alone after it is released. Halved in wave 2:
+    /// at the new cadence a 90 s cooldown starved the pool of the handful of controls the user is
+    /// actually looking at, and the haunt drifted to the window's dead corners.</summary>
+    public static readonly TimeSpan TargetCooldown = TimeSpan.FromSeconds(45);
 
     // ---------------------------------------------------------------------------------------------
     //  The ladder
@@ -78,27 +84,32 @@ public static class PossessionDeck
         _ => PossessionRung.Collapse,
     };
 
-    /// <summary>Max ghosts live at once. One at a time early (so the WHO is never ambiguous), three
-    /// once the room is collapsing.</summary>
+    /// <summary>Max ghosts live at once. Two early (one at a time read as an empty room, and the
+    /// attribution grammar - charge, outline, cursor ring - already answers WHO even when two things
+    /// are moving), four once the room is collapsing.</summary>
     public static int MaxLive(PossessionRung rung) => rung switch
     {
-        PossessionRung.Settle or PossessionRung.Drift => 1,
-        PossessionRung.Melt => 2,
-        _ => 3,
+        PossessionRung.Settle or PossessionRung.Drift => 2,
+        PossessionRung.Melt => 3,
+        _ => 4,
     };
 
     // ---------------------------------------------------------------------------------------------
     //  Cadence
     // ---------------------------------------------------------------------------------------------
 
-    /// <summary>Eerie base range (seconds) per rung. Gentle doubles it, Full Doki takes 80%.</summary>
+    /// <summary>Eerie base range (seconds) per rung. Gentle doubles it, Full Doki takes 80%.
+    ///
+    /// <para>Wave 2 sped the whole ladder up ~2.5x. The first live 10-minute Eerie run produced two
+    /// named effects in nine minutes, which is not a haunted room, it is a rare glitch. At the new
+    /// numbers a 10 min run lands roughly 40 haunts and the escalation is legible minute to minute.</para></summary>
     private static (double Min, double Max) BaseRangeSeconds(PossessionRung rung) => rung switch
     {
-        PossessionRung.Settle => (60, 90),
-        PossessionRung.Drift => (30, 45),
-        PossessionRung.Melt => (20, 30),
-        PossessionRung.Collapse => (12, 20),
-        _ => (8, 15),
+        PossessionRung.Settle => (20, 30),
+        PossessionRung.Drift => (12, 18),
+        PossessionRung.Melt => (8, 12),
+        PossessionRung.Collapse => (5, 8),
+        _ => (4, 6),
     };
 
     private static double CadenceScale(PossessionIntensity intensity) => intensity switch
@@ -191,7 +202,13 @@ public static class PossessionDeck
 
     /// <summary>Weighted pick of one effect plus its victim, or null when nothing may run. The effect is
     /// drawn by weight; the victim is then drawn flat from that effect's eligible pool, so a role with
-    /// many controls does not drag the whole deck towards itself. Deterministic for a given rng.</summary>
+    /// many controls does not drag the whole deck towards itself. Deterministic for a given rng.
+    ///
+    /// <para><paramref name="nearTargets"/> is the proximity option (wave 2, A5): indexes into
+    /// <paramref name="targets"/> that sit near the cursor. When it is supplied the pick is tried
+    /// against that shortlist FIRST and falls back to the full pool if nothing there may run - a haunt
+    /// the user cannot see is worth less than one on the wrong control. Passing null (or fewer than two
+    /// indexes) is the plain full-pool behaviour.</para></summary>
     public static PossessionPick? Pick(
         IReadOnlyList<PossessionEffectMeta> effects,
         IReadOnlyList<PossessionTargetMeta> targets,
@@ -199,9 +216,30 @@ public static class PossessionDeck
         PossessionIntensity intensity,
         bool photosafe,
         string? lastTargetKey,
-        Random rng)
+        Random rng,
+        IReadOnlyCollection<int>? nearTargets = null)
+    {
+        if (nearTargets != null && nearTargets.Count >= 2)
+        {
+            var near = PickCore(effects, targets, rung, intensity, photosafe, lastTargetKey, rng, nearTargets);
+            if (near != null) return near;
+        }
+        return PickCore(effects, targets, rung, intensity, photosafe, lastTargetKey, rng, null);
+    }
+
+    private static PossessionPick? PickCore(
+        IReadOnlyList<PossessionEffectMeta> effects,
+        IReadOnlyList<PossessionTargetMeta> targets,
+        PossessionRung rung,
+        PossessionIntensity intensity,
+        bool photosafe,
+        string? lastTargetKey,
+        Random rng,
+        IReadOnlyCollection<int>? restrictTargets)
     {
         if (effects == null || effects.Count == 0) return null;
+
+        var restrict = restrictTargets == null ? null : new HashSet<int>(restrictTargets);
 
         var candidates = new List<(int EffectIndex, List<int> Targets, double Weight)>();
         double total = 0;
@@ -216,7 +254,17 @@ public static class PossessionDeck
             if (needsTarget)
             {
                 pool = EligibleTargets(meta, targets, lastTargetKey);
+                if (restrict != null)
+                {
+                    // A targetless effect ignores the shortlist on purpose: a title typo or an edge
+                    // pulse is already "wherever you are looking", it has no coordinates to be near.
+                    pool = pool.FindAll(restrict.Contains);
+                }
                 if (pool.Count == 0) continue;   // no victim it may take -> not a candidate
+            }
+            else if (restrict != null)
+            {
+                continue;   // proximity round: only effects that can land ON something near the cursor
             }
 
             var w = WeightOf(meta, rung);
@@ -242,5 +290,42 @@ public static class PossessionDeck
             if (idx < 0 || idx >= c.Targets.Count) idx = 0;
             return new PossessionPick(c.EffectIndex, c.Targets[idx]);
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    //  Proximity (wave 2, A5)
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>How near the cursor a control has to be to count as "where the user is", in window
+    /// pixels. Roughly one card's reach: wide enough that the pointer resting anywhere on a card puts
+    /// that whole card plus its neighbours in range, narrow enough that the other half of the window
+    /// is not.</summary>
+    public const double ProximityRadius = 160.0;
+
+    /// <summary>Share of picks that try the cursor's neighbourhood first. Half: all-proximity would
+    /// leave the rest of the room provably safe (and the user would learn to look away), none is the
+    /// wave-1 behaviour the owner called empty.</summary>
+    public const double ProximityChance = 0.5;
+
+    /// <summary>Roll for a proximity round. Split out so the director stays a plumbing file and the
+    /// odds stay pinnable.</summary>
+    public static bool ShouldUseProximity(Random rng) => (rng?.NextDouble() ?? 1.0) < ProximityChance;
+
+    /// <summary>Indexes of every centre within <paramref name="radius"/> of the origin. Plain doubles
+    /// rather than a Point so the deck keeps its no-WPF rule; the director does the transform.</summary>
+    public static List<int> WithinRadius(IReadOnlyList<(double X, double Y)> centres, double originX, double originY, double radius)
+    {
+        var hits = new List<int>();
+        if (centres == null || radius <= 0) return hits;
+        if (double.IsNaN(originX) || double.IsNaN(originY)) return hits;
+        var r2 = radius * radius;
+        for (int i = 0; i < centres.Count; i++)
+        {
+            var dx = centres[i].X - originX;
+            var dy = centres[i].Y - originY;
+            if (double.IsNaN(dx) || double.IsNaN(dy)) continue;
+            if (dx * dx + dy * dy <= r2) hits.Add(i);
+        }
+        return hits;
     }
 }

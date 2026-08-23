@@ -2934,6 +2934,30 @@ namespace ConditioningControlPanel.Models
             set { _lockdownPossessionIntroSeen = value; OnPropertyChanged(); }
         }
 
+        // Possession audio tics: the ember "tick" on every big effect and the 300 ms dip at a rung
+        // change / a third repeated escape attempt (Services/Possession/PossessionAudio.cs).
+        // Separate from LockdownPhotosafe on purpose - photosafe is a VISUAL accommodation, and a
+        // user who needs the room to stop flashing may still want to hear it move. Master volume 0
+        // and AudioService's own circuit breaker silence this like everything else.
+        private bool _lockdownAudioTics = true;
+        public bool LockdownAudioTics
+        {
+            get => _lockdownAudioTics;
+            set { _lockdownAudioTics = value; OnPropertyChanged(); }
+        }
+
+        // "It remembers": set when a Full Doki lockdown ENDS, spent ~20 s into the next launch as one
+        // ember charge on the Lockdown door plus one bark, then cleared. Persisted because the whole
+        // point is that it survives the app closing; cleared unconditionally on the next launch so a
+        // crash between arming and spending can never leave it stuck on
+        // (Services/Possession/PossessionRemember.cs).
+        private bool _lockdownPossessionRememberPending = false;
+        public bool LockdownPossessionRememberPending
+        {
+            get => _lockdownPossessionRememberPending;
+            set { _lockdownPossessionRememberPending = value; OnPropertyChanged(); }
+        }
+
         // ---- Chaos Mode (effect-bubbles roguelite, Lab) ----
         private bool _chaosModeEnabled = true;
         public bool ChaosModeEnabled

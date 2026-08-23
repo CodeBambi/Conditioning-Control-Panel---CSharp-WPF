@@ -546,7 +546,45 @@
                             <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.6"/>
                         </Image.Effect>
                     </Image>
+                    <!-- Possession (Lockdown R4, "glitchportrait"): the corrupted-portrait layer.
+                         A SIBLING of the avatar images inside AvatarBounceHost on purpose - a copy
+                         placed here inherits the exact same layout slot, so a sliced duplicate lines
+                         up with the real portrait pixel for pixel without measuring anything, and it
+                         rides the bounce/float transforms with it. Filled and emptied entirely by
+                         AvatarTubeWindow.GlitchPortrait; the real emote pipeline never sees it.
+                         Services/Possession/POSSESSION.md - Companion wave. -->
+                    <Grid x:Name="PossessionGlitchLayer"
+                          IsHitTestVisible="False"
+                          Visibility="Collapsed"
+                          ClipToBounds="False"/>
                 </Grid>
+            </Border>
+
+            <!-- Possession (Lockdown R4): the warden's note, left in the tube while the companion is
+                 away (Warden.LeaveAsync) and taken down by ReturnAsync. Crimson - the Lockdown THEME
+                 colour, never ember: ember means something is happening RIGHT NOW, and a note is the
+                 opposite of that. Same margin as AvatarBorder so it sits where she was standing. -->
+            <Border x:Name="PossessionNoteCard"
+                    Panel.ZIndex="6"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Margin="5,100,126,210"
+                    MaxWidth="210"
+                    Padding="16,12"
+                    CornerRadius="10"
+                    Background="#F21A0A0E"
+                    BorderBrush="#DC143C" BorderThickness="1.5"
+                    RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <RotateTransform x:Name="PossessionNoteRotate" Angle="-3"/>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="#DC143C" BlurRadius="18" ShadowDepth="0" Opacity="0.55"/>
+                </Border.Effect>
+                <TextBlock x:Name="TxtPossessionNote"
+                           Foreground="#FFE3E8" FontSize="15" FontWeight="SemiBold"
+                           TextWrapping="Wrap" TextAlignment="Center" LineHeight="20"/>
             </Border>
 
             <!-- Takeover countdown bar - thin pink bar under the avatar, drains toward the next

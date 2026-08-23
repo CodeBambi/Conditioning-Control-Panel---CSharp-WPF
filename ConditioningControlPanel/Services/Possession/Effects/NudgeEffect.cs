@@ -7,8 +7,14 @@ using System.Windows.Media;
 namespace ConditioningControlPanel.Services.Possession.Effects;
 
 /// <summary>
-/// R0 "nudge" - the smallest tic on the ladder. One or two pixels, held for a breath, eased back.
-/// Deniable in WHAT (did that move?), never in WHO (the ember charge fired first).
+/// R0 "nudge" - the smallest tic on the ladder: the control jumps a few pixels, overshoots, settles
+/// crooked for a breath, then eases back. Deniable in WHAT (did that move?), never in WHO (the ember
+/// charge fired first).
+///
+/// <para>Wave 2 floor: the original was 1-2 px with no overshoot, which on a 1585x901 design canvas
+/// scaled into a fractional window pixel - literally invisible on the owner's first live run. A tic
+/// that cannot be seen is not deniable, it is absent. 3-4 px with a 35% overshoot is still small
+/// enough to doubt and large enough to catch.</para>
 /// </summary>
 public sealed class NudgeEffect : PossessionEffectBase
 {
@@ -28,11 +34,13 @@ public sealed class NudgeEffect : PossessionEffectBase
         var lease = TakeLease();
         if (lease == null) return Task.CompletedTask;
 
-        double dx = Amp(Rand(1.0, 2.0)) * Sign();
-        double dy = Amp(Rand(0.6, 1.6)) * Sign();
+        double dx = Amp(Rand(3.0, 4.5)) * Sign();
+        double dy = Amp(Rand(2.0, 3.5)) * Sign();
 
-        PossAnim.To(lease.Translate, TranslateTransform.XProperty, dx, 320, PossAnim.EaseOut);
-        PossAnim.To(lease.Translate, TranslateTransform.YProperty, dy, 320, PossAnim.EaseOut);
+        // Overshoot then settle: a straight ease-out reads as a layout pass, a snap-back-past reads as
+        // something SHOVED it. Same distance, completely different author.
+        PossAnim.Pulse(lease.Translate, TranslateTransform.XProperty, dx * 1.35, 130, 190, 0, dx);
+        PossAnim.Pulse(lease.Translate, TranslateTransform.YProperty, dy * 1.35, 130, 190, 0, dy);
         return Task.CompletedTask;
     }
 

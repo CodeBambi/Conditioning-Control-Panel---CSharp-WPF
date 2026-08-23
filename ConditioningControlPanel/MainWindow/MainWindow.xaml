@@ -380,6 +380,41 @@
                             <TextBlock Text="Camera active" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
+
+                    <!-- Lockdown badge — the exit affordance that follows you off the Lockdown tab.
+                         Last in the pill row so it sits hard against the window buttons: while a
+                         lockdown runs this is the one thing on screen the user is allowed to trust,
+                         and it has to be findable without hunting.
+
+                         Crimson only, no ember: crimson is the Lockdown THEME, ember is Possession's
+                         verb (POSSESSION.md "clarity in front"). A badge that glowed ember would read
+                         as one of the ghosts, which is the exact opposite of its job.
+
+                         Exclude inherits, so the badge and everything in it stays out of the Wave 2
+                         auto-tagger's deck. Visibility, the clock and the click are all owned by
+                         MainWindow.Lab.cs (OnLockdownActivated / OnLockdownTick / LockdownBadge_Click). -->
+                    <Border x:Name="LockdownBadge" x:FieldModifier="internal"
+                            poss:Possession.Exclude="True"
+                            Visibility="Collapsed"
+                            VerticalAlignment="Center"
+                            Background="#DC143C" CornerRadius="12" Padding="11,4"
+                            Margin="0,0,12,0"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="LockdownBadge_Click"
+                            ToolTip="{loc:Str lockdown_badge_tooltip}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="#FFE3E8" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str lockdown_badge_label}" Foreground="White" FontSize="11"
+                                       FontWeight="Bold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtLockdownBadgeTime" x:FieldModifier="internal" Text="00:00"
+                                       Foreground="White" FontSize="11.5" FontWeight="SemiBold"
+                                       Margin="9,0,0,0" VerticalAlignment="Center"/>
+                            <Border Width="1" Height="12" Background="#59FFFFFF" Margin="9,0,9,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str lockdown_badge_end}" Foreground="#FFE3E8" FontSize="11"
+                                       FontWeight="SemiBold" VerticalAlignment="Center"
+                                       TextDecorations="Underline"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Window Control Buttons -->

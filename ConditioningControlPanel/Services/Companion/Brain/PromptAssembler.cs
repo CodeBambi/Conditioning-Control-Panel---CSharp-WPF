@@ -185,6 +185,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         private readonly Func<DateTime> _localClock;
         private readonly Func<IReadOnlyList<(string Title, string Url)>> _linkPool;
         private readonly Func<DateTime?> _personaFence;
+        private readonly Func<string?> _lockdownContext;
 
         /// <param name="systemPromptProvider">
         /// Injectable so tests (and any future prefix source) can supply a prefix without standing up
@@ -201,7 +202,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public PromptAssembler(IMemoryStore memory, RecentRecommendations recommendations,
             Func<string>? systemPromptProvider = null, Func<DateTime>? localClock = null,
             Func<IReadOnlyList<(string Title, string Url)>>? linkPool = null,
-            Func<DateTime?>? personaFence = null)
+            Func<DateTime?>? personaFence = null,
+            Func<string?>? lockdownContext = null)
         {
             // Deliberately NOT `?? new MemoryStore()`. The production MemoryStore constructor is not
             // inert — it loads memory.json, starts a MemorySignalWriter and registers a shutdown
@@ -214,6 +216,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             _localClock = localClock ?? (() => DateTime.Now);
             _linkPool = linkPool ?? DefaultLinkPool;
             _personaFence = personaFence ?? DefaultPersonaFence;
+            _lockdownContext = lockdownContext ?? DefaultLockdownContext;
         }
 
         private static DateTime? DefaultPersonaFence()
@@ -497,6 +500,20 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             var exclusion = _recommendations.BuildExclusionLine();
             if (exclusion != null) lines.Add(exclusion);
 
+            // The warden briefing, when a lockdown is running. Chat and Reaction only: those are the
+            // two purposes where SHE speaks. Memory extracts JSON facts and Summary writes prose about
+            // the conversation, and a "you are the warden" instruction in either would end up recorded
+            // as something the user said or believed, which would outlive the lockdown by design.
+            // Placed right after the exclusion set - ahead of everything else, but never ahead of the
+            // 0807 anti-fixation lines, which earned their spot at the front of the budget.
+            if (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction)
+            {
+                string? lockdown = null;
+                try { lockdown = _lockdownContext(); }
+                catch (Exception ex) { App.Logger?.Debug("PromptAssembler: lockdown context threw: {Error}", ex.Message); }
+                if (!string.IsNullOrWhiteSpace(lockdown)) lines.Add(lockdown!);
+            }
+
             if (purpose == AiPurpose.Chat || purpose == AiPurpose.Reaction) lines.Add(VaryPicksRule);
 
             lines.Add(TimeOfDayLine(_localClock()));
@@ -540,6 +557,90 @@ namespace ConditioningControlPanel.Services.Companion.Brain
             sb.Append(instruction);
             return sb.ToString();
         }
+
+        /// <summary>
+        /// The warden briefing (Possession wave 2, item B12). While a lockdown is running the companion
+        /// is not a companion, she is the thing holding the door, and until this existed she had no idea:
+        /// the user would type "let me out" and get a cheerful video recommendation, which is the single
+        /// fastest way to break a mode built entirely out of atmosphere.
+        ///
+        /// <para>It lives in the DYNAMIC TAIL, never in the stable prefix, for two reasons. The obvious
+        /// one is caching: the prefix is byte-identical across calls by design and a countdown in it
+        /// would invalidate it every single turn. The load-bearing one is that it must not be able to
+        /// persist - a "you are the warden" paragraph cached into a prefix that only rebuilds on a mod
+        /// switch would still be there an hour after the lockdown ended.</para>
+        ///
+        /// <para>The three prohibitions are the whole safety surface. The secret exit phrase is the
+        /// user's own key and the model has no business hinting at it (it does not know it either, and a
+        /// GUESS presented confidently is worse than silence); promising to end the lockdown is a promise
+        /// nothing in this process can keep, because only the timer and the phrase can; and "short" keeps
+        /// her from monologuing at someone who is, at that moment, locked in with her.</para>
+        /// </summary>
+        internal static string BuildLockdownContext(int minutesLeft, string? rung, string? intensity, int escapes)
+        {
+            var sb = new StringBuilder();
+            sb.Append("A lockdown is running (").Append(Math.Max(0, minutesLeft)).Append(" minutes left");
+            if (!string.IsNullOrWhiteSpace(rung)) sb.Append(", Possession rung ").Append(rung);
+            if (!string.IsNullOrWhiteSpace(intensity)) sb.Append(", intensity ").Append(intensity);
+            sb.Append(", the user tried to escape ").Append(Math.Max(0, escapes)).Append(" times). ");
+            sb.Append("You are the warden: tease them about wanting out, stay in your mod voice, ");
+            sb.Append("never reveal or hint at the secret exit phrase, never promise to end it, ");
+            sb.Append("keep it playful and short.");
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Reads the live lockdown state, or null when none is running. Every read is guarded: this runs
+        /// on the chat path, and a prompt that throws is a chat that does not answer.
+        /// </summary>
+        private static string? DefaultLockdownContext()
+        {
+            try
+            {
+                var lockdown = App.Lockdown;
+                if (lockdown == null || !lockdown.IsActive) return null;
+
+                int minutes = (int)Math.Round(lockdown.Remaining.TotalMinutes, MidpointRounding.AwayFromZero);
+
+                // Rung and intensity are only true while the haunt is actually running. With
+                // LockdownPossessionEnabled off there is a timer and no ladder, and telling the model
+                // about a rung nothing is climbing invites her to narrate effects that never happen.
+                string? rung = null, intensity = null;
+                var director = App.Possession;
+                if (director != null && director.IsHaunting)
+                {
+                    rung = RungName(director.CurrentRung);
+                    intensity = IntensityName(App.Settings?.Current?.LockdownPossessionIntensity ?? 1);
+                }
+
+                return BuildLockdownContext(minutes, rung, intensity,
+                    Services.Possession.PossessionRemember.EscapeAttempts);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("PromptAssembler: lockdown context unavailable: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>The ladder rung, in the words POSSESSION.md uses for it.</summary>
+        internal static string RungName(Services.Possession.PossessionRung rung) => rung switch
+        {
+            Services.Possession.PossessionRung.Settle => "Settle",
+            Services.Possession.PossessionRung.Drift => "Drift",
+            Services.Possession.PossessionRung.Melt => "Melt",
+            Services.Possession.PossessionRung.Collapse => "Collapse",
+            Services.Possession.PossessionRung.ItKnows => "It knows",
+            _ => "Settle"
+        };
+
+        /// <summary>The intensity preset, in the words the Lockdown card uses for it.</summary>
+        internal static string IntensityName(int intensity) => intensity switch
+        {
+            0 => "Gentle",
+            2 => "Full Doki",
+            _ => "Eerie"
+        };
 
         private static string PurposeInstruction(AiPurpose purpose) => purpose switch
         {

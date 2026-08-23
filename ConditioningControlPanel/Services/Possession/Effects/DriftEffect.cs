@@ -27,7 +27,10 @@ public sealed class DriftEffect : PossessionEffectBase
         var lease = TakeLease();
         if (lease == null) return Task.CompletedTask;
 
-        double reach = Amp(6) * Sign();
+        // Wave 2 floor: 6 design units shrank to ~4 window px at the shipped window size and got lost
+        // in the peripheral vision it was aiming for. 6-8 with the same slow sine keeps the "loose
+        // layout" read and actually leaves alignment.
+        double reach = Amp(Rand(6, 8)) * Sign();
         bool sideways = Rng.Next(100) < 70;
 
         PossAnim.Oscillate(
