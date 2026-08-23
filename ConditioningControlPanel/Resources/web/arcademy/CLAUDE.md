@@ -1047,7 +1047,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     class back to quick flattens it to 40-50 and 18-20 - an owner call, not a code fix.
 
 66. **THE LOADER IS THE INTRO SPLASH, AND ONLY THE HAPPY PATH GETS THE BEAT.** `#arc-loader`
-    plays a ~1.2s fixed CSS timeline from t0 (no init needed) and boot.js's `dismissLoader()`
+    plays a ~3s fixed CSS timeline from t0 (no init needed) and boot.js's `dismissLoader()`
     WAITS OUT `INTRO_MIN_MS` before adding `.is-done` (the fade + zoom-through exit), so an
     early boot never cuts the beat. `failBoot()` must keep snapping `hidden = true` directly -
     an error card delayed by a celebration, or a splash replaying its exit over the nope
