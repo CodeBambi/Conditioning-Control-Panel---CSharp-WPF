@@ -17,6 +17,17 @@ namespace ConditioningControlPanel
     /// nothing else is. They cost nothing when they are not happening, which is the whole appeal:
     /// high perceived polish, zero idle clock.
     ///
+    /// <para><b>The seventh moment.</b> THE BANK on XP (MainWindow.BankFx.cs) joined this list
+    /// later and breaks its shape in one way worth naming here: the six above are one-offs a
+    /// subject reaches a handful of times, while XP arrives constantly, so THE BANK is the only
+    /// event moment that has to be RATIONED. It does not burst - value flies as 3-7 tokens from
+    /// its source to the XP counter - and it does not fire per event: <see cref="BankAccumulator"/>
+    /// pools awards behind a collection window and a launch cooldown so a busy minute produces a
+    /// few deliberate flights instead of thirty. It keeps every rule below (the focus gate, the
+    /// particle gate, TransformToVisual anchoring, no idle clock) and owns a second, re-sizeable
+    /// canvas of its own, because a flight is a line between two anchors rather than a box round
+    /// one.</para>
+    ///
     /// <para><b>The shared burst layer.</b> One <see cref="AmbientFxCanvas"/> lives in
     /// <c>EventFxHost</c>, a child of RootGrid <i>outside</i> the 1489x901 Viewbox. Inside the
     /// Viewbox everything is bitmap-scaled, which is right for a fog wash and wrong for crisp
@@ -228,11 +239,18 @@ namespace ConditioningControlPanel
         /// and the reset reads as the consequence rather than the event. The bloom reuses
         /// XPBarFlashOverlay (the pre-existing pink-glow overlay sized to the fill) and the
         /// existing FlashOverlay animation, so the two never fight over the same property.
+        ///
+        /// <para>House law, one burst per moment: THE BANK yields here. Aborting first (and NOT
+        /// writing truth - UpdateLevelDisplay is the caller's very next line) both ends any flight
+        /// in the air and releases the held counter, so the bloom below still lands on a full bar
+        /// and the reset that follows is the level-up's to show. This runs before the motion gate
+        /// on purpose: a held counter has to be released at MotionLevel Off too.</para>
         /// </summary>
         internal void CelebrateLevelUp()
         {
             try
             {
+                AbortBankFlight(writeTruth: false);
                 if (!MotionFx.AllowTransitions) return;
                 FlashOverlay(XPBarFlashOverlay);
                 // Velvet Kit 2 (FX lane B): the number that changed is the one thing the burst does

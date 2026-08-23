@@ -790,11 +790,20 @@ namespace ConditioningControlPanel
         /// The level-up flash (XPBarFlashOverlay) is deliberately NOT wired in as MotionFx's cap
         /// bloom - it already exists and is driven by the level-up path; double-driving its
         /// opacity would fight that.
+        ///
+        /// <para>THE BANK gets first refusal (MainWindow.BankFx.cs). While a pot is collecting or
+        /// tokens are in the air the readout belongs to the flight, so this returns before drawing
+        /// anything and BankFx remembers the target instead - the value is never lost, only its
+        /// arrival is staged. <see cref="TryHoldXpDisplay"/> answers false for every ordinary
+        /// refresh, and for the whole of MotionLevel Reduced/Off, which is what keeps this path
+        /// byte-identical to how it behaved before THE BANK existed.</para>
         /// </summary>
         private void AnimateXpDisplay(double xp, double xpNeeded, int level)
         {
             try
             {
+                if (TryHoldXpDisplay(xp, xpNeeded, level)) return;
+
                 if (TxtXP != null)
                 {
                     double from = (!double.IsNaN(_lastXpShown) && level == _lastXpLevelShown) ? _lastXpShown : 0;
@@ -817,23 +826,32 @@ namespace ConditioningControlPanel
                 _lastXpShown = xp;
                 _lastXpLevelShown = level;
 
-                if (XPBar != null)
-                {
-                    var container = XPBar.Parent as FrameworkElement;
-                    var available = container?.ActualWidth ?? 0;
-                    if (available > 0)
-                    {
-                        var progress = Math.Min(1.0, xpNeeded > 0 ? xp / xpNeeded : 0);
-                        double fromWidth = double.IsNaN(XPBar.Width) ? 0 : XPBar.Width;
-                        double toWidth = progress * available;
-                        MotionFx.BarFill(XPBar, fromWidth, toWidth);
-                        // Velvet Kit 2 (FX lane B): the meniscus rides the same target width on the
-                        // same clock and curve as the fill, so it sits on the surface throughout.
-                        AnimateXpMeniscus(toWidth);
-                    }
-                }
+                FillXpBarTo(xp, xpNeeded);
             }
             catch (Exception ex) { App.Logger?.Debug("AnimateXpDisplay: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The bar half of the XP display, on its own so THE BANK's last token can land the fill on
+        /// the value the tokens actually delivered rather than on the ledger's - the two differ
+        /// whenever a second pot is already collecting behind the flight. Lifted verbatim out of
+        /// <see cref="AnimateXpDisplay"/>; the only caller that passes anything but the ledger's
+        /// number is MainWindow.BankFx.cs.
+        /// </summary>
+        private void FillXpBarTo(double xp, double xpNeeded)
+        {
+            if (XPBar == null) return;
+            var container = XPBar.Parent as FrameworkElement;
+            var available = container?.ActualWidth ?? 0;
+            if (available <= 0) return;
+
+            var progress = Math.Min(1.0, xpNeeded > 0 ? xp / xpNeeded : 0);
+            double fromWidth = double.IsNaN(XPBar.Width) ? 0 : XPBar.Width;
+            double toWidth = progress * available;
+            MotionFx.BarFill(XPBar, fromWidth, toWidth);
+            // Velvet Kit 2 (FX lane B): the meniscus rides the same target width on the
+            // same clock and curve as the fill, so it sits on the surface throughout.
+            AnimateXpMeniscus(toWidth);
         }
 
         /// <summary>Slow gloss travelling along the XP fill. Three stop offsets on one 6s clock.</summary>

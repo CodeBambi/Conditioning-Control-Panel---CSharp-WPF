@@ -210,6 +210,9 @@ namespace ConditioningControlPanel
                     App.Progression.XPChanged -= OnXPChanged;
                     App.Progression.LevelUp -= OnLevelUp;
                 }
+                // THE BANK: drops its own XPChanged/XPAwarded hooks, force-lands any flight and
+                // stops its poll (MainWindow.BankFx.cs).
+                ShutdownBankFx();
                 // Profile bubble: unsubscribes its own progression/flash/subliminal/achievement/
                 // Discord hooks and closes the hover menu (MainWindow.ProfileBubble.cs).
                 CleanupProfileBubble();

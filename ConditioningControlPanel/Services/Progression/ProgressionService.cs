@@ -13,6 +13,27 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<int>? LevelUp;
         public event EventHandler<double>? XPChanged;
 
+        /// <summary>
+        /// One XP award, post-multiplier. <see cref="LeveledUp"/> means <c>SpendXPOnLevels</c>
+        /// crossed at least one level inside this same award - which is the whole reason this
+        /// carries more than a number. A presentation layer has to be able to yield to the level-up
+        /// celebration, and once <see cref="LevelUp"/> has fired there is no way to tell from
+        /// <see cref="XPChanged"/> alone which award caused it.
+        /// </summary>
+        public readonly record struct XpAward(double Amount, XPSource Source, bool LeveledUp);
+
+        /// <summary>
+        /// Raised once per award that actually landed, AFTER <see cref="XPChanged"/> and on the same
+        /// call stack. Deliberately a second event rather than a fatter <see cref="XPChanged"/>:
+        /// XPChanged reports the ledger TOTAL and a dozen things read it, while this reports the
+        /// DELTA and its provenance, which is what a celebration needs and nothing else wants.
+        ///
+        /// <para>Presentation only, and it fires after the ledger is already settled - nothing
+        /// downstream of it may touch <c>PlayerXP</c>. A subscriber that throws is swallowed (see
+        /// <see cref="RaiseXpAwarded"/>): a decoration must never be able to break an award.</para>
+        /// </summary>
+        public event EventHandler<XpAward>? XPAwarded;
+
         /// <summary>The curve every account has always been on. See <see cref="XpForLevelV1"/>.</summary>
         public const int CurveEpochLegacy = 0;
 
@@ -99,9 +120,10 @@ namespace ConditioningControlPanel.Services
             App.Quests?.TrackXPEarned((int)amount);
 
             // Check for level up
-            SpendXPOnLevels(settings, inOfflineMode);
+            var leveledUp = SpendXPOnLevels(settings, inOfflineMode);
 
             XPChanged?.Invoke(this, settings.PlayerXP);
+            RaiseXpAwarded(adjustedAmount, source, leveledUp);
         }
 
         /// <summary>
@@ -141,9 +163,14 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Information("Web XP claim applied: +{Amount} (was {Prev}, now {Now})", amount, previousXP, settings.PlayerXP);
 
-            SpendXPOnLevels(settings, inOfflineMode);
+            var leveledUp = SpendXPOnLevels(settings, inOfflineMode);
 
             XPChanged?.Invoke(this, settings.PlayerXP);
+
+            // XPSource.Other because that is the truth: a web claim has no in-app feature behind it,
+            // so nothing on screen is the place it came from. A presentation layer reading this will
+            // fall back to its neutral origin, which is the honest look for XP earned elsewhere.
+            RaiseXpAwarded(amount, XPSource.Other, leveledUp);
 
             AnnounceFirstWebXpClaim(amount);
         }
@@ -205,17 +232,43 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Fire <see cref="XPAwarded"/> for one settled award. Wrapped whole: this is a decoration
+        /// hanging off the end of the XP path, and the ledger has already been written by the time
+        /// it runs, so a throwing subscriber must be logged and forgotten rather than allowed to
+        /// unwind through the caller and take the award's remaining work with it.
+        /// </summary>
+        private void RaiseXpAwarded(double amount, XPSource source, bool leveledUp)
+        {
+            try
+            {
+                XPAwarded?.Invoke(this, new XpAward(amount, source, leveledUp));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("XPAwarded subscriber failed: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Drains banked XP into levels for as long as the player can afford the next one, running
         /// the full level-up experience for each level gained. Shared by AddXP and AddClaimedXP so
         /// the two ways XP can arrive can never drift apart.
         /// </summary>
-        private void SpendXPOnLevels(Models.AppSettings settings, bool inOfflineMode)
+        /// <returns>
+        /// True if at least one level was gained. Reported rather than inferred: a caller cannot
+        /// work this out afterwards without re-reading the level it captured beforehand, and the
+        /// one consumer that needs it (THE BANK, which must yield to the level-up celebration)
+        /// needs it per AWARD, not per level.
+        /// </returns>
+        private bool SpendXPOnLevels(Models.AppSettings settings, bool inOfflineMode)
         {
+            var gained = false;
             var xpNeeded = GetXPForLevel(settings.PlayerLevel);
             while (settings.PlayerXP >= xpNeeded)
             {
                 settings.PlayerXP -= xpNeeded;
                 settings.PlayerLevel++;
+                gained = true;
 
                 // Track highest level ever for permanent unlocks across seasons
                 if (settings.PlayerLevel > settings.HighestLevelEver)
@@ -256,6 +309,8 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Debug("Offline mode: Skipped cloud sync for level up to {Level}", settings.PlayerLevel);
                 }
             }
+
+            return gained;
         }
 
         /// <summary>

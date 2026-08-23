@@ -87,12 +87,28 @@ namespace ConditioningControlPanel.Controls
     ///   • every tick is wrapped, and repeated faults stop the clock instead of spamming the log.
     ///
     /// All simulation state is in element-normalized (0-1) coordinates, so it is DPI- and
-    /// Viewbox-agnostic and <see cref="Burst"/> takes plain element-local coordinates.
+    /// Viewbox-agnostic, while the two one-shot entry points (<see cref="Burst"/> and
+    /// <see cref="BankTokens"/>) take plain element-local coordinates.
     /// </summary>
     public class AmbientFxCanvas : Decorator
     {
         private const int MaxBurstParticles = 150;
         private const int FaultLimit = 5;
+
+        // ---- THE BANK: guided token flight (House Book) ----
+
+        /// <summary>Hard ceiling on tokens in flight, and the size the sim array is pre-baked to.</summary>
+        private const int MaxBankTokens = BankFlightPlan.MaxTokens;
+
+        /// <summary>Core diameter band in ELEMENT pixels. The book calls for a coin, not a spark.</summary>
+        private const double BankTokenCoreMinPx = 5;
+        private const double BankTokenCoreMaxPx = 7;
+
+        /// <summary>Halo diameter as a multiple of the core. Enough to read as "lit", not as a puff.</summary>
+        private const float BankTokenGlowScale = 3.4f;
+
+        /// <summary>Fade-in after a token's stagger delay expires, so it arrives instead of popping.</summary>
+        private const float BankTokenFadeInMs = 90f;
 
         private readonly SKElement _sk;
         private readonly DispatcherTimer _timer;
@@ -129,6 +145,40 @@ namespace ConditioningControlPanel.Controls
         private Spark[]? _burst;
         private int _burstN;
         private SKColorFilter? _burstTint;
+
+        /// <summary>
+        /// One banked token. It carries its whole bezier rather than a velocity because the flight
+        /// is AUTHORED, not simulated: position is a pure function of elapsed time, so a dropped
+        /// frame moves the token further instead of bending its path, and the landing instant is
+        /// exact no matter how the clock stutters.
+        /// </summary>
+        private struct Tok
+        {
+            public float X0, Y0;      // P0, normalized
+            public float CX, CY;      // P1 (the bowed control point), normalized
+            public float X2, Y2;      // P2, normalized
+            public float X, Y;        // last evaluated position, normalized
+            public float Elapsed;     // ms since the FLIGHT started, not since this token launched
+            public float Delay, Dur;  // ms, from the flight plan
+            public float Size;        // normalized core half-size, same units as Spark.Size
+        }
+
+        private Tok[]? _tok;
+        private int _tokN;
+        private SKColorFilter? _tokTint;
+
+        /// <summary>The live flight's landing callback, plus the counters that make (index, isLast) honest.</summary>
+        private Action<int, bool>? _tokOnLand;
+        private int _tokLanded;
+        private int _tokTotal;
+
+        /// <summary>
+        /// Landing indices collected during a tick and dispatched after the sim loop has finished.
+        /// Pre-sized like everything else here - but the real reason it exists is re-entrancy: a
+        /// landing callback steps a counter and may do anything at all, including starting another
+        /// flight, and it must not be able to do that while the loop is still walking the array.
+        /// </summary>
+        private readonly int[] _tokLandBuf = new int[MaxBankTokens];
 
         private bool _running;
         private bool _paused;
@@ -213,6 +263,9 @@ namespace ConditioningControlPanel.Controls
             _running = false;
             _paused = false;
             StopClock();
+            // A live token flight is force-landed rather than dropped: its callbacks are somebody
+            // else's choreography and silently abandoning them leaves a held counter behind.
+            ForceLandTokens();
             _burst = null;
             _burstN = 0;
             _dustN = 0;
@@ -265,6 +318,153 @@ namespace ConditioningControlPanel.Controls
                 App.Logger?.Debug("AmbientFxCanvas.Burst: {E}", ex.Message);
             }
         }
+
+        /// <summary>
+        /// THE BANK (House Book): <paramref name="count"/> tokens spawn at <paramref name="origin"/>
+        /// and fly a slight arc to <paramref name="target"/> - both in element-local px - landing one
+        /// after another so the counter can tick per landing.
+        /// <paramref name="onLand"/> is invoked on the UI thread as each token arrives, with the
+        /// landing's ordinal and whether it was the last of the flight. Timings and bow come from
+        /// <see cref="BankFlightPlan"/>.
+        ///
+        /// <para><b>Arcs, not physics.</b> Each token rides a quadratic bezier whose control point
+        /// is the midpoint pushed perpendicular by the plan's signed bow, and its parameter is
+        /// eased IN - the book is explicit that tokens accelerate into the counter, which is what
+        /// makes the arrival read as being caught rather than as coasting to a stop.</para>
+        ///
+        /// <para><b>Landing ordinal, not plan index.</b> Durations vary by 150ms while the stagger
+        /// is 60-80ms, so tokens can and do land out of the order they left in. The index handed to
+        /// <paramref name="onLand"/> counts LANDINGS, which is the only thing a counter stepping
+        /// once per landing can safely divide by, and <c>isLast</c> is true exactly once.</para>
+        ///
+        /// <para><b>Safe to call while a flight is alive.</b> The old flight is force-landed first:
+        /// its outstanding callbacks fire immediately, in order, with the last carrying
+        /// <c>isLast</c>. Nothing is ever left holding a counter it was promised would be
+        /// released - which is also why a refusal (reduced motion, an unmeasured canvas, a
+        /// non-finite anchor) settles every callback on the spot instead of returning silently.
+        /// The value still arrives; only the show is skipped.</para>
+        /// </summary>
+        public void BankTokens(System.Windows.Point origin, System.Windows.Point target,
+                               int count, System.Windows.Media.Color? color, Action<int, bool>? onLand)
+        {
+            try
+            {
+                // A second flight always ends the first - THE BANK is one moment at a time.
+                ForceLandTokens();
+
+                if (count <= 0) return;
+
+                double w = ActualWidth, h = ActualHeight;
+                if (!MotionFx.AllowParticles || w <= 1 || h <= 1 ||
+                    !IsFinite(origin) || !IsFinite(target))
+                {
+                    SettleNow(count, onLand);
+                    return;
+                }
+
+                if (_particleBudget <= 0) ReadEnvironment();
+                // Budget-clamped exactly like Burst, even though seven tokens can never trouble a
+                // tier that allows particles at all: the rule is that no emitter gets to opt out.
+                count = Math.Clamp(count, 1, Math.Min(MaxBankTokens, Math.Max(1, _particleBudget)));
+
+                var plan = BankFlightPlan.Plan(count, _rng.Next());
+                if (plan.Length == 0) { SettleNow(count, onLand); return; }
+                count = plan.Length;
+
+                var c = color is { } wc ? new SKColor(wc.R, wc.G, wc.B) : _particle;
+                _tokTint?.Dispose();
+                _tokTint = SKColorFilter.CreateBlendMode(c, SKBlendMode.Modulate);
+
+                // Geometry is done in element px and normalized once at the end: normalized space is
+                // anisotropic, so a perpendicular computed in it would bow the wrong way on any
+                // canvas that is not square.
+                double dx = target.X - origin.X, dy = target.Y - origin.Y;
+                double dist = Math.Sqrt(dx * dx + dy * dy);
+                double perpX = dist > 0.001 ? -dy / dist : 0;
+                double perpY = dist > 0.001 ? dx / dist : 0;
+                double midX = (origin.X + target.X) * 0.5;
+                double midY = (origin.Y + target.Y) * 0.5;
+                float minElem = (float)Math.Min(w, h);
+
+                _tok ??= new Tok[MaxBankTokens];
+                _tokN = 0;
+                _tokOnLand = onLand;
+                _tokLanded = 0;
+                _tokTotal = count;
+
+                for (int i = 0; i < count && _tokN < MaxBankTokens; i++)
+                {
+                    var slot = plan[i];
+                    double bow = slot.ArcBow * dist;
+                    double corePx = BankTokenCoreMinPx + _rng.NextDouble() * (BankTokenCoreMaxPx - BankTokenCoreMinPx);
+
+                    _tok[_tokN++] = new Tok
+                    {
+                        X0 = (float)(origin.X / w), Y0 = (float)(origin.Y / h),
+                        CX = (float)((midX + perpX * bow) / w), CY = (float)((midY + perpY * bow) / h),
+                        X2 = (float)(target.X / w), Y2 = (float)(target.Y / h),
+                        X = (float)(origin.X / w), Y = (float)(origin.Y / h),
+                        Elapsed = 0f,
+                        Delay = (float)slot.DelayMs,
+                        Dur = (float)Math.Max(1.0, slot.DurationMs),
+                        Size = (float)(corePx / (2.0 * Math.Max(1f, minElem))),
+                    };
+                }
+
+                Evaluate();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AmbientFxCanvas.BankTokens: {E}", ex.Message);
+                // Whatever failed, the caller is mid-choreography and is waiting on callbacks it
+                // will otherwise never get. Force-landing settles whatever was armed; if the flight
+                // never armed at all this is a no-op and the caller's own watchdog takes it.
+                try { ForceLandTokens(); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// End the live flight now: clear the sim FIRST (so a callback that starts another flight
+        /// cannot see a corpse), then fire every callback the flight still owed, in order.
+        /// </summary>
+        private void ForceLandTokens()
+        {
+            var cb = _tokOnLand;
+            int landed = _tokLanded, total = _tokTotal;
+
+            _tokOnLand = null;
+            _tokLanded = 0;
+            _tokTotal = 0;
+            _tokN = 0;
+            _tokTint?.Dispose();
+            _tokTint = null;
+
+            if (cb == null || total <= 0) return;
+            for (int i = landed; i < total; i++) InvokeLand(cb, i, i == total - 1);
+        }
+
+        /// <summary>A flight that never flew, answered instantly so nobody is left holding a counter.</summary>
+        private static void SettleNow(int count, Action<int, bool>? onLand)
+        {
+            if (onLand == null || count <= 0) return;
+            for (int i = 0; i < count; i++) InvokeLand(onLand, i, i == count - 1);
+        }
+
+        /// <summary>
+        /// Every landing callback is individually railed. A subscriber that throws on token three
+        /// must not cost tokens four through seven their callbacks - the last one is the only thing
+        /// that puts the counter back on the ledger's number.
+        /// </summary>
+        private static void InvokeLand(Action<int, bool>? cb, int index, bool isLast)
+        {
+            if (cb == null) return;
+            try { cb(index, isLast); }
+            catch (Exception ex) { App.Logger?.Debug("AmbientFxCanvas token landing: {E}", ex.Message); }
+        }
+
+        private static bool IsFinite(System.Windows.Point p)
+            => !double.IsNaN(p.X) && !double.IsNaN(p.Y) &&
+               !double.IsInfinity(p.X) && !double.IsInfinity(p.Y);
 
         // ============================== environment ==============================
 
@@ -417,13 +617,15 @@ namespace ConditioningControlPanel.Controls
 
         private bool ShouldRun()
         {
-            // A live burst outruns the ambient gates: it is a one-shot event moment, already
-            // budget-checked at emit time, and it may fire on a canvas running no ambient layers.
-            bool burstLive = _burst != null && _burstN > 0;
+            // Live one-shot work outruns the ambient gates: a burst or a token flight is an event
+            // moment, already budget-checked at emit time, and it may run on a canvas composing no
+            // ambient layers at all. A token flight counts for the extra reason that its landings
+            // drive somebody else's counter - stopping the clock under it would strand the display.
+            bool oneShotLive = (_burst != null && _burstN > 0) || _tokN > 0;
             if (_paused || _faults >= FaultLimit) return false;
-            if (!_running && !burstLive) return false;
+            if (!_running && !oneShotLive) return false;
             if (!IsLoaded || !IsVisible) return false;
-            if (!burstLive)
+            if (!oneShotLive)
             {
                 if (_targetFps <= 0) return false;
                 if (!MotionFx.AllowAmbientLoops) return false;
@@ -432,7 +634,7 @@ namespace ConditioningControlPanel.Controls
             if (w != null)
             {
                 if (w.WindowState == WindowState.Minimized) return false;
-                if (!w.IsActive && !burstLive) return false;
+                if (!w.IsActive && !oneShotLive) return false;
             }
             return true;
         }
@@ -471,6 +673,7 @@ namespace ConditioningControlPanel.Controls
                 if (!_sheenDone) _sheenT += dt;
                 StepDust(dt);
                 StepBurst(dt);
+                StepTokens(dt);
 
                 _sk.InvalidateVisual();
             }
@@ -579,6 +782,71 @@ namespace ConditioningControlPanel.Controls
             }
         }
 
+        /// <summary>
+        /// Advance the token flight. Nothing here integrates: each token's position is evaluated
+        /// straight off its bezier at the eased fraction of its own elapsed time, so a hitch costs
+        /// smoothness and never accuracy - a token that misses ten frames is simply further along.
+        ///
+        /// <para>Landings are collected and dispatched AFTER the loop, never inside it. The
+        /// callback is the shell's counter step and may do arbitrary work, up to and including
+        /// launching the next flight; letting it run mid-walk would mutate the array under the
+        /// iterator.</para>
+        /// </summary>
+        private void StepTokens(float dt)
+        {
+            if (_tok == null || _tokN == 0) return;
+
+            float dtMs = dt * 1000f;
+            int landedNow = 0;
+
+            for (int i = _tokN - 1; i >= 0; i--)
+            {
+                var t = _tok[i];
+                t.Elapsed += dtMs;
+
+                float local = t.Elapsed - t.Delay;
+                if (local <= 0f) { _tok[i] = t; continue; }   // still waiting out its stagger
+
+                float p = Math.Clamp(local / t.Dur, 0f, 1f);
+                float e = p * p;                              // ease-in: accelerate INTO the counter
+                float inv = 1f - e;
+                t.X = inv * inv * t.X0 + 2f * inv * e * t.CX + e * e * t.X2;
+                t.Y = inv * inv * t.Y0 + 2f * inv * e * t.CY + e * e * t.Y2;
+
+                if (p >= 1f)
+                {
+                    _tok[i] = _tok[--_tokN];
+                    if (landedNow < _tokLandBuf.Length) _tokLandBuf[landedNow++] = _tokLanded;
+                    _tokLanded++;
+                }
+                else
+                {
+                    _tok[i] = t;
+                }
+            }
+
+            if (landedNow == 0) return;
+
+            var cb = _tokOnLand;
+            int total = _tokTotal;
+            bool done = _tokN == 0 && _tokLanded >= _tokTotal;
+
+            if (done)
+            {
+                // Teardown before dispatch, for the same reason ForceLandTokens clears first.
+                _tokOnLand = null;
+                _tokLanded = 0;
+                _tokTotal = 0;
+                _tokTint?.Dispose();
+                _tokTint = null;
+            }
+
+            for (int k = 0; k < landedNow; k++)
+                InvokeLand(cb, _tokLandBuf[k], _tokLandBuf[k] == total - 1);
+
+            if (done) Evaluate();
+        }
+
         // ================================ paint ================================
 
         private void OnPaintSurface(object? sender, SKPaintSurfaceEventArgs e)
@@ -601,6 +869,7 @@ namespace ConditioningControlPanel.Controls
                 if (!_fogOnly && (layers & AmbientFxLayers.DustField) != 0) DrawDust(canvas, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.SheenSweep) != 0) DrawSheen(canvas, w, h, intensity);
                 DrawBurst(canvas, w, h, min);
+                DrawTokens(canvas, w, h, min);
             }
             catch (Exception ex)
             {
@@ -713,6 +982,39 @@ namespace ConditioningControlPanel.Controls
                 float size = s.Size * min * 2f * (0.6f + 0.4f * env);
                 _paint.Color = SKColors.White.WithAlpha(Alpha(a));
                 DrawSprite(canvas, Dot, s.X * w, s.Y * h, size, size);
+            }
+            _paint.ColorFilter = null;
+        }
+
+        /// <summary>
+        /// A token is a bright core sitting in a soft halo - two draws of the shared dot at
+        /// different scales, which is how everything else on this canvas gets a glow without
+        /// allocating a shader. Drawn last, over the bursts: THE BANK is the thing being read.
+        /// </summary>
+        private void DrawTokens(SKCanvas canvas, float w, float h, float min)
+        {
+            if (_tok == null || _tokN == 0) return;
+
+            _paint.ColorFilter = _tokTint;
+            for (int i = 0; i < _tokN; i++)
+            {
+                var t = _tok[i];
+                float local = t.Elapsed - t.Delay;
+                if (local <= 0f) continue;   // still staggered: it does not exist yet
+
+                float p = Math.Clamp(local / t.Dur, 0f, 1f);
+                float a = Math.Clamp(local / BankTokenFadeInMs, 0f, 1f);
+                if (a <= 0.004f) continue;
+
+                float core = t.Size * min * 2f;
+                float x = t.X * w, y = t.Y * h;
+
+                _paint.Color = SKColors.White.WithAlpha(Alpha(0.30f * a));
+                DrawSprite(canvas, Dot, x, y, core * BankTokenGlowScale, core * BankTokenGlowScale);
+
+                // The core brightens as it closes, so the last thing the eye tracks is the arrival.
+                _paint.Color = SKColors.White.WithAlpha(Alpha((0.75f + 0.25f * p) * a));
+                DrawSprite(canvas, Dot, x, y, core, core);
             }
             _paint.ColorFilter = null;
         }
