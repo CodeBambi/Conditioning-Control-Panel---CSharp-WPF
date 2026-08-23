@@ -280,9 +280,15 @@ public sealed class TrainerCardTests : IDisposable
     [Fact]
     public void TheCard_SaysOutLoudThatItHasNoLevelAndNoPortrait()
     {
-        // No XP, level, streak or rank exists anywhere in client/src (census §3 B1). The failure
-        // this forbids is a card that renders the absence as an empty stat block or a zero.
-        Assert.Contains("no level, XP, rank or streak", TrainerCard.NoLevelNote, StringComparison.Ordinal);
+        // The failure this forbids is a card that renders an absence as an empty stat block or a
+        // zero. The sentence moved when the XP ledger landed: this build now KEEPS a level, and the
+        // card's job is to say it does not render it rather than to claim none exists.
+        Assert.Contains("does not show your level or XP", TrainerCard.NoLevelNote, StringComparison.Ordinal);
+        Assert.Contains(
+            CcpClient.Desktop.Features.Progression.ProgressionDocument.FileName,
+            TrainerCard.NoLevelNote,
+            StringComparison.Ordinal);
+        Assert.Contains("no rank and no streak", TrainerCard.NoLevelNote, StringComparison.Ordinal);
         Assert.Contains("no portrait, wardrobe or banner", TrainerCard.NoPortraitNote, StringComparison.Ordinal);
         Assert.Contains("stays on it", TrainerCard.LocalOnlyNote, StringComparison.Ordinal);
         Assert.Contains("no sharing, export, upload or publish path", TrainerCard.LocalOnlyNote, StringComparison.Ordinal);

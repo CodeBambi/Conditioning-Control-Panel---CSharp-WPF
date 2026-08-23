@@ -96,6 +96,9 @@ public class UnboundedWaitGuardTests
         ("CcpClient.Tests/GradedRunAwardsTests.cs", "store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
         ("CcpClient.Tests/IntakePassServiceTests.cs", "store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
         ("CcpClient.Tests/IntakePunchCardTests.cs", "store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/ProgressionLedgerTests.cs", "store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/ProgressionLedgerTests.cs", "settings.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/ProgressionLedgerTests.cs", "slots.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
         ("CcpClient.HeadlessTests/DtrhSlotPickerHeadlessTests.cs", "slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
         // Shape (a), blocking form, population 3: the awaited task ALREADY carries a budget, so the
         // block inherits it. Bare in the source only because the bound is one frame further out.

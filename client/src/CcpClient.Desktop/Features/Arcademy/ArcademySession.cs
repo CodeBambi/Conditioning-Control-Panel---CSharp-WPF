@@ -37,6 +37,7 @@ public sealed class ArcademySession : IDisposable
 {
     private readonly PersistenceStore<ArcademySettingsDocument> _store;
     private readonly ArcademyMetaStore? _meta;
+    private readonly Progression.ProgressionLedger? _xp;
     private readonly Action<object> _post;
     private readonly ILogSink _log;
     private bool _initPosted;
@@ -55,17 +56,23 @@ public sealed class ArcademySession : IDisposable
     /// (<c>_meta?.…</c> at every call site, <c>:464</c>, <c>:568</c>, <c>:1386</c>, <c>:1407</c>):
     /// without one, a <c>meta-command</c> is answered with nothing, <c>init.meta</c> is the empty
     /// object, and a class-ended payout credits nobody and reports zeros.</param>
+    /// <param name="xp">The XP ledger a finished class banks into, nullable for exactly the reason
+    /// upstream's <c>App.Progression?.AddXP</c> is (<c>:1396</c>): without one the payout is still
+    /// computed, still reported and still credits attendance — it simply banks nowhere, and
+    /// <see cref="ArcademyClassPayout.ArcademyPayout.XpBankedReason"/> says which.</param>
     public ArcademySession(
         PersistenceStore<ArcademySettingsDocument> store,
         ArcademyAppFacts facts,
         Action<object> post,
         ILogSink log,
-        ArcademyMetaStore? meta = null)
+        ArcademyMetaStore? meta = null,
+        Progression.ProgressionLedger? xp = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(post);
         _store = store;
         _meta = meta;
+        _xp = xp;
         _post = post;
         _log = log;
         Facts = facts;
@@ -84,15 +91,20 @@ public sealed class ArcademySession : IDisposable
     public event Action<ArcademyAppFacts>? AppFactsChanged;
 
     /// <summary>
-    /// <b>THE XP SEAM (slice 4).</b> Raised with the payout a finished class computed, AFTER the
-    /// page has been answered. Upstream's equivalent line is
-    /// <c>App.Progression?.AddXP(xp, XPSource.Other)</c> (<c>:1394-1400</c>) — the same
-    /// hosted-experience route Intake and the descent take. This build has no XP store, level or
-    /// rank of any kind, so <see cref="ArcademyClassPayout.ArcademyPayout.Xp"/> is computed and
-    /// lands nowhere; a subscriber here is the whole of what an XP economy would need to wire, and
-    /// nothing else in this file would change. Upstream's own failure posture is ported too: it
-    /// wraps <c>AddXP</c> in a try/catch "because a payout must not take the report card down with
-    /// it" — a throwing handler here is isolated and logged for the same reason.
+    /// <b>THE PAYOUT SEAM (slice 4).</b> Raised with the payout a finished class produced, AFTER the
+    /// page has been answered and AFTER the XP has been banked — so a subscriber sees
+    /// <see cref="ArcademyClassPayout.ArcademyPayout.XpBanked"/> already settled and cannot bank it
+    /// a second time.
+    ///
+    /// <para>The XP itself does NOT ride this event. Upstream's grant sits between the payout and
+    /// the frame (<c>:1390-1399</c>, frame at <c>:1410</c>) because the frame reports the level-up
+    /// it caused; an event raised after the post could not fill that field, so the ledger is called
+    /// inline at upstream's own point in the order and this seam stays what it was — the hook for
+    /// anything ELSE that wants to know a class paid out.</para>
+    ///
+    /// <para>Upstream's failure posture is ported: it wraps <c>AddXP</c> in a try/catch "because a
+    /// payout must not take the report card down with it", and with an event there is more than one
+    /// call to protect — a throwing handler here is isolated and logged for the same reason.</para>
     /// </summary>
     public event Action<ArcademyClassPayout.ArcademyPayout>? PayoutComputed;
 
@@ -467,12 +479,42 @@ public sealed class ArcademySession : IDisposable
             return;
         }
 
+        // THE GRANT, at upstream's own place in the order: after the payout is computed and BEFORE
+        // the frame goes out (:1390-1399, frame at :1410-1416). That order is what lets levelUp be a
+        // real before/after comparison rather than a constant. Upstream's own try/catch (:1396-1397)
+        // is here for its stated reason — a payout must not take the report card down with it.
+        //
+        // ONE STEP LATER THAN UPSTREAM AND DELIBERATELY SO: upstream grants at :1396 and credits
+        // attendance at :1401-1407, while Compute above already did the attendance write. Nothing
+        // user-visible moves — the frame carries the same two answers either way — and the failure
+        // ordering improves, because a throwing grant now cannot land in front of the credit this
+        // file's own remarks call the thing that must not be lost (ArcademyClassPayout, :1359-1366).
+        var banked = payout;
+        try
+        {
+            // Upstream's `if (xp > 0)` (:1394) is the ledger's own RefusedNotPositive arm, so a
+            // retake's 0 is refused with a reason instead of skipped silently.
+            var grant = _xp?.Grant(payout.Xp, "arcademy class");
+            banked = payout with
+            {
+                XpBanked = grant?.Banked ?? false,
+                XpBankedReason = grant is null
+                    ? NoLedgerReason
+                    : grant.Banked ? string.Empty : grant.Reason,
+                LevelUp = grant?.LeveledUp ?? false,                                // :1416
+            };
+        }
+        catch (Exception ex)
+        {
+            _log.Log($"arcademy: XP grant failed, isolated ({ex.GetType().Name}) — the report card still lands (:1397)");
+        }
+
         if (_meta is { } meta)
         {
             _post(ArcademyProtocol.BuildMetaSnapshot(meta.Rev, meta.Snapshot()));   // :1408
         }
 
-        _post(ArcademyProtocol.BuildPayoutResult(payout));                          // :1410
+        _post(ArcademyProtocol.BuildPayoutResult(banked));                          // :1410
 
         // PER-HANDLER isolation, the shape PersistenceStore.Replace already uses for
         // SettingsReplaced: upstream wraps its single AddXP call (:1396-1399) because "a payout must
@@ -482,7 +524,7 @@ public sealed class ArcademySession : IDisposable
         {
             try
             {
-                handler(payout);
+                handler(banked);
             }
             catch (Exception ex)
             {
@@ -491,11 +533,17 @@ public sealed class ArcademySession : IDisposable
         }
 
         _log.Log(
-            $"arcademy: class complete ({payout.GameKey}, tier {payout.GradeTier}, grade {payout.Grade}) = "
-            + $"{payout.Xp:0} XP{(payout.Retake ? $" (retake — already paid for {payout.XpLedgerUtcDay})" : "")}, "
-            + $"streak {payout.Streak}, {payout.ClassesToday}/{ArcademyMetaStore.ClassesPerDay} today "
-            + $"— computed only ({ArcademyClassPayout.NoXpStoreReason})");          // :1422-1425
+            $"arcademy: class complete ({banked.GameKey}, tier {banked.GradeTier}, grade {banked.Grade}) = "
+            + $"{banked.Xp:0} XP{(banked.Retake ? $" (retake — already paid for {banked.XpLedgerUtcDay})" : "")}, "
+            + $"streak {banked.Streak}, {banked.ClassesToday}/{ArcademyMetaStore.ClassesPerDay} today "
+            + (banked.XpBanked
+                ? $"— banked{(banked.LevelUp ? ", LEVEL UP" : "")}"
+                : $"— not banked ({banked.XpBankedReason})"));                      // :1422-1425
     }
+
+    /// <summary>Said when this session was built without a ledger — which is the whole of what makes
+    /// a payout unbankable here, and is a property of the WIRING rather than of the run.</summary>
+    public const string NoLedgerReason = "this session has no XP ledger wired to it";
 
     /// <summary>Re-echo every key the init projection carries (<c>RepushProjectedSettings</c>,
     /// <c>:1798-1806</c>). The restored values may differ from what the page is painting, and the

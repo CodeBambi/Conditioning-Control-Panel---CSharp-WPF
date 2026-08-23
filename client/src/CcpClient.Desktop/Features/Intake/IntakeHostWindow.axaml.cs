@@ -505,7 +505,8 @@ public partial class IntakeHostWindow : Window
 
     // ---------- the completion loop (:393-568) ----------
 
-    /// <summary>quiz-result → XP (computed, never granted) → graded awards (RECORDED,
+    /// <summary>quiz-result → XP (computed AND banked into
+    /// <see cref="Features.Progression.ProgressionLedger"/>) → graded awards (RECORDED,
     /// never merely computed) → pass spend → draft (marked never-runnable) → punch stamp → session-drafted
     /// reply. The window STAYS OPEN.
     /// Order pinned from the WPF evidence: XP :443-446, spend :465, draft :478-484,
@@ -537,10 +538,23 @@ public partial class IntakeHostWindow : Window
             return;
         }
 
-        // 1. XP — COMPUTED, never granted (no greenfield XP store — typed seam;
-        // IntakeHostService.cs:443-446 formula).
+        // 1. XP — computed AND GRANTED (:443-446 formula, :446 grant). Wrapped exactly as upstream
+        // wraps its own AddXP (:441/:455 — "XP grant failed" is a debug line and the run carries on):
+        // the spend, the draft and the punch all follow, and they are what the run was for.
         var xp = IntakeDraft.ComputeCompletionXp(run);
-        _host.LogDiagnostic($"intake: completion XP computed, not granted ({xp}; no XP store — typed seam)");
+        try
+        {
+            var grant = _context.Progression.Grant(xp, "intake completion");
+            _host.LogDiagnostic(grant.Banked
+                ? $"intake: completion XP granted (+{xp}) — level {grant.LevelAfter}{(grant.LeveledUp ? " (LEVEL UP)" : string.Empty)}"
+                : $"intake: completion XP ({xp}) NOT granted — {grant.Reason}");
+        }
+        catch (Exception ex)
+        {
+            _host.LogDiagnostic($"intake: XP grant failed ({ex.GetType().Name}) — the run continues (:455)");
+        }
+        // The mantra quest/program credit that shares this block upstream (:448-453) is still a
+        // typed seam — there is no quest verifier here.
 
         // 1b. The graded verdict (#870; :48-55 const, :431-435 emit, :451-453 mantra
         // credit) — RECORDED, not merely computed. The verdict now reaches the award consumer, which

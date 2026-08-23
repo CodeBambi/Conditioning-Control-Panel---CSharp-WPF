@@ -423,7 +423,7 @@ public class DtrhMetaTests
             "{\"score\":12000,\"durationSec\":180,\"elapsedSec\":180,\"difficulty\":\"Gentle\",\"difficultyMult\":1.0,"
             + "\"sparkGainMult\":1.0,\"bestCombo\":14,\"defused\":9,\"trickleDrops\":5,\"dripFeedMaxed\":false}"));
         Assert.Equal(750, payout.BaseXp);      // capBase = 250 * 3min * 1.0 (m2test.js:143)
-        Assert.Equal(1.0, payout.SkillMult);   // no skill tree — WPF's own ?? 1.0 fallback (:526)
+        Assert.Equal(1.0, payout.SkillMult);   // no skill tree — WPF's own ?? 1.0 fallback (:580)
         Assert.Equal(750, payout.FinalXp);
         // sparks: round((1.5*sqrt(12000) + 35*1*min(1,3/3)) * 1) + 5 trickle = 199 + 5 = 204,
         // + FIRST_FALL_BONUS 25 (RunsCompleted was 0, real mode) = 229.

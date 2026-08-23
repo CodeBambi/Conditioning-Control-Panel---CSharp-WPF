@@ -180,6 +180,11 @@ public sealed class DtrhMeta
     private readonly Action<object> _broadcast;
     private readonly Action<string> _log;
     private readonly bool _testMode;
+
+    /// <summary>The app-wide XP ledger the run-ended payout banks into (upstream
+    /// <c>DtrhHostService.cs:603</c>). Null in the unit fixtures and in the m2 test mirror, which is
+    /// the same shape upstream's own <c>App.Progression?.</c> null-conditional carries.</summary>
+    private readonly Progression.ProgressionLedger? _xp;
     private readonly DtrhSlotDocument? _testState;
     private Timer? _saveDebounce;
     private readonly object _timerGate = new();
@@ -205,7 +210,8 @@ public sealed class DtrhMeta
         Action<string> log,
         bool testMode,
         string? slotFilePath = null,
-        DtrhSlotDocument? testFixture = null)
+        DtrhSlotDocument? testFixture = null,
+        Progression.ProgressionLedger? xp = null)
     {
         _slotStore = slotStore;
         _indexStore = indexStore;
@@ -213,6 +219,7 @@ public sealed class DtrhMeta
         _broadcast = broadcast;
         _log = log;
         _testMode = testMode;
+        _xp = xp;
         if (testMode)
         {
             // The test clone starts from the DECLARED fixture (the committed
@@ -776,9 +783,16 @@ public sealed class DtrhMeta
     /// <summary>run-ended → XP payout + meta banking (DtrhHostService.OnRunEnded :510-613).
     /// The freeze hygiene has ALREADY run (host window, :513 order). Returns the
     /// payout-result payload. skillMult is 1.0: WPF reads App.SkillTree with a `?? 1.0`
-    /// fallback (:526) and the greenfield has no skill tree — the fallback IS the parity
-    /// outcome. App-level hooks (AddXP/achievements/reveal-sync/bark/sentinel/session
-    /// telemetry) are named limits — no greenfield subsystems exist for them.</summary>
+    /// fallback (:580 — the citation this comment carried, :526, had drifted; re-derived against
+    /// the shipping file) and the greenfield has no skill tree — the fallback IS the parity
+    /// outcome. The XP now BANKS (:603) into <see cref="Progression.ProgressionLedger"/>; the
+    /// remaining app-level hooks (achievements / reveal-sync / bark / sentinel / session telemetry)
+    /// are still named limits — no greenfield subsystems exist for them.
+    /// <para><b>baseXp is what upstream grants, not finalXp.</b> <c>:603</c> passes <c>baseXp</c>,
+    /// and <c>AddXP</c> applies the skill multiplier itself (<c>ProgressionService.cs:75-77</c>) —
+    /// so <c>finalXp</c> is a DISPLAY figure for the payout frame (<c>:643</c>, <c>:656</c>) and
+    /// granting it would double the bonus. With no skill tree the two are equal here, which is
+    /// exactly why the wrong one would never be noticed.</para></summary>
     public DtrhProtocol.DtrhPayoutResult OnRunEnded(JsonElement raw)
     {
         RunActive = false;
@@ -791,7 +805,7 @@ public sealed class DtrhMeta
         var durMin = durationSec / 60.0;
         var capBase = 250.0 * durMin * diffMult;
         var baseXp = Math.Min(score, capBase);
-        const double skillMult = 1.0; // no greenfield skill tree — WPF's own ?? 1.0 fallback (:526)
+        const double skillMult = 1.0; // no greenfield skill tree — WPF's own ?? 1.0 fallback (:580)
         var finalXp = baseXp * skillMult;
 
         long previousBest = _testMode ? 0 : S.BestScore; // read BEFORE banking (:529)
@@ -810,6 +824,27 @@ public sealed class DtrhMeta
         string? rankUp = null;
         if (!_testMode)
         {
+            // THE XP GRANT (:603), inside the same !_testMode block upstream puts it in (:601) —
+            // a dry run credits nothing. Wrapped for upstream's own reason (:604: a failing AddXP
+            // is a debug line, never the thing that costs the player their run's meta banking,
+            // which has already happened above).
+            try
+            {
+                var grant = _xp?.Grant(baseXp, "descent run");
+                if (grant is { Banked: true, LeveledUp: true })
+                {
+                    _log($"dtrh-meta: LEVEL UP → {grant.LevelAfter}");
+                }
+                else if (grant is { Banked: false })
+                {
+                    _log($"dtrh-meta: run XP ({baseXp:0}) NOT banked — {grant.Reason}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _log($"dtrh-meta: XP grant failed ({ex.GetType().Name}) — the payout continues (:604)");
+            }
+
             // Evaluated AFTER AwardRun incremented RunsCompleted (:563-566).
             var nowRank = DtrhRanks.For(S.RunsCompleted);
             if (nowRank > S.LastRankSeen) rankUp = DtrhRanks.Name(nowRank);

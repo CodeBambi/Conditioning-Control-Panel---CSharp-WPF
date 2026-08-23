@@ -84,10 +84,18 @@ public enum LockCardResolution
 /// one card on the primary display; voice-solve mode (<c>:423</c>, an offline Vosk microphone the
 /// port has no capability for); the interaction queue that defers a card behind a video or a pop
 /// quiz (<c>LockCardService.cs:193-263</c>) — the port has no queue, so upstream's own
-/// <c>DropNoQueue</c> answer applies verbatim; XP, achievements and the level-35 unlock; the
-/// keep-alive window pool and the dead-man's-switch watchdog (<c>:53-119</c>), both of which exist
-/// for WPF render-thread hazards this port's raw window does not have; and the five colour dials.
-/// Each is recorded as a divergence rather than stubbed.</para>
+/// <c>DropNoQueue</c> answer applies verbatim; the solved-card XP grant
+/// (<c>Windows/LockCardWindow.xaml.cs:862</c> — the port has an XP ledger now,
+/// <c>Features/Progression/ProgressionLedger</c>, but this effect has no solve payout to hand it)
+/// and its achievements; the keep-alive window pool and the dead-man's-switch watchdog
+/// (<c>:53-119</c>), both of which exist for WPF render-thread hazards this port's raw window does
+/// not have; and the five colour dials. Each is recorded as a divergence rather than stubbed.</para>
+///
+/// <para><b>The level-35 unlock refuses nobody, here or upstream.</b> No statement of it survives in
+/// the shipping tree at all — it is carried as data on <c>Features/Progression/LevelUnlocks</c> from
+/// this port's own record — and every level gate the app still has funnels through
+/// <c>AppSettings.IsLevelUnlocked</c>, whose body is <c>return true;</c>
+/// (<c>Models/AppSettings.cs:5434-5442</c>: <i>"Feature level gating has been removed"</i>).</para>
 /// </summary>
 public sealed class LockCardEffect : PacedSessionEffect<LockCardFiring>
 {

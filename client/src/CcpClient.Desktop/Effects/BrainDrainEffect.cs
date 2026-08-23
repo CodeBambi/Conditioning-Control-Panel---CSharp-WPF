@@ -48,8 +48,18 @@ namespace CcpClient.Desktop.Effects;
 /// reads <c>Armed</c>, because then nothing reaches anybody at all
 /// (<see cref="AudioCueEffect.WorkIsRunning"/>).</para>
 ///
-/// <para><b>What else is NOT ported</b>: the level-70 unlock (<c>BrainDrainService.cs:116-120</c> —
-/// the port has no level system), the Discord presence call (<c>:138</c>), the live master-volume
+/// <para><b>THE LEVEL-70 UNLOCK IS NOT A GATE ANYWHERE, INCLUDING UPSTREAM.</b> This comment used
+/// to say the port has no level system, and cited <c>BrainDrainService.cs:116-120</c>, which is the
+/// <c>BrainDrainTriggered</c> event declaration and not a gate. The real call is
+/// <c>BrainDrainService.cs:208</c> — <c>!App.Settings.Current.IsLevelUnlocked(70)</c> — and
+/// <c>IsLevelUnlocked</c> is <c>return true;</c> under the comment <i>"Feature level gating has been
+/// removed — every feature is available from level 1"</i> (<c>Models/AppSettings.cs:5434-5442</c>).
+/// So the shipping app never refuses Brain Drain on level either. The port now HAS a level system
+/// (<c>Features/Progression/ProgressionLedger</c>) and still does not refuse, on purpose:
+/// <c>Features/Progression/LevelUnlocks</c> keeps the 70 as the recorded requirement and returns
+/// upstream's answer.</para>
+///
+/// <para><b>What else is NOT ported</b>: the Discord presence call (<c>:138</c>), the live master-volume
 /// push (<c>:339-349</c>, and the port has no master volume at all — see
 /// <see cref="BrainDrainPresetDocument.DefaultVolumePercent"/>), and the melt variant of the blur
 /// (<c>MainWindow.StartStop.cs:241</c>), which belongs to the visual half.</para>
