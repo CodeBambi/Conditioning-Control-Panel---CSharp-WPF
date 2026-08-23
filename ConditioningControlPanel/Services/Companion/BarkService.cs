@@ -74,7 +74,23 @@ namespace ConditioningControlPanel.Services
         /// app-raised constants, so a mod's rule under this trigger inherits the exemption.
         /// </summary>
         private static readonly HashSet<string> GlobalGapExemptTriggers =
-            new(StringComparer.OrdinalIgnoreCase) { "AttentionCheckFail" };
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                "AttentionCheckFail",
+                // Possession attribution is functional, not flavor: "the warden names the big ones" is
+                // the clarity-in-front rule (POSSESSION.md), and a tripwire that fires silently because
+                // the room chatted 40s ago reads as a bug. Per-rule cooldowns (4-20s) stay in force.
+                Services.Possession.PossessionBarkTriggers.Effect,
+                Services.Possession.PossessionBarkTriggers.Tripwire,
+                Services.Possession.PossessionBarkTriggers.Warden,
+                Services.Possession.PossessionBarkTriggers.RungChanged,
+            };
+
+        private static bool IsPossessionAttribution(string? trigger) =>
+            string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Effect, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Tripwire, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.Warden, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trigger, Services.Possession.PossessionBarkTriggers.RungChanged, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>Barks at/above this priority (or any non-Normal class) speak via GigglePriority; lower ones queue via Giggle.</summary>
         private const int PriorityBarkThreshold = 100;
@@ -1484,7 +1500,9 @@ namespace ConditioningControlPanel.Services
 
                 // Don't talk over a subliminal/flash whisper that's still audible — two voices at once is
                 // jarring. Safety/guaranteed barks bypass this (handled above) so panic still speaks.
-                if (App.Audio?.IsWhisperAudioPlaying == true)
+                // Possession attribution barks are text-only by contract (POSSESSION.md: audio null,
+                // bubble still shows), so they cannot be a second voice - let them name the haunt.
+                if (App.Audio?.IsWhisperAudioPlaying == true && !IsPossessionAttribution(rule.Trigger))
                     return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "whisper-active" };
 
                 // Don't talk over the Chaos narrator (the Madam). She holds the floor; the next

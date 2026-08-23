@@ -147,7 +147,7 @@ public sealed class PossessionDirector : IDisposable
 
             // Let the room settle before the first twitch (PossessionDeck.FirstWait).
             _nextDue = DateTime.Now + PossessionDeck.FirstDelay(CurrentRung, _intensity, _rng);
-            App.Logger?.Debug("Possession armed: intensity={Intensity}, first haunt in {Sec:F0}s, {Count} effects",
+            App.Logger?.Information("Possession armed: intensity={Intensity}, first haunt in {Sec:F0}s, {Count} effects",
                 _intensity, (_nextDue - DateTime.Now).TotalSeconds, _effects.Count);
         }
         catch (Exception ex) { App.Logger?.Warning("Possession activate failed: {Error}", ex.Message); }
@@ -178,7 +178,7 @@ public sealed class PossessionDirector : IDisposable
             {
                 var previous = CurrentRung;
                 CurrentRung = rung;
-                App.Logger?.Debug("Possession rung {From} -> {To} at {Pct:P0}", previous, rung, frac);
+                App.Logger?.Information("Possession rung {From} -> {To} at {Pct:P0}", previous, rung, frac);
                 try { RungChanged?.Invoke(rung); } catch { }
 
                 // The rung change itself is an event: the whole window flares once so the escalation is
@@ -295,7 +295,7 @@ public sealed class PossessionDirector : IDisposable
             _live.Add(ghost);
             _nextDue = now + PossessionDeck.NextDelay(rung, _intensity, _rng);
 
-            App.Logger?.Debug("Possession: {Effect} on {Target} at rung {Rung} (live {Live})",
+            App.Logger?.Information("Possession: {Effect} on {Target} at rung {Rung} (live {Live})",
                 effect.Id, target?.Key ?? "(window)", rung, _live.Count);
 
             if (knock && Warden != null)
@@ -466,7 +466,7 @@ public sealed class PossessionDirector : IDisposable
 
             CurrentRung = PossessionRung.Settle;
             try { RungChanged?.Invoke(CurrentRung); } catch { }
-            App.Logger?.Debug("Possession: reassembled, room is quiet");
+            App.Logger?.Information("Possession: reassembled, room is quiet");
         }
         catch (Exception ex) { App.Logger?.Warning("Possession reassembly failed: {Error}", ex.Message); }
     }
