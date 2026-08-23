@@ -374,6 +374,16 @@ export default {
         showRt: settingOf('ic_show_rt', true) !== false,
         seed,                    // the tube grows its skin from the class seed
         log: say,
+        /* W0 (2026-08-24): denied.mp3 finally obeys the mixer. The clip rides
+         * the engine's audio_trigger clip path (mute / master / bus level /
+         * ducking all apply; `stamp_bad` is the recipe FALLBACK if the browser
+         * refuses the decode). render.js keeps its raw-element path only for an
+         * engine-less class - the X-hit must never be the beat that goes silent. */
+        sting: (clipUrl) => deckEngine.fire('audio_trigger', {
+          name: 'stamp_bad',
+          level: Math.min(audioCeil(), 0.9),
+          url: clipUrl, key: 'ic-denied', maxMs: 1500,
+        }),
       });
 
       S = {

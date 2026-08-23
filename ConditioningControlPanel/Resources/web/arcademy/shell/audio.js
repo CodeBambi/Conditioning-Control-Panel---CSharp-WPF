@@ -72,6 +72,11 @@ const SOUNDS = {
   bubble_pop:{ type: 'sine',     f0: 1200, f1: 380, ms: 70, gain: 0.7 },
   stamp:     { type: 'sine',     f0: 150, f1: 58,  ms: 190, gain: 1.0, thunk: true },
   stamp_bad: { type: 'sawtooth', f0: 96,  f1: 44,  ms: 240, gain: 0.9, thunk: true },
+  /* W0 (2026-08-24): Anomaly's wrong-tap / round-timeout beats requested `thud`
+     since Semester II and were silently degrading to `blip` - a bright tick on
+     the game's two LOSS moments, the exact opposite of the muted thud the House
+     Book asks for. Softer and shorter than either stamp: a body knock, no bite. */
+  thud:      { type: 'sine',     f0: 130, f1: 52,  ms: 150, gain: 0.85, thunk: true },
   streak:    { arp: [523.25, 659.25], ms: 90,  gain: 0.6 },
   jackpot:   { arp: [523.25, 659.25, 783.99, 1046.5], ms: 110, gain: 0.9 },
   near_miss: { type: 'sawtooth', f0: 180, f1: 760, ms: 520, gain: 0.5, riser: true },

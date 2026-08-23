@@ -63,8 +63,10 @@ shell/splitflap.js departure-board reveal. The campus hangs it COLLAPSED behind 
                    rolls the flaps, which is why there is no "flip the board
                    again" button any more
 shell/reportcard.js day summary + THE one share pipeline
-shell/settings.js  THE settings page (3 tiers) + SETTING_KEYS
-shell/ceremonies.js stamp / 10-segment meter / reward beats (engine-delegated)
+shell/settings.js  THE settings page (3 tiers) + SETTING_KEYS; `gameKey` scopes it to ONE
+                   game group (the pause card's door) - argless = the full sheet
+shell/ceremonies.js stamp / 10-segment meter / reward beats (engine-delegated; the
+                   CSS floor REQUESTS its own cues on `document` since W0 - see trap 66)
 shell/exits.js     THE WAY OUT: the campus pill + its confirm, the sticky exit
                    bar, and the casino arrow SIGN. Every back/leave/done in the
                    school is minted here (games borrow it through ctx.exits)
@@ -1056,6 +1058,25 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     ambient campus built with `animate:false`, which is what makes the extended cover safe -
     if a future first screen gains a one-shot entry reveal, it must not fire until the
     loader's `hidden` lands (or the splash will eat it).
+
+67. **shell/ceremonies.js streakMeter must NEVER delegate `streak_meter`, and the CSS
+    floor is no longer silent (W0, 2026-08-24).** The engine's ceremony reads `{streak}`
+    (this module used to send `{filled, total}`, which parsed as streak 0 - the chime
+    ladder NEVER played) and it mounts its OWN meter node in the fx layer, so a "fixed"
+    delegate would double-render the meter. The shell draws the one meter and requests
+    the chime itself (level + a semitone per lit segment, capped +7, hidden under 2).
+    Same wave: every floor beat (stamp / gradeObject / payoff jackpot / near-miss) now
+    dispatches `arcademy-sfx` directly when the engine cannot take it - punchcard
+    thud()'s precedent; a REQUEST on `document` is not an audio node. gradeObject is
+    rank-pitched on the punch-card ladder (C .78 / B .92 / A 1 / S 1.18). If you re-add
+    a delegate or "simplify" the quiet flag, the end card goes mute or double-cues.
+68. **The pause card is the ONE in-class door to settings, and the scoped page's knobs
+    land NEXT run.** The topbar gear is hidden while a class is up, so
+    `showSettings(active.cls.gameKey)` from the pause card is the only class-stage
+    entry; it renders tiers 1+2 plus that game's group only (an unknown key falls back
+    to the FULL page - too many knobs is the lesser bug than hidden ones). ctx.settings
+    is a startClass snapshot, so the scoped page prints `applies_next_class` instead of
+    pretending to live-apply. The campus gear / Registrar stay argless = full sheet.
 
 ## 5. The game module contract (short version)
 

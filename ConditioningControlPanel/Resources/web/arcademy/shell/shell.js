@@ -920,7 +920,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ============================ SCREEN: SETTINGS ======================== */
-  function showSettings() {
+  /**
+   * THE SPLIT (owner ruling 2026-08-24). `gameKey` scopes the page to one
+   * class: the pause card passes the running class's key so a player mid-class
+   * sees the globals plus THEIR room's knobs, never the other eight. The
+   * campus gear and the Registrar keep calling with no argument and get the
+   * full sheet - the between-classes page is the right home for "everything".
+   */
+  function showSettings(gameKey) {
     if (active) pauseClass(true);
     dismissEndCard();
     dismissPunchStage();
@@ -933,6 +940,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       games: games.list,
       keybinds,
       log: say,
+      gameKey: gameKey || null,
       onClose: () => (active ? showClassScreen() : showBoard()),
     });
     dom.screen.appendChild(settingsPage.root);
@@ -2226,10 +2234,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         const resume = el('button', 'btn primary', 'Resume');
         resume.type = 'button';
         resume.addEventListener('click', () => pauseClass(false));
+        /* THE MISSING DOOR (owner ruling 2026-08-24). The topbar gear is hidden
+         * while a class is up, so until now NO path on the class stage reached
+         * settings at all. The pause card is the natural place: it is already
+         * the freeze state showSettings() induces, and onClose walks straight
+         * back here. The running class's key scopes the page to this room. */
+        const options = el('button', 'btn ghost', t('settings', 'Settings'));
+        options.type = 'button';
+        options.addEventListener('click', () =>
+          showSettings(active && active.cls ? active.cls.gameKey : null));
         const leave = el('button', 'btn ghost', t('leave_class', 'Leave class'));
         leave.type = 'button';
         leave.addEventListener('click', () => showBoard());
-        bar.appendChild(resume); bar.appendChild(leave);
+        bar.appendChild(resume); bar.appendChild(options); bar.appendChild(leave);
         overlay.appendChild(bar);
         /* DECK V - STREAK JEOPARDY. What "Leave class" actually costs, in the
          * HOST's own attendance numbers. It is a LINE, not a gate: the button

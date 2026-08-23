@@ -47,9 +47,10 @@
  * That was a straight violation of web CLAUDE.md trap 18 - shell/audio.js is
  * the only thing in the Arcademy that may hold an audio node, and the engine's
  * `audio_trigger` is the sanctioned road to it. Every oscillator is GONE; the
- * casino deck owns the cue ladder now. The ONE survivor is deniedSting():
- * assets/denied.mp3 is a real, owner-approved sample fired on the X-hit, it is
- * grandfathered, and it is deliberately the only <Audio> in this folder.
+ * casino deck owns the cue ladder now. deniedSting() (assets/denied.mp3, the
+ * owner-approved X-hit sample) rides the engine's audio_trigger clip path as of
+ * W0 2026-08-24 - mixer laws apply - and its raw <Audio> survives only as the
+ * engine-less fallback, deliberately the only such element in this folder.
  *
  * INPUT TRUST (Law II): the bubble is the single tap target; every decorative
  * layer, slot and sheet figure is pointer-events:none. The reveal is
@@ -89,6 +90,9 @@ export function createRender(o = {}) {
   const perf = !!o.perf;
   const showRt = o.showRt !== false;
   const log = o.log || (() => {});
+  /* W0: index.js hands us the sanctioned road for the denied sample - a hook
+     onto the engine's audio_trigger clip path, so the mixer's laws apply. */
+  const sting = typeof o.sting === 'function' ? o.sting : null;
   /* the class seed rides down into the tube: every class grows its own skin,
      and a retake (same seed, by law) wears the same one */
   const seed = o.seed == null ? '' : String(o.seed);
@@ -117,11 +121,20 @@ export function createRender(o = {}) {
   let scoreText = null;  // the odometer's last painted string
 
   /* ------------------------------------------------------------------ sfx */
-  /* THE ONE SURVIVING SOUND. Every synthesised chirp this file used to make is
+  /* THE ONE SURVIVING SAMPLE. Every synthesised chirp this file used to make is
      gone (trap 18: shell/audio.js owns audio, the engine's audio_trigger is the
-     road, and casino.js drives the ladder). denied.mp3 is a real sample the
-     owner approved for the X-hit and is grandfathered in place. */
+     road, and casino.js drives the ladder). denied.mp3 is the owner-approved
+     X-hit sample; since W0 it travels that same road. */
   function deniedSting() {
+    /* W0 (2026-08-24): the grandfather clause is repaid. The sample is now
+       REQUESTED through the engine's clip path (o.sting -> audio_trigger with a
+       url), so mute, master volume, the fx bus level and ducking all finally
+       apply to the one real sample in the build. The raw element below survives
+       ONLY as the engine-less fallback (sting missing, or fire() answered null
+       because the class has no engine) - the X-hit never goes silent. */
+    if (sting) {
+      try { if (sting(url(DENIED_SFX)) != null) return; } catch (e) { /* fall through */ }
+    }
     try {
       if (typeof Audio !== 'function') return;
       if (!deniedAudio) { deniedAudio = new Audio(url(DENIED_SFX)); deniedAudio.volume = 0.45; }
