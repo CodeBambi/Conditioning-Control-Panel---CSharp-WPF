@@ -1048,7 +1048,18 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     and each meaty 1 night in 4 (30/360), with a duplicate family on 30/120 nights. Demoting ONE
     class back to quick flattens it to 40-50 and 18-20 - an owner call, not a code fix.
 
-66. **shell/ceremonies.js streakMeter must NEVER delegate `streak_meter`, and the CSS
+66. **THE LOADER IS THE INTRO SPLASH, AND ONLY THE HAPPY PATH GETS THE BEAT.** `#arc-loader`
+    plays a ~3s fixed CSS timeline from t0 (no init needed) and boot.js's `dismissLoader()`
+    WAITS OUT `INTRO_MIN_MS` before adding `.is-done` (the fade + zoom-through exit), so an
+    early boot never cuts the beat. `failBoot()` must keep snapping `hidden = true` directly -
+    an error card delayed by a celebration, or a splash replaying its exit over the nope
+    screen, are both wrong. The contract between boot.js and the div is ONLY `hidden` +
+    `.is-done`; the decoration inside is free to change. The first screen underneath is the
+    ambient campus built with `animate:false`, which is what makes the extended cover safe -
+    if a future first screen gains a one-shot entry reveal, it must not fire until the
+    loader's `hidden` lands (or the splash will eat it).
+
+67. **shell/ceremonies.js streakMeter must NEVER delegate `streak_meter`, and the CSS
     floor is no longer silent (W0, 2026-08-24).** The engine's ceremony reads `{streak}`
     (this module used to send `{filled, total}`, which parsed as streak 0 - the chime
     ladder NEVER played) and it mounts its OWN meter node in the fx layer, so a "fixed"
@@ -1059,7 +1070,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     thud()'s precedent; a REQUEST on `document` is not an audio node. gradeObject is
     rank-pitched on the punch-card ladder (C .78 / B .92 / A 1 / S 1.18). If you re-add
     a delegate or "simplify" the quiet flag, the end card goes mute or double-cues.
-67. **The pause card is the ONE in-class door to settings, and the scoped page's knobs
+68. **The pause card is the ONE in-class door to settings, and the scoped page's knobs
     land NEXT run.** The topbar gear is hidden while a class is up, so
     `showSettings(active.cls.gameKey)` from the pause card is the only class-stage
     entry; it renders tiers 1+2 plus that game's group only (an unknown key falls back
@@ -1067,7 +1078,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     is a startClass snapshot, so the scoped page prints `applies_next_class` instead of
     pretending to live-apply. The campus gear / Registrar stay argless = full sheet.
 
-68. **Deck gates split two ways since W2 (2026-08-24): `armed()` = visuals and keeps
+69. **Deck gates split two ways since W2 (2026-08-24): `armed()` = visuals and keeps
     capsOk; `sounds()` = cues and NEVER tests capsOk.** bgIntensity 0 is the player's
     VISUAL exit (Law VI), not a mute switch - a game-called beat (the bell, a dim-out,
     a rung climb, a stat correction) still sounds with the lights off, while a deck's
