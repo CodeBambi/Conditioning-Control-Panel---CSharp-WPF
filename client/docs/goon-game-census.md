@@ -245,9 +245,9 @@ differently, and in the port's favour.
 | 1 | `Videos` (`:47`) | `Effects/MandatoryVideoEffect.cs:48` |
 | 2 | `Subliminals` (`:48`) | `Effects/SubliminalsEffect.cs:62` |
 | 3 | `Bubbles` (`:49`) | `Effects/BubblePopEffect.cs:41` |
-| 4 | `LockCards` (`:50`) | `Effects/LockCardEffect.cs:92` |
+| 4 | `LockCards` (`:50`) | `Effects/LockCardEffect.cs:100` |
 | 5 | `ToyPatterns` (`:51`) | `Haptics/HapticLimb.cs:71` |
-| 6 | `BrainDrain` (`:52`) | `Effects/BrainDrainEffect.cs:57` |
+| 6 | `BrainDrain` (`:52`) | `Effects/BrainDrainEffect.cs:67` |
 | 7 | `BouncingText` (`:53`) | `Effects/BouncingTextEffect.cs:43` |
 | 8 | `Spiral` (`:54`) | `Effects/SpiralOverlayEffect.cs:47` |
 
@@ -971,9 +971,9 @@ a wire break and must red the suite rather than drift.
 | videos | Effects/MandatoryVideoEffect.cs | 48 | class MandatoryVideoEffect |
 | subliminals | Effects/SubliminalsEffect.cs | 62 | class SubliminalsEffect |
 | bubbles | Effects/BubblePopEffect.cs | 41 | class BubblePopEffect |
-| lockcards | Effects/LockCardEffect.cs | 92 | class LockCardEffect |
+| lockcards | Effects/LockCardEffect.cs | 100 | class LockCardEffect |
 | toypatterns | Haptics/HapticLimb.cs | 71 | class HapticLimb |
-| braindrain | Effects/BrainDrainEffect.cs | 57 | class BrainDrainEffect |
+| braindrain | Effects/BrainDrainEffect.cs | 67 | class BrainDrainEffect |
 | bouncingtext | Effects/BouncingTextEffect.cs | 43 | class BouncingTextEffect |
 | spiral | Effects/SpiralOverlayEffect.cs | 47 | class SpiralOverlayEffect |
 | webview-anchor | Features/Dtrh/DtrhCapabilityProbes.cs | 22 | EmbeddedCapability |

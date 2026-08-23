@@ -60,11 +60,16 @@ public enum TrainerCardRecordState
 /// and, for everything else, says in words that it does not know — never a zero, never a blank
 /// stat, never a level the port does not compute.</para>
 ///
-/// <para><b>WHY THERE IS NO LEVEL AND NO XP HERE.</b> Not an omission: no XP, level, streak or rank
-/// exists anywhere in <c>client/src</c> (census §3 B1, re-derived 2026-08-23 — every <c>XP</c>
-/// mention in the tree is a comment saying the port does not have one, e.g.
-/// <c>Effects/BouncingTextEffect.cs:35</c>). Inventing an economy to fill the card would put a
-/// number in front of a user that nothing in the app computes.</para>
+/// <para><b>WHY THIS CARD STILL SHOWS NO LEVEL.</b> When this type landed, no XP or level existed
+/// anywhere in <c>client/src</c> (census §3 B1). One does now — <see cref="ProgressionLedger"/> over
+/// <c>progression.json</c>, which the intake, the descent and the Arcademy all bank into — but
+/// RENDERING it is a change to this surface's visual contract and belongs to the row that owns that
+/// surface, not to the row that built the ledger. So the card says what it does not show rather than
+/// showing a number it has not been given a place for, and <see cref="NoLevelNote"/> names the file
+/// the level actually lives in. The rule that governs the day it IS rendered is already set here and
+/// on the ledger: an unreadable record answers Unknown with a NULL count, never a zero or a
+/// consoling 1 (<see cref="TrainerCardAwardState.Unknown"/>,
+/// <see cref="ProgressionLedger.Known"/>).</para>
 ///
 /// <para><b>WHY THIS RENDERS AWARDS IT CANNOT VERIFY AN ENTITLEMENT FOR (divergence D228).</b> All
 /// four graded-run achievements are <c>IsExclusive = true</c>
@@ -91,10 +96,13 @@ public sealed record TrainerCard(
     /// <summary>The surface's own name — the board row's noun.</summary>
     public const string Title = "Trainer Card";
 
-    /// <summary>Said out loud rather than left as an empty stat block.</summary>
+    /// <summary>Said out loud rather than left as an empty stat block. Kept accurate the day the XP
+    /// ledger landed: this build DOES keep XP and a level now, and this card is simply not the
+    /// surface that renders them yet — see the type remarks.</summary>
     public const string NoLevelNote =
-        "This build keeps no level, XP, rank or streak, so this card shows none. What it does know is "
-        + "the graded-run record below.";
+        "This card does not show your level or XP. This build keeps both, in progression.json, but "
+        + "no surface renders them yet; it also keeps no rank and no streak at all. What this card "
+        + "does know is the graded-run record below.";
 
     /// <summary>The other half of the absence, in the same voice.</summary>
     public const string NoPortraitNote =

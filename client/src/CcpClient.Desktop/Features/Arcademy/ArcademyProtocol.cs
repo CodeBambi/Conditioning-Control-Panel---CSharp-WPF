@@ -288,20 +288,25 @@ public static class ArcademyProtocol
     /// The <c>payout-result</c> reply (<c>ArcademyHostService.cs:1410-1421</c>) — the ONLY source
     /// of an XP number on the page (<c>arcademy/shell/shell.js:1331</c>).
     ///
-    /// <para><b><c>levelUp</c> is a constant false in this build, and that is a stated
-    /// divergence.</b> Upstream fills it by reading <c>PlayerLevel</c> either side of
-    /// <c>AddXP</c> (<c>:1390</c>, <c>:1398</c>). There is no XP store, no level and no rank
-    /// anywhere in <c>client/src</c> for the computed XP to move, so there is nothing to compare
-    /// and "no level-up happened" is the truthful frame. See
-    /// <see cref="ArcademyClassPayout.ArcademyPayout.XpBanked"/>; the page degrades to omitting one
-    /// log suffix (<c>arcademy/boot.js:193</c>).</para>
+    /// <para><b><c>levelUp</c> is a real before/after comparison</b>, exactly as upstream fills it
+    /// by reading <c>PlayerLevel</c> either side of <c>AddXP</c> (<c>:1390</c>, <c>:1399</c>). The
+    /// comparison is made in <c>ArcademySession.ClassEnd</c> and arrives here already stamped on the
+    /// value; this method reports it and decides nothing. A payout that was never banked — no ledger
+    /// wired, a retake's zero, an unreadable ledger — reports <c>false</c>, because no level moved.
+    /// See <see cref="ArcademyClassPayout.ArcademyPayout.XpBanked"/> for which of those it was.</para>
+    ///
+    /// <para><b>The port builds no level-up CEREMONY.</b> This frame is the one field upstream's
+    /// payout already carries; what the page then does with it (<c>arcademy/shell/shell.js:1338</c>
+    /// announces it, <c>arcademy/boot.js:193</c> adds a log suffix) is the payload's own behaviour
+    /// over a true fact. Nothing here plays a sound, animates, raises a balloon or changes an
+    /// avatar.</para>
     /// </summary>
     public static object BuildPayoutResult(ArcademyClassPayout.ArcademyPayout p) => new
     {
         type = "payout-result",                 // :1413
         gameKey = p.GameKey,
         xp = p.Xp,
-        levelUp = false,                        // :1416 — see the remarks above
+        levelUp = p.LevelUp,                    // :1416 — see the remarks above
         streak = p.Streak,
         perfectAttendance = p.PerfectAttendance,
         classesToday = p.ClassesToday,

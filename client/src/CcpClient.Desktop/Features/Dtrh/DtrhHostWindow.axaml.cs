@@ -76,6 +76,11 @@ public partial class DtrhHostWindow : Window
     private SoundArbitration? _barkArbitration;
     private PersistenceStore<CompanionStateDocument>? _barkStore;
     private PersistenceStore<AssetSelectionDocument>? _assetSelectionStore;
+
+    /// <summary>The app-wide XP ledger the run-ended payout banks into (upstream
+    /// <c>DtrhHostService.cs:603</c>). Opened host-locally, like every other store this window
+    /// owns; flushed and stopped in <see cref="TeardownBarkPipeline"/>.</summary>
+    private Progression.ProgressionLedger? _progression;
     private HashSet<string> _disabledAssets = [];
     private bool _useAssetWhitelist;
 
@@ -168,6 +173,10 @@ public partial class DtrhHostWindow : Window
     {
         var slots = _host.Participants.OfType<DtrhSaveSlots>().Single();
         _assetStats = new DtrhAssetStats(slots.AssetStatsStore, _host.LogDiagnostic);
+        // The XP ledger is APP-WIDE, not per-slot: it lives in the shared <dataDir> beside the
+        // intake's copy of it, because a level is a property of the person and not of the descent
+        // save they happen to be in (upstream banks into AppSettings, not into ChaosMeta).
+        _progression = Progression.ProgressionLedger.Open(_host, _dtrh.DataDirectory, "DtrhProgression");
         _meta = new DtrhMeta(
             slots.StoreFor(_slot),
             slots.IndexStore,
@@ -175,7 +184,8 @@ public partial class DtrhHostWindow : Window
             SendToPage,
             _host.LogDiagnostic,
             _m2Test,
-            slots.SlotFilePath(_slot));
+            slots.SlotFilePath(_slot),
+            xp: _progression);
         // b4: the Loom store (<dataDir>/Spirals — DtrhLoomStore.cs:28 parity).
         _loom = new DtrhLoom(_dtrh.SpiralsRoot, _host.LogDiagnostic);
         _loomDispatch = new DtrhLoomDispatch(_loom, () => _dtrh.Server.MediaOrigin, SendToPage, _host.LogDiagnostic);
@@ -255,10 +265,14 @@ public partial class DtrhHostWindow : Window
         try { _barkArbitration?.Dispose(); } catch { /* best-effort */ }
         try { _barkStore?.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { _assetSelectionStore?.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
+        // The ledger flushes BEFORE it stops (contract §11) — its own Dispose does both, so the
+        // last run's XP cannot be lost to a window close that raced the write.
+        try { _progression?.Dispose(); } catch { /* best-effort */ }
         _bark = null;
         _barkArbitration = null;
         _barkStore = null;
         _assetSelectionStore = null;
+        _progression = null;
     }
 
     /// <summary>Adapts the host's diagnostic log to the persistence contract's ILogSink.</summary>

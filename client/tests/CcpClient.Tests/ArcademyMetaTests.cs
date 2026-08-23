@@ -632,12 +632,11 @@ public sealed class ArcademyMetaTests : IDisposable
     }
 
     /// <summary>
-    /// <b>THE PAYOUT LANDS NOWHERE, AND THE TYPE SAYS SO.</b> This build has no XP store, level or
-    /// rank for a computed payout to move, so <see cref="ArcademyClassPayout.ArcademyPayout.Xp"/> is
-    /// computed and never granted, the frame's <c>levelUp</c> is a constant false rather than a
-    /// before/after comparison, and the seam is
-    /// <see cref="ArcademySession.PayoutComputed"/> — the same honest shape
-    /// <c>IntakeDraft.XpComputed</c> already takes for the same reason.
+    /// <b>COMPUTE COMPUTES; IT DOES NOT BANK.</b> An XP ledger exists in this build now
+    /// (<c>Features/Progression/ProgressionLedger</c>) and <c>ArcademySession.ClassEnd</c> is what
+    /// calls it, at upstream's own point in the order (<c>:1390-1399</c>). This fact holds the OTHER
+    /// half: a payout that came straight out of <see cref="ArcademyClassPayout.Compute"/> claims
+    /// nothing about banking and reports <c>levelUp: false</c>, because nothing has moved yet.
     /// </summary>
     [Fact]
     public void Payout_IsComputedNeverBanked_AndTheSeamIsTheOnlyPlaceItGoes()
@@ -646,8 +645,8 @@ public sealed class ArcademyMetaTests : IDisposable
             new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero));
 
         Assert.Equal(165.0, payout.Xp);                       // 110 × 1.5 — a real number…
-        Assert.False(payout.XpBanked);                        // …that nothing banks.
-        Assert.Equal(ArcademyClassPayout.NoXpStoreReason, payout.XpBankedReason);
+        Assert.False(payout.XpBanked);                        // …that Compute does not bank.
+        Assert.Equal(ArcademyClassPayout.NotBankedByCompute, payout.XpBankedReason);
 
         var frame = JsonDocument.Parse(
             ArcademyProtocol.SerializeForPage(ArcademyProtocol.BuildPayoutResult(payout))).RootElement;
@@ -656,7 +655,7 @@ public sealed class ArcademyMetaTests : IDisposable
         Assert.False(frame.GetProperty("levelUp").GetBoolean());
         Assert.False(frame.GetProperty("retake").GetBoolean());
 
-        // Even the largest payout the table can produce is unbanked: there is no branch that banks.
+        // Even the largest payout the table can produce is unbanked by Compute.
         Assert.False(Compute("""{"gradeTier":4,"grade":"S","flavorXp":15}""",
             new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero)).XpBanked);
     }

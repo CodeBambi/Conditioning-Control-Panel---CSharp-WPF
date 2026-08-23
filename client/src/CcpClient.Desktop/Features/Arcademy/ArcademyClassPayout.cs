@@ -11,16 +11,15 @@ namespace CcpClient.Desktop.Features.Arcademy;
 /// C#-owned for exactly that reason (<c>:1332-1333</c>), and the page agrees — "XP → C# (the page
 /// only reads payout-result)" (<c>arcademy/shell/shell.js:25</c>).
 ///
-/// <para><b>THE PORT HAS NO XP STORE, AND THIS TYPE SAYS SO.</b> Upstream's payout ends at
+/// <para><b>THIS TYPE COMPUTES; IT DOES NOT BANK.</b> Upstream's payout ends at
 /// <c>App.Progression?.AddXP(xp, XPSource.Other)</c> (<c>:1396</c>) and reads
-/// <c>PlayerLevel</c> either side of it to fill <c>levelUp</c> (<c>:1390</c>, <c>:1398</c>). No XP,
-/// level, streak-rank or progression economy exists anywhere in <c>client/src</c>: the only
-/// progression types here are <c>Features/Progression/GradedRunAwards</c> (an award set) and
-/// <c>TrainerCard</c> (a read-only projection). So the payout is COMPUTED and TYPED and lands
-/// nowhere — the same honest shape <c>Features/Intake/IntakeDraft.XpComputed</c> already takes for
-/// the same reason, and <see cref="ArcademyPayout.XpBanked"/> is the marker that says it. The seam
-/// is <see cref="ArcademySession.PayoutComputed"/>: the day an XP store exists, it subscribes
-/// there and nothing else about this file changes.</para>
+/// <c>PlayerLevel</c> either side of it to fill <c>levelUp</c> (<c>:1390</c>, <c>:1399</c>). Both
+/// halves now happen in <c>ArcademySession.ClassEnd</c>, against
+/// <c>Features/Progression/ProgressionLedger</c> — at upstream's own point in the order, BEFORE the
+/// <c>payout-result</c> frame goes out, which is what lets the frame's <c>levelUp</c> be a real
+/// comparison instead of a constant. <see cref="Compute"/> stays pure and clock-injected so the
+/// table can be checked without a ledger, and <see cref="ArcademyPayout.XpBanked"/> is the marker
+/// that says which of the two you are holding.</para>
 ///
 /// <para><b>THE TWO CLOCKS ARE NOT AN ACCIDENT — see <see cref="ArcademyClassDay"/>.</b></para>
 /// </summary>
@@ -98,7 +97,7 @@ public static class ArcademyClassPayout
     }
 
     /// <summary>
-    /// One class's computed payout. <b>Nothing here is granted</b> — see
+    /// One class's payout. Nothing <see cref="Compute"/> returns has been granted — see
     /// <see cref="XpBanked"/> and the type remarks on <see cref="ArcademyClassPayout"/>.
     /// </summary>
     public sealed record ArcademyPayout
@@ -141,20 +140,25 @@ public static class ArcademyClassPayout
         /// <summary>Classes credited on <see cref="AttendanceLocalDate"/>, after this credit.</summary>
         public int ClassesToday { get; init; }
 
-        /// <summary><b>ALWAYS false, and not settable.</b> <see cref="Xp"/> is computed and lands
-        /// nowhere: this build has no XP store, no level and no rank for it to move (see the
-        /// remarks on <see cref="ArcademyClassPayout"/>). That is also why the
-        /// <c>payout-result</c> frame's <c>levelUp</c> is a constant false rather than a
-        /// before/after comparison — there is no level to compare.</summary>
-        public bool XpBanked => false;
+        /// <summary>Whether <see cref="Xp"/> reached the XP ledger. <b>Always false on a value that
+        /// came straight out of <see cref="Compute"/></b>, which computes and banks nothing;
+        /// <c>ArcademySession.ClassEnd</c> stamps the real answer on after the grant, at the point
+        /// upstream calls <c>AddXP</c> (<c>:1394-1398</c>).</summary>
+        public bool XpBanked { get; init; }
 
         /// <summary>Why <see cref="XpBanked"/> is false, carried on the value so no consumer has to
-        /// guess.</summary>
-        public string XpBankedReason => NoXpStoreReason;
+        /// guess. Empty when it is true.</summary>
+        public string XpBankedReason { get; init; } = NotBankedByCompute;
+
+        /// <summary>Upstream's <c>levelUp</c>, a real before/after comparison across the grant
+        /// (<c>:1390</c>, <c>:1399</c>, frame field at <c>:1416</c>). False on a value
+        /// <see cref="Compute"/> produced, for the same reason as <see cref="XpBanked"/>.</summary>
+        public bool LevelUp { get; init; }
     }
 
-    /// <summary>The typed named limit (the <c>IntakeDraft.NeverRunnableReason</c> shape).</summary>
-    public const string NoXpStoreReason = "no-xp-store (computed, never granted)";
+    /// <summary>Why a freshly computed payout is not banked: because computing is not banking. The
+    /// real refusal reasons come from <c>Progression.XpGrant.Reason</c>.</summary>
+    public const string NotBankedByCompute = "computed here; ArcademySession.ClassEnd banks it";
 
     /// <summary>
     /// The whole of <c>OnClassEnded</c>'s decision half (<c>:1354-1409</c>), in upstream's order:

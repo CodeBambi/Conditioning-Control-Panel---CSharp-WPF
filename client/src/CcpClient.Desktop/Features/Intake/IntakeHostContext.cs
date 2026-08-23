@@ -24,6 +24,7 @@ public sealed class IntakeHostContext : IDisposable
         IntakePassService pass,
         IntakePunchCard punchCard,
         GradedRunAwards awards,
+        ProgressionLedger progression,
         DtrhLoom loom,
         IntakeDraftSink draftSink,
         IntakeSaveImageSink saveImageSink,
@@ -38,6 +39,7 @@ public sealed class IntakeHostContext : IDisposable
         Pass = pass;
         PunchCard = punchCard;
         Awards = awards;
+        Progression = progression;
         Loom = loom;
         DraftSink = draftSink;
         SaveImageSink = saveImageSink;
@@ -73,6 +75,12 @@ public sealed class IntakeHostContext : IDisposable
     /// <c>IntakeHostWindow.OnQuizResult</c> — upstream's <c>GamificationBridge.OnQuizCompleted</c>
     /// (<c>Services/GamificationBridge.cs:578-609</c>).</summary>
     public GradedRunAwards Awards { get; }
+
+    /// <summary>The XP ledger (&lt;dataDir&gt;/progression.json). A completed run's computed XP
+    /// reaches it from <c>IntakeHostWindow.OnQuizResult</c> — upstream's own grant is
+    /// <c>Services/Quiz/IntakeHostService.cs:446</c>. It owns its store, so its flush and stop ride
+    /// its <see cref="ProgressionLedger.Dispose"/>.</summary>
+    public ProgressionLedger Progression { get; }
 
     /// <summary>The SHARED b4 loom store handle (&lt;dataDir&gt;/Spirals — never a second root).</summary>
     public DtrhLoom Loom { get; }
@@ -175,6 +183,12 @@ public sealed class IntakeHostContext : IDisposable
             host.LogDiagnostic($"intake: graded-run awards load → {awardsStore.LastLoadOutcome?.GetType().Name} (typed Degraded — flagged defaults)");
         }
 
+        // The XP ledger, same shared <dataDir>, and it opens its OWN store (the
+        // AssetSelectionStore.Start shape: one progression.json per install, a uniquely-named
+        // registry owner per host). Starting it only READS, so a launch the pass gate refuses still
+        // writes no file here.
+        var progression = ProgressionLedger.Open(host, dataDir, "IntakeProgression");
+
         var pass = new IntakePassService(settingsStore, entitlement, null, host.LogDiagnostic);
         var punchCard = new IntakePunchCard(punchStore, null, host.LogDiagnostic);
         var awards = new GradedRunAwards(awardsStore, host.LogDiagnostic);
@@ -187,7 +201,7 @@ public sealed class IntakeHostContext : IDisposable
 
         return new IntakeHostContext(
             participant, settingsStore, punchStore, assetSelectionStore, awardsStore, pass, punchCard, awards,
-            loom, draftSink, saveImageSink, subjectIdPath, host.LogDiagnostic);
+            progression, loom, draftSink, saveImageSink, subjectIdPath, host.LogDiagnostic);
     }
 
     /// <summary>Bind the loopback origin and take the payload probe (idempotent — the
@@ -206,6 +220,10 @@ public sealed class IntakeHostContext : IDisposable
     /// dispose: three flushes at 3 s and four stops at 2 s. That is a bound, not an
     /// expectation — every wait here observes an already-completed task unless a write is
     /// genuinely in flight.</para>
+    ///
+    /// <para>The XP ledger is the FOURTH, and it carries the same bounds inside its own
+    /// <see cref="ProgressionLedger.Dispose"/> (it owns its store, so its flush-then-stop is not
+    /// spelled again here). Worst case rises to <b>22 s</b>.</para>
     /// </summary>
     public void Dispose()
     {
@@ -216,6 +234,7 @@ public sealed class IntakeHostContext : IDisposable
         try { PunchStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { AwardsStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { AssetSelectionStore.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
+        try { Progression.Dispose(); } catch { /* best-effort */ }
         try { Participant.Dispose(); } catch { /* best-effort */ }
     }
 

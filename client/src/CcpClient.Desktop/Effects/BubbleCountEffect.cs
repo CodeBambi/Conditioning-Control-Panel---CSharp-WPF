@@ -81,8 +81,10 @@ public enum BubbleCountResolution
 /// <para><b>What is NOT ported</b>, and is declared rather than stubbed: the strict lock and the
 /// whole WRONG! WATCH AGAIN retry/mercy machine, including the mercy LOCK CARD a failed non-strict
 /// game shows (<c>BubbleCountService.cs:296-436</c>,
-/// <c>Windows/BubbleCountResultWindow.xaml.cs:296-340</c>); XP, achievements and the level-50
-/// unlock; the interaction queue and its stuck-detection timeouts
+/// <c>Windows/BubbleCountResultWindow.xaml.cs:296-340</c>); the game's own XP grant
+/// (<c>BubbleCountService.cs:303</c>, <c>BubbleCountResultWindow.xaml.cs:201</c> — the port has an
+/// XP ledger now, <c>Features/Progression/ProgressionLedger</c>, but this effect has no completion
+/// payout to hand it) and its achievements; the interaction queue and its stuck-detection timeouts
 /// (<c>BubbleCountService.cs:169-186</c>, <c>:262-268</c>); the fullscreen cover on every monitor
 /// (<c>Windows/BubbleCountWindow.xaml.cs:229-380</c>) — this port plays on one bounded rectangle on
 /// the primary display, D123's placement; content-pack clips and their decryption
@@ -91,6 +93,14 @@ public enum BubbleCountResolution
 /// (<c>:200-204</c>); the pop SOUND; and the #633 inactivity watchdog, whose cause cannot occur here
 /// because Escape always closes a card in this build (D112). Each is a subsystem this port does not
 /// have, and a silent no-op would make the row look complete.</para>
+///
+/// <para><b>The level-50 unlock is NOT among them, because it is not a gate upstream either.</b>
+/// <c>BubbleCountService.cs:19</c> says <i>"Unlocks at Level 50"</i> in a doc comment and no code
+/// anywhere reads it; the one gating call the app still has funnels through
+/// <c>AppSettings.IsLevelUnlocked</c>, which is <c>return true;</c>
+/// (<c>Models/AppSettings.cs:5434-5442</c>: <i>"Feature level gating has been removed"</i>). The 50
+/// is recorded as data on <c>Features/Progression/LevelUnlocks</c> and refuses nobody, here or
+/// there.</para>
 /// </summary>
 public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
 {

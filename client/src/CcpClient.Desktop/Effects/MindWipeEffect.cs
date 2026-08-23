@@ -37,9 +37,17 @@ namespace CcpClient.Desktop.Effects;
 /// (<c>:355-365</c>), session mode's escalating frequency (<c>:213-235</c>, which belongs to the
 /// scripted preset session the port does not have — D99), the custom-clip override
 /// (<c>:139-146</c>, no picker on any ported panel), <c>TriggerOnce</c>'s test button
-/// (<c>:879-895</c>), the Discord presence call (<c>:206</c>) and the level-75 unlock
-/// (<c>:16</c> — the port has no level system). Each is recorded as a divergence rather than
-/// stubbed.</para>
+/// (<c>:879-895</c>) and the Discord presence call (<c>:206</c>). Each is recorded as a divergence
+/// rather than stubbed.</para>
+///
+/// <para><b>The level-75 unlock is not a gate upstream and is not one here.</b>
+/// <c>MindWipeService.cs:16</c> says <i>"Unlockable at level 75"</i> in a doc comment and no code
+/// anywhere reads it; the app's one surviving gating call funnels through
+/// <c>AppSettings.IsLevelUnlocked</c>, whose body is <c>return true;</c>
+/// (<c>Models/AppSettings.cs:5434-5442</c>: <i>"Feature level gating has been removed — every
+/// feature is available from level 1"</i>). This port now HAS a level
+/// (<c>Features/Progression/ProgressionLedger</c>) and still refuses nobody; the 75 is recorded on
+/// <c>Features/Progression/LevelUnlocks</c>.</para>
 /// </summary>
 public sealed class MindWipeEffect : AudioCueEffect
 {

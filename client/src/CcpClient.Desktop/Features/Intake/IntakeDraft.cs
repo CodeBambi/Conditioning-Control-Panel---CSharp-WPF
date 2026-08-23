@@ -21,8 +21,10 @@ namespace CcpClient.Desktop.Features.Intake;
 /// <item>ApplyRunShaping's Lean/Nudge/EnsureRising math (:269-397) applied to
 /// <see cref="IntakeDraftKnobs"/> — exactly the knobs the axis→knob table names, with the
 /// per-tier baselines for those knobs (BuildSettings :425-700);</item>
-/// <item>the host completion-loop XP formula (IntakeHostService.cs:389-397) — COMPUTED,
-/// never granted (no greenfield XP store — typed seam, consult ruling 8).</item>
+/// <item>the host completion-loop XP formula (IntakeHostService.cs:443-446) — computed here and
+/// stamped on the draft; the GRANT is <c>IntakeHostWindow.OnQuizResult</c> step 1, against
+/// <see cref="Progression.ProgressionLedger"/> (the XP store that did not exist when this type
+/// landed).</item>
 /// </list>
 /// TYPED NAMED LIMIT (record.md): WPF's BuildPhases, GetCategoryIcon, GetFallbackContent
 /// per-niche phrase banks, BonusXP, and the BrainDrain ramp pair (the withheld Delta-1
@@ -242,9 +244,11 @@ public static class IntakeDraft
         };
     }
 
-    /// <summary>The host completion-loop XP (IntakeHostService.cs:389-397): COMPUTED, never
-    /// granted (no greenfield XP store — typed seam). 25 base + depth share (banker's
-    /// rounding, WPF's Math.Round default) + ≤5 affirmed mantras ×5, capped at 100.</summary>
+    /// <summary>The host completion-loop XP (IntakeHostService.cs:443-446). 25 base + depth share
+    /// (banker's rounding, WPF's Math.Round default) + ≤5 affirmed mantras ×5, capped at 100.
+    /// PURE — it computes and grants nothing; <c>IntakeHostWindow.OnQuizResult</c> banks the result
+    /// through <see cref="Progression.ProgressionLedger"/>, which is where upstream's <c>:446</c>
+    /// grant lands.</summary>
     public static int ComputeCompletionXp(IntakeQuizRun run)
     {
         var xp = 25 + (int)Math.Round(Math.Clamp(run.PeakDepth, 0, 1) * 50)
