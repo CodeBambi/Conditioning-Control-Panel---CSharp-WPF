@@ -62,6 +62,13 @@ public class GlyphCoexistenceTests
     [Fact]
     public void TheFifthRectangleIsDisjointFromAllFour_AssertedRatherThanAssumed()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "this reading is the Win32 window manager arbitrating between five REAL top-level windows - a "
+            + "hit test, a foreground read, a system keyboard-focus read, or a rectangle derived from "
+            + "GetSystemMetrics. Off Windows none of the five windows exists, every handle is 0, and 0 == 0 "
+            + "would make several of these readings answer YES about nothing at all; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         // The disjointness argument, kept where it still holds and MEASURED rather than asserted in a
         // comment. Where it stops holding is stated on the class.
         Assert.True(GlyphSurfaceObservations.Coexistence.GlyphSurfaceSharesNoRectangle);
@@ -70,6 +77,13 @@ public class GlyphCoexistenceTests
     [Fact]
     public void TheOverlayStaysCLICKTHROUGH_AtAllFourMoments_IncludingDuringAMove()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "this reading is the Win32 window manager arbitrating between five REAL top-level windows - a "
+            + "hit test, a foreground read, a system keyboard-focus read, or a rectangle derived from "
+            + "GetSystemMetrics. Off Windows none of the five windows exists, every handle is 0, and 0 == 0 "
+            + "would make several of these readings answer YES about nothing at all; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         var run = GlyphSurfaceObservations.Coexistence;
 
         Assert.True(run.OverlayBefore.PointPassesThrough);
@@ -127,6 +141,13 @@ public class GlyphCoexistenceTests
     [Fact]
     public void THECARDKEEPSTHEFOREGROUNDANDTHEKEYBOARD_ThroughAPresentAMoveAndAWithdraw()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "this reading is the Win32 window manager arbitrating between five REAL top-level windows - a "
+            + "hit test, a foreground read, a system keyboard-focus read, or a rectangle derived from "
+            + "GetSystemMetrics. Off Windows none of the five windows exists, every handle is 0, and 0 == 0 "
+            + "would make several of these readings answer YES about nothing at all; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         // The two things the operating system lends to exactly one window at a time. A layered
         // WS_EX_NOACTIVATE surface must never take either, and this is where that is checked
         // against the one capability whose whole job is holding them.
@@ -162,6 +183,13 @@ public class GlyphCoexistenceTests
     [Fact]
     public void ThePointerTargetStillOwnsItsOwnPoint()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "this reading is the Win32 window manager arbitrating between five REAL top-level windows - a "
+            + "hit test, a foreground read, a system keyboard-focus read, or a rectangle derived from "
+            + "GetSystemMetrics. Off Windows none of the five windows exists, every handle is 0, and 0 == 0 "
+            + "would make several of these readings answer YES about nothing at all; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         var run = GlyphSurfaceObservations.Coexistence;
         Assert.Equal(run.MachineHasInteractiveDesktop, run.PointerStillOwnsItsPoint);
     }

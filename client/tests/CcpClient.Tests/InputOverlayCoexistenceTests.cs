@@ -40,6 +40,11 @@ public class InputOverlayCoexistenceTests
     [Fact]
     public void TheOverlayStillPassesInputThrough_BeforeDuringAndAfterACard()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the point-passes-through reading is WindowFromPoint arbitrating between a REAL layered overlay "
+            + "and a REAL card. Off Windows neither window exists and the overlay handle is 0, so the hit test "
+            + "answers about nothing; the machine-keyed facts in this class carry what CAN be said off Windows");
+
         // The property five landed modules depend on. Measured at three separate moments against the
         // SAME point, through the overlay's own oracle.
         var run = InputCaptureObservations.Coexistence;

@@ -326,7 +326,18 @@ public class SubliminalSurfacePresenterTests
         // text means the phrase was drawn first and buried.
         Assert.Equal(run.RasteriserAvailable, run.CarriesTheTextColour);
         Assert.Equal(run.RasteriserAvailable, run.CarriesTheOutlineColour);
-        Assert.Equal(run.RasteriserAvailable, run.SurvivedAPhraseLongerThanTheCard);
+
+        // The overflow leg is NOT keyed to RasteriserAvailable, and comparing it to that flag was
+        // simply wrong: SubliminalCardObservations records this one as "the long phrase did what
+        // THIS build's rasteriser must do" — a card where GDI+ exists, and null where it does not
+        // (the `longPhrase is null && !available` arm). On a build with GDI+ that reduces to the
+        // same assertion as before; on a build without it, the old comparison demanded FALSE from a
+        // field the observation had already defined as TRUE, which is the whole failure.
+        Assert.True(
+            run.SurvivedAPhraseLongerThanTheCard,
+            "a phrase far wider than the card must still produce a card where GDI+ exists (WPF measures with "
+            + "infinite width and lets it overflow), and must produce nothing where it does not — and this "
+            + $"build's rasteriser is available = {run.RasteriserAvailable}");
     }
 
     // ---------------------------------------------------------------------------------

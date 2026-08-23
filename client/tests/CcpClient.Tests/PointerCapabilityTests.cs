@@ -41,6 +41,12 @@ public class PointerCapabilityTests
     [Fact]
     public void TheDeliveryOracle_CanSeeAClickArriveAtAWindowItBuiltItself_OrNoFactBelowMeansAnything()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the delivery run injects a REAL click with SendInput and asks the Win32 window manager where it "
+            + "landed, then reads the foreground back. Off Windows nothing is placed, every handle is 0, and a "
+            + "0 == 0 comparison would answer YES about a window that does not exist; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         // The instrument's own control, run before the product is touched. Every fact in this file
         // trusts that a synthesised click reaching a window procedure MEANS something. An oracle
         // that had degenerated into "always report delivered" would certify a capability that
@@ -104,6 +110,12 @@ public class PointerCapabilityTests
     [Fact]
     public void PLACINGATargetTakesNothing_TheForegroundIsTheSameWindowBeforeAndAfterAndIsNeverTheTarget()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the delivery run injects a REAL click with SendInput and asks the Win32 window manager where it "
+            + "landed, then reads the foreground back. Off Windows nothing is placed, every handle is 0, and a "
+            + "0 == 0 comparison would answer YES about a window that does not exist; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         var run = PointerSurfaceObservations.Delivery;
 
         // BOTH halves, and they are different claims. "Not us" alone is satisfied by a target that
@@ -120,6 +132,12 @@ public class PointerCapabilityTests
     [Fact]
     public void ACLICKARRIVESATTHETARGETSOWNWINDOWPROCEDURE_WHILETHEFOREGROUNDDOESNOTMOVE()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the delivery run injects a REAL click with SendInput and asks the Win32 window manager where it "
+            + "landed, then reads the foreground back. Off Windows nothing is placed, every handle is 0, and a "
+            + "0 == 0 comparison would answer YES about a window that does not exist; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         // THE FACT WORTH HAVING, and the packet's whole subject. Three things at once: the OS
         // delivered both halves of a real click to THIS window's procedure; the procedure answered
         // WM_MOUSEACTIVATE with MA_NOACTIVATE while holding that click; and the foreground window is
@@ -183,6 +201,12 @@ public class PointerCapabilityTests
     [Fact]
     public void ClosingATargetTakesItOffTheDesktop_StopsTheRouting_AndStillCostsTheUserNothing()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the delivery run injects a REAL click with SendInput and asks the Win32 window manager where it "
+            + "landed, then reads the foreground back. Off Windows nothing is placed, every handle is 0, and a "
+            + "0 == 0 comparison would answer YES about a window that does not exist; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         var run = PointerSurfaceObservations.Delivery;
 
         Assert.True(
@@ -247,6 +271,12 @@ public class PointerCapabilityTests
     [Fact]
     public void AClickAtAPointAnsweredBEFORETheTargetMoved_StillReachesTheSAMETargetOneStepLater()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the delivery run injects a REAL click with SendInput and asks the Win32 window manager where it "
+            + "landed, then reads the foreground back. Off Windows nothing is placed, every handle is 0, and a "
+            + "0 == 0 comparison would answer YES about a window that does not exist; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         var run = PointerSurfaceObservations.Race;
 
         Assert.True(run.StepPixels < run.Radius,
@@ -274,6 +304,12 @@ public class PointerCapabilityTests
     [Fact]
     public void AClickAtAPointTheTargetHasLEFTDoesNotReachIt_WhichIsWhatMakesTheFactAboveMeanSomething()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "the delivery run injects a REAL click with SendInput and asks the Win32 window manager where it "
+            + "landed, then reads the foreground back. Off Windows nothing is placed, every handle is 0, and a "
+            + "0 == 0 comparison would answer YES about a window that does not exist; the machine-keyed facts "
+            + "in this class carry what CAN be said off Windows");
+
         // Without this, "the click still arrived" is equally true of a window that never moved.
         var run = PointerSurfaceObservations.Race;
 
@@ -364,10 +400,17 @@ public class PointerCapabilityTests
             : opened.Count == 0);
         Assert.True(fourth is CapabilityState.Unavailable);
         var reason = Assert.IsType<CapabilityState.Unavailable>(fourth).Reason;
+
+        // NO SKIP: three machine classes, three honest codes, and the fourth target is refused in
+        // ALL of them. Win32PointerSurface.Open checks the mechanism first, the station second and
+        // the cap third, so a Windows desktop reaches the cap, a Windows session with no station
+        // stops at the station, and a machine with no USER32 at all stops at the mechanism.
         Assert.Equal(
             PointerWindowProbe.MachineHasInteractiveDesktop
                 ? PointerReasonCodes.PointerTargetLimitReached
-                : PointerReasonCodes.PointerNoInteractiveStation,
+                : OperatingSystem.IsWindows()
+                    ? PointerReasonCodes.PointerNoInteractiveStation
+                    : PointerReasonCodes.PointerMechanismAbsent,
             reason.Code);
     }
 

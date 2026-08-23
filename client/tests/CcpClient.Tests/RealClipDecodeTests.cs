@@ -74,7 +74,20 @@ public class RealClipDecodeTests
     [Fact]
     public void TheFixtureIsTheFfmpegArtefactWhoseProvenanceIsRecorded_NotAnythingMediaFoundationCouldHaveMade()
     {
-        var actual = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(FixturePath())));
+        var bytes = File.ReadAllBytes(FixturePath());
+        var actual = Convert.ToHexStringLower(SHA256.HashData(bytes));
+
+        // NO PLATFORM GATE: the bytes and the sentence are the same on every OS, and this fact must
+        // keep running where the decode facts below cannot. What DOES vary is the checkout —
+        // .gitattributes stores *.mp4 in Git LFS — so a clone whose LFS objects were never fetched
+        // holds a ~130-byte pointer here instead of the artefact. That is a checkout property, not a
+        // port defect and not something to gate; it is named so the hash mismatch diagnoses itself
+        // rather than reading as a swapped fixture.
+        Assert.False(
+            bytes.Length < 1024 && bytes.AsSpan().StartsWith("version https://git-lfs"u8),
+            $"the fixture at {FixturePath()} is an UNFETCHED GIT-LFS POINTER ({bytes.Length} bytes), not the "
+            + "ffmpeg artefact: run `git lfs install && git lfs pull` in this clone. Nothing about the port is "
+            + "being measured until the real bytes are there");
 
         Assert.Equal(FixtureSha256, actual);
 
@@ -93,6 +106,13 @@ public class RealClipDecodeTests
     [Fact]
     public void TheStreamIsH264_SoTheOsMustDECODEIt_AndTheVIDEOPROCESSORIsWhatMakesItBgrx()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Media Foundation is a Windows mechanism and VideoPresenceFactory hands back "
+            + "UnsupportedVideoClipSource off Windows - 'the Windows decoder was asked for from a process that "
+            + "is not on Windows' - so there is no decode to measure here. This port has no Linux decoder: "
+            + "VideoCapabilityTests.Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows "
+            + "asserts that refusal on every platform");
+
         var bytes = File.ReadAllBytes(FixturePath());
 
         // The AVC decoder configuration record. It appears in a sample entry and NOWHERE else — a
@@ -137,6 +157,13 @@ public class RealClipDecodeTests
     [Fact]
     public void EveryFrameOfTheCompressedClipDecodes_AndThenTheClipENDS_RatherThanRunningOn()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Media Foundation is a Windows mechanism and VideoPresenceFactory hands back "
+            + "UnsupportedVideoClipSource off Windows - 'the Windows decoder was asked for from a process that "
+            + "is not on Windows' - so there is no decode to measure here. This port has no Linux decoder: "
+            + "VideoCapabilityTests.Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows "
+            + "asserts that refusal on every platform");
+
         using var clip = OpenFixture();
 
         var frames = 0;
@@ -163,6 +190,13 @@ public class RealClipDecodeTests
     [Fact]
     public void TheDecodedPictureIsAPICTURE_AndItMOVES_WhichNoSolidColourFixtureCanShow()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Media Foundation is a Windows mechanism and VideoPresenceFactory hands back "
+            + "UnsupportedVideoClipSource off Windows - 'the Windows decoder was asked for from a process that "
+            + "is not on Windows' - so there is no decode to measure here. This port has no Linux decoder: "
+            + "VideoCapabilityTests.Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows "
+            + "asserts that refusal on every platform");
+
         using var clip = OpenFixture();
 
         var first = ReadFirstFrame(clip).Pixels.ToArray();
@@ -198,6 +232,13 @@ public class RealClipDecodeTests
     [Fact]
     public void TheStrideForThisRealContainerIsPOSITIVE_SoTheFLIPBranchIsTheAviFixturesAlone()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Media Foundation is a Windows mechanism and VideoPresenceFactory hands back "
+            + "UnsupportedVideoClipSource off Windows - 'the Windows decoder was asked for from a process that "
+            + "is not on Windows' - so there is no decode to measure here. This port has no Linux decoder: "
+            + "VideoCapabilityTests.Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows "
+            + "asserts that refusal on every platform");
+
         using var clip = OpenFixture();
 
         // Measured, and measured again across all 54 of the owner's real videos (D324): every one
@@ -215,6 +256,13 @@ public class RealClipDecodeTests
     [Fact]
     public void TheFrameRateAndTheDurationComeFromTheCONTAINER_NotFromThePortsOwnFallback()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Media Foundation is a Windows mechanism and VideoPresenceFactory hands back "
+            + "UnsupportedVideoClipSource off Windows - 'the Windows decoder was asked for from a process that "
+            + "is not on Windows' - so there is no decode to measure here. This port has no Linux decoder: "
+            + "VideoCapabilityTests.Linux_TheDECODERRefusesToo_BecauseBothHalvesAreAbsentAndOnlyOneOfThemIsAboutWindows "
+            + "asserts that refusal on every platform");
+
         using var clip = OpenFixture();
 
         // D125: a container that reports no rate falls back to 80 ms so a rate-less file cannot spin
