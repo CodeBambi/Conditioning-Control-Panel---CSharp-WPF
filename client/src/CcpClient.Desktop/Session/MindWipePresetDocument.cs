@@ -21,8 +21,10 @@ namespace CcpClient.Desktop.Session;
 /// <c>MindWipeAudioPath</c> — the custom-clip override that wins over the folder
 /// (<c>:139-146</c>) — has no file picker on any ported panel, and a persisted path nothing can
 /// write is exactly the dead dial §9 D7 refuses. Session mode's escalating frequency
-/// (<c>:213-235</c>, <c>:709-727</c>) belongs to the scripted preset session, which this port does
-/// not have at all (D99).</para>
+/// (<c>:213-235</c>, <c>:709-727</c>) belongs to the scripted preset session (D99); that session's
+/// runtime core is now ported (<see cref="ScriptedSessionRun"/>), but its escalation is not — the
+/// scripted layer writes this document's <see cref="Enabled"/> and <see cref="VolumePercent"/> and
+/// carries <c>mindWipeBaseMultiplier</c> in its model without a module to hand it to.</para>
 /// </summary>
 public sealed class MindWipePresetDocument
 {
