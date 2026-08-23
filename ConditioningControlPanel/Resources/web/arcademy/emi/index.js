@@ -25,9 +25,33 @@ import { createWidget, DIALS, HINT_LINE, STORE_KEY } from './widget.js';
 export { DIALS, HINT_LINE, STORE_KEY };
 
 let singleton = null;
+let voice = null;
+let voicePending = null;
 
 /** The shell's accessor - `moments.js` and any later caller read EMI here. */
 export function getEmi() { return singleton; }
+
+/** The voice (emi/voice.js), once it has loaded. Null is the normal answer. */
+export function getVoice() { return voice; }
+
+/**
+ * ASK THE VOICE, SAFELY. `moments.js` routes every moment through here before
+ * it reaches the wordless table.
+ *
+ * Two things this wrapper buys, and both matter: a voice that throws can never
+ * reach a shell screen transition, and a moment fired BEFORE the voice module
+ * has landed is remembered. The shell's opening `greet` goes out on the same
+ * frame as the mount and `voice.js` is one dynamic import away, so without the
+ * one-slot buffer the very first beat of the game could never fire.
+ * @returns {boolean} true when the voice performed and the table should stand down
+ */
+export function voiceMoment(name, payload) {
+  try {
+    if (voice) return !!voice.onMoment(name, payload);
+    if (singleton) voicePending = { name, payload, when: Date.now() };
+  } catch (e) { /* a mascot may never break a screen transition */ }
+  return false;
+}
 
 /**
  * @param {Object} o
@@ -154,13 +178,41 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
     /** Force the debounced persistence write out now (host shutdown, tests). */
     flush() { widget.flush(); },
 
+    /** The decision engine, once it has loaded. A test/debug handle only. */
+    get voice() { return voice; },
+
     destroy() {
       try { widget.destroy(); } catch (e) { /* noop */ }
+      try { if (voice) voice.destroy(); } catch (e) { /* noop */ }
+      voice = null;
+      voicePending = null;
       if (singleton === api) singleton = null;
     },
   };
 
   singleton = api;
+
+  /* THE VOICE, LATE AND OPTIONAL (emi/voice.js). Exactly the discipline the
+   * renderer gets above: a dynamic import in a catch, so a broken decision
+   * engine costs EMI her lines and nothing else - she keeps her face, her
+   * verbs and the whole wordless table. It loads AFTER the controller exists
+   * because it speaks through it. */
+  import('./voice.js').then((m) => {
+    if (singleton !== api || !m || typeof m.createVoice !== 'function') return;
+    voice = m.createVoice({
+      store,
+      emi: api,
+      stats: () => api.stats(),
+      onGesture: widget.onGesture,
+      log: say,
+    });
+    const q = voicePending;
+    voicePending = null;
+    if (voice && q && Date.now() - q.when < PENDING_GRACE_MS) {
+      try { voice.onMoment(q.name, q.payload); } catch (e) { /* noop */ }
+    }
+  }).catch((e) => { say('emi: voice.js unavailable (' + ((e && e.message) || e) + ')'); });
+
   return api;
 }
 

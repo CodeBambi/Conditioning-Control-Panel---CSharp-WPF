@@ -42,6 +42,12 @@ const dom = {
 
 const BOOT_DEADLINE_MS = 45000;
 const HOLD_EXIT_MS = 1200;
+/* THE REACH FOR THE DOOR. A tap is under 200ms, so a hold still going at this
+ * mark is a genuine attempt to leave - and the ~750ms of hold left after it is
+ * the only runway EMI's wordless send-off ever gets (the host closes the window
+ * within a frame or two of `exit`). A release between the two marks was a
+ * false-alarm reach: both timers are cleared and nothing else happens. */
+const EXIT_INTENT_MS = 450;
 const TOAST_MS = 2200;
 
 let shell = null;
@@ -243,7 +249,23 @@ function shutdown(reason) {
  *   hold -> exit
  * -------------------------------------------------------------------------- */
 let escTimer = 0;
+let escIntentTimer = 0;
 let escHint = null;
+
+/* EMI, LAZILY AND OPTIONALLY. boot.js knows nothing about the mascot and keeps
+ * it that way: the module is only reached for when a hold has actually started,
+ * the promise is cached (a failure is permanent silence) and the call is fired
+ * and forgotten. NOTHING HERE MAY DELAY OR GATE THE EXIT. */
+let emiMoments = null;
+function fireEmi(name, payload) {
+  try {
+    if (!emiMoments) emiMoments = import('./emi/moments.js').catch(() => null);
+    emiMoments.then((m) => {
+      try { if (m && typeof m.fireMoment === 'function') m.fireMoment(name, payload); }
+      catch (e) { /* a mascot may never break the way out */ }
+    });
+  } catch (e) { /* noop */ }
+}
 
 function showEscHint() {
   if (!doc || escHint) return;
@@ -264,10 +286,16 @@ if (win) {
       escTimer = 0;
       shutdown('hold-esc');
     }, HOLD_EXIT_MS);
+    // EMI SEAM: the hold is past a tap, so the player is leaving the Arcademy.
+    escIntentTimer = setTimeout(() => {
+      escIntentTimer = 0;
+      fireEmi('exitIntent', { reason: 'hold-esc' });
+    }, EXIT_INTENT_MS);
   });
 
   win.addEventListener('keyup', (e) => {
     if (e.key !== 'Escape') return;
+    if (escIntentTimer) { clearTimeout(escIntentTimer); escIntentTimer = 0; }
     if (!escTimer) return;          // the hold already fired
     clearTimeout(escTimer);
     escTimer = 0;

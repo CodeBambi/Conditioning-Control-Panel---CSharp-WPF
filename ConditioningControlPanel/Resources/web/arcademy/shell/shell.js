@@ -517,6 +517,26 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     return out;
   }
 
+  /** How many cards are MASTERED once `gameKey`'s tenth hole lands (EMI seam).
+   *  Read off the store like every other card question; the shell counts
+   *  nothing of its own, it only folds in the card the ceremony is drawing. */
+  function masteredCount(gameKey) {
+    const done = unlockedMap();
+    if (gameKey) done[gameKey] = true;
+    return Object.keys(done).length;
+  }
+
+  /** How many classes the player holds a card for, counting `gameKey` (EMI seam). */
+  function enrolledCount(gameKey) {
+    const out = Object.create(null);
+    for (const entry of games.list) {
+      try { if (store.punchCard(entry.key).enrolled) out[entry.key] = true; }
+      catch (e) { /* a card that cannot be read is not an enrollment */ }
+    }
+    if (gameKey) out[gameKey] = true;
+    return Object.keys(out).length;
+  }
+
   /** Is this room open tonight regardless of the board? (a full card, §2.3) */
   function isUnlocked(gameKey) {
     try { return !!store.punchCard(gameKey).complete; } catch (e) { return false; }
@@ -990,10 +1010,27 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // the tenth hole - moments.js owns which.
     try {
       fireMoment('stamp', {
+        gameKey: o && o.gameKey,
         streak: store.streak().count,
         perfect: !!(o && o.justUnlocked),
         grade: (o && o.justUnlocked) ? 's' : null,
+        // The post-mint total and how many holes this finish bought: the card
+        // the ceremony is about to draw, never a count of our own.
+        holes: (o && o.card && Number(o.card.punches)) || (o && Number(o.to)) || 0,
+        minted: (o && Number(o.minted)) || 1,
       });
+    } catch (e) { /* a mascot may never break a ceremony */ }
+    // EMI SEAM: the card turned MASTERED - and, when it was the last one, the
+    // whole school. `justUnlocked` is the host's own signal; nothing is diffed.
+    try {
+      if (o && o.justUnlocked) fireMoment('cardMastered', { gameKey: o.gameKey, count: masteredCount(o.gameKey) });
+    } catch (e) { /* a mascot may never break a ceremony */ }
+    try {
+      if (o && o.justUnlocked && masteredCount(o.gameKey) >= games.list.length) fireMoment('allMastered', { count: masteredCount(o.gameKey) });
+    } catch (e) { /* a mascot may never break a ceremony */ }
+    // EMI SEAM: the enrollment mint (the three first-run punches).
+    try {
+      if (o && o.reason === 'enrollment') fireMoment('enrolMint', { gameKey: o.gameKey, enrolled: enrolledCount(o.gameKey), total: games.list.length });
     } catch (e) { /* a mascot may never break a ceremony */ }
     dismissPunchStage();
     if (!dom || !dom.screen) return null;
@@ -2006,7 +2043,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // store.applyPayout folds them in. Writing them locally would be refused
       // by the host anyway - see core/store.js HOST_OWNED_KEYS.
       if (allDone()) {
+        // Read the row BEFORE the write: a retake of the last class finds the
+        // day already complete, and the bell rings once per LOCAL day.
+        const dayWasDone = !!(store.day(localDate) || {}).complete;
         store.completeDay(localDate, { classCount: timetable.classes.length, perfect: true });
+        // EMI SEAM: that was the last class of the night.
+        if (!dayWasDone) { try { fireMoment('dayDone', { classes: timetable.classes.length }); } catch (e) { /* noop */ } }
       }
     } catch (e) {
       say('meta write failed (screen unaffected): ' + ((e && e.message) || e));

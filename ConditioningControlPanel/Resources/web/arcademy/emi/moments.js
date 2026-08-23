@@ -14,9 +14,14 @@
  *   that reason.
  * - WORDS ONLY IN THE BUBBLE (the locked talk rule). The one moment that talks
  *   is `reportCard`, and its lines are short enough for the pixel bubble.
+ *
+ * THE VOICE GETS FIRST REFUSAL. `emi/voice.js` is consulted before the table
+ * below: a scripted beat or a bark speaks INSTEAD of the wordless reaction, and
+ * anything else falls straight through to what this file always did. A voice
+ * that is absent, still loading or throwing changes nothing at all.
  * ==========================================================================*/
 
-import { getEmi } from './index.js';
+import { getEmi, voiceMoment } from './index.js';
 
 /**
  * REPORT-CARD LINES, by grade. The one place EMI uses words, so this table IS her
@@ -155,7 +160,6 @@ export function fireMoment(name, payload) {
   const emi = getEmi();
   if (!emi || typeof name !== 'string') return false;
   const spec = Object.prototype.hasOwnProperty.call(MOMENTS, name) ? MOMENTS[name] : null;
-  if (!spec) return false;
 
   const p = Object.assign({}, payload || {});
   if (name === 'tabAway' || name === 'suspend') {
@@ -164,6 +168,13 @@ export function fireMoment(name, payload) {
   } else if (name === 'resume') {
     seen.tabAway = 0; seen.suspend = 0;
   }
+
+  /* THE VOICE FIRST. It is asked about EVERY name, including the ones this
+   * table has no row for (`exitIntent`, `lockedClick`, the card ceremonies) -
+   * which is why the unknown-moment check now sits below this line instead of
+   * above it. A true means she spoke and the wordless reaction is skipped. */
+  if (voiceMoment(name, p)) return true;
+  if (!spec) return false;
 
   let entry = spec;
   try {

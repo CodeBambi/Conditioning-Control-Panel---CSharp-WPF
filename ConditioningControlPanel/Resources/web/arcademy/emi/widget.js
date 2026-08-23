@@ -71,7 +71,11 @@ const BODY_CLASSES = ['breath', 'nod', 'shiver', 'bounce', 'thud', 'droop'];
 /* How long each body move runs before EMI settles back into BREATH. Agent A's
  * keyframe lengths, rounded up: a move that never returns leaves `droop`'s
  * `forwards` fill (or a dead `bounce`) welded onto the root. */
-const BODY_MS = { bounce: 800, thud: 800, shiver: 900, nod: 1900, droop: 800 };
+const BODY_MS = { bounce: 800, thud: 800, shiver: 900, nod: 1900, droop: 800, shake: 420 };
+/* SHAKE is the exit flinch's move and it is deliberately NOT a new keyframe:
+ * emi.css owns the keyframes and this file owns how long a move runs, so a
+ * shake is SHIVER cut short. It inherits the reduced-motion refusal with it. */
+const BODY_ALIAS = { shake: 'shiver' };
 /* The bubble hangs OFF EMI's right edge (emi.css: right:-5%, max-width:104px),
  * so she needs roughly this multiple of her own width to the right of her left
  * edge or the line runs off the viewport - at which point it flips left. */
@@ -398,9 +402,10 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     if (bodyTimer !== null) { clearTimeout(bodyTimer); bodyTimer = null; }
     for (const c of BODY_CLASSES) el.classList.remove(c);
   }
-  function setBody(cls) {
+  function setBody(name) {
     clearBody();
-    if (!cls) return;
+    if (!name) return;
+    const cls = BODY_ALIAS[name] || name;
     if (reducedMotion() && (cls === 'breath' || cls === 'shiver')) return;
     // Force a reflow so re-adding the same class re-runs the keyframe (trap 4's
     // lesson, one line instead of a whole reveal). `droop` fills FORWARDS, so a
@@ -413,7 +418,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       el.classList.remove(cls);
       // Back to breathing, unless the player asked for stillness.
       if (!reducedMotion() && !hidden && enabled) { void el.offsetWidth; el.classList.add('breath'); }
-    }, BODY_MS[cls] || 800);
+    }, BODY_MS[name] || BODY_MS[cls] || 800);
   }
 
   function burst(kind) {
@@ -492,7 +497,27 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       if (busy() || hidden || !enabled || dragging) return;
       drawFace(BLINK_FACE, {});
       later(() => { if (!busy() && !dragging) drawFace(IDLE_FACE, {}); }, DIALS.BLINK_HOLD_MS);
+      emitGesture('blinkIdle');
     }, DIALS.BLINK_EVERY_MS);
+  }
+
+  /* ---------------------- gestures (the voice's ear) --------------------
+   * A READ-ONLY TAP on the pointer verbs. EMI's own reaction runs first and is
+   * completely unchanged; this only lets emi/voice.js hear that a pet, a fling
+   * or an idle blink happened and decide whether the moment also earns a line.
+   * A subscriber that throws is swallowed here, because a listener must never
+   * be able to reach into a pointer handler. */
+  const gestureSubs = new Set();
+  function onGesture(cb) {
+    if (typeof cb !== 'function') return () => {};
+    gestureSubs.add(cb);
+    return () => gestureSubs.delete(cb);
+  }
+  function emitGesture(kind, detail) {
+    if (!gestureSubs.size) return;
+    for (const cb of gestureSubs) {
+      try { cb(kind, detail || {}); } catch (e) { /* noop */ }
+    }
   }
 
   /* ---------------------- pointer: drag / pet / hide -------------------- */
@@ -585,6 +610,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     // The reaction is a raw face, not a chain: a chain would fight the next
     // frame of movement. A live SAY keeps the glass (law 3).
     if (!saying()) { cancelChain(); killTimers(); stopBlink(); clearBody(); setDragFace(DRAG_FACE); }
+    emitGesture('drag');
   }
 
   function onMove(ev) {
@@ -648,9 +674,15 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
         if (!reducedMotion()) setBody(wasFling ? 'thud' : 'bounce');
         later(() => idle(), DIALS.SETTLE_MS);
       }
+      const flung = wasFling;
       wasFling = false;
       // ONE write per interaction, on the END of it (never per pointermove).
       save();
+      if (flung) emitGesture('fling');
+      // WHERE SHE LANDED, in viewport coordinates: her CENTRE, which is the
+      // point a hit-test should ask about. voice.js does the asking.
+      const sz = sizePx();
+      emitGesture('dropAt', { x: Math.round(r.left + sz.w / 2), y: Math.round(r.top + sz.h / 2) });
       return;
     }
     // NOT A DRAG. A short press is a PET; a long hold was the x-arming gesture
@@ -687,6 +719,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       if (CHAINS && CHAINS.wink) play(CHAINS.wink);
       else raw('^_~', { hold: 500 });
       save();
+      emitGesture('pet', { cooled: true });
       return;
     }
     petTimes = petTimes.filter((p) => t - p < DIALS.PET_WINDOW_MS);
@@ -700,10 +733,14 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       const cycle = CHAINS && (CHAINS.glee || CHAINS.love);
       if (cycle) play(cycle);
       else raw('(≧◡≦)', { hold: 1400, fx: 'hearts', body: 'bounce' });
-    } else {
-      raw(SETTLE_FACE, { hold: 900, fx: 'hearts', body: reducedMotion() ? null : 'bounce' });
+      save();
+      emitGesture('pet');
+      emitGesture('petStreak3');
+      return;
     }
+    raw(SETTLE_FACE, { hold: 900, fx: 'hearts', body: reducedMotion() ? null : 'bounce' });
     save();
+    emitGesture('pet');
   }
 
   /* ---------------------- hide / dock ----------------------------------- */
@@ -727,6 +764,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       try { shout(HINT_LINE); } catch (e) { /* a toast may never hold a dismiss */ }
     }
     save(true);
+    if (!o.silent) emitGesture('hide', { fromX: !!o.fromX });
   }
 
   function show(opts) {
@@ -739,6 +777,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     beginVisible();
     idle();
     save(true);
+    if (!(opts && opts.silent)) emitGesture('restore');
   }
 
   xBtn.addEventListener('click', (ev) => {
@@ -785,6 +824,8 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   return {
     el, dock, canvas, fxHost, bubble,
     attach,
+    /** Subscribe to the pointer verbs (emi/voice.js). Returns an unsubscribe. */
+    onGesture,
     play, raw, idle,
     makeSayFn() { return makeSay; },
     chainsTable() { return CHAINS; },

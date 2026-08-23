@@ -31,6 +31,7 @@
 import { t, tierLabel, familyLabel } from '../core/lexicon.js';
 import { makeRng } from '../core/rng.js';
 import { OPEN_SEMESTERS, isOpenSemester } from '../games/registry.js';
+import { fireMoment } from '../emi/moments.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -1039,6 +1040,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       ccGo.textContent = t('campus_not_tonight', 'Not tonight').toUpperCase();
       ccGo.disabled = true;
       cardAction = null;
+      // EMI SEAM: a room that refused. Never `records` or `lab` from here -
+      // this branch is only ever a dark CLASSROOM (voice.js geofences those two
+      // names anyway, in the engine, where no data file can reopen them).
+      try { fireMoment('lockedClick', { what: 'room', gameKey: key }); } catch (e) { /* noop */ }
     }
     setAltButton(key, r);
     popCard();
@@ -1057,6 +1062,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       ccGo.textContent = t('campus_sealed', 'Sealed').toUpperCase();
       ccGo.disabled = true;
       cardAction = null;
+      // EMI SEAM: a sealed wing refused. A facility that OPENS (Records, the
+      // Registrar) is not a locked click and never fires one.
+      try { fireMoment('lockedClick', { what: 'sealed' }); } catch (e) { /* noop */ }
     } else {
       ccGo.textContent = t('campus_step_inside', 'Step inside').toUpperCase();
       ccGo.disabled = !d.action;
@@ -1334,6 +1342,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     idleTimer = 0;
     // A card in front of the plan means the player is mid-decision, not idle.
     if (destroyed || attractOn || cardOpen) { armIdle(); return; }
+    // EMI SEAM: the player has gone quiet ON THE CAMPUS. The attract's own idle
+    // edge is the signal - a mascot does not get a second idle timer.
+    try { fireMoment('idlePlayer', { where: 'hub' }); } catch (e) { /* noop */ }
     const order = attractOrder();
     if (!order.length) { armIdle(); return; }
     attractOn = true;
