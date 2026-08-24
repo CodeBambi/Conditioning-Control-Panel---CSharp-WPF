@@ -60,6 +60,8 @@
  *               hidesAtLeast:N     lifetime x-dismissals
  *               zoneCountAtLeast:N / zoneRowIs:top|mid|bottom   spot memory,
  *               off the dropAt payload (zone, zoneRow, zoneCount)
+ * emi color     droppedOn:room|sealed|wing|none   what a dropAt landed on
+ *               gameIs:KEY         which class fired the moment (per-game colour)
  *
  * FREQUENCY FIELDS honoured on a pool or a line: odds, ceremony, priority,
  * noRepeat, cooldownMs, maxPerSession, maxPerClass, oncePerStreak, onceEver,
@@ -627,6 +629,22 @@ export function createVoice(o) {
     /** Spot memory, read straight off the dropAt payload the widget builds. */
     zoneCountAtLeast: (a, c) => Math.round(Number(c.p.zoneCount) || 0) >= (Number(a) || 0),
     zoneRowIs: (a, c) => !!c.p.zoneRow && String(c.p.zoneRow) === String(a),
+    /* --- the EMI COLOR wave (2026-08-24) -------------------------------- */
+    /** What a dropAt landed on, off onGesture's own hitTest: room | sealed |
+     *  wing | none. A facility never reaches a pool at all (rec 3), so it is
+     *  deliberately not a value here. */
+    droppedOn: (a, c) => String(c.p.what || 'none') === String(a),
+    /** Which class fired the moment - the per-game colour gate. Closed only
+     *  by the payload: no gameKey, no match, never a guess. */
+    gameIs: (a, c) => !!c.gameKey && c.gameKey === String(a),
+    /** The LOCAL calendar date, MM-DD. Local on purpose: a holiday is the
+     *  player's evening, not a UTC accountant's. */
+    dateIs: (a) => {
+      const d = new Date(now());
+      const mm = String(d.getMonth() + 1);
+      const dd = String(d.getDate());
+      return ((mm.length < 2 ? '0' + mm : mm) + '-' + (dd.length < 2 ? '0' + dd : dd)) === String(a);
+    },
   };
 
   function holds(when, c) {

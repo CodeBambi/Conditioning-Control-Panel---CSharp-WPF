@@ -136,7 +136,7 @@ export const MD_CASINO = Object.freeze({
   /* ---- the sound ladder ---------------------------------------------- */
   SEMITONE_CAP: 7,
   CHIME_LEVEL: Object.freeze([0.3, 0.5]),      // by min(streak,10)/10
-  THUD_LEVEL: 0.22,
+  THUD_LEVEL: 0.11,   /* owner 2026-08-24: error cues -50% */
   SWAP_LEVEL: Object.freeze([0.08, 0.2]),      // by heat
   SWAP_GAP_MS: 170,                            // at most one swap cue this often
   GLITCH_LEVEL: 0.18,
@@ -146,7 +146,7 @@ export const MD_CASINO = Object.freeze({
   BANK_LEVEL: 0.45,
   JACKPOT_LEVEL: 0.55,
   NEAR_LEVEL: 0.3,
-  BUST_LEVEL: 0.28,
+  BUST_LEVEL: 0.14,
   DIM_LEVEL: 0.22,
   /* ---- ken-burns ----------------------------------------------------- */
   KB_T: Object.freeze([30, 16]),

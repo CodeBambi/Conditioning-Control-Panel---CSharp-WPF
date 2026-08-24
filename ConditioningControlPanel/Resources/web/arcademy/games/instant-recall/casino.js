@@ -95,8 +95,8 @@ export const IR_CASINO = Object.freeze({
   /* ---- the ladders ------------------------------------------------------ */
   SEMITONE_CAP: 7,
   HIT_LEVEL: Object.freeze([0.3, 0.52]),        // by min(streak,6)/6
-  MISS_LEVEL: 0.24,
-  TIMEOUT_LEVEL: 0.22,
+  MISS_LEVEL: 0.12,   /* owner 2026-08-24: error cues -50% */
+  TIMEOUT_LEVEL: 0.11,
   MILESTONE_LEVEL: 0.45,
   JACKPOT_LEVEL: 0.55,
   NEAR_LEVEL: 0.3,

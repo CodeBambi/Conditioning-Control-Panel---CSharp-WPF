@@ -383,7 +383,7 @@ export default {
       const now = Date.now();
       if (now - lastBumpAt < REFUSE_GAP_MS) return;
       lastBumpAt = now;
-      cue('bump', 0.3);
+      cue('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
     }
 
     /* ---- the decks, null-safe ------------------------------------------- */
@@ -836,11 +836,11 @@ export default {
             ctx.ceremonies.reward('near_miss', { text: t('an_moved', AN_LEX.an_moved), target: tile || gridEl });
           }
         } catch (e) { /* noop */ }
-        cue('near', 0.3);
+        cue('near', 0.15);
         msg('an_moved', AN_LEX.an_moved);
       } else {
         cur.remainingMs -= PLAYTEST.WRONG_BURN_MS;
-        cue('thud', 0.26, { pitch: 0.8 });
+        cue('thud', 0.13, { pitch: 0.8 });
         msg('an_wrong', AN_LEX.an_wrong);
       }
 
@@ -874,7 +874,7 @@ export default {
        * gets the answer pointed at - the reveal is the lesson either way */
       if (cur.wrong > 0) msg('an_reveal', AN_LEX.an_reveal);
       else msg('an_timeout', AN_LEX.an_timeout);
-      cue('thud', 0.24, { pitch: 0.7 });
+      cue('thud', 0.12, { pitch: 0.7 });
       paintHud();
       after(reduced ? PLAYTEST.WHIFF_HOLD_MS_REDUCED : PLAYTEST.WHIFF_HOLD_MS, endRound);
     }

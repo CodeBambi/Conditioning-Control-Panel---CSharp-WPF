@@ -110,7 +110,7 @@ export const AN_CASINO = Object.freeze({
   /* ---- the sound ladder ---------------------------------------------- */
   SEMITONE_CAP: 7,
   FIND_LEVEL: Object.freeze([0.3, 0.5]),       // by min(streak,8)/8
-  MISS_LEVEL: 0.22,
+  MISS_LEVEL: 0.11,   /* owner 2026-08-24: error cues -50% */
   ADVANCE_LEVEL: 0.16,
   MOVED_LEVEL: 0.24,
   MILESTONE_LEVEL: 0.45,

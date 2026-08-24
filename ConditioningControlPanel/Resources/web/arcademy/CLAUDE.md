@@ -85,7 +85,16 @@ shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
                    the tenth = the unlock beat)
 shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-card
                    stamp docket, and a link to the report card (never a second
-                   share pipeline - trap 13)
+                   share pipeline - trap 13). + THE SPOTLIGHT (owner playtest
+                   2026-08-24): picking a wall card ALSO lifts that cardFace to
+                   centre screen under a key light and plays one choreographed
+                   entrance (badge glint -> per-class name idiom -> star wave ->
+                   ken burns on the text strip; styles.css THE SPOTLIGHT block).
+                   Presentation only - no data moves, the docket still paints.
+                   Esc closes it FIRST via a rung in shell.js escapeStep
+                   (recordsPage.dismissSpotlight(), trap 48's shape); reduced
+                   motion (html.arc-reduced / the media query) = one plain fade,
+                   no cues
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
@@ -1588,6 +1597,20 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     (traps 66 and 76 both still hold: `failBoot` still snaps, `settler` is still the one
     funnel).
 
+
+90. **`ctx.mood` IS THE TENSION MIRROR, AND IT IS FACE-ONLY BY LAW (EMI COLOR,
+    2026-08-24).** A game may tell the mascot how the room feels - `ctx.mood.tense()`
+    latches until `.calm()`, `.clutch()` is the one big moment, `.stumble()` is a small
+    >_<, `.runLost()` the once-per-class K.O. - and every one of them is throttled in
+    shell.js (15s shared spacing, 3 stumbles a class, tense latch), so a game cannot
+    flood her and must never build its own rate limit on top. Three laws: (1) NO BARK
+    POOL may ever sit on `tense` or `clutch` - mid-class speech is barred and the only
+    words a stumble can buy are the `miss` pool's own (maxPerClass:1); (2) call sites
+    are opt-in and null-safe (`if (ctx.mood) ...` inside try/catch) because rigs stub
+    ctx without it; (3) ride the game's EXISTING beat (L&F calls it inside its own
+    `clutch()` ease) rather than inventing a parallel one. The `classStart` payload
+    also carries `family` now - moments.js varies the arrival face by room kind and an
+    absent family falls back to the locked glance.
 
 ## 5. The game module contract (short version)
 

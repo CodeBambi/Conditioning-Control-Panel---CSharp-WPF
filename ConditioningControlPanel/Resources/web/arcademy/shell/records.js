@@ -11,6 +11,18 @@
  *                which is how the mechanic advertises itself.
  *   THE DOCKET   pick a card and the desk answers: enrolled on, every stamp
  *                date in order, unlocked on, holes left.
+ *   THE SPOTLIGHT (owner playtest 2026-08-24) picking a card ALSO lifts it to
+ *                the centre of the screen, close up, under a key light: the
+ *                office dims, the card sweeps in, the badge catches the lamp,
+ *                the class name plays one beat in its own game's idiom, the
+ *                stamped stars do a stadium wave and the text strip drifts
+ *                like a rostrum camera. Presentation ONLY - the face is still
+ *                shell/punchcard.js's cardFace (one card = one object) and no
+ *                number moves. Dismiss: backdrop click, the close button, or
+ *                Esc (shell.js's escapeStep asks dismissSpotlight() first,
+ *                trap 48's shape). All the motion is CSS (styles.css, THE
+ *                SPOTLIGHT block); this file only mounts nodes and staggers
+ *                sfx. Reduced motion = one plain fade, no beats, no cues.
  *   THE REPORT   the existing report card is still one press away, unchanged -
  *                `shell/reportcard.js` stays the ONE share pipeline (trap 13)
  *                and this screen never renders a share of its own.
@@ -60,6 +72,30 @@ function attr(node, name, value) {
   catch (e) { /* noop */ }
 }
 
+function css(node, name, value) {
+  try {
+    if (node && node.style && typeof node.style.setProperty === 'function') {
+      node.style.setProperty(name, value);
+    }
+  } catch (e) { /* noop */ }
+}
+
+/** Reduced motion, either signal: the shell's own class or the OS preference. */
+function reducedMotion() {
+  try {
+    const root = (typeof document !== 'undefined') && document.documentElement;
+    if (root && root.classList && typeof root.classList.contains === 'function'
+      && root.classList.contains('arc-reduced')) return true;
+  } catch (e) { /* noop */ }
+  try {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      const m = window.matchMedia('(prefers-reduced-motion: reduce)');
+      if (m && m.matches) return true;
+    }
+  } catch (e) { /* noop */ }
+  return false;
+}
+
 /**
  * @param {Object} o
  * @param {Function} o.gameName        (gameKey) -> display name
@@ -74,6 +110,151 @@ export function createRecords({ gameName, punchCard, log } = {}) {
 
   const root = el('div', 'arc-records');
   let selected = null;
+  /** The live spotlight, or null. {el, timers:[], from} */
+  let spot = null;
+
+  /* --------------------------- THE SPOTLIGHT ---------------------------- */
+
+  /**
+   * Close the presentation beat. Returns true when one was up (the Esc rung's
+   * answer). `immediate` skips the exit fade - a re-render or a destroy has
+   * already taken the ground out from under it.
+   */
+  function dismissSpotlight(immediate) {
+    if (!spot) return false;
+    const s = spot;
+    spot = null;
+    for (const id of s.timers) { try { clearTimeout(id); } catch (e) { /* noop */ } }
+    const drop = () => { try { if (s.el && s.el.remove) s.el.remove(); } catch (e) { /* noop */ } };
+    if (immediate || !(s.el && s.el.classList)) {
+      drop();
+    } else {
+      sfx('paper', 0.18);
+      try { s.el.classList.add('is-closing'); } catch (e) { /* noop */ }
+      let scheduled = false;
+      try { setTimeout(drop, 220); scheduled = true; } catch (e) { /* noop */ }
+      if (!scheduled) drop();
+    }
+    // The focus goes back where it came from (the wall slot that opened it).
+    if (!immediate && s.from) { try { s.from.focus(); } catch (e) { /* noop */ } }
+    return true;
+  }
+
+  /**
+   * Lift one card off the wall to centre screen - evidence held to the desk
+   * lamp. Reuses cardFace so the card is still ONE object (punchcard.js's law);
+   * everything on top is presentation chrome the CSS choreographs:
+   *   0ms    veil + key light, the card sweeps in            ('whoosh')
+   *   ~500ms the badge catches the lamp (glint, then breathe) ('chime')
+   *   ~700ms the name plays its class's own idiom, letter by letter ('slide')
+   *   ~1s    the stars do their stadium wave                 ('pop' ladder)
+   *   ~1.2s  the text strip starts its ken burns drift
+   * Reduced motion mounts the same dialog with one fade and no cues.
+   */
+  function openSpotlight(key, from) {
+    dismissSpotlight(true);
+    const c = readCard(key) || {};
+    const label = name(key);
+    const rm = reducedMotion();
+    const enrolled = c.enrolled === true
+      || (typeof c.enrolledAt === 'string' && !!c.enrolledAt);
+
+    const box = el('div', 'arc-rs' + (rm ? ' arc-rs-reduced' : ''));
+    attr(box, 'role', 'dialog');
+    attr(box, 'aria-modal', 'true');
+    attr(box, 'aria-label', label);
+
+    const veil = el('div', 'arc-rs-veil');
+    attr(veil, 'aria-hidden', 'true');
+    veil.addEventListener('click', () => dismissSpotlight());
+    box.appendChild(veil);
+
+    const stage = el('div', 'arc-rs-stage');
+    box.appendChild(stage);
+
+    const lamp = el('div', 'arc-rs-lamp');
+    attr(lamp, 'aria-hidden', 'true');
+    stage.appendChild(lamp);
+
+    /* The card itself: the SAME face the wall pins, at full size. */
+    const cardBox = el('div', 'arc-rs-card');
+    const face = cardFace({ gameKey: key, card: c, name: label });
+    cardBox.appendChild(face.root);
+    /* The badge fx ride an overlay INSIDE the card box (the face clips its own
+     * corners; this clips the same way) - a halo + glint over the baked
+     * Arcademy badge, never a second badge (the art owns the pixels). */
+    const fx = el('div', 'arc-rs-fx');
+    attr(fx, 'aria-hidden', 'true');
+    const badge = el('i', 'arc-rs-badge');
+    badge.appendChild(el('i', 'arc-rs-glint'));
+    fx.appendChild(badge);
+    face.root.appendChild(fx);
+    stage.appendChild(cardBox);
+
+    /* The placard: the name in live type (the baked logo cannot animate), one
+     * letter per span so each class's keyframes can play its own idiom. */
+    const placard = el('div', 'arc-rs-placard');
+    const nameEl = el('h2', 'arc-rs-name');
+    attr(nameEl, 'data-anim', key);
+    attr(nameEl, 'aria-label', label);
+    const chars = String(label).split('');
+    /* Anomaly's beat needs its odd one out: a deterministic pick past the
+     * midpoint, never a space (the same card must always misbehave the same). */
+    let oddAt = -1;
+    if (key === 'anomaly') {
+      const inked = [];
+      for (let i = 0; i < chars.length; i++) { if (chars[i].trim()) inked.push(i); }
+      if (inked.length) oddAt = inked[Math.floor(inked.length * 0.6)];
+    }
+    for (let i = 0; i < chars.length; i++) {
+      const sp = el('span', 'arc-rs-l' + (i === oddAt ? ' is-odd' : ''), chars[i]);
+      attr(sp, 'aria-hidden', 'true');
+      css(sp, '--li', String(i));
+      nameEl.appendChild(sp);
+    }
+    placard.appendChild(nameEl);
+    placard.appendChild(el('p', 'arc-rs-sub', enrolled
+      ? holesLine(c.punches)
+      : t('records_not_enrolled', 'Not enrolled - attend the class')));
+    stage.appendChild(placard);
+
+    const close = el('button', 'arc-rs-close', '✕');
+    close.type = 'button';
+    attr(close, 'aria-label', t('records_spot_close', 'Close'));
+    close.addEventListener('click', () => dismissSpotlight());
+    box.appendChild(close);
+
+    /* One focusable thing lives in here, so the trap is one line. Esc is NOT
+     * handled here: boot.js owns the key and shell.js's escapeStep asks
+     * dismissSpotlight() first (trap 48's shape - never a second key ladder). */
+    box.addEventListener('keydown', (ev) => {
+      if (!ev || ev.key !== 'Tab') return;
+      try { ev.preventDefault(); } catch (e) { /* noop */ }
+      try { close.focus(); } catch (e) { /* noop */ }
+    });
+
+    root.appendChild(box);
+    spot = { el: box, timers: [], from: from || null };
+    try { close.focus(); } catch (e) { /* noop */ }
+
+    /* The cue sheet. Levels stay whisper-low; a dropped cue is not an error,
+     * and reduced motion plays NONE of them (there is no beat to score). */
+    if (!rm) {
+      const cue = (ms, fn) => {
+        try { spot.timers.push(setTimeout(() => { if (spot && spot.el === box) fn(); }, ms)); }
+        catch (e) { /* noop */ }
+      };
+      sfx('whoosh', 0.22);
+      cue(500, () => sfx('chime', 0.16));
+      cue(700, () => sfx('slide', 0.18));
+      const punched = Math.max(0, Math.min(HOLES, Math.round(Number(c.punches) || 0)));
+      for (let i = 0; i < punched; i++) {
+        const n = i;
+        cue(1000 + n * 90, () => sfx('pop', 0.12, { pitch: 0.85 + n * 0.06 }));
+      }
+    }
+    return box;
+  }
 
   /**
    * @param {Object} state
@@ -85,6 +266,8 @@ export function createRecords({ gameName, punchCard, log } = {}) {
   function render(state) {
     const s = state || {};
     const keys = Array.isArray(s.gameKeys) ? s.gameKeys.slice() : [];
+    // A render empties the root, so any spotlight node is already gone with it.
+    dismissSpotlight(true);
     root.textContent = '';
     // The docket coming out. `shell.js showRecords()` renders once per visit, so
     // a render IS an open - there is no repaint path into this screen.
@@ -163,6 +346,8 @@ export function createRecords({ gameName, punchCard, log } = {}) {
         sfx('flap', 0.2);
         selected = entry.key;
         paintDocket();
+        // And the office presents it: close up, under the lamp.
+        openSpotlight(entry.key, slot);
       });
       wall.appendChild(slot);
     }
@@ -243,7 +428,14 @@ export function createRecords({ gameName, punchCard, log } = {}) {
     render,
     /** Which card the docket is showing (test seam). */
     get selected() { return selected; },
-    destroy() { try { root.remove(); } catch (e) { /* noop */ } },
+    /** True while the presentation beat is up (test seam). */
+    get spotlightUp() { return !!spot; },
+    /** The Esc rung's handle: closes the spotlight, answers whether one was up. */
+    dismissSpotlight: () => dismissSpotlight(false),
+    destroy() {
+      dismissSpotlight(true);
+      try { root.remove(); } catch (e) { /* noop */ }
+    },
   };
 }
 

@@ -2985,6 +2985,377 @@ html.arc-reduced .arc-sign-chase { opacity:.55; }
 .arc-records-empty { margin:0; font-size:13px; color:var(--ink-faint); }
 .arc-records-hint { margin:0; text-align:center; }
 
+/* ---- THE SPOTLIGHT (records.js openSpotlight) ---------------------------
+   Pick a card on the wall and the office PRESENTS it: the room dims under a
+   vignette, the card sweeps up to centre screen beneath a warm key light, and
+   the live parts each play one staggered beat - badge glint, the name in the
+   class's own idiom, the star wave, the ken burns drift on the text strip.
+   records.js only mounts nodes and staggers cues; every frame of motion is
+   here. Choreography (all delays measured from mount):
+     0ms  veil + lamp + card sweep      ~500ms  the badge catches the light
+     700ms  the name letters            1000ms  the stadium wave (then every 8s)
+     1200ms  the text strip starts drifting (16s ping-pong, no snap)
+   Reduced motion (.arc-rs-reduced, minted by records.js off html.arc-reduced
+   OR the media query) keeps the dialog and swaps everything for one fade.
+   LAWS KEPT: every drift is a transform, never background-position (trap 36);
+   base states are VISIBLE and the keyframes own their own from-states, so
+   animation:none degrades to a finished still, not a blank. */
+.arc-rs {
+  position:fixed; inset:0; z-index:46; /* under the annex reveal (48) and EMI (50) */
+  display:flex; align-items:center; justify-content:center;
+}
+.arc-rs-veil {
+  position:absolute; inset:0;
+  background:radial-gradient(ellipse at 50% 40%,
+    color-mix(in srgb, var(--navy), transparent 46%) 0%,
+    rgba(5, 6, 14, .84) 66%,
+    rgba(3, 4, 10, .92) 100%);
+  animation:arc-rs-fade .28s ease-out both;
+}
+@keyframes arc-rs-fade { from { opacity:0; } to { opacity:1; } }
+.arc-rs.is-closing { pointer-events:none; }
+.arc-rs.is-closing .arc-rs-veil,
+.arc-rs.is-closing .arc-rs-stage,
+.arc-rs.is-closing .arc-rs-close { animation:arc-rs-out .18s ease-in both; }
+@keyframes arc-rs-out { to { opacity:0; } }
+
+.arc-rs-stage {
+  position:relative;
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  max-width:96vw;
+  padding:10px;
+}
+/* The key light: a warm cone behind the card, breathing very slowly. */
+.arc-rs-lamp {
+  position:absolute; left:50%; top:42%;
+  width:135%; aspect-ratio:1.35;
+  transform:translate(-50%, -52%);
+  background:radial-gradient(ellipse at 50% 46%,
+    color-mix(in srgb, var(--gold), transparent 82%) 0%,
+    color-mix(in srgb, var(--lav), transparent 90%) 44%,
+    transparent 70%);
+  pointer-events:none;
+  animation:arc-rs-fade .6s ease-out both,
+            arc-rs-lamp-breathe 7s 1.5s ease-in-out infinite alternate;
+}
+@keyframes arc-rs-lamp-breathe { from { opacity:1; } to { opacity:.7; } }
+
+/* The card sweeps up off the wall - evidence held to the desk lamp - then
+   floats on a slow idle sway. The entrance ends (0.55s) before the idle's
+   delay starts (1.5s), so the two transform animations never fight. */
+.arc-rs-card {
+  position:relative;
+  animation:arc-rs-card-in .55s cubic-bezier(.18, 1.2, .3, 1) both,
+            arc-rs-card-idle 7s 1.5s ease-in-out infinite alternate;
+}
+@keyframes arc-rs-card-in {
+  from { opacity:0; transform:translateY(9vh) scale(.55) rotate(-4deg); }
+  70%  { opacity:1; transform:translateY(-.6vh) scale(1.015) rotate(.5deg); }
+  to   { opacity:1; transform:none; }
+}
+@keyframes arc-rs-card-idle {
+  from { transform:translateY(0) rotate(-.3deg); }
+  to   { transform:translateY(-5px) rotate(.3deg); }
+}
+.arc-rs .arc-pc { --pc-w:min(720px, 92vw, calc((100vh - 250px) * 1.5)); }
+.arc-rs .arc-pc-face {
+  box-shadow:0 34px 84px rgba(0,0,0,.72),
+    0 0 46px color-mix(in srgb, var(--lav), transparent 78%),
+    inset 0 1px 0 rgba(255,255,255,.07);
+}
+/* Close up, the strip can afford real type. */
+.arc-rs .arc-pc-count { font-size:21px; }
+.arc-rs .arc-pc-phrase { font-size:12.5px; line-height:1.45; }
+
+/* THE BADGE VIBES. A halo + glint clipped over the face's top-right corner,
+   where every face bakes its Arcademy badge - light on the art, never a second
+   badge. The glint is a translating strip (transform drift, trap 36). */
+.arc-rs-fx {
+  position:absolute; inset:0;
+  overflow:hidden; border-radius:10px;
+  pointer-events:none;
+}
+.arc-rs-badge {
+  position:absolute; left:70.5%; top:3%; width:27%; height:16%;
+  display:block;
+  border-radius:8px; overflow:hidden;
+  background:radial-gradient(ellipse at 50% 50%,
+    color-mix(in srgb, var(--gold), transparent 80%), transparent 74%);
+  opacity:0;
+  animation:arc-rs-badge-in .5s .45s ease-out both,
+            arc-rs-badge-breathe 4.6s 1.2s ease-in-out infinite alternate;
+}
+@keyframes arc-rs-badge-in { to { opacity:.55; } }
+@keyframes arc-rs-badge-breathe { from { opacity:.55; } to { opacity:.16; } }
+.arc-rs-glint {
+  position:absolute; top:-45%; bottom:-45%; left:0; width:34%;
+  display:block;
+  background:linear-gradient(100deg, transparent 0%,
+    rgba(255,255,255,.36) 45%, rgba(255,255,255,.06) 58%, transparent 100%);
+  transform:translateX(-170%) rotate(8deg);
+  animation:arc-rs-glint 5.6s .5s ease-in-out infinite;
+}
+@keyframes arc-rs-glint {
+  0%   { transform:translateX(-170%) rotate(8deg); }
+  15%  { transform:translateX(430%) rotate(8deg); }
+  100% { transform:translateX(430%) rotate(8deg); }
+}
+
+/* THE STAR WAVE. Sequential hops off each hole's own --i (punchcard.js sets
+   it): the first wave lands at 1s, then one every 8s - a wave, then rest.
+   Earned ink jumps high and bright; an empty slot only stirs (a faint wash
+   and a small lift - on the art path the empty square is baked into the face,
+   so there is nothing of ours to throw). */
+.arc-rs .arc-pc-hole.is-punched {
+  animation:arc-rs-star 8s cubic-bezier(.3, 1.4, .4, 1) calc(1s + var(--i) * 90ms) infinite;
+}
+.arc-rs .arc-pc-hole:not(.is-punched) {
+  animation:arc-rs-slot 8s ease-in-out calc(1s + var(--i) * 90ms) infinite;
+}
+@keyframes arc-rs-star {
+  0%    { transform:none; filter:none; }
+  2.6%  { transform:translateY(-34%) scale(1.16) rotate(-7deg);
+          filter:brightness(1.45) drop-shadow(0 6px 7px rgba(0,0,0,.45)); }
+  5.4%  { transform:translateY(3%) scale(.97) rotate(2deg); filter:none; }
+  7.5%  { transform:none; filter:none; }
+  100%  { transform:none; filter:none; }
+}
+@keyframes arc-rs-slot {
+  0%   { transform:none; background-color:transparent; }
+  2.6% { transform:translateY(-11%);
+         background-color:color-mix(in srgb, var(--pink), transparent 82%); }
+  6%   { transform:none; background-color:transparent; }
+  100% { transform:none; background-color:transparent; }
+}
+
+/* KEN BURNS on the live text strip: a 16s ping-pong pan/zoom, `both` so the
+   1.2s hold sits on the from-state and the start never snaps. The whole zone
+   drifts (its children ride along), so nothing is ever cropped mid-word. */
+.arc-rs .arc-pc-text {
+  animation:arc-rs-kenburns 16s ease-in-out 1.2s infinite alternate both;
+}
+@keyframes arc-rs-kenburns {
+  from { transform:translate(-1.2%, 1.6%) scale(1); }
+  to   { transform:translate(1.4%, -2%) scale(1.075); }
+}
+
+/* THE PLACARD: the museum label under the exhibit. */
+.arc-rs-placard {
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  text-align:center;
+  animation:arc-rs-placard-in .4s .55s ease-out both;
+}
+@keyframes arc-rs-placard-in {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:none; }
+}
+.arc-rs-name {
+  margin:0;
+  font-family:var(--disp); font-weight:800;
+  font-size:clamp(20px, 3.6vw, 33px);
+  letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink);
+  text-shadow:0 2px 10px rgba(0,0,0,.6);
+  white-space:pre;
+  perspective:520px;
+}
+.arc-rs-sub {
+  margin:0;
+  font-family:var(--mono); font-size:11px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+.arc-rs-close {
+  position:absolute; top:clamp(10px, 3vh, 26px); right:clamp(12px, 3vw, 30px);
+  width:44px; height:44px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:17px; line-height:1; color:var(--ink-dim);
+  background:color-mix(in srgb, var(--navy), transparent 28%);
+  border:var(--hairline); border-radius:999px;
+  cursor:pointer;
+  transition:color .15s, border-color .15s, transform .15s;
+  animation:arc-rs-fade .3s .25s ease-out both;
+}
+.arc-rs-close:hover { color:var(--ink); border-color:var(--lav); transform:scale(1.06); }
+.arc-rs-close:focus-visible { outline:2px solid var(--lav); outline-offset:2px; }
+
+/* THE TEN NAMES, each in its class's own idiom - one entrance, then rest.
+   Every letter is a span carrying --li; --ld staggers off it. The keyframes
+   own the hidden from-states, so animation:none (reduced motion) shows the
+   finished name. */
+.arc-rs-l { --ld:calc(.7s + var(--li, 0) * 55ms); display:inline-block; }
+
+/* daily_trigger - the homeroom word: board flaps turning over, tile by tile. */
+.arc-rs-name[data-anim="daily_trigger"] .arc-rs-l {
+  transform-origin:50% 0%;
+  animation:arc-rs-nm-dt .5s var(--ld) cubic-bezier(.3, 1.3, .4, 1) both;
+}
+@keyframes arc-rs-nm-dt {
+  0%   { opacity:0; transform:rotateX(-92deg); }
+  60%  { opacity:1; transform:rotateX(14deg); }
+  100% { opacity:1; transform:none; }
+}
+/* lost_and_found - the hunt: letters sit lost in the dark until the torch
+   beam passes and finds them, one by one. */
+.arc-rs-name[data-anim="lost_and_found"] .arc-rs-l {
+  animation:arc-rs-nm-lf .55s var(--ld) ease-out both;
+}
+@keyframes arc-rs-nm-lf {
+  0%   { opacity:.12; filter:blur(4px); transform:none; }
+  55%  { opacity:1; filter:blur(0) brightness(1.6); transform:scale(1.06); }
+  100% { opacity:1; filter:none; transform:none; }
+}
+/* deja_vu - the pair memory: the name lands, ghosts, and comes back - you
+   have seen this one before. */
+.arc-rs-name[data-anim="deja_vu"] .arc-rs-l {
+  animation:arc-rs-nm-dv .95s var(--ld) ease-out both;
+}
+@keyframes arc-rs-nm-dv {
+  0%   { opacity:0; transform:translateY(6px); text-shadow:0 0 0 transparent; }
+  30%  { opacity:1; transform:none; text-shadow:0 0 0 transparent; }
+  48%  { opacity:.35; text-shadow:6px 0 0 color-mix(in srgb, var(--lav), transparent 40%); }
+  66%  { opacity:1; text-shadow:2px 0 0 color-mix(in srgb, var(--lav), transparent 70%); }
+  100% { opacity:1; text-shadow:0 0 0 transparent; }
+}
+/* impulse_control - the Drop Tube: every letter drops the chute and lands
+   with a squash. */
+.arc-rs-name[data-anim="impulse_control"] .arc-rs-l {
+  transform-origin:50% 100%;
+  animation:arc-rs-nm-ic .5s var(--ld) cubic-bezier(.35, 1.6, .45, 1) both;
+}
+@keyframes arc-rs-nm-ic {
+  0%   { opacity:0; transform:translateY(-1em); }
+  62%  { opacity:1; transform:translateY(0) scaleY(.8) scaleX(1.12); }
+  100% { opacity:1; transform:none; }
+}
+/* the_deep_end - letters rise out of the deep, blur first, surface and rest. */
+.arc-rs-name[data-anim="the_deep_end"] .arc-rs-l {
+  animation:arc-rs-nm-de .8s var(--ld) ease-out both;
+}
+@keyframes arc-rs-nm-de {
+  0%   { opacity:0; transform:translateY(.9em) scale(.92); filter:blur(3px); }
+  60%  { opacity:.9; transform:translateY(-.12em); filter:blur(.5px); }
+  100% { opacity:1; transform:none; filter:none; }
+}
+/* sort - two piles: letters deal in from the left and the right, alternating,
+   and snap straight. */
+.arc-rs-name[data-anim="sort"] .arc-rs-l {
+  animation:arc-rs-nm-sortl .45s var(--ld) cubic-bezier(.25, 1.3, .4, 1) both;
+}
+.arc-rs-name[data-anim="sort"] .arc-rs-l:nth-child(2n) { animation-name:arc-rs-nm-sortr; }
+@keyframes arc-rs-nm-sortl {
+  0%   { opacity:0; transform:translateX(-1.4em) rotate(-9deg); }
+  100% { opacity:1; transform:none; }
+}
+@keyframes arc-rs-nm-sortr {
+  0%   { opacity:0; transform:translateX(1.4em) rotate(9deg); }
+  100% { opacity:1; transform:none; }
+}
+/* echo - the Simon ring: each letter lights like a pad, settles, then rings
+   once more, fainter - the echo. */
+.arc-rs-name[data-anim="echo"] .arc-rs-l {
+  animation:arc-rs-nm-ec 1s var(--ld) ease-out both;
+}
+@keyframes arc-rs-nm-ec {
+  0%   { opacity:0; transform:scale(.6); text-shadow:0 0 0 transparent; }
+  18%  { opacity:1; transform:scale(1.3);
+         text-shadow:0 0 16px color-mix(in srgb, var(--pink), transparent 30%); }
+  34%  { transform:none; text-shadow:0 0 0 transparent; }
+  62%  { opacity:.92; transform:scale(1.09);
+         text-shadow:0 0 10px color-mix(in srgb, var(--pink), transparent 62%); }
+  78%  { opacity:1; transform:none; text-shadow:0 0 0 transparent; }
+  100% { opacity:1; transform:none; text-shadow:0 0 0 transparent; }
+}
+/* instant_recall - the vigil: the whole name flashes up at once, blanks, and
+   is recalled. No stagger - a flash is one event. */
+.arc-rs-name[data-anim="instant_recall"] .arc-rs-l {
+  --ld:.72s;
+  animation:arc-rs-nm-ir 1.15s var(--ld) ease-out both;
+}
+@keyframes arc-rs-nm-ir {
+  0%   { opacity:0; filter:none; }
+  6%   { opacity:1; filter:brightness(2.1); }
+  16%  { opacity:1; filter:none; }
+  38%  { opacity:1; }
+  46%  { opacity:0; }
+  62%  { opacity:0; }
+  74%  { opacity:1; filter:brightness(1.3); }
+  100% { opacity:1; filter:none; }
+}
+/* anomaly - the odd one out: the letters file in tidily, except one, which
+   arrives wrong (tilted, pink) and quietly corrects itself. */
+.arc-rs-name[data-anim="anomaly"] .arc-rs-l {
+  animation:arc-rs-nm-an .5s var(--ld) ease-out both;
+}
+@keyframes arc-rs-nm-an {
+  0%   { opacity:0; transform:translateY(8px); }
+  100% { opacity:1; transform:none; }
+}
+.arc-rs-name[data-anim="anomaly"] .arc-rs-l.is-odd {
+  animation:arc-rs-nm-anodd 1.3s var(--ld) cubic-bezier(.3, 1.2, .4, 1) both;
+}
+@keyframes arc-rs-nm-anodd {
+  0%   { opacity:0; transform:translateY(8px); color:var(--ink); }
+  22%  { opacity:1; transform:rotate(14deg) translateY(-2px) scale(1.12); color:var(--pink); }
+  58%  { transform:rotate(14deg) scale(1.12); color:var(--pink); }
+  74%  { transform:rotate(-4deg) scale(1); color:var(--ink); }
+  100% { opacity:1; transform:none; color:var(--ink); }
+}
+/* composure - the sliding picture: letters glide in from the four directions
+   like tiles crossing the gap, pause flush, and settle. */
+.arc-rs-name[data-anim="composure"] .arc-rs-l {
+  animation:arc-rs-nm-cpu .55s var(--ld) cubic-bezier(.2, .9, .25, 1) both;
+}
+.arc-rs-name[data-anim="composure"] .arc-rs-l:nth-child(4n+2) { animation-name:arc-rs-nm-cpr; }
+.arc-rs-name[data-anim="composure"] .arc-rs-l:nth-child(4n+3) { animation-name:arc-rs-nm-cpd; }
+.arc-rs-name[data-anim="composure"] .arc-rs-l:nth-child(4n)   { animation-name:arc-rs-nm-cpl; }
+@keyframes arc-rs-nm-cpu {
+  0%   { opacity:0; transform:translateY(-1em); }
+  55%  { opacity:1; transform:translateY(.1em); }
+  75%  { transform:translateY(.1em); }
+  100% { opacity:1; transform:none; }
+}
+@keyframes arc-rs-nm-cpr {
+  0%   { opacity:0; transform:translateX(1em); }
+  55%  { opacity:1; transform:translateX(-.08em); }
+  75%  { transform:translateX(-.08em); }
+  100% { opacity:1; transform:none; }
+}
+@keyframes arc-rs-nm-cpd {
+  0%   { opacity:0; transform:translateY(1em); }
+  55%  { opacity:1; transform:translateY(-.1em); }
+  75%  { transform:translateY(-.1em); }
+  100% { opacity:1; transform:none; }
+}
+@keyframes arc-rs-nm-cpl {
+  0%   { opacity:0; transform:translateX(-1em); }
+  55%  { opacity:1; transform:translateX(.08em); }
+  75%  { transform:translateX(.08em); }
+  100% { opacity:1; transform:none; }
+}
+
+/* REDUCED MOTION: the spotlight still works, as one plain fade. records.js
+   mints .arc-rs-reduced off html.arc-reduced OR prefers-reduced-motion, and
+   every base state above is visible, so animation:none is a finished still. */
+.arc-rs-reduced .arc-rs-veil,
+.arc-rs-reduced .arc-rs-stage,
+.arc-rs-reduced .arc-rs-close { animation:arc-rs-fade .18s ease-out both; }
+.arc-rs-reduced .arc-rs-lamp,
+.arc-rs-reduced .arc-rs-card,
+.arc-rs-reduced .arc-rs-placard,
+.arc-rs-reduced .arc-rs-glint,
+.arc-rs-reduced .arc-pc-hole:not(.is-punched),
+.arc-rs-reduced .arc-pc-hole.is-punched,
+.arc-rs-reduced .arc-pc-text,
+.arc-rs.arc-rs-reduced .arc-rs-name .arc-rs-l { animation:none; }
+.arc-rs-reduced .arc-rs-badge { animation:none; opacity:0; }
+.arc-rs-reduced.is-closing .arc-rs-veil,
+.arc-rs-reduced.is-closing .arc-rs-stage,
+.arc-rs-reduced.is-closing .arc-rs-close { animation:arc-rs-out .12s ease-in both; }
+/* A lit-down room (.ae-lite) keeps the beats but sheds the per-frame extras:
+   the roaming glint and the 16s drift. */
+html.ae-lite .arc-rs-glint,
+html.ae-lite .arc-rs .arc-pc-text { animation:none; }
+
 /* An unlocked room's door card wears its seal where the grade stamp goes. */
 /* An unlocked room's door card wears its seal where the grade stamp goes - but a
    WORD does not fit the round one-letter grade stamp (it clipped in the first

@@ -341,7 +341,7 @@ export default {
       const now = Date.now();
       if (now - lastBumpAt < BUMP_MIN_MS) return;
       lastBumpAt = now;
-      tick('bump', 0.3);
+      tick('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
     }
     /** Class progress, 0..1 - the engine's heat curve and the plain-share ramp
      *  both ride it. It is a CLASS number now (boards done against the tier's
@@ -813,6 +813,8 @@ export default {
       combo += 1;
       maxCombo = Math.max(maxCombo, combo);
       mismatchStreak = 0;
+      /* EMI COLOR: one pair left on the bench = the lean-in. */
+      try { if (ctx.mood && unmatchedPairs() === 1) ctx.mood.tense(); } catch (e) { /* noop */ }
       const pairId = cells[a].pairId;
 
       /* "tracked through the static": matched within 2 attempts of the pair
@@ -861,6 +863,8 @@ export default {
     function onMismatch(a, b) {
       combo = 0;
       mismatchStreak += 1;
+      /* EMI COLOR: the small >_<, shell-rationed. */
+      try { if (ctx.mood) ctx.mood.stumble(); } catch (e) { /* noop */ }
       paintMeter();
 
       /* the near-miss tease: 'you KNEW that one'. */
@@ -885,7 +889,7 @@ export default {
           // the almost: the face you NEEDED haunts the card you picked
           if (casino) casino.almost(cells[b], cells[a]);
         }
-        tick('stamp_bad', 0.4);
+        tick('stamp_bad', 0.2);
         after(reduced ? TIMING.flipReducedMs : TIMING.flipMs, () => {
           for (const i of [a, b]) {
             const c = cells[i];

@@ -135,7 +135,7 @@ export const EC_CASINO = Object.freeze({
   MILESTONE_LEVEL: 0.42,
   JACKPOT_LEVEL: 0.5,
   NEAR_LEVEL: 0.3,
-  THUD_LEVEL: 0.24,
+  THUD_LEVEL: 0.12,   /* owner 2026-08-24: error cues -50% */
   RESIST_LEVEL: 0.22,
   AUDIO_CEIL: Object.freeze({ 1: 0.45, 2: 0.6, 3: 0.75, 4: 0.9 }),
   /* ---- identity ----------------------------------------------------------- */

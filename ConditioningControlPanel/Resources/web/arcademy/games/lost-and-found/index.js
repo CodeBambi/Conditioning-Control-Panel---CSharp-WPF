@@ -300,7 +300,7 @@ export default {
       const now = Date.now();
       if (now - lastBumpAt < BUMP_THROTTLE_MS) return;
       lastBumpAt = now;
-      cue('bump', level == null ? 0.3 : level);
+      cue('bump', level == null ? 0.15 : level);   /* owner 2026-08-24: error cues -50% */
     }
 
     /**
@@ -1035,6 +1035,8 @@ export default {
       if (board) board.setDriftMult(PLAYTEST.CLUTCH_DRIFT_EASE);
       setHeat();
       announce(t('lf_clutch', 'The board relents'), 1800);
+      /* EMI COLOR: the board's own clutch beat is the mascot's too. */
+      try { if (ctx.mood) ctx.mood.clutch(); } catch (e) { /* noop */ }
       say('clutch ease engaged');
     }
 
@@ -1068,6 +1070,11 @@ export default {
       const took = Math.max(0.05, (Date.now() - findStartedAt - (pausedMs - findPausedBase)) / 1000);
       findTimes.push(took);
       finds += 1;
+      /* EMI COLOR: the home stretch (final fifth of the hunt) leans her in. */
+      try {
+        if (ctx.mood && findsTarget > 1 && finds >= Math.ceil(findsTarget * 0.8)
+          && finds < findsTarget) ctx.mood.tense();
+      } catch (e) { /* noop */ }
       /* THE CONFIRM: the press that lands her, on the beat of the press. The
          pitch climbs across the WHOLE class - first find at 1.0, last find at
          1.5, however many finds this tier deals. It used to be a flat +0.06 a
@@ -1166,6 +1173,8 @@ export default {
     function countWrong() {
       misclicks += 1;
       misclickStreak += 1;
+      /* EMI COLOR: a small >_< on the mascot, shell-rationed to 3 a class. */
+      try { if (ctx.mood) ctx.mood.stumble(); } catch (e) { /* noop */ }
       cleanThisFind = false;
       cleanStreak = 0;
       if (!zen) penaltySec += PLAYTEST.MISCLICK_TIME_PENALTY_SEC;
@@ -1191,7 +1200,7 @@ export default {
       // `stamp_bad` are near-identical sawtooth thunks in shell/audio.js, so
       // this is the House Book's own loss recipe at the House Book's own level;
       // it REPLACES the raw stamp_bad fire, so one press stays ONE cue.)
-      bump(0.3);
+      bump(0.15);
 
       if (misclickStreak >= PLAYTEST.MISCLICK_STREAK_FOR_WASH) {
         misclickStreak = 0;
@@ -1218,7 +1227,7 @@ export default {
       // THE ALMOST: the near-tease, landing with casino.almost()'s ghost and
       // the shimmer on the real target. `blip` used to sit here - a BRIGHT TICK
       // on a wrong press, the one thing the House Book forbids on a loss.
-      cue('near', 0.35);
+      cue('near', 0.175);
       if (board) {
         const target = board.targetTile();
         board.mark(target, 'g-lf-warm', true);
@@ -1259,7 +1268,7 @@ export default {
         // Deck II: a loss is acknowledged, never silent - a muted stamp and a
         // low thud while the marquee sighs out. Scaled down, still a ceremony.
         try { ctx.ceremonies.stamp({ text: t('lf_timeout', 'Time'), tone: 'pink', target: hud && hud.stampAnchor }); } catch (e) { /* optional */ }
-        cue('stamp_bad', 0.3);
+        cue('stamp_bad', 0.15);
       }
 
       say('class over: ' + finds + '/' + findsTarget + ' finds, median '

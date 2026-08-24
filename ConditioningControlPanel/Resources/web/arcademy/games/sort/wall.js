@@ -181,8 +181,12 @@ export function createWall(o = {}) {
   function paint(tile, card) {
     if (!tile) return;
     /* A WALL TILE IS NEVER A LIVE DECODE (trap 36). A loop lands as its own
-     * url in an <img> - a gif still animates cheaply, an mp4 simply fails to
-     * paint and falls back to the drawn card back underneath it. */
+     * url in an <img> - a gif still animates cheaply. A VIDEO url gets no <img>
+     * at all (owner 2026-08-24): an mp4 in an <img> paints nothing but still
+     * downloads the whole file, so the drawn card back stands for it instead. */
+    const mime = card && card.mime;
+    if ((mime && /^video\//i.test(String(mime)))
+      || /\.(mp4|webm|m4v|mov)(\?|#|$)/i.test(String((card && card.url) || ''))) return;
     const img = el('img', 'g-sort-wall-face');
     if (!img) return;
     img.alt = '';

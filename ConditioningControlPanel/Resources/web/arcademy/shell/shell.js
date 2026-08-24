@@ -1066,7 +1066,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     renderTopbar();
     // EMI SEAM: arriving at the campus, not repainting it - and the FIRST deal
     // of the night is an arrival (see `greeted`, above).
-    if (!greeted || wasScreen !== 'board') { greeted = true; fireMoment('greet'); }
+    if (!greeted || wasScreen !== 'board') {
+      const firstArrival = !greeted;
+      greeted = true;
+      fireMoment('greet');
+      if (firstArrival) noteStreakTurn();
+    }
     /* THE MORNING-AFTER CATCH-UP: a save that sealed its last card before this
      * wave shipped (or whose final-seal ceremony was torn down by a host-forced
      * class before onDone could fire the beat) gets the reveal on its next
@@ -1578,10 +1583,35 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     });
   }
 
+  /* EMI SEAM (EMI COLOR, 2026-08-24): THE STREAK OBITUARY. The host rolls the
+   * attendance streak at local midnight, so the one moment the shell can catch
+   * a streak DYING is the first arrival of a session: the snapshot already
+   * carries the rolled number while `emiLastStreak` still holds the height it
+   * reached last time (written on every stamp below). A drop from >= 3 to the
+   * floor fires the `streakBroken` cry - delayed a breath so it never talks
+   * over the greet - and any ambiguity (host not yet synced, first boot ever)
+   * reads as NO, never as a guessed funeral. */
+  function noteStreakTurn() {
+    try {
+      const cur = Number((store.streak() || {}).count) || 0;
+      const prev = Number(store.get('emiLastStreak')) || 0;
+      if (prev >= 3 && cur <= 1 && cur < prev) {
+        setTimeout(() => {
+          try { fireMoment('streakBroken', { prev, streak: cur }); } catch (e) { /* noop */ }
+        }, 6500);
+      }
+      if (cur !== prev) store.set('emiLastStreak', cur);
+    } catch (e) { /* a mascot may never break an arrival */ }
+  }
+
   function runPunchCeremony(o) {
     // EMI SEAM: the stamp lands. ^_^ + hearts, (≧◡≦) on a 3-day streak, COOL on
     // the tenth hole - moments.js owns which.
     try {
+      const liveStreak = store.streak().count;
+      if (liveStreak !== (Number(store.get('emiLastStreak')) || 0)) {
+        store.set('emiLastStreak', liveStreak);   // the obituary's high-water mark
+      }
       fireMoment('stamp', {
         gameKey: o && o.gameKey,
         streak: store.streak().count,
@@ -2240,7 +2270,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'class';
     clearScreen();
     renderTopbar();
-    fireMoment('classStart', { gameKey: cls.gameKey, tier: gradeTier });   // EMI SEAM
+    // EMI SEAM. `family` rides along for the place-awareness table in
+    // moments.js (EMI COLOR): the arrival face knows what kind of room it is.
+    fireMoment('classStart', { gameKey: cls.gameKey, tier: gradeTier,
+      family: manifest.family || null });
     const chrome = classScreenChrome(
       Object.assign({}, cls, { timeBudgetSec }), gradeTier, retake, endless);
 
@@ -2306,6 +2339,44 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     let ended = false;
 
+    /* ---- ctx.mood (EMI COLOR, 2026-08-24): THE TENSION MIRROR ------------
+     * A game may TELL the mascot how the room feels; it may not make her talk.
+     * `tense`/`clutch` reach only the wordless MOMENTS table (no pool exists on
+     * either name, by design - mid-class speech stays barred), `stumble` fires
+     * the small 'miss' face whose pool always said "one wrong answer, one
+     * dropped tile" and finally means it (its own maxPerClass:1 still rations
+     * the words), and `runLost` is the mid-class K.O. All throttled HERE so no
+     * game can flood her: tense latches until calm, everything shares a 15s
+     * spacing, stumbles cap at 3 a class, the K.O. spends once. Opt-in per
+     * game; a class that never calls it plays exactly as before. */
+    const mood = (() => {
+      let tenseLatch = false, stumbles = 0, lastAt = 0, koSpent = false;
+      const MOOD_SPACING_MS = 15000;
+      const fire = (name, extra) => {
+        try { fireMoment(name, Object.assign({ gameKey: cls.gameKey, midClass: true }, extra || {})); }
+        catch (e) { /* a mascot may never break a class */ }
+      };
+      return Object.freeze({
+        tense() {
+          if (tenseLatch) return; const now = Date.now();
+          if (now - lastAt < MOOD_SPACING_MS) return;
+          tenseLatch = true; lastAt = now; fire('tense');
+        },
+        calm() { tenseLatch = false; },
+        clutch() {
+          const now = Date.now();
+          if (now - lastAt < MOOD_SPACING_MS) return;
+          lastAt = now; fire('clutch');
+        },
+        stumble() {
+          if (stumbles >= 3) return; const now = Date.now();
+          if (now - lastAt < MOOD_SPACING_MS) return;
+          stumbles += 1; lastAt = now; fire('miss');
+        },
+        runLost() { if (koSpent) return; koSpent = true; fire('runLost'); },
+      });
+    })();
+
     const ctx = {
       root: chrome.root,
       engine: engineHandleFor(engine, manifest, cls.gameKey),
@@ -2318,6 +2389,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       peek,
       ceremonies: classCeremonies,
       store,
+      mood,
 
       /* ---- additive read-only projection (all from init) ----------------
        * A class that needs to know the shape of the machine it is running on
@@ -2698,10 +2770,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     /* EMI SEAM: she reacts to the letter. The report card lands one screen later
      * and its SAY is suppressed for this finish (see showReport) so the two beats
-     * do not talk over each other. */
+     * do not talk over each other.
+     * EMI COLOR (2026-08-24): a C is 'fail' now, not 'miss' - the rage chain and
+     * the its-my-fault pool were written for "the class went badly" and never
+     * fired, while 'miss' is reserved for the mid-class stumble seam (ctx.mood)
+     * whose "one wrong answer, one dropped tile" register it always carried.
+     * The payload grew gameKey + perfect: the per-game colour pools key on the
+     * first, and the perfect-gated dork line was unreachable without the second. */
     lastGraded = { grade: graded.grade, perfect: allDone(), fresh: true };
-    fireMoment(/^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'miss',
-      { grade: graded.grade, streak: store.streak().count });
+    fireMoment(/^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'fail',
+      { grade: graded.grade, streak: store.streak().count,
+        gameKey: cls.gameKey, perfect: allDone() });
 
     bridge.send({
       type: 'class-ended',
@@ -3193,6 +3272,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } settingsPage = null; }
         if (active) showClassScreen(); else showBoard();
         return true;
+      }
+      // THE RECORDS SPOTLIGHT is a modal the player opened one press ago (a
+      // card lifted off the wall) - Esc puts the card back first and the
+      // office stays put. Trap 48's shape: one rung, above the screen's own.
+      if (screen === 'records' && recordsPage
+        && typeof recordsPage.dismissSpotlight === 'function') {
+        try { if (recordsPage.dismissSpotlight()) return true; } catch (e) { /* noop */ }
       }
       // The Records Office is a screen like settings: Esc walks back to campus.
       if (screen === 'records') { showBoard(); return true; }

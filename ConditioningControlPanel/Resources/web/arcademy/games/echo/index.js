@@ -532,7 +532,7 @@ export default {
       const now = Date.now();
       if (now - lastBumpAt < CHROME_BUMP_MS) return;
       lastBumpAt = now;
-      tone('bump', 0.3, 1);
+      tone('bump', 0.15, 1);   /* owner 2026-08-24: error cues -50% */
     }
     /** Deck IV's haptics hook: one call per rung, silent where there is no hardware. */
     function haptic(ms) {
@@ -1690,7 +1690,7 @@ export default {
       deck('pressure', 'beat', 'fail');
       deck('pressure', 'setStreak', curLen, { links: 0, cleared: 0, heat: currentHeat });
       /* THE BUZZER: low, short, and nothing else in the room sounds like it. */
-      tone(FAIL_SFX, 0.4, 1);
+      tone(FAIL_SFX, 0.2, 1);
       stopInputPressure();
       if (near) { nearMisses += 1; ceremonySafe('near_miss', {}); }
       /* THE DOT that broke it goes red, and stays red through the hold. */

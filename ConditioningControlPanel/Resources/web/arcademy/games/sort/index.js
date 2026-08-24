@@ -740,9 +740,10 @@ export default {
     /* ------------------------------------------------------------ the card */
     /**
      * One card node. The FACE is the decoder budget's whole story: only the top
-     * card may hold a live <video>, the second gets the same url in an <img>
-     * (a gif keeps moving, an mp4 simply never paints and the drawn back shows
-     * through), and the third is the back alone.
+     * card may hold a live <video>; a video card below the top keeps its drawn
+     * back (reseat() grows the real <video> when it surfaces - an <img> can
+     * never paint an mp4 and used to download it whole anyway), a gif/still
+     * second card keeps moving in an <img>, and the third is the back alone.
      */
     function mintCard(card, depth) {
       const node = el('div', 'g-sort-card');
@@ -785,7 +786,8 @@ export default {
     function mintFace(card, depth) {
       if (!card || !card.url) return null;
       if (depth > 1) return null;                       // the third card is a back
-      const wantVideo = depth === 0 && isVideoUrl(card.url, card.mime);
+      const isVid = isVideoUrl(card.url, card.mime);
+      const wantVideo = depth === 0 && isVid;
       if (wantVideo && videoCount < DECODER_CEILING) {
         const v = el('video', 'g-sort-face');
         if (!v) return null;
@@ -810,6 +812,12 @@ export default {
         return v;
       }
       if (wantVideo) return null;                       // budget spent: the back stands
+      /* owner 2026-08-24 (blank-card fix): a video url NEVER goes into an <img>.
+       * The old dud face downloaded the whole mp4, painted nothing, and - being
+       * a face - blocked reseat()'s grow branch, so every promoted video card
+       * topped the stack as a bare back. Null here means reseat() mints the
+       * real <video> the moment the card becomes the top one. */
+      if (isVid) return null;
       const img = el('img', 'g-sort-face');
       if (!img) return null;
       img.alt = '';
@@ -887,7 +895,10 @@ export default {
           if (face) {
             live.face = face;
             live.video = face.tagName === 'VIDEO';
-            try { live.node.appendChild(face); } catch (e) { /* noop */ }
+            /* seat it where mintCard does: over the back, UNDER the stamps -
+             * appended last it would paint over the yes/no verdict stamps. */
+            try { live.node.insertBefore(face, live.node.children[1] || null); }
+            catch (e) { try { live.node.appendChild(face); } catch (e2) { /* noop */ } }
           }
         }
         if (i === 0 && !live.ring) {
@@ -1041,7 +1052,7 @@ export default {
     /** The wrong swipe: grey stamp, muted thud, SHIVER, one rung down on a fade. */
     function wrongBeat(step) {
       verdictWord(t('sort_wrong', 'WRONG'), 'grey');
-      cue('bump', 0.3, { pitch: 0.62 });
+      cue('bump', 0.15, { pitch: 0.62 });   /* owner 2026-08-24: error cues -50% */
       const stage = S.nodes.playfield;
       addCls(stage, 'is-shiver');
       timers.after(260, () => delCls(stage, 'is-shiver'));

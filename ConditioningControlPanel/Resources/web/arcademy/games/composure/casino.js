@@ -118,7 +118,7 @@ export const CP_CASINO = Object.freeze({
   SEMITONE_CAP: 7,
   SLIDE_LEVEL: Object.freeze([0.14, 0.3]),  // by heat
   LOCK_LEVEL: Object.freeze([0.3, 0.5]),    // by min(streak,8)/8
-  THRASH_LEVEL: 0.22,
+  THRASH_LEVEL: 0.11,   /* owner 2026-08-24: error cues -50% */
   ASSIST_LEVEL: 0.3,
   JACK_LEVEL: 0.5,
   NEAR_LEVEL: 0.3,
