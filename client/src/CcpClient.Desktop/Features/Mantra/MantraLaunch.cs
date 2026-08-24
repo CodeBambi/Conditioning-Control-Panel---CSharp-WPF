@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using CcpClient.Desktop.Features.Progression;
 using CcpClient.Desktop.Lifecycle;
 
@@ -9,15 +9,18 @@ namespace CcpClient.Desktop.Features.Mantra;
 /// <see cref="Dtrh.DtrhLaunch"/> / <see cref="Intake.IntakeLaunch"/> pattern: one construction
 /// site, no second launcher.
 ///
-/// <para><b>NOTHING CALLS THIS YET, and that is recorded rather than hidden.</b> Upstream's door is
-/// the Play page's Mantras card, and the port's Play page is
-/// <c>Views/Pages/PlayPage.axaml.cs</c> — outside the file scope of the packet that built this, so
-/// the window ships unreachable. That is also, exactly, upstream's own state: the WPF card came off
-/// the Play tab in the 2026-08-12 relayout and <c>MainWindow/MainWindow.PlayTab.cs:262</c> says in
-/// capitals that <c>MantraWindow</c> is "a window nothing opens". Its rescue note (<c>:269</c>) puts
-/// the cost of re-homing the game at "exactly one <c>StartMantraSession(reps)</c> call"; here that
-/// is one <see cref="Open"/> call, and the ordering hazard that note exists to preserve is gone —
-/// a <see cref="MantraSession"/> is started by its own constructor.</para>
+/// <para><b>THE DOOR IS THE PLAY PAGE'S MANTRAS CARD</b> — <c>Views/Pages/PlayPage.axaml</c>, whose
+/// Begin button is this build's only caller of <see cref="Open"/>. Upstream's is the same card on
+/// the same page, and it came OFF the Play tab in the 2026-08-12 relayout, which is why
+/// <c>MainWindow/MainWindow.PlayTab.cs:262</c> says in capitals that <c>MantraWindow</c> is "a
+/// window nothing opens". That removal was DE-DUPLICATION whose premise was false for this one
+/// card — "only the duplicate Play-page card is gone"
+/// (<c>Views/Tabs/PlayTabView.xaml:20-24</c>), while this card was the window's ONLY caller, which
+/// the relayout's own commit records as "MantraWindow entry point orphaned - re-home pending owner
+/// call" (<c>a9859e7b6</c>). Upstream's rescue note (<c>:269</c>) puts the cost of re-homing the
+/// game at "exactly one <c>StartMantraSession(reps)</c> call"; here that is one <see cref="Open"/>
+/// call, and the ordering hazard that note exists to preserve is gone — a
+/// <see cref="MantraSession"/> is started by its own constructor.</para>
 ///
 /// <para><b>THE XP DECISION LIVES HERE.</b> The ledger is opened for the life of ONE window and
 /// disposed with it, which is the shape <c>Features/Progression/ProgressionLedger.Open</c> was

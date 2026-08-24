@@ -88,6 +88,13 @@ public partial class MainWindow : Window
         // the paid rungs live inside, on hosting and sending (GoonHostService.cs:894,:909),
         // where Features/Goon/GoonDoors.cs refuses them.
         Goon = new Features.Goon.GoonLaunch(host, this);
+        // The ONE mantra construction site (Features/Mantra/MantraLaunch.cs). Built HERE and not
+        // inside the Play page for the LoomLaunch/Recap reason recorded below: the window is owned
+        // by the SHELL and the page is not a window. No entitlement argument, and that is
+        // upstream's fact rather than an omission - the typed game is "free by design - no tier
+        // bar ... gating the typed game would be gating the cheaper half of something already
+        // given away" (MainWindow/MainWindow.PlayTab.cs:282-285).
+        Mantra = new Features.Mantra.MantraLaunch(host, this);
 
         // The demonstrator popup manager. It has no user path now that the demonstrator card
         // is retired: it is infrastructure only (A-014 integration rule), kept because
@@ -137,7 +144,7 @@ public partial class MainWindow : Window
 
         _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics, Recap);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
-        _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon, Arcademy);
+        _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon, Arcademy, Mantra);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
         _pages[ShellRoutes.System] = new SystemPage(host, Session, ToastLayer);
 
@@ -245,6 +252,16 @@ public partial class MainWindow : Window
     /// <c>static readonly false</c> with no override seam, so this refuses before it allocates
     /// anything — and the Play page's strip that reaches it is hidden from the same flag.</summary>
     public Features.Arcademy.ArcademyLaunch Arcademy { get; }
+
+    /// <summary>The one typed-mantra launch path (public so tests drive the real seam, and so its
+    /// data-directory seam can be pointed at a temporary store rather than the developer's own).
+    /// Upstream's counterpart is <c>MainWindow.StartMantraSession</c>, which has had NO CALLER
+    /// since the 2026-08-12 relayout dropped the Play page's Mantras card
+    /// (<c>MainWindow/MainWindow.PlayTab.cs:262</c>); the port restores the door because that
+    /// removal was de-duplication whose premise was false for this one card, recorded in the
+    /// relayout's own commit as "MantraWindow entry point orphaned - re-home pending owner
+    /// call".</summary>
+    public Features.Mantra.MantraLaunch Mantra { get; }
 
     /// <summary>Demonstrator popup manager; public so tests drive the real wiring.</summary>
     public FeaturePopupManager Popups => _popups;

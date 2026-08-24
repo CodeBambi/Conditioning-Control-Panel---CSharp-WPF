@@ -1,7 +1,9 @@
+﻿using System.Globalization;
 using Avalonia.Controls;
 using CcpClient.Desktop.Features.Arcademy;
 using CcpClient.Desktop.Features.Dtrh;
 using CcpClient.Desktop.Features.Goon;
+using CcpClient.Desktop.Features.Mantra;
 
 namespace CcpClient.Desktop.Views.Pages;
 
@@ -32,11 +34,12 @@ public partial class PlayPage : UserControl
     /// caption for a refusal and must never be reused as one.</summary>
     public const string FaultBandTitleText = LaunchFaultText.DtrhHeadline;
 
-    public PlayPage(DtrhLaunch dtrh, GoonLaunch goon, ArcademyLaunch arcademy)
+    public PlayPage(DtrhLaunch dtrh, GoonLaunch goon, ArcademyLaunch arcademy, MantraLaunch mantra)
     {
         ArgumentNullException.ThrowIfNull(dtrh);
         ArgumentNullException.ThrowIfNull(goon);
         ArgumentNullException.ThrowIfNull(arcademy);
+        ArgumentNullException.ThrowIfNull(mantra);
         InitializeComponent();
 
         // THE ARCADEMY STRIP IS DARK AND IS RE-ASSERTED DARK. Upstream ships the card
@@ -65,6 +68,15 @@ public partial class PlayPage : UserControl
         // vanishing into an unobserved task, which is the launch-fault lesson applied to a second door.
         GoonPracticeButton.Click += (_, _) => goon.Practice();
         goon.Faulted += RenderGoonFault;
+
+        // THE MANTRA DOOR, and the restoration this page exists to make. Synchronous, like the
+        // Goon door beside it: upstream's StartMantraSession has no gate to resolve and no async
+        // read to wait on either (MainWindow/MainWindow.PlayTab.cs:287-315), and the game is free
+        // by design (:282-285). Its single-tenancy is the LAUNCHER's, not this page's - a second
+        // press focuses the live window rather than restarting it, because "a second StartSession
+        // would reset Completions and Streak mid-run, i.e. silently delete the user's progress"
+        // (:294-303).
+        MantraBeginButton.Click += (_, _) => BeginMantra(mantra);
 
         // Fire-and-forget on purpose: the gate resolves asynchronously (it reads the shipping
         // app's login) and a click handler may not block the UI thread. The awaited work
@@ -180,6 +192,58 @@ public partial class PlayPage : UserControl
         GoonFaultText.Text = LaunchFaultText.Compose(GoonFaultHeadline, exception);
         GoonFaultText.IsVisible = true;
     }
+
+    /// <summary>
+    /// One Begin press. Upstream reads its picker and hands the count to the launcher
+    /// (<c>Views/Tabs/PlayTabView.Cards.cs:107-117</c> at <c>a9859e7b6^</c>), which is the whole
+    /// of what this does - every rule the run obeys belongs to <c>MantraSession</c>.
+    ///
+    /// <para>A fault gets this card's own line, and a LATER success takes it back down: the plate
+    /// is the newest thing known about this door, and leaving a stale failure under a window that
+    /// just opened would be telling the user the app is broken while she types into it. Same rule
+    /// the DTRH card's <see cref="ClearFault"/> follows above.</para>
+    /// </summary>
+    private void BeginMantra(MantraLaunch mantra)
+    {
+        // Null is the ONLY faulted answer: the launcher types its own faults rather than letting
+        // one escape into the click (MantraLaunch.Open's catch), which is the launch-fault lesson
+        // applied to a third door.
+        if (mantra.Open(SelectedMantraReps()) is null && mantra.LastFault is { } fault)
+        {
+            MantraFaultText.Text = LaunchFaultText.Compose(MantraFaultHeadline, fault);
+            MantraFaultText.IsVisible = true;
+            return;
+        }
+
+        MantraFaultText.Text = string.Empty;
+        MantraFaultText.IsVisible = false;
+    }
+
+    /// <summary>
+    /// The picker's answer. Upstream's four values with upstream's own fallback: it reads the
+    /// <c>ComboBoxItem</c>'s <c>Tag</c> and keeps <see cref="DefaultCardReps"/> when the read
+    /// fails, so a picker that somehow has nothing selected still starts a run rather than
+    /// swallowing the press (<c>PlayTabView.Cards.cs:109-115</c> at <c>a9859e7b6^</c>).
+    /// </summary>
+    private int SelectedMantraReps() =>
+        MantraRepsPicker.SelectedItem is ComboBoxItem { Tag: string tag }
+        && int.TryParse(tag, NumberStyles.Integer, CultureInfo.InvariantCulture, out var reps)
+            ? reps
+            : DefaultCardReps;
+
+    /// <summary>Upstream's card default - its picker opens on <c>SelectedIndex="1"</c>, the second
+    /// of 10/25/50/100, and its handler falls back to the same 25
+    /// (<c>PlayTabView.Cards.cs:109</c> at <c>a9859e7b6^</c>). It is deliberately NOT
+    /// <c>MantraSession.DefaultTargetReps</c>: that is the launcher's answer when no card asked,
+    /// and this card always asks.</summary>
+    public const int DefaultCardReps = 25;
+
+    /// <summary>WPF's own failure headline for the mantra launch, verbatim from
+    /// <c>MainWindow/MainWindow.PlayTab.cs:311</c> minus its trailing colon (the colon joins
+    /// headline to detail in <see cref="LaunchFaultText.Compose"/>, exactly as WPF's
+    /// concatenation does). Kept here rather than in <see cref="LaunchFaultText"/> for the reason
+    /// <see cref="GoonFaultHeadline"/> is.</summary>
+    public const string MantraFaultHeadline = "Couldn't start the mantra session";
 
     /// <summary>WPF's own failure headline for this card, verbatim from
     /// <c>MainWindow/MainWindow.Lab.cs:207</c> minus its trailing colon (the colon joins headline

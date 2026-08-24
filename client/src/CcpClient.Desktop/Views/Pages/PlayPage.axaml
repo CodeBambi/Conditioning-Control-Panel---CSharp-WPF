@@ -20,6 +20,17 @@
     does not have — so rendering them would be dead dials, which is the greyed control that
     swallows the gesture (the §9 D7 rule). They are absent, not disabled.
   -->
+  <!-- THE WALL SCROLLS, and that is upstream's shape rather than a port convenience: WPF wraps
+       its whole Play wall in a ScrollViewer with VerticalScrollBarVisibility="Auto"
+       (Views/Tabs/PlayTabView.xaml:289-1433), because a wall of cards outgrows a window. MEASURED
+       here, not supposed - the same measurement the Studio rack recorded (StudioPage.axaml:34-38):
+       with the third card on the page, a headless click at the Begin button's own centre opened
+       nothing at all, because the button sits below the shell's 760 DIP fold and there was no
+       viewport to bring it into. Auto, so nothing changes for a wall that fits. -->
+  <ScrollViewer x:Name="PlayScroll"
+                AutomationProperties.AutomationId="PlayScroll"
+                HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto">
   <StackPanel Margin="20" Spacing="4">
     <TextBlock Classes="page-title" Text="Play" />
     <!-- The page's own live sub-line (§8.5). -->
@@ -257,6 +268,99 @@
       </StackPanel>
     </Border>
 
+    <!-- THE MANTRA DOOR, AND IT IS A RESTORATION RATHER THAN AN INVENTION.
+
+         Upstream's card is `Grid x:Name="SlotMantra"` on this same tab, and it came OFF the page
+         in the 2026-08-12 relayout (a9859e7b6) whose own commit message records the consequence:
+         "MantraWindow entry point orphaned - re-home pending owner call". The relayout's stated
+         premise is de-duplication - "Every one of those features is still built, still shipped and
+         still reachable by its own door / rail entry / dashboard tile; only the duplicate
+         Play-page card is gone" (Views/Tabs/PlayTabView.xaml:20-24) - and that premise is TRUE for
+         the other four cards it dropped and FALSE for this one: the Mantras card was the window's
+         ONLY caller, which is why MainWindow/MainWindow.PlayTab.cs:262 now says in capitals that
+         MantraWindow has "NO CALLER", keeps StartMantraSession alive as "the whole rescue", and
+         ends "Owner call: WHERE the game should live now" - where, never whether.
+
+         The shipping product still SELLS the surface it cannot open, in three places: three
+         built-in program tasks are verified by QuestCategory.Mantra
+         (Services/Program/BuiltInPrograms.Kept.cs:349,705,1149) and print "type them in the mantra
+         minigame" on their own task cards (MainWindow/MainWindow.ProgramsTab.cs:411 ->
+         programs_howto_mantra, nine languages); three shipped bark packs carry voiced lines for
+         MantraCompleted / MantraStreakChanged / MantraStreakBroken, events raised ONLY from the
+         typed window's path (Services/MantraService.cs:92,101,110 - CreditExternalMantra at :46
+         raises none of them, and BreakStreak's one caller is Windows/MantraWindow.xaml.cs:204);
+         and the card's four loc keys survive unused in all nine language files.
+
+         Upstream's own "Do NOT restore them here: two doors to one feature is what the
+         restructure exists to stop" (:26-27) is a DE-DUPLICATION rule, and its reason does not
+         obtain here: this is the port's ONLY door to the game, not a second one. WPF's one-entry
+         rule is satisfied for the same reason it is by the Goon and DTRH cards above -
+         MantraLaunch is the single construction site (MainWindow/MainWindow.Presets.cs:1007).
+
+         THE SHAPE IS UPSTREAM'S CARD: title, blurb, a repetitions picker, one free button. The
+         picker's four values and its default are upstream's (SlotMantra's ComboBox, 10/25/50/100
+         with SelectedIndex="1"), and its comment's reason is kept - "a 'how long do I feel like
+         going' dial, not a setting", so nothing here is persisted. No lock band: free by design
+         (MainWindow/MainWindow.PlayTab.cs:282-285, "gating the typed game would be gating the
+         cheaper half of something already given away"). -->
+    <Border Classes="hero" Margin="0,16,0,0">
+      <StackPanel Spacing="10">
+        <TextBlock x:Name="MantraTitle"
+                   Classes="hero-title"
+                   AutomationProperties.AutomationId="MantraTitle"
+                   Text="MANTRAS" />
+        <!-- pl6_mantra_blurb, verbatim (en.json:4981). -->
+        <TextBlock Classes="page-blurb" MaxWidth="640" HorizontalAlignment="Left"
+                   Text="type it back, word for word, until it stops feeling like typing." />
+        <!-- The honest sub-line, in the door itself, the same way the Goon card carries one.
+             Upstream's game hums: a drone whose gain tracks the streak and three synthesised
+             tones. This port's audio seam takes FILES, and upstream makes those sounds with a
+             signal generator - so the game is silent here and the refusal is said out loud
+             rather than discovered (Features/Mantra/MantraIntensity.cs). -->
+        <TextBlock x:Name="MantraScopeLine"
+                   Classes="page-blurb"
+                   MaxWidth="640" HorizontalAlignment="Left"
+                   AutomationProperties.AutomationId="MantraScopeLine"
+                   Text="This build plays silent. Upstream synthesises its drone and its three tones, and this app's audio plays files only; everything else - the streak, the best streak, the XP and the pace limits - is here." />
+        <!-- pl6_mantra_reps_label + SlotMantra's ComboBox. Tag strings, and the fallback below
+             them, are upstream's own shape (PlayTabView.Cards.cs:109-115). -->
+        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Left">
+          <TextBlock Classes="page-blurb" VerticalAlignment="Center" Text="Repetitions" />
+          <ComboBox x:Name="MantraRepsPicker"
+                    MinWidth="96"
+                    VerticalAlignment="Center"
+                    SelectedIndex="1"
+                    AutomationProperties.AutomationId="MantraRepsPicker"
+                    AutomationProperties.Name="Repetitions">
+            <ComboBoxItem Content="10" Tag="10" />
+            <ComboBoxItem Content="25" Tag="25" />
+            <ComboBoxItem Content="50" Tag="50" />
+            <ComboBoxItem Content="100" Tag="100" />
+          </ComboBox>
+        </StackPanel>
+        <!-- pl6_mantra_start, verbatim (en.json:4983). Never disabled and never banded: the
+             press ARRIVES, exactly as the two cards above. -->
+        <Button x:Name="MantraBeginButton"
+                Classes="hero-primary"
+                HorizontalAlignment="Left"
+                AutomationProperties.AutomationId="MantraBeginButton"
+                AutomationProperties.Name="Begin"
+                ToolTip.Tip="say it back until it stops being yours."
+                Content="Begin" />
+        <!-- The launch fault surface, its own element for the reason the Goon card's is: WPF
+             answers a thrown StartMantraSession with a MessageBox carrying its own headline and
+             the exception's message (MainWindow/MainWindow.PlayTab.cs:308-313), and a fault is
+             not a refusal. -->
+        <TextBlock x:Name="MantraFaultText"
+                   Classes="fault-text"
+                   AutomationProperties.AutomationId="MantraFaultText"
+                   TextWrapping="Wrap"
+                   MaxWidth="640"
+                   IsVisible="False"
+                   Text="" />
+      </StackPanel>
+    </Border>
+
     <!-- THE ARCADEMY, AND IT SHIPS DARK. Upstream's strip sits in this same tab's MORE zone
          (Views/Tabs/PlayTabView.xaml:1312) with Visibility="Collapsed" as its DEFAULT, and
          RefreshPlayCards re-asserts that from ArcademyHostService.DoorAvailable on every repaint
@@ -317,4 +421,5 @@
       </Border>
     </StackPanel>
   </StackPanel>
+  </ScrollViewer>
 </UserControl>
