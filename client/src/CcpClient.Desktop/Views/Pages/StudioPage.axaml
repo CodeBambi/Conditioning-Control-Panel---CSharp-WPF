@@ -356,6 +356,45 @@
             </Grid>
           </RadioButton>
 
+          <!-- AUDIO, AND IT IS THE FIRST ROW ON THIS RACK THAT IS NOT A MODULE AT ALL.
+               Upstream keeps these four controls in its SETTINGS door's audio card
+               (Views/Controls/AppSettings/AudioSettingsSection.xaml:82, :103, :181, :195), not in
+               its rack — this port has no settings door, and the app-wide device row it does have
+               is Haptics, immediately above. So it goes beside it, at the foot of IMMERSION, where
+               the two rows a session never borrows sit together and directly under the two modules
+               (Mind Wipe, Brain Drain) whose whole output these dials govern.
+
+               NO DOT, and it is the Visuals row's precedent rather than an omission
+               (StudioPage.axaml:167-186; upstream passes null where every other row passes a dot
+               predicate, StudioTabView.xaml.cs:494-496). A dot on this rack means Off / Armed /
+               Live for a MODULE: switched off, waiting for the session, running. This row has no
+               enable to switch, nothing to arm and no schedule to be live on. What the operating
+               system last answered about a device is a fact with three of its own values and it
+               belongs in the panel's notice, in words, where it can say "nothing has been asked
+               yet" — which no dot can.
+
+               NO RIGHT-CLICK either, for the same reason and the same upstream case: the rack's
+               quick-toggle flips a module's enable, and rows with none fall through unhandled
+               (StudioTabView.xaml.cs:659).
+
+               NOT ONE CONTROL IN THE PANEL BELOW IS session-owned. Read the SessionOwnedMarker
+               remarks in StudioPage.axaml.cs before adding the class here: the rule is that a dial
+               locks iff its document is one of the eleven a run borrows AND upstream marks it
+               owned, and audio.json fails BOTH halves. ScriptedSessionDials' constructor does not
+               take it (Session/ScriptedSessionDials.cs:51-61), so nothing snapshots it and nothing
+               writes it back; and volumes are named in upstream's own never-lock list as COMFORT
+               (Features/SessionLock.cs:21-38). A session does not get to move the user's master
+               volume or re-route their headphones. -->
+          <RadioButton x:Name="RowAudio"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowAudio"
+                       AutomationProperties.Name="Audio rack row">
+            <Grid ColumnDefinitions="*" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Audio" VerticalAlignment="Center" />
+            </Grid>
+          </RadioButton>
+
           <!-- THE RACK'S SECOND GROUP. WPF has four (EFFECTS, GAMES & CARDS,
                IMMERSION, TIMING — §8.3, built at StudioTabView.xaml.cs:483/498/508/530); the
                port now has two, because it now has a module in a second one. The group header
@@ -1767,6 +1806,136 @@
             <TextBlock TextWrapping="Wrap"
                        x:Name="HapticsAbsenceState"
                        AutomationProperties.AutomationId="HapticsAbsenceState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Audio ================= -->
+        <!-- FOUR CONTROLS, AND THEY ARE UPSTREAM'S FOUR: master volume, video volume, the output
+             endpoint picker with its Refresh, and Test audio
+             (Views/Controls/AppSettings/AudioSettingsSection.xaml:82-89, :103-110, :181-190,
+             :195-201). Upstream's card carries three more — the auto-duck switch, the duck amount
+             and the don't-duck-the-browser exception (:114-167) — and none of them is here, because
+             cross-application ducking is a pending owner platform decision this build refuses
+             TYPED rather than pretends (Audio/AudioSeams.UnavailableDuckSink, composed by
+             AudioParticipant). A duck slider over a sink that always answers "not applied" is the
+             dead dial §9 D7 refuses. Its Audio Layers button (:202-207) opens a mixer window this
+             port does not have.
+
+             WHEN THE ENDPOINTS ARE ENUMERATED, AND WHY IT IS NOT AT PAGE LOAD. This page and all
+             seventeen of its panels are built once, during startup, so "on load" here means "at
+             every launch". Enumerating there would build a native miniaudio context for a user who
+             never opens this row and never plays a sound — the same class of unrequested claim on a
+             shared resource that AudioParticipant's phase 3 exists to refuse, and the reason
+             EnsureDevice is deferred to the first consumer that needs sound. So the list is read on
+             the FIRST REVEAL of this panel and again on Refresh, which is also where upstream reads
+             it (MainWindow/MainWindow.Settings.cs:140, inside LoadSettings, when the audio door's
+             own state loads). Listing is not opening: EnumerateDevices reads the engine's playback
+             devices and only TryInit brings a device up (Audio/SoundFlowAudioBackend.cs:58-70 vs
+             :73-110), so the picker can offer endpoints without seizing one.
+
+             THE SLIDERS ARE NOT session-owned, AND NEITHER IS ANYTHING ELSE HERE. See the row's own
+             comment above and the SessionOwnedMarker remarks in StudioPage.axaml.cs. -->
+        <StackPanel x:Name="AudioModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Audio" />
+          <TextBlock Classes="page-blurb"
+                     x:Name="AudioWhatItIs"
+                     TextWrapping="Wrap"
+                     AutomationProperties.AutomationId="AudioWhatItIs"
+                     Text="" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Master volume" />
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="AudioMasterSlider"
+                    Minimum="0" Maximum="100"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="AudioMasterSlider"
+                    AutomationProperties.Name="Master volume" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="AudioMasterValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="AudioMasterValue"
+                       Text="" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="dial-label" Text="Video volume" />
+            <Slider Grid.Row="1" Grid.Column="1"
+                    x:Name="AudioVideoSlider"
+                    Minimum="0" Maximum="100"
+                    SmallChange="1" LargeChange="10"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="AudioVideoSlider"
+                    AutomationProperties.Name="Video volume" />
+            <TextBlock Grid.Row="1" Grid.Column="2"
+                       x:Name="AudioVideoValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="AudioVideoValue"
+                       Text="" />
+          </Grid>
+
+          <Grid ColumnDefinitions="150,*,Auto">
+            <TextBlock Grid.Column="0" Classes="dial-label" Text="Output" />
+            <ComboBox Grid.Column="1"
+                      x:Name="AudioDevicePicker"
+                      HorizontalAlignment="Stretch"
+                      AutomationProperties.AutomationId="AudioDevicePicker"
+                      AutomationProperties.Name="Audio output device" />
+            <Button Grid.Column="2"
+                    x:Name="AudioDeviceRefreshButton"
+                    Classes="module-action"
+                    Margin="8,0,0,0"
+                    AutomationProperties.AutomationId="AudioDeviceRefreshButton"
+                    AutomationProperties.Name="Refresh the list of audio outputs"
+                    Content="Refresh" />
+          </Grid>
+
+          <!-- THE ONE CONTROL HERE WHOSE POINT IS THAT A HUMAN HEARS SOMETHING. It brings a device
+               up for real and cues a real clip at a fixed half gain that deliberately ignores the
+               master dial (Services/AudioService.cs:625). It refuses BY NAME when there is no clip
+               to cue, which is upstream's own branch (:600-607) rather than a port shortfall
+               dressed up as one. -->
+          <Button x:Name="AudioTestButton"
+                  Classes="module-action"
+                  HorizontalAlignment="Left"
+                  AutomationProperties.AutomationId="AudioTestButton"
+                  AutomationProperties.Name="Test audio"
+                  Content="Test audio" />
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="AudioMasterState"
+                         AutomationProperties.AutomationId="AudioMasterState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="AudioVideoState"
+                         AutomationProperties.AutomationId="AudioVideoState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="AudioChoiceState"
+                         AutomationProperties.AutomationId="AudioChoiceState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="AudioDeviceState"
+                         AutomationProperties.AutomationId="AudioDeviceState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="AudioTestState"
+                       AutomationProperties.AutomationId="AudioTestState"
                        Text="" />
           </Border>
         </StackPanel>

@@ -724,10 +724,14 @@ public class StudioRackHeadlessTests : HeadlessTest
                 // the group because moving the three above it would reorder rows a user has learned.
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowPopQuiz",
                 "RowMindWipe", "RowBrainDrain",
-                // Haptics is LAST in IMMERSION, immediately after Brain Drain and before
-                // the TIMING group, which is upstream's own position
-                // (StudioTabView.xaml.cs:513/519/530).
-                "RowHaptics",
+                // Haptics is immediately after Brain Drain, which is upstream's own position
+                // (StudioTabView.xaml.cs:513/519/530). AUDIO closes IMMERSION behind it, and that
+                // position is the PORT's own for the Pop Quiz reason: upstream has no rack row for
+                // these four controls at all — they are its Settings door's audio card
+                // (Views/Controls/AppSettings/AudioSettingsSection.xaml:82,:103,:181,:195) — so
+                // there was no order to take. It goes beside Haptics because that is the other
+                // app-lifetime device row, and LAST so nothing a user has learned moved.
+                "RowHaptics", "RowAudio",
                 "RowScheduler", "RowIntensityRamp",
                 // The SESSIONS group's one row — upstream's presets TAB folded into this door
                 // (MainWindow/MainWindow.TabNavigation.cs:592). It is the second row on this page
@@ -757,15 +761,24 @@ public class StudioRackHeadlessTests : HeadlessTest
                 e => e.Classes.Contains("dot"));
         }
 
-        // AND THE ONE ROW THAT MUST NOT HAVE ONE. The method's name has always said "every
-        // row WITH A PORTED EFFECT BEHIND IT", and Visuals is the first row in this rack with no
+        // AND THE TWO ROWS THAT MUST NOT HAVE ONE. The method's name has always said "every
+        // row WITH A PORTED EFFECT BEHIND IT", and Visuals was the first row in this rack with no
         // effect behind it at all: upstream's entry passes null where every other row passes a dot
         // predicate (StudioTabView.xaml.cs:496) because there is no master toggle to read, and its
         // own comment says a dot that cannot be wired honestly is omitted (:494-495). Asserted
         // rather than left implicit, because "the row exists" and "the row tells the truth about
         // itself" are different facts and only the second one is worth having.
+        //
+        // AUDIO IS THE SECOND, and its reason is the same rule reaching a different case: the three
+        // dot states are Off / Armed / Live for a MODULE, and that row has no enable to switch,
+        // nothing to arm and no schedule to be live on. What the operating system last answered
+        // about a device is a fact with three values of its OWN — including "nothing has been asked
+        // yet", which no dot can say — so it is rendered in words on the panel instead.
         Assert.Empty(
             Descendant<RadioButton>(window, "RowVisuals").GetVisualDescendants()
+                .OfType<Avalonia.Controls.Shapes.Ellipse>());
+        Assert.Empty(
+            Descendant<RadioButton>(window, "RowAudio").GetVisualDescendants()
                 .OfType<Avalonia.Controls.Shapes.Ellipse>());
 
         // AND THE ROW THAT HAS A DOT WITH NO EFFECT BEHIND IT, which is the inverse case
@@ -992,10 +1005,14 @@ public class StudioRackHeadlessTests : HeadlessTest
                 // the group because moving the three above it would reorder rows a user has learned.
                 "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowPopQuiz",
                 "RowMindWipe", "RowBrainDrain",
-                // Haptics is LAST in IMMERSION, immediately after Brain Drain and before
-                // the TIMING group, which is upstream's own position
-                // (StudioTabView.xaml.cs:513/519/530).
-                "RowHaptics",
+                // Haptics is immediately after Brain Drain, which is upstream's own position
+                // (StudioTabView.xaml.cs:513/519/530). AUDIO closes IMMERSION behind it, and that
+                // position is the PORT's own for the Pop Quiz reason: upstream has no rack row for
+                // these four controls at all — they are its Settings door's audio card
+                // (Views/Controls/AppSettings/AudioSettingsSection.xaml:82,:103,:181,:195) — so
+                // there was no order to take. It goes beside Haptics because that is the other
+                // app-lifetime device row, and LAST so nothing a user has learned moved.
+                "RowHaptics", "RowAudio",
                 "RowScheduler", "RowIntensityRamp",
                 "RowScriptedSession",
             ],

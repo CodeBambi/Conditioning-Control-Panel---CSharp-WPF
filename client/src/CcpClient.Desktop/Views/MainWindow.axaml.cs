@@ -135,7 +135,18 @@ public partial class MainWindow : Window
         // owned by the SHELL, and the page is not a window.
         Recap = new Navigation.SessionRecapLaunch(Session.MediaLog, this, host.LogDiagnostic);
 
-        _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics, Recap);
+        // The app-wide audio owner, composed once by the composition root beside the session, the
+        // scheduler and the haptic sink, and reached through the host — the same rule all three
+        // follow. A shell-local second one would mean a second native engine on the same endpoint,
+        // which is precisely the defect Audio/AudioParticipant.cs was lifted out of the DTRH window
+        // to remove: the Studio door's endpoint picker and the sound the app actually plays have to
+        // be the same one device.
+        Audio = CcpClient.Desktop.Audio.AudioParticipant.Of(host)
+            ?? throw new InvalidOperationException(
+                "the shell needs the app-wide audio owner and this host has none — the Studio door's "
+                + "volume dials and endpoint picker would then move numbers no device ever reads");
+
+        _pages[ShellRoutes.Studio] = new StudioPage(Loom, Session, Scheduler, Haptics, Recap, Audio);
         _pages[ShellRoutes.Companion] = new CompanionPage(ShowCompanion);
         _pages[ShellRoutes.Play] = new PlayPage(Dtrh, Goon, Arcademy);
         _pages[ShellRoutes.Intake] = new IntakePage(Intake);
@@ -278,6 +289,12 @@ public partial class MainWindow : Window
     /// unlike every rack module: upstream's is a static built at startup and never engine-started
     /// (<c>App.xaml.cs:533</c>, <c>:2060</c>).</summary>
     public Haptics.HapticParticipant Haptics { get; }
+
+    /// <summary>The one app-wide audio owner; public so tests read the real device seam and the
+    /// real settings document rather than a shell-local copy of either. APP-lifetime, like the
+    /// scheduler and the haptic sink: upstream's audio service is a field on the application built
+    /// once at startup (<c>App.xaml.cs:1798</c>) that outlives every window and every run.</summary>
+    public Audio.AudioParticipant Audio { get; }
 
     /// <summary>
     /// WPF's <c>UpdateStartButton</c> (<c>MainWindow/MainWindow.StartStop.cs:751-796</c>): one

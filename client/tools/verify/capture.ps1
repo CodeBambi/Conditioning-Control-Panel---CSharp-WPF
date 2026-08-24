@@ -102,7 +102,7 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'trainer-card-level', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'companion-privacy', 'companion-transcript', 'toast', 'popquiz-card')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'trainer-card-level', 'session-row', 'session-start', 'session-history', 'studio-dial', 'audio-dial', 'companion-permissions', 'companion-privacy', 'companion-transcript', 'toast', 'popquiz-card')] [string]$Surface,
     [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'broad', 'titles', 'open', 'saved', 'refused', 'asking', 'fresh', 'earned')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
@@ -144,7 +144,14 @@ $stateFiles = @(
     # state re-seeds it below. Unconditional here for the same reason session_preset.json is: a
     # ledger left behind by a previous run would put a level on the `fresh` capture and the pair
     # would differ for a reason that has nothing to do with what was seeded.
-    (Join-Path $env:APPDATA 'CcpClient\progression.json')
+    (Join-Path $env:APPDATA 'CcpClient\progression.json'),
+    # The SEVENTH, and the audio-dial pair's own subject. Both of its captures are of the master
+    # volume slider AT THE SAME VALUE - that is what makes them a statement about the livery rather
+    # than about two thumb positions - and the value they are both at is upstream's fresh-install 32
+    # (Models/AppSettings.cs:1127). A document left behind by a previous run would move the thumb,
+    # so this is the session_lockcard.json note applied to the row beside it
+    # (AudioSettingsDocument.FileName).
+    (Join-Path $env:APPDATA 'CcpClient\audio.json')
 )
 $progressionFile = Join-Path $env:APPDATA 'CcpClient\progression.json'
 # AND THE PAGE'S OWN PREFS. Hygiene, and NOT what makes this deterministic.
@@ -211,6 +218,13 @@ $statesFor = @{
     # thumb sits in the same place in both captures and the only thing a check can be reading is
     # the disabled livery.
     'studio-dial' = @('live', 'locked')
+    # THE SAME PAIR RUN IN REVERSE, and the only surface here whose two states are meant to look
+    # IDENTICAL. `live` is the audio row's master volume with nothing running; `running` is the same
+    # dial at the same value with a real scripted session under way. A check that failed on
+    # `running` would be reporting an OVER-LOCK - a control taken away from the user for no benefit,
+    # which upstream calls out as its own regression (Features/SessionLock.cs:36-38). The inversion
+    # is therefore against studio-dial-locked-track rather than against this surface's other state.
+    'audio-dial' = @('live', 'running')
     # THE TWO PERMISSION STATES ARE ONE GESTURE APART, and the gesture is the whole claim: `closed`
     # is what a fresh process gives the user (master off, not one per-effect switch on screen) and
     # `admitted` is what she gets after pressing the master switch once. A check that passed on both
@@ -1904,6 +1918,129 @@ elseif ($Surface -eq 'studio-dial') {
     # its own background.
     if ($dialRect.H -lt [int][math]::Round(12 * $scale)) {
         Fail "the Repeats slider is only $($dialRect.H) px tall at scale $scale; its centre band would not be the track"
+    }
+    Write-Output ("dial rect $($dialRect.X),$($dialRect.Y) $($dialRect.W)x$($dialRect.H) @ scale $scale; " +
+    'track band y 0.40..0.60, filled band x 0.02..0.10')
+
+    $capX = $dialRect.X; $capY = $dialRect.Y; $capW = $dialRect.W; $capH = $dialRect.H
+}
+elseif ($Surface -eq 'audio-dial') {
+    # =============================================================================================
+    # THE AUDIO ROW'S MASTER VOLUME, PHOTOGRAPHED TWICE, AND THE CLAIM IS THAT THE TWO PICTURES ARE
+    # THE SAME.
+    #
+    # This is the studio-dial pair run in reverse. There, a session is running and the dial the
+    # session OWNS must go grey; here, a session is running and this dial must NOT — because
+    # audio.json is not one of the eleven documents a run borrows (ScriptedSessionDials'
+    # constructor) and upstream classes volumes as COMFORT rather than dosage, naming audio volume
+    # in the never-lock list outright (MainWindow/MainWindow.SessionFeatureLock.cs:39-42,
+    # Features/SessionLock.cs:21-38). Over-locking is a regression in its own right (:36-38), and
+    # this is the only evidence class that can catch one: a greyed dial and a live dial are the same
+    # control at the same value, and the difference is entirely in composited pixels.
+    #
+    # SO THE INVERSION IS NOT AGAINST THE OTHER STATE OF THIS SURFACE - both states are the same
+    # livery on purpose - IT IS AGAINST studio-dial-locked-track, which reads #333333 in the same
+    # band of the same kind of control in a capture taken under the same running session. Each pair
+    # must fail the other's check.
+    #
+    # THE UIA GATE IS WHAT MAKES THE `running` CAPTURE MEAN ANYTHING, and it is read before any
+    # pixel: no check can tell a session that is running from one that never started, and a dial
+    # that is live because the click silently failed photographs identically to one that is live
+    # because the lock let it be.
+    # =============================================================================================
+    $scale = (Get-DoorRect $window 'studio').Scale
+    $viewport = Get-Rect (Get-Element $window 'RackScroll')
+
+    if ($State -eq 'running') {
+        # The same four gestures studio-dial and session-start use. There is no flag for a running
+        # session and deliberately so.
+        $sessions = Scroll-RowIntoView $window $viewport 'RowScriptedSession'
+        Click-Rect $sessions.Rect
+        if (-not (Get-Selected (Get-Element $window 'RowScriptedSession'))) {
+            Fail 'the left-click did not open the Scripted Sessions row (state drive failed)'
+        }
+        Click-Rect (Get-Rect (Get-Element $window 'SessionRowMorningDrift'))
+        if (-not (Get-Selected (Get-Element $window 'SessionRowMorningDrift'))) {
+            Fail 'the left-click did not select the Morning Drift session row (state drive failed)'
+        }
+        Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionStartButton'))
+        $stillIdle = (Get-Element $window 'ScriptedSessionStartButton').Current.Name
+        if ($stillIdle -ne 'Start Session') { Fail "a session started before the confirmation was answered: '$stillIdle'" }
+        Click-Rect (Get-Rect (Get-Element $window 'ScriptedSessionConfirmButton'))
+        $caption = (Get-Element $window 'ScriptedSessionStartButton').Current.Name
+        if ($caption -notlike 'STOP SESSION (*') { Fail "the session did not start: the button reads '$caption'" }
+        Write-Output "start gate: button '$caption' ($($sessions.Notches) wheel notch(es))"
+    }
+
+    # THE PANEL, opened the same way in both states so the two captures differ by the session and
+    # by nothing else. It is the last row of IMMERSION and below the fold at this window size.
+    $audioRow = Scroll-RowIntoView $window $viewport 'RowAudio'
+    Click-Rect $audioRow.Rect
+    if (-not (Get-Selected (Get-Element $window 'RowAudio'))) {
+        Fail 'the left-click did not open the Audio rack row (state drive failed)'
+    }
+    Write-Output "state drive: left-click on the Audio rack row -> IsSelected=True ($($audioRow.Notches) wheel notch(es))"
+
+    $master = Get-Element $window 'AudioMasterSlider'
+    $picker = Get-Element $window 'AudioDevicePicker'
+    $test = Get-Element $window 'AudioTestButton'
+    $banner = Find-Element $window 'SessionLockReason'
+    $reading = (Get-Element $window 'AudioMasterValue').Current.Name
+
+    # THE VALUE, IN BOTH STATES. What makes this pair evidence rather than two photographs is that
+    # the thumb is in the same place in each, so a check can only be reading the livery. 32% is
+    # upstream's own fresh-install master volume (Models/AppSettings.cs:1127) and this run cleared
+    # the settings file, so anything else means a document leaked in from a previous run and the
+    # two captures would differ for a reason that has nothing to do with the lock.
+    if ($reading -ne '32%') {
+        Fail "the master volume reads '$reading' rather than the fresh-install 32%; a leaked audio.json would move the thumb"
+    }
+
+    # THE CLAIM. All three controls stay the user's while the session runs.
+    foreach ($pair in @(@('master volume', $master), @('output picker', $picker), @('Test audio', $test))) {
+        if (-not $pair[1].Current.IsEnabled) {
+            Fail ("the audio $($pair[0]) control is disabled$(if ($State -eq 'running') { ' while a session runs' } else { ' with nothing running' })" +
+    '; a scripted session does not borrow audio.json and upstream names audio volume in its own never-lock list')
+        }
+    }
+
+    if ($State -eq 'running') {
+        # AND THE LOCK REALLY IS UP. Without this, a capture in which the session silently failed to
+        # start would photograph a live dial and pass - which is the whole failure mode this state
+        # exists to exclude. The banner is page-level (StudioPage.axaml:496-502), so it is on screen
+        # with the AUDIO panel open even though the dials it explains are in panels that are not.
+        if ($null -eq $banner) { Fail 'no session lock banner is on screen, so nothing here shows the lock was ever active' }
+        $reason = $banner.Current.Name
+        if ($reason -ne 'Morning Drift is running this. Its features and intensity are locked until the session ends.') {
+            Fail "the banner does not name the running session: '$reason'"
+        }
+        Write-Output "lock gate: banner reads '$reason', and master/picker/Test are all IsEnabled=True at '$reading'"
+    }
+    else {
+        if ($null -ne $banner) { Fail "a session lock banner is on screen with nothing running: '$($banner.Current.Name)'" }
+        Write-Output "live gate: no banner, and master/picker/Test are all IsEnabled=True at '$reading'"
+    }
+
+    # AND THE DEVICE, WHICH IS THE OTHER HALF OF THIS ROW'S CONTRACT. Opening the panel lists
+    # endpoints and opens NOTHING, so the panel's own device line still reads "nothing has been
+    # asked" in a real process that has been driven to this point by real clicks. A pixel cannot
+    # read text, so this is a UIA needle rather than a manifest check - the capability-line
+    # precedent in verification-harness.md.
+    $deviceLine = (Get-Element $window 'AudioDeviceState').Current.Name
+    if ($deviceLine -notlike 'Nothing has been asked of the operating system yet*') {
+        Fail "a device was brought up merely by opening the audio panel: '$deviceLine'"
+    }
+    Write-Output "device gate: '$deviceLine'"
+
+    $dialRect = Get-Rect $master
+    Assert-Inside $dialRect $windowRect 'the audio master volume slider' 'the shell window'
+
+    # THE BAND checks.json SAMPLES, PROVED AGAINST THE MEASURED CONTROL - the studio-dial pair's own
+    # arithmetic, because it is the same Fluent slider template: y 0.40..0.60 is the centre line
+    # where the track is drawn, and x 0.02..0.10 is inside the FILLED part of it for any value above
+    # the minimum, which 32 of 0..100 is.
+    if ($dialRect.H -lt [int][math]::Round(12 * $scale)) {
+        Fail "the master slider is only $($dialRect.H) px tall at scale $scale; its centre band would not be the track"
     }
     Write-Output ("dial rect $($dialRect.X),$($dialRect.Y) $($dialRect.W)x$($dialRect.H) @ scale $scale; " +
     'track band y 0.40..0.60, filled band x 0.02..0.10')

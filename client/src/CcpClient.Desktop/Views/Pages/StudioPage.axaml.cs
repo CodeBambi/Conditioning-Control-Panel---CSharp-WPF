@@ -82,6 +82,34 @@ public partial class StudioPage : UserControl
     private readonly SessionScheduler _scheduler;
     private readonly Haptics.HapticParticipant _haptics;
 
+    /// <summary>
+    /// The APP-WIDE audio owner (<c>Audio/AudioParticipant.cs</c>), and it is what makes the Audio
+    /// row possible at all: the volumes, the endpoint choice and the device seams used to exist only
+    /// inside the DTRH host window, so no rack row could reach any of them. It arrives as its own
+    /// constructor argument for the reason <see cref="_scheduler"/> and <see cref="_haptics"/> do —
+    /// it is owned at APP lifetime and a session never borrows it.
+    /// </summary>
+    private readonly Audio.AudioParticipant _audio;
+
+    /// <summary>
+    /// The endpoints the picker is currently offering, index-aligned with its items after the
+    /// leading "System default" entry — the <see cref="_spiralLibrary"/> shape, for the same reason:
+    /// the list is the MACHINE's and changes under the app, so it is a session fact re-read on
+    /// demand rather than a cached one.
+    /// </summary>
+    private IReadOnlyList<string> _audioDevices = [];
+
+    /// <summary>Whether the endpoints have been enumerated at all this run. Null connectivity is
+    /// not "absent" — see <see cref="AudioDialsNotices.DescribeChoice"/>.</summary>
+    private bool _audioDevicesListed;
+
+    /// <summary>Upstream's <c>_testingAudio</c> re-entrancy guard
+    /// (<c>MainWindow/MainWindow.UiUpdates.cs:1063</c>), widened to cover the device switch as well
+    /// because both gestures reach the same one native device.</summary>
+    private bool _audioBusy;
+
+    private string _audioTest = AudioDialsNotices.DescribeTestNotRun();
+
     /// <summary>The one scripted session, reached off the composed participant — never a second
     /// one built here, for the reason <c>MainWindow</c> gives about the engine: two runs would
     /// borrow the user's dials twice and give them back once.</summary>
@@ -151,20 +179,30 @@ public partial class StudioPage : UserControl
     /// owned by the shell window and a page is not one — the same reason
     /// <paramref name="loom"/> arrives already built.
     /// </param>
+    /// <param name="audio">
+    /// The one app-wide audio owner, and it arrives as its own argument for the same reason
+    /// <paramref name="scheduler"/> and <paramref name="haptics"/> do: it is not part of a session.
+    /// Upstream's audio service is a field on the application, built once at startup
+    /// (<c>App.xaml.cs:1798</c>) and outliving every window and every run. It is reached here rather
+    /// than rebuilt, so the endpoint this panel chooses and the endpoint the app plays through are
+    /// the same one device.
+    /// </param>
     public StudioPage(LoomLaunch loom, SessionParticipant session, SessionScheduler scheduler,
-        Haptics.HapticParticipant haptics, SessionRecapLaunch recap)
+        Haptics.HapticParticipant haptics, SessionRecapLaunch recap, Audio.AudioParticipant audio)
     {
         ArgumentNullException.ThrowIfNull(loom);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(scheduler);
         ArgumentNullException.ThrowIfNull(haptics);
         ArgumentNullException.ThrowIfNull(recap);
+        ArgumentNullException.ThrowIfNull(audio);
         InitializeComponent();
         _sessionOwned =
             [.. this.GetLogicalDescendants().OfType<Control>().Where(IsSessionOwnedMarker)];
         _recap = recap;
         _scheduler = scheduler;
         _haptics = haptics;
+        _audio = audio;
 
         _session = session;
         _flash = session.Flash;
@@ -207,6 +245,7 @@ public partial class StudioPage : UserControl
         RowVisuals.IsCheckedChanged += (_, _) => ApplySelection();
         RowScheduler.IsCheckedChanged += (_, _) => ApplySelection();
         RowHaptics.IsCheckedChanged += (_, _) => ApplySelection();
+        RowAudio.IsCheckedChanged += (_, _) => ApplySelection();
         RowScriptedSession.IsCheckedChanged += (_, _) => ApplySelection();
 
         // The rack row's second gesture (StudioTabView.xaml.cs:660 -> :1109-1133). On the ROW,
@@ -355,6 +394,15 @@ public partial class StudioPage : UserControl
         SpiralPicker.SelectionChanged += (_, _) => OnSpiralPicked();
         SpiralRefreshButton.Click += (_, _) => OnSpiralLibraryRefreshed();
 
+        // THE AUDIO ROW'S FOUR CONTROLS. The picker is NOT populated here: see
+        // EnsureAudioDevicesListed for when the endpoints are enumerated and why it is not at
+        // construction. Both buttons hand off to an awaitable so the native call they make is off
+        // this thread — upstream moved the same work off ITS UI thread because a wedged endpoint
+        // blocks for many seconds or forever (MainWindow/MainWindow.UiUpdates.cs:1072-1076, #686).
+        AudioDevicePicker.SelectionChanged += (_, _) => OnAudioDevicePicked();
+        AudioDeviceRefreshButton.Click += (_, _) => OnAudioDevicesRefreshed();
+        AudioTestButton.Click += (_, _) => _ = TestAudioAsync();
+
         OnSliderMoved(FlashFrequencySlider, OnFrequencyMoved);
         OnSliderMoved(FlashImagesSlider, OnImagesPerFlashMoved);
         OnSliderMoved(SubliminalFrequencySlider, OnSubliminalFrequencyMoved);
@@ -379,6 +427,8 @@ public partial class StudioPage : UserControl
         OnSliderMoved(BubblePopSizeSlider, OnBubblePopSizeMoved);
         OnSliderMoved(BubblePopSpeedSlider, OnBubblePopSpeedMoved);
         OnSliderMoved(PopQuizFrequencySlider, OnPopQuizFrequencyMoved);
+        OnSliderMoved(AudioMasterSlider, OnAudioMasterMoved);
+        OnSliderMoved(AudioVideoSlider, OnAudioVideoMoved);
         OnSliderMoved(VisualsScaleSlider, OnVisualsScaleMoved);
         OnSliderMoved(VisualsOpacitySlider, OnVisualsOpacityMoved);
         OnSliderMoved(VisualsDurationSlider, OnVisualsDurationMoved);
@@ -771,10 +821,17 @@ public partial class StudioPage : UserControl
         var visualsOpen = RowVisuals.IsChecked == true;
         var schedulerOpen = RowScheduler.IsChecked == true;
         var hapticsOpen = RowHaptics.IsChecked == true;
+        var audioOpen = RowAudio.IsChecked == true;
         var scriptedOpen = RowScriptedSession.IsChecked == true;
         ScriptedSessionModulePanel.IsVisible = scriptedOpen;
         SchedulerModulePanel.IsVisible = schedulerOpen;
         HapticsModulePanel.IsVisible = hapticsOpen;
+        AudioModulePanel.IsVisible = audioOpen;
+        if (audioOpen)
+        {
+            EnsureAudioDevicesListed();
+        }
+
         VisualsModulePanel.IsVisible = visualsOpen;
         MandatoryVideoModulePanel.IsVisible = videoOpen;
         BubbleCountModulePanel.IsVisible = bubbleCountOpen;
@@ -792,8 +849,314 @@ public partial class StudioPage : UserControl
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
             && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen
             && !bubblePopOpen && !bouncingTextOpen && !visualsOpen && !schedulerOpen && !hapticsOpen
-            && !scriptedOpen && !popQuizOpen;
+            && !scriptedOpen && !popQuizOpen && !audioOpen;
     }
+
+    // =====================================================================================
+    //  THE AUDIO ROW — the app-wide volumes, the endpoint and the test
+    // =====================================================================================
+
+    /// <summary>Upstream's extension set, in upstream's own order
+    /// (<c>Services/MindWipeService.cs:162-165</c>, mirrored by
+    /// <c>Effects/AudioCuePool.cs:67</c>).</summary>
+    private static readonly string[] TestClipExtensions = [".mp3", ".wav", ".ogg"];
+
+    /// <summary>
+    /// Read the render endpoints ONCE per reveal-or-refresh and fill the picker.
+    ///
+    /// <para><b>Why not at construction.</b> This page and all of its panels are built during
+    /// startup, so "on load" would mean "at every launch" — and a launch that builds a native audio
+    /// context for a user who never opens this row and never plays a sound is the same unrequested
+    /// claim on a shared resource that <c>AudioParticipant</c>'s phase 3 refuses. Upstream reads its
+    /// list at the equivalent moment: inside <c>LoadSettings</c>, when the audio door's own state
+    /// loads (<c>MainWindow/MainWindow.Settings.cs:140</c>).</para>
+    ///
+    /// <para><b>Listing is not opening.</b> <see cref="Audio.AudioParticipant.Devices"/> reads the
+    /// backend's playback-device list; only <c>TryInit</c> brings a device up
+    /// (<c>Audio/SoundFlowAudioBackend.cs:58-70</c> against <c>:73-110</c>). So the picker can offer
+    /// endpoints without seizing one, and <c>DeviceInitAttempts</c> stays where it was.</para>
+    /// </summary>
+    private void EnsureAudioDevicesListed()
+    {
+        if (_audioDevicesListed)
+        {
+            return;
+        }
+
+        ListAudioDevices();
+        Refresh();
+    }
+
+    private void ListAudioDevices()
+    {
+        _audioDevices = _audio.Devices();
+        _audioDevicesListed = true;
+        _syncing = true;
+        try
+        {
+            AudioDevicePicker.ItemsSource =
+                (string[])[AudioDialsNotices.SystemDefaultLabel, .. _audioDevices];
+            SyncAudioPickerSelection();
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    /// <summary>
+    /// Put the picker on the stored choice. A stored name that is NOT in the fresh enumeration
+    /// selects entry 0, which is upstream's own behaviour
+    /// (<c>MainWindow/MainWindow.UiUpdates.cs:1117-1124</c>, <c>SelectedItem = pick ?? devices[0]</c>)
+    /// and is also what the arbitration really does with it
+    /// (<c>Audio/SoundArbitration.cs:325-328</c>: absent name → typed fallback to the default). The
+    /// difference from upstream is that the notice beside it SAYS so instead of leaving the user to
+    /// discover their choice was dropped — and the setting itself is never rewritten here, so the
+    /// choice comes back when the device does.
+    /// </summary>
+    private void SyncAudioPickerSelection()
+    {
+        var chosen = _audio.OutputDeviceName;
+        var index = chosen is null
+            ? -1
+            : _audioDevices.ToList().FindIndex(
+                name => string.Equals(name, chosen, StringComparison.OrdinalIgnoreCase));
+        AudioDevicePicker.SelectedIndex = index < 0 ? 0 : index + 1;
+    }
+
+    /// <summary>True when the stored choice is in the fresh enumeration; null when nothing has been
+    /// enumerated yet, which is a different thing and is rendered differently.</summary>
+    private bool? AudioChoiceConnected =>
+        !_audioDevicesListed || _audio.OutputDeviceName is null
+            ? null
+            : _audioDevices.Any(
+                name => string.Equals(name, _audio.OutputDeviceName, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Upstream's <c>SliderMaster_Changed</c> (<c>MainWindow/MainWindow.UiUpdates.cs:1008-1021</c>):
+    /// truncate to an int, write it, persist it. Upstream additionally pushes the new value into
+    /// whatever is playing right now (<c>:1016-1017</c>); this build's one reader takes it when the
+    /// companion's window is built (<c>Features/Dtrh/DtrhHostWindow.axaml.cs:268</c>), so there is
+    /// nothing here to push it into and the panel says which of the two this is.
+    /// </summary>
+    private void OnAudioMasterMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var value = (int)Math.Round(AudioMasterSlider.Value);
+        if (value == _audio.MasterVolume)
+        {
+            return;
+        }
+
+        _audio.Settings.Mutate(document => document.MasterVolume = value);
+        _ = _audio.Settings.Save();
+        Refresh();
+    }
+
+    /// <summary>Upstream's <c>SliderVideoVolume_Changed</c> (<c>:1023-1030</c>), minus its one live
+    /// consumer: <c>App.Video.UpdateVideoVolume</c> (<c>:1028</c>) drives a video service whose
+    /// soundtrack this port does not play at all
+    /// (<c>Session/MandatoryVideoPresetDocument.cs:17-19</c>). The setting is real and app-wide, so
+    /// the dial is here and the notice states plainly that today it stores a preference rather than
+    /// changing playback.</summary>
+    private void OnAudioVideoMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var value = (int)Math.Round(AudioVideoSlider.Value);
+        if (value == _audio.VideoVolume)
+        {
+            return;
+        }
+
+        _audio.Settings.Mutate(document => document.VideoVolume = value);
+        _ = _audio.Settings.Save();
+        Refresh();
+    }
+
+    /// <summary>Upstream's <c>BtnAudioOutputRefresh_Click</c> (<c>:1159-1162</c>): re-ask the
+    /// machine, because endpoints come and go under a running app. It changes no setting — the
+    /// selection is re-derived from the document, so a device that vanished while the app was
+    /// running is reflected rather than silently kept.</summary>
+    private void OnAudioDevicesRefreshed()
+    {
+        ListAudioDevices();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The user picked an endpoint. Entry 0 is the system default and stores the empty string,
+    /// which is upstream's own encoding (<c>Models/AppSettings.cs:1238-1240</c>).
+    ///
+    /// <para>It goes through <see cref="Audio.AudioParticipant.SelectOutputDevice"/> — the one seam
+    /// that persists the choice and re-probes in that order — rather than writing the document here,
+    /// so a crash between the two halves cannot leave the app playing on one endpoint while the
+    /// setting names another.</para>
+    /// </summary>
+    private void OnAudioDevicePicked()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        var index = AudioDevicePicker.SelectedIndex;
+        var name = index >= 1 && index - 1 < _audioDevices.Count ? _audioDevices[index - 1] : string.Empty;
+        _ = SelectAudioDeviceAsync(name);
+    }
+
+    /// <summary>
+    /// Route this app's sound to the chosen endpoint. <b>Off this thread</b>, because a device
+    /// switch is a native init and upstream moved the same class of call off ITS UI thread for the
+    /// stated reason that a wedged endpoint blocks for many seconds or forever
+    /// (<c>MainWindow/MainWindow.UiUpdates.cs:1072-1074</c>, #686).
+    ///
+    /// <para>Public so a fact can await the GESTURE instead of waiting on a clock — the same reason
+    /// the rendered dots on this page are public.</para>
+    /// </summary>
+    public async Task SelectAudioDeviceAsync(string deviceName)
+    {
+        if (_audioBusy)
+        {
+            // A second gesture while the first is still in the driver. Upstream returns outright
+            // (_testingAudio, :1067); this also puts the picker back on the stored value, because a
+            // combo box left showing an endpoint that was never applied is a lie the user can read.
+            _syncing = true;
+            try
+            {
+                SyncAudioPickerSelection();
+            }
+            finally
+            {
+                _syncing = false;
+            }
+
+            return;
+        }
+
+        _audioBusy = true;
+        try
+        {
+            await Task.Run(() => _audio.SelectOutputDevice(deviceName)).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // The seam is documented never to throw into a caller; this is the belt on top of those
+            // braces, and it is upstream's own shape (:1081-1086).
+            _audioTest = AudioDialsNotices.DescribeTestFailure(ex);
+        }
+        finally
+        {
+            _audioBusy = false;
+            Refresh();
+        }
+    }
+
+    /// <summary>
+    /// The port of upstream's <c>BtnTestAudio_Click</c>
+    /// (<c>MainWindow/MainWindow.UiUpdates.cs:1065-1091</c> over
+    /// <c>Services/AudioService.TestAudioPlayback</c>, <c>:553-643</c>): bring a device up and cue
+    /// one real clip at a fixed half gain, then report what came back.
+    ///
+    /// <para><b>The clip is looked for FIRST, and the device is only asked for if there is one.</b>
+    /// That inverts upstream's order (<c>:578</c> probes the device before <c>:590-607</c> looks for
+    /// a file) and it is deliberate: upstream's diagnostic exists to REPORT that probe, while this
+    /// panel already carries the device's own last typed outcome permanently
+    /// (<see cref="AudioDialsNotices.DescribeDeviceOutcome"/>). So there is nothing to gain by
+    /// seizing a render endpoint for a test that cannot play anything, and
+    /// <see cref="Audio.AudioParticipant.DeviceInitAttempts"/> stays put on the refusal — which is
+    /// the same discipline the participant applies to phase 3.</para>
+    ///
+    /// <para><b>The gain is fixed at half and does NOT scale with master</b>, which is upstream's
+    /// own decision in upstream's own words (<c>AudioService.cs:625</c>, <i>"Fixed 50% for test —
+    /// bypasses curve"</i>): a user with the master at 0 still gets to find out whether their
+    /// endpoint works.</para>
+    ///
+    /// <para>Public so a fact can await it rather than wait on a clock.</para>
+    /// </summary>
+    public async Task TestAudioAsync()
+    {
+        if (_audioBusy)
+        {
+            return;
+        }
+
+        _audioBusy = true;
+        try
+        {
+            var folders = TestClipFolders();
+            _audioTest = await Task.Run(() =>
+            {
+                var clip = FirstTestClip();
+                if (clip is null)
+                {
+                    return AudioDialsNotices.DescribeTestRefusal(folders);
+                }
+
+                var device = _audio.EnsureDevice();
+                var play = _audio.Arbitration.PlaySfx(clip, AudioDialsNotices.TestGain);
+                return AudioDialsNotices.DescribeTest(
+                    device, play, System.IO.Path.GetFileName(clip), _audio.MasterVolume);
+            }).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _audioTest = AudioDialsNotices.DescribeTestFailure(ex);
+        }
+        finally
+        {
+            _audioBusy = false;
+            Refresh();
+        }
+    }
+
+    /// <summary>
+    /// The clip the test cues, or null when there is none.
+    ///
+    /// <para><b>This build ships no sound of its own</b> — upstream's three candidates are
+    /// application resources under <c>Resources/sounds</c> (<c>AudioService.cs:590-594</c>) and those
+    /// bytes belong to the legacy tree, which is the same absence
+    /// <c>Effects/PopQuizEffect.cs:96-99</c> records for its chime. What this port has instead is
+    /// the two user clip folders its audio modules already draw from, so the test plays something a
+    /// user recognises as theirs and the refusal names a folder they can act on.</para>
+    ///
+    /// <para><b>First by name, never a random draw</b>, and that is a divergence from the pools
+    /// beside it (<c>Effects/AudioCuePool.Draw</c> picks uniformly) chosen for upstream's property
+    /// rather than upstream's mechanism: its candidate list is fixed and ordered
+    /// (<c>:590-602</c>, first existing wins), because a diagnostic that plays a different clip on
+    /// every press is a diagnostic you cannot compare two runs of.</para>
+    /// </summary>
+    private string? FirstTestClip()
+    {
+        foreach (var folder in new[] { _mindWipe.ClipFolder, _brainDrain.ClipFolder })
+        {
+            if (!Directory.Exists(folder))
+            {
+                continue;
+            }
+
+            var clip = Directory.EnumerateFiles(folder)
+                .Where(file => TestClipExtensions.Contains(
+                    System.IO.Path.GetExtension(file), StringComparer.OrdinalIgnoreCase))
+                .OrderBy(file => file, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+            if (clip is not null)
+            {
+                return clip;
+            }
+        }
+
+        return null;
+    }
+
+    private string TestClipFolders() => $"{_mindWipe.ClipFolder} or {_brainDrain.ClipFolder}";
 
     // =====================================================================================
     //  THE SCRIPTED SESSION RACK
@@ -1885,6 +2248,13 @@ public partial class StudioPage : UserControl
             HapticsEnableToggle.IsChecked = _haptics.Enabled;
             HapticsLovenseToggle.IsChecked = _haptics.Preset.Current.LovenseEnabled;
             HapticsButtplugToggle.IsChecked = _haptics.Preset.Current.ButtplugEnabled;
+
+            // The app-wide audio document, whose defaults are upstream's own on a fresh install
+            // (32 and 50, Models/AppSettings.cs:1127 and :1134). NOT the picker: its items are the
+            // machine's endpoints rather than a stored value, and enumerating them here would put a
+            // native audio context on every reload of these dials — see EnsureAudioDevicesListed.
+            AudioMasterSlider.Value = _audio.MasterVolume;
+            AudioVideoSlider.Value = _audio.VideoVolume;
         }
         finally
         {
@@ -1949,6 +2319,21 @@ public partial class StudioPage : UserControl
         HapticsGateState.Text = HapticsPanelNotices.DescribeGate(_haptics.Gate);
         HapticsSinkState.Text = HapticsPanelNotices.DescribeSink(_haptics.SinkState);
         HapticsAbsenceState.Text = HapticsPanelNotices.DescribeAbsences();
+
+        // The Audio row. NO PaintDot AND NO PaintSchedulerDot CALL — it has no Ellipse to paint,
+        // for the Visuals row's reason: there is no enable to switch, nothing to arm and no
+        // schedule to be live on. What the operating system last said about a device goes in words
+        // instead, where "nothing has been asked yet" can be said at all.
+        AudioWhatItIs.Text = AudioDialsNotices.DescribeWhatItIs();
+        AudioMasterValue.Text = $"{_audio.MasterVolume}%";
+        AudioVideoValue.Text = $"{_audio.VideoVolume}%";
+        AudioMasterState.Text = AudioDialsNotices.DescribeMaster(_audio.MasterVolume);
+        AudioVideoState.Text = AudioDialsNotices.DescribeVideo(_audio.VideoVolume);
+        AudioChoiceState.Text =
+            AudioDialsNotices.DescribeChoice(_audio.OutputDeviceName, AudioChoiceConnected);
+        AudioDeviceState.Text =
+            AudioDialsNotices.DescribeDeviceOutcome(_audio.DeviceOutcome, _audio.DeviceInitAttempts);
+        AudioTestState.Text = _audioTest;
 
         var subliminal = _session.SubliminalPreset.Current;
         SubliminalFrequencyValue.Text = subliminal.PerMinute.ToString(System.Globalization.CultureInfo.CurrentCulture);

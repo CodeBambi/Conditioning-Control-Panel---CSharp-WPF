@@ -383,6 +383,56 @@
       "tolerance": 8,
       "minPixelFraction": 0.20
     },
+
+    // THE SAME PAIR RUN IN REVERSE, AND IT IS THE FIRST ON THIS MANIFEST WHOSE TWO STATES ARE MEANT
+    // TO BE IDENTICAL. The audio row's master volume is photographed with nothing running and again
+    // with a real scripted session under way, at the SAME value (32%, upstream's fresh install,
+    // Models/AppSettings.cs:1127), and both must read the LIVE track. audio.json is not one of the
+    // eleven documents a run borrows (ScriptedSessionDials' constructor) and upstream classes
+    // volumes as COMFORT, naming audio volume in its never-lock list outright
+    // (MainWindow/MainWindow.SessionFeatureLock.cs:39-42), so a session that greyed this dial would
+    // be OVER-LOCKING - which upstream calls out as a regression in its own right
+    // (Features/SessionLock.cs:36-38) and which nothing but a composited pixel can catch.
+    //
+    // SO THE INVERSION IS ACROSS SURFACES, NOT ACROSS STATES: studio-dial-locked-track (#333333)
+    // must FAIL on both captures below, and both checks below must fail on the studio-dial locked
+    // capture. Measured on real captures at scale 1.75: this band holds 208 track pixels of 936
+    // (0.2222) in every one of the four, so the two liveries are separated by colour alone.
+    //
+    // THE FRACTION IS 0.12 AGAINST A LOWEST MEASUREMENT OF 0.2222, and the number is not the point
+    // - THE MARGIN RULE IS. A floor set near a value the product moves reds a perfectly good
+    // capture (the pop quiz ink lesson, and the trainer-card level bar's 0.10..0.30 against a 0.5949
+    // fill). This band's fraction is decided by the SLIDER'S OWN HEIGHT against the panel row it
+    // sits in, so a theme or a font change moves it without moving the claim; 0.12 is a little over
+    // half the measurement, far enough below to survive that and far enough above zero that the
+    // wrong livery - which scores 0.0000, not a near miss - cannot pass.
+    //
+    // TOLERANCE 8, which is dashboard-background's and studio-dial's: 51/69/161 separates the two
+    // colours and a slider is enabled or it is not, so there is no third livery to confuse them
+    // with. RackPresentationTests asserts that separation mechanically, so widening it reds the
+    // floor by name.
+    {
+      "name": "audio-dial-live-track",
+      "surface": "audio-dial",
+      "state": "live",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.40, "w": 0.08, "h": 0.20 } },
+      "expectedColor": "#0078D4",
+      "tolerance": 8,
+      "minPixelFraction": 0.12
+    },
+    {
+      "name": "audio-dial-running-track",
+      "surface": "audio-dial",
+      "state": "running",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.40, "w": 0.08, "h": 0.20 } },
+      "expectedColor": "#0078D4",
+      "tolerance": 8,
+      "minPixelFraction": 0.12
+    },
     // THE AI PERMISSIONS GRID. Both checks read the SAME derived band - 380x4 DIP, 8 DIP below the
     // master switch's own UIA rect - in the two states one press of that switch produces. In
     // `admitted` those pixels are the permissions panel's own padding (#FF1E1822 behind its amber
