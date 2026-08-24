@@ -282,6 +282,18 @@ export const DEFAULT_LEXICON = Object.freeze({
   game_sort: 'Sort',
   game_instant_recall: 'Instant Recall',
   game_echo: 'Echo',
+
+  /* ORIENTATION DAY (ORIENTATION.md §3 / §5, shell/orientation.js) - the
+     school's once-ever hello. Four rows: the beat's own name, and EMI's three
+     lines, resolved here and handed to the `orientation` moment as
+     `payload.line` (emi/moments.js keeps the same three as its fallback, and
+     owns the faces). All well under the 96-char MergeModTable cap, so a mod
+     re-voices the whole beat. The room this walks to is the Front Office and it
+     is NEVER named in any of them. */
+  orientation_kicker: 'Orientation Day',
+  emi_orientation_hi: 'a new student! i did a little spin. you missed it.',
+  emi_orientation_card: "official! now you have to come back. it's the rules.",
+  emi_orientation_go: "go! your first class doesn't know how lucky it is.",
 });
 
 let table = Object.create(null);

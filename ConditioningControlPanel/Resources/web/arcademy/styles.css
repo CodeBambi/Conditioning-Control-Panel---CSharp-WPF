@@ -2033,6 +2033,64 @@ g.campus-students { pointer-events:none; }
   font-family:var(--pix); font-size:6px; fill:var(--lav); text-anchor:middle;
 }
 
+/* ========================== THE WALK (the player) =======================
+   shell/walk.js draws into `g.campus-walker`, the SIBLING mounted immediately
+   after `g.campus-students` - so YOU are drawn in front of the crowd and both
+   of you stay under the rooms, the door arcs and the stop badges. Same three
+   inherited laws as the student body:
+
+     - NOT ONE HEX. Gold is `--gold`, the token the plan already reskins with.
+     - `pointer-events:none` ON THE LAYER (trap 59). The walker may never eat a
+       click meant for a door - attract Law II's precedent, and the reason the
+       attract cursor carries the same rule.
+     - NO COMPETING `[hidden]` RULE and no bare `display:` on anything the shell
+       toggles (trap 27). Nothing below writes one.
+
+   FOUR STATES, FOUR LOOKS, and every colour already existed: pink march is
+   tonight's route, gold march is you walking NOW, faint gold is where you have
+   been tonight, faint lavender (`.campus-route.done`) is the route completed.
+   ---------------------------------------------------------------------- */
+g.campus-walker { pointer-events:none; }
+
+/* THE WAKE. Same dash grammar as the route, in gold, and it reuses the route's
+   own `campus-march` keyframes - one marching-ants animation on this page. */
+.campus-trace {
+  fill:none; stroke:var(--gold); stroke-width:2.5;
+  stroke-dasharray:3 9; stroke-linecap:round; opacity:.9;
+  animation:campus-march 1.6s linear infinite;
+  /* NO BLOOM, deliberately. The route wears a drop-shadow because it is the
+     background layer and needs to lift off the carpet; the trace is drawn over
+     it and is the only GOLD line on the plan, so it reads without one - and a
+     filter on a line that is repainted every frame is a surface per frame
+     (trap 36 family). The residue below is cheaper still. */
+}
+/* the 600ms hand-off from live trace to residue (walk.js retire()) */
+.campus-trace.fading { transition:opacity .6s ease; opacity:.22; }
+/* WHERE YOU HAVE BEEN TONIGHT. No march, no bloom - a residue that marched
+   would compete with the route for the same read. */
+.campus-trace.residue {
+  opacity:.22; animation:none; filter:none; stroke-width:2;
+}
+
+/* THE MINIATURE. It is a ghost's body (one sprite builder, ghosts.js) with
+   three differences and all three are here: never age-tinted, a gold ring on
+   the floor under the feet, and a size that reads as the foreground. */
+.gh-you { opacity:1; }
+/* the per-id hue-rotate filters are a GHOST's variety; you are always you, so
+   they are cancelled here and the two fills below are the whole palette. */
+.gh-you .gh-sprite rect { shape-rendering:crispEdges; filter:none; }
+.gh-you .gh-hair  { fill:var(--gold); }
+.gh-you .gh-shirt { fill:color-mix(in srgb, var(--gold), var(--pink) 45%); }
+.gh-you .gh-sprite {
+  filter:drop-shadow(0 0 2.5px var(--gold))
+         drop-shadow(0 0 7px color-mix(in srgb, var(--gold), transparent 55%));
+}
+/* the ground ring - a shadow you can find on a busy plan */
+.gh-youring {
+  fill:color-mix(in srgb, var(--gold), transparent 78%);
+  stroke:var(--gold); stroke-width:.8; opacity:.75;
+}
+
 /* REDUCED MOTION / the lit-down rung: ghosts stand where they stand. ghosts.js
    already refuses to walk them - this is the belt on those braces, and it takes
    the bubble's entry and the S pop with it. */
@@ -2040,9 +2098,16 @@ html.arc-reduced .gh-bubble,
 html.arc-reduced .gh-spark line,
 html.arc-reduced .campus-student[data-scene="nod"] .gh-inner { animation:none; }
 html.arc-reduced .campus-student { transition:none; }
+/* THE WALK under the same rung: walk.js already refuses to animate (the trace
+   appears whole and the miniature snaps), so this is the belt on those braces -
+   static dashes, no march (ORIENTATION §2.3). */
+html.arc-reduced .campus-trace { animation:none; }
+html.arc-reduced .campus-trace.fading { transition:none; opacity:.22; }
 @media (prefers-reduced-motion: reduce) {
   .gh-bubble, .gh-spark line, .campus-student[data-scene="nod"] .gh-inner { animation:none; }
   .campus-student { transition:none; }
+  .campus-trace { animation:none; }
+  .campus-trace.fading { transition:none; opacity:.22; }
 }
 
 /* small stages: hide the flourishes before they collide with the board */

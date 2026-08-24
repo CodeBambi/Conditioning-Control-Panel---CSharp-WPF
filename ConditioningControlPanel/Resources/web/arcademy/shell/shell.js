@@ -37,6 +37,8 @@ import {
 import { createBoard } from './splitflap.js';
 import { createCampus, campusState } from './campus.js';
 import { createGhosts, presenceOptions } from './ghosts.js';
+import { createWalker, roomStop } from './walk.js';
+import { createOrientation, needsOrientation, orientationOptions } from './orientation.js';
 import { createReportCard } from './reportcard.js';
 import { createSettingsPage, boardSizeKey, SETTING_KEYS, isGlobalSettingKey } from './settings.js';
 import { createCeremonies } from './ceremonies.js';
@@ -468,12 +470,53 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * free rather than a second cold open. */
   let vn = null;
   let splashSpent = false;
+  /* Has the first-night stage cleared? False until `onSplashDone` has run AND
+   * FIRST BELL has finished (or was never armed). Orientation Day may not start
+   * before both: the boot campus runs its 4.5s entry reveal UNDER the ~3s
+   * splash, so `revealDone` lands ~1.5s after the splash falls - which on a
+   * genuine first night is the middle of the cold open's first scene (measured
+   * live; the beat played under the VN plates and was spent unseen). */
+  let stageClear = false;
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
   // THE STUDENT BODY (PRESENCE.md). Optional in exactly the way the campus is:
   // it hangs off the campus's own ghost layer, so it lives and dies with it and
   // no other screen has ever heard of it.
   let ghosts = null;
+  /* THE WALK (ORIENTATION.md §2). The player miniature. Optional in exactly the
+   * way the campus and the ghosts are - it hangs off the campus's own walker
+   * layer, lives and dies with it, and no other screen has ever heard of it. */
+  let walker = null;
+  /* ORIENTATION DAY (ORIENTATION.md §3). The once-ever first-visit beat, and
+   * optional in exactly the way the campus, the ghosts and the walker are: it
+   * hangs off the campus, lives and dies with it, and a module that fails to
+   * load or throws on build costs the beat and NOTHING else - the card is shown
+   * immediately in that case (see the build below). */
+  let orientation = null;
+  /* WHERE YOU ARE STANDING, and it is SESSION-ONLY. null = the Main Gate, i.e.
+   * you have just arrived at school; otherwise the room key you last walked
+   * into, so coming back out of a class puts you at its door instead of
+   * teleporting you to the gate. Nothing persisted, nothing posted - a reload
+   * puts you back at the gate, which is diegetically correct (§2.2). */
+  let lastRoomKey = null;
+  /* TONIGHT'S RESIDUE: the finished traces, as DATA, so they survive a screen
+   * change and are re-rendered on the next campus mount. FIFO-capped inside
+   * walk.js (RESIDUE_MAX). Cleared at end-run with the rest of the shell. */
+  let residueTrail = [];
+  /* THE ONE DOOR ORIENTATION DAY STARTS THROUGH. Every seam that could be "the
+   * moment the player can finally see the campus" funnels here - the campus's
+   * revealDone hook, the build-time already-revealed check, `onSplashDone`'s
+   * post-FIRST-BELL callback and the suspend lift - and the conditions are
+   * checked in ONE place so no seam can rediscover the mid-VN bug on its own:
+   * the stage must be clear (splash down, cold open done or never armed), the
+   * campus must exist, be revealed and be the live screen, and nothing may be
+   * suspended. `start()` is state-guarded, so N callers cost nothing. */
+  const maybeStartOrientation = () => {
+    if (!orientation || !stageClear || suspendedGlobally) return;
+    if (screen !== 'board') return;
+    if (!campus || typeof campus.revealDone !== 'function' || !campus.revealDone()) return;
+    try { orientation.start(); } catch (e) { say('orientation start threw: ' + ((e && e.message) || e)); }
+  };
   let extrasBox = null;            // replay/report bar + yesterday strip container
   let settingsPage = null;
   let reportCard = null;
@@ -752,8 +795,30 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // beside dismissEndCard() at every real screen change instead, and
     // showReport() re-seats it after a repaint (same treatment, same reason).
     // The campus owns a 1s bell interval; a screen wipe must not orphan it.
+    /* ORIENTATION GOES FIRST, WHILE THERE IS STILL A CAMPUS TO LAND IN. Its
+     * destroy() is the abort path (§3.3): the student ID lands in its home slot
+     * and `seenAt` is banked, and both of those need `campus.idCardEl()` to
+     * still be attached. Tear it down after the campus and a player who clicked
+     * a door mid-beat would own no card and be offered the beat again. */
+    if (orientation) {
+      const ob = orientation;
+      orientation = null;
+      try { ob.destroy(); } catch (e) { /* noop */ }
+    }
     if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
     if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
+    /* THE WALKER GOES LAST AND ITS RESIDUE IS BANKED FIRST. `campus` is already
+     * null by the time destroy() runs, which is what makes a pending onDone
+     * safe: walk.js pays it (a launch is never silently swallowed), the funnel
+     * below sees the campus gone and declines to deal a class into a screen
+     * that has already moved on. Nulling `walker` before destroying it is the
+     * other half - a re-entrant clearScreen finds nothing left to tear down. */
+    if (walker) {
+      const w = walker;
+      walker = null;
+      try { residueTrail = w.residue(); } catch (e) { /* noop */ }
+      try { w.destroy(); } catch (e) { /* noop */ }
+    }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
      * funnels through here, so dropping it here is what stops a gate the campus
@@ -1042,6 +1107,61 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       onSelect: onSelectRow,
     });
 
+    /* ========================= THE ONE WALK FUNNEL =======================
+     * Every diegetic way into a room goes through here: `begin`, `freeSwim`,
+     * the Records door and the Front Office DOOR. You walk there, and the
+     * thing you were going to do happens when you arrive.
+     *
+     * Three laws, and the third is the one that matters:
+     *   - the topbar gear is NOT in here. It is the shortcut; the Front Office
+     *     room is the diegetic door (ORIENTATION §2.3, and campus.js routes the
+     *     two apart through `registrarRoom`).
+     *   - `lastRoomKey` is written HERE and only here, so "where you are
+     *     standing" is exactly "the last door you actually walked through".
+     *   - THE WALK IS DECORATION AND THE LAUNCH IS NOT. No walker, a walker
+     *     that throws, an unknown room, a zero-length path - every one of them
+     *     runs the action anyway. The single case that does NOT launch is a
+     *     campus that was torn down mid-walk (a suspend, an end-run): the
+     *     screen has moved on and dealing a class into it would be the bug.
+     * ==================================================================== */
+    const walkThen = (targetKey, action) => {
+      const fire = () => { try { action(); } catch (e) { say('room action threw: ' + ((e && e.message) || e)); } };
+      if (!walker) { lastRoomKey = targetKey; fire(); return; }
+      let spent = false;
+      const owner = campus;
+      const go = () => {
+        if (spent) return;
+        spent = true;
+        try { if (walker) residueTrail = walker.residue(); } catch (e) { /* noop */ }
+        if (!campus || campus !== owner) {
+          say('walk: the campus went away mid-walk - ' + targetKey + ' dropped');
+          return;
+        }
+        lastRoomKey = targetKey;
+        fire();
+      };
+      try { walker.walkTo(targetKey, { onDone: go }); }
+      catch (e) { say('walk refused (' + ((e && e.message) || e) + ') - straight in'); go(); }
+    };
+
+    /* ==================== IS THIS THE FIRST NIGHT? =======================
+     * ORIENTATION.md §3.1/§3.2. The decision is SYNCHRONOUS and taken HERE,
+     * before the campus is built, because it changes how the campus is built:
+     * a first-night student's ID card is withheld so the beat can hand it over,
+     * and everybody else's is the furniture it has always been. Meta is already
+     * local, so there is no async gap and no flash - and if orientation.js is
+     * absent or throws below, `idCardMode` reverts to 'shown' the same turn
+     * (the decoration law, and the card is never the thing that is lost).
+     *
+     * `?orientation=force` is the play-test path: it plays the beat over any
+     * meta at all and deliberately writes nothing.
+     * =================================================================== */
+    let orientForced = false;
+    try { orientForced = !!orientationOptions().force; } catch (e) { orientForced = false; }
+    let wantsOrientation = false;
+    try { wantsOrientation = orientForced || needsOrientation(store); }
+    catch (e) { say('orientation gate threw: ' + ((e && e.message) || e)); wantsOrientation = false; }
+
     /* THE CAMPUS IS OPTIONAL. A hub that throws costs the scenery, never the
      * school: the catch below renders the plain panel the shell shipped with
      * (full chip rows, same buttons), which is also what the headless suites
@@ -1062,15 +1182,30 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // opened once TODAY (local date - it is attendance furniture, not
         // content; regression #978's rule).
         boardPulse: store.get('boardOpenedDate') !== localDate,
+        // ORIENTATION DAY §3.2: the card is WITHHELD on a first night so the
+        // beat can hand over the very same node. One card object either way.
+        idCardMode: wantsOrientation ? 'withheld' : 'shown',
+        // ...and the idle attract may not deal a cursor over the handover (§4).
+        // Asked at the ONE place attract decides to begin; a beat that is over
+        // (or was never built) says false and attract arms exactly as before.
+        holdAttract: () => {
+          try { return !!(orientation && orientation.active()); } catch (e) { return false; }
+        },
         on: {
           /* THE STUDENT BODY STARTS HERE AND NOWHERE ELSE (PRESENCE §4): after
            * the entry reveal, never during it. The campus fires this once; a
-           * layer that failed to build simply never answers. */
+           * layer that failed to build simply never answers.
+           * ORIENTATION DAY rides the SAME slot, after the ghosts - through
+           * `maybeStartOrientation`, because this hook alone is NOT enough: the
+           * boot campus runs this reveal UNDER the splash, and on a first night
+           * FIRST BELL owns the screen after that. The funnel waits for all of
+           * them; the post-VN start is paid by `onSplashDone`. */
           revealDone: () => {
             try { if (ghosts) ghosts.start(); } catch (e) { say('presence start threw: ' + ((e && e.message) || e)); }
             // FIRST BELL's second gate: the school has finished standing up.
             bellBoardRevealed = true;
             maybeFirstBell();
+            maybeStartOrientation();
           },
           boardToggle: (expanded) => {
             if (!expanded) return;
@@ -1081,7 +1216,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
             } catch (e) { say('boardOpenedDate write failed: ' + ((e && e.message) || e)); }
             if (board) board.replay();
           },
-          begin: (gameKey) => {
+          begin: (gameKey) => walkThen(gameKey, () => {
             const cls = timetable.classes.find((c) => c.gameKey === gameKey);
             if (cls) { startClass(cls); return; }
             // THE DEV DOOR: a room off tonight's board still opens when the host
@@ -1101,9 +1236,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
               say('dev pass: ' + gameKey + ' is off the board - graded run anyway');
               startClass(freeSwimClass(gameKey));
             }
-          },
-          freeSwim: (gameKey) => startFreeSwim(gameKey),
-          records: () => showRecords(),
+          }),
+          freeSwim: (gameKey) => walkThen(gameKey, () => startFreeSwim(gameKey)),
+          records: () => walkThen('records', () => showRecords()),
+          /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
+           * for the Front Office room and falls back to `registrar` for the
+           * topbar gear, so these two lines are the whole split. */
+          registrarRoom: () => walkThen('registrar', () => showSettings()),
           registrar: () => showSettings(),
         },
         log: say,
@@ -1132,6 +1271,61 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       } catch (e) {
         say('presence layer unavailable (' + ((e && e.message) || e) + ')');
         ghosts = null;
+      }
+      /* THE WALK. Its own try/catch for the ghost layer's reason: a walker that
+       * fails to build costs the player a walk, never the school - `walkThen`
+       * above sees `walker === null` and launches the class directly. Built
+       * after the stage is in the document so the miniature has a plan to stand
+       * on, and seeded with where the session says you are standing: the door
+       * you last walked into, or the Main Gate on a fresh campus. */
+      try {
+        walker = createWalker({
+          mount: campus.walkMount,
+          reducedMotion,
+          // There is no unified player hash on `init` today, so the body is
+          // dealt from a stable constant. The day presence projects a self id,
+          // this is the one line that changes.
+          spriteId: 'self',
+          log: say,
+        });
+        walker.setResidue(residueTrail);
+        walker.mountAt(lastRoomKey ? roomStop(lastRoomKey) : null);
+      } catch (e) {
+        say('the walk is unavailable (' + ((e && e.message) || e) + ')');
+        walker = null;
+      }
+      /* ORIENTATION DAY (§3.3). Built last (it consumes the campus AND the
+       * walker) and started from `revealDone` above, never during the entry
+       * reveal. Its own try/catch, and the catch has a JOB the other two do not:
+       * the campus was built with the card WITHHELD on the strength of this
+       * module, so a beat that cannot be built must hand the card over on the
+       * spot. That is the whole decoration law here - the school is unharmed
+       * and the player is not missing their ID, they simply never got a show. */
+      if (wantsOrientation) {
+        try {
+          orientation = createOrientation({
+            campus,
+            walker,
+            store,
+            fireMoment,
+            t,
+            localDate,
+            reducedMotion,
+            forced: orientForced,
+            log: say,
+          });
+          /* A reveal that already ran only counts once the STAGE is clear: the
+           * boot mount reaches here revealed-but-curtained (splash, then on a
+           * first night FIRST BELL), and its start is onSplashDone's to pay. A
+           * LATER mount - a `?orientation=force` replay after a class - is past
+           * all of that and starts right here like everything else. */
+          maybeStartOrientation();
+        } catch (e) {
+          say('orientation unavailable (' + ((e && e.message) || e) + ') - the card is simply given');
+          orientation = null;
+          try { const c = campus.idCardEl && campus.idCardEl(); if (c) c.hidden = false; }
+          catch (e2) { /* noop */ }
+        }
       }
       // The window IS the campus: the topbar's content is diegetic in-scene
       // (crest, student ID, Front Office/gear), so the bar itself steps aside.
@@ -2721,6 +2915,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // NO GHOSTS UNDER A MANDATORY VIDEO. The layer rides the same one funnel the
     // pause card does, and it is a LEVEL (trap 28), so both edges are written.
     if (ghosts) { try { ghosts.setPaused(!!on); } catch (e) { /* noop */ } }
+    /* AND NO BEAT UNDER ONE EITHER. A RUNNING beat is ENDED rather than paused:
+     * the card lands, `seenAt` is banked, and it never replays after the video
+     * (trap 28's spirit - a beat that came back afterwards would be a beat the
+     * player watched twice). skip() refuses an IDLE beat on purpose - one still
+     * waiting behind the splash or FIRST BELL has shown nothing yet, so it
+     * simply stands down (onSplashDone's `beat` checks this flag) and the LIFT
+     * edge below hands it its stage back. start() is state-guarded, so a beat
+     * that already ran, skipped or never existed makes the lift a no-op. */
+    if (on && orientation) { try { orientation.skip(); } catch (e) { /* noop */ } }
+    if (!on) maybeStartOrientation();
     if (active) {
       try { active.engine.suspend(!!on); } catch (e) { say('engine.suspend threw: ' + ((e && e.message) || e)); }
       try { active.peek.forceHide(); } catch (e) { /* noop */ }
@@ -2912,16 +3116,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     onSplashDone() {
       if (splashSpent) return;
       splashSpent = true;
-      /* THE BELL RIDES THE SAME FUNNEL, and deliberately not a second one:
-       * `splashDone` calls back exactly once whether the opening played, stood
-       * down or threw (trap 76), and a night with no controller has nothing to
-       * wait for at all. maybeFirstBell is latched, so a double call is free. */
-      const cleared = () => { bellSplashCleared = true; maybeFirstBell(); };
-      try { if (vn) vn.splashDone(cleared); else cleared(); }
-      catch (e) {
-        say('first bell cold open skipped (' + ((e && e.message) || e) + ')');
-        cleared();
-      }
+      /* THE BELL AND ORIENTATION DAY BOTH RIDE THIS ONE FUNNEL, deliberately
+       * not two: `splashDone` calls back exactly once whether the opening
+       * played, stood down or threw (trap 76). The continuation pays BOTH
+       * debts - the bell's latch (maybeFirstBell is latched, a double call is
+       * free) and the stage-clear that lets `maybeStartOrientation` re-check
+       * everything else (campus revealed, live screen, no suspend), so a beat
+       * can never start under a curtain from ANY seam. */
+      const cleared = () => {
+        bellSplashCleared = true; maybeFirstBell();
+        stageClear = true; maybeStartOrientation();
+      };
+      try { if (vn) { vn.splashDone(cleared); return; } }
+      catch (e) { say('first bell cold open skipped (' + ((e && e.message) || e) + ')'); }
+      cleared();
     },
 
     /** {type:'suspend'} */
@@ -2963,6 +3171,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         const intro = active.enrollEl;
         active.enrollEl = null;
         try { intro.skip(); } catch (e) { /* noop */ }
+        return true;
+      }
+      /* ORIENTATION DAY, WHILE IT IS ON STAGE AND NEVER OTHERWISE. Esc during
+       * the beat means "yes, fine, give me the card" - it lands instantly, the
+       * beat is banked as seen, and the press is spent. `active()` is false the
+       * rest of the night, so this is a rung that EXISTS for ~6 seconds once
+       * ever and adds nothing permanent to the ladder (traps 29/48). It sits
+       * above the door card because a beat is the newer thing on screen; in
+       * practice they cannot both be up, since the click that opens a door card
+       * has already aborted the beat. */
+      if (orientation && orientation.active()) {
+        try { orientation.skip(); } catch (e) { /* noop */ }
         return true;
       }
       // The campus door card is the outermost thing a tap can close.
@@ -3027,8 +3247,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       disarmPunch();
       teardownClass();
       setStage(null);
+      if (orientation) { const ob = orientation; orientation = null; try { ob.destroy(); } catch (e) { /* noop */ } }
       if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
       if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
+      if (walker) { const w = walker; walker = null; try { w.destroy(); } catch (e) { /* noop */ } }
+      // END OF RUN: the residue is tonight's, and tonight is over (§2.4).
+      residueTrail = [];
+      lastRoomKey = null;
       if (vn) { try { vn.destroy(); } catch (e) { /* noop */ } vn = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
       if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } }

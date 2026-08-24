@@ -2142,6 +2142,16 @@ internal static class ArcademyHostService
         ["cp_zen_done"] = "Whole, in your own time.",
         ["cp_zen_grid"] = "Zen board",
         ["cp_zen_grid_hint"] = "Zen only. A timed class plays the board your year has earned.",
+        // ---- ORIENTATION DAY (2026-08-24, planning/arcademy/ORIENTATION.md §3/§5)
+        // The school's once-ever hello: the walk to the front office, the student ID
+        // handover, EMI's three lines. Mirrors core/lexicon.js DEFAULT_LEXICON verbatim
+        // - copy the values, do not re-word them (the IC_LEX rule); the page resolves
+        // them and hands them to emi/moments.js as payload.line. All well under the
+        // 96-char cap (trap 26), so a mod re-voices the whole beat.
+        ["orientation_kicker"] = "Orientation Day",
+        ["emi_orientation_hi"] = "a new student! i did a little spin. you missed it.",
+        ["emi_orientation_card"] = "official! now you have to come back. it's the rules.",
+        ["emi_orientation_go"] = "go! your first class doesn't know how lucky it is.",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via

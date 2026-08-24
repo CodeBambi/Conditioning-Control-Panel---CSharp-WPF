@@ -652,11 +652,18 @@ function svgNode(tag, attrs, cls) {
 
 function rect(x, y, w, h, cls) { return svgNode('rect', { x, y, width: w, height: h }, cls); }
 
-/** Build the pixel student. 10 units wide, ~16 tall, feet on the origin.
- * EXPORTED for the Annex camera wall (annex/cams.js): the fake feeds draw
- * THIS student, never a copy of it - one body for the whole school (the
- * "lifted, not copied" rule above). Still pure: no snapshot, no schedule,
- * no bridge - a caller gets a <g> of rects and owns where it stands. */
+/**
+ * Build the pixel student. 10 units wide, ~16 tall, feet on the origin.
+ *
+ * ONE BODY FOR THE WHOLE SCHOOL. Exported twice for two callers:
+ *  - `buildSprite` for the Annex camera wall (annex/cams.js) - the fake feeds
+ *    draw THIS student, never a copy of it (the "lifted, not copied" rule).
+ *  - `buildStudentSprite` alias below for the Walk's player miniature
+ *    (ORIENTATION.md §2.1) - the miniature is THE SAME BODY as a ghost, so a
+ *    mod that reskins the student body reskins you with it; they can't drift.
+ * Still pure: no snapshot, no schedule, no bridge - a caller gets a <g> of
+ * rects and owns where it stands.
+ */
 export function buildSprite(id) {
   const tr = spriteTraitsFor(id);
   const g = svgNode('g', null, 'gh-sprite');
@@ -687,6 +694,9 @@ export function buildSprite(id) {
   put(rect(1, top + 13, 2, tr.tall ? 3 : 1, 'gh-leg'));
   return g;
 }
+
+/** THE SEAM shell/walk.js imports. Same function, a name a stranger can read. */
+export { buildSprite as buildStudentSprite };
 
 /** The discord tier's avatar chip. Falls back to the sprite on any load error. */
 function buildChip(id, url, onFail) {

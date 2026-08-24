@@ -464,6 +464,40 @@ export function bellLabel(totalSec) {
  * Every leg any of these functions returns stays inside that union.
  * ==========================================================================*/
 
+/**
+ * THE TWO COUNTERS, as walk-graph rooms.
+ *
+ * Records and the Front Office are drawn by `facility()` below, not by the
+ * ROOMS table - they are furniture, never classes, and `campusState` must never
+ * see them. But THE WALK (ORIENTATION.md §2) has to reach them: a player who
+ * clicks the Records door walks there like they walk to any other room, and one
+ * corridor grammar is the whole law (ghosts.js's LAW 2). So the two counters get
+ * a table of their own, in the SAME shape ROOMS uses (`rect`/`side`/`door`), and
+ * `stopAnchor` / `doorPoint` / `walkLegs` fall through to it.
+ *
+ * They open WEST onto the east wing's alley (x 1240..1260, mouth y 434..506), so
+ * their dwell anchor is the middle of that alley at the door's own y - which the
+ * existing three-step grammar reaches with no special case at all: onto the
+ * hall's centre line, east along it and through the mouth, then up (or down) the
+ * alley to the counter. Nothing here is a second pathing system.
+ *
+ * `facility()` reads its geometry from this table, so there is exactly one place
+ * either counter's rect or door lives.
+ */
+export const FACILITIES = Object.freeze({
+  records: Object.freeze({
+    rect: [1260, 380, 108, 84], side: 'w', door: 422, stop: [1250, 422], rm: '001',
+  }),
+  registrar: Object.freeze({
+    rect: [1260, 476, 108, 84], side: 'w', door: 518, stop: [1250, 518], rm: '002',
+  }),
+});
+
+/** ROOMS first, the two counters second. Pure; undefined for anything else. */
+function walkSpec(key) {
+  return ROOMS[key] || FACILITIES[key];
+}
+
 /** The Main Gate, where every night's route (and every ghost) walks in. */
 export const CAMPUS_GATE = Object.freeze([720, 908]);
 /** The Main Hall's centre line - the lane the route and the ghosts walk. */
@@ -478,7 +512,7 @@ export const CAMPUS_ENTER_MS = 4500;
  * near its door). Pure.
  */
 export function stopAnchor(key) {
-  const spec = ROOMS[key] || {};
+  const spec = walkSpec(key) || {};
   if (spec.stop) return spec.stop;
   return spec.side === 'n' ? [spec.door, 447] : [spec.door, 488];
 }
@@ -489,7 +523,7 @@ export function stopAnchor(key) {
  * encounter never stages on top of a swinging leaf. Pure; null for an unknown key.
  */
 export function doorPoint(key) {
-  const spec = ROOMS[key];
+  const spec = walkSpec(key);
   if (!spec || spec.door == null) return null;
   if (spec.side === 'n') return [spec.door, spec.wallY != null ? spec.wallY : 430];
   if (spec.side === 'w' || spec.side === 'e') {
@@ -536,7 +570,7 @@ export function routeFor(stops) {
  * Pure; an unknown room key answers an empty list (the caller skips that leg).
  */
 export function walkLegs(from, key) {
-  const spec = ROOMS[key];
+  const spec = walkSpec(key);
   if (!spec || !from) return [];
   const anchor = stopAnchor(key);
   // Already standing on the plaque (two classes running back to back in the
@@ -641,6 +675,13 @@ function el(tag, cls, text) {
  *   it so every player gets the SAME show tonight (trap 8: UTC seeds content).
  *   Omitted, it falls back to today's UTC date.
  * @param {number=} o.attractIdleMs  test seam; defaults to ATTRACT_IDLE_MS.
+ * @param {string=} o.idCardMode  'shown' (default) | 'withheld'. 'withheld'
+ *   builds the bottom-left student ID hidden, for Orientation Day's handover
+ *   (ORIENTATION.md §3.2). One node either way - see idCardEl().
+ * @param {Function=} o.holdAttract  () => boolean. Answered TRUE while a beat
+ *   is on stage, and the idle attract then refuses to start and simply re-arms
+ *   (ORIENTATION.md §4). Default is a function that always says false, so a
+ *   caller that has never heard of a beat behaves exactly as it did.
  * @param {boolean=} o.boardPulse  the timetable has NOT been opened yet today:
  *   the collapsed plaque's clock pulses until the first expand. The shell
  *   decides (it owns the local date + the store); the campus only wears it.
@@ -648,13 +689,14 @@ function el(tag, cls, text) {
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
-  dateSeed, attractIdleMs, boardPulse } = {}) {
+  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   const name = typeof gameName === 'function' ? gameName : (k) => String(k);
   let st = state || campusState({ classes: [], records: {} });
   let cardOpen = false;
   let destroyed = false;
+  const holdsAttract = typeof holdAttract === 'function' ? holdAttract : () => false;
 
   const root = el('div', 'campus-stage enter');
   root.appendChild(el('div', 'campus-stars'));
@@ -954,6 +996,19 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   ghostLayer.setAttribute('aria-hidden', 'true');
   plan.appendChild(ghostLayer);
 
+  /* THE WALKER'S LAYER (ORIENTATION.md §2.1) - the player miniature and its
+   * gold trace. A SIBLING of the ghost layer and mounted immediately after it,
+   * which is the whole z-order story: YOU are drawn in front of the crowd, and
+   * both of you stay under the rooms, their door arcs, the stop badges, the
+   * tooltip and the card scrim - so a walker can never cover a door you are
+   * about to click. `pointer-events:none` in the sheet, for the ghost layer's
+   * reason (trap 59): a full-plan layer that took clicks would eat every room.
+   * The campus owns the node and nothing else about the feature - shell/walk.js
+   * fills it, and a campus built without a walker carries an empty group. */
+  const walkLayer = svg('g', null, 'campus-walker');
+  walkLayer.setAttribute('aria-hidden', 'true');
+  plan.appendChild(walkLayer);
+
   /* ------------------------------ rooms ---------------------------------- */
   /* A door is the architect's symbol: a gap in the wall plus the leaf pivoting
    * on one jamb. `spec.door` is the coordinate ALONG that wall - an x on the
@@ -1222,11 +1277,12 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   /* Records (the punch-card wall + the report card) - office, upper counter */
   const recordsG = facility({
-    rect: [1260, 380, 108, 84], door: 422, side: 'w', compact: true,
+    rect: FACILITIES.records.rect, door: FACILITIES.records.door,
+    side: FACILITIES.records.side, compact: true,
     neonY: 388, nameY: 426,
     sign: t('report_card', 'Report Card'),
     name: t('campus_records', 'Records'),
-    rm: '001',
+    rm: FACILITIES.records.rm,
     onClick: () => { if (handlers.records) handlers.records(); },
     tip: () => ({
       name: t('campus_records', 'Records'),
@@ -1246,12 +1302,21 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   /* Front Office (ex-Registrar; settings) - office, lower counter */
   const regG = facility({
-    rect: [1260, 476, 108, 84], door: 518, side: 'w', compact: true,
+    rect: FACILITIES.registrar.rect, door: FACILITIES.registrar.door,
+    side: FACILITIES.registrar.side, compact: true,
     neonY: 484, nameY: 522,
     sign: t('settings', 'Settings'),
     name: t('campus_registrar', 'Front Office'),
-    rm: '002',
-    onClick: () => { if (handlers.registrar) handlers.registrar(); },
+    rm: FACILITIES.registrar.rm,
+    /* THE ROOM CLICK IS NOT THE GEAR (ORIENTATION.md §2.3). The topbar gear is
+     * the SHORTCUT and must never walk; the Front Office door is the diegetic
+     * way in and does. Both still end at the same page, so a caller that only
+     * knows `registrar` (every caller before The Walk, and every suite) is
+     * unchanged - `registrarRoom` is an OPT-IN override, never a requirement. */
+    onClick: () => {
+      const fn = handlers.registrarRoom || handlers.registrar;
+      if (fn) fn();
+    },
     tip: () => ({
       name: t('campus_registrar', 'Front Office'),
       status: t('settings', 'Settings'),
@@ -1461,6 +1526,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
 
   /* ------------------------------ student ID ----------------------------- */
   const id = el('div', 'campus-idcard');
+  /* WITHHELD IS A MODE, NOT A SECOND CARD (ORIENTATION.md §3.2). Orientation Day
+   * hands this exact node to the player mid-air, so there is only ever ONE card
+   * object: 'withheld' builds it hidden and the beat un-hides the same element.
+   * The default is 'shown', so every caller that has never heard of orientation
+   * gets the furniture it has always got. Hidden through the `hidden` PROPERTY
+   * and the sheet's `[hidden]{display:none!important}` reset - never a bare
+   * `display:` on this node (trap 27). */
+  if (idCardMode === 'withheld') id.hidden = true;
   const idTop = el('div', 'id-top');
   idTop.appendChild(el('div', 'id-photo'));
   const idMeta = el('div');
@@ -1980,7 +2053,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   function startAttract() {
     idleTimer = 0;
     // A card in front of the plan means the player is mid-decision, not idle.
-    if (destroyed || attractOn || cardOpen) { armIdle(); return; }
+    // A BEAT ON STAGE means the same thing and more: a stalled tab must never
+    // deal an attract cursor over Orientation Day's handover (ORIENTATION §4).
+    // The hold is asked HERE, at the one place the attract decides to begin, so
+    // there is no second timer and no second flag to keep in sync.
+    let held = false;
+    try { held = !!holdsAttract(); } catch (e) { held = false; }
+    if (destroyed || attractOn || cardOpen || held) { armIdle(); return; }
     // EMI SEAM: the player has gone quiet ON THE CAMPUS. The attract's own idle
     // edge is the signal - a mascot does not get a second idle timer.
     try { fireMoment('idlePlayer', { where: 'hub' }); } catch (e) { /* noop */ }
@@ -2052,6 +2131,44 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     footMount,
     /** THE STUDENT BODY'S SEAM: the one group shell/ghosts.js draws into. */
     ghostMount: ghostLayer,
+    /** THE WALK'S SEAM: the one group shell/walk.js draws into (above ghosts). */
+    walkMount: walkLayer,
+    /** The ONE student-ID node. Orientation Day animates this, never a copy. */
+    idCardEl() { return id; },
+    /**
+     * The two counters' groups, by walk-graph key. Orientation Day pulses the
+     * Front Office's own neon sign on arrival (§3.3 step 3) and a beat may not
+     * guess at a selector to find it - `roomRefs` holds GAME rooms only, so
+     * this is the facility half of the same idea. Unknown keys answer null.
+     * @param {string} key  'records' | 'registrar'
+     * @returns {?Element}
+     */
+    facilityNode(key) {
+      if (key === 'records') return recordsG;
+      if (key === 'registrar') return regG;
+      return null;
+    },
+    /**
+     * A viewBox point -> page coordinates, for a FLIP that has to start at a
+     * place on the plan (ORIENTATION.md §3.4's handover). Fully guarded: the
+     * DOM double has no `getScreenCTM` and a detached SVG answers nothing
+     * useful, so this returns null rather than a plausible lie, and the caller
+     * lands the card with no animation debt.
+     * @param {Array<number>} pt  [x, y] in plan viewBox units
+     * @returns {?{x:number, y:number}}
+     */
+    mapPoint(pt) {
+      try {
+        if (!pt || pt.length < 2) return null;
+        if (!plan || typeof plan.getScreenCTM !== 'function') return null;
+        const m = plan.getScreenCTM();
+        if (!m) return null;
+        const x = m.a * pt[0] + m.c * pt[1] + m.e;
+        const y = m.b * pt[0] + m.d * pt[1] + m.f;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return { x, y };
+      } catch (e) { return null; }
+    },
     /** True once the entry reveal has finished (ghosts may not start before). */
     revealDone() { return revealed; },
     update,
