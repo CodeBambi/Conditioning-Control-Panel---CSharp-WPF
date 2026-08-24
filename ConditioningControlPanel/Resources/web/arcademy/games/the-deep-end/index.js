@@ -1948,14 +1948,18 @@ export default {
     }
 
     /**
-     * Policy is the shell's "Skip class tutorials" contract: by default the
-     * sheet shows EVERY class; with the skip on, the pool still explains itself
-     * ONCE per grade tier. Dismissal is the sheet's own button and nothing
-     * else - every arrow key and the whole board are verbs here, so a key
-     * shortcut would be a move played against a board that has not dealt.
+     * THE LAW, uniform across every open class (owner ruling 2026-08-24): the
+     * sheet SHOWS the first time this player meets the pool at this grade tier
+     * and AUTO-SKIPS every later class at that tier, whatever the setting says.
+     * The shell's "Skip class tutorials" switch (ctx.hideTutorial) means "skip
+     * even the first showing". No meta = no memory = the sheet shows.
+     * Dismissal is the sheet's own button and nothing else - every arrow key
+     * and the whole board are verbs here, so a key shortcut would be a move
+     * played against a board that has not dealt. The sheet is free of the
+     * clock: startClock() is the first thing past GO, inside beginClass.
      */
     function howto(onDone) {
-      if (ctx.hideTutorial === true && howtoSeenTiers().indexOf(tier) >= 0) { onDone(); return; }
+      if (ctx.hideTutorial === true || howtoSeenTiers().indexOf(tier) >= 0) { onDone(); return; }
       if (ctx.dev === true && spec && spec.devSkipHowto === true) { onDone(); return; }
       if (!stage) { onDone(); return; }
       const tierNow = tier;

@@ -215,14 +215,22 @@ export function createCasino(o) {
 
     /**
      * A find pays light: one bright pulse over the frame, brighter up the
-     * ladder (n = the find just claimed, 1..5). The class flag self-clears.
+     * ladder. `n` is the find just claimed and `total` the finds this class is
+     * asking for - the ladder is still FIVE rungs of light, but it is now spread
+     * across the whole class instead of being spent in the first five finds of a
+     * 13-26 find one (the class-length wave, 2026-08-24). An absent `total`
+     * keeps the original behaviour, one rung a find.
      */
-    payout(n) {
+    payout(n, total) {
       if (!mq || !mq.classList) return;
+      const of = Math.max(1, Math.round(Number(total) || 5));
+      const rung = of > 1
+        ? 1 + 4 * clamp((Math.max(1, Number(n) || 1) - 1) / (of - 1), 0, 1)
+        : 5;
       mq.classList.remove('g-lf-mq-flash');
       // restart the CSS animation even on back-to-back finds
       if (typeof mq.offsetWidth === 'number') void mq.offsetWidth;
-      mq.style.setProperty('--g-lf-mqf', String(1 + 0.16 * clamp(n, 1, 5)));
+      mq.style.setProperty('--g-lf-mqf', String(1 + 0.16 * clamp(rung, 1, 5)));
       mq.classList.add('g-lf-mq-flash');
       if (flashTimer) timers.cancel(flashTimer);
       flashTimer = timers.after(CASINO.FLASH_MS, () => {

@@ -66,10 +66,15 @@ export const CSS = [
   '.g-lf-tchip small { font-size:10px; letter-spacing:.12em; text-transform:uppercase;',
   '  color:var(--pink); font-family:var(--disp); display:block; }',
   '.g-lf-tchip b { font-family:var(--mono); font-size:12px; color:var(--ink); }',
-  /* The find tally: one slot per find, stamped pink as each is claimed. */
+  /* The find tally: one slot per find, stamped pink as each is claimed - until
+     the class is longer than hud.js's SLOT_CAP (13-26 finds since the
+     class-length wave), when the same strip becomes a ten-segment METER filled
+     in proportion. Same slots, narrower and tighter, so the chip never grows. */
   '.g-lf-slots { display:flex; gap:4px; margin-top:3px; }',
   '.g-lf-slot { width:11px; height:13px; border-radius:2px; border:1px solid var(--line);',
   '  background:var(--flap-well); display:inline-block; }',
+  '.g-lf-slots-meter { gap:2px; }',
+  '.g-lf-slots-meter .g-lf-slot { width:7px; height:11px; border-radius:1px; }',
   '.g-lf-slot.on { background:var(--pink); border-color:var(--pink);',
   '  box-shadow:0 0 7px rgba(255,105,180,.7); animation:g-lf-slotpop .35s cubic-bezier(.2,1.5,.4,1) 1; }',
   '@keyframes g-lf-slotpop { 0% { transform:scale(.4); } 60% { transform:scale(1.25); } 100% { transform:scale(1); } }',

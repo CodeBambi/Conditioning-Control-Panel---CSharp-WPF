@@ -845,6 +845,32 @@ export function createCpCasino(o) {
       say('casino: ROYAL');
     },
 
+    /**
+     * THE BANK (multi-board, 2026-08-24). The royal was a beat, not the end of
+     * the night: the class deals a fresh scramble and runs on. Take the royal
+     * dressing back down and restore the marquee to whatever the REAL bell
+     * warning is doing - `solved()` borrows `bellOn` for its own flash, so
+     * without this the rig would sit in bell mode from the first bank onward.
+     * `info.bell` is index.js's own bell-warning flag; it is the truth.
+     */
+    deal(info) {
+      if (!started) return;
+      const stillBell = !!(info && info.bell);
+      royalOn = false;
+      bellOn = stillBell;
+      if (royalTimer) { cancel(royalTimer); royalTimer = 0; }
+      if (mq && mq.classList) {
+        mq.classList.remove('g-cp-mq-flash');
+        if (stillBell) mq.classList.add('g-cp-mq-bell'); else mq.classList.remove('g-cp-mq-bell');
+      }
+      if (cs && cs.classList) cs.classList.remove('g-cp-royal');
+      stageClass('g-cp-royal', false);
+      stageClass('g-cp-bell', stillBell);
+      setProp('--cp-n-dark', stillBell ? '0.35' : '0');
+      paintMarquee(true);
+      say('casino: deal (royal cleared)');
+    },
+
     /** The last 20s: gold frame, frantic chase, the room darkens a stop. */
     bell(on) {
       bellOn = !!on;

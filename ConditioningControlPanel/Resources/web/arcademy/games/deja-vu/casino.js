@@ -174,7 +174,12 @@ export function createDvCasino(o) {
 
   /* ---------------------------------------------------------------- api */
   return {
-    /** Dress the lab + light the frame. Call when play arms. */
+    /**
+     * Dress the lab + light the frame. Call ONCE A CLASS, at the first board's
+     * armPlay - `dressLab()` re-rolls the seeded lab identity off its own
+     * stream, so a second call would re-skin the room mid-class. index.js keeps
+     * the `casinoLit` latch for exactly that reason (class-length wave).
+     */
     start() {
       if (!armed || destroyed) { say('casino: disarmed'); return; }
       dressLab();
@@ -190,7 +195,8 @@ export function createDvCasino(o) {
       paint();
     },
 
-    /** The last pair: gold frame, frantic chase, until the class ends. */
+    /** The last pair: gold frame, frantic chase, until the BOARD clears (a
+     *  class is a run of boards now, and win() drops the frame again). */
     bell(on) {
       if (!mq || !mq.classList) return;
       bellOn = !!on;
@@ -249,7 +255,8 @@ export function createDvCasino(o) {
       }
     },
 
-    /** The class is over; nothing may pulse again. */
+    /** The class is over; nothing may pulse again. (A board ending is NOT this
+     *  call - the marquee is the room's and outlives every board.) */
     stop() {
       if (flashTimer) { timers.cancel(flashTimer); flashTimer = 0; }
       if (mq && mq.classList) mq.classList.remove('g-dv-mq-flash');

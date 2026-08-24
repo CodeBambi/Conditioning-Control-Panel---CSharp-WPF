@@ -8,7 +8,11 @@
  * cadences. Same seed = same show; a retake replays it exactly (Law V).
  *
  * DRAW ORDER IS APPEND-ONLY. New draws go at the END of buildPlan (and at the
- * end of a round's own block) so an older seed keeps the plan it had.
+ * end of a round's own block) so an older seed keeps the plan it had. One thing
+ * that rule cannot protect: `count` is part of the INPUT, so a budget change
+ * (90s -> 300s, the class-length wave) lengthens the round loop and every draw
+ * made AFTER it - subJitter today - moves. Same seed + same budget is still the
+ * same show, which is all a retake needs (Law V).
  *
  * ---------------------------------------------------------------------------
  * THE CRITIC'S TOP FIX IS LAW (dossier, 7/10): the top tiers get harder through
@@ -126,9 +130,37 @@ export const PLAYTEST = Object.freeze({
   SUBSECOND_MS: 1000,
 
   STALL_TICK_MS: 700,
-  /** Rounds dealt = what the budget can hold, padded, then capped. */
+
+  /* ---- HOW MANY ROUNDS THE PLAN HOLDS -------------------------------------
+   * THE PLAN IS SIZED FOR THE FASTEST PLAYER, NOT FOR THE ROUND WINDOW.
+   *
+   * It used to be `ceil(budgetMs / lo) + COUNT_PAD`, where `lo` is the SLOW end
+   * of ROUND_MS (6-12s) - i.e. how long a round lasts when nobody finds the
+   * tile. But a round ENDS on the first correct tap, and a competent player
+   * taps in ~2.4-2.9s including the ADVANCE_MS ceremony, so the plan was always
+   * three to four times too short and index.js's `roundIdx % rounds.length`
+   * quietly wrapped: the class re-dealt the same seeded rounds, in the same
+   * order, with the same odd tiles. At 90s that was a curiosity at the very end
+   * of a flawless run; at 300s a fast tier-1 player would see round 0 again
+   * before the halfway bell (~125 rounds played against a 24-round plan).
+   *
+   * So the divisor is FAST_ROUND_MS - the floor of what a round can cost - and
+   * COUNT_MAX is raised to cover a full-length class at that rate:
+   *     300000 / 2400 = 125, + COUNT_PAD 4 = 129   (cap 140, comfortable)
+   *      90000 / 2400 =  38, + COUNT_PAD 4 =  42
+   * A round is a handful of numbers plus one rotated index list (<= 25 ints,
+   * and only when the tier relocates at all), and NOTHING in the plan holds a
+   * url or preloads media - index.js claims a fixed {loops:10, stills:4} pool
+   * off ctx.assets regardless of `count` - so a 129-round plan costs a few tens
+   * of kilobytes and one build-time loop, not a download.
+   * ------------------------------------------------------------------------ */
+  /** The floor of what one round can cost a fast player: find + tap + the
+   *  sub-500ms advance ceremony. Deliberately BELOW the observed 2.4-2.9s so
+   *  the plan is never the thing that runs out. */
+  FAST_ROUND_MS: 2400,
+  /** Rounds dealt = what a fast player can get through, padded, then capped. */
   COUNT_PAD: 4,
-  COUNT_MAX: 24,
+  COUNT_MAX: 140,
   COUNT_MIN: 8,
 });
 
@@ -318,7 +350,7 @@ function relocTimes(k, durationMs, rng) {
  * @param {Object} o
  *   seed           the class seed (Law V)
  *   gradeTier      1..4
- *   timeBudgetSec  the class bell (90 by contract)
+ *   timeBudgetSec  the class bell (300 by contract)
  *   kindsMode      'all' | 'gentle'   (the `an_kinds` setting)
  *   reduced        reducedMotion
  *   coarse         coarse pointer (caps the grid)
@@ -340,10 +372,16 @@ export function buildPlan(o = {}) {
   const lo = Math.round(win[0] * (reduced ? PLAYTEST.ROUND_MS_REDUCED_MULT : 1));
   const hi = Math.round(win[1] * (reduced ? PLAYTEST.ROUND_MS_REDUCED_MULT : 1));
 
-  const budgetMs = Math.max(20000, (Number(o.timeBudgetSec) || 90) * 1000);
+  const budgetMs = Math.max(20000, (Number(o.timeBudgetSec) || 300) * 1000);
+  /* FAST_ROUND_MS, never `lo`: the plan has to outlast the fastest player the
+   * budget allows, not the slowest round the tier deals. See the dial's own
+   * note for the arithmetic and for why a deep plan is cheap. `count` is still
+   * a pure function of (budget, tier-independent dials), so the whole deal
+   * below stays byte-identical for a given seed AND budget. */
   const count = Math.max(
     PLAYTEST.COUNT_MIN,
-    Math.min(PLAYTEST.COUNT_MAX, Math.ceil(budgetMs / lo) + PLAYTEST.COUNT_PAD),
+    Math.min(PLAYTEST.COUNT_MAX,
+      Math.ceil(budgetMs / PLAYTEST.FAST_ROUND_MS) + PLAYTEST.COUNT_PAD),
   );
 
   /* relocations are OFF under reduced motion (no glitch, no drift) */

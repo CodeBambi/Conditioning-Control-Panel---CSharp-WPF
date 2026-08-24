@@ -7,39 +7,89 @@
  * that to S/A/B/C through core/grades.js and applies every cap (peek is the
  * shell's, always - CLAUDE.md trap 9).
  *
+ * THE CLASS IS MULTI-BOARD (owner ruling 2026-08-24, the class-length wave).
+ * A solve BANKS the picture and deals a fresh scramble; the BELL is the one
+ * thing that ends a timed class. So the rubric no longer asks "did the one
+ * board come back" - it asks "how many pictures did you put back in five
+ * minutes", normalised per tier so the S bar means the same thing at every
+ * year. See EXPECTED BOARDS below for the gate arithmetic.
+ *
  * THE COMPOSITE. Composure, not speed:
- *   .45 PROGRESS   how much of the picture came back. Solved = 1. Otherwise a
- *                  blend of distance-closed (manhattan against the scramble's
- *                  own starting distance) and pieces-home, so a player who
- *                  reorganised the board without locking anything still scores
- *                  what they actually did.
- *   .25 PACE       progress against the BASELINE SOLVER's move count (par):
- *                  clamp(progress x par / moves). Solving in par flat = 1;
- *                  solving in twice par = .5; being ahead of the baseline's
- *                  rate part-way through also reads 1. There is no clock term
- *                  anywhere - a 120s class already ends when the bell says so.
+ *   .45 PROGRESS   how many BOARDS' worth of picture came back, against what
+ *                  this tier is expected to fill the bell with:
+ *                    boardsDone = banked + (the live board's own progress)
+ *                    progress   = clamp01(boardsDone / expectedBoards)
+ *                  The live board's own progress is the old blend of
+ *                  distance-closed (manhattan against the scramble's own
+ *                  starting distance) and pieces-home, so a player who
+ *                  reorganised the board without locking anything still
+ *                  scores what they actually did. A board already BANKED is
+ *                  worth zero as a live board - counting both would pay for
+ *                  the same picture twice.
+ *   .25 PACE       moves against the BASELINE SOLVER's move count (par):
+ *                  clamp(parEarned / moves), where parEarned is every banked
+ *                  board's own par plus the live board's par pro-rated by how
+ *                  much of it came back. Identical in meaning to the
+ *                  single-board rubric it replaces: solving in par flat = 1,
+ *                  in twice par = .5, and being ahead of the baseline's rate
+ *                  part-way through also reads 1. There is no clock term
+ *                  anywhere - the class already ends when the bell says so.
  *   .30 CALM       1 minus the panic rate: backtracks (a slide that undoes the
  *                  slide before it) and THRASH (a backtrack made while a wash
  *                  was burying the board) per move. Thrash costs double - the
- *                  whole game is "keep sliding from memory".
+ *                  whole game is "keep sliding from memory". CLASS-cumulative:
+ *                  the panic rate is one number for the whole five minutes.
  *   x .92 ^ assists   each skill-floor rescue EPISODE taxes the composite. A
  *                  rescue also fails the declared sGate, so the shell caps the
  *                  class at A whatever this number says. Both, deliberately:
- *                  the tax is honest, the gate is the promise.
+ *                  the tax is honest, the gate is the promise. The tax has a
+ *                  FLOOR now (ASSIST_TAX_FLOOR): a 300s class can stack twice
+ *                  the episodes a 120s one could, and the tax must not quietly
+ *                  become a second gate harsher than the one we declared.
+ *
+ * EXPECTED BOARDS, and the gate arithmetic. `expectedBoardsFor(tier, budget)`
+ * is `round(budgetSec / TYPICAL_SOLVE_SEC[tier])`, so it is derived from the
+ * class's own length rather than a table pinned to one budget. At the shipped
+ * 300s budget that is 7 / 5 / 3 / 2 boards for years 1-4.
+ *
+ * With pace and calm both perfect (.25 + .30 = .55) the letter thresholds in
+ * core/grades.js (S .92, A .75) become pure progress requirements:
+ *     S needs .45 x progress >= .37  ->  progress >= .8222
+ *     A needs .45 x progress >= .20  ->  progress >= .4444
+ * which is `boardsDone >= .8222 x expected` and `>= .4444 x expected`:
+ *
+ *     tier  expected   S at boardsDone   A at boardsDone
+ *      1       7           5.76             3.11
+ *      2       5           4.11             2.22
+ *      3       3           2.47             1.33
+ *      4       2           1.64             0.89
+ *
+ * So the old "one clean 40s solve = S" at tier 1 is now SIX clean solves (or
+ * five plus three quarters of a sixth), and a year-4 S is two whole 4x4
+ * pictures. Anything short of perfect pace or calm raises those bars, which is
+ * the point: the bar is boards AND composure, never boards alone.
+ *
+ * THE BELL IS NOT A FAIL. There is no timeout gate in this file and there may
+ * never be one: a timed class ALWAYS ends on the bell now, so "the clock ran
+ * out" is the ordinary ending. A player who banked nothing simply scores what
+ * their one live board was worth.
  *
  * PAR. `parMoves = ceil(baseline x PAR_MULT[tier])`, never below the baseline
  * itself. The baseline comes from solver.js, which is OPTIMAL on 3x3 and a
  * careful-human reduction on 4x4/5x5 - so par is a real number about this
- * scramble, not a table someone guessed. PAR_MULT tightens with the year.
+ * scramble, not a table someone guessed. PAR_MULT tightens with the year, and
+ * every board of the class gets its own par (the solver runs on every deal).
  *
  * ZEN never reaches any of this: `ctx.endClass({zen:true, ...})` short-circuits
- * to 'pass' in core/grades.js (DECISIONS #1).
+ * to 'pass' in core/grades.js (DECISIONS #1). Zen banks and re-deals exactly
+ * the same way - it just has no bell and no letter.
  *
  * THE PLAN. `buildPlan()` deals the class's effect schedule off the seed
  * (Law V, append-only draw order): the wash windows that bury the board, the
  * sub_flash cadence, the heat ceiling and the audio ceiling. Dials first,
  * difficulty second - tiers 1-3 only raise dials; the board itself grows at
- * tier 3 and the scramble deepens at 3-4.
+ * tier 3 and the scramble deepens at 3-4 (and, gently, board by board at
+ * tiers 1-2 - see SCRAMBLE_WALK_STEP).
  * ==========================================================================*/
 
 import { makeRng } from '../../core/rng.js';
@@ -55,8 +105,29 @@ export const PLAYTEST = Object.freeze({
    *  seeded permutation with a parity repair (deep). Classic difficulty, so
    *  it only moves at the top tiers. */
   SCRAMBLE_WALK: Object.freeze({ 1: 40, 2: 90, 3: 0, 4: 0 }),
+  /** THE GENTLE ESCALATION (multi-board). Board 1 is the tier's own walk; each
+   *  board after it adds this many slides, capped at SCRAMBLE_WALK_MAX. It is
+   *  a pure function of the BOARD INDEX, so it is as seeded as the deal it
+   *  feeds - a retake replays the same seven boards at the same seven depths.
+   *  Tiers 3-4 are absent on purpose: they already deal a full permutation, so
+   *  there is nothing left to deepen (scrambleWalkFor short-circuits on 0). */
+  SCRAMBLE_WALK_STEP: Object.freeze({ 1: 8, 2: 12 }),
+  SCRAMBLE_WALK_MAX: Object.freeze({ 1: 80, 2: 150 }),
   /** Zen is always the deep deal - a zen board the player chose is not a test. */
   ZEN_WALK: 0,
+
+  /* ---- how many boards a class is expected to hold (the S/A normaliser) --- */
+  /** Seconds a competent player of that year takes over ONE board, measured
+   *  against the tier's own grid and scramble depth (3x3 shallow / 3x3 deep /
+   *  4x4 permutation / 4x4 permutation under the heaviest dials). The gate is
+   *  `round(budgetSec / this)`, so it tracks the class length instead of
+   *  hard-coding 300s: at 300s that is 7 / 5 / 3 / 2 boards. It is deliberately
+   *  a touch generous at tiers 1-2, where SCRAMBLE_WALK_STEP makes the later
+   *  boards of a class slower than the first. */
+  TYPICAL_SOLVE_SEC: Object.freeze({ 1: 42, 2: 58, 3: 100, 4: 140 }),
+  /** A sanity ceiling, not a dial: nothing this class deals should ever want
+   *  more than a dozen boards' worth of picture out of one bell. */
+  EXPECTED_BOARDS_MAX: 12,
 
   /* ---- par ---- */
   PAR_MULT: Object.freeze({ 1: 2.2, 2: 1.9, 3: 1.7, 4: 1.5 }),
@@ -76,8 +147,17 @@ export const PLAYTEST = Object.freeze({
   /** Nobody is judged on a panic rate out of three moves. */
   CALM_MIN_MOVES: 8,
   ASSIST_TAX: 0.92,
+  /** THE TAX FLOOR. .92^7 = .558, so this is "about seven episodes and then it
+   *  stops biting". A 300s class gives a stalling player roughly twice the
+   *  chances to trip the 20s rescue that a 120s one did, and the DECLARED gate
+   *  (sGate, an A-cap) is what we promised - the tax is flavour on top of it
+   *  and must never quietly outrank it. */
+  ASSIST_TAX_FLOOR: 0.55,
 
   /* ---- flavour XP (game-owned; the XP TABLE itself is C#'s) ---- */
+  /** +5 for banking at least one picture, +5 for a new personal best on this
+   *  board size, +5 for having taken any ONE board inside its own par. Cap 15,
+   *  exactly as it was - a five-minute class does not pay five times over. */
   FLAVOR_SOLVE: 5,
   FLAVOR_BEST: 5,
   FLAVOR_UNDER_PAR: 5,
@@ -94,7 +174,22 @@ export const PLAYTEST = Object.freeze({
   AUDIO_CEIL: Object.freeze({ 1: 0.45, 2: 0.6, 3: 0.75, 4: 0.9 }),
 
   /* ---- the washes (the class's own effect, CORE-fired) ---- */
+  /** THE COUNT IS A DENSITY, not a count. This table was tasted at a 120s
+   *  class (WASH_BASE_SEC), so buildPlan scales it by budget/120 and the
+   *  washes-per-minute a year gets stays what it was: .5 / 1.5 / 2.5 / 3.5.
+   *  At the shipped 300s budget that is 3 / 8 / 13 / 18 windows. Left
+   *  unscaled, a year-4 class would have gone from a wash every 17s to one
+   *  every 40s and the whole "the room buries the board" premise would have
+   *  thinned out at exactly the tier that needs it most. */
   WASH_COUNT: Object.freeze({ 1: 1, 2: 3, 3: 5, 4: 7 }),
+  WASH_BASE_SEC: 120,
+  /** The cap, and it is an INVARIANT rather than a taste: no more than this
+   *  share of the class may be under a wash. tier 4 at 300s wants 18 x 5000ms
+   *  = 90s of 300s = 30%, so this never binds at the shipped dials - it exists
+   *  so a future budget or a fatter WASH_MS cannot bury a whole class. */
+  WASH_LOAD_MAX: 0.34,
+  /** A hard ceiling on top of the load rule, for the same reason. */
+  WASH_COUNT_MAX: 24,
   WASH_MS: Object.freeze({ 1: 2600, 2: 3400, 3: 4200, 4: 5000 }),
   WASH_ALPHA: Object.freeze({ 1: 0.18, 2: 0.28, 3: 0.38, 4: 0.5 }),
   /** DELIBERATELY NOT 'spiral'. The engine keeps ONE wash element PER VARIANT
@@ -125,7 +220,11 @@ export const PLAYTEST = Object.freeze({
   ROW_DRIFT_TIER: 4,
 
   /* ---- THE SKILL-FLOOR RESCUE (the critic's top fix, and it is law) ---- */
-  /** No new piece home for this long -> light the baseline's next move. */
+  /** No new piece home for this long -> light the baseline's next move. It is
+   *  a rate per STUCK EPISODE, not per class, so it does not scale with the
+   *  budget - but its bookkeeping is PER BOARD: a fresh deal restarts the
+   *  stall clock, because being twenty seconds into a brand new scramble is
+   *  not being stuck. */
   RESCUE_MS: 20000,
   RESCUE_TICK_MS: 500,
   /** A lit hint stays lit this long if the player does nothing with it. */
@@ -144,9 +243,16 @@ export const PLAYTEST = Object.freeze({
   BELL_WARN_SEC: 20,
   BRIEF_MS: 1600,
   BRIEF_MS_REDUCED: 900,
-  /** The solve: seams dissolve and the clip plays clean before the end card. */
-  SOLVE_PLAY_MS: 3000,
-  SOLVE_PLAY_MS_REDUCED: 1500,
+  /** THE BANK BEAT. A solve dissolves the seams and the clip plays clean -
+   *  and then the next scramble deals, because a solve no longer ends the
+   *  class. Trimmed from 3000/1500 for exactly that reason: this beat is paid
+   *  once per SOLVE now, so at tier 1 it runs six or seven times inside one
+   *  bell and three seconds of it each time was ~7% of the class. */
+  SOLVE_PLAY_MS: 1800,
+  SOLVE_PLAY_MS_REDUCED: 900,
+  /** ...and then the fresh board settles in. Input stays closed for both. */
+  DEAL_MS: 700,
+  DEAL_MS_REDUCED: 300,
   CEREMONY_MS: 2400,
   CEREMONY_MS_REDUCED: 1300,
   END_HOLD_MS: 2600,
@@ -159,9 +265,45 @@ export function tierOf(gradeTier) { return Math.max(1, Math.min(4, Math.round(Nu
 /** The timed board for a year. Zen's board is the player's own setting. */
 export function gridForTier(gradeTier) { return PLAYTEST.GRID_BY_TIER[tierOf(gradeTier)] || 3; }
 
-/** Seeded slides for a tier's scramble; 0 = full permutation + parity repair. */
-export function scrambleWalkFor(gradeTier, zen) {
-  return zen ? PLAYTEST.ZEN_WALK : (PLAYTEST.SCRAMBLE_WALK[tierOf(gradeTier)] || 0);
+/**
+ * Seeded slides for a tier's scramble; 0 = full permutation + parity repair.
+ *
+ * `boardIndex` is 0-based and is THE gentle escalation: board 1 of a class is
+ * exactly the walk this tier always dealt, and each board after it adds
+ * SCRAMBLE_WALK_STEP, capped at SCRAMBLE_WALK_MAX. Tiers 3-4 return 0 either
+ * way - a full permutation cannot be deepened.
+ *
+ * @param {number} gradeTier
+ * @param {boolean} zen
+ * @param {number=} boardIndex  0 = the class's first board
+ */
+export function scrambleWalkFor(gradeTier, zen, boardIndex) {
+  if (zen) return PLAYTEST.ZEN_WALK;
+  const tier = tierOf(gradeTier);
+  const base = PLAYTEST.SCRAMBLE_WALK[tier] || 0;
+  if (base <= 0) return 0;
+  const i = Math.max(0, Math.round(Number(boardIndex) || 0));
+  if (i === 0) return base;
+  const step = PLAYTEST.SCRAMBLE_WALK_STEP[tier] || 0;
+  const max = PLAYTEST.SCRAMBLE_WALK_MAX[tier] || base;
+  return Math.max(base, Math.min(max, base + step * i));
+}
+
+/**
+ * How many whole boards this year is expected to fill the bell with - the
+ * normaliser the PROGRESS term divides by, and therefore the whole S/A gate.
+ * Derived from the class's own budget so a length change moves the bar with
+ * it rather than silently making S free (or impossible).
+ *
+ * @param {number} gradeTier
+ * @param {number} timeBudgetSec   the class's budget, in seconds
+ * @returns {number} >= 1
+ */
+export function expectedBoardsFor(gradeTier, timeBudgetSec) {
+  const tier = tierOf(gradeTier);
+  const sec = Math.max(20, Number(timeBudgetSec) || 0);
+  const typical = Math.max(5, PLAYTEST.TYPICAL_SOLVE_SEC[tier] || 60);
+  return Math.max(1, Math.min(PLAYTEST.EXPECTED_BOARDS_MAX, Math.round(sec / typical)));
 }
 
 /**
@@ -181,36 +323,55 @@ export function parFor(baseline, gradeTier, n) {
 }
 
 /**
- * The composite.
+ * The composite, over a WHOLE multi-board class.
+ *
  * @param {Object} i
  *   gradeTier      1..4
- *   solved         the picture came back whole
+ *   banked         pictures finished and banked this class
+ *   expectedBoards expectedBoardsFor(tier, budgetSec) - the S/A normaliser
+ *   boardSolved    the LIVE board was whole at the ending (the bell caught the
+ *                  bank beat). Its whole is already inside `banked`, so this
+ *                  only tells us to score the live board at zero, never twice.
  *   n              board size
- *   moves          real slides (a press into a wall is not a move)
- *   par            parFor(...)
- *   manhattanStart / manhattanNow   the scramble's distance, then and now
- *   locked / tiles                  pieces home, out of n*n-1
- *   backtracks     slides that undid the slide before them
- *   thrash         those of them made while a wash was up
- *   assists        rescue EPISODES (not hint repaints)
- * @returns {{composite:number, terms:Object, tax:number, raw:number, par:number}}
+ *   moves          real slides across the CLASS (a press into a wall is not one)
+ *   par            parFor(...) for the LIVE board
+ *   parBanked      the sum of every banked board's own par
+ *   manhattanStart / manhattanNow   the LIVE scramble's distance, then and now
+ *   locked / tiles                  pieces home on the LIVE board, out of n*n-1
+ *   backtracks     slides that undid the slide before them (class total)
+ *   thrash         those of them made while a wash was up (class total)
+ *   assists        rescue EPISODES across the class (not hint repaints)
+ * @returns {{composite:number, terms:Object, tax:number, raw:number, par:number,
+ *            parEarned:number, boardsDone:number, expectedBoards:number}}
  */
 export function compositeFor(i = {}) {
-  const solved = !!i.solved;
+  const banked = Math.max(0, Math.round(Number(i.banked) || 0));
+  const expected = Math.max(1, Math.round(Number(i.expectedBoards) || 1));
+  const boardSolved = !!i.boardSolved;
   const moves = Math.max(0, Math.round(Number(i.moves) || 0));
   const par = Math.max(1, Math.round(Number(i.par) || 1));
+  const parBanked = Math.max(0, Number(i.parBanked) || 0);
   const tiles = Math.max(1, Math.round(Number(i.tiles) || 1));
   const locked = Math.max(0, Math.min(tiles, Math.round(Number(i.locked) || 0)));
   const mhStart = Math.max(0, Number(i.manhattanStart) || 0);
   const mhNow = Math.max(0, Number(i.manhattanNow) || 0);
 
-  const closed = mhStart > 0 ? clamp01((mhStart - mhNow) / mhStart) : (solved ? 1 : 0);
+  const closed = mhStart > 0 ? clamp01((mhStart - mhNow) / mhStart) : 0;
   const home = clamp01(locked / tiles);
-  const progress = solved
-    ? 1
+  /* THE LIVE BOARD's own worth, 0..1. A board whose whole is already in
+   * `banked` is worth ZERO here - it has been paid for. */
+  const live = boardSolved
+    ? 0
     : clamp01(PLAYTEST.PROGRESS_MH_SHARE * closed + (1 - PLAYTEST.PROGRESS_MH_SHARE) * home);
 
-  const pace = moves > 0 ? clamp01((progress * par) / moves) : 0;
+  const boardsDone = banked + live;
+  const progress = clamp01(boardsDone / expected);
+
+  /* PACE. Every banked board's own par, plus the live board's par pro-rated by
+   * how much of it came back, against the class's real slide count. One board
+   * solved flat in par and nothing else reads exactly what it read before. */
+  const parEarned = parBanked + live * par;
+  const pace = moves > 0 ? clamp01(parEarned / moves) : 0;
 
   const backtracks = Math.max(0, Math.round(Number(i.backtracks) || 0));
   const thrash = Math.max(0, Math.round(Number(i.thrash) || 0));
@@ -220,34 +381,48 @@ export function compositeFor(i = {}) {
 
   const raw = PLAYTEST.W_PROGRESS * progress + PLAYTEST.W_PACE * pace + PLAYTEST.W_CALM * calm;
   const assists = Math.max(0, Math.round(Number(i.assists) || 0));
-  const tax = Math.pow(PLAYTEST.ASSIST_TAX, assists);
+  const tax = Math.max(PLAYTEST.ASSIST_TAX_FLOOR, Math.pow(PLAYTEST.ASSIST_TAX, assists));
 
   return {
     composite: clamp01(raw * tax),
     raw: clamp01(raw),
     tax,
     par,
-    terms: { progress, pace, calm, closed, home },
+    parEarned,
+    boardsDone,
+    expectedBoards: expected,
+    terms: { progress, pace, calm, closed, home, live, banked },
   };
 }
 
 /**
  * Declared hard gates. `sGate` is the rescue promise: a class that took the
- * skill-floor assist may not exceed A, whatever the composite says. Nothing
- * else in this game gates - the board size is the year's, not a choice.
+ * skill-floor assist may not exceed A, whatever the composite says - and it
+ * stays CLASS-sticky across the re-deals, because the promise was about the
+ * class, not about one board. Nothing else in this game gates: the board size
+ * is the year's, not a choice, and running out the bell is the normal ending
+ * of a timed class rather than a failure.
  */
 export function hardGates(rescueUsed) {
   return { sGate: !rescueUsed };
 }
 
-/** +5 solved, +5 a new personal best on this board, +5 inside par. Cap 15. */
+/**
+ * +5 for banking any picture at all, +5 for a new personal best on this board
+ * size, +5 for having taken any one board inside its own par. Cap 15.
+ *
+ * @param {Object} i {banked, bestSolveMoves, bestMovesBefore, underParSolve}
+ *   bestSolveMoves  the fewest moves any ONE banked board took this class
+ *   underParSolve   at least one banked board came in at or under its own par
+ */
 export function flavorXp(i = {}) {
-  if (!i.solved) return 0;
+  const banked = Math.max(0, Math.round(Number(i.banked) || 0));
+  if (banked <= 0) return 0;
   let xp = PLAYTEST.FLAVOR_SOLVE;
   const before = Number(i.bestMovesBefore);
-  const moves = Math.max(1, Math.round(Number(i.moves) || 1));
-  if (!Number.isFinite(before) || before <= 0 || moves < before) xp += PLAYTEST.FLAVOR_BEST;
-  if (moves <= Math.max(1, Math.round(Number(i.par) || 1))) xp += PLAYTEST.FLAVOR_UNDER_PAR;
+  const best = Math.max(1, Math.round(Number(i.bestSolveMoves) || 1));
+  if (!Number.isFinite(before) || before <= 0 || best < before) xp += PLAYTEST.FLAVOR_BEST;
+  if (i.underParSolve) xp += PLAYTEST.FLAVOR_UNDER_PAR;
   return Math.min(PLAYTEST.FLAVOR_CAP, xp);
 }
 
@@ -281,12 +456,26 @@ export function buildPlan(o = {}) {
   const zen = !!o.zen;
   const seed = String(o.seed == null ? 'composure' : o.seed);
   const rng = makeRng(seed + '|cp-plan');
-  const budgetMs = Math.max(20000, (Number(o.timeBudgetSec) || 120) * 1000);
+  const budgetMs = Math.max(20000, (Number(o.timeBudgetSec) || 300) * 1000);
 
   /* 1. the wash windows - the burial the whole game is about. Dealt across the
-   *    budget between a lead-in and a tail so no wash lands on the bell. */
-  const count = zen ? PLAYTEST.ZEN_WASH_COUNT : (PLAYTEST.WASH_COUNT[tier] || 1);
+   *    budget between a lead-in and a tail so no wash lands on the bell.
+   *
+   *    THE COUNT SCALES WITH THE BUDGET. WASH_COUNT was tasted at a 120s class
+   *    and the class is 300s now, so a literal count would have thinned the
+   *    burial to 40% of its old density and quietly made every year easier.
+   *    Scale by budget/WASH_BASE_SEC, then clamp by the LOAD rule (no more
+   *    than WASH_LOAD_MAX of the class under a wash) and the hard ceiling.
+   *    The spread machinery below needs no change and degrades on its own:
+   *    `span` grows with the budget and the per-slot jitter is a fraction of
+   *    span/count, so more washes across more wall stay evenly dealt. */
   const washMs = zen ? PLAYTEST.ZEN_WASH_MS : (PLAYTEST.WASH_MS[tier] || 2600);
+  const baseCount = zen ? PLAYTEST.ZEN_WASH_COUNT : (PLAYTEST.WASH_COUNT[tier] || 1);
+  const budgetScale = budgetMs / (PLAYTEST.WASH_BASE_SEC * 1000);
+  const loadCap = Math.max(1, Math.floor((budgetMs * PLAYTEST.WASH_LOAD_MAX) / Math.max(200, washMs)));
+  const count = Math.max(1, Math.min(
+    PLAYTEST.WASH_COUNT_MAX, loadCap, Math.round(baseCount * budgetScale),
+  ));
   const alpha = zen ? PLAYTEST.ZEN_WASH_ALPHA : (PLAYTEST.WASH_ALPHA[tier] || 0.2);
   const first = PLAYTEST.WASH_FIRST_MS;
   const span = Math.max(1000, budgetMs - first - PLAYTEST.WASH_TAIL_MS);
@@ -313,6 +502,7 @@ export function buildPlan(o = {}) {
   return Object.freeze({
     tier,
     zen,
+    budgetMs,
     washes: Object.freeze(washes),
     washStepdown: PLAYTEST.WASH_STEPDOWN,
     washStepdownShare: PLAYTEST.WASH_STEPDOWN_SHARE,
@@ -329,5 +519,5 @@ export function buildPlan(o = {}) {
 
 export default {
   PLAYTEST, compositeFor, hardGates, flavorXp, parFor, heatFor, cadenceMs, buildPlan,
-  gridForTier, scrambleWalkFor, clamp01, tierOf,
+  gridForTier, scrambleWalkFor, expectedBoardsFor, clamp01, tierOf,
 };

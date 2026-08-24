@@ -719,7 +719,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (!compact) {
         if (c.homeroom) chips.push({ text: t('homeroom', 'Homeroom'), kind: 'homeroom' });
         chips.push({ text: t('family_' + c.family, c.family) });
-        chips.push({ text: c.timeBudgetSec + 's', kind: 'num' });
+        /* A CLOCKLESS CLASS SHOWS NO SECONDS, ANYWHERE (the class-length wave).
+         * The budget is still real and still rings the bell; Daily Trigger just
+         * does not wear it. Same suppression on the campus room card and in the
+         * proctor strip, and the time bar is not mounted at all. */
+        if (!c.clockless) chips.push({ text: c.timeBudgetSec + 's', kind: 'num' });
       }
       if (suspended) chips.push({ text: t('class_suspended', 'Class Suspended'), kind: 'warn' });
       if (done) {
@@ -776,6 +780,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       gameKey: c.gameKey,
       family: c.family,
       timeBudgetSec: c.timeBudgetSec,
+      clockless: !!c.clockless,          // the room card hides the seconds chip
       homeroom: !!c.homeroom,
       tier: tierFor(store.gameMeta(c.gameKey)),
       endless: endlessFor(c.gameKey),
@@ -1465,10 +1470,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * right. The shell owns the clock (see timeBar* below) because a game must
      * never be able to make the flow of time lie - and it never ENDS a class:
      * the game's own bell is authoritative, the bar just goes pink and holds.
-     * A FREE SWIM has no budget, so it has no bar (panel carries arc-endless). */
+     * A FREE SWIM has no budget, so it has no bar (panel carries arc-endless).
+     * A CLOCKLESS CLASS has a budget and still refuses one: the bar is the loud
+     * half of "you are being timed", and homeroom's minute is a ritual, not an
+     * exam. Nothing downstream needs a guard - timeBarSet / timeBarTick /
+     * timeBarPaint all return on a null `timebar`, exactly as they do for a
+     * free swim, so the clock simply never starts. */
+    const clockless = !!cls.clockless;
     let timebar = null;
     let timefill = null;
-    if (!endless) {
+    if (!endless && !clockless) {
       timebar = el('div', 'arc-timebar');
       timefill = el('div', 'arc-timebar-fill');
       timebar.appendChild(timefill);
@@ -1498,11 +1509,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (retake) bar.appendChild(el('span', 'chip', t('retake', 'Retake')));
     bar.appendChild(el('span', 'arc-spacer'));
     // A free swim is untimed, so the clock chip would be a lie. The chip that
-    // replaces it names what this is instead.
+    // replaces it names what this is instead. A CLOCKLESS class gets neither:
+    // it IS timed, it simply never says so, so there is nothing honest to put
+    // in the slot and the strip closes over it.
     const clock = endless
       ? el('span', 'chip', t('free_swim', 'Free Swim'))
-      : el('span', 'chip num', cls.timeBudgetSec + 's');
-    bar.appendChild(clock);
+      : (clockless ? null : el('span', 'chip num', cls.timeBudgetSec + 's'));
+    if (clock) bar.appendChild(clock);
     panel.appendChild(bar);
 
     return { panel, root, clock, timebar, timefill, pill };
@@ -1753,7 +1766,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const manifest = (mod && mod.manifest) || {};
     const gameMeta = store.gameMeta(cls.gameKey);
     const gradeTier = tierFor(gameMeta);
-    // A free swim has NO budget: 0 is the contract the game reads as "no bell".
+    /* A free swim has NO budget: 0 is the contract the game reads as "no bell".
+     * Otherwise the CLASS's own budget, fenced by the ceiling for its type -
+     * and since the class-length wave both ceilings are 300 and `meaty` is the
+     * anchor-slot flag rather than a length, so this Math.min only ever bites a
+     * calendar override that asked for more than five minutes. The `||` arm is
+     * a belt: the timetable clamps every dealt budget to >= MIN_BUDGET_SEC and
+     * freeSwimClass now carries the descriptor's own, so nothing reaches here
+     * with a falsy one. */
     const timeBudgetSec = endless ? 0 : Math.min(
       cls.timeBudgetSec || QUICK_MAX_SEC,
       cls.meaty ? MEATY_MAX_SEC : QUICK_MAX_SEC
@@ -2097,16 +2117,26 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function freeSwimClass(gameKey) {
     const onBoard = timetable.classes.find((c) => c.gameKey === gameKey);
-    if (onBoard) return Object.assign({}, onBoard, { timeBudgetSec: 0 });
+    if (onBoard) return Object.assign({}, onBoard);
     const d = descriptors(games.list).find((x) => x.key === gameKey)
       || { key: gameKey, family: 'comfort', meaty: false };
     return {
       gameKey,
       family: d.family || 'comfort',
       meaty: !!d.meaty,
+      clockless: !!d.clockless,
       homeroom: false,
       timeLabel: '',
-      timeBudgetSec: 0,
+      /* THE DESCRIPTOR'S OWN BUDGET, not zero and not a ceiling. Two callers,
+       * and only one of them is a swim: `startFreeSwim` passes {endless:true}
+       * and startClass zeroes the budget itself, so an untimed swim is untimed
+       * whatever is written here - but THE EARNED DOOR and the dev door start
+       * this object as an ordinary GRADED, TIMED class, and they used to land
+       * on startClass's `|| QUICK_MAX_SEC` fallback. That was already wrong
+       * (Daily Trigger ran 180s through the unlock door) and the class-length
+       * wave made it wronger by moving the quick ceiling to 300. Budgets are
+       * per-module now, so the door runs the module's own class length. */
+      timeBudgetSec: Number(d.timeBudgetSec) > 0 ? Number(d.timeBudgetSec) : 120,
     };
   }
 

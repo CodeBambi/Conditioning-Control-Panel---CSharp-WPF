@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -1384,7 +1384,9 @@ internal static class ArcademyHostService
         ["dt_whisper_3"] = "You already typed it.",
         ["dt_whisper_4"] = "The stars are lying, not me.",
         // ---- Deja Vu (games/deja-vu) --------------------------------------------------
-        ["dv_bell"] = "The bell. Time is up.",
+        ["dv_bell"] = "The bell. Class over.",
+        ["dv_boards"] = "boards",
+        ["dv_last_call"] = "Last ten seconds.",
         ["dv_called_it"] = "You called the lie.",
         ["dv_card"] = "Card",
         ["dv_clear"] = "Board clear.",
@@ -1417,7 +1419,7 @@ internal static class ArcademyHostService
         ["dv_swaps"] = "swaps",
         ["dv_tracked"] = "Tracked through the static.",
         // ---- Lost & Found (games/lost-and-found) --------------------------------------
-        ["lf_briefing"] = "Memorize her, then find her five times.",
+        ["lf_briefing_n"] = "Memorize her, then find her {n} times.",
         ["lf_clutch"] = "The board relents",
         ["lf_final_bell"] = "Final bell",
         ["lf_find_prompt"] = "Find her",
@@ -1426,7 +1428,7 @@ internal static class ArcademyHostService
         ["lf_found"] = "Found her",
         ["lf_howto_title"] = "Class rules",
         ["lf_howto_find"] = "She hides on a wall that never sits still. Spot the tile that matches her picture.",
-        ["lf_howto_five"] = "Every find, she relocates. Catch her five times.",
+        ["lf_howto_finds_n"] = "Every find, she relocates. Catch her {n} times.",
         ["lf_howto_go"] = "Start the hunt",
         ["lf_jackpot"] = "Jackpot",
         ["lf_melt"] = "The wall runs like wax",
@@ -1611,6 +1613,7 @@ internal static class ArcademyHostService
         ["dt_howto_type"] = "Type a word into the row, then Enter. One answer a day, the same for everyone.",
         // ---- Deja Vu class-rules sheet (2026-08-23)
         ["dv_howto_flip"] = "Turn two slides. A matching pair stays lit. Anything else turns back over.",
+        ["dv_howto_boards"] = "Clear the board and a fresh one deals. The bell ends class.",
         ["dv_howto_go"] = "Deal the board",
         ["dv_howto_redeal"] = "Sometimes the whole board re-deals. Same pairs - only the seats change.",
         ["dv_howto_swap"] = "The board only moves while nothing is face up, and it always shudders first.",
@@ -2041,8 +2044,10 @@ internal static class ArcademyHostService
         ["cp_backtrack_line"] = "Back where it was. Breathe.",
         ["cp_bell_line"] = "The bell. Hands off the board.",
         ["cp_bell_warn"] = "Twenty seconds.",
-        ["cp_brief"] = "One picture, cut apart and still moving. Put it back together.",
-        ["cp_brief_zen"] = "No clock tonight. Slide until it is whole again.",
+        ["cp_bank_line"] = "Banked. Here is a fresh one.",
+        ["cp_brief"] = "One picture, cut apart and still moving. Put it back together, then again.",
+        ["cp_brief_zen"] = "No clock tonight. Slide until it is whole, then again if you like.",
+        ["cp_chip_banked"] = "Pictures done",
         ["cp_chip_calm"] = "Composure",
         ["cp_chip_clock"] = "Time left",
         ["cp_chip_locked"] = "Pieces home",
@@ -2054,15 +2059,14 @@ internal static class ArcademyHostService
         ["cp_end_best_line"] = "Your standing mark on this board. Beat it next class.",
         ["cp_end_locked"] = "Pieces home",
         ["cp_end_moves"] = "Moves",
-        ["cp_end_no"] = "No",
-        ["cp_end_par"] = "Baseline",
-        ["cp_end_solved"] = "Solved",
+                ["cp_end_par"] = "Baseline",
+        ["cp_end_solved"] = "Pictures finished",
+        ["cp_howto_bank"] = "Finish a picture and the next one deals. The bell ends the class, not the solve.",
         ["cp_end_thrash"] = "Panic moves",
         ["cp_end_time"] = "Time",
         ["cp_end_title"] = "Composure report",
         ["cp_end_title_zen"] = "Zen board",
-        ["cp_end_yes"] = "Yes",
-        ["cp_finish"] = "Finish",
+                ["cp_finish"] = "Finish",
         ["cp_howto_go"] = "Start the picture",
         ["cp_howto_lock"] = "A piece that reaches its own place locks with a snap. It can still be slid.",
         ["cp_howto_slide"] = "Tap a piece beside the gap and it slides in. Arrows, WASD and swipes do the same.",
