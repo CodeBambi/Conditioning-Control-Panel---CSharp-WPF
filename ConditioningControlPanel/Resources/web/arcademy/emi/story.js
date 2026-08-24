@@ -106,10 +106,12 @@ export const BEATS = deepFreeze([
     // Beat 2. The introduction, ~1.5s after the WAKE UP chain settles.
     // Denies napping, badly. Name only: the three words behind it do not exist
     // outside the lab letterhead.
+    // NOT gated on the session counter: a boot that loses the race for it (a
+    // renderer that lands late, a page closed early) must not strand the whole
+    // P0 script for ever. `once` + the top greet priority are the ordering.
     id: 'b02_hello',
     phase: 'P0',
     on: 'greet',
-    when: ['firstSession'],
     priority: 100,
     lead: 'glance',
     say: 'oh! hi. i\'m emi. i was not asleep.',
@@ -123,7 +125,7 @@ export const BEATS = deepFreeze([
     id: 'b03_pet_hint',
     phase: 'P0',
     on: 'idlePlayer',
-    when: ['firstSession', 'notSeen:b04_first_pet'],
+    when: ['notSeen:b04_first_pet'],
     requires: ['b02_hello'],
     priority: 70,
     say: 'the glass is pattable. just saying.',
@@ -162,7 +164,7 @@ export const BEATS = deepFreeze([
     id: 'b06_enrol_nudge',
     phase: 'P0',
     on: 'idlePlayer',
-    when: ['firstSession', 'notSeen:b07_first_enrol'],
+    when: ['notSeen:b07_first_enrol'],
     requires: ['b02_hello'],
     priority: 65,
     lead: 'nod',

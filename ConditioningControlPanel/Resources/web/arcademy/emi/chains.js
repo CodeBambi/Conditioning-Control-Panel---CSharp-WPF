@@ -26,40 +26,54 @@ export const FACES = {
 export const BODY_FOR_FX = { hearts: 'bounce', sparks: 'bounce', tears: 'droop', storm: 'shiver', bang: 'bounce' };
 
 /**
- * CHAINS[id] = { label, seq:[[text, ms, frameOpts?], ...], fx?, body?, flat? }
+ * THE BODY FRAMES. EMI's body is a PNG and there are six of them now (art/emi/):
+ * `celebration` (body.png, arms up - the ceremony pose), `idle` (arms down, the
+ * RESTING pose), `sad`, `shock`, `smug` and `pet`. The pairing is DATA and it
+ * lives here, one `bodyFrame` per chain, because a chain IS the feeling; the
+ * widget owns only the swapping and a by-face fallback for raw holds.
+ * A chain with no `bodyFrame` (every `makeSay` line) is resolved FRAME BY FRAME
+ * off the face instead, which is what keeps the typing dots at `idle` and lands
+ * the pose with the reaction face.
+ */
+export const BODY_FRAMES = Object.freeze(['celebration', 'idle', 'sad', 'shock', 'smug', 'pet']);
+
+/**
+ * CHAINS[id] = { label, seq:[[text, ms, frameOpts?], ...], fx?, body?, flat?, bodyFrame? }
  * frameOpts: {small:true} for the THINKING dots, {bubble:'text'|null} for the speech bubble.
+ * `bodyFrame` is one of BODY_FRAMES and is held for the WHOLE chain (a pose that
+ * flickered per 90ms glitch frame would read as a broken sprite, not as a mood).
  */
 export const CHAINS = {
-  wink:     { label: 'WINK',         seq: [['^_^', 420], ['^_~', 260], ['^_^', 600]] },
-  blink:    { label: 'BLINK (idle)', seq: [['0_0', 1400], ['-_-', 110], ['0_0', 1200]] },
-  wake:     { label: 'WAKE UP',      seq: [['-_-', 500], ['o_o', 220], ['0_0', 260], ['(⊙_⊙)', 700]] },
-  shock:    { label: 'SHOCK',        seq: [['o_o', 160], ['0_0', 160], ['(◉_◉)', 900]], fx: 'bang', body: 'bounce' },
-  sus:      { label: 'SUSPICIOUS',   seq: [['¬_¬', 500], ['-_-', 220], ['¬_¬', 800]] },
-  thinking: { label: 'THINKING',     seq: [['.', 260, { small: true }], ['..', 260, { small: true }],
+  wink:     { label: 'WINK',          bodyFrame: 'idle',        seq: [['^_^', 420], ['^_~', 260], ['^_^', 600]] },
+  blink:    { label: 'BLINK (idle)',  bodyFrame: 'idle',        seq: [['0_0', 1400], ['-_-', 110], ['0_0', 1200]] },
+  wake:     { label: 'WAKE UP',       bodyFrame: 'shock',       seq: [['-_-', 500], ['o_o', 220], ['0_0', 260], ['(⊙_⊙)', 700]] },
+  shock:    { label: 'SHOCK',         bodyFrame: 'shock',       seq: [['o_o', 160], ['0_0', 160], ['(◉_◉)', 900]], fx: 'bang', body: 'bounce' },
+  sus:      { label: 'SUSPICIOUS',    bodyFrame: 'smug',        seq: [['¬_¬', 500], ['-_-', 220], ['¬_¬', 800]] },
+  thinking: { label: 'THINKING',      bodyFrame: 'idle',        seq: [['.', 260, { small: true }], ['..', 260, { small: true }],
                                             ['...', 260, { small: true }], ['.', 260, { small: true }],
                                             ['..', 260, { small: true }], ['...', 420, { small: true }],
                                             ['0_0', 900]], flat: true },
-  glance:   { label: 'GLANCE',       seq: [['0_0', 300], ['o_o', 640], ['0_0', 900]] },
-  nod:      { label: 'NOD',          seq: [['0_0', 1400]], body: 'nod' },
-  say:      { label: 'SAY (bubble)', seq: [['0_0', 420, { bubble: '.' }], ['0_0', 420, { bubble: '..' }],
+  glance:   { label: 'GLANCE',        bodyFrame: 'idle',        seq: [['0_0', 300], ['o_o', 640], ['0_0', 900]] },
+  nod:      { label: 'NOD',           bodyFrame: 'idle',        seq: [['0_0', 1400]], body: 'nod' },
+  say:      { label: 'SAY (bubble)',  bodyFrame: 'idle',        seq: [['0_0', 420, { bubble: '.' }], ['0_0', 420, { bubble: '..' }],
                                             ['0_0', 520, { bubble: '...' }], ['^_^', 1800, { bubble: 'nice one!' }],
                                             ['0_0', 200, { bubble: null }]] },
-  sayNod:   { label: 'SAY + NOD',    seq: [['0_0', 420, { bubble: '.' }], ['0_0', 420, { bubble: '..' }],
+  sayNod:   { label: 'SAY + NOD',     bodyFrame: 'idle',        seq: [['0_0', 420, { bubble: '.' }], ['0_0', 420, { bubble: '..' }],
                                             ['0_0', 520, { bubble: '...' }], ['0_0', 1800, { bubble: 'again?' }],
                                             ['0_0', 200, { bubble: null }]], body: 'nod' },
-  cry:      { label: 'CRY',          seq: [[';_;', 500], ['T_T', 1400]], fx: 'tears', body: 'droop' },
-  rage:     { label: 'RAGE',         seq: [['>.<', 200], ['>_<', 200], ['>.<', 200], ['>_<', 700]], fx: 'storm', body: 'shiver' },
-  reveal:   { label: 'EVENT REVEAL', seq: [['._.', 420], ['0_0', 1200]], fx: 'sparks', body: 'bounce' },
-  glitch:   { label: 'GLITCH',       seq: [['x_x', 90], ['#ERR', 90], ['@_@', 90], ['#ERR', 90], ['x_x', 90], ['0_0', 600]] },
-  love:     { label: 'LOVESTRUCK',   seq: [['0_0', 260], ['*_*', 420], ['(｡♥‿♥｡)', 1400]], fx: 'hearts', body: 'bounce' },
+  cry:      { label: 'CRY',           bodyFrame: 'sad',         seq: [[';_;', 500], ['T_T', 1400]], fx: 'tears', body: 'droop' },
+  rage:     { label: 'RAGE',          bodyFrame: 'shock',       seq: [['>.<', 200], ['>_<', 200], ['>.<', 200], ['>_<', 700]], fx: 'storm', body: 'shiver' },
+  reveal:   { label: 'EVENT REVEAL',  bodyFrame: 'celebration', seq: [['._.', 420], ['0_0', 1200]], fx: 'sparks', body: 'bounce' },
+  glitch:   { label: 'GLITCH',        bodyFrame: 'shock',       seq: [['x_x', 90], ['#ERR', 90], ['@_@', 90], ['#ERR', 90], ['x_x', 90], ['0_0', 600]] },
+  love:     { label: 'LOVESTRUCK',    bodyFrame: 'pet',         seq: [['0_0', 260], ['*_*', 420], ['(｡♥‿♥｡)', 1400]], fx: 'hearts', body: 'bounce' },
   /* GLEE is the lock's "three pets in a row" and "a streak stamp lands" beat: the
    * squeezed-eye kaomoji, not the lovestruck one. Short run-up so it can ride a
    * ceremony without holding the screen. */
-  glee:     { label: 'GLEE',         seq: [['^_^', 300], ['(≧◡≦)', 1400]], fx: 'hearts', body: 'bounce' },
-  cool:     { label: 'COOL',         seq: [['-_-', 300], ['(⌐■_■)', 1400]], fx: 'sparks', body: 'bounce' },
-  dizzy:    { label: 'DIZZY',        seq: [['@_@', 260], ['=_=', 260], ['@_@', 260], ['x_x', 800]] },
-  smug:     { label: 'SMUG',         seq: [['^_^', 300], ['(¬‿¬)', 1200]] },
-  ko:       { label: 'K.O.',         seq: [['>_<', 220], ['x_x', 420], ['(✖╭╮✖)', 1400]], fx: 'tears', body: 'droop' }
+  glee:     { label: 'GLEE',          bodyFrame: 'celebration', seq: [['^_^', 300], ['(≧◡≦)', 1400]], fx: 'hearts', body: 'bounce' },
+  cool:     { label: 'COOL',          bodyFrame: 'celebration', seq: [['-_-', 300], ['(⌐■_■)', 1400]], fx: 'sparks', body: 'bounce' },
+  dizzy:    { label: 'DIZZY',         bodyFrame: 'idle',        seq: [['@_@', 260], ['=_=', 260], ['@_@', 260], ['x_x', 800]] },
+  smug:     { label: 'SMUG',          bodyFrame: 'smug',        seq: [['^_^', 300], ['(¬‿¬)', 1200]] },
+  ko:       { label: 'K.O.',          bodyFrame: 'sad',         seq: [['>_<', 220], ['x_x', 420], ['(✖╭╮✖)', 1400]], fx: 'tears', body: 'droop' }
 };
 
 /**

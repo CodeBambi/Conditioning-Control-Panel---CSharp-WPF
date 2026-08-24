@@ -81,10 +81,21 @@
  * adds `.bubble-left` to the root when that is about to happen; this mirrors the
  * box and its tail. `.bubble-low` is the vertical twin: parked at the very top
  * there is no sky for the bubble to rise into, so it drops below the chin.
- * Nothing else about the bubble is touched — the skin stays agent A's. */
+ * Nothing else about the bubble is touched — the skin stays agent A's.
+ *
+ * THE SHIFT (owner, 2026-08-24): the line sits `--emi-bubble-dx` further off her
+ * ear than the skin's 58% puts it. widget.js writes that property from
+ * DIALS.BUBBLE_SHIFT_X so there is one number, and the 15px here is only the
+ * fallback for a bubble drawn before the widget has touched the node. It is
+ * MIRRORED by the flip — further LEFT on `.bubble-left` — and `faceBubble()`
+ * counts it on both sides of its reach test, so the extra 15px can never push
+ * the mirrored line back off the edge the flip exists to stay clear of. */
+.arc-emi .emi .emi-bubble {
+  left: calc(58% + var(--emi-bubble-dx, 15px));
+}
 .arc-emi .emi.bubble-left .emi-bubble {
   left: auto;
-  right: 58%;
+  right: calc(58% + var(--emi-bubble-dx, 15px));
   text-align: right;
   transform-origin: 100% 100%;
 }

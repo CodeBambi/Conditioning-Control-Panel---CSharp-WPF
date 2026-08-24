@@ -55,6 +55,18 @@ export const DIALS = Object.freeze({
   BLINK_EVERY_MS: 5200,    // resting blink cadence
   BLINK_HOLD_MS: 110,      // ...and how long the eyes stay shut
 
+  /* --- the idle sway (five body frames; antenna + hand tips only) ------- */
+  SWAY_STEP_MS: 200,       // one step of the ping-pong walk
+  SWAY_CENTER_MIN_MS: 600, // ...and the pause when it passes back through centre
+  SWAY_CENTER_MAX_MS: 900, // (a range, so two idle beats never land in lockstep)
+
+  /* --- the speech bubble ------------------------------------------------ */
+  BUBBLE_SHIFT_X: 15,      // px further off her ear (owner, 2026-08-24). Mirrored
+                           // by `.bubble-left` and paid for in faceBubble's reach.
+  SAY_HOLD_MIN_MS: 3000,   // a landed line NEVER holds less than this...
+  SAY_HOLD_BASE_MS: 1400,  // ...and a long one grows: BASE + PER_CHAR x length
+  SAY_HOLD_PER_CHAR_MS: 45,
+
   /* --- persistence ----------------------------------------------------- */
   SAVE_DEBOUNCE_MS: 600,   // one write per interaction, never per pointermove
 });
@@ -76,6 +88,87 @@ const BODY_MS = { bounce: 800, thud: 800, shiver: 900, nod: 1900, droop: 800, sh
  * emi.css owns the keyframes and this file owns how long a move runs, so a
  * shake is SHIVER cut short. It inherits the reduced-motion refusal with it. */
 const BODY_ALIAS = { shake: 'shiver' };
+/* ============================================================================
+ * THE BODY FRAMES
+ * ==========================================================================*/
+/* EMI's body used to be ONE png - the arms-up ceremony pose - and she wore it
+ * at rest, which is why she always looked like she had just won something. The
+ * locked pose set gives her six, and `body.png` keeps its name so nothing else
+ * in the bundle moves: it is now CEREMONY ONLY. Every frame is the same
+ * 859x869 canvas with the same screen rect, so the face canvas lands in exactly
+ * the same place whichever one is up. */
+export const BODY_FRAME_SRC = Object.freeze({
+  celebration: './art/emi/body.png',      // arms up: stamps, wins, reveals, LV UP
+  idle: './art/emi/body-idle.png',        // arms down: THE RESTING POSE + sway centre
+  sad: './art/emi/body-sad.png',          // cry, K.O., a broken streak, the exit flinch
+  shock: './art/emi/body-shock.png',      // shock, wake, rage, glitch, a rare drop
+  smug: './art/emi/body-smug.png',        // smug, suspicious, the dork-canon lines
+  pet: './art/emi/body-pet.png',          // pets, love, the pet streak
+  // ...and the four off-centre steps of the idle sway. Only her antenna and her
+  // hand tips differ from `idle`; nothing else in the frame moves.
+  sway1: './art/emi/body-sway1.png',
+  sway2: './art/emi/body-sway2.png',
+  sway3: './art/emi/body-sway3.png',
+  sway4: './art/emi/body-sway4.png',
+});
+
+/* THE POSE WALK. Out to one side and back through the centre, then out to the
+ * other - `sway1` and `sway4` are the two extremes. The centre is HELD (see
+ * DIALS.SWAY_CENTER_*); every other step is one SWAY_STEP_MS. */
+const SWAY_CYCLE = ['idle', 'sway2', 'sway1', 'sway2', 'idle', 'sway3', 'sway4', 'sway3'];
+
+/* THE DEFAULT MAP: a face family -> a pose, for everything that is NOT a chain
+ * with its own `bodyFrame` (raw holds, and every line `makeSay` builds - which
+ * is resolved frame by frame, so the typing dots stay at `idle` and the pose
+ * lands with the reaction face). Anything absent here is `idle`, deliberately:
+ * a face nobody paired is a face she has no strong feeling about. */
+export const FACE_BODY_FRAME = Object.freeze({
+  // celebration
+  '^_^': 'celebration', '^___^': 'celebration', '^_~': 'celebration',
+  '\\o/': 'celebration', 'GG': 'celebration', 'LV UP': 'celebration',
+  '★★★': 'celebration', ':D': 'celebration', 'XD': 'celebration',
+  // sad
+  ';_;': 'sad', 'T_T': 'sad', 'x_x': 'sad', '(ಥ_ಥ)': 'sad',
+  '(✖╭╮✖)': 'sad', ":'(": 'sad',
+  // shock
+  'o_o': 'shock', '(◉_◉)': 'shock', '(⊙_⊙)': 'shock',
+  '>_<': 'shock', '>.<': 'shock', '!!!': 'shock', '???': 'shock',
+  '#ERR': 'shock', '404': 'shock', ':O': 'shock',
+  // smug
+  '¬_¬': 'smug', '(¬‿¬)': 'smug', '(ಠ‿ಠ)': 'smug',
+  '(⌐■_■)': 'smug', '( ͡° ͜ʖ ͡°)': 'smug',
+  '(◔_◔)': 'smug', 'B)': 'smug', '>:)': 'smug',
+  // pet
+  '(｡♥‿♥｡)': 'pet', '(✿◡‿◡)': 'pet',
+  '(≧◡≦)': 'pet', '(◠‿◠)': 'pet', '(◕‿◕)': 'pet',
+  '*_*': 'pet', '♥♥♥': 'pet', '<3': 'pet',
+});
+
+/** A frame key, or null when it is not one of ours (never throws on junk). */
+function frameKey(k) {
+  return (typeof k === 'string' && Object.prototype.hasOwnProperty.call(BODY_FRAME_SRC, k)) ? k : null;
+}
+/** The pose a raw face string wears. Unpaired faces rest at `idle`. */
+export function frameForFace(text) {
+  const t = typeof text === 'string' ? text : '';
+  return Object.prototype.hasOwnProperty.call(FACE_BODY_FRAME, t) ? FACE_BODY_FRAME[t] : 'idle';
+}
+
+/**
+ * HOW LONG A LANDED LINE STAYS UP (owner ruling 2026-08-24: "3 sec, or more
+ * according to length"). The typing cadence is UNCHANGED - `. .. ...` still
+ * runs 420/420/520 and the clear frame is still 200 - only the hold grows.
+ * An explicit ask from a caller wins when it is LONGER; it can never pull a
+ * line back under the floor.
+ */
+export function sayHoldMs(line, explicitMs) {
+  const n = typeof line === 'string' ? line.length : 0;
+  const grown = DIALS.SAY_HOLD_BASE_MS + n * DIALS.SAY_HOLD_PER_CHAR_MS;
+  const asked = (typeof explicitMs === 'number' && isFinite(explicitMs)) ? Math.round(explicitMs) : 0;
+  return Math.max(DIALS.SAY_HOLD_MIN_MS, grown, asked);
+}
+/** Everything in a locked SAY that is NOT the hold: . / .. / ... plus the clear. */
+export const SAY_LEAD_MS = 420 + 420 + 520 + 200;
 /* The bubble hangs UP OFF EMI's right ear (emi.css: left:58%, bottom:96%,
  * max-width:104px), so she needs roughly this multiple of her own width to the
  * right of her left edge or the line runs off the viewport - at which point it
@@ -217,7 +310,9 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
 
   const body = document.createElement('img');
   body.className = 'emi-body';
-  body.src = './art/emi/body.png';
+  /* THE RESTING POSE IS `idle`, NOT the ceremony one. body.png (arms up) is what
+   * a stamp, a win or a reveal puts on her; at rest her arms are down. */
+  body.src = BODY_FRAME_SRC.idle;
   body.alt = '';
   body.draggable = false;
   if (body.setAttribute) body.setAttribute('draggable', 'false');
@@ -239,6 +334,15 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   xBtn.title = 'Hide EMI';
   if (xBtn.setAttribute) xBtn.setAttribute('aria-label', 'Hide EMI');
 
+  /* THE BUBBLE'S OFFSET IS A DIAL, and the sheets read it as a custom property
+   * so widget.css keeps one half of it and this file's reach test keeps the
+   * other, both off the same number. */
+  try {
+    if (el.style && typeof el.style.setProperty === 'function') {
+      el.style.setProperty('--emi-bubble-dx', DIALS.BUBBLE_SHIFT_X + 'px');
+    }
+  } catch (e) { /* noop */ }
+
   el.appendChild(body);
   el.appendChild(canvas);
   el.appendChild(fxHost);
@@ -256,6 +360,59 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   root.appendChild(el);
   root.appendChild(dock);
 
+  /* ---------------------- the body frames ------------------------------- */
+  /* A FRAME THAT WILL NOT LOAD IS NOT AN ERROR. EMI floats over every screen in
+   * the school and she may never break one, so a missing or broken png falls
+   * back to `body.png` (the one frame that has shipped since day one) silently
+   * and once per key. */
+  const frameFailed = Object.create(null);
+  let bodyFrame = 'idle';
+
+  function frameUrl(key) {
+    return frameFailed[key] ? BODY_FRAME_SRC.celebration : BODY_FRAME_SRC[key];
+  }
+
+  /** Swap the body png. A no-op when it is already up (this runs per sway step). */
+  function setBodyFrame(key) {
+    const k = frameKey(key) || 'idle';
+    if (k === bodyFrame) return k;
+    bodyFrame = k;
+    try { body.src = frameUrl(k); } catch (e) { /* noop */ }
+    try { if (body.setAttribute) body.setAttribute('data-frame', k); } catch (e) { /* noop */ }
+    return k;
+  }
+
+  if (body.addEventListener) {
+    body.addEventListener('error', () => {
+      const k = bodyFrame;
+      if (!k || k === 'celebration' || frameFailed[k]) return;
+      frameFailed[k] = true;
+      say('emi: body frame "' + k + '" failed to load - falling back to body.png');
+      try { body.src = BODY_FRAME_SRC.celebration; } catch (e) { /* noop */ }
+    });
+  }
+
+  /* PRELOAD, ONCE. The bundle is offline so every frame is a local file, but a
+   * first decode on the beat a stamp lands would still flash an empty body.
+   * `Image` does not exist in the node DOM double - no preload, no problem. */
+  const preloaded = [];
+  (function preloadFrames() {
+    if (typeof Image !== 'function') return;
+    for (const k of Object.keys(BODY_FRAME_SRC)) {
+      try {
+        const im = new Image();
+        im.onerror = () => {
+          if (frameFailed[k]) return;
+          frameFailed[k] = true;
+          say('emi: body frame "' + k + '" is missing - body.png stands in');
+          if (bodyFrame === k) { try { body.src = BODY_FRAME_SRC.celebration; } catch (e) { /* noop */ } }
+        };
+        im.src = BODY_FRAME_SRC[k];
+        preloaded.push(im);
+      } catch (e) { /* noop */ }
+    }
+  }());
+
   /* ---------------------- the renderer, injected ------------------------ */
   /* A CANVAS THE PLATFORM CANNOT PAINT IS NOT AN ERROR. The node DOM double has
    * no getContext, so the widget runs faceless there instead of throwing on
@@ -265,6 +422,15 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   let playChain = null;
   let makeSay = null;
   let showFx = null;
+  /* CONSTRUCTION-TIME ATTACH IS NOT A REPAINT. `attach({face, chains, fx})` runs
+   * once from inside createWidget - a caller may hand the renderer straight to
+   * the constructor instead of injecting it a tick later - and at that point the
+   * chain runner's own state (`current`, `timers`, `blinkTimer`) is still in its
+   * temporal dead zone below. The first-paint block at the BOTTOM of this
+   * function already calls idle(), so the sync paint here is only for the LATE
+   * attach. Without this flag the constructor threw
+   * `ReferenceError: Cannot access 'current' before initialization`. */
+  let built = false;
 
   function attach(mods) {
     const f = mods && mods.face;
@@ -285,11 +451,12 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     if (x) showFx = typeof x === 'function' ? x : (typeof x.showFx === 'function' ? x.showFx : null);
     if (painter && !hidden && enabled) {
       // THE BUNDLED FACE FIRST. face.ready settles once Noto Sans Mono is in;
-      // painting before it would show one frame in the system monospace.
+      // painting before it would show one frame in the system monospace. This
+      // one is safe from the constructor: it resolves on a later tick.
       if (painter.ready && typeof painter.ready.then === 'function') {
         painter.ready.then(() => { if (!hidden && enabled && !busy()) idle(); }).catch(() => {});
       }
-      idle();
+      if (built) idle();
     }
   }
   attach({ face, chains, fx });
@@ -348,8 +515,12 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
    *  window there, so it flips to the left ear instead (`.bubble-left`, styled in
    *  widget.css). Decided from the position, so a drag and a resize both fix it. */
   function faceBubble(left, top, w, vw) {
-    const overRight = left + w * BUBBLE_REACH > vw;
-    const room = left - w * (BUBBLE_REACH - 1) > 0;
+    // The +15px shift is part of the reach on BOTH sides: the box is mirrored
+    // with the flip, so the flip has to know about the offset or it would
+    // re-create the clipped line it exists to prevent (owner tweak 2026-08-24).
+    const dx = DIALS.BUBBLE_SHIFT_X;
+    const overRight = left + w * BUBBLE_REACH + dx > vw;
+    const room = left - w * (BUBBLE_REACH - 1) - dx > 0;
     // `classList.toggle` is not in every DOM double; add/remove is.
     if (overRight && room) el.classList.add('bubble-left');
     else el.classList.remove('bubble-left');
@@ -378,6 +549,39 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
 
   let blinkTimer = null;
   function stopBlink() { if (blinkTimer !== null) { clearInterval(blinkTimer); blinkTimer = null; } }
+
+  /* ---------------------- the idle sway ---------------------------------
+   * Five frames of ONE pose walked out and back through the centre. It is the
+   * only loop the body png ever runs, it exists only at rest, and REDUCED
+   * MOTION REFUSES IT OUTRIGHT - the design lock allows no breath/shiver loops
+   * there and a sprite sway is the same law, not a loophole. Anything that
+   * takes the glass (a chain, a say, a drag, a hide) stops it; `idle()` is the
+   * only thing that starts it. */
+  let swayTimer = null;
+  let swayAt = 0;
+  function stopSway() { if (swayTimer !== null) { clearTimeout(swayTimer); swayTimer = null; } }
+  function swayHold(key) {
+    if (key !== 'idle') return DIALS.SWAY_STEP_MS;
+    const lo = DIALS.SWAY_CENTER_MIN_MS;
+    const hi = Math.max(lo, DIALS.SWAY_CENTER_MAX_MS);
+    return lo + Math.floor(Math.random() * (hi - lo + 1));
+  }
+  function startSway() {
+    stopSway();
+    if (reducedMotion() || hidden || !enabled) return;
+    swayAt = 0;
+    const step = () => {
+      swayTimer = null;
+      if (hidden || !enabled || busy() || dragging || reducedMotion()) return;
+      const key = SWAY_CYCLE[swayAt % SWAY_CYCLE.length];
+      swayAt += 1;
+      setBodyFrame(key);
+      swayTimer = setTimeout(step, swayHold(key));
+    };
+    // She is already on the centre frame when idle() calls this, so the first
+    // beat is the centre pause, not a jump.
+    swayTimer = setTimeout(step, swayHold('idle'));
+  }
 
   function drawFace(text, o) {
     if (!painter || typeof painter.draw !== 'function') return;
@@ -457,9 +661,19 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     cancelChain();
     killTimers();
     stopBlink();
+    stopSway();
     clearBody();
+    /* THE POSE. A chain that declares `bodyFrame` (chains.js owns that table)
+     * HOLDS it for the whole run - a pose that flickered per 90ms glitch frame
+     * would read as a broken sprite, not as a mood. A chain that declares none
+     * - every line `makeSay` builds - is resolved FRAME BY FRAME off the face
+     * instead, which is what keeps the typing dots at `idle` and lands the pose
+     * with the reaction face. `opts.bodyFrame` overrides both (the pet streak
+     * borrows the GLEE chain but wants the pet pose, not the ceremony one). */
+    const chainFrame = frameKey(o.bodyFrame) || frameKey(chain.bodyFrame);
+    if (chainFrame) setBodyFrame(chainFrame);
     const handle = playChain(chain, {
-      draw: (text, fo) => drawFace(text, fo),
+      draw: (text, fo) => { if (!chainFrame) setBodyFrame(frameForFace(text)); drawFace(text, fo); },
       bubble: (b) => setBubble(b),
       body: (cls) => setBody(cls),
       fx: (kind) => burst(kind),
@@ -481,7 +695,9 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     cancelChain();
     killTimers();
     stopBlink();
+    stopSway();
     if (o.clearBubble !== false) setBubble(null);
+    setBodyFrame(frameKey(o.bodyFrame) || frameForFace(text));
     drawFace(text, o.frameOpts || {});
     if (o.body) setBody(o.body);
     if (o.fx) burst(o.fx);
@@ -495,8 +711,12 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     cancelChain();
     killTimers();
     stopBlink();
+    stopSway();
     setBubble(null);
     clearBody();
+    // ARMS DOWN AT REST. This runs even faceless: the body png is the half of
+    // EMI that never needed a 2d context.
+    setBodyFrame('idle');
     if (!painter || hidden || !enabled) return;
     drawFace(IDLE_FACE, {});
     if (!reducedMotion()) el.classList.add('breath');
@@ -506,6 +726,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       later(() => { if (!busy() && !dragging) drawFace(IDLE_FACE, {}); }, DIALS.BLINK_HOLD_MS);
       emitGesture('blinkIdle');
     }, DIALS.BLINK_EVERY_MS);
+    startSway();
   }
 
   /* ---------------------- gestures (the voice's ear) --------------------
@@ -542,6 +763,16 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
    * only fire when the expression actually CHANGES, not for every frame she
    * happens to be travelling fast. */
   let dragFace = null;
+  /* THE TWO THINGS A GESTURE HAS TO PROVE (field bug, 2026-08-24). `beginDrag`
+   * also fires on the TIME threshold, so a slow click that never moved - the
+   * click that focuses the window, say, landing on EMI's corner - used to end
+   * as a "drag" that committed her existing position and emitted a dropAt with
+   * nobody touching anything. A gesture now needs a pointer that TRAVELLED at
+   * least DRAG_PX, and an event the platform did not mark synthetic. EMI's own
+   * reactions are unchanged: this gates only what the VOICE is told. */
+  let dragMax = 0;            // furthest the pointer got from the press point
+  let dragTold = false;       // 'drag' is announced once, when it becomes real
+  let trusted = true;         // ev.isTrusted, when the platform reports one
   let armTimer = null;
   let petTimes = [];
   let petCooldownUntil = 0;
@@ -554,6 +785,9 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   function setDragFace(text) {
     if (dragFace === text) return;
     dragFace = text;
+    // The pose follows the face the way a raw hold's does: `@_@` is unpaired, so
+    // a carry rests at `idle`; `>.<` is paired, so a FLING wears `shock`.
+    setBodyFrame(frameForFace(text));
     drawFace(text, {});
   }
 
@@ -562,6 +796,9 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
    * moment), and a latched `pressing`/`dragging` would then let the NEXT
    * pointerup commit a position read from a hidden element - rect 0,0, i.e. she
    * teleports to the top-left corner the next time she is restored. */
+  /** Did this press actually become a DRAG a human would recognise? */
+  function realDrag() { return trusted && dragMax >= DIALS.DRAG_PX; }
+
   function endPress() {
     if (pressId !== null) {
       try { if (el.releasePointerCapture) el.releasePointerCapture(pressId); } catch (e) { /* noop */ }
@@ -572,6 +809,8 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     fastSince = 0;
     wasFling = false;
     dragFace = null;
+    dragMax = 0;
+    dragTold = false;
     disarmHold();
     el.classList.remove('dragging', 'armed');
   }
@@ -599,6 +838,9 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     startX = ev.clientX; startY = ev.clientY;
     lastX = ev.clientX; lastY = ev.clientY; lastT = pressAt;
     fastSince = 0;
+    dragMax = 0;
+    dragTold = false;
+    trusted = ev.isTrusted !== false;
     try { if (el.setPointerCapture) el.setPointerCapture(ev.pointerId); } catch (e) { /* noop */ }
     // PRESS-AND-HOLD ARMS THE x. Touch has no hover, so this is the only way to
     // reach the dismiss affordance with a finger.
@@ -616,8 +858,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     el.classList.add('dragging');
     // The reaction is a raw face, not a chain: a chain would fight the next
     // frame of movement. A live SAY keeps the glass (law 3).
-    if (!saying()) { cancelChain(); killTimers(); stopBlink(); clearBody(); setDragFace(DRAG_FACE); }
-    emitGesture('drag');
+    if (!saying()) { cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setDragFace(DRAG_FACE); }
   }
 
   function onMove(ev) {
@@ -628,12 +869,15 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     const dt = Math.max(1, t - lastT);
     const moved = Math.hypot(ev.clientX - lastX, ev.clientY - lastY);
 
+    // The threshold is measured from where the PRESS began, never from the
+    // previous move - a slow drag never crosses a per-move delta.
+    const total = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+    if (total > dragMax) dragMax = total;
     if (!dragging) {
-      // The threshold is measured from where the PRESS began, never from the
-      // previous move - a slow drag never crosses a per-move delta.
-      const total = Math.hypot(ev.clientX - startX, ev.clientY - startY);
       if (total > DIALS.DRAG_PX || (t - pressAt) > DIALS.DRAG_MS) beginDrag();
     }
+    // ...and the voice only hears about it once it is a journey, not a jiggle.
+    if (dragging && !dragTold && realDrag()) { dragTold = true; emitGesture('drag'); }
     if (dragging) {
       const vp = viewport();
       const s = sizePx();
@@ -676,26 +920,31 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       // SETTLE: ^_^ for a beat, then back to resting. The landing move is the
       // playbook's BOUNCE, or a THUD when she was thrown.
       if (!saying()) {
-        cancelChain(); killTimers(); stopBlink();
+        cancelChain(); killTimers(); stopBlink(); stopSway();
+        setBodyFrame(frameForFace(SETTLE_FACE));
         drawFace(SETTLE_FACE, {});
         if (!reducedMotion()) setBody(wasFling ? 'thud' : 'bounce');
         later(() => idle(), DIALS.SETTLE_MS);
       }
       const flung = wasFling;
+      const travelled = realDrag();
       wasFling = false;
       // ONE write per interaction, on the END of it (never per pointermove).
       save();
-      if (flung) emitGesture('fling');
-      // WHERE SHE LANDED, in viewport coordinates: her CENTRE, which is the
-      // point a hit-test should ask about. voice.js does the asking.
-      const sz = sizePx();
-      emitGesture('dropAt', { x: Math.round(r.left + sz.w / 2), y: Math.round(r.top + sz.h / 2) });
+      if (travelled) {
+        if (flung) emitGesture('fling');
+        // WHERE SHE LANDED, in viewport coordinates: her CENTRE, which is the
+        // point a hit-test should ask about. voice.js does the asking. A press
+        // that never travelled is NOT a drop - she is exactly where she was.
+        const sz = sizePx();
+        emitGesture('dropAt', { x: Math.round(r.left + sz.w / 2), y: Math.round(r.top + sz.h / 2) });
+      }
       return;
     }
     // NOT A DRAG. A short press is a PET; a long hold was the x-arming gesture
     // and is deliberately not a pet (the player was reaching for the dismiss).
     el.classList.remove('dragging');
-    if (held < DIALS.HOLD_MS) pet();
+    if (held < DIALS.HOLD_MS && ev.isTrusted !== false) pet();
   }
 
   function onCancel() {
@@ -723,8 +972,8 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     const t = nowMs();
     if (t < petCooldownUntil) {
       // Spam guard: she still notices you, she just does not do the whole show.
-      if (CHAINS && CHAINS.wink) play(CHAINS.wink);
-      else raw('^_~', { hold: 500 });
+      if (CHAINS && CHAINS.wink) play(CHAINS.wink, { bodyFrame: 'pet' });
+      else raw('^_~', { hold: 500, bodyFrame: 'pet' });
       save();
       emitGesture('pet', { cooled: true });
       return;
@@ -737,15 +986,18 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       stats.petStreaks3 += 1;
       // THE LOCK SAYS THE THIRD PET LANDS ON (≧◡≦) - that is `glee`, not
       // `love` (which ends on the lovestruck kaomoji and is a different beat).
+      /* THE POSE IS THE PET ONE, not the ceremony one. `glee` is shared: it is
+       * also the streak-STAMP beat, where the arms-up frame is the right answer
+       * - so the override rides the CALL SITE, never the chain. */
       const cycle = CHAINS && (CHAINS.glee || CHAINS.love);
-      if (cycle) play(cycle);
-      else raw('(≧◡≦)', { hold: 1400, fx: 'hearts', body: 'bounce' });
+      if (cycle) play(cycle, { bodyFrame: 'pet' });
+      else raw('(≧◡≦)', { hold: 1400, fx: 'hearts', body: 'bounce', bodyFrame: 'pet' });
       save();
       emitGesture('pet');
       emitGesture('petStreak3');
       return;
     }
-    raw(SETTLE_FACE, { hold: 900, fx: 'hearts', body: reducedMotion() ? null : 'bounce' });
+    raw(SETTLE_FACE, { hold: 900, fx: 'hearts', body: reducedMotion() ? null : 'bounce', bodyFrame: 'pet' });
     save();
     emitGesture('pet');
   }
@@ -760,7 +1012,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     // A live press has to be let go BEFORE she goes: a latched drag would let the
     // next pointerup commit a position read off a display:none element.
     endPress();
-    cancelChain(); killTimers(); stopBlink(); clearBody(); setBubble(null);
+    cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setBubble(null);
     el.hidden = true;
     dock.hidden = false;
     /* THE ONE-SHOT HINT. The dock is 28px and .35 opacity in a corner, so the
@@ -823,6 +1075,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   }
 
   /* ---------------------- first paint ----------------------------------- */
+  built = true;
   place();
   if (hidden) { el.hidden = true; dock.hidden = false; }
   else { el.hidden = false; dock.hidden = true; beginVisible(); if (painter) idle(); }
@@ -834,6 +1087,12 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     /** Subscribe to the pointer verbs (emi/voice.js). Returns an unsubscribe. */
     onGesture,
     play, raw, idle,
+    /** Swap the body png by frame key (BODY_FRAME_SRC). Test/host seam. */
+    setBodyFrame,
+    /** Which pose is up right now. */
+    get bodyFrame() { return bodyFrame; },
+    /** True while EMI is walking the idle sway (reduced motion never is). */
+    swaying() { return swayTimer !== null; },
     makeSayFn() { return makeSay; },
     chainsTable() { return CHAINS; },
     hasFace() { return !!painter; },
@@ -865,7 +1124,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       if (!enabled) {
         accrueVisible();
         endPress();
-        cancelChain(); killTimers(); stopBlink(); clearBody();
+        cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody();
         root.hidden = true;
         save(true);
       } else {
@@ -883,7 +1142,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       save(true);
       // clearBody() is the easy one to miss: `bodyTimer` outlives everything else
       // and its callback re-adds `.breath` to a node that is no longer in the page.
-      cancelChain(); killTimers(); stopBlink(); disarmHold(); clearBody();
+      cancelChain(); killTimers(); stopBlink(); stopSway(); disarmHold(); clearBody();
       if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
       if (typeof window !== 'undefined' && window.removeEventListener) {
         window.removeEventListener('resize', onResize);

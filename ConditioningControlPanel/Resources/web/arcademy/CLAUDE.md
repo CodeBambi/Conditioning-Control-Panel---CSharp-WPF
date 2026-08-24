@@ -223,7 +223,18 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    {zen:true} = 'pass'), cp_zen_grid; skill-floor rescue after 20s (solver hint + sGate false);
                    locks are MARKERS never freezes (a frozen tile can make a board unsolvable)
 emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page.
-             The body is a PNG (art/emi/body.png, 859x869) and the FACE IS TEXT -
+             The body is a POSE SET of PNGs (art/emi/body*.png, all 859x869, all
+             sharing the exact screen rect): body.png is the arms-up CELEBRATION
+             frame, body-idle.png the arms-down default, plus sad/shock/smug/pet
+             and four sway micro-variants. widget.js owns the layer: every chain
+             names its `bodyFrame` in chains.js, a raw hold resolves through
+             FACE_BODY_FRAME (face family -> frame; junk -> idle, never throws),
+             `opts.bodyFrame` overrides both, and a missing file silently falls
+             back to body.png. At rest an idle sway loop ping-pongs the variants
+             (~200ms steps, long randomised centre hold; OFF under
+             prefers-reduced-motion / html.arc-reduced, stopped by every chain,
+             say, drag, hide). New frames reproduce the body.png recipe: octree
+             quantize to 256 + optimized PNG (~40-46K each). The FACE IS TEXT -
              a kaomoji drawn on a 152px canvas and nearest-neighbour upscaled, so
              any font becomes pixel art. Owner-locked design; the spec is
              EMI-DESIGN-LOCK.md, not this file. Two halves, two owners:

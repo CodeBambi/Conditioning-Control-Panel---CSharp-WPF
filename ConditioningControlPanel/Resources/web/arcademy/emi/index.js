@@ -20,13 +20,31 @@
  * worse than one that missed it.
  * ==========================================================================*/
 
-import { createWidget, DIALS, HINT_LINE, STORE_KEY } from './widget.js';
+import { createWidget, DIALS, HINT_LINE, STORE_KEY, sayHoldMs, SAY_LEAD_MS } from './widget.js';
 
-export { DIALS, HINT_LINE, STORE_KEY };
+export { DIALS, HINT_LINE, STORE_KEY, sayHoldMs, SAY_LEAD_MS };
 
 let singleton = null;
 let voice = null;
 let voicePending = null;
+/** () => bool: can EMI actually PERFORM right now (is her face attached). */
+let voiceGate = null;
+
+/* THE BOOT WINDOW. The opening `greet` goes out on the same frame as the mount
+ * and three things have to land before it can be a bubble: voice.js, its two
+ * data modules, and the renderer. On a cold WebView2 (first paint, a font
+ * fetch, six module requests) that is comfortably more than the renderer's own
+ * 2.5s replay grace, and losing the race cost the day-1 introduction. */
+const VOICE_PENDING_MS = 6000;
+
+/** Replay the one buffered moment - but only once EMI could actually say it. */
+function flushVoice() {
+  const q = voicePending;
+  if (!q || !voice || !voice.ready || (voiceGate && !voiceGate())) return false;
+  voicePending = null;
+  if (Date.now() - q.when >= VOICE_PENDING_MS) return false;
+  try { return !!voice.onMoment(q.name, q.payload); } catch (e) { return false; }
+}
 
 /** The shell's accessor - `moments.js` and any later caller read EMI here. */
 export function getEmi() { return singleton; }
@@ -47,7 +65,7 @@ export function getVoice() { return voice; }
  */
 export function voiceMoment(name, payload) {
   try {
-    if (voice) return !!voice.onMoment(name, payload);
+    if (voice && voice.ready && (!voiceGate || voiceGate())) return !!voice.onMoment(name, payload);
     if (singleton) voicePending = { name, payload, when: Date.now() };
   } catch (e) { /* a mascot may never break a screen transition */ }
   return false;
@@ -96,6 +114,9 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
     if (p && widget.hasFace() && Date.now() - p.when < PENDING_GRACE_MS) {
       try { p.fn(); } catch (e) { /* noop */ }
     }
+    // THE FACE WAS THE OTHER HALF OF THE RACE. If the voice is already up and
+    // holding the opening moment, this is the tick it can finally speak on.
+    flushVoice();
   }).catch(() => {});
 
   const api = {
@@ -131,6 +152,10 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
      * THE TALK RULE (locked): EMI never mouths words. The face holds `0_0` while
      * the bubble types `.` `..` `...`, then the reaction face lands with the
      * line. A say is PROTECTED - a pet or a drag cannot cut it mid-sentence.
+     * THE HOLD IS A FLOOR, NOT A CONSTANT (owner, 2026-08-24): a landed line
+     * stays up DIALS.SAY_HOLD_MIN_MS at the very least and longer the longer it
+     * is. `opts.hold` still wins when it asks for MORE; it can never ask for
+     * less. The typing cadence is untouched.
      * @param {string} line
      * @param {{face?:string, hold?:number, nod?:boolean}=} opts
      */
@@ -141,7 +166,7 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
       const make = widget.makeSayFn();
       if (!make) return false;
       let chain = null;
-      try { chain = make(line, o.face || '^_^', typeof o.hold === 'number' ? o.hold : 1800); }
+      try { chain = make(line, o.face || '^_^', sayHoldMs(line, o.hold)); }
       catch (e) { say('emi: makeSay threw - ' + ((e && e.message) || e)); return false; }
       if (o.nod) chain = Object.assign({}, chain, { body: 'nod' });
       return widget.play(chain, { protect: true, force: true });
@@ -180,12 +205,15 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
 
     /** The decision engine, once it has loaded. A test/debug handle only. */
     get voice() { return voice; },
+    /** Debug: the one moment waiting on the voice + the face, by name. */
+    get pendingMoment() { return voicePending ? voicePending.name : null; },
 
     destroy() {
       try { widget.destroy(); } catch (e) { /* noop */ }
       try { if (voice) voice.destroy(); } catch (e) { /* noop */ }
       voice = null;
       voicePending = null;
+      voiceGate = null;
       if (singleton === api) singleton = null;
     },
   };
@@ -197,6 +225,7 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
    * engine costs EMI her lines and nothing else - she keeps her face, her
    * verbs and the whole wordless table. It loads AFTER the controller exists
    * because it speaks through it. */
+  voiceGate = () => widget.hasFace();
   import('./voice.js').then((m) => {
     if (singleton !== api || !m || typeof m.createVoice !== 'function') return;
     voice = m.createVoice({
@@ -204,13 +233,13 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
       emi: api,
       stats: () => api.stats(),
       onGesture: widget.onGesture,
+      // The two halves of the boot race, handed to the engine so it can never
+      // spend a one-shot beat on a face that cannot draw it yet.
+      canPerform: () => widget.hasFace(),
+      onReady: () => { flushVoice(); },
       log: say,
     });
-    const q = voicePending;
-    voicePending = null;
-    if (voice && q && Date.now() - q.when < PENDING_GRACE_MS) {
-      try { voice.onMoment(q.name, q.payload); } catch (e) { /* noop */ }
-    }
+    flushVoice();
   }).catch((e) => { say('emi: voice.js unavailable (' + ((e && e.message) || e) + ')'); });
 
   return api;

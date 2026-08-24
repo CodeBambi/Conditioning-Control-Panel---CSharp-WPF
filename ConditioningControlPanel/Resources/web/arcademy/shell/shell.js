@@ -414,6 +414,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   const shares = Object.create(null);
 
   let screen = 'board';            // 'board' | 'class' | 'report' | 'settings' | 'records'
+  /* THE OPENING DEAL IS AN ARRIVAL TOO. `screen` starts on 'board', so the very
+   * first showBoard() reads as a REPAINT to the wasScreen guard below and the
+   * opening greet never fired at all (field bug, 2026-08-24: two unattended
+   * boots, an empty seen ledger and no introduction). This flag says "the board
+   * has been arrived at once"; everything after it is the guard as it was. */
+  let greeted = false;
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
   let extrasBox = null;            // replay/report bar + yesterday strip container
@@ -805,8 +811,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     teardownClass();
     clearScreen();
     renderTopbar();
-    // EMI SEAM: arriving at the campus, not repainting it.
-    if (wasScreen !== 'board') fireMoment('greet');
+    // EMI SEAM: arriving at the campus, not repainting it - and the FIRST deal
+    // of the night is an arrival (see `greeted`, above).
+    if (!greeted || wasScreen !== 'board') { greeted = true; fireMoment('greet'); }
     if (!dom || !dom.screen) return;
 
     if (src.audioOnlySession) {
