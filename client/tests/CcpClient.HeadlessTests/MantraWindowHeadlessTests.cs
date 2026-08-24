@@ -1,4 +1,5 @@
-using System.Text.Json;
+﻿using System.Text.Json;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Headless;
@@ -19,9 +20,10 @@ namespace CcpClient.HeadlessTests;
 /// <para><b>Draw-level ONLY</b> (verification-harness.md evidence class): visual tree, real input
 /// routing, the brushes the window actually assigned. <b>Nothing here claims a composited pixel, a
 /// legible layout, a colour a human saw, window activation, focus against a real window manager, or
-/// anything at all on Linux.</b> Those need a headed run and this feature cannot have one — the
-/// window has no door in this build (<see cref="MantraLaunch"/>), so the capture harness has nothing
-/// to drive.</para>
+/// anything at all on Linux.</b> Those need a headed run. The window HAS a door now — the Play
+/// page's Mantras card, <see cref="MantraLaunch"/>'s one caller — so the capture harness has
+/// something to drive, and <c>client/tools/verify/checks.json</c>'s <c>mantra-window</c> surface is
+/// where that evidence lives. It is a WINDOWS capture; the Linux leg of this window is unrun.</para>
 ///
 /// <para><b>What the input really is.</b> <c>KeyPress</c> with a text payload is the headless
 /// platform's own key-to-text delivery: it raises the same <c>KeyDown</c> and <c>TextInput</c> the
@@ -226,6 +228,47 @@ public class MantraWindowHeadlessTests : HeadlessTest
         // 173.4 -> 173, G 136-31*0.2 = 129.8 -> 129, B 221-41*0.2 = 212.8 -> 212.
         Type(window, "o");
         Assert.Equal(Color.FromRgb(173, 129, 212), ColourOf(Runs(window)[0]));
+    }
+
+    /// <summary>
+    /// <b>The mantra reaches the accessibility tree, and it has to be put there by hand.</b> The
+    /// line is built from one <see cref="Run"/> per character and carries no
+    /// <c>TextBlock.Text</c> at all, so its automation peer would name an EMPTY element — a screen
+    /// reader would announce nothing where the whole game is, and the headed harness could not read
+    /// the mantra it must type back (<c>client/tools/verify/capture.ps1</c>'s
+    /// <c>mantra-window</c> surface reads exactly this name).
+    ///
+    /// <para>Reds on the <c>AutomationProperties.SetName</c> call in <c>BuildMantraRuns</c> going
+    /// away, and on the name going stale when the mantra changes under it — which is the same
+    /// staleness the rebuilt <c>Run</c> collection exists to avoid.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void TheMantraIsPublishedToTheAccessibilityTree_BecauseTheRunsCarryNoText()
+    {
+        var clock = new Clock();
+        var pool = new[] { "obey", "kneel" };
+        // A draw that cannot repeat: NextMantra excludes the previous one, so with a pool of two
+        // the second mantra is the other one whatever the Random says.
+        var window = Show(new MantraSession(10, pool, clock: clock.Now));
+        var line = Text(window, "MantraText");
+
+        // The premise: there is no Text on this element, only Runs. If this ever stops being true
+        // the name below is redundant rather than load-bearing, and this fact says so out loud.
+        Assert.True(string.IsNullOrEmpty(line.Text));
+        Assert.NotEmpty(Runs(window));
+
+        var first = window.Session.CurrentMantra!;
+        Assert.Contains(first, pool);
+        Assert.Equal(first, AutomationProperties.GetName(line));
+
+        // It FOLLOWS the mantra rather than being set once: complete a repetition and the name is
+        // the new line, not the old one.
+        clock.Advance(2);
+        Type(window, first);
+
+        var second = window.Session.CurrentMantra!;
+        Assert.NotEqual(first, second);
+        Assert.Equal(second, AutomationProperties.GetName(line));
     }
 
     /// <summary>

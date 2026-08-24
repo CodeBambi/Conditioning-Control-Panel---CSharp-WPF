@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -8,6 +8,7 @@ using Avalonia.VisualTree;
 using CcpClient.Desktop;
 using CcpClient.Desktop.Entitlement;
 using CcpClient.Desktop.Features.Dtrh;
+using CcpClient.Desktop.Features.Mantra;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Navigation;
 using CcpClient.Desktop.Views;
@@ -602,6 +603,154 @@ public class PlayPageHeadlessTests : HeadlessTest
 
         await host.ShutdownAsync();
     }
+
+    // ================================ THE MANTRA DOOR ================================
+    //
+    // Upstream's Mantras card was the ONLY caller of its typed mantra window, and the 2026-08-12
+    // relayout took the card off this page: MainWindow/MainWindow.PlayTab.cs:262 says in capitals
+    // that MantraWindow has "NO CALLER", and the relayout's own commit message (a9859e7b6) records
+    // the consequence as "MantraWindow entry point orphaned - re-home pending owner call". The
+    // removal was de-duplication - "only the duplicate Play-page card is gone"
+    // (Views/Tabs/PlayTabView.xaml:20-24) - and that premise is false for this one card. These
+    // facts are the restored door, driven the way a user reaches it.
+
+    /// <summary>The launch's ledger, pointed at a throwaway directory. NEVER the developer's own
+    /// store: <see cref="MantraLaunch.DataDirectory"/>'s product default is the install's data root
+    /// through the data-root choke point, and a test that let it stand would bank XP into the
+    /// machine's real progression.json.</summary>
+    private static string NewLedgerDir()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-mantra-door-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    /// <summary>The Play page has no viewport of its own, so a card below the fold is reached the
+    /// way a user reaches it — by scrolling. Deterministic and synchronous: no wait, no wheel
+    /// count, no timing.</summary>
+    private static void ScrollTo(MainWindow window, Control control)
+    {
+        control.BringIntoView();
+        window.UpdateLayout();
+    }
+
+    [AvaloniaFact]
+    public async Task ColdStart_PlayDoorThenBegin_OpensTheRealMantraWindow_AtThePickersOwnCount()
+    {
+        // THE DOOR, end to end, from a cold composition-root boot with no arguments: rail door
+        // Play -> the Mantras card -> Begin -> the real MantraWindow, playing a real started
+        // session. Upstream's two-step (StartSession(n) then the window,
+        // MainWindow/MainWindow.PlayTab.cs:305-306) is the launcher's here, and the count comes
+        // from the card's picker exactly as upstream's did (PlayTabView.Cards.cs:107-117 at
+        // a9859e7b6^).
+        var (host, window, _) = await BootAsync(TierLookup.Entitled(EntitlementTier.Lab));
+        window.Mantra.DataDirectory = NewLedgerDir();
+
+        Click(window, window.FindControl<RadioButton>("DoorPlay")!);
+
+        // Upstream's picker opens on SelectedIndex="1" — the second of 10/25/50/100 — and this
+        // card carries the same four values in the same order.
+        var picker = Descendant<ComboBox>(window, "MantraRepsPicker");
+        Assert.Equal(1, picker.SelectedIndex);
+        Assert.Equal(
+            new[] { "10", "25", "50", "100" },
+            picker.Items.OfType<ComboBoxItem>().Select(i => i.Content as string).ToArray());
+
+        var begin = Descendant<Button>(window, "MantraBeginButton");
+        ScrollTo(window, begin);
+        Click(window, begin);
+
+        var game = window.Mantra.Window;
+        Assert.NotNull(game);
+        Assert.Equal(1, window.Mantra.LaunchCount);
+        Assert.Null(window.Mantra.LastFault);
+
+        // The run the window is playing is REAL and already started — the footgun upstream's
+        // rescue note exists to describe (:272-275, "it has always assumed a session was already
+        // running").
+        Assert.Equal(PlayPage.DefaultCardReps, game.Session.TargetCount);
+        Assert.Equal(25, game.Session.TargetCount);
+        Assert.True(game.Session.IsActive);
+        Assert.False(string.IsNullOrWhiteSpace(game.Session.CurrentMantra));
+
+        // Nothing broke, so the card says nothing.
+        Assert.False(Descendant<TextBlock>(window, "MantraFaultText").IsVisible);
+
+        game.Close();
+        await host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task ThePickedCount_IS_THE_RUN_NotAFixedDefault()
+    {
+        // The picker is a dial the user turns, not decoration: 100 picked is 100 asked for.
+        // Upstream's four values are inside MantraService's own 1..100 clamp by construction
+        // (Services/MantraService.cs:28), so the count reaches the run unmodified.
+        var (host, window, _) = await BootAsync(TierLookup.Entitled(EntitlementTier.Lab));
+        window.Mantra.DataDirectory = NewLedgerDir();
+
+        Click(window, window.FindControl<RadioButton>("DoorPlay")!);
+        var picker = Descendant<ComboBox>(window, "MantraRepsPicker");
+        picker.SelectedIndex = 3;                       // the fourth value: 100
+        window.UpdateLayout();
+
+        var begin = Descendant<Button>(window, "MantraBeginButton");
+        ScrollTo(window, begin);
+        Click(window, begin);
+
+        var game = window.Mantra.Window;
+        Assert.NotNull(game);
+        Assert.Equal(100, game.Session.TargetCount);
+        Assert.NotEqual(PlayPage.DefaultCardReps, game.Session.TargetCount);
+
+        game.Close();
+        await host.ShutdownAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task WhenTheMantraLaunchTHROWS_TheCardSaysSo_InWpfsOwnWords_AndALaterSuccessTakesItBack()
+    {
+        // Upstream answers a thrown StartMantraSession with a MessageBox carrying its own
+        // headline and the exception's message (MainWindow/MainWindow.PlayTab.cs:308-313). The
+        // port has no dialog service, so the card carries the same disclosure in its own line —
+        // and the SHOW seam is what is made to throw, because that is exactly the half of
+        // upstream's try block that opens a window.
+        var (host, window, _) = await BootAsync(TierLookup.Entitled(EntitlementTier.Lab));
+        window.Mantra.DataDirectory = NewLedgerDir();
+        window.Mantra.Show = (_, _) => throw new InvalidOperationException(ShowFailureMessage);
+
+        Click(window, window.FindControl<RadioButton>("DoorPlay")!);
+        var begin = Descendant<Button>(window, "MantraBeginButton");
+        ScrollTo(window, begin);
+        Click(window, begin);
+
+        // Nothing opened, and the user is TOLD rather than left with a button that did nothing.
+        Assert.Null(window.Mantra.Window);
+        var line = Descendant<TextBlock>(window, "MantraFaultText");
+        Assert.True(line.IsVisible);
+        var text = line.Text ?? "";
+        Assert.StartsWith(PlayPage.MantraFaultHeadline + ":", text, StringComparison.Ordinal);
+        Assert.Contains(nameof(InvalidOperationException), text, StringComparison.Ordinal);
+        Assert.Contains(ShowFailureMessage, text, StringComparison.Ordinal);   // the detail is not dropped
+        Assert.Contains(LaunchFaultText.NotADecisionLine, text, StringComparison.Ordinal);
+
+        // A LATER success takes the plate back down: leaving it up would tell the user the app is
+        // broken while she is typing into the window it just opened.
+        window.Mantra.Show = static (game, owner) => game.Show(owner);
+        Click(window, begin);
+
+        var opened = window.Mantra.Window;
+        Assert.NotNull(opened);
+        Assert.False(line.IsVisible);
+        Assert.Equal(string.Empty, line.Text);
+
+        opened.Close();
+        await host.ShutdownAsync();
+    }
+
+    /// <summary>Shaped like an exception message a real launch failure would carry, and unlike
+    /// anything else on this page.</summary>
+    private const string ShowFailureMessage = "the mantra window refused to present (fixture)";
 
     /// <summary>A readable shipping-app login. Fresh per call, because the capability disposes
     /// the read on every path — a shared instance would be a double-disposed token.</summary>
