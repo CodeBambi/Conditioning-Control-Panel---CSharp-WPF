@@ -1611,6 +1611,20 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     `clutch()` ease) rather than inventing a parallel one. The `classStart` payload
     also carries `family` now - moments.js varies the arrival face by room kind and an
     absent family falls back to the locked glance.
+91. **A SPOTLIGHT LETTER CARRIES EXACTLY TWO ANIMATIONS - [entrance, idle] - AND THE
+    ORDER IS LOAD-BEARING (title idioms, 2026-08-24).** Every `.arc-rs-l` pair in
+    styles.css is `entrance (fill both), idle (no fill, delayed, infinite)`: through the
+    idle's delay the entrance's `both` holds the finished pose, and after it the idle
+    (later in the list) owns the properties it animates. `html.ae-lite .arc-rs-name
+    .arc-rs-l { animation-play-state:running, paused; }` is what makes ae-lite
+    "entrance only": it pauses the SECOND slot by POSITION, freezing the idle in its
+    invisible pre-delay state. Add a third animation to a letter, give an idle a fill,
+    or reorder a pair, and ae-lite silently breaks (a paused mid-list idle with fill
+    would freeze the name mid-flicker). Variants ride `animation-name` overrides only
+    (sort's 2n, composure's 4n set, deja vu's dying tube 7n+3) so the pair shape never
+    changes. Idle events also budget legibility - the name is dark/displaced <=20% of
+    any cycle - and the wall whisper (`arc-rw-*`) is hover/focus-gated per card so the
+    grid never runs ten ambient loops at once.
 
 ## 5. The game module contract (short version)
 
