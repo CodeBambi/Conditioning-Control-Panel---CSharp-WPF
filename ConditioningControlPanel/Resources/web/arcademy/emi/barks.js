@@ -360,6 +360,121 @@ export const POOLS = Object.freeze({
     ]
   },
 
+  /* --- the rooms (EMI COLOR, 2026-08-24) --------------------------------
+   * PER-GAME COLOUR. She lives on this campus and has loitered outside every
+   * door, so each room gets its own arrival pool: priority 20 sits them over
+   * the generic A11 above, `gameIs` closes them to their own class, and the
+   * odds stay at the lock's 0.25 - the variety grew, the frequency did not.
+   * Register per room = what she happens to think about that class, never a
+   * strategy guide. */
+
+  /** R1 - homeroom, the daily word. */
+  dtClassStart: {
+    on: 'classStart', when: ['gameIs:daily_trigger'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "homeroom. i guessed today's word already. i won't tell.", face: '(¬‿¬)' },
+      { t: "one word a day keeps the... i forget. guess well.", face: '._.' },
+      { t: "six tries. you'll need one. maybe two. rounding up.", face: '^_^' }
+    ]
+  },
+
+  /** R2 - the lost and found. */
+  lfClassStart: {
+    on: 'classStart', when: ['gameIs:lost_and_found'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "find all five. squint like a champion.", face: '\\o/' },
+      { t: "i looked already. i'm not allowed to point.", face: '0_0' },
+      { t: "somebody lost a whole gif in there. imagine the panic.", face: '@_@' }
+    ]
+  },
+
+  /** R3 - the memory lab. */
+  dvClassStart: {
+    on: 'classStart', when: ['gameIs:deja_vu'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "the memory lab. i have a great memory. mostly of you.", face: '(◕‿◕)', double: true },
+      { t: "match the pairs. blink between flips. pro tip.", face: '^_~' },
+      { t: "i'd play but i see through the cards. unfair advantage.", face: '(⌐■_■)' }
+    ]
+  },
+
+  /** R4 - the drop tube. */
+  icClassStart: {
+    on: 'classStart', when: ['gameIs:impulse_control'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "the drop tube. pop the good ones. the x is a liar.", face: '>:(' },
+      { t: "gravity does the work. you do the glory.", face: '\\o/' },
+      { t: "i held my breath in here once. all of it.", face: '0_0' }
+    ]
+  },
+
+  /** R5 - the pool. */
+  deClassStart: {
+    on: 'classStart', when: ['gameIs:the_deep_end'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "the pool. deep end only. i can't swim. i float. same thing.", face: '^_^' },
+      { t: "hold your breath. i'll hold the numbers.", face: '(◠‿◠)', double: true },
+      { t: "it goes deeper than it looks. bring snacks.", face: '=_=' }
+    ]
+  },
+
+  /** R6 - the sort room. */
+  sortClassStart: {
+    on: 'classStart', when: ['gameIs:sort'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "two piles. no wrong answers. several wrong answers.", face: '0_0' },
+      { t: "sort fast. the belt has opinions.", face: 'o_o' },
+      { t: "keep or toss. i'm a keep. obviously.", face: '(✿◡‿◡)', double: true }
+    ]
+  },
+
+  /** R7 - echo. */
+  echoClassStart: {
+    on: 'classStart', when: ['gameIs:echo'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "listen. repeat. this room speaks my language.", face: '^_^' },
+      { t: "the room hums it once. hum it back. politely.", face: '(◠‿◠)' },
+      { t: "i echo things sometimes. sometimes. sometimes.", face: '@_@' }
+    ]
+  },
+
+  /** R8 - the vigil. */
+  irClassStart: {
+    on: 'classStart', when: ['gameIs:instant_recall'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "eyes open. it all counts. even the blinks.", face: '0_0', double: true },
+      { t: "watch everything. the quiz picks the one thing you didn't.", face: '¬_¬' },
+      { t: "i'd take notes for you but my handwriting is pixels.", face: '._.' }
+    ]
+  },
+
+  /** R9 - the shell game. */
+  misClassStart: {
+    on: 'classStart', when: ['gameIs:misdirection'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "keep your eye on it. the cups know they're being watched.", face: 'o_o' },
+      { t: "i never blink during this one. career habit.", face: '0_0' }
+    ]
+  },
+
+  /** R10 - odd one out. */
+  anomalyClassStart: {
+    on: 'classStart', when: ['gameIs:anomaly'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "one of these things is not like the others. classic.", face: '^_^' },
+      { t: "find the odd one. i relate to the odd one.", face: '._.' }
+    ]
+  },
+
+  /** R11 - the sliding puzzle. */
+  compClassStart: {
+    on: 'classStart', when: ['gameIs:composure'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "slide gently. the picture is shy.", face: '(◠‿◠)' },
+      { t: "one empty square. it's doing its best. respect it.", face: '^_^' }
+    ]
+  },
+
   /** A12 - one wrong answer, one dropped tile. Small, and at most one per
    *  class: a mascot that comments on every miss is a mascot you mute. */
   miss: {
@@ -380,7 +495,11 @@ export const POOLS = Object.freeze({
       { t: "my fault. i jinxed it. i'm unjinxing it now.", face: '>_<' },
       { t: "i distracted you. with my face. classic me.", face: ';_;', double: true },
       { t: "we riot at dawn. or nap. naps are also good.", face: '>_<' },
-      { t: "that class cheated. no proof. just loyalty.", face: '¬_¬' }
+      { t: "that class cheated. no proof. just loyalty.", face: '¬_¬' },
+      /* EMI COLOR: room-flavoured consolation, closed by gameIs. Same law as
+       * the whole pool: the room's fault, the cold's fault, never yours. */
+      { t: "the tube ate one. i saw it cheat.", face: '>:(', when: ['gameIs:impulse_control'] },
+      { t: "the pool was cold today. not your fault. the cold's.", face: ';_;', when: ['gameIs:the_deep_end'] }
     ]
   },
 
@@ -414,7 +533,11 @@ export const POOLS = Object.freeze({
       { t: "S?! wait till my fans hear this. the spinny ones.", face: '(⌐■_■)' },
       { t: "an S. i'm putting it on my screen. it's my face now.", face: '(⌐■_■)' },
       { t: "double punch day. the card is scared of you.", face: '(⌐■_■)' },
-      { t: "top marks. as predicted. by me. just now.", face: '(¬‿¬)', chain: 'smug' }
+      { t: "top marks. as predicted. by me. just now.", face: '(¬‿¬)', chain: 'smug' },
+      /* EMI COLOR: room-flavoured S lines, closed by gameIs. */
+      { t: "an s in the pool. lifeguard material.", face: '(⌐■_■)', when: ['gameIs:the_deep_end'] },
+      { t: "an s in homeroom. the word never stood a chance.", face: '(⌐■_■)', when: ['gameIs:daily_trigger'] },
+      { t: "five for five. the bin fears you.", face: '\\o/', when: ['gameIs:lost_and_found'] }
     ]
   },
 

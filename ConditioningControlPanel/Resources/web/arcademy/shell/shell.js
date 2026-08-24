@@ -1066,7 +1066,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     renderTopbar();
     // EMI SEAM: arriving at the campus, not repainting it - and the FIRST deal
     // of the night is an arrival (see `greeted`, above).
-    if (!greeted || wasScreen !== 'board') { greeted = true; fireMoment('greet'); }
+    if (!greeted || wasScreen !== 'board') {
+      const firstArrival = !greeted;
+      greeted = true;
+      fireMoment('greet');
+      if (firstArrival) noteStreakTurn();
+    }
     /* THE MORNING-AFTER CATCH-UP: a save that sealed its last card before this
      * wave shipped (or whose final-seal ceremony was torn down by a host-forced
      * class before onDone could fire the beat) gets the reveal on its next
@@ -1578,10 +1583,35 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     });
   }
 
+  /* EMI SEAM (EMI COLOR, 2026-08-24): THE STREAK OBITUARY. The host rolls the
+   * attendance streak at local midnight, so the one moment the shell can catch
+   * a streak DYING is the first arrival of a session: the snapshot already
+   * carries the rolled number while `emiLastStreak` still holds the height it
+   * reached last time (written on every stamp below). A drop from >= 3 to the
+   * floor fires the `streakBroken` cry - delayed a breath so it never talks
+   * over the greet - and any ambiguity (host not yet synced, first boot ever)
+   * reads as NO, never as a guessed funeral. */
+  function noteStreakTurn() {
+    try {
+      const cur = Number((store.streak() || {}).count) || 0;
+      const prev = Number(store.get('emiLastStreak')) || 0;
+      if (prev >= 3 && cur <= 1 && cur < prev) {
+        setTimeout(() => {
+          try { fireMoment('streakBroken', { prev, streak: cur }); } catch (e) { /* noop */ }
+        }, 6500);
+      }
+      if (cur !== prev) store.set('emiLastStreak', cur);
+    } catch (e) { /* a mascot may never break an arrival */ }
+  }
+
   function runPunchCeremony(o) {
     // EMI SEAM: the stamp lands. ^_^ + hearts, (≧◡≦) on a 3-day streak, COOL on
     // the tenth hole - moments.js owns which.
     try {
+      const liveStreak = store.streak().count;
+      if (liveStreak !== (Number(store.get('emiLastStreak')) || 0)) {
+        store.set('emiLastStreak', liveStreak);   // the obituary's high-water mark
+      }
       fireMoment('stamp', {
         gameKey: o && o.gameKey,
         streak: store.streak().count,
@@ -2240,7 +2270,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'class';
     clearScreen();
     renderTopbar();
-    fireMoment('classStart', { gameKey: cls.gameKey, tier: gradeTier });   // EMI SEAM
+    // EMI SEAM. `family` rides along for the place-awareness table in
+    // moments.js (EMI COLOR): the arrival face knows what kind of room it is.
+    fireMoment('classStart', { gameKey: cls.gameKey, tier: gradeTier,
+      family: manifest.family || null });
     const chrome = classScreenChrome(
       Object.assign({}, cls, { timeBudgetSec }), gradeTier, retake, endless);
 
@@ -2698,10 +2731,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     /* EMI SEAM: she reacts to the letter. The report card lands one screen later
      * and its SAY is suppressed for this finish (see showReport) so the two beats
-     * do not talk over each other. */
+     * do not talk over each other.
+     * EMI COLOR (2026-08-24): a C is 'fail' now, not 'miss' - the rage chain and
+     * the its-my-fault pool were written for "the class went badly" and never
+     * fired, while 'miss' is reserved for the mid-class stumble seam (ctx.mood)
+     * whose "one wrong answer, one dropped tile" register it always carried.
+     * The payload grew gameKey + perfect: the per-game colour pools key on the
+     * first, and the perfect-gated dork line was unreachable without the second. */
     lastGraded = { grade: graded.grade, perfect: allDone(), fresh: true };
-    fireMoment(/^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'miss',
-      { grade: graded.grade, streak: store.streak().count });
+    fireMoment(/^[sab]$/i.test(String(graded.grade)) || graded.grade === 'pass' ? 'win' : 'fail',
+      { grade: graded.grade, streak: store.streak().count,
+        gameKey: cls.gameKey, perfect: allDone() });
 
     bridge.send({
       type: 'class-ended',

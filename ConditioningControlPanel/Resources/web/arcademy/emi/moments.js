@@ -31,11 +31,15 @@ import { getEmi, voiceMoment } from './index.js';
  * that ratio. Do not write the joke down anywhere; the lines are the whole gag.
  */
 export const REPORT_LINES = Object.freeze({
-  s: ['top of the class.', 'perfect. show off.', 'gold star. obviously.', 'you came back.'],
-  a: ['nice work today.', 'very good, student.', 'a grade. earned it.', 'good. again tomorrow.'],
-  b: ['solid. keep going.', 'not your best. fine.', 'you always come back.'],
-  c: ['we all have days.', 'passed. barely.', 'try again tomorrow?'],
-  pass: ['you showed up. good.', 'attendance counts.'],
+  s: ['top of the class.', 'perfect. show off.', 'gold star. obviously.', 'you came back.',
+    'frame this one.', 'the s is for sparkle.'],
+  a: ['nice work today.', 'very good, student.', 'a grade. earned it.', 'good. again tomorrow.',
+    'an a. i clapped.', 'almost an s. scary.'],
+  b: ['solid. keep going.', 'not your best. fine.', 'you always come back.',
+    'b for brave. yes it is.'],
+  c: ['we all have days.', 'passed. barely.', 'try again tomorrow?',
+    'the c builds character.', "i'll see you tomorrow."],
+  pass: ['you showed up. good.', 'attendance counts.', 'showing up is a skill.'],
   none: ['same time tomorrow?', 'class dismissed.'],
 });
 
