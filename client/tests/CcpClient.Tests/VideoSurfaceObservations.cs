@@ -292,6 +292,176 @@ internal static class VideoSurfaceObservations
     }
 
     // ---------------------------------------------------------------------------------------
+    //  THE INPUT POLICY: whose click is it, asked of the window manager and of a REAL click
+    // ---------------------------------------------------------------------------------------
+
+    private static readonly Lazy<InputRoutingRun> LazyInputRouting = new(RunInputRouting, isThreadSafe: true);
+
+    /// <summary>The input-routing run. Cached: it puts two real windows on the real desktop and
+    /// synthesises three real clicks at a point it owns.</summary>
+    internal static InputRoutingRun InputRouting => LazyInputRouting.Value;
+
+    /// <summary>Where the routing run works: the bottom-left of the primary display, anchored to the
+    /// screen edge rather than to its centre, because every other real-desktop rectangle in this
+    /// assembly is centre-relative and a click is the one measurement that cannot share a point.</summary>
+    internal static VideoBounds RoutingBounds
+    {
+        get
+        {
+            var (_, screenHeight) = OverlayWindowProbe.PrimarySize;
+            return new VideoBounds(40, Math.Max(0, screenHeight - 280), 240, 160);
+        }
+    }
+
+    /// <param name="MachineHasInteractiveDesktop">The machine fact every expectation flips on.</param>
+    /// <param name="UnderneathIsUp">The probe's own click-counting window really is at the point —
+    /// without it every "the click did not arrive" below is a statement about a window nothing could
+    /// ever reach.</param>
+    /// <param name="UnderneathWindow">Its handle, for failure messages.</param>
+    /// <param name="SurfaceWindow">The video surface's handle, for failure messages.</param>
+    /// <param name="PresentState">What the capability said when the surface went up over it.</param>
+    /// <param name="RoutesToUnderneathBefore">Before any surface existed, the window manager routed
+    /// the point to the window underneath.</param>
+    /// <param name="RoutedToBefore">Who it named, for failure messages.</param>
+    /// <param name="ClickInjectedBefore">The OS accepted the control injection. False means UIPI, the
+    /// secure desktop or a locked workstation refused it, and nothing below is claimed.</param>
+    /// <param name="DownsBefore">How many <c>WM_LBUTTONDOWN</c> the window underneath had received
+    /// once that control click had been drained. <b>Leg one</b>: it must be one.</param>
+    /// <param name="RoutesToSurfaceDuring">With the surface up, the window manager routes the SAME
+    /// point to the SURFACE. <b>The routing outcome</b>, and not the extended style it was asked
+    /// for.</param>
+    /// <param name="RoutedToDuring">Who it named.</param>
+    /// <param name="ClickInjectedDuring">A second real click was injected at the same point.</param>
+    /// <param name="DownsDuring">The count afterwards. <b>Leg two</b>: unchanged, because the surface
+    /// caught it — and a mutation that made the surface click-through moves it.</param>
+    /// <param name="WithdrawState">What the capability said when the surface came down.</param>
+    /// <param name="RoutesToUnderneathAfter">The point goes BACK. Teardown restoring normal desktop
+    /// input is a safety invariant in its own right, not a corollary of the surface being gone.</param>
+    /// <param name="RoutedToAfter">Who it named.</param>
+    /// <param name="ClickInjectedAfter">A third real click at the same point.</param>
+    /// <param name="DownsAfter">The count afterwards. <b>Leg three</b>: two.</param>
+    internal sealed record InputRoutingRun(
+        bool MachineHasInteractiveDesktop,
+        bool UnderneathIsUp,
+        nint UnderneathWindow,
+        nint SurfaceWindow,
+        CapabilityState PresentState,
+        bool RoutesToUnderneathBefore,
+        nint RoutedToBefore,
+        bool ClickInjectedBefore,
+        int DownsBefore,
+        bool RoutesToSurfaceDuring,
+        nint RoutedToDuring,
+        bool ClickInjectedDuring,
+        int DownsDuring,
+        CapabilityState WithdrawState,
+        bool RoutesToUnderneathAfter,
+        nint RoutedToAfter,
+        bool ClickInjectedAfter,
+        int DownsAfter);
+
+    /// <summary>
+    /// <b>Does the video surface swallow the user's click?</b> Asked of the window manager, and then
+    /// of a real synthesised click with a real application-shaped window underneath it counting what
+    /// arrives.
+    ///
+    /// <para><b>Three legs, because two of them are vacuous alone.</b> "The click did not reach the
+    /// window underneath" is also true of a window nothing can reach, of an injection the OS refused,
+    /// and of a point that was never anybody's. So the same point takes the same click BEFORE the
+    /// surface exists and AFTER it is withdrawn, and the window underneath must catch both. This is
+    /// the overlay's own two-polarity argument (<c>Win32OverlayPresence.ConfirmInputRouting</c>) with
+    /// the polarity supplied by the surface's presence rather than by a style write — which is the
+    /// only form available here, because this surface has no click-through request to flip.</para>
+    ///
+    /// <para><b>Why not the extended style.</b> Because the style is not the fact:
+    /// <c>Win32OverlayPresence.cs:504-511</c> records a measured run where every style write
+    /// SUCCEEDED and the ex-style read back wrong anyway, and
+    /// <c>.claude/skills/overlay-clickthrough/SKILL.md:48</c> forbids treating those bits as
+    /// approved.</para>
+    ///
+    /// <para><b>Every injection is gated on the OS having already said the point is OURS.</b> A click
+    /// synthesised at a point some other window owns lands on whatever the user really had there.</para>
+    /// </summary>
+    private static InputRoutingRun RunInputRouting()
+    {
+        var bounds = RoutingBounds;
+        var (centreX, centreY) = bounds.Centre;
+        var restore = PointerWindowProbe.CursorPosition();
+
+        // The application underneath: the probe's own non-activating window, which counts the mouse
+        // messages the OS delivers to it. Created BEFORE the surface, so the "before" leg is a
+        // measurement of the desktop as the user would have found it.
+        using var underneath = PointerWindowProbe.ScratchTarget.Create(
+            bounds.X, bounds.Y, bounds.Width, bounds.Height);
+        var underneathWindow = underneath?.Window ?? 0;
+
+        // ---- leg one: the point is the window underneath's, and a real click reaches it ----
+        var routedBefore = underneathWindow == 0
+            ? 0
+            : PointerWindowProbe.HitTestAfterRaising(underneathWindow, centreX, centreY);
+        var injectedBefore = routedBefore != 0 && routedBefore == underneathWindow
+            && PointerWindowProbe.InjectClickAt(centreX, centreY);
+        PointerWindowProbe.PumpUntil(() => underneath is { Downs: > 0, Ups: > 0 });
+        var downsBefore = underneath?.Downs ?? 0;
+
+        // ---- the surface goes up over it ----
+        var source = VideoPresenceFactory.CreateClipSourceFor(VideoHostPlatform.Windows);
+        using var video = new Win32VideoPresence(source);
+        var presentState = video.Present(new VideoSurfaceRequest(bounds, Letterbox));
+        var surfaceWindow = video.LastObservation.Window;
+
+        // ---- leg two: the SAME point is now the surface's, and the SAME click does not arrive ----
+        var routedDuring = surfaceWindow == 0
+            ? 0
+            : PointerWindowProbe.HitTestAfterRaising(surfaceWindow, centreX, centreY);
+
+        // Injected whenever one of OUR OWN two windows owns the point — not only when the surface
+        // does. Gating on the surface alone would let a click-through mutation skip the injection
+        // entirely and leave "no click arrived" trivially true; this way that mutation moves the
+        // count and reds the swallow leg as well as the routing one.
+        var injectedDuring = (routedDuring == surfaceWindow || routedDuring == underneathWindow)
+            && routedDuring != 0
+            && PointerWindowProbe.InjectClickAt(centreX, centreY);
+
+        // A FIXED drain budget, not a wait for something to happen: the claim is that nothing
+        // arrives, and a message still in flight is not an absence.
+        PointerWindowProbe.Drain();
+        var downsDuring = underneath?.Downs ?? 0;
+
+        // ---- leg three: the surface comes down and the desktop gets its point back ----
+        var withdrawState = video.Withdraw();
+        var routedAfter = underneathWindow == 0
+            ? 0
+            : PointerWindowProbe.HitTestAfterRaising(underneathWindow, centreX, centreY);
+        var injectedAfter = routedAfter != 0 && routedAfter == underneathWindow
+            && PointerWindowProbe.InjectClickAt(centreX, centreY);
+        PointerWindowProbe.PumpUntil(() => (underneath?.Downs ?? 0) > downsDuring);
+        var downsAfter = underneath?.Downs ?? 0;
+
+        PointerWindowProbe.MovePointerTo(restore.X, restore.Y);
+
+        return new InputRoutingRun(
+            MachineHasInteractiveDesktop: OverlayWindowProbe.MachineHasInteractiveDesktop,
+            UnderneathIsUp: underneathWindow != 0 && PointerWindowProbe.WindowIsVisible(underneathWindow),
+            UnderneathWindow: underneathWindow,
+            SurfaceWindow: surfaceWindow,
+            PresentState: presentState,
+            RoutesToUnderneathBefore: underneathWindow != 0 && routedBefore == underneathWindow,
+            RoutedToBefore: routedBefore,
+            ClickInjectedBefore: injectedBefore,
+            DownsBefore: downsBefore,
+            RoutesToSurfaceDuring: surfaceWindow != 0 && routedDuring == surfaceWindow,
+            RoutedToDuring: routedDuring,
+            ClickInjectedDuring: injectedDuring,
+            DownsDuring: downsDuring,
+            WithdrawState: withdrawState,
+            RoutesToUnderneathAfter: underneathWindow != 0 && routedAfter == underneathWindow,
+            RoutedToAfter: routedAfter,
+            ClickInjectedAfter: injectedAfter,
+            DownsAfter: downsAfter);
+    }
+
+    // ---------------------------------------------------------------------------------------
     //  TRAP 1: the overlay AND the card must both survive a video surface
     // ---------------------------------------------------------------------------------------
 

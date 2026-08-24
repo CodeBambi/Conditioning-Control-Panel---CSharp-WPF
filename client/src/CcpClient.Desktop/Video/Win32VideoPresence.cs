@@ -401,6 +401,45 @@ public sealed class Win32VideoPresence : IVideoPresence
         // the SetWindowPos in Present, by which time the OS already holds its alpha. The window class
         // registers NO background brush on purpose — every pixel on this surface is one this presence
         // put there, which is what makes the bar read-back mean something (the M-t mutation).
+        //
+        // WS_EX_TRANSPARENT IS DELIBERATELY ABSENT: THIS SURFACE CATCHES ITS OWN CLICKS. That is
+        // upstream's behaviour and not an omission. All three of upstream's video render paths
+        // swallow the press at the window level — the LibVLC path's PreviewMouseDown with
+        // e.Handled = true, whose own comment is "it swallows every one of them"
+        // (Services/Video/VideoService.cs:2894-2907), the MediaElement fallback (:4162-4166) and the
+        // mirror (:4226-4230) — over a hit-testable transparent rectangle placed to catch "all clicks
+        // before they reach the video surface" (:2862-2874), on an opaque black topmost window
+        // (:2619-2636). Upstream then goes out of its way to KEEP that message while refusing the
+        // z-order raise it would otherwise cause: PreventClickRaise answers WM_MOUSEACTIVATE with
+        // MA_NOACTIVATE "while KEEPING the mouse message" (:7205-7255), and DisableChildWindowInput
+        // EnableWindow(FALSE)s LibVLC's native children so the press lands on the top-level window
+        // rather than the renderer (:7264-7295).
+        //
+        // The strict lock is NOT the click policy and must not be read as one. It governs DISMISSAL:
+        // it vetoes Closing (:4274) and eats the panic key and Alt+F4 (:4276-4306), while the
+        // non-strict branch consumes ESC as "dismiss this video" (:4328-4345). Both branches assume
+        // the window already owns the input; the dial only decides whether that ownership can be
+        // escaped. A click-through video would therefore be LESS like upstream, not more.
+        //
+        // Two things are NOT copied, and both are narrower rather than stricter. WS_EX_NOACTIVATE is
+        // set where upstream ACTIVATES its primary window (:2622, :2920), because Lock Card's whole
+        // capability is the foreground and upstream took it only to serve an ESC this port has not
+        // ported. And the rectangle is not upstream's fullscreen cover of every monitor — the
+        // presenter places a bounded 0.55x0.42 of one display (Effects/VideoSurfacePresenter.cs:230,
+        // D123) — so what is caught is the clicks inside that rectangle, never the desktop.
+        //
+        // THE COUPLING A LATER EDIT WOULD TRIP OVER: Present and Show read occlusion out of
+        // VideoSurfaceObservation.HitTestRoutesHere, which is WindowFromPoint. Setting
+        // WS_EX_TRANSPARENT here does not merely change the input policy, it makes that answer
+        // permanently false and the capability refuses every placement with video-surface-occluded —
+        // measured, by adding the bit to this call. Measured in the same sweep and worth writing
+        // down: WS_EX_TRANSPARENT on a window that is NOT layered does not pass clicks through at
+        // all, so it is the LAYERED bit above that gives this one its force.
+        //
+        // And the flag is not the fact
+        // either way: the overlay measured a run where every style write SUCCEEDED and the ex-style
+        // read back wrong anyway (Overlay/Win32OverlayPresence.cs:504-511), so the routing outcome is
+        // measured against the window manager with a real injected click in VideoInputRoutingTests.
         _window = Win32VideoInterop.CreateWindowExW(
             Win32VideoInterop.WsExLayered | Win32VideoInterop.WsExToolwindow | Win32VideoInterop.WsExNoactivate,
             _windowClassName,

@@ -21,9 +21,12 @@ namespace CcpClient.Desktop.Video;
 /// <see cref="WsExNoactivate"/> is set — upstream's mandatory-video window ACTIVATES
 /// (<c>Services/Video/VideoService.cs:2624</c>, <c>ShowActivated = withAudio</c>) — because a video
 /// surface that took the foreground would fight Lock Card for it and could take it away from a
-/// question the user is being asked. <see cref="WsExTransparent"/> is deliberately NOT set: this is
-/// not a click-through overlay, and a video the pointer falls straight through would be a lie about
-/// what is in front of the user.</para>
+/// question the user is being asked. <c>WS_EX_TRANSPARENT</c> is deliberately NOT set — there is no
+/// constant for it here because nothing may set it — and the reason, upstream's citations and the
+/// coupling it would break are declared at the creation site itself,
+/// <c>Win32VideoPresence.EnsureWindow</c>. The routing OUTCOME that sentence claims is measured
+/// against the window manager with a real injected click in <c>VideoInputRoutingTests</c>, because
+/// the style is not the fact.</para>
 /// </summary>
 internal static class Win32VideoInterop
 {

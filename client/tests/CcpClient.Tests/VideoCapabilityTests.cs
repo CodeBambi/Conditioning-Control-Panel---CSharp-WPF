@@ -190,8 +190,15 @@ public class VideoCapabilityTests : RealDesktopFacts
         Assert.Equal(0x08000000u, m.ExStyleAfterPresent & 0x08000000u);
         Assert.Equal(0x00000008u, m.ExStyleAfterPresent & 0x00000008u);
 
-        // WS_EX_TRANSPARENT must NOT be set: this is not a click-through overlay, and a video the
-        // pointer falls straight through would be a lie about what is in front of the user.
+        // WS_EX_TRANSPARENT must NOT be set: this surface is a deliberate click sink, which is
+        // upstream's own behaviour (VideoService.cs:2894-2907 swallows every press, :2862-2874 exists
+        // to catch them) and is declared at the creation site in Win32VideoPresence.EnsureWindow.
+        //
+        // THIS LINE IS THE STYLE AND NOT THE POLICY. It is a read-back of what the OS holds, so it
+        // catches a write that was never made — but the overlay measured a run where every style
+        // write SUCCEEDED and the ex-style read back wrong anyway (Win32OverlayPresence.cs:504-511),
+        // so it cannot carry the input claim on its own. VideoInputRoutingTests pins the OUTCOME:
+        // where the window manager routes a point, and where a real injected click actually lands.
         Assert.Equal(0u, m.ExStyleAfterPresent & 0x00000020u);
 
         // THE TRAP-1 FACT. Five modules draw through a click-through overlay and Lock Card takes the
