@@ -86,6 +86,73 @@ public class OverlayDesktopInputTests : RealDesktopFacts
     }
 
     /// <summary>
+    /// <b>The drag instrument's own control, and the guard on the defect that made the four facts in
+    /// this file unexplainable for a day.</b>
+    ///
+    /// <para>The four facts above each inject a drag over NINE points and, until this was measured,
+    /// the harness had asked the window manager about exactly ONE of them — the press point. A
+    /// second window over the PATH and not over the press point takes every move and leaves every
+    /// click, because a button message is posted to the queue of the window under the cursor when
+    /// the event is injected while a <c>WM_MOUSEMOVE</c> is synthesised at peek time for whatever
+    /// owns the cursor's point then. The reading that produces — <c>downs=2 dragMoves=0 moves=2</c>
+    /// with every injection accepted — is indistinguishable from a machine that cannot inject at
+    /// all, and it cost this board three wrong diagnoses.</para>
+    ///
+    /// <para>So this fact builds that state deliberately, proves it built it, and then requires the
+    /// drag to arrive anyway — which it does only because
+    /// <c>PointerWindowProbe.InjectDragAt</c> now holds each of its own points. Delete the hold and
+    /// this reds, naming the window that took the path.</para>
+    ///
+    /// <para>The contender is a window of THIS process, not a foreign one: a foreign topmost window
+    /// is what really did this and no fact may depend on one existing
+    /// (<see cref="RealDesktopCollection"/> says it can never be excluded). What is under test here
+    /// is the Z-ORDER, and a window of ours reproduces that part exactly and deterministically.</para>
+    /// </summary>
+    [Fact]
+    public void ADragHoldsItsOwnPath_OrAWindowOverPartOfTheRectangleTakesEveryMoveAndLeavesTheClicks()
+    {
+        var run = OverlayDesktopInputObservations.HeldPath;
+        var expected = run.MachineHasInteractiveDesktop;
+
+        Assert.True(run.TargetIsUp == expected,
+            $"the drag target is not on the desktop at {OverlayDesktopInputObservations.ContendedBounds}. {run.Trace}");
+        Assert.True(run.ContenderIsUp == expected,
+            $"the contending window is not on the desktop, so nothing is over the drag path and this fact is a "
+            + $"drag with nothing in the way. {run.Trace}");
+
+        // Measured, not assumed: with the foreground elsewhere the drag's own button-down ACTIVATES
+        // the target, activation raises it over the contender, and the whole construction below
+        // dissolves — the first draft of this fact passed with the hold deleted for that reason.
+        Assert.True(run.TargetTookForeground == expected,
+            "the drag target could not take the foreground, so its own button-down would activate and raise it "
+            + $"over the contender and this fact would be a drag with nothing in the way. {run.Trace}");
+
+        // The two anti-vacuity clauses, and they are the whole construction: the press point must be
+        // the target's and the path must NOT be, or the asymmetry under test does not exist.
+        Assert.True((run.OwnerOfPressPoint == run.Target) == expected,
+            $"the window manager gives the press point to {PointerWindowProbe.DescribeWindow(run.OwnerOfPressPoint)} "
+            + $"rather than to the drag target, so the press below lands somewhere else. {run.Trace}");
+        Assert.True((run.OwnerOfFirstStep == run.Contender) == expected,
+            $"the window manager gives the drag's first step to "
+            + $"{PointerWindowProbe.DescribeWindow(run.OwnerOfFirstStep)} rather than to the contender, so the path "
+            + $"was never contested and the drag below had nothing to hold against. {run.Trace}");
+
+        Assert.True(run.Drag.Accepted == expected, $"the OS refused an event of the drag. {run.Trace}");
+
+        // The half that always worked, asserted so a reader never again mistakes this shape for an
+        // injection that does not reach the desktop at all.
+        Assert.True(run.Downs > run.DownsBefore == expected,
+            $"the drag's PRESS did not reach the target, so this run is about a broken injection rather than about a "
+            + $"contested path. {run.Trace}");
+
+        // And the half that only arrives because the drag holds its own points.
+        Assert.True(run.Drag.Delivered == (expected ? run.Drag.Steps : 0),
+            $"the drag did not hold its path against a window this run put over it. {run.Trace}");
+        Assert.True(run.DragMoves > 0 == expected,
+            $"no WM_MOUSEMOVE carrying MK_LBUTTON reached the target. {run.Trace}");
+    }
+
+    /// <summary>
     /// <b>THE INVARIANT THE ROW WAS OPENED FOR.</b> With a click-through overlay covering the point,
     /// the desktop underneath still takes a CLICK, a DRAG, a SCROLL and a keystroke it can TYPE.
     ///

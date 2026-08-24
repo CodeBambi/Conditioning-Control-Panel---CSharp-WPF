@@ -141,6 +141,11 @@ internal static class OverlayDesktopInputObservations
     /// <param name="Activations">How many times the OS made the window underneath active,
     /// cumulative.</param>
     /// <param name="Foreground">The foreground window when the pass ended.</param>
+    /// <param name="Drag">How much of the drag PATH arrived and, when some of it did not, the
+    /// window the OS gives that point to. <b>This exists because its absence cost three wrong
+    /// diagnoses.</b> "The drag channel delivered nothing" is true of a broken injection, of a
+    /// desktop that refuses synthetic input, and of a foreign window sitting on part of the
+    /// rectangle — and only the third was ever happening.</param>
     internal sealed record ChannelPass(
         string Label,
         bool ClickAccepted,
@@ -155,7 +160,8 @@ internal static class OverlayDesktopInputObservations
         int KeyDowns,
         int KeeperKeyDowns,
         int Activations,
-        nint Foreground)
+        nint Foreground,
+        PointerWindowProbe.DragReading Drag)
     {
         internal bool EveryInjectionAccepted => ClickAccepted && DragAccepted && WheelAccepted && KeyAccepted;
 
@@ -164,7 +170,8 @@ internal static class OverlayDesktopInputObservations
             + $"keeperKeys={KeeperKeyDowns} activations={Activations} "
             + $"routedTo={PointerWindowProbe.DescribeWindow(Routed)} "
             + $"foreground={PointerWindowProbe.DescribeWindow(Foreground)} "
-            + $"accepted(click/drag/wheel/key)={ClickAccepted}/{DragAccepted}/{WheelAccepted}/{KeyAccepted}";
+            + $"accepted(click/drag/wheel/key)={ClickAccepted}/{DragAccepted}/{WheelAccepted}/{KeyAccepted} "
+            + Drag.Describe;
     }
 
     /// <param name="MachineHasInteractiveDesktop">The machine fact every expectation flips on.</param>
@@ -340,7 +347,7 @@ internal static class OverlayDesktopInputObservations
             : PointerWindowProbe.HitTestAfterRaising(underneathWindow, centreX, centreY);
         var baseline = DriveFourChannels(
             "baseline (no overlay)", underneath, keeper, baselineRouted == underneathWindow, baselineRouted,
-            centreX, centreY);
+            centreX, centreY, HoldingThePath(overlay: null, underneathWindow));
 
         // ---- the overlay goes up over it, asking to be passed through ----
         using var overlay = new Win32OverlayPresence();
@@ -351,7 +358,8 @@ internal static class OverlayDesktopInputObservations
         var (passRouted, overlayIndex, underneathIndex) =
             SettleWithOverlayOnTop(overlay, overlayWindow, underneathWindow, centreX, centreY, underneathWindow);
         var passThrough = DriveFourChannels(
-            "click-through ON", underneath, keeper, passRouted == underneathWindow, passRouted, centreX, centreY);
+            "click-through ON", underneath, keeper, passRouted == underneathWindow, passRouted, centreX, centreY,
+            HoldingThePath(overlay, underneathWindow));
 
         // ---- leg 2: the handled click. The foreground moves AWAY first, or the absence is vacuous ----
         var keeperTookForeground = keeperWindow != 0 && InputWindowProbe.TakeForeground(keeperWindow);
@@ -390,7 +398,7 @@ internal static class OverlayDesktopInputObservations
             SettleWithOverlayOnTop(overlay, overlayWindow, underneathWindow, centreX, centreY, underneathWindow);
         var restored = DriveFourChannels(
             "click-through restored", underneath, keeper, restoredRouted == underneathWindow, restoredRouted,
-            centreX, centreY);
+            centreX, centreY, HoldingThePath(overlay, underneathWindow));
 
         // ---- leg 4: teardown gives all four channels back ----
         var withdrawState = overlay.Withdraw();
@@ -410,7 +418,7 @@ internal static class OverlayDesktopInputObservations
             : PointerWindowProbe.HitTestAfterRaising(underneathWindow, centreX, centreY);
         var withdrawn = DriveFourChannels(
             "overlay withdrawn", underneath, keeper, withdrawnRouted == underneathWindow, withdrawnRouted,
-            centreX, centreY);
+            centreX, centreY, HoldingThePath(overlay: null, underneathWindow));
 
         PointerWindowProbe.MovePointerTo(restoreCursor.X, restoreCursor.Y);
 
@@ -465,6 +473,14 @@ internal static class OverlayDesktopInputObservations
     /// <para>Each wait is <c>PumpUntil</c> — a bounded iteration count with a yield, never a
     /// wall-clock wait — and it is a wait for a COUNTER TO MOVE, so a pass that receives nothing
     /// falls out at the ceiling and reports the unchanged count rather than hanging.</para>
+    ///
+    /// <para><b>The click's point is asked about; the drag's path was not, and that was the
+    /// defect.</b> <paramref name="pointIsOurs"/> is one question about ONE point, and the drag then
+    /// injected eight more at points nobody had claimed — so a foreign topmost window over part of
+    /// the rectangle took every move while the clicks kept landing. The drag now holds each of its
+    /// own points through <paramref name="hold"/>, which is this leg's own settle rather than a bare
+    /// raise: on the pass-through leg it re-asserts the OVERLAY on top afterwards, so holding the
+    /// path can never put the window underneath above the surface the leg measures through.</para>
     /// </summary>
     private static ChannelPass DriveFourChannels(
         string label,
@@ -473,7 +489,8 @@ internal static class OverlayDesktopInputObservations
         bool pointIsOurs,
         nint routed,
         int centreX,
-        int centreY)
+        int centreY,
+        Func<int, int, nint> hold)
     {
         var downsBefore = underneath?.Downs ?? 0;
         var dragBefore = underneath?.DragMoves ?? 0;
@@ -483,9 +500,11 @@ internal static class OverlayDesktopInputObservations
         var click = pointIsOurs && PointerWindowProbe.InjectClickAt(centreX, centreY);
         PointerWindowProbe.PumpUntil(() => (underneath?.Downs ?? 0) > downsBefore);
 
-        var drag = pointIsOurs && underneath is not null
-            && PointerWindowProbe.InjectDragAt(
-                underneath, centreX, centreY, DragDeltaX, DragDeltaY, DragSteps);
+        var dragReading = pointIsOurs && underneath is not null
+            ? PointerWindowProbe.InjectDragAt(
+                underneath, centreX, centreY, DragDeltaX, DragDeltaY, DragSteps, hold)
+            : new PointerWindowProbe.DragReading(false, DragSteps, 0, 0, 0, 0);
+        var drag = dragReading.Accepted;
         PointerWindowProbe.PumpUntil(() => (underneath?.DragMoves ?? 0) > dragBefore);
 
         var wheel = pointIsOurs && PointerWindowProbe.InjectWheelAt(centreX, centreY, WheelNotchesPerPass);
@@ -508,8 +527,38 @@ internal static class OverlayDesktopInputObservations
             KeyDowns: underneath?.KeyDowns ?? 0,
             KeeperKeyDowns: keeper.KeyDowns,
             Activations: underneath?.Activations ?? 0,
-            Foreground: PointerWindowProbe.Foreground());
+            Foreground: PointerWindowProbe.Foreground(),
+            Drag: dragReading);
     }
+
+    /// <summary>
+    /// The re-assertion one leg needs over one point of the drag path, and the window manager's
+    /// answer about who owns it afterwards.
+    ///
+    /// <para>It is the same pair of moves <see cref="SettleWithOverlayOnTop"/> makes and for the
+    /// same reasons — the window underneath is raised so it beats FOREIGN topmost contention (the
+    /// residue <see cref="RealDesktopCollection"/> names), and the overlay is then put back on top
+    /// of it, which is what the shipping product does on a cadence
+    /// (<c>Services/Flash/FlashService.cs:3865-3872</c>, <c>ForceTopmost</c>). Passing
+    /// <paramref name="overlay"/> as null is the baseline and post-teardown shape, where there is
+    /// no surface that has to stay above anything.</para>
+    ///
+    /// <para>It never grants an answer: the counters the facts read are still the operating
+    /// system's, and the handle returned here is only used to NAME whoever took a step that did not
+    /// arrive.</para>
+    /// </summary>
+    private static Func<int, int, nint> HoldingThePath(Win32OverlayPresence? overlay, nint underneathWindow) =>
+        (x, y) =>
+        {
+            var winner = PointerWindowProbe.HitTestAfterRaising(underneathWindow, x, y);
+            if (overlay is null)
+            {
+                return winner;
+            }
+
+            overlay.Reassert();
+            return PointerWindowProbe.HitTest(x, y);
+        };
 
     /// <summary>
     /// Put the overlay ABOVE the window underneath and ask the window manager who owns the point,
@@ -556,6 +605,145 @@ internal static class OverlayDesktopInputObservations
         }
 
         return (routed, overlayIndex, underneathIndex);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    //  the drag instrument's own control: a window over the PATH and not over the press point
+    // -------------------------------------------------------------------------------------------
+
+    private static readonly Lazy<HeldPathRun> LazyHeldPath =
+        new(RunHeldPath, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>The held-path run. Cached: it puts two real windows on the user's screen and
+    /// synthesises a drag between them.</summary>
+    internal static HeldPathRun HeldPath => LazyHeldPath.Value;
+
+    /// <summary>Where the held-path run works: the same bottom-right column as
+    /// <see cref="UnderneathBounds"/> and <see cref="KeeperBounds"/>, clear of both, and clear of the
+    /// upper-middle row <see cref="RunTaskSwitcher"/> uses. Nothing in this assembly may share a
+    /// point with a run that synthesises clicks.</summary>
+    internal static OverlayBounds ContendedBounds
+    {
+        get
+        {
+            var (width, height) = PointerWindowProbe.PrimarySize;
+            return new OverlayBounds(Math.Max(0, width - 320), Math.Max(0, height - 720), 240, 160);
+        }
+    }
+
+    /// <summary>
+    /// <b>The drag instrument's control, and the regression guard for the defect that made four
+    /// facts in this file unexplainable for a day.</b>
+    ///
+    /// <para>A second window of this process is put over the drag's PATH and deliberately NOT over
+    /// its press point, and then a drag is run. That asymmetry is the whole thing: a BUTTON message
+    /// is posted to the queue of the window under the cursor when the event is injected, while a
+    /// <c>WM_MOUSEMOVE</c> is SYNTHESISED at peek time for whatever owns the cursor's point then —
+    /// so a window over part of a rectangle takes every move and leaves every click, and the
+    /// resulting <c>downs=2 dragMoves=0 moves=2</c> reads exactly like an injection that does not
+    /// work at all. It is not: <see cref="Downs"/> is asserted to have moved, in the same run, at
+    /// the same rectangle.</para>
+    ///
+    /// <para><b>Why a second window of OUR OWN rather than a foreign one.</b> A foreign process is
+    /// what really did this, and no fact may depend on one existing — <see cref="RealDesktopCollection"/>
+    /// says plainly that a foreign topmost window can never be excluded and this run does not try.
+    /// A window this process owns reproduces the ONE thing under test, which is the z-order, and
+    /// does it deterministically.</para>
+    /// </summary>
+    /// <param name="MachineHasInteractiveDesktop">The machine fact every expectation flips on.</param>
+    /// <param name="Target">The window the drag is aimed at.</param>
+    /// <param name="TargetIsUp">The OS reports it visible.</param>
+    /// <param name="TargetTookForeground">It holds the foreground BEFORE the drag. Without that the
+    /// drag's own button-down activates it, activation raises it over the contender, and the drag
+    /// steps over the obstruction for a reason that has nothing to do with holding its path.</param>
+    /// <param name="Contender">The window placed over the drag's path.</param>
+    /// <param name="ContenderIsUp">Ditto.</param>
+    /// <param name="OwnerOfPressPoint">Who the window manager gives the press point to. It must be
+    /// the target, or the press below lands on nothing and the asymmetry is not constructed.</param>
+    /// <param name="OwnerOfFirstStep">And who it gives the drag's first step to. <b>It must be the
+    /// CONTENDER</b>, or this run is a drag with nothing in the way and proves nothing.</param>
+    /// <param name="DownsBefore">The target's click count before the drag.</param>
+    /// <param name="Downs">And after: the press still lands, which is the half of the asymmetry that
+    /// sent three diagnoses after a broken injection.</param>
+    /// <param name="DragMoves">The target's DRAG count after — the half that only arrives because
+    /// the drag holds its own path.</param>
+    /// <param name="Drag">The instrument's own account of the path.</param>
+    internal sealed record HeldPathRun(
+        bool MachineHasInteractiveDesktop,
+        nint Target,
+        bool TargetIsUp,
+        bool TargetTookForeground,
+        nint Contender,
+        bool ContenderIsUp,
+        nint OwnerOfPressPoint,
+        nint OwnerOfFirstStep,
+        int DownsBefore,
+        int Downs,
+        int DragMoves,
+        PointerWindowProbe.DragReading Drag)
+    {
+        internal string Trace =>
+            $"target={PointerWindowProbe.DescribeWindow(Target)} up={TargetIsUp} fg={TargetTookForeground} | "
+            + $"contender={PointerWindowProbe.DescribeWindow(Contender)} up={ContenderIsUp} | "
+            + $"pressPoint->{PointerWindowProbe.DescribeWindow(OwnerOfPressPoint)} "
+            + $"firstStep->{PointerWindowProbe.DescribeWindow(OwnerOfFirstStep)} | "
+            + $"downs {DownsBefore}->{Downs} dragMoves={DragMoves} | {Drag.Describe}";
+    }
+
+    private static HeldPathRun RunHeldPath()
+    {
+        var bounds = ContendedBounds;
+        var (pressX, pressY) = bounds.Centre;
+        var restoreCursor = PointerWindowProbe.CursorPosition();
+
+        using var target = PointerWindowProbe.ScratchTarget.Create(
+            bounds.X, bounds.Y, bounds.Width, bounds.Height, activatable: true);
+        var targetWindow = target?.Window ?? 0;
+
+        // THE FOREGROUND FIRST, and it is not tidiness — it was measured. Without it the drag's own
+        // button-down ACTIVATES this window, activation brings it to the top of its band, and the
+        // contender below is stepped over for free: the first draft of this run passed with the hold
+        // deleted for exactly that reason. The passive-channel legs above already hold the foreground
+        // here (InputWindowProbe.TakeForeground on the window underneath), so taking it is also what
+        // makes this run the same shape as the thing it guards.
+        var tookForeground = targetWindow != 0 && InputWindowProbe.TakeForeground(targetWindow);
+
+        // Offset by less than one step, so it covers every point of the path and none of the press.
+        using var contender = PointerWindowProbe.ScratchTarget.Create(
+            pressX + 3, pressY + 2, DragDeltaX + 160, DragDeltaY + 160);
+        var contenderWindow = contender?.Window ?? 0;
+
+        // The target is raised first and the contender on top of it, which is the state the defect
+        // needs and the state this run must PROVE it built before it may claim anything.
+        PointerWindowProbe.HitTestAfterRaising(targetWindow, pressX, pressY);
+        var firstStepX = pressX + (DragDeltaX / DragSteps);
+        var firstStepY = pressY + (DragDeltaY / DragSteps);
+        var ownerOfFirstStep = PointerWindowProbe.HitTestAfterRaising(contenderWindow, firstStepX, firstStepY);
+        var ownerOfPressPoint = PointerWindowProbe.HitTest(pressX, pressY);
+
+        var downsBefore = target?.Downs ?? 0;
+        var reading = target is null || ownerOfPressPoint != targetWindow
+            ? new PointerWindowProbe.DragReading(false, DragSteps, 0, 0, 0, 0)
+            : PointerWindowProbe.InjectDragAt(
+                target, pressX, pressY, DragDeltaX, DragDeltaY, DragSteps,
+                HoldingThePath(overlay: null, targetWindow));
+
+        var run = new HeldPathRun(
+            MachineHasInteractiveDesktop: PointerWindowProbe.MachineHasInteractiveDesktop,
+            Target: targetWindow,
+            TargetIsUp: PointerWindowProbe.WindowIsVisible(targetWindow),
+            TargetTookForeground: tookForeground,
+            Contender: contenderWindow,
+            ContenderIsUp: PointerWindowProbe.WindowIsVisible(contenderWindow),
+            OwnerOfPressPoint: ownerOfPressPoint,
+            OwnerOfFirstStep: ownerOfFirstStep,
+            DownsBefore: downsBefore,
+            Downs: target?.Downs ?? 0,
+            DragMoves: target?.DragMoves ?? 0,
+            Drag: reading);
+
+        PointerWindowProbe.MovePointerTo(restoreCursor.X, restoreCursor.Y);
+        return run;
     }
 
     // -------------------------------------------------------------------------------------------
