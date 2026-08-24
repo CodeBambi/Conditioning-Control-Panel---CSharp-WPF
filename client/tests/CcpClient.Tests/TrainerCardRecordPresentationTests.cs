@@ -91,7 +91,14 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
         // CAPTURE PASS over an all-black image. A colour c passes two checks only if EVERY channel
         // is within tolerance of both expected values, which needs |a-b| <= ta+tb on every channel.
         // One channel further apart than that makes the two bands unreachable together.
-        foreach (var state in RecordChecks().Select(c => c.State).Distinct())
+        //
+        // Pinned before the loop, not inside it: a fact whose every assertion lives in a foreach
+        // over a collection the manifest could stop producing passes by asserting NOTHING, which is
+        // the exact vacuity this file exists to forbid one level up.
+        var states = RecordChecks().Select(c => c.State).Distinct().ToArray();
+        Assert.Equal(3, states.Length);
+
+        foreach (var state in states)
         {
             var forState = RecordChecks().Where(c => c.State == state).ToArray();
             Assert.True(
@@ -131,6 +138,7 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
         // and it is what makes the earned/unreadable separation MECHANICAL rather than measured.
         var checks = RecordChecks();
         var states = checks.Select(c => c.State).Distinct().OrderBy(s => s, StringComparer.Ordinal).ToArray();
+        Assert.Equal(3, states.Length);   // pinned before the loop, for the reason above it
 
         foreach (var left in states)
         {
@@ -239,15 +247,23 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
         var script = CaptureScript();
         Directory.CreateDirectory(_root);
 
-        foreach (var (state, expected) in new (string State, (TrainerCardRecordState Record, string Note, string Top, string Honor))[]
-                 {
-                     ("read", (TrainerCardRecordState.Read, string.Empty, TrainerCard.EarnedStatus,
-                         $"{TrainerCard.NotEarnedStatus} 1 of {GradedRunAwards.HonorRollCategories} categories cleared at top marks.")),
-                     ("earned", (TrainerCardRecordState.Read, string.Empty, TrainerCard.EarnedStatus, TrainerCard.EarnedStatus)),
-                     ("unreadable", (TrainerCardRecordState.Unreadable,
-                         TrainerCard.UnreadableNoteHead + TrainerCard.UnreadableInvalidJson,
-                         TrainerCard.UnknownStatus, TrainerCard.UnknownStatus)),
-                 })
+        (string State, (TrainerCardRecordState Record, string Note, string Top, string Honor) Card)[] cases =
+        [
+            ("read", (TrainerCardRecordState.Read, string.Empty, TrainerCard.EarnedStatus,
+                $"{TrainerCard.NotEarnedStatus} 1 of {GradedRunAwards.HonorRollCategories} categories cleared at top marks.")),
+            ("earned", (TrainerCardRecordState.Read, string.Empty, TrainerCard.EarnedStatus, TrainerCard.EarnedStatus)),
+            ("unreadable", (TrainerCardRecordState.Unreadable,
+                TrainerCard.UnreadableNoteHead + TrainerCard.UnreadableInvalidJson,
+                TrainerCard.UnknownStatus, TrainerCard.UnknownStatus)),
+        ];
+
+        // Pinned before the loop: every state capture.ps1 can drive has to be in here, or this fact
+        // would check the seeds it happens to list and say nothing about the one that was added.
+        Assert.Equal(
+            cases.Select(c => c.State).OrderBy(s => s, StringComparer.Ordinal).ToArray(),
+            RecordChecks().Select(c => c.State).Distinct().OrderBy(s => s, StringComparer.Ordinal).ToArray());
+
+        foreach (var (state, expected) in cases)
         {
             var path = Path.Combine(_root, $"{state}-{GradedRunAwardsDocument.FileName}");
             File.WriteAllText(path, SeedFor(script, state));
@@ -290,7 +306,7 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
         var awards = new GradedRunAwards(store, _ => { });
 
         awards.RecordGradedRun(topMarks: false, category: "bambi");
-        Assert.False(File.Exists(path), "a run below the bar wrote an award record");
+        Assert.Empty(Directory.GetFiles(_root));   // a run below the bar leaves no record behind at all
         Assert.Equal(TrainerCardRecordState.NoRunsYet, TrainerCard.Read(path).Record);
 
         awards.RecordGradedRun(topMarks: true, category: "bambi");
@@ -301,6 +317,11 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
         Assert.Equal(
             TrainerCardAwardState.Earned,
             card.Awards.Single(a => a.Id == GradedRunAwards.TopOfTheClassId).State);
+
+        // Stopped before Dispose deletes the directory underneath it: this fact STARTED a real
+        // background participant, and a store still owning an operation while its folder is removed
+        // is a race this test would be introducing rather than observing.
+        await store.StopAsync();
     }
 
     private sealed class NullSink : ILogSink
