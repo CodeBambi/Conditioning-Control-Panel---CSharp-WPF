@@ -1041,6 +1041,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       bridge,
       games: games.list,
       keybinds,
+      /* THE DOOR'S TWO WRITE VERBS, lent to the web Media group so its add
+       * and remove buttons ride SORT's `probe-sub` / `library-remove` frames
+       * rather than a second copy of them. The group only renders behind
+       * `init.settings.mediaControls === true`, so on the app this is an
+       * unread argument. */
+      assets,
       log: say,
       gameKey: gameKey || null,
       onClose: () => (active ? showClassScreen() : showBoard()),
