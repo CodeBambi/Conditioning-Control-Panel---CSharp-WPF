@@ -7,13 +7,17 @@
     "3": "Cited only by historical research inputs (first-attempt lessons, row-1 research, spikes, prior sync ledgers, audits). Recorded, no standing obligation."
   },
   "baseline": {
-    "upstreamVersion": "v6.8.0",
-    "merge": "db3e842f",
+    "upstreamVersion": "v6.8.4",
+    "merge": "6a8b4c724",
     "previous": {
-      "upstreamVersion": "v6.7.4",
-      "merge": "42286638"
+      "upstreamVersion": "v6.8.0",
+      "merge": "79feea844",
+      "wasRecordedAs": "db3e842f"
     },
-    "recorded": "2026-08-14"
+    "recorded": "2026-08-25",
+    "note": "ADVANCED WITH THE DELTAS, NOT SEPARATELY. Every changedAtSync in this file is `git diff --numstat 79feea844..6a8b4c724 -- ConditioningControlPanel/`, produced by `node client/tools/citations/detect.mjs --regenerate --write` with NO --since/--until, so the window is READ FROM THIS BLOCK and the two can never describe different spans. That coupling is the point and it is measured, not asserted: regenerating the deltas while leaving this block at 42286638..db3e842f moves DELTA-MISMATCH from 1 to 54 - every changed entry, a 100% fire rate against the class's own recorded 1-of-106 - because the deltas would then describe one window while this block named another. A future regeneration therefore advances this block FIRST and then runs the tool with no window flags. The tool never writes here, by design: choosing the endpoint is judgment, and its consequences are named in the two notes below.",
+    "endpointNote": "BOTH ENDPOINTS ARE UPSTREAM STATES OF ConditioningControlPanel/, AND THAT IS WHY `previous.merge` IS NOT THE SYNC MERGE. The v6.8.0 sync merge db3e842f is on the PORT branch, and its WPF subtree was not an upstream tree: it still carried the abandoned first-attempt refactor, which had relocated four Models/ files into CCP.Core/Models/ and left residue in thirteen more. Commits c9e98f29a and b0e97d98a restored ConditioningControlPanel/ to main AFTER it, inside any window starting there. Measured on this checkout, using db3e842f as the start contaminates 21 of the 297 entries: 4 regenerate to null because git pairs the deleted CCP.Core copy with the surviving shipping copy and plain numstat keys that rename by its combined {old => new} path, and 17 more mix the port's own restore into the recorded add/del. FOUR OF THE 21 ARE TIER 1 AND ONE WAS A FABRICATED REVIEW ROW: Services/Quiz/QuizService.cs regenerates to `M +121/-1` from db3e842f and has NO ROW AT ALL from 79feea844 - the entire +121 was the restore putting back what the refactor had removed, and upstream did not touch the file between v6.8.0 and v6.8.4. So `previous.merge` is 79feea844, the second parent of db3e842f: upstream main at v6.8.0, an ancestor of main, subtree 409efaf0c. `merge` stays at the port-side sync merge 6a8b4c724 because THAT one passes the same test - its subtree 93c726aa6 is byte-identical to main's and to upstream's own v6.8.4 tip 85bc6c86c. `wasRecordedAs` keeps the superseded value so the change is legible rather than silent. CONSEQUENCE, STATED: the tool's one named ceiling (rename destinations) COSTS NOTHING over this window - the count is 0, where it was 4 - so nothing is dropped silently and nothing had to be hand-written past the tool.",
+    "needleAnchorNote": "ADVANCING THIS BLOCK MOVES A GUARD'S FOOTING, AND THE GUARD WAS NOT EDITED. CitationNeedleTests.TheNeedleMode_ExitsZero_WithANonEmptyReviewList runs `--needles --since <previous.merge>` and asserts the list is NON-EMPTY, because a fact watching an empty list would pass even with the exit contract reverted. Its non-emptiness was a property of the DATA, not of the tool: with one needled entry (Services/Quiz/IntakeHostService.cs, untouched since v6.7.4) the list had rows only at 42286638. Advancing previous to the v6.8.0 endpoint empties it, so the fix is more needles rather than a looser test - Chaos/ChaosWebViewHost.cs is now needled at five subjects, every one of them verified to anchor exactly once at BOTH endpoints and to sit at a different line at each. Line-level coverage goes from 1 entry to 2 and the test file is untouched."
   },
   "ambiguousBasenames": [
     "MainWindow.xaml"
@@ -32,12 +36,12 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 471,
-        "del": 88
+        "add": 217,
+        "del": 66
       },
-      "verdict": "SPLIT: EnsureInstallDateRecorded/ResolveInstallDateUtc = new persisted startup field (persistence-contract row); OfferRemoteMediaSource/FlushPendingRemoteMediaOffer = remote-media row + owner network decision"
+      "verdict": "RE-BASED 2026-08-25 - THE DELTA THIS VERDICT REASONED OVER IS GONE. The recorded finding was about the v6.8.0 delta (M +471/-88): EnsureInstallDateRecorded / ResolveInstallDateUtc as a new persisted startup field for the persistence-contract row, and OfferRemoteMediaSource / FlushPendingRemoteMediaOffer for the remote-media row gated on the owner network decision. BOTH REMAIN TRUE OF THAT WINDOW and both still belong to their rows; they are simply no longer what this entry's field measures. THE NEW WINDOW (v6.8.0 -> v6.8.4, M +217/-66) IS DIFFERENT WORK: DescentCountdownService and DescentShowDirector added to the static service surface; PerkNotificationsSuppressed; StartUiHangSelfTest, a startup-argument diagnostic; and the auth-token healing block - a _authUpgradeGate SemaphoreSlim(1,1), EnsureAuthTokenAsync and NeedsAuthTokenUpgrade, which is the App-side half of the v6.8.3/v6.8.4 auth repair wave. NOT YET JUDGED AGAINST LANDED PORT CODE: the port's Entitlement/HostAuthTokenReader.cs reads a token the shipping app mints, so a change to HOW that token is healed or upgraded is exactly the class that can invalidate a landed reader without either side going red. That is a real question and this pass did not answer it - it needs the token's on-disk shape compared across the two endpoints, which is its own row."
     },
     {
       "path": "ConditioningControlPanel/Models/AppSettings.cs",
@@ -57,12 +61,12 @@
         "src:src/CcpClient.Desktop/Persistence/AssetSelectionDocument.cs"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 441,
-        "del": 5
+        "add": 518,
+        "del": 65
       },
-      "verdict": "NO LANDED-CODE DEFECT IDENTIFIED: +441 is new-feature surface (SetSessionFlashRamp/ClearSessionFlashRamp, Descent/JustDrop/Programs keys). Any CHANGED existing key is still unreviewed - owed to the tier-1 review row"
+      "verdict": "RE-MEASURED AND RE-BASED 2026-08-25. The recorded +441/-5 was never this path's own delta - it was the numstat of CCP.Core/Models/AppSettings.cs, a basename collision, and it was the single live DELTA-MISMATCH row on this tree. It is now M +518/-65, measured from upstream main at v6.8.0 (79feea844) to v6.8.4, where this path exists at its shipping location; the rename artefact that made it unmeasurable from the port-side merge is gone with the window (see baseline.endpointNote). THE RECORDED FINDING STILL STANDS for the part it covered - the v6.8.0 additions were new-feature surface (SetSessionFlashRamp / ClearSessionFlashRamp, Descent / JustDrop / Programs keys) rather than changes to keys the port had already copied. WHAT THE WIDER WINDOW ADDS, AND IT IS A REMOVAL: RemoteMediaBlockedSubs and RemoteMediaBlockedIds are GONE, replaced by an in-file note giving upstream's reason - nothing in the UI could ever add to the list, so it was removed rather than finished, and stale keys in settings.json are ignored on load. The consequence lands in Services/Chaos/DtrhAssetManifest.cs, whose block-since-cached prune went with it. STILL UNREVIEWED, NARROWED: whether any EXISTING key the port has copied changed its type, default or semantics across this window. -65 lines is small enough to answer by reading, and it is owed to the persistence-migration contract, not to this field."
     },
     {
       "path": "ConditioningControlPanel/Services/Video/VideoService.cs",
@@ -78,13 +82,8 @@
         "src:src/CcpClient.Desktop/Features/Dtrh/DtrhHostWindow.axaml.cs",
         "src:src/CcpClient.Desktop/Features/Dtrh/DtrhNativeEffects.cs"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 364,
-        "del": 11
-      },
-      "verdict": "REMOTE-MEDIA: IsRemoteMediaPath/RemoteMediaEnabled/RemoteChannels/TakeRemoteVideo/RemoteConsumerId - board row, gated by the owner network/credential decision"
+      "changedAtSync": null,
+      "verdict": "STILL BLOCKED ON THE OWNER, DELTA WINDOW MOVED (2026-08-25). The finding stands: at v6.8.0 (M +364/-11) this service gained the remote-media surface - IsRemoteMediaPath, RemoteMediaEnabled, RemoteChannels, TakeRemoteVideo, RemoteConsumerId - which is a board row gated on the owner's network/credential decision. Upstream did NOT touch the file between v6.8.0 and v6.8.4, so the field is null and the delta is recorded here in prose. ONE THING DID CHANGE AROUND IT, and it narrows the row rather than closing it: the remote-media BLOCKLIST (RemoteMediaBlockedSubs / RemoteMediaBlockedIds) was retired from Models/AppSettings.cs in this window, and Services/Chaos/DtrhAssetManifest.cs lost the prune that consumed it - so a port of remote media inherits no blocklist to build."
     },
     {
       "path": "ConditioningControlPanel/MainWindow/MainWindow.Presets.cs",
@@ -101,12 +100,12 @@
         "src:src/CcpClient.Desktop/Features/QuickToggleDispatch.cs"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 213,
-        "del": 63
+        "add": 98,
+        "del": 58
       },
-      "verdict": "GROUND-TRUTH MOVED under a RATIFIED row: CardJustDrop_Click removed and re-added as => TeaseCardClicked(); + RefreshPresetsModVisuals/MysteryFeatureTier - escalated to the owner"
+      "verdict": "RE-BASED 2026-08-25 - DIFFERENT WINDOW, DIFFERENT SUBJECT. The recorded finding (GROUND-TRUTH MOVED under a ratified row: CardJustDrop_Click removed and re-added as => TeaseCardClicked(), plus RefreshPresetsModVisuals / MysteryFeatureTier, escalated to the owner) was about the v6.8.0 delta M +213/-63. It remains true of that window and remains with the owner; it is no longer what this field measures. THE NEW WINDOW (v6.8.0 -> v6.8.4) IS M +98/-58 and is a PRESET-CARD LAYOUT rework: the stat-icon row moved out of its own WrapPanel onto the card's existing line, AddStatIcon widened from WrapPanel to Panel to allow it, and the community/yours badge and key colouring were reworked alongside. NO ENTITLEMENT, DISPATCH OR TEASE-TIER LOGIC IN THIS WINDOW, so the quick-toggle row's ground truth is untouched by it. NOT A PARITY OBLIGATION: card layout is open design space for the port, which does not copy WPF visuals."
     },
     {
       "path": "ConditioningControlPanel/Services/Chaos/DtrhAssetManifest.cs",
@@ -117,12 +116,12 @@
         "src:src/CcpClient.Desktop/Features/Dtrh/DtrhUserMedia.cs"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 270,
-        "del": 2
+        "add": 2,
+        "del": 19
       },
-      "verdict": "SECOND CONSECUTIVE SYNC on this file - re-read owed against the landed active-pool code (SP-055) - tier-1 review row"
+      "verdict": "RE-BASED 2026-08-25, AND THE NEW DELTA IS A DELIBERATE REMOVAL. The recorded verdict called this a SECOND CONSECUTIVE SYNC with a re-read owed against the landed active-pool code (SP-055); that was about the v6.8.0 delta (M +270/-2), which is no longer what this field measures. THE NEW WINDOW (v6.8.0 -> v6.8.4) IS M +2/-19, and all of it is one subject: PruneRemoteLocked no longer drops cached entries whose subreddit or id the user has blocked SINCE they were cached. The whole block went, along with its doc paragraph explaining why a block made today had to reach yesterday's cache. IT IS NOT A REGRESSION: Models/AppSettings.cs removed RemoteMediaBlockedSubs / RemoteMediaBlockedIds in the same wave, with upstream's reason stated in the file - nothing in the UI could ever add to the blocklist, so it was removed rather than finished, picking the niches IS the content control, and there is deliberately no NSFW filter (owner decision 2026-08-12). Verified on this tree: no reference to either key survives anywhere under ConditioningControlPanel/ except that note. PORT CONSEQUENCE: a port that copies a remote-media blocklist would be porting a feature upstream has retired, and the TTL prune is now the whole of PruneRemoteLocked. The SP-055 active-pool re-read that the previous verdict owed is NOT discharged by this and stays owed to its row."
     },
     {
       "path": "ConditioningControlPanel/Services/Settings/SettingsService.cs",
@@ -132,13 +131,8 @@
         "docs:persistence-migration-contract.md",
         "docs:row-1-research-inputs.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 124,
-        "del": 48
-      },
-      "verdict": "DEFECT-CANDIDATE: adds MergeBuiltInPresetInto (built-in preset merge on load) inside the LANDED persistence-migration contract - board P1 row"
+      "changedAtSync": null,
+      "verdict": "STILL A DEFECT-CANDIDATE, DELTA WINDOW MOVED (2026-08-25). The finding stands: at v6.8.0 (M +124/-48) this service gained MergeBuiltInPresetInto, a built-in preset merge on load, INSIDE the port's landed persistence-migration contract - board P1 row. Upstream did NOT touch the file between v6.8.0 and v6.8.4, so the field is now null and the delta the candidate was raised against is recorded here in prose. The candidate is NOT resolved by the field going quiet."
     },
     {
       "path": "ConditioningControlPanel/MainWindow/MainWindow.UiUpdates.cs",
@@ -149,12 +143,12 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 166,
-        "del": 4
+        "add": 3,
+        "del": 2
       },
-      "verdict": "GROUND-TRUTH MOVED under a RATIFIED row: QueueModAwareSurfaceSweep/RefreshModAwareSurfaces/EnsureModSweepWatchers (mod-aware surface sweep)"
+      "verdict": "RE-BASED 2026-08-25. The recorded finding (GROUND-TRUTH MOVED under a ratified row: QueueModAwareSurfaceSweep / RefreshModAwareSurfaces / EnsureModSweepWatchers, the mod-aware surface sweep) was about the v6.8.0 delta M +166/-4 and stays true of that window and with its row. THE NEW WINDOW (v6.8.0 -> v6.8.4) IS M +3/-2 and is one line of the same free-day rule the rest of this sync applies: the Bambi Takeover unlock now reads HasPremiumAccess OR App.DailyFree?.IsFreeToday('takeover'), which drives the Locked/Unlocked visibility pair. NO LANDED PORT CLAIM TOUCHED - the port has no Takeover surface - and the rule itself is already implemented port-side in Features/Dtrh/DtrhGate.cs and Haptics/HapticGate.cs."
     },
     {
       "path": "ConditioningControlPanel/Features/FeatureCard.xaml.cs",
@@ -165,13 +159,8 @@
         "docs:quick-toggle-dispatch.md",
         "docs:task-board.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 142,
-        "del": 1
-      },
-      "verdict": "GROUND-TRUTH MOVED under a RATIFIED row: tease-tier DependencyProperty + ApplyTeaseState + visibility/size refresh on the card control the quick-toggle row ports"
+      "changedAtSync": null,
+      "verdict": "STILL TRUE, DELTA WINDOW MOVED (2026-08-25). The finding stands and belongs to its ratified row: at v6.8.0 (M +142/-1) this control gained the tease-tier DependencyProperty, ApplyTeaseState, and the visibility/size refresh on the card the quick-toggle row ports. Upstream did NOT touch the file between v6.8.0 and v6.8.4, so this entry's field is now null and the +142/-1 above is recorded in prose instead - the review obligation was discharged when the finding was written, not by the field going quiet."
     },
     {
       "path": "ConditioningControlPanel/Services/Quiz/IntakeHostService.cs",
@@ -194,13 +183,8 @@
         "src:src/CcpClient.Desktop/Features/Intake/IntakeSaveImageSink.cs",
         "src:src/CcpClient.Desktop/Features/Intake/IntakeSubjectId.cs"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 106,
-        "del": 1
-      },
-      "verdict": "THIRD CONSECUTIVE SYNC on this file - re-read owed against the landed Intake host contract - tier-1 review row",
+      "changedAtSync": null,
+      "verdict": "RE-BASED 2026-08-25, AND THE STREAK ENDED. The recorded verdict called this a THIRD CONSECUTIVE SYNC with a re-read owed against the landed Intake host contract; that was about the v6.8.0 delta M +106/-1. Upstream did NOT touch this file between v6.8.0 and v6.8.4, so the streak is broken and the field is null. THE RE-READ IS STILL OWED - a null delta answers 'did it change again', never 'was the last change reviewed' - and it is now the ONLY thing owed here, which is a narrower obligation than the streak language implied. This is also the inventory's original needled entry: all nine needles still anchor exactly once at the recorded baseline and none has moved since v6.8.0, which is independent evidence for the null.",
       "needles": [
         { "id": "top-marks-rationale", "needle": "Deliberately NOT full marks" },
         { "id": "top-marks-constant", "needle": "TopMarksPercent = 90.0" },
@@ -222,13 +206,8 @@
         "src:src/CcpClient.Desktop/Ai/AiPrivacyFilters.cs",
         "src:src/CcpClient.Desktop/Ai/AiTextHygiene.cs"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 61,
-        "del": 1
-      },
-      "verdict": "DEFECT-FILED: transcript-shape hygiene missing in landed SP-069 port code (board P1 row, 2026-08-14)"
+      "changedAtSync": null,
+      "verdict": "STILL TRUE, DELTA WINDOW MOVED (2026-08-25). DEFECT-FILED remains the verdict: transcript-shape hygiene is missing in the port's landed SP-069 code, board P1 row, filed 2026-08-14 against the v6.8.0 delta M +61/-1. Upstream did NOT touch this file between v6.8.0 and v6.8.4, so the field is now null and the delta the defect was raised against is recorded here in prose. THE FILED DEFECT IS NOT DISCHARGED BY THAT and the null must not be read as 'nothing to do'. See also Services/Companion/Brain/CompanionBrain.cs, the caller half of the same work."
     },
     {
       "path": "ConditioningControlPanel/Chaos/ChaosWebViewHost.cs",
@@ -242,12 +221,19 @@
         "src:src/CcpClient.Desktop/Features/Intake/IntakeProtocol.cs"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 43,
-        "del": 6
+        "add": 354,
+        "del": 7
       },
-      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+      "verdict": "REVIEWED (2026-08-25), THREE SUBJECTS, ONE ALREADY A FILED DEFECT. v6.8.0 -> v6.8.4 is M +354/-7 and splits cleanly. (1) HOST-OWNED FULLSCREEN CHROME: new HostOwnedFullscreen option, BuildHostChrome / UpdateChromeToggle / Enter- and LeaveHostFullscreen / CaptureWindowedFrame plus an HWND_TOPMOST path - a code-built chrome bar with its own fullscreen toggle, distinct from the page's Fullscreen API route that ContainsFullScreenElementChanged already drove. Unported: the port's hosted windows carry Avalonia chrome, and this is a mechanism, not an outcome. (2) THE ESC BRIDGE: EscapeBridgeScript injected on document creation, posting a namespaced ccp-host-escape message from a CAPTURE-phase listener so a page that stops propagation on its own Esc still lets the user out. That IS a user-observable outcome and the port's five hosted call sites should be checked against it - filed as a carry-forward, not as a confirmed defect, because no port surface was measured for it here. (3) THE REDUCED-MOTION SWITCH (PrefersReducedMotionArgument, both the instance and the pure static overload): ALREADY TRIAGED - the 2026-08-22 sync ledger records it as a CONFIRMED P1 parity drift with its own board row, and the port landed Motion/MotionSettings.cs against it. THE OLDER v6.8.0 DELTA (M +43/-6) IS NO LONGER REPRESENTED BY ANY FIELD HERE, SO IT IS RECORDED: OnCoreCreated (the last seam before the first byte, used to attach a request filter that must precede the sign-in navigation) and AdditionalNavigationHosts, which replaced the single-origin StartsWith lockdown in OnNavigationStarting with a primary-plus-allowlist check. The port's hosted windows implement navigation lockdown and the Intake protocol cites this file for it, so that widening is the part of the v6.8.0 delta with live port relevance.",
+      "needles": [
+        { "id": "host-window-show-activated", "needle": "ShowActivated = _opts.InputEnabled" },
+        { "id": "fullscreen-state", "needle": "public bool IsFullscreen => _isFullscreen;" },
+        { "id": "browser-arguments", "needle": "var args = \"--disable-direct-composition-video-overlays" },
+        { "id": "page-message-ready", "needle": "case \"ready\":" },
+        { "id": "page-message-log", "needle": "case \"log\":" }
+      ]
     },
     {
       "path": "ConditioningControlPanel/Services/Companion/Brain/CompanionBrain.cs",
@@ -258,13 +244,8 @@
         "src:src/CcpClient.Desktop/Ai/AiOperationPipeline.cs",
         "src:src/CcpClient.Desktop/Ai/AiPrivacyFilters.cs"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 27,
-        "del": 2
-      },
-      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+      "changedAtSync": null,
+      "verdict": "REVIEWED AND CLOSED, ONE HALF ALREADY FILED (2026-08-25). Delta went NULL in this regeneration; recorded here so the v6.8.0 obligation is not retired by the field going quiet. THE v6.8.0 CHANGE (M +27/-2) IS TWO THINGS. (1) Both UnwrapSpokenSigil call sites now pass ActiveSpeakerName(), so the 0813 transcript shape can DROP a line the model attributed to a DIFFERENT companion instead of quoting it - this is the CALLER half of the work already recorded against Services/AIService/AiTextHygiene.cs, whose verdict is DEFECT-FILED against the port's landed SP-069 code. Same defect, second site; not a new one. (2) NEW OnModSwitched() purges BarkEcho turns on a mod switch, because bark echoes bake the companion name into their text (CompanionTurn.FormatBarkEcho) and the persona fence deliberately KEEPS them, so without the purge the window carries the old companion's echoes beside the new mod's and the model answers with a two-speaker roleplay transcript (upstream observed it after Bambi -> Drone). NOT PORTED: the port has no bark-echo turn kind and no sigil unwrap - its only reference is a doc comment in Ai/AiPrivacyFilters.cs. CARRY-FORWARD: a port that lands bark echoes inherits the PURGE, not just the unwrap."
     },
     {
       "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.ChatInput.cs",
@@ -274,12 +255,12 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 26,
-        "del": 0
+        "add": 7,
+        "del": 4
       },
-      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+      "verdict": "REVIEWED AND CLOSED, NOT PORTED (2026-08-25). v6.8.0 -> v6.8.4 is M +7/-4 and is ONE rule applied twice: the Takeover gate in the tube's quick menu now reads HasPremiumAccess OR App.DailyFree?.IsFreeToday('takeover') - both at the refusal site (which used to Giggle 'This is Patreon only~' on the feature's own free-today day, #978) and at the menu-availability site that names the row. THE OLDER v6.8.0 DELTA (M +26/-0) IS NO LONGER REPRESENTED BY ANY FIELD HERE, SO IT IS RECORDED: dismissing the tube now PERSISTS AvatarEnabled=false before HideTube (#888 - it was session-only, so the tube came back visible and mute on the next launch, speech gating on the same flag), and the dismiss nudges the Companion room's hero card through SyncCompanionRoom because that card only re-reads AvatarEnabled on a Sync. NO LANDED PORT CLAIM TOUCHED either way: there is no tube chat input and no quick menu under client/src. The free-day OR is the same rule the port already implements in Features/Dtrh/DtrhGate.cs and Haptics/HapticGate.cs, so it is a pattern confirmation rather than a new obligation."
     },
     {
       "path": "ConditioningControlPanel/MainWindow/MainWindow.Settings.cs",
@@ -291,12 +272,12 @@
         "src:src/CcpClient.Desktop/Features/Intake/IntakeSettingsDocument.cs"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 16,
-        "del": 0
+        "add": 10,
+        "del": 4
       },
-      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+      "verdict": "REVIEWED AND CLOSED, NOT PORTED (2026-08-25). v6.8.0 -> v6.8.4 is M +10/-4, two edits to one condition. (1) The autonomy-resume gate now reads HasPremiumAccess OR IsFreeToday('takeover'), the same OR as every other Takeover site. (2) AutonomyResumeOnStartup joined the condition (#930): this runs while MainWindow is being built, long before the async InitializePatreonAndSyncAsync block that owns the same decision, so without it Takeover re-armed itself on every launch and the later block cleared only AutonomyModeEnabled - leaving the SERVICE RUNNING behind a checkbox that read OFF. That divergence-between-two-owners-of-one-decision is the transferable lesson. THE OLDER v6.8.0 DELTA (M +16/-0) IS NO LONGER REPRESENTED BY ANY FIELD HERE, SO IT IS RECORDED: FlashSaveAbsorb() (decoration on BtnSave_Click, its own 1.6s clock, save path untouched) and BtnTutorialWhatMoved_Click, the permanent re-run entry for the v6.8 relocation tour that the one-shot What's New dialog otherwise strands. NO LANDED PORT CLAIM TOUCHED: the port has no Autonomy/Takeover feature and no settings tab of this shape."
     },
     {
       "path": "ConditioningControlPanel/MainWindow/MainWindow.Patreon.cs",
@@ -306,12 +287,12 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 10,
-        "del": 5
+        "add": 67,
+        "del": 24
       },
-      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+      "verdict": "REVIEWED AND CLOSED, NOT PORTED, ONE RULE WORTH INHERITING (2026-08-25). v6.8.0 -> v6.8.4 is M +67/-24 and is a CENTRALISATION plus one new consent. RefreshPremiumGate gained a dailyKey parameter, and the six pool features' veils moved out of UpdatePatreonUI into a new RefreshEntitlementVeils() so the day-roll / server-override path and the tier-change path cannot disagree about which doors are shut - upstream's named failure (#978) was the door's own page staying padlocked on its free day while the rail chip and the vault card both read FREE TODAY. Lockdown passes no key because the rotation never names it. The haptics content grid is dimmed by the same question HapticsGate asks, so the veil cannot lift over an inert page. Also new: ChkPublicShareRealAvatar_Changed, a SEPARATE consent for the public web profile card's avatar that deliberately does not inherit the signed-in-surfaces consent, and pushes on change so a revoke does not wait for the next scheduled sync. THE OLDER v6.8.0 DELTA (M +10/-5) IS RECORDED HERE TOO, since no field carries it now: RefreshProgramsUI() on the entitlement-arrived path (the Programs tab read HasPremiumAccess at BUILD time, so a subscriber who opened it before async validation landed saw everything locked), and the removal of a ctor-time 'hide avatar if disabled' guard that ran before MainWindow_Loaded builds the tube and was therefore always a no-op (#888). NO LANDED PORT CLAIM TOUCHED: no entitlement veil UI exists under client/src. THE RULE TO INHERIT: one repaint entry point for every gate, and no consent implied by another consent."
     },
     {
       "path": "ConditioningControlPanel/Services/KeywordTriggerService.cs",
@@ -324,13 +305,8 @@
         "docs:task-board.md",
         "src:src/CcpClient.Desktop/Ai/AiAwarenessService.cs"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 11,
-        "del": 1
-      },
-      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+      "changedAtSync": null,
+      "verdict": "REVIEWED AND CLOSED, RULE CARRIED FORWARD (2026-08-25). Delta went NULL in this regeneration; answered here rather than retired. THE v6.8.0 CHANGE (M +11/-1) IS TWO ENTITLEMENT EDITS. (1) HasAccess() now returns true on App.DailyFree?.IsFreeToday('awareness') as well as HasPremiumAccess - the same OR AutonomyService and HapticMixer apply. (2) FireDemoTrigger now runs that SAME gate, because the tutorial demo drives the real fire path and was therefore a back door into a premium feature - pulse feed, dispatch and the keyword achievements included (#887). NO LANDED PORT CLAIM INVALIDATED: the port's only citer, Ai/AiAwarenessService.cs, cites this file for the REJECTED fire-and-forget Task.Run, for the global cooldown gate and for the awareness context shape, never for the entitlement gate, and the port has no keyword-trigger feature. THE RULE MATTERS ANYWAY, TWICE OVER: 'tier bar OR today's free key' is already how the port's Features/Dtrh/DtrhGate.cs and Haptics/HapticGate.cs read, so a keyword row inherits it; and 'a demo or tutorial path runs the same gate as the real one' is a rule the port has nowhere written down."
     },
     {
       "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.Avatar.cs",
@@ -339,13 +315,8 @@
         "docs:capability-inventory.md",
         "docs:first-attempt-lessons.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 10,
-        "del": 0
-      },
-      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+      "changedAtSync": null,
+      "verdict": "REVIEWED AND CLOSED, NOT PORTED (2026-08-25). This entry's delta went NULL in this regeneration - upstream did not touch the file between v6.8.0 and v6.8.4 - which would have retired the outstanding v6.8.0 obligation by making NEEDS-VERDICT stop firing rather than by answering it, so the answer is recorded here. THE v6.8.0 CHANGE (M +10/-0): UpdateQuickMenuState() added to the tube's ModChanged handler, so the right-click quick menu re-paints to the mod accent and re-words its Talk-to / Takeover / Personality rows (GetTalkToLabel, GetTakeoverLabel, GetPersonalityDisplayName) on the one path MainWindow.ApplyActiveModChange never reaches - uninstalling the mod you are wearing, where ModService activates the fallback itself. NO LANDED PORT CLAIM TOUCHED: the port's Features/AvatarTube/ is the avatar RENDERER (pack loader, strip codec, sequence evaluator, animation engine); there is no tube window and no quick menu anywhere under client/src, and this entry's citedBy is docs-only. CARRY-FORWARD for whoever ports the tube chrome: the mod-change repaint belongs on ModChanged, not on the manage-mods path."
     },
     {
       "path": "ConditioningControlPanel/Services/AiService.cs",
@@ -361,13 +332,8 @@
         "src:src/CcpClient.Desktop/Ai/AiOperationVocabulary.cs",
         "src:src/CcpClient.Desktop/Ai/AiProviderSeam.cs"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 8,
-        "del": 2
-      },
-      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+      "changedAtSync": null,
+      "verdict": "REVIEWED AND CLOSED, GAP NAMED (2026-08-25). Delta went NULL in this regeneration; the v6.8.0 question is answered here rather than retired with the field. THE v6.8.0 CHANGE (M +8/-2): the AI request quota became TIERED - PatreonDailyLimit=1000 split into Tier1DailyLimit=1000 and Tier2DailyLimit=2000, and EffectiveDailyLimit now tests HasLabAccess FIRST and HasAiAccess second, leaving FreeDailyLimit=100 for identity-only users. Upstream's own stated reason (owner decision 2026-08-13): 'AI is not the perk - usage is.' NO LANDED PORT CLAIM INVALIDATED: every port citation into this file is a SHAPE citation and none is a quota one - the proxy host constant, the awareness context and still-on duration formats, the prompt shape, and the cannot-run refusal. THE GAP, STATED RATHER THAN IMPLIED: client/src carries no request quota at all (zero DailyLimit occurrences), so the port ships an unmetered AI path against an upstream that meters it in three bands. That is a MISSING FEATURE for the AI row, not a divergence this sync created."
     },
     {
       "path": "ConditioningControlPanel/MainWindow/MainWindow.Lab.cs",
@@ -379,12 +345,12 @@
         "src:src/CcpClient.Desktop/Features/Dtrh/DtrhLaunchCoordinator.cs"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 0,
-        "del": 2
+        "add": 22,
+        "del": 0
       },
-      "verdict": "UNREVIEWED - owed to board row \"Tier-1 citation review for the v6.8.0 sync\""
+      "verdict": "REVIEWED AND CLOSED, ALREADY ON THE BOARD (2026-08-25). v6.8.0 -> v6.8.4 is M +22/-0 and is exactly one thing: BtnStartArcademy_Click, the Play strip's entry to the Arcademy web hub, which delegates EVERY gate to ArcademyHostService.Launch() - tier 2 through TierGate, then AudioOnlySession, then idempotency - for the stated reason that the card's lockband is decoration and the one code path that opens the door has to be the one that can say no. That refusal-belongs-at-the-door rule is the transferable part; the surface itself is the open Arcademy board row, whose door upstream SHUT in v6.8.4 (DoorAvailable is a static readonly false), so it cannot be headed-verified against the shipping app either. THE OLDER v6.8.0 DELTA (M +0/-2) IS RECORDED, since no field carries it: a single dropped TxtBannerTertiary recolour in the lockdown banner - cosmetic, no port surface. NOTE ON THE MEASUREMENT: from the port-side merge db3e842f this file regenerates to +23/-2 rather than +22/-0, because two of those lines are the port's own SP-141 tree restore rather than upstream; the figure recorded here is the upstream-to-upstream one (see baseline.endpointNote)."
     },
     {
       "path": "ConditioningControlPanel/AvatarTube/AvatarTubeWindow.CirceEmotes.cs",
@@ -427,8 +393,13 @@
         "docs:first-attempt-lessons.md",
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": null,
-      "verdict": "not-changed-at-2026-08-14-sync"
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 4,
+        "del": 0
+      },
+      "verdict": "REVIEWED AND CLOSED, NOT PORTED (2026-08-25). Its recorded verdict said 'not-changed-at-2026-08-14-sync', which was true then and is no longer the whole truth: upstream DID touch it between v6.8.0 and v6.8.4 (M +4/-0). THE CHANGE: one InitializeDescentFuseCandle() call added to the tube constructor, subscribing the Descent fuse candle to a service that raises nothing without a cached ceremony timestamp, so the flame stays collapsed until there is one. NO LANDED PORT CLAIM TOUCHED: the port has no tube window and no Descent ceremony; Features/AvatarTube/ is the renderer only. Recorded rather than left as a stale 'not changed' string, because a verdict that denies a change the field beside it reports is the exact rot this inventory exists to remove."
     },
     {
       "path": "ConditioningControlPanel/Chaos/ChaosOverlayWindow.xaml.cs",
@@ -859,8 +830,13 @@
         "src:src/CcpClient.Desktop/Features/Dtrh/LoopbackServer.cs",
         "src:src/CcpClient.Desktop/Features/Intake/IntakeProtocol.cs"
       ],
-      "changedAtSync": null,
-      "verdict": "not-changed-at-2026-08-14-sync"
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "REVIEWED (2026-08-25), CITATION ROT FOUND, DEFECT ALREADY FILED. Its recorded verdict said 'not-changed-at-2026-08-14-sync'; upstream changed it between v6.8.0 and v6.8.4 (M +1/-1). THE CHANGE: the loom-reveal handler's raw Process.Start('explorer.exe', '/select,\"<path>\"') became Helpers.ExplorerLauncher.RevealInExplorer(path). That is the upstream half of the 'Reveal in Explorer selects the file instead of opening Desktop' fix the 2026-08-22 sync ledger already recorded as a CONFIRMED P2 parity drift with its own board row, and the port's Features/Dtrh/DtrhLoomReveal.cs has independently repaired the same quoting bug on its own side. CITATION ROT, NAMED: DtrhLoomReveal.cs quotes the OLD literal (explorer.exe /select,\"<path>\") as upstream's shape while citing LoomHostService.cs by line - the span still lands on the reveal case, but the line it quotes now calls ExplorerLauncher instead. The span is right and the quotation is stale; re-quoting it belongs to the citation-repair row, not to this entry."
     },
     {
       "path": "ConditioningControlPanel/Services/Chaos/DtrhLoomStore.cs",
@@ -905,8 +881,13 @@
         "src:src/CcpClient.Desktop/Features/Dtrh/DtrhProfileLock.cs",
         "src:src/CcpClient.Desktop/Features/Dtrh/DtrhProtocol.cs"
       ],
-      "changedAtSync": null,
-      "verdict": "not-changed-at-2026-08-14-sync"
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 1,
+        "del": 1
+      },
+      "verdict": "REVIEWED (2026-08-25), SAME EDIT AS ITS SIBLING. Its recorded verdict said 'not-changed-at-2026-08-14-sync'; upstream changed it between v6.8.0 and v6.8.4 (M +1/-1), identically to Services/Chaos/DtrhHostService.cs: the loom-reveal handler's raw Process.Start('explorer.exe', '/select,\"<path>\"') became Helpers.ExplorerLauncher.RevealInExplorer(path). Already a filed P2 parity row from the 2026-08-22 sync, and already independently repaired on the port side in Features/Dtrh/DtrhLoomReveal.cs. This entry carries the port's most precise citation into either file, and that citation now quotes a literal upstream no longer writes - recorded here so the citation-repair row has the exact subject."
     },
     {
       "path": "ConditioningControlPanel/Services/Commands/AiCommandService.cs",
@@ -934,8 +915,13 @@
         "src:src/CcpClient.Desktop/Companion/CompanionState.cs",
         "src:src/CcpClient.Desktop/Features/Dtrh/DtrhBarkRouting.cs"
       ],
-      "changedAtSync": null,
-      "verdict": "not-changed-at-2026-08-14-sync"
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 3,
+        "del": 0
+      },
+      "verdict": "REVIEWED AND CLOSED, NOT PORTED (2026-08-25). Its recorded verdict said 'not-changed-at-2026-08-14-sync'; upstream changed it between v6.8.0 and v6.8.4 (M +3/-0). THE CHANGE: the QuizCompleted bark now also stands down while the Arcademy is active - if (Arcademy.ArcademyHostService.IsActive) return; - beside the existing IntakeHostService.IsActive guard, for the same stated reason: a modal WebView2 window with its own voiced and animated ceremonies, with MainWindow tucked to the tray behind it. THE RULE, WHICH IS THE PORTABLE PART: every full-screen hosted surface suppresses the companion's ambient voice, and the list of such surfaces GROWS with each one added - so a port that lands a hosted surface without adding it to that list inherits a bark over a ceremony. The port has no bark service, so nothing is invalidated; the rule is carried forward to the companion row. NOTE ON THE MEASUREMENT: from the port-side merge db3e842f this file regenerates to +3/-1, the extra deletion being the port's own SP-141 tree restore rather than upstream (see baseline.endpointNote)."
     },
     {
       "path": "ConditioningControlPanel/Services/Companion/CompanionPhraseService.cs",
@@ -1073,10 +1059,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 1107,
-        "del": 296
+        "add": 165,
+        "del": 9
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1087,10 +1073,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 653,
-        "del": 53
+        "add": 4,
+        "del": 1
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1101,10 +1087,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 480,
-        "del": 0
+        "add": 4,
+        "del": 102
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1115,10 +1101,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 293,
-        "del": 38
+        "add": 273,
+        "del": 67
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1129,10 +1115,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 139,
-        "del": 127
+        "add": 788,
+        "del": 190
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1143,10 +1129,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 154,
-        "del": 11
+        "add": 1,
+        "del": 0
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1156,12 +1142,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 102,
-        "del": 62
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1171,10 +1152,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 142,
-        "del": 14
+        "add": 89,
+        "del": 6
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1184,12 +1165,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 97,
-        "del": 18
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1201,10 +1177,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 63,
-        "del": 34
+        "add": 401,
+        "del": 23
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1214,12 +1190,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 63,
-        "del": 29
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1228,12 +1199,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 8,
-        "del": 76
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1242,12 +1208,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 66,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1257,10 +1218,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 66,
-        "del": 2
+        "add": 2,
+        "del": 0
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1270,12 +1231,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 66,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1285,10 +1241,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 43,
-        "del": 15
+        "add": 107,
+        "del": 1
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1299,10 +1255,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 50,
-        "del": 0
+        "add": 8,
+        "del": 9
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1312,12 +1268,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 38,
-        "del": 0
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1326,12 +1277,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 17,
-        "del": 17
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1340,12 +1286,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 26,
-        "del": 5
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1354,12 +1295,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 20,
-        "del": 8
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1368,12 +1304,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 14,
-        "del": 14
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1382,12 +1313,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 12,
-        "del": 12
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1396,12 +1322,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 11,
-        "del": 11
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1410,12 +1331,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 10,
-        "del": 10
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1425,10 +1341,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 19,
-        "del": 0
+        "add": 14,
+        "del": 3
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1439,12 +1355,7 @@
         "docs:row-1-research-inputs.md",
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 17,
-        "del": 0
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1453,12 +1364,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 8,
-        "del": 8
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1467,12 +1373,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 8,
-        "del": 8
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1482,10 +1383,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 8,
-        "del": 6
+        "add": 1,
+        "del": 13
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1496,10 +1397,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 14,
-        "del": 0
+        "add": 1,
+        "del": 10
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1510,10 +1411,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 12,
-        "del": 1
+        "add": 30,
+        "del": 6
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1523,12 +1424,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 6,
-        "del": 6
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1537,12 +1433,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 7,
-        "del": 5
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1551,12 +1442,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 4,
-        "del": 7
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1565,12 +1451,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 8,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1579,12 +1460,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 4,
-        "del": 4
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1593,12 +1469,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 4,
-        "del": 4
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1608,9 +1479,9 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 7,
+        "add": 20,
         "del": 1
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
@@ -1621,12 +1492,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 5,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1635,12 +1501,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 3
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1649,12 +1510,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 3
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1663,12 +1519,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 3
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1677,12 +1528,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 3
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1691,12 +1537,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 3
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1705,12 +1546,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 3
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1719,12 +1555,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 3
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1733,12 +1564,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 3
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1747,12 +1573,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 3
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1761,12 +1582,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 4,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1775,12 +1591,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 4,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1790,10 +1601,10 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 5,
-        "del": 0
+        "add": 10,
+        "del": 3
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
@@ -1804,9 +1615,9 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 4,
+        "add": 1,
         "del": 1
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
@@ -1817,12 +1628,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 2,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1831,12 +1637,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 2,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1845,12 +1646,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 2,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1859,12 +1655,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 2,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1873,12 +1664,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 2,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1887,12 +1673,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 2,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1901,12 +1682,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 2,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1915,12 +1691,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 2,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1930,9 +1701,9 @@
         "docs:window-behavior-manifest.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 3,
+        "add": 6,
         "del": 0
       },
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
@@ -1943,12 +1714,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1957,12 +1723,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1971,12 +1732,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1985,12 +1741,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -1999,12 +1750,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -2013,12 +1759,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -2027,12 +1768,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -2041,12 +1777,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -2055,12 +1786,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -2069,12 +1795,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -2083,12 +1804,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -2097,12 +1813,7 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 1,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-2 - covered by the window-behavior-manifest re-verification row (no per-file obligation)"
     },
     {
@@ -2121,7 +1832,12 @@
         "docs:first-attempt-lessons.md",
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": null,
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 53,
+        "del": 0
+      },
       "verdict": "not-changed-at-2026-08-14-sync"
     },
     {
@@ -2365,7 +2081,12 @@
         "docs:main-sync-2026-08-04.md",
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": null,
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 78,
+        "del": 12
+      },
       "verdict": "not-changed-at-2026-08-14-sync"
     },
     {
@@ -2392,7 +2113,12 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": null,
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 14,
+        "del": 3
+      },
       "verdict": "not-changed-at-2026-08-14-sync"
     },
     {
@@ -2447,7 +2173,12 @@
         "docs:row-1-research-inputs.md",
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": null,
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 18,
+        "del": 5
+      },
       "verdict": "not-changed-at-2026-08-14-sync"
     },
     {
@@ -2469,7 +2200,12 @@
         "docs:row-1-research-inputs.md",
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": null,
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 57,
+        "del": 4
+      },
       "verdict": "not-changed-at-2026-08-14-sync"
     },
     {
@@ -2487,7 +2223,12 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": null,
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 11,
+        "del": 11
+      },
       "verdict": "not-changed-at-2026-08-14-sync"
     },
     {
@@ -2664,7 +2405,12 @@
       "citedBy": [
         "docs:window-behavior-manifest.md"
       ],
-      "changedAtSync": null,
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 91,
+        "del": 15
+      },
       "verdict": "not-changed-at-2026-08-14-sync"
     },
     {
@@ -2774,10 +2520,10 @@
         "docs:upstream-sync.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 247,
-        "del": 18
+        "add": 44,
+        "del": 20
       },
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
@@ -2788,10 +2534,10 @@
         "docs:row-1-research-inputs.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 202,
-        "del": 22
+        "add": 21,
+        "del": 0
       },
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
@@ -2801,12 +2547,7 @@
       "citedBy": [
         "docs:row-1-research-inputs.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 126,
-        "del": 11
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -2815,12 +2556,7 @@
       "citedBy": [
         "docs:row-1-research-inputs.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 51,
-        "del": 11
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -2829,12 +2565,7 @@
       "citedBy": [
         "docs:upstream-sync.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 44,
-        "del": 12
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -2845,12 +2576,7 @@
         "docs:row-1-research-inputs.md",
         "docs:task-board.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 38,
-        "del": 16
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -2859,12 +2585,7 @@
       "citedBy": [
         "docs:upstream-sync.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 41,
-        "del": 11
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -2873,12 +2594,7 @@
       "citedBy": [
         "docs:row-1-research-inputs.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 33,
-        "del": 4
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -2887,12 +2603,7 @@
       "citedBy": [
         "docs:her-room-divergence-audit.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 22,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -2901,12 +2612,7 @@
       "citedBy": [
         "docs:her-room-divergence-audit.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 15,
-        "del": 0
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -2915,12 +2621,7 @@
       "citedBy": [
         "docs:first-attempt-systemic-lessons.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 8,
-        "del": 2
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -2930,9 +2631,9 @@
         "docs:row-1-research-inputs.md"
       ],
       "changedAtSync": {
-        "sync": "2026-08-14",
+        "sync": "2026-08-23",
         "status": "M",
-        "add": 3,
+        "add": 11,
         "del": 1
       },
       "verdict": "tier-3 - historical research input only, no standing obligation"
@@ -2943,12 +2644,7 @@
       "citedBy": [
         "docs:her-room-divergence-audit.md"
       ],
-      "changedAtSync": {
-        "sync": "2026-08-14",
-        "status": "M",
-        "add": 3,
-        "del": 1
-      },
+      "changedAtSync": null,
       "verdict": "tier-3 - historical research input only, no standing obligation"
     },
     {
@@ -3220,7 +2916,12 @@
       "citedBy": [
         "docs:first-attempt-lessons.md"
       ],
-      "changedAtSync": null,
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 17,
+        "del": 0
+      },
       "verdict": "not-changed-at-2026-08-14-sync"
     },
     {
@@ -3283,7 +2984,12 @@
       "citedBy": [
         "docs:row-1-research-inputs.md"
       ],
-      "changedAtSync": null,
+      "changedAtSync": {
+        "sync": "2026-08-23",
+        "status": "M",
+        "add": 18,
+        "del": 1
+      },
       "verdict": "not-changed-at-2026-08-14-sync"
     },
     {
