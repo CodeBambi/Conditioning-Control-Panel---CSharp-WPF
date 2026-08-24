@@ -167,7 +167,63 @@ const INTRO_BEATS = [
 ];
 /** Past this much of the splash the bed would start mid-CRT: stitch instead. */
 const INTRO_BED_WINDOW_MS = 600;
+/** After the knock (below) the splash lingers this long, so the bed's opening
+ *  bar lands on the CRT and rides the exit into the campus reveal. */
+const KNOCK_EXIT_MS = 700;
 const introTimers = new Set();
+
+/* THE KNOCK (web hosts only). `autoplayOk` is the WebView2 host's promise and
+ * a browser never makes it: the mixer keeps its gesture gate, and the splash -
+ * "the only cue that can never be re-fired" - would play its jingle into a
+ * context that does not exist yet. So when the bed sample is shipped and the
+ * host made no autoplay promise, the splash HOLDS on a small invitation and
+ * the first pointer/key both arms the mixer (its own capture listeners run on
+ * pointerdown, before our pointerup) and strikes the bed. Reduced motion gets
+ * no cues and therefore no hold (trap 66), a host that promised autoplay is
+ * untouched, and failBoot tears the whole thing down with the loader. */
+let knockWanted = false;
+let knockDone = false;
+let knockDismissQueued = false;
+let knockHint = null;
+
+function disarmKnock() {
+  try {
+    if (doc && doc.removeEventListener) {
+      doc.removeEventListener('pointerup', onKnock, true);
+      doc.removeEventListener('keydown', onKnock, true);
+    }
+  } catch (e) { /* noop */ }
+}
+
+function onKnock() {
+  disarmKnock();
+  if (knockDone) return;
+  knockDone = true;
+  try { if (knockHint) knockHint.classList.add('is-heard'); } catch (e) { /* noop */ }
+  if (!splashIsUp()) return;         // failBoot got there first: nothing to score
+  cancelIntroCues();                 // the stitched beats yield to the real bed
+  sfx('intro_bed', 0.6);
+  if (knockDismissQueued) setTimeout(dismissLoader, KNOCK_EXIT_MS);
+}
+
+function armKnockGate() {
+  const src = initMsg || {};
+  if (src.autoplayOk === true) return;                       // the host's promise stands
+  if (!!src.reducedMotion || src.motionLevel === 0) return;  // no cues, no hold (trap 66)
+  if (!audio || typeof audio.hasSample !== 'function' || !audio.hasSample('intro_bed')) return;
+  if (!doc || !doc.addEventListener) return;
+  knockWanted = true;
+  try {
+    if (dom.loader && typeof document !== 'undefined' && document.createElement) {
+      knockHint = document.createElement('div');
+      knockHint.className = 'arc-boot-knock';
+      knockHint.textContent = (src.lexicon && src.lexicon.intro_knock) || 'Knock to enter';
+      dom.loader.appendChild(knockHint);
+    }
+  } catch (e) { knockHint = null; /* a hint may never cost the boot */ }
+  doc.addEventListener('pointerup', onKnock, true);
+  doc.addEventListener('keydown', onKnock, true);
+}
 
 /* ONE AUDIO DOOR (GROUND-RULES §6, shell/ceremonies.js's exact pattern): a cue
  * is a REQUEST on `document`, never a node - shell/audio.js owns the only audio
@@ -224,6 +280,9 @@ function scheduleIntroCues() {
 function dismissLoader() {
   const el = dom.loader;
   if (!el || el.hidden) return;
+  /* The knock outranks readiness: a booted school still waits for the door.
+   * onKnock re-calls us KNOCK_EXIT_MS after the tap that struck the bed. */
+  if (knockWanted && !knockDone) { knockDismissQueued = true; return; }
   const wait = Math.max(0, INTRO_MIN_MS - (Date.now() - introT0));
   setTimeout(() => {
     try {
@@ -245,6 +304,9 @@ function failBoot(msg) {
   warn(msg);
   bridge.send({ type: 'boot-error', msg: String(msg).slice(0, 400) });
   if (dom.loader) dom.loader.hidden = true;
+  knockDone = true;       // the error card is not held for a knock
+  disarmKnock();
+  try { if (knockHint) knockHint.remove(); } catch (e) { /* noop */ }
   cancelIntroCues();      // a clearTimeout, so the error card waits for nothing
   if (dom.nopeMsg) dom.nopeMsg.textContent = String(msg).slice(0, 200);
   if (dom.nope) dom.nope.hidden = false;
@@ -281,6 +343,8 @@ async function start() {
       });
       // The splash is already a second or so into its timeline: score the rest.
       scheduleIntroCues();
+      // And on a gesture-gated host, hold the door for the knock instead.
+      armKnockGate();
     } catch (e) { warn('audio consumer unavailable (' + ((e && e.message) || e) + ') - sfx are silent'); }
     const mod = await import('./shell/shell.js');
     shell = await mod.createShell({

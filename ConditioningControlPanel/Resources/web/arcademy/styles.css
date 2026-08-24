@@ -897,6 +897,24 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
   background:color-mix(in srgb, var(--ground), black 34%);
 }
 .arc-loader.is-done { opacity:0; transition:opacity .26s ease-in .04s; pointer-events:none; }
+/* THE KNOCK (boot.js armKnockGate, web hosts only): a browser owes the mixer a
+   gesture, so the splash holds on this line until the first tap strikes the
+   bed. Absolutely positioned so the ~3s CRT timeline above never re-lays out;
+   pointer-events none because the LISTENER is on the document - the whole
+   screen is the door. Safe-area padded for the phone's home indicator. */
+.arc-boot-knock {
+  position:absolute; left:0; right:0;
+  bottom:calc(26px + env(safe-area-inset-bottom, 0px));
+  text-align:center; pointer-events:none;
+  font-family:var(--disp); font-size:12.5px; letter-spacing:.3em;
+  text-transform:uppercase; color:var(--ink-dim);
+  animation:arc-knock-breathe 2.1s ease-in-out .9s infinite alternate both;
+}
+.arc-boot-knock.is-heard { animation:none; opacity:0; transition:opacity .22s ease-out; }
+@keyframes arc-knock-breathe { from { opacity:.35; } to { opacity:.9; } }
+@media (prefers-reduced-motion: reduce) {
+  .arc-boot-knock { animation:none; opacity:.7; }
+}
 .arc-loader.is-done .arc-intro-stage {
   animation:none; transform:scale(1.07); transition:transform .3s ease-in;
 }
