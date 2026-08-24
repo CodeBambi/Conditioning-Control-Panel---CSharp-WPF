@@ -212,6 +212,11 @@ function blankStats() {
   return {
     pets: 0, petStreaks3: 0, drags: 0, flings: 0, hides: 0, dockRestores: 0,
     bubblesSeen: 0, firstSeenAt: null, lastSeenAt: null, msVisible: 0,
+    /* THE OFF CHANNELS (W3). EXACTLY THREE counters, and they ride the same
+     * debounced blob: how many channels ever played, how many times she was
+     * caught on one, and how many times she actually showed you. Cooldowns and
+     * the per-session cap are SESSION-LOCAL by design and are not here. */
+    takeovers: 0, caught: 0, reveals: 0,
     /* WHERE SHE GETS PUT DOWN: drop counts per ninth of the viewport (z0..z8,
      * row-major). The favourite-spot beats read the count off the dropAt
      * payload; nothing else looks in here. */
@@ -255,8 +260,14 @@ function readStats(raw) {
  * @param {Function=} o.toast         the SHELL's toast (boot.js -> createShell's `shout`)
  * @param {Function=} o.log
  */
-export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, log } = {}) {
+export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, log, assets, settings } = {}) {
   const say = typeof log === 'function' ? log : () => {};
+  /* OFF CHANNELS (W3): the two things NOW WATCHING needs and nothing else in
+   * this file does - the shell's provider handle (media through the HOST, the
+   * only remote path this bundle has) and `init.settings` (the player's own
+   * local library). Both optional; absent means the channel plans itself out. */
+  const channelAssets = assets || null;
+  const channelSettings = settings || null;
   /* THE SHELL'S TOAST, NOT A SECOND ONE. `#arc-toast` already exists, already
    * stacks above EMI (z 60 vs 50) and already expires its own nodes; minting a
    * rival would put two notice systems on one page. */
@@ -703,6 +714,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   function busy() { return !!current; }
 
   function cancelChain() {
+    /* OFF CHANNELS (W3): A SAY OUTRANKS THE GLASS. Every path that takes her
+     * face - a chain, a say, a drag, a hide, a disable, destroy - already
+     * funnels through here, which is why this is the ONE hook the wave needs
+     * instead of ten. See emi/takeover.js law 3. */
+    killTakeover();
     if (current && current.handle && typeof current.handle.cancel === 'function') {
       try { current.handle.cancel(); } catch (e) { /* noop */ }
     }
@@ -1101,6 +1117,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // LAW 3: a line in flight is never cut for a head-pat. Ignore, do not queue -
     // a reaction that lands four seconds late reads as a glitch.
     if (saying()) return;
+    /* OFF CHANNELS (W3): the press that CAUGHT her mid-channel is not also a
+     * head-pat. One-shot, false on every ordinary day. */
+    if (takeoverAtePet()) return;
     stats.pets += 1;
     touchSeen();
     const t = nowMs();
@@ -1314,6 +1333,111 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('pointermove', onDocMove, { passive: true });
   }
+
+  /* ==========================================================================
+   * THE OFF CHANNELS (W3) - ONE BLOCK, DELIBERATELY.
+   *
+   * EMI is a television, and a television left alone changes the channel. The
+   * whole wave is ONE capability - `screenTakeover(painter, {ms})` - and it
+   * lives in `emi/takeover.js` + `emi/channels.js`, both loaded the way the
+   * renderer is: dynamically, optionally, in a catch. A broken deck costs EMI
+   * her channels and NOTHING else; face.js is never touched and never read.
+   *
+   * Everything this file contributes is here plus two marked one-liners
+   * (`cancelChain()`'s preempt hook and `pet()`'s swallow), so a second merge
+   * into this file has exactly three places to look.
+   * ======================================================================== */
+
+  /* THE SECOND CANVAS. Same locked rect as `.emi-screen` (emi.css), laid over
+   * it, hidden at rest. face.js keeps painting underneath the whole time. */
+  const glass = document.createElement('canvas');
+  glass.className = 'emi-glass';
+  /* THE LOCKED GEOMETRY, SIZED AT BIRTH. face.js paints at res 152 and derives
+   * its height as round(152 x 0.903) = 137; a canvas left on the 300x150 UA
+   * default would stretch every channel off her bezel the first frame anything
+   * painted. The deck re-asserts these two numbers, but a node that is right
+   * before the deck ever lands is one less way to be wrong. */
+  glass.width = 152;
+  glass.height = 137;
+  glass.hidden = true;
+  el.appendChild(glass);
+
+  let deck = null;
+  /** The painter table, once the deck module lands: `screenTakeover('pong')`. */
+  let CHANNEL_TABLE = null;
+  /** The `cancelChain()` hook. Hoisted, so the caller above may be older. */
+  function killTakeover() {
+    if (!deck) return;
+    try { deck.preempt(); } catch (e) { /* a channel may never break a face */ }
+  }
+  /** The `pet()` hook: did the last press already spend itself on a channel? */
+  function takeoverAtePet() {
+    if (!deck) return false;
+    try { return !!deck.swallowPet(); } catch (e) { return false; }
+  }
+
+  (function loadChannels() {
+    if (typeof canvas.getContext !== 'function') return;   // faceless platform: no deck
+    import('./takeover.js').catch((e) => {
+      say('emi: takeover.js unavailable (' + ((e && e.message) || e) + ')');
+      return null;
+    }).then((m) => {
+      if (!m || typeof m.createDeck !== 'function') return;
+      CHANNEL_TABLE = m.CHANNELS || null;
+      let media = null;
+      try {
+        media = m.createMediaBroker({
+          assets: channelAssets, settings: channelSettings,
+          rand: Math.random, doc: document, log: say,
+        });
+      } catch (e) { media = null; say('emi: media broker unavailable - ' + ((e && e.message) || e)); }
+      try {
+        deck = m.createDeck({
+          root, el, glass, media,
+          emi: {
+            raw, play, chains: () => CHAINS, busy, saying,
+            /* HER VOICE THROUGH THE ONE DOOR. index.js's `say` is the same three
+             * lines; a channel that minted its own would be a second call site
+             * for the bubble and therefore for the vox (trap 70). */
+            say(line, opts) {
+              if (!makeSay || !painter) return false;
+              const o = opts || {};
+              let chain = null;
+              try { chain = makeSay(line, o.face || '^_^', sayHoldMs(line, o.hold)); }
+              catch (e) { return false; }
+              return play(chain, { protect: true, force: true });
+            },
+          },
+          state: {
+            hidden: () => hidden,
+            enabled: () => enabled,
+            dragging: () => dragging || pressing,
+            reducedMotion,
+            face: () => IDLE_FACE,
+          },
+          data: {
+            days() {
+              try { return store && typeof store.get === 'function' ? store.get('days') : null; }
+              catch (e) { return null; }
+            },
+            labSeen() {
+              try {
+                const v = store && typeof store.get === 'function' ? store.get('emiVoice') : null;
+                return !!(v && v.labSeen);
+              } catch (e) { return false; }
+            },
+          },
+          seed: String((stats.firstSeenAt || '') + '|' + (isoDay() || '')),
+          onStat(key) {
+            if (!Object.prototype.hasOwnProperty.call(stats, key)) return;
+            stats[key] += 1;
+            save();
+          },
+          log: say,
+        });
+      } catch (e) { deck = null; say('emi: createDeck threw - ' + ((e && e.message) || e)); }
+    }).catch(() => {});
+  }());
 
   /* ---------------------- viewport ------------------------------------- */
   /* A resize re-derives the default width AND re-clamps the anchor, in that
@@ -1746,6 +1870,30 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     },
     /** Test/host seam: force the debounced write out now. */
     flush,
+    /* ---- OFF CHANNELS (W3): the one capability, plus its test seams ---- */
+    /**
+     * screenTakeover(painterOrId, {ms}) - lay a channel over her glass. Returns
+     * false when the deck refused (no material, not idle, a say is up), and a
+     * refusal is a perfectly normal answer.
+     */
+    screenTakeover(which, opts) {
+      // `which`, not `painter`: `painter` is the FACE renderer in this closure.
+      if (!deck) return false;
+      const p = typeof which === 'string' ? (CHANNEL_TABLE && CHANNEL_TABLE[which]) : which;
+      if (!p) return false;
+      try { return !!deck.screenTakeover(p, opts || {}); } catch (e) { return false; }
+    },
+    /** The deck itself: the suites drive the wheel and the clock through it. */
+    get channels() { return deck; },
+    /** A shell moment changed hands (a class, a suspend). One line in moments.js. */
+    noteMoment(name) {
+      if (!deck) return;
+      const busyNow = name === 'classStart' || name === 'suspend' || name === 'tabAway';
+      const freeNow = name === 'win' || name === 'miss' || name === 'fail' || name === 'resume'
+        || name === 'reportCard' || name === 'greet' || name === 'dayDone';
+      if (busyNow) { try { deck.setScene(true); } catch (e) { /* noop */ } }
+      else if (freeNow) { try { deck.setScene(false); } catch (e) { /* noop */ } }
+    },
     destroy() {
       accrueVisible();
       cancelTrip();                  // W2a: never leave a trip timer behind
@@ -1759,6 +1907,9 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       }
       // Her voice is a setTimeout ladder of its own and nothing above clears it.
       if (vox) { try { vox.stop(); } catch (e) { /* noop */ } }
+      // OFF CHANNELS (W3): the deck owns a rAF, a wheel timer and five document
+      // listeners of its own; nothing above reaches any of them.
+      if (deck) { try { deck.destroy(); } catch (e) { /* noop */ } deck = null; }
       if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
       if (typeof document !== 'undefined' && document.removeEventListener) {
         document.removeEventListener('pointermove', onDocMove);

@@ -246,6 +246,21 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                holdMs). VERBATIM from the lock - re-time a chain there, not here.
                `glee` ((≧◡≦)) is the THREE-PETS / STREAK-STAMP beat; `love`
                ((｡♥‿♥｡)) is a different, rarer one. Do not swap them.
+  channels.js  THE OFF CHANNELS (W3): `SL_DIALS` + the eight painters + the
+               weighted wheel. DATA AND PAINT ONLY - no timer, no rAF, no DOM
+               node, no I/O, which is what makes the whole wave testable in
+               node against a fake 2d context. Every painter is
+               `{id, weight, cooldownMs, plan(ctx)->spec|null, prepare?,
+               start(g,spec), frame(g,spec,t), end(g,spec,reason), gag?, caught}`
+               and `g` is `{c, w:152, h:137, rm}` - face.js's own geometry.
+               CH1 pong / CH2 browsing / CH3 watching / CH4 reruns / CH5 shop
+               ride the wheel; CH6 wrong rides other channels' EXITS; CH7 saver
+               and CH8 offair are the DETERMINISTIC deep-idle pair. Every line
+               in a `caught` table is tagged `DRAFT: /emi-lines pass pending`.
+  takeover.js  `createDeck(...)` - `screenTakeover(painter, {ms})`, the blip,
+               the one rAF, the wheel timer, the five document listeners, the
+               caught arc (snap -> shiver -> offer -> reveal card -> afterglow)
+               and `createMediaBroker` (the wave's ONLY I/O). Traps 76-79.
   fx.js        showFx(host, kind) - hearts/sparks/tears/storm/bang as pixel glyphs.
   vox.js       HER VOICE, "Blipese". createVox() -> {speak, tick, stop, destroy}
                + the pure, harness-testable makeScore(text, mood) and the frozen
@@ -263,6 +278,7 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                the gaps up, because the pace is the character. See trap 70.
                Timbre lives in `shell/audio.js` SOUNDS: `emi_blip` / `emi_tick`.
   emi.css      the SKIN: .emi / .emi-body / .emi-screen (the locked glass rect) /
+               .emi-glass (THE SECOND CANVAS, the same rect, hidden at rest) /
                .emi-fx / .emi-bubble + the body moves (.breath .nod .shiver
                .bounce .thud .droop). Ships BOTH bundled fonts (fonts/*.woff2,
                OFL, licences beside them): Noto Sans Mono for the CANVAS face and
@@ -540,6 +556,38 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   `showBoard({silent:true})` repaint is not an arrival, and `onPayout` re-rendering the report
   is not one either - without the `wasScreen` guards EMI greets you on every meta echo and
   talks over her own win face.
+- **THE OFF CHANNELS' MEDIA SEAM IS THE ONE THE CLASSES ALREADY USE** (W3,
+  2026-08-24). `shell.js` now hands `mountEmi` two extra things - `assets` (the
+  live `createAssets` handle) and `settings` (`init.settings`) - and NOW WATCHING
+  is the only thing in EMI that touches either. Four bright lines, and none of
+  them is negotiable:
+  - **Remote media goes through the HOST, over the bridge**, exactly as a class's
+    does: `emi/takeover.js createMediaBroker` calls `assets.claim({loops:2,
+    stills:2})` ONCE a sitting and `provider/remote.js` asks the host. The page
+    never talks to a server for media, and the host fetches Scrolller straight
+    from the player's own machine (`provider/remote.js` header, GROUND-RULES §8).
+  - **The gate is the app's, resolved host-side.**
+    `ArcademyHostService.RemoteMediaEnabled()` is literally
+    `MediaSource != "local" && HasRemoteMediaConsent`, projected as
+    `remoteMediaEnabled` / `remoteConsent` / `mediaSource` on `init.settings` and
+    read here through `assets.catalog()`. EMI re-derives nothing.
+  - **NO NSFW FILTERING OF REMOTE CONTENT, EVER.** There is no filter in
+    `takeover.js` and none may be added.
+  - **Consent off is the player's OWN library**, `init.settings.localAssets`
+    (trap 16's `{gifs, stills}`), titled with the filename. Neither available and
+    `watching.plan()` returns null: the channel is ABSENT from the wheel, never a
+    stub and never a black glass (trap 79).
+  - `canvasSafe` is deliberately **false** on that claim. The two-pool law exists
+    so a consumer that READS pixels never meets a tainted origin; the glass is
+    drawn to and never sampled, and the reveal card is a plain `<img>`. A
+    canvasSafe claim would have made the flagship channel local-only for every
+    consenting player.
+- **`fireMoment` now also tells EMI the SCREEN changed hands** (W3). One line in
+  `emi/moments.js` calls `emi.noteMoment(name)`, which maps `classStart` /
+  `suspend` / `tabAway` to "a class owns the screen" and `win` / `miss` / `fail` /
+  `resume` / `reportCard` / `greet` / `dayDone` back to "it does not". It is a leg
+  of the off-channel idle gate and nothing else in EMI tracked it. Unknown names
+  are ignored, and an EMI with no deck is a no-op.
 - **Protocol** (`bridge.PROTOCOL = 1`) must match the host's `PROTOCOL` int. A mismatch
   fails the boot on purpose — a page mis-reading the projection would mis-clamp settings.
 - **`ctx.assets.claimTagged()` IS THE SECOND POOL SHAPE, AND IT IS ADDITIVE** (SORT,
@@ -1291,6 +1339,57 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     graded day", and a false answer BANKS all four flags so an upgrading player never
     meets a frame of it.
 
+77. **THE OFF CHANNELS ARE A SECOND CANVAS OVER THE FACE, AND THAT IS THE WHOLE
+    SAFETY ARGUMENT (W3, 2026-08-24).** `face.js` is owner-locked, so a wave that
+    turned EMI's glass into a pong board could not touch it - and does not.
+    `.emi-glass` is a SECOND canvas carrying the byte-for-byte rect `.emi-screen`
+    carries (`left:34.46% top:29.46% w:41.68% h:37.63%`, `152x137` internal, from
+    face.js's own `res` 152 / `h = w x 0.903`), laid over it at `z-index:1` and
+    `hidden` at rest. Three things fall out of that and every one of them is load
+    bearing: **the face keeps painting underneath the whole time** (proved: 4950
+    lit face pixels with a channel live), **killing a channel is hiding one node**
+    rather than restoring a renderer's state, and **a broken deck costs EMI her
+    channels and nothing else** - `takeover.js` is a dynamic import in a catch,
+    the `loadOptional` discipline again. If you ever move `.emi-screen`'s rect,
+    move `.emi-glass` in the same commit or the channels drift off her bezel; and
+    never, ever paint a channel by calling into the face renderer.
+78. **A SAY OUTRANKS THE GLASS, AND THE HOOK IS `cancelChain()` - ONE PLACE.**
+    Trap 70's lesson, one wave later: `widget.js`'s `cancelChain()` is already the
+    funnel EVERY path that takes her face goes through (a chain, a say, a drag, a
+    hide, a `setEnabled(false)`, `destroy()`), so the off-channel preempt is ONE
+    line there and nothing anywhere else. Add a second cancel site and one of
+    those ten paths stops killing the glass, which is a channel painting over a
+    bubble she is speaking through. The rest of the cancel law lives in the deck:
+    any pointer or key ANYWHERE cancels instantly (on EMI it is the channel's
+    caught beat, elsewhere it is a silent blip-off with no line), a class or a
+    suspend refuses a takeover outright (`noteMoment`), and `document.hidden`
+    kills one mid-flight. **Zero cost at rest is part of the same law**: one
+    repeating wheel timer, five passive document listeners, and NO rAF, no fetch
+    and no media element while nothing is up (proved in Chromium: zero
+    `requestAnimationFrame` calls in 1.2s of rest).
+79. **`plan()` REFUSES, IT NEVER STUBS - AND `prepare()` IS THE ONLY I/O IN THE
+    WAVE.** A channel that cannot fully play tonight is ABSENT from the wheel: no
+    tape on record and RERUNS does not exist, no library and no consent and NOW
+    WATCHING does not exist, reduced motion and PONG / code rain / THE WRONG
+    CHANNEL do not exist. Nothing in `channels.js` ever paints an apology, a
+    placeholder or an error face, because a mascot that shows you a broken channel
+    has told you something about the code instead of about herself. `plan()` also
+    does NO I/O - it asks the broker one synchronous question (`ready()`) - and the
+    fetch is the optional `prepare()`, which the deck races against
+    `FETCH_BUDGET_MS` (2000): a slow answer **skips the takeover entirely** rather
+    than opening on a black glass. The wheel's weights are meaningless without
+    this: `rollChannel` weights only what actually planned.
+80. **THE OFF CHANNELS BIND EMI'S FIRST KEY LISTENER, AND IT IS A PASSIVE READ.**
+    Trap 59 says EMI binds no key listener at all, and that rule was about the ESC
+    LADDER: she may add no rung to it. "Any input cancels" cannot mean "any input
+    except the keyboard", so `takeover.js` listens for `keydown` on `document`
+    with `{passive:true}`, in the BUBBLE phase, and does exactly two things -
+    stamps `lastInput` and kills a live channel. It never calls `preventDefault`
+    or `stopPropagation`, never inspects `ev.key`, and is removed on `destroy()`.
+    The Esc ladder is byte-for-byte the ladder it was (boot.js's outer rungs,
+    shell.js's inner ones, the host's panic rung above both). If you ever need to
+    branch on a key here, do not: put it in the ladder that already owns keys.
+
 ## 5. The game module contract (short version)
 
 ```js
@@ -1404,6 +1503,23 @@ enrollment, `justUnlocked`) plus the no-op silence, the door CTA order, and the 
 Office populated and empty. **A boot with no `punchCards` in `init.meta` now opens with an
 enrollment intro**, so the older suites seed an already-enrolled school in their `fakeInit`
 - a first night is `test-punchcard.mjs`'s subject, not theirs.
+
+`scratchpad/emi-w1/test-channels.mjs` + `proof-channels.mjs` (2026-08-24, W3) are
+THE OFF CHANNELS' pair. The node suite (**130 assertions**) drives the real
+`emi/channels.js` and `emi/takeover.js` against a fake 2d context, a fake document
+and a hand-cranked rAF over a virtual clock - the dials verbatim and frozen, every
+`plan()` refusal, the reduced-motion table, the weighted wheel over 4000 rolls,
+all eight painters through ten seconds without a throw, the 10s cap, the
+screensaver's exemption, the per-session cap, both cooldowns, the caught arc
+(snap -> shiver -> offer -> accept -> reveal card -> afterglow, and the decline),
+and `destroy()` taking every listener with it. The browser proof (**51
+assertions**, port 8752) mounts the REAL widget over the REAL sheets in Chromium
+and reads the glass back pixel by pixel: the second canvas landing on
+`.emi-screen`'s exact rect, face.js still painting underneath a live channel, a
+trusted click and a real keypress each cancelling instantly, the cap and the
+saver exemption on the WALL clock, the reveal card's layout and its
+`pointer-events:none`, and **zero rAF calls in 1.2s at rest**. Both drive a deck
+of their own on compressed dials - the shipped widget grows no test seam.
 
 **Browser pass, not just node.** The suites drive a DOM double, which cannot see a CSS rule
 that does not parse, a module that throws on evaluation, or trap 49. The recipe: serve the
