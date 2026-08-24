@@ -1794,6 +1794,18 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
 .campus-idcard .id-stat.gp b { color:var(--gold); }
 .campus-idcard .id-stat span { font-family:var(--mono); font-size:7.5px; letter-spacing:.12em; color:var(--ink-faint); }
 
+/* ---- the post row (PHANTOM POST furniture: noticeboard + folded Bugle).
+   The props style themselves (corkboard.css / bugle.css); this row only says
+   where they lean: beside the student ID, on the same baseline. On a phone the
+   card owns that corner, so the row steps up onto the wall above it. */
+.campus-postrow {
+  position:absolute; left:calc(clamp(12px, 2.5vw, 44px) + 256px); bottom:22px;
+  z-index:24; display:flex; align-items:flex-end; gap:12px;
+}
+@media (max-width: 740px) {
+  .campus-postrow { left:clamp(12px, 2.5vw, 44px); bottom:172px; }
+}
+
 /* ---- tooltip ---- */
 .campus-tip {
   position:absolute; z-index:80; pointer-events:none; opacity:0;

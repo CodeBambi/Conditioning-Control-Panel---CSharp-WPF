@@ -2154,6 +2154,38 @@ internal static class ArcademyHostService
         ["emi_orientation_hi"] = "a new student! i did a little spin. you missed it.",
         ["emi_orientation_card"] = "official! now you have to come back. it's the rules.",
         ["emi_orientation_go"] = "go! your first class doesn't know how lucky it is.",
+
+        // THE PHANTOM POST chrome (shell/mail.js, mailbox.js, corkboard.js,
+        // bugle.js). Copy of core/lexicon.js's block - copy the values, do not
+        // re-word them (the IC_LEX rule). Letter bodies, notices and newspaper
+        // copy are content, never lexicon, and are deliberately absent here.
+        ["mail_kicker"] = "Mail",
+        ["mail_title"] = "The Mail Box",
+        ["mail_chip_label"] = "Mail",
+        ["mail_unread"] = "unread",
+        ["mail_all_read"] = "read",
+        ["mail_empty"] = "Nothing in the box yet.",
+        ["mail_pick"] = "Pick an envelope to read it.",
+        ["mail_delivered"] = "Delivered",
+        ["mail_new"] = "New",
+        ["mail_close"] = "Close",
+        ["board_kicker"] = "Pinned up",
+        ["board_title"] = "Noticeboard",
+        ["board_prop_label"] = "Noticeboard",
+        ["board_lede"] = "What is up on the wall tonight. Some of it stays. Most of it does not.",
+        ["board_empty"] = "Nothing pinned up tonight.",
+        ["board_rotates"] = "The wall gets sorted through most days. What is pinned flat stays put.",
+        ["board_kind_notice"] = "Notice",
+        ["board_kind_flyer"] = "Flyer",
+        ["board_kind_minutes"] = "Minutes",
+        ["bugle_issue"] = "Issue",
+        ["bugle_page"] = "Page",
+        ["bugle_pages"] = "Pages",
+        ["bugle_prev"] = "Previous page",
+        ["bugle_next"] = "Next page",
+        ["bugle_comics"] = "Comics",
+        ["bugle_empty"] = "Nothing set for this page.",
+        ["bugle_prop_label"] = "The paper",
     };
 
     /// <summary>The mockup's owner-approved tokens (BUILD-CONTRACT §10). A mod overrides them via

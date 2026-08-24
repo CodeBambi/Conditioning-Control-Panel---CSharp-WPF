@@ -33,6 +33,15 @@ import { makeRng } from '../core/rng.js';
 import { OPEN_SEMESTERS, isOpenSemester } from '../games/registry.js';
 import { fireMoment } from '../emi/moments.js';
 import { isMobile, onDeviceChange } from '../core/device.js';
+/* THE PHANTOM POST chrome: the envelope chip by the bell, the noticeboard and
+ * the folded paper by the student ID. Campus mounts the furniture; the shell
+ * owns the overlays, the engines and every byte of their state (Wave 4 law:
+ * everything arrives through the `post` option bag, and a campus built without
+ * one simply has no post - the mockup, the suite and old callers all still
+ * stand). */
+import { mountMailChip } from './mailbox.js';
+import { mountBoardProp } from './corkboard.js';
+import { mountBugleProp } from './bugle.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -689,13 +698,17 @@ function el(tag, cls, text) {
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
-  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract } = {}) {
+  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   const name = typeof gameName === 'function' ? gameName : (k) => String(k);
   let st = state || campusState({ classes: [], records: {} });
   let cardOpen = false;
   let destroyed = false;
+  /* PHANTOM POST furniture handles - null when no `post` bag arrived. */
+  let mailChip = null;
+  let boardProp = null;
+  let bugleProp = null;
   const holdsAttract = typeof holdAttract === 'function' ? holdAttract : () => false;
 
   const root = el('div', 'campus-stage enter');
@@ -1514,6 +1527,18 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   gear.setAttribute('title', t('settings', 'Settings'));
   gear.addEventListener('click', () => { if (handlers.registrar) handlers.registrar(); });
   topCluster.appendChild(gear);
+  /* THE ENVELOPE, between the bell and the gear. The chip hides itself while
+   * the box has never held a letter, so a fresh save's chrome is unchanged. */
+  if (post && typeof post.openMail === 'function') {
+    mailChip = mountMailChip(topCluster, {
+      onOpen: post.openMail,
+      unreadCount: post.mailUnread,
+      total: post.mailTotal,
+    });
+    if (mailChip && mailChip.el) {
+      try { topCluster.insertBefore(mailChip.el, gear); } catch (e) { /* order is cosmetic */ }
+    }
+  }
   root.appendChild(topCluster);
 
   /* THE HINT HAS TO BE TRUE. There is no hover on a phone, so the desktop line
@@ -1556,6 +1581,24 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   idPerfect = stat('gp', t('perfect_attendance', 'Perfect Attendance'));
   id.appendChild(idStats);
   root.appendChild(id);
+
+  /* THE POST ROW: the noticeboard thumbnail and the folded Bugle, leaning
+   * against the wall beside the student ID. Furniture only - the overlays,
+   * their engines and their state are the shell's, delivered in `post`. */
+  if (post && (typeof post.openBoard === 'function' || typeof post.openBugle === 'function')) {
+    const postRow = el('div', 'campus-postrow');
+    if (typeof post.openBoard === 'function') {
+      boardProp = mountBoardProp(postRow, {
+        onOpen: post.openBoard, daySeed: post.daySeed, state: post.boardState,
+      });
+    }
+    if (typeof post.openBugle === 'function') {
+      bugleProp = mountBugleProp(postRow, {
+        onOpen: post.openBugle, state: post.bugleState,
+      });
+    }
+    root.appendChild(postRow);
+  }
 
   root.appendChild(el('div', 'campus-vignette'));
 
@@ -1833,6 +1876,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     if (destroyed) return;
     if (nextState) st = nextState;
     const stats2 = nextStats || stats || {};
+
+    /* Post furniture repaints off its own getters - a delivery or a read that
+     * happened since the last paint lands here (the silent-repaint path calls
+     * update on every meta echo, so the chip is never stale on the board). */
+    if (mailChip) { try { mailChip.update(); } catch (e) { /* noop */ } }
+    if (boardProp) { try { boardProp.refresh(post && post.daySeed); } catch (e) { /* noop */ } }
+    if (bugleProp) { try { bugleProp.refresh(); } catch (e) { /* noop */ } }
 
     for (const key of Object.keys(roomRefs)) {
       const ref = roomRefs[key];
@@ -2185,6 +2235,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      if (mailChip) { try { mailChip.destroy(); } catch (e) { /* noop */ } mailChip = null; }
+      if (boardProp) { try { boardProp.destroy(); } catch (e) { /* noop */ } boardProp = null; }
+      if (bugleProp) { try { bugleProp.destroy(); } catch (e) { /* noop */ } bugleProp = null; }
       cancelAttract(false);
       if (idleTimer) { try { clearTimeout(idleTimer); } catch (e) { /* noop */ } idleTimer = 0; }
       try { INPUT_EVENTS.forEach((n) => root.removeEventListener(n, onInput, true)); } catch (e) { /* noop */ }
