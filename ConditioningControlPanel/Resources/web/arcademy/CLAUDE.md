@@ -502,6 +502,35 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
 - **`engine/index.js` `createEngine(opts)` / `provider/index.js` `createAssets(opts)`** are
   loaded *optionally* (intake's `loadOptional`). Missing or throwing → null object, and the
   class still runs, silent. Never make either a hard import.
+- **CAMPUS PRESENCE is TWO seams, and they are deliberately unequal** (P3, 2026-08-24;
+  `planning/arcademy/PRESENCE.md` §3, wire contract `proxy/docs/arcademy-presence-api.md`).
+  - **Down the wire to the page: `presence {self, snapshot}`.** `Services/Arcademy/ArcademyPresenceService.cs`
+    GETs the public snapshot on campus open and every ~60s ±10s while the window is up, and
+    `ArcademyHostService.OnPresenceSnapshot` posts it. **The snapshot rides through UNMODIFIED** -
+    its `now` is the SERVER's clock, which is the only reason `shell/ghosts.js` can paint the
+    server's ages rather than a skewed machine's. `self` is this account's opaque id (from the last
+    POST reply) and is ALWAYS included, because omitting it leaves the page's previous value
+    standing; `snapshot` is null on the frame that only carries a newly-learned id. The page reads
+    exactly those two fields and nothing else. **The pusher is NOT gated on the share setting** -
+    watching is not consenting, so a player at `off` still gets a populated campus.
+  - **Up the wire from the HOST: four transitions, and only with consent.** `campus_enter` at
+    launch, `room_enter` on `class-started`, `class_end` on `class-ended` (the host's CLAMPED
+    grade, so a zen `pass` rides as null), `campus_leave` in `DisposeAll`. All four are gated on
+    `AppSettings.ArcademyPresenceShare != "off"` plus an identity plus `!OfflineMode`. **The room
+    key is kebab-case and is its OWN table** (`daily-trigger`, not `daily_trigger`, not the punch
+    card's snake_case): two features, two vocabularies, no shared table to drift.
+  - **`presenceShare` is the ONE consent flag in `SETTING_KEYS`** (`off|anon|username|discord`,
+    default `off`). It clamps to an ALLOWLIST at both ends - anything unknown lands on `off`, never
+    on the nearest rung, because a consent flag degrades to "no consent". Seven `presence_share_*`
+    lexicon rows carry the copy and every option names what it shows PUBLICLY; a rung labelled only
+    "Anonymous" is not consent copy.
+  - **A downgrade owes one POST, and `off` cannot pay it.** The server's consent row only ever
+    moves on a POST, so lowering the rung posts one `campus_leave` carrying the NEW rung - which
+    retroactively hides the name and picture on rows already on disk. Turning presence fully OFF
+    posts nothing at all: `share` is validated against `anon|username|discord` and there is no
+    revoke route, so the only "off" the wire could carry would be this client asserting a consent
+    the player just withdrew. The account's prior window ages out inside 24h instead. That gap is
+    the server's to close, not the host's to fake.
 
 ## 4. Traps (each one cost real time)
 
