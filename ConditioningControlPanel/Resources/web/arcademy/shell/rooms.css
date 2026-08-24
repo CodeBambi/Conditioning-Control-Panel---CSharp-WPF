@@ -170,15 +170,81 @@
   color: #C9BBD6;
 }
 
-/* ------------------------------ back pill ------------------------------- */
+/* --------------------------- the proctor's rail -------------------------- */
 
-.arm-back {
-  position: absolute;
-  z-index: 4;
-  left: 16px;
-  bottom: 14px;
-  padding: 6px 14px;
-  background: rgba(16, 10, 22, 0.82);
+/* THE LETTERBOX, PUT TO WORK. The stage is a fixed plane scaled to fit, so
+ * most viewports leave a dark band under the art; the rail sits in it. On the
+ * wide ones where the art reaches the bottom it sits ON the art instead, which
+ * is why the ground is a gradient rather than a slab: it fades up out of the
+ * painting and never crops it. Three columns with the hero dead centre, so the
+ * one press that matters is where the eye already is. */
+.arm-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  background: linear-gradient(180deg,
+              rgba(11, 11, 24, 0) 0%,
+              rgba(11, 11, 24, 0.88) 34%,
+              rgba(11, 11, 24, 0.96) 100%);
+  border-top: 1px solid rgba(255, 105, 180, 0.22);
+}
+
+/* The 1fr sides are what keep the hero centred no matter how long the two
+   ghost labels get in a language that spends more words on them. */
+.arm-bar-side {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.arm-bar-right { justify-content: flex-end; }
+
+/* THE HERO. The chalkboard says the verb quietly, in the fiction; this says it
+ * out loud for the player who did not find the glowing furniture. */
+.arm-hero {
+  flex: 0 0 auto;
+  padding: 14px 48px;
+  background: var(--pink, #FF69B4);
+  color: #1A0A14;
+  border: none;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(255, 105, 180, 0.35);
+  animation: arm-hero-breath 2.6s ease-in-out infinite;
+}
+/* The same breath the hotspot takes, one room apart: the two surfaces are one
+   press, so they should look like it. */
+@keyframes arm-hero-breath {
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 105, 180, 0.28); }
+  50%      { box-shadow: 0 0 34px rgba(255, 105, 180, 0.52); }
+}
+.arc-reduced .arm-hero,
+.arm-lite .arm-hero {
+  animation: none;
+  box-shadow: 0 0 24px rgba(255, 105, 180, 0.35);
+}
+.arm-hero:hover, .arm-hero:focus-visible {
+  outline: none;
+  background: #FF8FC8;
+  box-shadow: 0 0 40px rgba(255, 105, 180, 0.55);
+}
+
+/* The two errands either side of the verb: quiet, equal, and never the thing
+   the eye lands on first. */
+.arm-bar-ghost {
+  padding: 9px 18px;
+  background: transparent;
   color: #D9C9E4;
   border: 1px solid rgba(255, 105, 180, 0.30);
   border-radius: 999px;
@@ -186,7 +252,7 @@
   font-size: 13px;
   cursor: pointer;
 }
-.arm-back:hover, .arm-back:focus-visible {
+.arm-bar-ghost:hover, .arm-bar-ghost:focus-visible {
   outline: none;
   border-color: var(--pink, #FF69B4);
   color: #FFF;

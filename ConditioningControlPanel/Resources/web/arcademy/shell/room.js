@@ -93,6 +93,7 @@ function el(tag, cls, text) {
  *  xpLine      - the honest line under the plate (what this run pays).
  *  onEnter     - start the class (the shell walks its own graded path).
  *  onBack      - back to campus.
+ *  onOptions   - open this class's options page; absent = no options button.
  *  lite        - performance mode; kills the pulse like reduced motion does.
  *  log         - shell's say.
  */
@@ -128,19 +129,26 @@ export function createRoomScene(opts) {
 
   /* THE ONE LIT THING. A <button>, focused on mount, so Enter is the same
    * press the end card taught (its click latch is `entered`, one rung up). */
-  const hot = el('button', 'arm-hot');
-  hot.type = 'button';
-  placeRect(hot, scene.hotspot);
-  const tag = el('span', 'arm-hot-tag',
-    String(o.actionLabel || t('begin_class', 'Begin')).toUpperCase());
-  hot.appendChild(tag);
-  hot.setAttribute('aria-label', (o.actionLabel || '') + ' — ' + (o.name || ''));
-  hot.addEventListener('click', () => {
+  const actionText = String(o.actionLabel || t('begin_class', 'Begin')).toUpperCase();
+
+  /* ONE VERB, TWO SURFACES. The chalkboard and the rail's hero are the same
+   * press, so they share the same latch: whichever lands first spends it and
+   * the other becomes a no-op (a double-tap, or a race between the two, can
+   * never deal the class twice). */
+  function enterClass() {
     if (destroyed || entered) return;
     entered = true;
     try { if (o.onEnter) o.onEnter(); }
     catch (e) { entered = false; say('room enter threw: ' + ((e && e.message) || e)); }
-  });
+  }
+
+  const hot = el('button', 'arm-hot');
+  hot.type = 'button';
+  placeRect(hot, scene.hotspot);
+  const tag = el('span', 'arm-hot-tag', actionText);
+  hot.appendChild(tag);
+  hot.setAttribute('aria-label', (o.actionLabel || '') + ' — ' + (o.name || ''));
+  hot.addEventListener('click', enterClass);
   stage.appendChild(hot);
 
   /* The painted way out, when the art has one. Same verb as the pill below -
@@ -169,11 +177,47 @@ export function createRoomScene(opts) {
   if (o.xpLine) plate.appendChild(el('p', 'arm-plate-xp', o.xpLine));
   root.appendChild(plate);
 
-  /* ------------------------------ back pill ----------------------------- */
-  const back = el('button', 'arm-back', '← ' + t('rake_back_to_campus', 'Back to campus'));
+  /* --------------------------- the proctor's rail ----------------------- */
+  /* THE BAND AT THE BOTTOM WAS DOING NOTHING. The stage is a fixed 1376x768
+   * plane letterboxed into the viewport, so most screens leave a dark strip
+   * under the art; the rail lives there and carries the three things a room
+   * is ever asked for - out, in, and the knobs. The old corner pill is gone:
+   * this bar IS that pill, promoted, and a room has one way back, not two
+   * (the painted door stays what it is, a door). */
+  const bar = el('div', 'arm-bar');
+
+  const barLeft = el('div', 'arm-bar-side arm-bar-left');
+  const back = el('button', 'arm-bar-ghost',
+    '← ' + t('rake_back_to_campus', 'Back to campus'));
   back.type = 'button';
   back.addEventListener('click', () => { if (!destroyed) { try { if (o.onBack) o.onBack(); } catch (e) { /* noop */ } } });
-  root.appendChild(back);
+  barLeft.appendChild(back);
+  bar.appendChild(barLeft);
+
+  /* THE HERO. The same verb the chalkboard tag wears, said out loud - the
+   * hotspot is the room's diegetic way in and this is the honest one, for the
+   * player who did not find the glowing furniture. Same latch, same call. */
+  const hero = el('button', 'arm-hero', actionText);
+  hero.type = 'button';
+  hero.setAttribute('aria-label', (o.actionLabel || '') + ' - ' + (o.name || ''));
+  hero.addEventListener('click', enterClass);
+  bar.appendChild(hero);
+
+  const barRight = el('div', 'arm-bar-side arm-bar-right');
+  /* The knobs, where a player mid-doorway actually wants them. Absent
+   * callback = absent button; the shell decides whether a room has options,
+   * not this module (narrow caps). */
+  if (typeof o.onOptions === 'function') {
+    const cog = el('button', 'arm-bar-ghost', t('room_options', 'Class options'));
+    cog.type = 'button';
+    cog.addEventListener('click', () => {
+      if (destroyed) return;
+      try { o.onOptions(); } catch (e) { say('room options threw: ' + ((e && e.message) || e)); }
+    });
+    barRight.appendChild(cog);
+  }
+  bar.appendChild(barRight);
+  root.appendChild(bar);
 
   /* ------------------------------ fit ----------------------------------- */
   function fit() {

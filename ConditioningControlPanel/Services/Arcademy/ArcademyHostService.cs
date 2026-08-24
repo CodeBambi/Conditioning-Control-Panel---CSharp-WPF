@@ -1739,6 +1739,8 @@ internal static class ArcademyHostService
         ["campus_room_echo"] = "Music Room",
         ["campus_room_instant_recall"] = "Lecture Hall",
         ["campus_room_misdirection"] = "The Parlour",
+        // ---- shell/room.js: the proctor's rail along the bottom of a room scene
+        ["room_options"] = "Class options",
         // ---- shell Deck V THE RAKE (2026-08-23)
         ["rake_back_to_campus"] = "Back to campus",
         ["rake_class_dismissed"] = "Class dismissed",

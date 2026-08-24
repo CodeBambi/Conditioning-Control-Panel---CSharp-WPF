@@ -612,6 +612,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   };
   let extrasBox = null;            // replay/report bar + yesterday strip container
   let settingsPage = null;
+  /** WHERE THE SETTINGS PAGE OWES ITS WAY BACK. Normally there is nothing to
+   *  remember: the page came from the campus or a class and goes home to the
+   *  one it came from. A caller with somewhere else in mind (the room scene's
+   *  rail, which reopens the room it left) parks that route here and both
+   *  exits - the page's own Back and the Esc rung - spend it exactly once. */
+  let settingsBack = null;
   let reportCard = null;
   /** The Deck V one-more card. It sits OVER the report card, never instead of
    *  it (see showEndCard) - `{root, destroy}` while live, null otherwise. */
@@ -1518,7 +1524,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * campus gear and the Front Office keep calling with no argument and get the
    * full sheet - the between-classes page is the right home for "everything".
    */
-  function showSettings(gameKey) {
+  function showSettings(gameKey, opts) {
+    settingsBack = (opts && opts.onClose) || null;
     if (active) pauseClass(true);
     dismissEndCard();
     dismissPunchStage();
@@ -1539,7 +1546,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       assets,
       log: say,
       gameKey: gameKey || null,
-      onClose: () => (active ? showClassScreen() : showBoard()),
+      onClose: () => {
+        const back = settingsBack;
+        settingsBack = null;
+        if (active) { showClassScreen(); }
+        else if (back) { back(); }
+        else { showBoard(); }
+      },
     });
     dom.screen.appendChild(settingsPage.root);
   }
@@ -1703,6 +1716,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       xpLine,
       onEnter: () => launchGraded(gameKey),
       onBack: () => showBoard(),
+      /* THE RAIL'S THIRD ERRAND. The knobs are asked for from the doorway more
+       * than anywhere else, so the room lends them its own way back: settings
+       * opened from here folds into the room it left, never past it. */
+      onOptions: () => showSettings(gameKey, { onClose: () => showRoomScene(gameKey, info) }),
     });
     if (dom && dom.screen) dom.screen.appendChild(roomPage.root);
     setStage('arc-report-on');
@@ -3652,7 +3669,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       }
       if (screen === 'settings') {
         if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } settingsPage = null; }
-        if (active) showClassScreen(); else showBoard();
+        /* Esc is the page's other Back, so it owes the same route home - a
+         * settings page opened from a room folds back into the room, not past
+         * it to the campus. Same one-shot spend, same order of precedence. */
+        const back = settingsBack;
+        settingsBack = null;
+        if (active) showClassScreen();
+        else if (back) back();
+        else showBoard();
         return true;
       }
       // THE RECORDS SPOTLIGHT is a modal the player opened one press ago (a
