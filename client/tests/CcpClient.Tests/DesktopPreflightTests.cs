@@ -141,7 +141,18 @@ public class DesktopPreflightVerdictTests
 
         Assert.NotNull(refusal);
         Assert.Contains("OUR OWN harness or product", refusal, StringComparison.Ordinal);
-        Assert.Contains("verification-harness.md:47", refusal, StringComparison.Ordinal);
+        // A NAMED ANCHOR, AND THE DOCUMENT IS READ TO PROVE IT STILL RESOLVES.
+        // This assertion used to pin "verification-harness.md:47", and the paragraph it named moved
+        // to line 55 while the test stayed green - because it asserted the STRING, never the
+        // destination. A reader following that pointer landed on the wrong paragraph. The repo's
+        // citation checker cannot catch this class either: the anchor is a literal inside a runtime
+        // refusal message rather than a comment, and named anchors are the kind it records as
+        // "not resolvable without judgment". So the judgment is supplied here instead - the section
+        // heading must exist AND still carry the lease contract, or this reds.
+        Assert.Contains("section \"Tier 2\"", refusal, StringComparison.Ordinal);
+        var harnessDoc = File.ReadAllText(Path.Combine([FindRepoRoot(), "client", "docs", "verification-harness.md"]));
+        Assert.Contains("### Tier 2", harnessDoc, StringComparison.Ordinal);
+        Assert.Contains("ccp-real-desktop.lease", harnessDoc, StringComparison.Ordinal);
         Assert.Contains("hunt a harness bug, not a foreign application", refusal, StringComparison.Ordinal);
         Assert.DoesNotContain("THIS IS THE SHIPPING WPF PRODUCT", refusal, StringComparison.Ordinal);
     }
@@ -244,6 +255,23 @@ public class DesktopPreflightVerdictTests
             Title: title,
             ClassName: "HwndWrapper[Something;;guid]",
             Rect: "(42,19)-(1605,962)");
+
+    /// <summary>Walks up to the repository root, the same shape the source guards use.</summary>
+    private static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "client", "CcpClient.sln")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("repository root not found from " + AppContext.BaseDirectory);
+    }
 }
 
 /// <summary>
@@ -288,4 +316,5 @@ public class DesktopPreflightTests(RealDesktopLease lease) : RealDesktopFacts
         Assert.DoesNotContain("not reached", observation.ForegroundAtStart, StringComparison.Ordinal);
         Assert.DoesNotContain("not reached", observation.ForegroundAtEnd, StringComparison.Ordinal);
     }
+
 }
