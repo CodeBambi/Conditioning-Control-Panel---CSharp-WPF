@@ -1,0 +1,115 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Features.Mantra.MantraWindow"
+        Title="CCP — Mantra Lab"
+        WindowState="Maximized"
+        WindowDecorations="None"
+        Topmost="True"
+        Focusable="True"
+        Background="Black">
+  <!--
+    The typed mantra minigame's surface. Ports the OUTCOMES of Windows/MantraWindow.xaml
+    (WPF), never its mechanics:
+
+      - chromeless, maximized and topmost (WPF :6-9) — the game takes the screen;
+      - three counters over a huge centred mantra over the box (WPF :104-176);
+      - the mantra is painted PER CHARACTER, which is the whole game (WPF :95-144);
+      - the backdrop warms with the streak (WPF :310-351), driven from MantraIntensity.
+
+    THREE THINGS ARE DELIBERATELY ABSENT and each is named where it is decided:
+
+      1. There is NO TextBox. Characters arrive on the window's own TextInput and Backspace
+         and Escape on KeyDown, which is what this port's lock card already does
+         (Effects/LockCardTyping.cs:31-40) and it deletes upstream's entire mechanical
+         anti-cheat problem — no clipboard, no undo stack, no context menu, no drag-drop
+         (WPF :46-52, :234-243, WPF markup :169-171).
+      2. There is NO sound. See MantraIntensity's remarks: every tone upstream makes is
+         synthesised by an oscillator this build's audio seam does not have.
+      3. There are NO storyboards. Upstream animates five of them (WPF markup :14-59: a
+         completion pulse, two shakes, a letter pulse and a forever glow). They are
+         presentation, and this packet has no headed gate to prove one with — the door this
+         window hangs off belongs on Views/Pages/PlayPage.axaml.cs, which is outside its file
+         scope. Shipping animation nothing can verify is how a port acquires claims it cannot
+         support. The STATE they animate is all here and all pinned.
+  -->
+  <Panel>
+    <!-- Layer 0: the backdrop. Its centre stop warms with the streak (WPF :347); the outer
+         stop is fixed (WPF markup :68). Built in code-behind because both stops move. -->
+    <Border x:Name="BaseLayer"/>
+
+    <!-- Layer 1: the colour wash. Opacity 0 -> 0.8 and centre #6633AA -> #FF69B4
+         (WPF :335-336). -->
+    <Border x:Name="WashLayer" Opacity="0"/>
+
+    <!-- Layer 2: the vignette (WPF markup :94-101). Fixed. -->
+    <Border>
+      <Border.Background>
+        <RadialGradientBrush Center="50%,50%" GradientOrigin="50%,50%" RadiusX="80%" RadiusY="80%">
+          <GradientStop Color="Transparent" Offset="0.4"/>
+          <GradientStop Color="#80000000" Offset="1"/>
+        </RadialGradientBrush>
+      </Border.Background>
+    </Border>
+
+    <Grid Margin="40" RowDefinitions="Auto,*,Auto">
+      <!-- Top: the three counters (WPF markup :112-128). -->
+      <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center"
+                  Margin="0,20,0,0" Spacing="60">
+        <StackPanel>
+          <TextBlock Text="REPS" Foreground="#606080" FontSize="11" FontWeight="Bold"
+                     HorizontalAlignment="Center"/>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+            <TextBlock x:Name="CompletionsText" Text="0" Foreground="White" FontSize="36"
+                       FontWeight="Bold"/>
+            <TextBlock x:Name="TargetText" Text="/10" Foreground="#606080" FontSize="24"
+                       VerticalAlignment="Bottom" Margin="2,0,0,4"/>
+          </StackPanel>
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="STREAK" Foreground="#606080" FontSize="11" FontWeight="Bold"
+                     HorizontalAlignment="Center"/>
+          <TextBlock x:Name="StreakText" Text="0" Foreground="#FF69B4" FontSize="36"
+                     FontWeight="Bold" HorizontalAlignment="Center"/>
+        </StackPanel>
+        <StackPanel>
+          <TextBlock Text="BEST" Foreground="#606080" FontSize="11" FontWeight="Bold"
+                     HorizontalAlignment="Center"/>
+          <TextBlock x:Name="BestStreakText" Text="0" Foreground="#AAB8B8D0" FontSize="36"
+                     FontWeight="Bold" HorizontalAlignment="Center"/>
+        </StackPanel>
+      </StackPanel>
+
+      <!-- Centre: the mantra, one Run per character (WPF markup :131-148, WPF :95-111). -->
+      <Viewbox Grid.Row="1" MaxWidth="1400" MaxHeight="300" Stretch="Uniform"
+               VerticalAlignment="Center" HorizontalAlignment="Center">
+        <TextBlock x:Name="MantraText" FontSize="72" FontWeight="Bold" TextAlignment="Center"
+                   TextWrapping="Wrap" MaxWidth="1400" Padding="20"/>
+      </Viewbox>
+
+      <!-- Bottom: what has been typed so far, echoed back, and the way out
+           (WPF markup :151-175). -->
+      <Border x:Name="InputBand" Grid.Row="2" Background="#20FFFFFF" CornerRadius="12"
+              Padding="20,14" BorderThickness="1.5" BorderBrush="#40FF69B4"
+              HorizontalAlignment="Center" MaxWidth="800" MinWidth="500" Margin="0,0,0,40">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock x:Name="AnswerText" Grid.Column="0" Foreground="White" FontSize="22"
+                     VerticalAlignment="Center" TextWrapping="NoWrap"/>
+          <TextBlock Grid.Column="1" Text="Esc to exit" Foreground="#88A0A0C0" FontSize="11"
+                     VerticalAlignment="Center" Margin="10,0,0,0"/>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- The end of the run (WPF markup :179-192). -->
+    <Border x:Name="CompletionOverlay" IsVisible="False" Background="#E0000000">
+      <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+        <TextBlock Text="SESSION COMPLETE" Foreground="#FF69B4" FontSize="48" FontWeight="Bold"
+                   HorizontalAlignment="Center"/>
+        <TextBlock x:Name="CompletionStatsText" Foreground="#AAB8B8D0" FontSize="22"
+                   HorizontalAlignment="Center" Margin="0,16,0,0"/>
+        <TextBlock Text="press any key to close" Foreground="#606080" FontSize="14"
+                   HorizontalAlignment="Center" Margin="0,24,0,0"/>
+      </StackPanel>
+    </Border>
+  </Panel>
+</Window>
