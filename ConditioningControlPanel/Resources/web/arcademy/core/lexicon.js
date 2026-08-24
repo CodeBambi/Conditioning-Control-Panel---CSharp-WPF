@@ -180,8 +180,20 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_xp_first: 'First pass of the day pays XP.',
   campus_xp_retake: 'Retakes pay no XP - pride only.',
   campus_hint: 'Hover a room - click to step inside.',
+  campus_hint_touch: 'Tap a room to step inside.',
   campus_night_sessions: 'Night Sessions',
   campus_rm: 'RM',
+  /* --- the turn-your-phone card (shell/orientgate.js) --------------------
+     PHONES ONLY, and a desktop window never sees any of these. Three pairs
+     because the campus and a class are asking for different reasons: the
+     campus wants width for its floor plan, a class wants the shape its own
+     board was drawn for. */
+  rotate_campus_title: 'Turn it sideways',
+  rotate_campus_body: 'The floor plan runs wide, the way the cabinets actually sit along the walls, so give your phone a quarter turn and you get the whole place back on the glass with your spot still held.',
+  rotate_landscape_title: 'Turn it sideways',
+  rotate_landscape_body: 'This room was built wide, so give your phone a quarter turn and the board gets the width it was drawn for. Nothing is running while you sort it out.',
+  rotate_portrait_title: 'Stand it back up',
+  rotate_portrait_body: 'This one plays tall, so turn your phone upright and the board gets its full height back. Nothing is running while you sort it out.',
   /* --- the punch card + its ceremony (PUNCHCARD §4) ---------------------- */
   punchcard: 'Stamp Card',
   punchcard_holes: '{have} of {need}',

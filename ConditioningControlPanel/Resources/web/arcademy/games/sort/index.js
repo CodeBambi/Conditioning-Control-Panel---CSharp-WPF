@@ -234,6 +234,7 @@ export default {
   /* 180s since the class-length wave (was 120s). registry.js GAME_META.sort
      mirrors this - the timetable reads a SUSPENDED class's descriptor too. */
   timeBudgetSec: BUDGET_SEC,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Sort',
 
   manifest: {

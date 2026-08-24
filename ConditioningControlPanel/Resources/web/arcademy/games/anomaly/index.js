@@ -173,6 +173,7 @@ export default {
    * COUNT_MAX, which size the deal off a fast player rather than off the slow
    * end of the round window. */
   timeBudgetSec: 300,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Anomaly',
 
   manifest: {

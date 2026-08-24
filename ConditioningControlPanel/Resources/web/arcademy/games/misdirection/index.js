@@ -173,6 +173,7 @@ export default {
   meaty: false,
   flagship: false,
   timeBudgetSec: 120,
+  orientation: 'landscape',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Misdirection',
 
   manifest: {

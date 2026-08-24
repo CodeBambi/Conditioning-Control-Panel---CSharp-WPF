@@ -32,6 +32,7 @@ import { t, tierLabel, familyLabel } from '../core/lexicon.js';
 import { makeRng } from '../core/rng.js';
 import { OPEN_SEMESTERS, isOpenSemester } from '../games/registry.js';
 import { fireMoment } from '../emi/moments.js';
+import { isMobile, onDeviceChange } from '../core/device.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -684,8 +685,25 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   /* The viewBox is cut to 16:9 (1440x810) around the architecture and SLICES:
    * the plan always fills the frame, whatever the window - dead sky is cropped
    * instead of letterboxed. Content near the top/bottom edges is croppable
-   * flavor only (tower cap, quad), never a room or a control. */
-  const plan = svg('svg', { viewBox: '0 55 1440 810', preserveAspectRatio: 'xMidYMid slice' }, 'campus-plan');
+   * flavor only (tower cap, quad), never a room or a control.
+   *
+   * ON A PHONE IT MEETS INSTEAD (the mobile pass, owner bugs A and B). Slice is
+   * only ever right while the frame is CLOSE to 16:9, and a phone is not close
+   * in either direction: upright it is about 9:19.5 and slice eats two thirds of
+   * the width, turned sideways it is about 19.5:9 and slice eats the top and the
+   * bottom, which is exactly where The Pool sits - the owner's landscape
+   * screenshot had it sheared off at the bottom edge with no way to pan to it.
+   * `meet` fits the whole plan and letterboxes, and the bands it leaves are the
+   * stage's own dusk-sky gradient, so nothing looks broken. The attribute is
+   * re-written on a rotate rather than set once, because a phone that crosses in
+   * or out of the rule mid-scene must not be left wearing the other one. */
+  const plan = svg('svg', { viewBox: '0 55 1440 810' }, 'campus-plan');
+  function fitPlan() {
+    try { plan.setAttribute('preserveAspectRatio', isMobile() ? 'xMidYMid meet' : 'xMidYMid slice'); }
+    catch (e) { /* the DOM double may not carry attributes - never fatal */ }
+  }
+  fitPlan();
+  const unfit = onDeviceChange(fitPlan);
   plan.setAttribute('aria-label', t('arcademy', 'The Arcademy'));
 
   /* corridor paving texture (vector, styled from the stylesheet) */
@@ -1408,8 +1426,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   topCluster.appendChild(gear);
   root.appendChild(topCluster);
 
+  /* THE HINT HAS TO BE TRUE. There is no hover on a phone, so the desktop line
+   * describes a gesture the player does not have; the touch row says the same
+   * thing about the gesture they do. */
   root.appendChild(el('div', 'campus-hint',
-    t('campus_hint', 'Hover a room - click to step inside.').toUpperCase()));
+    (isMobile()
+      ? t('campus_hint_touch', 'Tap a room to step inside.')
+      : t('campus_hint', 'Hover a room - click to step inside.')).toUpperCase()));
 
   /* ------------------------------ student ID ----------------------------- */
   const id = el('div', 'campus-idcard');
@@ -2011,6 +2034,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       if (docBound) { try { document.removeEventListener('keydown', onInput, true); } catch (e) { /* noop */ } }
       if (bellTimer) { try { clearInterval(bellTimer); } catch (e) { /* noop */ } bellTimer = 0; }
       if (enterTimer) { try { clearTimeout(enterTimer); } catch (e) { /* noop */ } enterTimer = 0; }
+      try { unfit(); } catch (e) { /* noop */ }
       if (document.documentElement && document.documentElement.classList) {
         try { document.documentElement.classList.remove('arc-campus-on'); } catch (e) { /* noop */ }
       }

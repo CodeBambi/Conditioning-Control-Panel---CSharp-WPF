@@ -246,6 +246,7 @@ export default {
   meaty: true,
   flagship: false,
   timeBudgetSec: 180,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Instant Recall',
 
   manifest: {

@@ -43,6 +43,8 @@ import { createCeremonies } from './ceremonies.js';
 import { createPeek } from './peek.js';
 import { createKeybinds } from './keybinds.js';
 import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
+import { installDeviceClass } from '../core/device.js';
+import { requireOrientation, clearOrientation } from './orientgate.js';
 import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 /* FIRST BELL - the once-ever opening (vn/). It mints its own layer, owns its own
  * ledger (`vnSeen`, a sibling of EMI's `emiVoice`) and NEVER gates a shipped
@@ -359,6 +361,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   if (reducedMotion && document.documentElement) {
     document.documentElement.classList.add('arc-reduced');
   }
+  /* THE MOBILE SEAM (core/device.js). One decision, painted on <html> as
+   * `arc-mobile` and kept there across a rotate, so the stylesheet's phone rules
+   * and every `isMobile()` in the JS can never disagree. boot.js installs it too;
+   * it is idempotent, and a shell driven straight by a test harness needs its own
+   * call rather than boot's. */
+  installDeviceClass();
 
   /* ---------------------- state ----------------------------------------- */
   /* THE GRADE EMI SPEAKS ABOUT. Set by finishClass, read once by showReport, so
@@ -645,6 +653,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
     if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
     extrasBox = null;
+    /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
+     * funnels through here, so dropping it here is what stops a gate the campus
+     * asked for from hanging over the report card behind it. The screens that
+     * still want one (the campus, a class whose board has a shape) re-arm after
+     * they have built, which is also how the card knows which words to wear. */
+    try { clearOrientation(); } catch (e) { /* noop */ }
     // Every screen switch funnels through here, so no throw path can strand
     // the immersive stage lock (the campus's arc-campus-on unwinds in its own
     // destroy above, same guarantee).
@@ -976,6 +990,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // (crest, student ID, Front Office/gear), so the bar itself steps aside.
       // Every other screen re-shows it through renderTopbar().
       if (dom.topbar) dom.topbar.hidden = true;
+      /* THE CAMPUS WANTS THE PHONE SIDEWAYS (owner bug A). The plan is a fixed
+       * 16:9 geography and `meet` now fits all of it, but "all of it" inside a
+       * 9:19.5 slot is a strip of architecture two rooms wide with the rest of
+       * the school as sky. There is nothing to pan, so there is nothing to fix
+       * by scrolling: the card asks for the turn and lifts itself on the way
+       * back. It is armed ONLY for the real campus - the plain-board fallback
+       * below is an ordinary scrolling panel and reads fine upright. */
+      requireOrientation('landscape', { reason: 'campus' });
     } catch (e) {
       say('campus hub failed (' + ((e && e.message) || e) + ') - plain board fallback');
       // If the stage built and a LATER line threw, its bell interval and the
@@ -1969,6 +1991,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     dom.screen.appendChild(chrome.panel);
     setStage('arc-class-on');
+    /* THE ROOM ASKS FOR A SHAPE (games/registry.js `orientation`). Phones only,
+     * and 'any' arms nothing at all, so nine tenths of the desktop code path is
+     * a no-op here. Armed AFTER the stage is mounted so the card lands over a
+     * built class rather than over the screen it replaced, and the freeze rides
+     * the same hook in both directions - the card going up stops the clock, the
+     * card coming down starts it again. */
+    requireOrientation(entry.orientation, {
+      reason: 'class',
+      onChange: (blocking) => orientFreeze(blocking),
+    });
     // The host only flips _classActive off this frame and ignores fields it does
     // not know, so `endless` is free to carry: a free swim opens the same
     // bracket and closes it with `class-left` from teardownClass (never with
@@ -2339,6 +2371,32 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ---------------------- pause / suspend / teardown -------------------- */
+  /* ---------------------- the rotate freeze -----------------------------
+   * The turn-your-phone card covers the class, so the clock and the game behind
+   * it have to stop: grading a player on seconds they could not see would be the
+   * shell making the flow of time lie, which is the one thing the class clock
+   * exists to prevent.
+   *
+   * IT IS NOT pauseClass, DELIBERATELY. pauseClass mints the Paused card with its
+   * own Resume / Settings / Leave buttons, and a card stacked under a card the
+   * player cannot reach is exactly the two-dialog race trap 29 was written about.
+   * This is the quiet half of the same funnel - the bar and the game instance and
+   * nothing else - and it REFUSES to act while the class is already frozen for a
+   * reason of its own (a real pause, a host suspend), so lifting the gate can
+   * never resume something the player stopped on purpose.
+   * -------------------------------------------------------------------- */
+  let orientFrozen = false;
+  function orientFreeze(on) {
+    const want = !!on;
+    if (!active) { orientFrozen = false; return; }
+    if (want === orientFrozen) return;
+    if (want && (active.paused || active.suspendEl)) return;
+    orientFrozen = want;
+    timeBarSet(!want);
+    try { want ? active.instance.pause() : active.instance.resume(); }
+    catch (e) { say('rotate freeze threw: ' + ((e && e.message) || e)); }
+  }
+
   function pauseClass(on) {
     if (!active) return;
     active.paused = !!on;
@@ -2479,6 +2537,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // that fired afterwards would paint a bar that is no longer on the page.
     if (a.clockTimer) { try { clearInterval(a.clockTimer); } catch (e) { /* noop */ } a.clockTimer = 0; }
     a.clockRunning = false;
+    // The freeze belongs to the class, not to the page: leaving it armed would
+    // have the NEXT class start life believing it was already stopped.
+    orientFrozen = false;
     active = null;
     // TELL THE HOST THE CLASS IS OVER. `class-started` has a closing bracket now:
     // without it the host's `_classActive` stayed true for the rest of the session

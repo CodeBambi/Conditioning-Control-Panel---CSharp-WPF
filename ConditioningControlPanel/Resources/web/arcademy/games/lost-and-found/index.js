@@ -119,6 +119,7 @@ export default {
   meaty: true,
   flagship: true,
   timeBudgetSec: 300,
+  orientation: 'landscape',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Lost & Found',
 
   manifest: {
