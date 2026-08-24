@@ -2715,12 +2715,30 @@ elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start' -or $Surface
     "4 DIP stripe puts it at $stripeX (scale $scale). The row grid has changed and this no longer names the stripe")
         }
 
-        $capX = $stripeX
+        # THE CELL CARRIES THE STRIPE'S BOUNDARY, one row gutter either side, and that is a
+        # CORRECTION rather than a widening. Cropped to the bare 4x20 DIP stripe this capture was
+        # one flat colour - a picture no different from a screen flooded with the same green - and
+        # the capture step's own non-vacuity gate refuses it by name, correctly. Both gutters are
+        # row INTERIOR and derived from the same two constants as the stripe: the meta cell's
+        # 10 DIP right margin on one side, the row template's 10 DIP trailing padding on the
+        # other. So the cell is 10+4+10 DIP wide, still lies entirely inside the row it names, and
+        # its right edge is the row's own trailing edge.
+        #
+        # WHAT THAT BUYS, and it is the point of the change: the named check samples the stripe's
+        # INTERIOR columns of this wider cell (checks.json session-row-*-stripe, x 0.44..0.56), so
+        # a stripe that moved, vanished or was painted at the wrong end of the row now puts the
+        # gutter under that band and the check fails - and a row painted entirely in the stripe's
+        # colour is refused by the vacuity gate as the one flat colour it would be. The old cell
+        # could say neither: it was inside the stripe, so it proved a colour and nothing about
+        # where that colour stopped.
+        $capX = $stripeX - $pad
         $capY = [int]($rowRect.Y + ($rowRect.H - $stripeH) / 2)
-        $capW = $stripeW
+        $capW = $stripeW + (2 * $pad)
         $capH = $stripeH
-        Write-Output ("stripe cell: $capX,$capY ${capW}x${capH} - row $($rowRect.X),$($rowRect.Y) " +
-    "$($rowRect.W)x$($rowRect.H), meta ends $($metaRect.X + $metaRect.W), grid closes at $closes (scale $scale)")
+        Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $rowRect 'the stripe cell and its gutters' "session row $sessionId"
+        Write-Output ("stripe cell: $capX,$capY ${capW}x${capH} - a ${stripeW}x${stripeH} stripe at $stripeX with a " +
+    "$pad px gutter either side; row $($rowRect.X),$($rowRect.Y) $($rowRect.W)x$($rowRect.H), meta ends " +
+    "$($metaRect.X + $metaRect.W), grid closes at $closes (scale $scale)")
     }
     else {
         # session-start
