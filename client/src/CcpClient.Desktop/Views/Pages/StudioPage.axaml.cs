@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
@@ -77,6 +77,7 @@ public partial class StudioPage : UserControl
     private readonly MandatoryVideoEffect _mandatoryVideo;
     private readonly BubbleCountEffect _bubbleCount;
     private readonly BubblePopEffect _bubblePop;
+    private readonly PopQuizEffect _popQuiz;
     private readonly VisualsDials _visuals;
     private readonly SessionScheduler _scheduler;
     private readonly Haptics.HapticParticipant _haptics;
@@ -178,6 +179,7 @@ public partial class StudioPage : UserControl
         _mandatoryVideo = session.MandatoryVideo;
         _bubbleCount = session.BubbleCount;
         _bubblePop = session.BubblePop;
+        _popQuiz = session.PopQuiz;
 
         // NOT an effect, and never taken from session.Engine.Effects: the Visuals row is
         // the Flash Images module's DRAW dials, so this is the only field on this page that is not
@@ -201,6 +203,7 @@ public partial class StudioPage : UserControl
         RowMandatoryVideo.IsCheckedChanged += (_, _) => ApplySelection();
         RowBubbleCount.IsCheckedChanged += (_, _) => ApplySelection();
         RowBubblePop.IsCheckedChanged += (_, _) => ApplySelection();
+        RowPopQuiz.IsCheckedChanged += (_, _) => ApplySelection();
         RowVisuals.IsCheckedChanged += (_, _) => ApplySelection();
         RowScheduler.IsCheckedChanged += (_, _) => ApplySelection();
         RowHaptics.IsCheckedChanged += (_, _) => ApplySelection();
@@ -223,6 +226,7 @@ public partial class StudioPage : UserControl
         AddQuickToggle(RowMandatoryVideo, MandatoryVideoEffect.EffectId, MandatoryVideoEnableToggle);
         AddQuickToggle(RowBubbleCount, BubbleCountEffect.EffectId, BubbleCountEnableToggle);
         AddQuickToggle(RowBubblePop, BubblePopEffect.EffectId, BubblePopEnableToggle);
+        AddQuickToggle(RowPopQuiz, PopQuizEffect.EffectId, PopQuizEnableToggle);
 
         // NO quick toggle on RowVisuals, and it is upstream's own unhandled case rather than an
         // omission: the gesture flips a module's enable, and this row has no enable to flip
@@ -279,6 +283,8 @@ public partial class StudioPage : UserControl
             OnEnableToggled(BubbleCountEnableToggle, _bubbleCount, BubbleCountEffect.EffectId);
         BubblePopEnableToggle.IsCheckedChanged += (_, _) =>
             OnEnableToggled(BubblePopEnableToggle, _bubblePop, BubblePopEffect.EffectId);
+        PopQuizEnableToggle.IsCheckedChanged += (_, _) =>
+            OnEnableToggled(PopQuizEnableToggle, _popQuiz, PopQuizEffect.EffectId);
 
         // The scheduler's own enable. It does NOT route through SessionEngine.QuickToggle for the
         // same reason its row's right-click does not: there is no module to arm.
@@ -372,6 +378,7 @@ public partial class StudioPage : UserControl
         OnSliderMoved(BubblePopFrequencySlider, OnBubblePopFrequencyMoved);
         OnSliderMoved(BubblePopSizeSlider, OnBubblePopSizeMoved);
         OnSliderMoved(BubblePopSpeedSlider, OnBubblePopSpeedMoved);
+        OnSliderMoved(PopQuizFrequencySlider, OnPopQuizFrequencyMoved);
         OnSliderMoved(VisualsScaleSlider, OnVisualsScaleMoved);
         OnSliderMoved(VisualsOpacitySlider, OnVisualsOpacityMoved);
         OnSliderMoved(VisualsDurationSlider, OnVisualsDurationMoved);
@@ -400,6 +407,12 @@ public partial class StudioPage : UserControl
         _bubbleCount.Started += _ => Refresh();
         _bubbleCount.Asked += _ => Refresh();
         _bubbleCount.Resolved += _ => Refresh();
+
+        // BOTH of this module's signals, for the reason the Lock Card's pair is taken: Shown is a
+        // question appearing, Resolved is the user answering it OR walking away from it. A page that
+        // only repainted on the first would leave "asking you now" on screen after the card was gone.
+        _popQuiz.Shown += _ => Refresh();
+        _popQuiz.Resolved += _ => Refresh();
 
         LoomButton.Click += (_, _) => loom.Launch();
 
@@ -499,6 +512,13 @@ public partial class StudioPage : UserControl
     /// at one of its bubbles TO this app — the Lock Card row's DEMAND with the hit test in place of the
     /// foreground (<see cref="BubblePopSurfacePresenter.Running"/>).</summary>
     public EffectDotState RenderedBubblePopDot { get; private set; } = EffectDotState.Off;
+
+    /// <summary>The Pop Quiz row's dot. The LOCK CARD's rule exactly — a firing on the clock, a
+    /// desktop this process can put a window on, and, while a card of ITS OWN is up, the operating
+    /// system's own confirmation that the card holds the input
+    /// (<see cref="PopQuizEffect.WorkIsRunning"/>). The <c>of MINE</c> qualifier is what stops this
+    /// row darkening for a Lock Card or a Bubble Count question on the shared capability.</summary>
+    public EffectDotState RenderedPopQuizDot { get; private set; } = EffectDotState.Off;
 
     /// <summary>The Scheduler row's dot — the first on this page that is not a claim about
     /// a module at all. <c>Live</c> means the enable is on, a tick is REALLY on the clock, and the
@@ -747,6 +767,7 @@ public partial class StudioPage : UserControl
         var videoOpen = RowMandatoryVideo.IsChecked == true;
         var bubbleCountOpen = RowBubbleCount.IsChecked == true;
         var bubblePopOpen = RowBubblePop.IsChecked == true;
+        var popQuizOpen = RowPopQuiz.IsChecked == true;
         var visualsOpen = RowVisuals.IsChecked == true;
         var schedulerOpen = RowScheduler.IsChecked == true;
         var hapticsOpen = RowHaptics.IsChecked == true;
@@ -758,6 +779,7 @@ public partial class StudioPage : UserControl
         MandatoryVideoModulePanel.IsVisible = videoOpen;
         BubbleCountModulePanel.IsVisible = bubbleCountOpen;
         BubblePopModulePanel.IsVisible = bubblePopOpen;
+        PopQuizModulePanel.IsVisible = popQuizOpen;
         FlashModulePanel.IsVisible = flashOpen;
         SubliminalModulePanel.IsVisible = subliminalOpen;
         SpiralModulePanel.IsVisible = spiralOpen;
@@ -770,7 +792,7 @@ public partial class StudioPage : UserControl
         RackHint.IsVisible = !flashOpen && !subliminalOpen && !spiralOpen && !pinkOpen && !rampOpen
             && !mindWipeOpen && !brainDrainOpen && !lockCardOpen && !videoOpen && !bubbleCountOpen
             && !bubblePopOpen && !bouncingTextOpen && !visualsOpen && !schedulerOpen && !hapticsOpen
-            && !scriptedOpen;
+            && !scriptedOpen && !popQuizOpen;
     }
 
     // =====================================================================================
@@ -1650,6 +1672,47 @@ public partial class StudioPage : UserControl
     /// sliders, the Scheduler and Haptics all persist OUTSIDE those eleven, so a session neither
     /// overwrites them nor discards them at the restore, and greying them would be a lie in the
     /// other direction.</para>
+    ///
+    /// <para><b>THE CLAUSE IS ABOUT CUSTODY, NOT PRESCRIPTION, AND POP QUIZ IS WHY THAT SENTENCE IS
+    /// HERE.</b> Two upstream facts look like a contradiction and are not.
+    /// <list type="number">
+    /// <item>Upstream marks BOTH pop quiz dials <c>Owned</c>
+    /// (<c>Views/Tabs/GradedIntakeTabView.xaml:269</c> and <c>:286</c>).</item>
+    /// <item>Upstream also says pop quiz is <i>"a user-level toggle (AppSettings), not per-session"</i>
+    /// (<c>Services/Session/SessionEngine.cs:1406</c>), and it means it: the engine starts the
+    /// service from <c>App.Settings.Current.PopQuizEnabled</c> (<c>:490</c>, <c>:1407</c>) and the
+    /// per-session fields the model declares for it (<c>Models/Session.cs:913-916</c>) are read by
+    /// NOTHING — its own built-in programs say the same, <i>"PopQuiz*, MiniGameEnabled and BrainDrain*
+    /// are dead in the engine and are not touched"</i>
+    /// (<c>Services/Program/BuiltInPrograms.cs:430</c>).</item>
+    /// </list>
+    /// They reconcile because <c>Owned</c> is not about a session PRESCRIBING a value. Upstream's run
+    /// takes CUSTODY of these two: it snapshots them into its spare settings at
+    /// <c>Services/Session/SessionEngine.cs:919-920</c> and writes them back at <c>:1544-1545</c>, so a dial the user
+    /// moved mid-session is silently discarded at the end. That is the harm the lock prevents, and it
+    /// is exactly what the clause above is testing for.</para>
+    ///
+    /// <para><b>So the two Pop Quiz dials on this page are deliberately NOT marked.</b> This port's
+    /// run borrows eleven documents and <c>session_popquiz.json</c> is not one of them: nothing
+    /// snapshots it, nothing writes it back, and a change the user makes during a session is theirs
+    /// afterwards. Greying it would claim a custody this build does not take. That places Pop Quiz
+    /// beside Brain Drain and Haptics, the two rows that ALREADY carry upstream <c>Owned</c> markers
+    /// this port does not mirror (<c>Views/Controls/Studio/BrainDrainFeatureControl.xaml:98,155,179,200</c>
+    /// and <c>Views/Tabs/HapticsTabView.xaml:587</c>) — the same divergence for the same one reason,
+    /// not a new one. The other two exclusions above are NOT divergences at all and are worth
+    /// separating: upstream marks nothing on its scheduler panel either
+    /// (<c>Views/Controls/Studio/SchedulerRackPanel.xaml:45</c>, "NOTHING on this panel is
+    /// SessionLock.Owned, and that is deliberate"), and the ramp's CURVE is marked in both trees
+    /// while its sliders are marked in neither (<c>Views/Controls/Studio/RampRackPanel.xaml:24</c>,
+    /// "CmbRampCurve is the ONLY SessionLock.Owned control here"). It also lands where
+    /// upstream's own rule points when the two readings disagree: <i>"When in doubt, leave it
+    /// unmarked. Over-locking takes control away from the user for no benefit"</i>
+    /// (<c>Features/SessionLock.cs:36-38</c>).</para>
+    ///
+    /// <para><b>The close condition, so the next reader does not have to re-derive this:</b> the day
+    /// <see cref="ScriptedSessionDials"/> takes a twelfth document and it is the pop quiz one, both
+    /// dials must gain this marker in the same change — because that is the moment a mid-session edit
+    /// starts being thrown away.</para>
     /// </summary>
     private const string SessionOwnedMarker = "session-owned";
 
@@ -1781,6 +1844,10 @@ public partial class StudioPage : UserControl
             BubbleCountEnableToggle.IsChecked = bubbleCount.Enabled;
             BubbleCountFrequencySlider.Value = bubbleCount.PerHour;
             BubbleCountDifficultySlider.Value = (int)bubbleCount.Difficulty;
+
+            var popQuiz = _session.PopQuizPreset.Current;
+            PopQuizEnableToggle.IsChecked = popQuiz.Enabled;
+            PopQuizFrequencySlider.Value = popQuiz.PerHour;
 
             var bubblePop = _session.BubblePopPreset.Current;
             BubblePopEnableToggle.IsChecked = bubblePop.Enabled;
@@ -2025,6 +2092,24 @@ public partial class StudioPage : UserControl
         BubbleCountCapabilityState.Text = BubbleCountPanelNotices.DescribeBothCapabilities(
             _bubbleCount.LastPlayback, _bubbleCount.LastPrompt);
 
+        // The SECOND row on this page that asks a question through the shared input capability, and
+        // the only one whose answer can never be wrong (Services/Quiz/PopQuizService.cs:12).
+        var popQuizDials = _popQuiz.Preset;
+        PopQuizFrequencyValue.Text = PopQuizPanelNotices.DescribeFrequency(popQuizDials.PerHour);
+        PopQuizInterruptionNotice.Text = PopQuizPanelNotices.InterruptionNotice;
+        PopQuizScopeNotice.Text = PopQuizPanelNotices.ScopeNotice;
+        PopQuizTestNotice.Text = PopQuizPanelNotices.NoTestButtonNotice;
+        RenderedPopQuizDot = PaintDot(PopQuizRowDot, _popQuiz);
+        PopQuizLiveState.Text = PopQuizPanelNotices.DescribeQuizState(
+            RenderedPopQuizDot, _popQuiz.QuizCount, _popQuiz.Last, _session.Engine.Running,
+            _popQuiz.Presence.CanReachAUser, _popQuiz.Ask is not null, _popQuiz.AnsweredCount,
+            _popQuiz.SkippedCount, _popQuiz.LastResolution);
+        PopQuizPoolState.Text = PopQuizPanelNotices.DescribePool(
+            _popQuiz.QuestionCount, PopQuizQuestion.AnswerCount);
+        PopQuizXpState.Text = PopQuizPanelNotices.DescribeXp(_popQuiz.BanksXp, _popQuiz.LastGrant);
+        PopQuizCapabilityState.Text = PopQuizPanelNotices.DescribeInputCapability(
+            _popQuiz.LastPrompt, _popQuiz.Presence.LastObservation);
+
         // The one row the user ACTS on. Its live line has a clause no other row's has — targets are
         // up and the window manager routes clicks at none of them — because that is a state only
         // this row can be in and it is invisible from anywhere else.
@@ -2189,6 +2274,25 @@ public partial class StudioPage : UserControl
         var value = (int)Math.Round(BubbleCountDifficultySlider.Value);
         _bubbleCount.SetDifficulty((BubbleCountDifficulty)value);
         _ = _session.BubbleCountPreset.Save();
+        Refresh();
+    }
+
+    /// <summary>
+    /// The questions-per-hour slider writes the dial and re-paces the live schedule, the port's
+    /// standing convention — and here it is upstream's own behaviour rather than a convention: the
+    /// service recomputes its interval from the CURRENT setting on every tick
+    /// (<c>Services/Quiz/PopQuizService.cs:163-171</c>), so a raised rate takes effect at the next
+    /// question rather than after the old interval expires.
+    /// </summary>
+    private void OnPopQuizFrequencyMoved()
+    {
+        if (_syncing)
+        {
+            return;
+        }
+
+        _popQuiz.SetPerHour((int)Math.Round(PopQuizFrequencySlider.Value));
+        _ = _session.PopQuizPreset.Save();
         Refresh();
     }
 

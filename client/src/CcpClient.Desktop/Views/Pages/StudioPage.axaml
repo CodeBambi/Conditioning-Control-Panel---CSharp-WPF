@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="CcpClient.Desktop.Views.Pages.StudioPage">
   <!--
@@ -247,6 +247,32 @@
                        x:Name="LockCardRowDot"
                        Classes="dot"
                        AutomationProperties.AutomationId="LockCardRowDot" />
+            </Grid>
+          </RadioButton>
+
+          <!-- POP QUIZ CLOSES GAMES & CARDS, and its position is the PORT's rather than a copy of
+               anything: upstream has no Studio rack row for this module at all — its two dials live
+               on the Graded Intake door (Views/Tabs/GradedIntakeTabView.xaml:255-292) — so there is
+               no upstream rack order to take. It goes with the other three cards because that is
+               what it is, and it goes last in the group because it is the newest and moving the
+               three above it would reorder rows a user has already learned.
+
+               ITS DOT IS THE LOCK CARD'S, exactly: a firing on the clock, a desktop this process can
+               put a window on, and — while a card of ITS OWN is up — the operating system's own
+               confirmation that the card holds the input. See PopQuizEffect.WorkIsRunning, and note
+               the `of MINE` qualifier there: the presence is shared with two rows above, so a bare
+               IsPrompting would darken this row for somebody else's card. -->
+          <RadioButton x:Name="RowPopQuiz"
+                       Classes="rack-row"
+                       GroupName="rack"
+                       AutomationProperties.AutomationId="RowPopQuiz"
+                       AutomationProperties.Name="Pop Quiz rack row">
+            <Grid ColumnDefinitions="*,Auto" MinWidth="200">
+              <TextBlock Grid.Column="0" Text="Pop Quiz" VerticalAlignment="Center" />
+              <Ellipse Grid.Column="1"
+                       x:Name="PopQuizRowDot"
+                       Classes="dot"
+                       AutomationProperties.AutomationId="PopQuizRowDot" />
             </Grid>
           </RadioButton>
 
@@ -1380,6 +1406,108 @@
             <TextBlock TextWrapping="Wrap"
                        x:Name="LockCardCaptureState"
                        AutomationProperties.AutomationId="LockCardCaptureState"
+                       Text="" />
+          </Border>
+        </StackPanel>
+
+        <!-- ================= Pop Quiz ================= -->
+        <StackPanel x:Name="PopQuizModulePanel" IsVisible="False" Spacing="10">
+          <TextBlock Classes="module-title" Text="Pop Quiz" />
+          <TextBlock Classes="page-blurb"
+                     Text="Asks you a question at random and agrees with whatever you answer." />
+
+          <!-- THE INTERRUPTION WARNING LEADS, above the dials, as the Lock Card's and Bubble
+               Count's do — this row takes the keyboard. Constants in PopQuizPanelNotices rather
+               than inline prose so a fact can pin the exact words. -->
+          <Border Classes="notice">
+            <TextBlock x:Name="PopQuizInterruptionNotice"
+                       AutomationProperties.AutomationId="PopQuizInterruptionNotice"
+                       TextWrapping="Wrap"
+                       Text="" />
+          </Border>
+
+          <!-- TWO dials, because upstream has exactly two: ChkPopQuizEnabled and
+               SliderPopQuizFrequency (Views/Tabs/GradedIntakeTabView.xaml:268-292). There is no
+               strict mode, no colour, no repeat count and no phrase list to carry.
+
+               NEITHER IS `session-owned`, AND THAT IS THE RESOLUTION OF A REAL CONFLICT — read
+               the SessionOwnedMarker doc comment in StudioPage.axaml.cs before adding the class
+               here. Upstream marks BOTH of these Owned (:269, :286) because upstream's run takes
+               CUSTODY of the two values (Services/Session/SessionEngine.cs:919-920 saves them, :1544-1545 writes
+               them back). This port's run borrows eleven documents and this is not one of them,
+               so nothing is discarded at a restore and greying them would take control away for
+               a harm this build does not have. -->
+          <CheckBox x:Name="PopQuizEnableToggle"
+                    Classes="dial-enable"
+                    AutomationProperties.AutomationId="PopQuizEnableToggle"
+                    AutomationProperties.Name="Pop Quiz enabled"
+                    Content="Enable Pop Quiz" />
+
+          <Grid ColumnDefinitions="150,*,Auto" RowDefinitions="Auto" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="dial-label" Text="Questions per hour" />
+            <!-- Minimum/Maximum are upstream's slider's own, 1 and 100
+                 (GradedIntakeTabView.xaml:286), which is also AppSettings' clamp
+                 (Models/AppSettings.cs:3586) — see PopQuizSchedule.MaxPerHour for why the stale
+                 "1-10" comment beside it does not win. -->
+            <Slider Grid.Row="0" Grid.Column="1"
+                    x:Name="PopQuizFrequencySlider"
+                    Minimum="1" Maximum="100"
+                    SmallChange="1" LargeChange="1"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    AutomationProperties.AutomationId="PopQuizFrequencySlider"
+                    AutomationProperties.Name="Pop Quiz questions per hour" />
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       x:Name="PopQuizFrequencyValue"
+                       Classes="dial-value"
+                       AutomationProperties.AutomationId="PopQuizFrequencyValue"
+                       Text="" />
+          </Grid>
+
+          <Border Classes="notice">
+            <StackPanel Spacing="4">
+              <TextBlock x:Name="PopQuizLiveState"
+                         AutomationProperties.AutomationId="PopQuizLiveState"
+                         Foreground="#FFE8E0EE"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="PopQuizPoolState"
+                         AutomationProperties.AutomationId="PopQuizPoolState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+              <TextBlock x:Name="PopQuizXpState"
+                         AutomationProperties.AutomationId="PopQuizXpState"
+                         Foreground="#FFE8E0EE"
+                         Opacity="0.7"
+                         FontSize="12"
+                         TextWrapping="Wrap"
+                         Text="" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="PopQuizScopeNotice"
+                       AutomationProperties.AutomationId="PopQuizScopeNotice"
+                       Text="" />
+          </Border>
+
+          <!-- The missing Test button, named rather than stubbed. See
+               PopQuizPanelNotices.NoTestButtonNotice. -->
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="PopQuizTestNotice"
+                       AutomationProperties.AutomationId="PopQuizTestNotice"
+                       Text="" />
+          </Border>
+
+          <Border Classes="notice">
+            <TextBlock TextWrapping="Wrap"
+                       x:Name="PopQuizCapabilityState"
+                       AutomationProperties.AutomationId="PopQuizCapabilityState"
                        Text="" />
           </Border>
         </StackPanel>

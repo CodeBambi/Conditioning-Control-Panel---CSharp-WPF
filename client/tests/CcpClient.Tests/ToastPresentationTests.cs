@@ -1,4 +1,4 @@
-using CcpVerify;
+﻿using CcpVerify;
 using Xunit;
 
 namespace CcpClient.Tests;
@@ -172,13 +172,16 @@ public class ToastPresentationTests
     {
         var script = CaptureScript();
         Assert.Contains("'toast' = @('saved', 'refused')", script, StringComparison.Ordinal);
-        // The toast is the LAST entry in both ValidateSets, so the needles quote only its own tail.
-        // Anchoring on the entry before it would red this fact every time an unrelated surface is
-        // added between them, which is exactly what happened when companion-privacy and
-        // companion-transcript landed - a guard that fails on somebody else's addition teaches
-        // people to widen it.
-        Assert.Contains("'toast')] [string]$Surface", script, StringComparison.Ordinal);
-        Assert.Contains("'saved', 'refused')] [string]$State", script, StringComparison.Ordinal);
+        // MEMBERSHIP, NOT POSITION - and this needle has now been wrong in BOTH directions.
+        // It first anchored on the entry BEFORE the toast, so it redded when companion-privacy and
+        // companion-transcript landed between them. That was fixed by quoting the toast's own tail
+        // instead, which held only while the toast was LAST - and popquiz-card then landed after it.
+        // A guard that fails on somebody else's unrelated addition teaches people to widen it, so
+        // this asserts only what the fact is actually about: that capture.ps1 can be asked for this
+        // surface and both of its states. Where they sit in the list is not this fact's business.
+        Assert.Matches(@"ValidateSet\([^)]*'toast'[^)]*\)\] \[string\]\$Surface", script);
+        Assert.Matches(@"ValidateSet\([^)]*'saved'[^)]*\)\] \[string\]\$State", script);
+        Assert.Matches(@"ValidateSet\([^)]*'refused'[^)]*\)\] \[string\]\$State", script);
 
         // And the UIA gate that runs BEFORE any pixel is read. A capture whose only assertion is a
         // colour cannot tell one message from another, and these two states differ by their words

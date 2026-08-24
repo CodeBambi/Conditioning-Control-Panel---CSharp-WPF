@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Capabilities;
+﻿using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Persistence;
@@ -149,12 +149,20 @@ public class SecondEffectSpineTests
         // A TENTH followed (Bouncing Text, whose BouncingTextEnabled ships false at
         // CCP.Core/Models/AppSettings.cs:3598) and it lands after Spiral Overlay, which is the
         // rack's order.
+        //
+        // AND AN ELEVENTH THAT SHIPS OFF (Pop Quiz, whose PopQuizEnabled ships false at
+        // Models/AppSettings.cs:3575). It lands between Brain Drain and the ramp, which is
+        // upstream's StartEngine order and the ONLY order there is for this module: upstream has no
+        // Studio rack row for it at all, its dials living on the Graded Intake door
+        // (Views/Tabs/GradedIntakeTabView.xaml:255-292), so nothing competes with
+        // MainWindow/MainWindow.StartStop.cs:255-258 - after Brain Drain (:241-244), before the ramp
+        // timer (:265-269).
         Assert.Equal(
             [
                 MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, BouncingTextEffect.EffectId,
                 PinkFilterEffect.EffectId, BubblePopEffect.EffectId, BubbleCountEffect.EffectId,
                 LockCardEffect.EffectId, MindWipeEffect.EffectId, BrainDrainEffect.EffectId,
-                IntensityRampEffect.EffectId,
+                PopQuizEffect.EffectId, IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
     }

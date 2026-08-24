@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Audio;
+﻿using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Features.Dtrh;
 using CcpClient.Desktop.Haptics;
@@ -41,6 +41,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
     private readonly PersistenceStore<MandatoryVideoPresetDocument> _videoPreset;
     private readonly PersistenceStore<BubbleCountPresetDocument> _bubbleCountPreset;
     private readonly PersistenceStore<BubblePopPresetDocument> _bubblePopPreset;
+    private readonly PersistenceStore<PopQuizPresetDocument> _popQuizPreset;
     private readonly PersistenceStore<BouncingTextPresetDocument> _bouncingTextPreset;
     private readonly PersistenceStore<VisualsPresetDocument> _visualsPreset;
     private readonly PersistenceStore<AssetSelectionDocument> _assetSelection;
@@ -82,6 +83,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         IVideoClipPool? bubbleCountClips = null,
         Random? bubbleCountRandom = null,
         Func<InputBounds>? bubbleCountPlacement = null,
+        Random? popQuizRandom = null,
+        Func<InputBounds>? popQuizPlacement = null,
         IBubblePopSurface? bubblePopSurface = null,
         IBouncingTextSurface? bouncingTextSurface = null,
         IHapticLimb? haptics = null,
@@ -164,6 +167,15 @@ public sealed class SessionParticipant : IBackgroundParticipant
             infra.OwnerFor("BubblePopPreset"), infra.Log,
             Path.Combine(dataDirectory, BubblePopPresetDocument.FileName),
             BubblePopPresetDocument.CurrentSchemaVersion);
+
+        // The asking module's own document, same per-module precedent again — and it is the one
+        // document in this list that sits beside its MODULE rather than in this folder
+        // (Effects/PopQuizPresetDocument.cs), because Session/ was outside the file scope of the
+        // packet that wrote it. The store is generic over the model and cares about neither.
+        _popQuizPreset = new PersistenceStore<PopQuizPresetDocument>(
+            infra.OwnerFor("PopQuizPreset"), infra.Log,
+            Path.Combine(dataDirectory, PopQuizPresetDocument.FileName),
+            PopQuizPresetDocument.CurrentSchemaVersion);
 
         // Its own document, on the per-module precedent: the store's Degraded load path takes the
         // WHOLE document to defaults, so a shared file would let one broken value reset every other
@@ -460,6 +472,35 @@ public sealed class SessionParticipant : IBackgroundParticipant
             bubbleCountRandom,
             bubbleCountPlacement);
 
+        // THE ASKING MODULE THAT WAS BUILT AND CONSTRUCTED BY NOTHING. It takes the SAME input
+        // presence the Lock Card and Bubble Count ask through — one window contesting the one
+        // foreground the OS lends — and its two upstream guards ("a pop quiz is already open",
+        // Services/Quiz/PopQuizService.cs:183-187, and the lock-card cross-check at :194) are the
+        // presence's own single-tenancy rather than two reads this composition has to arrange.
+        //
+        // NO XP LEDGER, and that is a REFUSAL WITH A REASON rather than an omission. Upstream banks
+        // twenty-five on every answer (Windows/PopQuizWindow.xaml.cs:161) and the module will bank it
+        // the moment it is handed a ledger. The port's ledger is opened per WINDOW and disposed with
+        // it (Features/Progression/ProgressionLedger.Open's own remarks: "the three hosts that call
+        // this are modal windows the user opens one at a time"), and every one of its three callers
+        // holds it for the life of one modal. A session-lifetime FOURTH store over the same
+        // progression.json would be a second WRITER open across those windows: Grant mutates its own
+        // in-memory copy and saves (ProgressionLedger.Grant), so a quiz answered after a DTRH run had
+        // banked would write this store's stale level and XP back over it. With no ledger the module
+        // banks nothing and the card makes no XP claim at all — its own documented state, not a stub.
+        PopQuiz = new PopQuizEffect(
+            infra.OwnerFor("PopQuiz"),
+            signal,
+            sessionClock,
+            _input,
+            _popQuizPreset,
+            xp: null,
+            // Injectable for the same reason every other module's Random is: the SPACING, the DRAW
+            // and the SHUFFLE are what a fact makes deterministic, and the arithmetic they feed
+            // stays the module's own rather than a number a test double re-derives.
+            popQuizRandom,
+            popQuizPlacement);
+
         // The eleventh module, and the first the user is expected to ACT on. It goes FIRST
         // in GAMES & CARDS because that is where the rack puts it — Bubble Pop, Bubble Count, Lock
         // Card, Bouncing Text (StudioTabView.xaml.cs:499-505) — and upstream's StartEngine offers no
@@ -513,6 +554,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // and before IMMERSION (StudioTabView.xaml.cs:483/498/508/530), and StartEngine starts the
         // lock card (:206-209) after the overlay service and before Mind Wipe (:229-230). It is the
         // port's first GAMES & CARDS row, so the group opens with it.
+        // Adds Pop Quiz BETWEEN Brain Drain and the ramp, and it is the one module here whose
+        // position has only ONE upstream order to take rather than two that must be reconciled:
+        // upstream has no Studio rack row for it at all (its dials live on the Graded Intake door,
+        // Views/Tabs/GradedIntakeTabView.xaml:255-292), so StartEngine's order is unopposed —
+        // the lock card at :206-209, Mind Wipe at :229-230, Brain Drain at :241-244, then pop quiz
+        // at :255-258 and the ramp timer last at :265-269. Its RACK ROW sits in GAMES & CARDS beside
+        // the other three cards, which is the port's own placement for a row upstream does not have;
+        // the two orders therefore differ on purpose and neither is a D90 tie-break.
         // Inserts Mandatory Video BETWEEN Flash Images and Subliminals, which is where both
         // orders that matter put it and they agree: WPF's rack is Flash Images, Mandatory Video,
         // Subliminals, Spiral Overlay (StudioTabView.xaml.cs:483-491) and StartEngine starts the
@@ -521,7 +570,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         Engine = new SessionEngine(
             [
                 Flash, MandatoryVideo, Subliminals, Spiral, BouncingText, PinkFilter, BubblePop, BubbleCount,
-                LockCard, MindWipe, BrainDrain, Ramp,
+                LockCard, MindWipe, BrainDrain, PopQuiz, Ramp,
             ],
             _preset, signal);
 
@@ -653,6 +702,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
     public BubblePopEffect BubblePop { get; }
 
     /// <summary>
+    /// Pop Quiz, the module that asks a question with four answers and reinforces whichever one is
+    /// given — every one of them is correct (<c>Services/Quiz/PopQuizService.cs:12</c>).
+    /// </summary>
+    public PopQuizEffect PopQuiz { get; }
+
+    /// <summary>
     /// The pointer surface Bubble Pop places its targets on. Public for the same reason every other
     /// capability is: a capability nobody can reach is a capability nobody can interrogate — and this
     /// is the one whose <c>Available</c> is earned from the window manager's own routing answer while
@@ -766,6 +821,9 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <summary>The Bubble Pop module's persisted store, same reason as the others.</summary>
     public PersistenceStore<BubblePopPresetDocument> BubblePopPreset => _bubblePopPreset;
 
+    /// <summary>The Pop Quiz module's persisted store, same reason as the others.</summary>
+    public PersistenceStore<PopQuizPresetDocument> PopQuizPreset => _popQuizPreset;
+
     /// <summary>Where the spiral library lives. The module panel shows this so an empty library has
     /// an answer to "where do I put one", exactly as the flash panel names its images folder.</summary>
     public string SpiralsFolder => SpiralLibrary.Folder(AssetsRootFor(_dataDirectory));
@@ -790,6 +848,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         await _videoPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _bubbleCountPreset.StartAsync(cancellationToken).ConfigureAwait(false);
         await _bubblePopPreset.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _popQuizPreset.StartAsync(cancellationToken).ConfigureAwait(false);
 
         // Found _bouncingTextPreset missing from all four of these lists. A store that is
         // never started is never LOADED — PersistenceStore.Load runs only from StartAsync — so
@@ -816,6 +875,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
         LogIfDegraded("video-preset", _videoPreset.LastLoadOutcome);
         LogIfDegraded("bubblecount-preset", _bubbleCountPreset.LastLoadOutcome);
         LogIfDegraded("bubblepop-preset", _bubblePopPreset.LastLoadOutcome);
+        LogIfDegraded("popquiz-preset", _popQuizPreset.LastLoadOutcome);
         LogIfDegraded("bouncingtext-preset", _bouncingTextPreset.LastLoadOutcome);
         LogIfDegraded("visuals-preset", _visualsPreset.LastLoadOutcome);
     }
@@ -880,7 +940,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _preset.StopAsync(), _subliminalPreset.StopAsync(), _pinkFilterPreset.StopAsync(),
             _spiralPreset.StopAsync(), _rampPreset.StopAsync(), _mindWipePreset.StopAsync(),
             _brainDrainPreset.StopAsync(), _lockCardPreset.StopAsync(), _videoPreset.StopAsync(),
-            _bubbleCountPreset.StopAsync(), _bubblePopPreset.StopAsync(),
+            _bubbleCountPreset.StopAsync(), _bubblePopPreset.StopAsync(), _popQuizPreset.StopAsync(),
             _bouncingTextPreset.StopAsync(), _visualsPreset.StopAsync(), _assetSelection.StopAsync());
     }
 
@@ -925,6 +985,7 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _lockCardPreset.FlushAsync(boundedWait), _videoPreset.FlushAsync(boundedWait),
             _bubbleCountPreset.FlushAsync(boundedWait),
             _bubblePopPreset.FlushAsync(boundedWait),
+            _popQuizPreset.FlushAsync(boundedWait),
             _bouncingTextPreset.FlushAsync(boundedWait),
             // The Visuals row's three dials. The flash-opacity one is also a dial the ramp BORROWS,
             // and the same guarantee holds for the same reason: Engine.Stop() above restores it

@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -474,7 +474,8 @@ public class StudioRackHeadlessTests : HeadlessTest
         {
             "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
             "RowBouncingText", "RowPinkFilter",
-            "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+            "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowPopQuiz",
+            "RowMindWipe", "RowBrainDrain",
             "RowIntensityRamp",
         })
         {
@@ -715,7 +716,14 @@ public class StudioRackHeadlessTests : HeadlessTest
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
                 "RowBouncingText", "RowPinkFilter", "RowVisuals",
-                "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+                // Pop Quiz closes GAMES & CARDS. It is the one row on this page whose position is
+                // the PORT's own rather than upstream's, and for a reason rather than a preference:
+                // upstream has no Studio rack row for this module at all — its two dials live on the
+                // Graded Intake door (Views/Tabs/GradedIntakeTabView.xaml:255-292) — so there was no
+                // order to take. It goes with the other cards because that is what it is, and LAST in
+                // the group because moving the three above it would reorder rows a user has learned.
+                "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowPopQuiz",
+                "RowMindWipe", "RowBrainDrain",
                 // Haptics is LAST in IMMERSION, immediately after Brain Drain and before
                 // the TIMING group, which is upstream's own position
                 // (StudioTabView.xaml.cs:513/519/530).
@@ -738,7 +746,8 @@ public class StudioRackHeadlessTests : HeadlessTest
         {
             "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
             "RowBouncingText", "RowPinkFilter",
-            "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+            "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowPopQuiz",
+            "RowMindWipe", "RowBrainDrain",
             "RowIntensityRamp",
         })
         {
@@ -975,7 +984,14 @@ public class StudioRackHeadlessTests : HeadlessTest
             [
                 "RowFlashImages", "RowMandatoryVideo", "RowSubliminals", "RowSpiralOverlay",
                 "RowBouncingText", "RowPinkFilter", "RowVisuals",
-                "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowMindWipe", "RowBrainDrain",
+                // Pop Quiz closes GAMES & CARDS. It is the one row on this page whose position is
+                // the PORT's own rather than upstream's, and for a reason rather than a preference:
+                // upstream has no Studio rack row for this module at all — its two dials live on the
+                // Graded Intake door (Views/Tabs/GradedIntakeTabView.xaml:255-292) — so there was no
+                // order to take. It goes with the other cards because that is what it is, and LAST in
+                // the group because moving the three above it would reorder rows a user has learned.
+                "RowBubblePop", "RowBubbleCount", "RowLockCard", "RowPopQuiz",
+                "RowMindWipe", "RowBrainDrain",
                 // Haptics is LAST in IMMERSION, immediately after Brain Drain and before
                 // the TIMING group, which is upstream's own position
                 // (StudioTabView.xaml.cs:513/519/530).
