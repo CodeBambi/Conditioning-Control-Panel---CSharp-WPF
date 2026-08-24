@@ -1821,6 +1821,139 @@ html.arc-reduced .campus-sparkle { animation:none; opacity:0; }
   .campus-sparkle { animation:none; opacity:0; }
 }
 
+
+/* ======================= THE STUDENT BODY (presence) =====================
+   shell/ghosts.js draws into `g.campus-students`, a SIBLING of `.campus-route`
+   (above the floor, under the rooms and their door arcs). Three laws hold here
+   and every one of them is inherited:
+
+     - NOT ONE HEX. Every hue below is derived from the shell's own tokens, so
+       `init.palette` reskins the student body exactly the way it reskins the
+       plan. The eight shirt hues and six hair hues are `hue-rotate` filters over
+       ONE token, which is what keeps a deterministic per-id look out of the
+       colour table entirely.
+     - `pointer-events:none` ON THE LAYER (trap 59). A full-plan layer that took
+       clicks would eat every room the way `#arc-emi` would have.
+     - NO COMPETING `[hidden]` RULE (trap 27). The reset at the top of this file
+       is what hides a ghost that is off-stage and the whole layer while a class
+       runs; nothing here writes a bare `display:`.
+
+   The age tiers are the honesty (PRESENCE §1.2): an evening that happened at
+   teatime is a firefly, not a classmate standing next to you.
+
+   THE NAMES ARE `campus-student` / `campus-students` AND THEY HAD TO CHANGE.
+   The obvious `campus-ghost` was ALREADY TAKEN - it is the sealed-wing plate
+   that teases a locked class's name, and it carries `fill:none` plus
+   `stroke-dasharray:4 5`. Both are inherited SVG presentation properties, so
+   every rect and every bubble inside a student wearing that class came out
+   hollow and dashed (browser capture, 2026-08-24; the node suites cannot see
+   it, because a DOM double never paints). `campus-ghostcursor` is the attract
+   cursor and is a third thing again.
+   ---------------------------------------------------------------------- */
+g.campus-students { pointer-events:none; }
+
+.campus-student { transition:opacity .5s ease; }
+.campus-student[data-tier="live"]  { opacity:1; }
+.campus-student[data-tier="fresh"] { opacity:.92; }
+.campus-student[data-tier="dim"]   { opacity:.55; }
+.campus-student[data-tier="faint"] { opacity:.28; }
+
+/* THE LIVE RIM - the one thing that says "this happened minutes ago". A drop
+   shadow on the group, not a stroke on every pixel: the sprite is a dozen rects
+   and stroking them would draw the seams between them. */
+.campus-student[data-tier="live"] .gh-sprite,
+.campus-student[data-tier="live"] .gh-chip {
+  filter:drop-shadow(0 0 2.5px var(--pink)) drop-shadow(0 0 6px color-mix(in srgb, var(--pink), transparent 55%));
+}
+
+/* the pixel student - shape-rendering keeps the pixels PIXELS at any zoom */
+.gh-sprite rect { shape-rendering:crispEdges; }
+.gh-skin  { fill:color-mix(in srgb, var(--ink), var(--slate) 34%); }
+.gh-k1    { fill:color-mix(in srgb, var(--ink), var(--slate) 52%); }
+.gh-k2    { fill:color-mix(in srgb, var(--ink-dim), var(--pink) 12%); }
+.gh-k3    { fill:color-mix(in srgb, var(--ink-dim), var(--slate) 40%); }
+.gh-eye   { fill:var(--ground); }
+.gh-leg   { fill:color-mix(in srgb, var(--navy), var(--lav) 22%); }
+.gh-bag   { fill:color-mix(in srgb, var(--gold), var(--navy) 30%); }
+.gh-hair  { fill:var(--lav); }
+.gh-shirt { fill:var(--pink); }
+/* ONE token, eight/six turns of it. A palette swap moves all fourteen at once
+   and a mod never has to name a colour it did not choose. */
+.gh-h0 { filter:none; }
+.gh-h1 { filter:hue-rotate(40deg); }
+.gh-h2 { filter:hue-rotate(80deg) saturate(.8); }
+.gh-h3 { filter:hue-rotate(160deg); }
+.gh-h4 { filter:hue-rotate(230deg) saturate(.7); }
+.gh-h5 { filter:hue-rotate(300deg); }
+.gh-s0 { filter:none; }
+.gh-s1 { filter:hue-rotate(35deg); }
+.gh-s2 { filter:hue-rotate(70deg) saturate(.85); }
+.gh-s3 { filter:hue-rotate(120deg); }
+.gh-s4 { filter:hue-rotate(175deg); }
+.gh-s5 { filter:hue-rotate(215deg); }
+.gh-s6 { filter:hue-rotate(265deg) saturate(.8); }
+.gh-s7 { filter:hue-rotate(320deg); }
+
+/* the discord tier's avatar chip */
+.gh-chip-ring { fill:none; stroke:var(--lav); stroke-width:1.2; opacity:.8; }
+
+/* THE NAME PLATE. An SVG <text> and NOT an abs-positioned HTML box on purpose:
+   a left-anchored abs-pos label shrink-wraps against whatever is left of its
+   containing block and wraps every name three characters per row (the plaque
+   trap, and EMI's bubble paid for it twice). A centred <text> has no box to
+   shrink and cannot regress that way. */
+.gh-name {
+  font-family:var(--pix); font-size:5.4px; letter-spacing:.04em;
+  fill:var(--campus-text); text-anchor:middle;
+  paint-order:stroke; stroke:var(--campus-sky); stroke-width:1.6; stroke-linejoin:round;
+}
+
+/* the encounter bubble - the campus's pixel face, 1-4 characters, never prose */
+.gb-box { fill:var(--panel); stroke:var(--campus-line); stroke-width:1; }
+.gb-tail { fill:var(--panel); stroke:none; }
+.gb-t {
+  font-family:var(--pix); font-size:6px; fill:var(--ink); text-anchor:middle;
+}
+.gh-bubble { animation:gh-bubblein .18s ease-out both; }
+@keyframes gh-bubblein {
+  from { opacity:0; transform:translateY(3px); }
+  to { opacity:1; transform:translateY(0); }
+}
+/* the silent nod: the sprite dips two pixels and says nothing */
+.campus-student[data-scene="nod"] .gh-inner { animation:gh-nod .7s ease-in-out 2; }
+@keyframes gh-nod { 50% { transform:translateY(2px); } }
+
+/* grade S, at the door, on the beat the replay arrives */
+.gh-spark line {
+  stroke:var(--gold); stroke-width:1.6; stroke-linecap:round;
+  transform-box:fill-box; transform-origin:center;
+  animation:gh-spark .9s ease-out both;
+}
+@keyframes gh-spark {
+  from { opacity:0; transform:scale(.2); }
+  35% { opacity:1; transform:scale(1); }
+  to { opacity:0; transform:scale(1.5); }
+}
+
+/* THE BUSYNESS CHIP (PRESENCE §6). It counts the people who opted OUT as well,
+   which is the only place on this page their attendance is ever visible. */
+.cb-box { fill:var(--campus-hall); stroke:var(--campus-line); stroke-width:1; opacity:.94; }
+.cb-t {
+  font-family:var(--pix); font-size:6px; fill:var(--lav); text-anchor:middle;
+}
+
+/* REDUCED MOTION / the lit-down rung: ghosts stand where they stand. ghosts.js
+   already refuses to walk them - this is the belt on those braces, and it takes
+   the bubble's entry and the S pop with it. */
+html.arc-reduced .gh-bubble,
+html.arc-reduced .gh-spark line,
+html.arc-reduced .campus-student[data-scene="nod"] .gh-inner { animation:none; }
+html.arc-reduced .campus-student { transition:none; }
+@media (prefers-reduced-motion: reduce) {
+  .gh-bubble, .gh-spark line, .campus-student[data-scene="nod"] .gh-inner { animation:none; }
+  .campus-student { transition:none; }
+}
+
 /* small stages: hide the flourishes before they collide with the board */
 @media (max-width:760px), (max-height:600px) {
   .campus-idcard { display:none; }
