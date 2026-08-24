@@ -191,6 +191,7 @@ export default {
   meaty: false,
   flagship: false,
   timeBudgetSec: 90,
+  orientation: 'any',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Impulse Control',
 
   manifest: {

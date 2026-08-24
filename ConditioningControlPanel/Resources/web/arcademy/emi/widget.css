@@ -172,6 +172,7 @@
 :root.arc-reduced .arc-emi .emi-dock:hover,
 :root.arc-reduced .arc-emi .emi-dock:focus-visible { transform: none; }
 
+/* =========================================================================
  * THE REVEAL CARD (THE OFF CHANNELS, W3)
  *
  * The payoff of NOW WATCHING: she was caught watching something, she offered,
@@ -281,3 +282,32 @@
 :root.arc-reduced .arc-emi .emi.crt-off { visibility: hidden; }
 
 /* =====================================================================
+ * THE PHONE CLAMP (the mobile pass)
+ * `:root.arc-mobile` is core/device.js's one decision, so none of this can
+ * reach a desktop WebView2 window. widget.js already shrinks her BODY there
+ * (DIALS.W_MOBILE / W_MOBILE_MAX, roughly 57% of the desktop default); what
+ * is left is everything she can push OUT past her own footprint, which is
+ * what actually eclipsed the owner's board:
+ *
+ *   the speech bubble  fixed at 104px so the 8px pixel grid never scales.
+ *                      That is fine beside a 150px EMI and cramped beside an
+ *                      86px one, so a phone gets a little more rope and a
+ *                      viewport fence, and the line still cannot reach across
+ *                      a board it is standing over.
+ *   the reveal card    min(58vw, 420px) at up to 70vh is most of a phone. It
+ *                      comes down to 72vw and under half the height, with the
+ *                      shot inside it shorter again, so a game's play area is
+ *                      still readable behind her.
+ *
+ * SHE STAYS TAPPABLE. Nothing here touches `.emi` itself: at W_MOBILE she is
+ * 86px across, which is nearly twice the 44px touch floor, and the dock button
+ * and the x affordance keep the sizes they had.
+ * ===================================================================== */
+:root.arc-mobile .arc-emi .emi .emi-bubble {
+  max-width: min(72vw, 168px);
+}
+:root.arc-mobile .arc-emi .emi-reveal {
+  max-width: min(72vw, 300px);
+  max-height: 46vh;
+}
+:root.arc-mobile .arc-emi .emi-reveal-shot { max-height: 34vh; }

@@ -180,8 +180,60 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_xp_first: 'First pass of the day pays XP.',
   campus_xp_retake: 'Retakes pay no XP - pride only.',
   campus_hint: 'Hover a room - click to step inside.',
+  campus_hint_touch: 'Tap a room to step inside.',
   campus_night_sessions: 'Night Sessions',
   campus_rm: 'RM',
+  /* --- the turn-your-phone card (shell/orientgate.js) --------------------
+     PHONES ONLY, and a desktop window never sees any of these. Three pairs
+     because the campus and a class are asking for different reasons: the
+     campus wants width for its floor plan, a class wants the shape its own
+     board was drawn for. */
+  rotate_campus_title: 'Turn it sideways',
+  rotate_campus_body: 'The floor plan runs wide, the way the cabinets actually sit along the walls, so give your phone a quarter turn and you get the whole place back on the glass with your spot still held.',
+  rotate_landscape_title: 'Turn it sideways',
+  rotate_landscape_body: 'This room was built wide, so give your phone a quarter turn and the board gets the width it was drawn for. Nothing is running while you sort it out.',
+  rotate_portrait_title: 'Stand it back up',
+  rotate_portrait_body: 'This one plays tall, so turn your phone upright and the board gets its full height back. Nothing is running while you sort it out.',
+  /* --- THE MEDIA COUNTER, web only (MEDIA-CONTRACT §8) -------------------
+     Rendered by shell/settings.js ONLY where the browser host shim declares
+     `init.settings.mediaControls === true`, so the WebView2 build never draws
+     a single one of these rows. Front-desk voice: the front office keeps a
+     counter, you hand things over it, somebody writes it down. */
+  media_head: 'Media',
+  media_note: 'This is the counter where you say what the rooms are allowed to pull from. Anything you change is in play from your next class on, and whatever is running right now keeps the pile it already has.',
+  media_consent_label: 'Pull from online',
+  media_consent_hint: 'With this off nothing goes out to the network at all, and the rooms run on whatever you have handed over yourself.',
+  media_niches_head: 'What we pull',
+  media_niches_hint: 'Tick as many as you like. The desk hangs on to the last one, since an empty board leaves the rooms with nothing to work with.',
+  media_niches_snapback: 'That was the last one ticked, so it went straight back up. Tick another and then you can drop it.',
+  media_niches_none: 'The desk has no list to offer tonight.',
+  media_lib_head: 'Subs on your list',
+  media_lib_hint: 'Untick one to sit it out for a while, or use the X and it comes off the list everywhere.',
+  media_lib_empty: 'Nothing on your list yet, so type a name below and we will go and see if it is really there.',
+  media_lib_add_head: 'Add one',
+  media_lib_add_ph: 'name of a sub',
+  media_lib_add_btn: 'Add',
+  media_lib_remove: 'Take it off the list',
+  media_lib_clips: 'clips',
+  media_lib_stills: 'pictures only',
+  media_probe_checking: 'Having a look for',
+  media_probe_ok: 'is on your list now.',
+  media_probe_missing: 'came back empty, so give the spelling another go.',
+  media_probe_dupe: 'is already on your list.',
+  media_local_head: 'Your own media',
+  media_local_hint: 'Hand over a folder, a zip, or a few things off your camera roll, and the rooms will deal them out like anything else. It stays on this device and it goes when you close the page.',
+  media_local_folder: 'A folder',
+  media_local_zip: 'A zip',
+  media_local_gallery: 'Some files',
+  media_local_clear: 'Clear the pile',
+  media_local_empty: 'Nothing of yours in the pile yet.',
+  media_local_counts: '{images} pictures and {videos} clips in the pile',
+  media_local_skipped: '{n} we could not read',
+  media_local_waiting: 'Waiting on your picker.',
+  media_progress_reading: 'Reading',
+  media_progress_unpacking: 'Unpacking',
+  /* The trap-1 marker every media row wears while its echo is in the air. */
+  media_pending: 'writing it down',
   /* --- the punch card + its ceremony (PUNCHCARD §4) ---------------------- */
   punchcard: 'Stamp Card',
   punchcard_holes: '{have} of {need}',

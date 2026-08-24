@@ -103,6 +103,7 @@ export default {
   meaty: false,
   flagship: true,
   timeBudgetSec: 90,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   /* CLOCKLESS (owner ruling, the class-length wave). Homeroom keeps its budget
    * - the bell is real and still ends the class - but the SECONDS are never
    * drawn: no chip on the departure board, none on the campus room card, none

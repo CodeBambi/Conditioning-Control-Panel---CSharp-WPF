@@ -1,0 +1,213 @@
+/* ============================================================================
+ * core/device.js - THE ONE MOBILE DECISION.
+ *
+ * The Arcademy runs in two very different frames: a desktop WebView2 window
+ * inside the WPF app, and a phone browser at app.cclabs.app/arcademy. The phone
+ * needs a different campus fit, a rotate gate, slimmer class chrome and a
+ * smaller EMI. Every one of those needs the SAME answer to "is this a phone",
+ * or the CSS and the JS drift apart and you get a gate over a desktop window or
+ * a strip with nothing under it.
+ *
+ * So there is exactly one rule and exactly one seam:
+ *
+ *     isMobile()  ->  `html.arc-mobile` + `html[data-arc-orient]`
+ *
+ * CSS reads the class, JS reads the function, and `installDeviceClass()` keeps
+ * them in step across a rotate or a resize. Desktop never gets the class, so
+ * every mobile rule in the sheets is dead code on a desktop window and the
+ * WebView2 build stays pixel-identical to what it was before this file existed.
+ *
+ * THE RULE (and why it is shaped like this)
+ *   1. The PRIMARY pointer is coarse - `matchMedia('(pointer: coarse)')`.
+ *   2. There is NO fine pointer anywhere - `!matchMedia('(any-pointer: fine)')`.
+ *   3. The SHORT side of the viewport is at most 820 CSS px.
+ *
+ * Rule 2 is the important one and it is where this deliberately parts company
+ * with the engine's `.ae-touch` probe (CLAUDE.md trap 42). That probe is a
+ * PERFORMANCE ceiling, so it takes `navigator.maxTouchPoints > 1` as well and
+ * happily catches a Windows touchscreen laptop - being cautious with a laptop's
+ * GPU costs nobody anything. This is a LAYOUT decision, and catching that same
+ * laptop would put a full-screen "turn your phone" card over a 1080p window,
+ * which is a bug the owner would rightly file. A touchscreen laptop reports a
+ * FINE primary pointer and a fine `any-pointer`, so rules 1 and 2 both refuse
+ * it. No user-agent sniffing anywhere: the UA string is a rumour, the pointer
+ * media queries are the device.
+ *
+ * Rule 3's 820px lands under an iPad Pro 11" (834) and over every phone and
+ * small tablet, so a big tablet keeps the desktop campus it has room for.
+ *
+ * THE OVERRIDE. `?forcemobile=1` forces the answer true and `?forcemobile=0`
+ * forces it false, whatever the hardware says. This SHIPS on purpose: it is the
+ * only way to look at the phone layout in a desktop browser's devtools or in a
+ * headless screenshot run, both of which report a fine pointer no matter how
+ * the viewport is sized. It reads the query string once per call, so flipping it
+ * is a reload, and it is inert unless somebody types it.
+ *
+ * IMPORT SAFETY: nothing here touches document or window at module scope, same
+ * contract boot.js keeps, so the headless DOM double the suites drive can import
+ * it without a global in sight.
+ * ==========================================================================*/
+
+/** The class this module writes on <html>. CSS keys every mobile rule off it. */
+export const MOBILE_CLASS = 'arc-mobile';
+
+/** Short-side ceiling, in CSS px, for "this is a phone-shaped screen". */
+export const MOBILE_MAX_SHORT_SIDE = 820;
+
+/** Read the `?forcemobile=` override. Returns true, false, or null for absent. */
+function forcedAnswer() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return null;
+    const q = String(window.location.search || '');
+    const m = /[?&]forcemobile=([^&#]*)/i.exec(q);
+    if (!m) return null;
+    const v = decodeURIComponent(m[1] || '').toLowerCase();
+    return !(v === '0' || v === 'false' || v === 'no');
+  } catch (e) { return null; }
+}
+
+function mq(query) {
+  try {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+    const m = window.matchMedia(query);
+    return !!(m && m.matches);
+  } catch (e) { return false; }
+}
+
+/** {w,h} of the viewport, with the same 1280x800 fallback widget.js uses. */
+export function viewportSize() {
+  const w = (typeof window !== 'undefined' && Number(window.innerWidth)) || 1280;
+  const h = (typeof window !== 'undefined' && Number(window.innerHeight)) || 800;
+  return { w, h };
+}
+
+/**
+ * THE ANSWER. Recomputed on every call (it is three media queries and two
+ * numbers) so a rotate or a window resize can never leave a stale verdict
+ * behind; callers that need to react should use `onDeviceChange`.
+ * @returns {boolean}
+ */
+export function isMobile() {
+  const f = forcedAnswer();
+  if (f !== null) return f;
+  if (!mq('(pointer: coarse)')) return false;
+  if (mq('(any-pointer: fine)')) return false;
+  const vp = viewportSize();
+  return Math.min(vp.w, vp.h) <= MOBILE_MAX_SHORT_SIDE;
+}
+
+/**
+ * 'portrait' | 'landscape', decided from the viewport box rather than from
+ * `screen.orientation`, which reports the DEVICE's idea of upright and answers
+ * "portrait" for a landscape browser window on a tablet in a stand. A square
+ * viewport counts as landscape, so the campus (which is 16:9) wins the tie.
+ * @returns {string}
+ */
+export function orientation() {
+  const vp = viewportSize();
+  return vp.h > vp.w ? 'portrait' : 'landscape';
+}
+
+/**
+ * Does the current device state satisfy a wanted orientation?
+ * 'any' (and anything unrecognised, and any non-mobile frame) is always happy:
+ * the gate is a phone affordance and must never appear on a desktop window.
+ * @param {?string} want 'landscape' | 'portrait' | 'any'
+ * @returns {boolean}
+ */
+export function orientationOk(want) {
+  if (!isMobile()) return true;
+  if (want !== 'landscape' && want !== 'portrait') return true;
+  return orientation() === want;
+}
+
+/* ----------------------------------------------------------------------------
+ * THE SEAM
+ * One listener pair for the whole page, however many callers there are. iOS
+ * fires `orientationchange` BEFORE innerWidth/innerHeight have caught up, so
+ * every notification is re-run once on the next frame and once again a beat
+ * later - cheap, idempotent, and the difference between a gate that lifts when
+ * you turn the phone and one that needs a nudge to notice.
+ * -------------------------------------------------------------------------- */
+
+const subs = new Set();
+let bound = false;
+let lastKey = '';
+
+/** A stable signature of everything the callers care about. */
+function stateKey() {
+  return (isMobile() ? 'm' : 'd') + ':' + orientation();
+}
+
+function paintRoot() {
+  try {
+    const html = typeof document !== 'undefined' && document.documentElement;
+    if (!html || !html.classList) return;
+    if (isMobile()) html.classList.add(MOBILE_CLASS);
+    else html.classList.remove(MOBILE_CLASS);
+    if (typeof html.setAttribute === 'function') html.setAttribute('data-arc-orient', orientation());
+  } catch (e) { /* the DOM double has no classList - never fatal */ }
+}
+
+function announce(force) {
+  const key = stateKey();
+  if (!force && key === lastKey) return;
+  lastKey = key;
+  paintRoot();
+  for (const fn of Array.from(subs)) {
+    try { fn({ mobile: isMobile(), orientation: orientation() }); } catch (e) { /* a bad subscriber must not stop the next */ }
+  }
+}
+
+function onViewportEvent() {
+  announce(false);
+  try {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => announce(false));
+    if (typeof setTimeout === 'function') setTimeout(() => announce(false), 260);
+  } catch (e) { /* noop */ }
+}
+
+function bind() {
+  if (bound) return;
+  bound = true;
+  try {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    window.addEventListener('resize', onViewportEvent);
+    window.addEventListener('orientationchange', onViewportEvent);
+    try {
+      const m = window.matchMedia && window.matchMedia('(pointer: coarse)');
+      if (m && typeof m.addEventListener === 'function') m.addEventListener('change', onViewportEvent);
+    } catch (e) { /* Safari < 14 has addListener only; the resize handler covers us */ }
+  } catch (e) { /* noop */ }
+}
+
+/**
+ * Put the verdict on <html> and keep it there. Idempotent - call it from boot,
+ * from the shell, from a test harness, as often as you like.
+ * @returns {boolean} the answer it just painted
+ */
+export function installDeviceClass() {
+  bind();
+  announce(true);
+  return isMobile();
+}
+
+/**
+ * Subscribe to "the device state changed" (mobile flipped, or the phone turned).
+ * Fires only on a real change, never on a resize that means nothing.
+ * @param {Function} fn  ({mobile, orientation}) => void
+ * @returns {Function} unsubscribe
+ */
+export function onDeviceChange(fn) {
+  if (typeof fn !== 'function') return () => {};
+  bind();
+  if (!lastKey) lastKey = stateKey();
+  subs.add(fn);
+  return () => { try { subs.delete(fn); } catch (e) { /* noop */ } };
+}
+
+export default {
+  MOBILE_CLASS, MOBILE_MAX_SHORT_SIDE,
+  isMobile, orientation, orientationOk, viewportSize,
+  installDeviceClass, onDeviceChange,
+};

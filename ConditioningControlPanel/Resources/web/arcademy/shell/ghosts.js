@@ -623,13 +623,16 @@ function rect(x, y, w, h, cls) { return svgNode('rect', { x, y, width: w, height
 /**
  * Build the pixel student. 10 units wide, ~16 tall, feet on the origin.
  *
- * PUBLIC UNDER `buildStudentSprite` (ORIENTATION.md §2.1). The Walk's player
- * miniature is THE SAME BODY as a ghost - one sprite builder, so a mod that
- * reskins the student body reskins you with it and the two can never drift.
- * The internal name stays `buildSprite` because every call site in this file
- * is one; the alias export below is the whole seam.
+ * ONE BODY FOR THE WHOLE SCHOOL. Exported twice for two callers:
+ *  - `buildSprite` for the Annex camera wall (annex/cams.js) - the fake feeds
+ *    draw THIS student, never a copy of it (the "lifted, not copied" rule).
+ *  - `buildStudentSprite` alias below for the Walk's player miniature
+ *    (ORIENTATION.md §2.1) - the miniature is THE SAME BODY as a ghost, so a
+ *    mod that reskins the student body reskins you with it; they can't drift.
+ * Still pure: no snapshot, no schedule, no bridge - a caller gets a <g> of
+ * rects and owns where it stands.
  */
-function buildSprite(id) {
+export function buildSprite(id) {
   const tr = spriteTraitsFor(id);
   const g = svgNode('g', null, 'gh-sprite');
   if (!g) return null;

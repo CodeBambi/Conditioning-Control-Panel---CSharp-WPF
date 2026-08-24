@@ -45,6 +45,8 @@ import { createCeremonies } from './ceremonies.js';
 import { createPeek } from './peek.js';
 import { createKeybinds } from './keybinds.js';
 import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
+import { installDeviceClass } from '../core/device.js';
+import { requireOrientation, clearOrientation } from './orientgate.js';
 import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 /* FIRST BELL - the once-ever opening (vn/). It mints its own layer, owns its own
  * ledger (`vnSeen`, a sibling of EMI's `emiVoice`) and NEVER gates a shipped
@@ -53,13 +55,14 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
  * player's whole experience of this import is one controller that stands down. */
 import { createFirstBell } from '../vn/index.js';
 import { createRecords } from './records.js';
+import { createAnnexReveal } from './annexreveal.js';
 import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
 /* EMI, the mascot. Two of B's own modules: `mountEmi` builds the floating widget
  * (which dynamic-imports agent A's renderer optionally, so a broken face costs
  * EMI's expression and never the shell's boot) and `fireMoment` is the ONE verb
  * every seam below uses. Both are no-ops when there is no `#arc-emi` layer -
  * which is exactly the case in the node DOM double. */
-import { mountEmi } from '../emi/index.js';
+import { mountEmi, getEmi } from '../emi/index.js';
 import { fireMoment } from '../emi/moments.js';
 
 const FLAVOR_XP_CAP = 15;          // BUILD-CONTRACT §8 - the page clamps too
@@ -361,6 +364,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   if (reducedMotion && document.documentElement) {
     document.documentElement.classList.add('arc-reduced');
   }
+  /* THE MOBILE SEAM (core/device.js). One decision, painted on <html> as
+   * `arc-mobile` and kept there across a rotate, so the stylesheet's phone rules
+   * and every `isMobile()` in the JS can never disagree. boot.js installs it too;
+   * it is idempotent, and a shell driven straight by a test harness needs its own
+   * call rather than boot's. */
+  installDeviceClass();
 
   /* ---------------------- state ----------------------------------------- */
   /* THE GRADE EMI SPEAKS ABOUT. Set by finishClass, read once by showReport, so
@@ -495,6 +504,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * what the shell is WAITING for while the host answers `class-ended`.
    * Both are null the rest of the time. */
   let punchStage = null;
+  /* THE ANNEX REVEAL (shell/annexreveal.js). One-shot cinematic: `annexStage`
+   * is the live overlay, `annexProbe` the pending catch-up timer. Same
+   * lifecycle laws as the punch ceremony: dismissed at every real screen
+   * change, exactly one Esc rung, never a routed screen. */
+  let annexStage = null;
+  let annexProbe = 0;
   let punchArm = null;             // {gameKey, mode:'daily'|'enrollment', timer}
   let active = null;               // the running class (see startClass)
   let suspendedGlobally = false;
@@ -710,6 +725,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       try { w.destroy(); } catch (e) { /* noop */ }
     }
     extrasBox = null;
+    /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
+     * funnels through here, so dropping it here is what stops a gate the campus
+     * asked for from hanging over the report card behind it. The screens that
+     * still want one (the campus, a class whose board has a shape) re-arm after
+     * they have built, which is also how the card knows which words to wear. */
+    try { clearOrientation(); } catch (e) { /* noop */ }
     // Every screen switch funnels through here, so no throw path can strand
     // the immersive stage lock (the campus's arc-campus-on unwinds in its own
     // destroy above, same guarantee).
@@ -903,6 +924,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // overlay that outlived its screen would be a second, invisible Esc rung).
     dismissEndCard();
     dismissPunchStage();
+    dismissAnnexStage();
 
     // FAST REPAINT: a live campus is patched, never rebuilt - tearing the stage
     // down on every meta echo would restart every ambient animation mid-frame.
@@ -922,6 +944,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // EMI SEAM: arriving at the campus, not repainting it - and the FIRST deal
     // of the night is an arrival (see `greeted`, above).
     if (!greeted || wasScreen !== 'board') { greeted = true; fireMoment('greet'); }
+    /* THE MORNING-AFTER CATCH-UP: a save that sealed its last card before this
+     * wave shipped (or whose final-seal ceremony was torn down by a host-forced
+     * class before onDone could fire the beat) gets the reveal on its next
+     * arrival at the campus: a breath after the board paints, once the loader
+     * has landed. No-ops forever once seen - the flag stamps at mount. */
+    if (!store.get('annexRevealSeen')) {
+      if (annexProbe) clearTimeout(annexProbe);
+      /* 5600ms: past the greet bubble's whole life (1560 lead + 3000 hold + a
+       * breath) - the cut must never land on top of "oh! hi." (playtest 0824). */
+      annexProbe = setTimeout(() => { annexProbe = 0; maybeAnnexReveal(); }, 5600);
+    }
     if (!dom || !dom.screen) return;
 
     if (src.audioOnlySession) {
@@ -1170,6 +1203,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // (crest, student ID, Front Office/gear), so the bar itself steps aside.
       // Every other screen re-shows it through renderTopbar().
       if (dom.topbar) dom.topbar.hidden = true;
+      /* THE CAMPUS WANTS THE PHONE SIDEWAYS (owner bug A). The plan is a fixed
+       * 16:9 geography and `meet` now fits all of it, but "all of it" inside a
+       * 9:19.5 slot is a strip of architecture two rooms wide with the rest of
+       * the school as sky. There is nothing to pan, so there is nothing to fix
+       * by scrolling: the card asks for the turn and lifts itself on the way
+       * back. It is armed ONLY for the real campus - the plain-board fallback
+       * below is an ordinary scrolling panel and reads fine upright. */
+      requireOrientation('landscape', { reason: 'campus' });
     } catch (e) {
       say('campus hub failed (' + ((e && e.message) || e) + ') - plain board fallback');
       // If the stage built and a LATER line threw, its bell interval and the
@@ -1205,6 +1246,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (active) pauseClass(true);
     dismissEndCard();
     dismissPunchStage();
+    dismissAnnexStage();
     screen = 'settings';
     clearScreen();
     renderTopbar();
@@ -1213,6 +1255,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       bridge,
       games: games.list,
       keybinds,
+      /* THE DOOR'S TWO WRITE VERBS, lent to the web Media group so its add
+       * and remove buttons ride SORT's `probe-sub` / `library-remove` frames
+       * rather than a second copy of them. The group only renders behind
+       * `init.settings.mediaControls === true`, so on the app this is an
+       * unread argument. */
+      assets,
       log: say,
       gameKey: gameKey || null,
       onClose: () => (active ? showClassScreen() : showBoard()),
@@ -1266,6 +1314,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     screen = 'records';
     dismissEndCard();
     dismissPunchStage();
+    dismissAnnexStage();
     clearScreen();
     renderTopbar();
     if (!recordsPage) {
@@ -1342,6 +1391,58 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /** Mount the card, full screen, over the report it was earned on. */
+  /* ==================================================================== *
+   * THE RECORDS ANNEX REVEAL (one night only)
+   * ==================================================================== */
+
+  function dismissAnnexStage() {
+    if (annexProbe) { clearTimeout(annexProbe); annexProbe = 0; }
+    if (!annexStage) return false;
+    const st = annexStage;
+    annexStage = null;
+    try { st.destroy(); } catch (e) { /* noop */ }
+    return true;
+  }
+
+  /** Fire the reveal if - and only if - the whole school is sealed, the save
+   *  has never seen it, and there is a quiet stage to fire it on. `extraKey`
+   *  folds an in-flight tenth hole the way masteredCount always has. */
+  function maybeAnnexReveal(extraKey) {
+    if (annexStage || destroyed) return;
+    if (screen === 'class' || active) return;
+    if (store.get('annexRevealSeen')) return;
+    if (masteredCount(extraKey) < games.list.length) return;
+    /* trap 66: the loader's whole contract is `hidden` - a reveal that fires
+     * under the splash is a reveal that never happened. Probe until it lands. */
+    let loader = null;
+    try { loader = document.getElementById('arc-loader'); } catch (e) { /* noop */ }
+    if (loader && !loader.hidden) {
+      if (annexProbe) clearTimeout(annexProbe);
+      annexProbe = setTimeout(() => { annexProbe = 0; maybeAnnexReveal(extraKey); }, 450);
+      return;
+    }
+    /* Never cut on top of a sentence: the greet (which can queue behind the
+     * face decode and land seconds after showBoard) or the all-mastered beat
+     * may still be on the bubble. Wait for her to finish and try again -
+     * the THUD interrupting EMI mid-line would read as a renderer hiccup,
+     * not a story beat (playtest 0824). */
+    let talking = false;
+    try { const emi = getEmi(); talking = !!(emi && emi.saying); } catch (e) { /* noop */ }
+    if (talking) {
+      if (annexProbe) clearTimeout(annexProbe);
+      annexProbe = setTimeout(() => { annexProbe = 0; maybeAnnexReveal(extraKey); }, 450);
+      return;
+    }
+    /* Seen is stamped at MOUNT, not at finish - a beat half-watched is a beat
+     * watched; it must never replay into a farce. */
+    store.set('annexRevealSeen', true);
+    annexStage = createAnnexReveal({
+      mount: document.body,
+      reducedMotion,
+      onDone: () => { annexStage = null; },
+    });
+  }
+
   function runPunchCeremony(o) {
     // EMI SEAM: the stamp lands. ^_^ + hearts, (≧◡≦) on a 3-day streak, COOL on
     // the tenth hole - moments.js owns which.
@@ -1370,8 +1471,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (o && o.reason === 'enrollment') fireMoment('enrolMint', { gameKey: o.gameKey, enrolled: enrolledCount(o.gameKey), total: games.list.length });
     } catch (e) { /* a mascot may never break a ceremony */ }
     dismissPunchStage();
+    dismissAnnexStage();
     if (!dom || !dom.screen) return null;
     const spec = o || {};
+    /* Whether THIS seal is the school's LAST - decided now, while the mint is
+     * in hand (the store echo may lag; masteredCount folds the in-flight card
+     * exactly the way the allMastered seam above does). Consumed in onDone:
+     * the reveal fires after the player has SEEN the tenth stamp and pressed
+     * Done - never over the ceremony it is about. */
+    const finalSeal = !!spec.justUnlocked && masteredCount(spec.gameKey) >= games.list.length;
     punchStage = createPunchCeremony({
       mount: dom.screen,
       gameKey: spec.gameKey,
@@ -1393,6 +1501,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
          * the ordinary "Done" path and a screen change both read the same. */
         try { if (vn) vn.afterCeremony(); }
         catch (e) { say('first bell mail skipped (' + ((e && e.message) || e) + ')'); }
+        /* THE ANNEX REVEAL: the school's LAST seal. The two seams can never
+         * collide - a first-ever ceremony cannot be the tenth card's tenth
+         * hole - so this simply runs after the mail check. */
+        if (finalSeal) maybeAnnexReveal(spec.gameKey);
       },
       log: say,
     });
@@ -1951,6 +2063,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     } catch (e) { say('first bell walk skipped (' + ((e && e.message) || e) + ')'); }
     dismissEndCard();
     dismissPunchStage();
+    dismissAnnexStage();
     if (active) teardownClass();
 
     const endless = !!(opts && opts.endless);
@@ -2163,6 +2276,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     dom.screen.appendChild(chrome.panel);
     setStage('arc-class-on');
+    /* THE ROOM ASKS FOR A SHAPE (games/registry.js `orientation`). Phones only,
+     * and 'any' arms nothing at all, so nine tenths of the desktop code path is
+     * a no-op here. Armed AFTER the stage is mounted so the card lands over a
+     * built class rather than over the screen it replaced, and the freeze rides
+     * the same hook in both directions - the card going up stops the clock, the
+     * card coming down starts it again. */
+    requireOrientation(entry.orientation, {
+      reason: 'class',
+      onChange: (blocking) => orientFreeze(blocking),
+    });
     // The host only flips _classActive off this frame and ignores fields it does
     // not know, so `endless` is free to carry: a free swim opens the same
     // bracket and closes it with `class-left` from teardownClass (never with
@@ -2533,6 +2656,38 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ---------------------- pause / suspend / teardown -------------------- */
+  /* ---------------------- the rotate freeze -----------------------------
+   * The turn-your-phone card covers the class, so the clock and the game behind
+   * it have to stop: grading a player on seconds they could not see would be the
+   * shell making the flow of time lie, which is the one thing the class clock
+   * exists to prevent.
+   *
+   * IT IS NOT pauseClass, DELIBERATELY. pauseClass mints the Paused card with its
+   * own Resume / Settings / Leave buttons, and a card stacked under a card the
+   * player cannot reach is exactly the two-dialog race trap 29 was written about.
+   * This is the quiet half of the same funnel - the bar and the game instance and
+   * nothing else - and it REFUSES to act while the class is already frozen for a
+   * reason of its own (a real pause, a host suspend), so lifting the gate can
+   * never resume something the player stopped on purpose.
+   * -------------------------------------------------------------------- */
+  let orientFrozen = false;
+  function orientFreeze(on) {
+    const want = !!on;
+    if (!active) { orientFrozen = false; return; }
+    if (want === orientFrozen) return;
+    /* THE GUARD RUNS IN BOTH DIRECTIONS. Refusing to freeze an already-frozen
+     * class is the obvious half; the half that bites is the LIFT. A host suspend
+     * can land while the card is up, and un-freezing then would call resume() on
+     * a class the host stopped - the card would come down and the game would
+     * carry on playing behind a suspend overlay. Dropping the bookkeeping without
+     * resuming hands the class back to whoever actually owns its pause. */
+    if (active.paused || active.suspendEl) { orientFrozen = false; return; }
+    orientFrozen = want;
+    timeBarSet(!want);
+    try { want ? active.instance.pause() : active.instance.resume(); }
+    catch (e) { say('rotate freeze threw: ' + ((e && e.message) || e)); }
+  }
+
   function pauseClass(on) {
     if (!active) return;
     active.paused = !!on;
@@ -2683,6 +2838,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // that fired afterwards would paint a bar that is no longer on the page.
     if (a.clockTimer) { try { clearInterval(a.clockTimer); } catch (e) { /* noop */ } a.clockTimer = 0; }
     a.clockRunning = false;
+    // The freeze belongs to the class, not to the page: leaving it armed would
+    // have the NEXT class start life believing it was already stopped.
+    orientFrozen = false;
     active = null;
     // TELL THE HOST THE CLASS IS OVER. `class-started` has a closing bracket now:
     // without it the host's `_classActive` stayed true for the rest of the session
@@ -2847,6 +3005,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // byte-for-byte the ladder it always was (trap 29's corollary).
       // dismissConfirm carries the undo: it unfreezes a class the pill froze,
       // and hands a class that was ALREADY paused its pause card back.
+      /* THE ANNEX REVEAL is the topmost thing that can possibly be up (z 48,
+       * input-blocking): while it runs, nothing beneath it can hold a modal
+       * the player opened more recently. One new rung, at the top (trap 48).
+       * Esc SKIPS the beat - it never un-sees it (seen stamps at mount). */
+      if (annexStage) {
+        try { annexStage.skip(); } catch (e) { dismissAnnexStage(); }
+        return true;
+      }
       if (active && active.confirmEl) { dismissConfirm(); return true; }
       /* THE CARD CEREMONY IS A TERMINAL OVERLAY over the report card, and it
        * can only be up when there is no class at all - so it cannot race the
@@ -2933,6 +3099,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       destroyed = true;
       dismissEndCard();
       dismissPunchStage();
+      dismissAnnexStage();
       disarmPunch();
       teardownClass();
       setStage(null);
