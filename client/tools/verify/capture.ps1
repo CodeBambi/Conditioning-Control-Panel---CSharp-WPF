@@ -2821,7 +2821,10 @@ elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start' -or $Surface
         Assert-Inside $rowRect $windowRect "session row $sessionId" 'the shell window'
 
         # THE STRIPE CELL, DERIVED FROM TWO MEASURED RECTS AND CROSS-CHECKED — the dot cell's rule.
-        # The row's Grid is Auto,Auto,*,Auto,Auto: the stripe is the trailing Auto column, 4 DIP
+        # The row's Grid is Auto,Auto,*,Auto,Auto,Auto as of 2026-08-25 - a provenance badge joined it,
+        # and THIS CHECK IS UNAFFECTED BY CONSTRUCTION RATHER THAN BY LUCK: the badge was placed BEFORE
+        # the meta cell precisely so the `meta.right + 10 == stripe.left` derivation below still holds.
+        # The stripe is still the trailing Auto column, 4 DIP
         # wide and 20 DIP tall inside a row whose template pads 10 DIP each side, and the meta cell
         # carries a 10 DIP right margin. So meta's right edge + 10 DIP must land exactly on the
         # stripe's left edge, or the row grid has changed and this derivation no longer names it.
