@@ -139,6 +139,7 @@ export default {
    * a run of boards and the bell is the whistle. `games/registry.js` GAME_META
    * mirrors this number (the parachute) - the two must move together. */
   timeBudgetSec: 300,
+  orientation: 'landscape',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Deja Vu',
 
   manifest: {

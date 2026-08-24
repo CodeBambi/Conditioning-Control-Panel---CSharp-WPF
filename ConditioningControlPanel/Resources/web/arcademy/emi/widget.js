@@ -23,6 +23,8 @@
  *    eats a sentence reads as a bug, not as a mascot).
  * ==========================================================================*/
 
+import { isMobile, onDeviceChange } from '../core/device.js';
+
 /* ---------------------- dials (designer-tunable) -------------------------
  * EVERY tunable EMI has is in this one frozen object, so the owner can retune
  * her feel by hand without reading the code around it. One line each. */
@@ -33,6 +35,17 @@ export const DIALS = Object.freeze({
   W_NARROW_VW: 900,        // px of viewport width below which W_NARROW is the default
   W_MIN: 110,              // clamp floor for a stored/explicit width
   W_MAX: 220,              // clamp ceiling for the same
+  /* THE PHONE CEILING (the mobile pass). On a 390px-wide screen a 150px EMI owns
+   * more than a third of the glass and stands right on top of a game's board, so
+   * the phone gets its own default and its own hard ceiling - roughly 57% of the
+   * desktop default, which is still four times the 44px touch floor, so she is
+   * every bit as easy to grab as she was. It is a DISPLAY clamp and never a
+   * stored one: `userWidth` keeps whatever the player chose on their desktop and
+   * that is what persists, so a phone session can never shrink the size they set
+   * on the big screen (see effectiveWidth / save). */
+  W_MOBILE: 86,            // px wide on a phone, whatever the window says
+  W_MOBILE_MAX: 96,        // ...and the ceiling a stored desktop width is clamped to there
+  MARGIN_MOBILE: 8,        // px kept between EMI and the edge on a phone (see MARGIN)
   ASPECT_W: 859,           // mascot-body-blank.png, natural size
   ASPECT_H: 869,
   MARGIN: 4,               // px kept between EMI and the viewport edge
@@ -287,7 +300,13 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
    * box she follows the window: full size on a roomy one, smaller on a narrow
    * one. Persisting the auto width would freeze the first window she ever saw. */
   let userSized = num(saved.w) !== null;
-  let width = userSized ? clamp(num(saved.w), DIALS.W_MIN, DIALS.W_MAX) : autoWidth();
+  /* TWO WIDTHS, AND THE DIFFERENCE MATTERS. `userWidth` is what the player chose
+   * and the ONLY thing that is ever persisted; `width` is what this device is
+   * allowed to draw, which on a phone is `userWidth` clamped to the phone ceiling.
+   * Collapsing them would let one phone session overwrite the size the player set
+   * on their desktop, because the same blob is shared by both. */
+  let userWidth = userSized ? clamp(num(saved.w), DIALS.W_MIN, DIALS.W_MAX) : null;
+  let width = effectiveWidth();
   // Anchor = the TOP-LEFT corner as a fraction of the viewport, so a resize
   // moves EMI proportionally and then re-clamps instead of drifting off-screen.
   let fx0 = num(saved.x);
@@ -322,7 +341,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     // `w` is written ONLY when it was chosen, never when it was derived from the
     // window - see `userSized`. An auto width in the blob would out-vote the
     // viewport rule for ever after the first drag.
-    if (userSized) b.w = width;
+    if (userSized && userWidth != null) b.w = userWidth;
     if (hintShown) b.hintShown = true;
     return b;
   }
@@ -535,14 +554,25 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   function sizePx() {
     return { w: width, h: Math.round(width * DIALS.ASPECT_H / DIALS.ASPECT_W) };
   }
-  /** The default width for THIS window. Owner's rule: 150 on >= 900px, 116 below. */
+  /** The default width for THIS window. Owner's rule: 150 on >= 900px, 116 below,
+   *  and a flat W_MOBILE on a phone, where neither of those is small enough. */
   function autoWidth() {
+    if (isMobile()) return DIALS.W_MOBILE;
     return viewport().w >= DIALS.W_NARROW_VW ? DIALS.W_DEFAULT : DIALS.W_NARROW;
   }
-  /** Re-derive the width after a resize. No-op once the user has sized her. */
+  /** What this device may DRAW: the chosen width (or the window's default),
+   *  fenced by the phone ceiling. Never what gets stored - see `userWidth`. */
+  function effectiveWidth() {
+    const base = (userSized && userWidth != null) ? userWidth : autoWidth();
+    return isMobile() ? Math.min(base, DIALS.W_MOBILE_MAX) : base;
+  }
+  /** The margin this device keeps between EMI and the edge. */
+  function margin() { return isMobile() ? DIALS.MARGIN_MOBILE : DIALS.MARGIN; }
+  /** Re-derive the drawn width after a resize or a rotate. Runs even when the
+   *  player has sized her, because crossing onto or off a phone changes the
+   *  ceiling and only the ceiling - `userWidth` is not touched either way. */
   function refitWidth() {
-    if (userSized) return false;
-    const next = autoWidth();
+    const next = effectiveWidth();
     if (next === width) return false;
     width = next;
     return true;
@@ -551,13 +581,18 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   function place() {
     const vp = viewport();
     const s = sizePx();
+    const m = margin();
     if (fx0 == null || fy0 == null) {
-      // First run: park her bottom-right, clear of the dock's corner.
-      fx0 = (vp.w - s.w - 24) / vp.w;
-      fy0 = (vp.h - s.h - 56) / vp.h;
+      /* First run: park her bottom-right, clear of the dock's corner. A phone has
+       * no room for the desktop's 24/56 standoff, so she docks tight into the
+       * corner there and leaves the middle of the glass to the board. */
+      const padX = isMobile() ? 6 : 24;
+      const padY = isMobile() ? 10 : 56;
+      fx0 = (vp.w - s.w - padX) / vp.w;
+      fy0 = (vp.h - s.h - padY) / vp.h;
     }
-    const left = clamp(fx0 * vp.w, DIALS.MARGIN, Math.max(DIALS.MARGIN, vp.w - s.w - DIALS.MARGIN));
-    const top = clamp(fy0 * vp.h, DIALS.MARGIN, Math.max(DIALS.MARGIN, vp.h - s.h - DIALS.MARGIN));
+    const left = clamp(fx0 * vp.w, m, Math.max(m, vp.w - s.w - m));
+    const top = clamp(fy0 * vp.h, m, Math.max(m, vp.h - s.h - m));
     el.style.width = s.w + 'px';
     el.style.left = Math.round(left) + 'px';
     el.style.top = Math.round(top) + 'px';
@@ -1463,6 +1498,12 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('resize', onResize);
   }
+  /* A ROTATE IS NOT ALWAYS A RESIZE. Some engines land `orientationchange` with
+   * innerWidth/innerHeight still reporting the old box, so the resize handler
+   * refits against numbers that are about to change. core/device.js already
+   * re-checks on the next frame and again a beat later, so riding its seam is
+   * what makes the phone ceiling and the corner dock survive a turn. */
+  const unDevice = onDeviceChange(onResize);
 
   /* THE LAST FLUSH. msVisible is only true if it is banked before the page goes,
    * and a debounced write in flight would be lost with it. */
@@ -1840,8 +1881,11 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
     setWidth(px) {
       const n = num(px);
       if (n === null) return width;
-      const next = clamp(Math.round(n), DIALS.W_MIN, DIALS.W_MAX);
+      // The CHOSEN width is stored raw; what gets drawn is that fenced by the
+      // device ceiling, so setting 200 on a phone stores 200 and draws 96.
+      userWidth = clamp(Math.round(n), DIALS.W_MIN, DIALS.W_MAX);
       userSized = true;
+      const next = effectiveWidth();
       if (next !== width) { width = next; if (!hidden && enabled) place(); }
       save();
       return width;
@@ -1916,6 +1960,7 @@ export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, 
       }
       if (typeof window !== 'undefined' && window.removeEventListener) {
         window.removeEventListener('resize', onResize);
+        try { unDevice(); } catch (e2) { /* noop */ }
         window.removeEventListener('pagehide', onPageHide);
       }
       try { el.remove(); } catch (e) { /* noop */ }

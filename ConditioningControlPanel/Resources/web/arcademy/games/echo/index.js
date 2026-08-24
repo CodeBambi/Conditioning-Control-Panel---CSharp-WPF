@@ -244,6 +244,7 @@ export default {
    * class is a count - the room deals sequences until the bell and a fail is
    * not the class - so the extra fifteen seconds are simply more rounds. */
   timeBudgetSec: 120,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Echo',
 
   manifest: {

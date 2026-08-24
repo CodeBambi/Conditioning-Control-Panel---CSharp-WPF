@@ -25,6 +25,7 @@
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
+import { installDeviceClass } from './core/device.js';
 
 const doc = (typeof document !== 'undefined') ? document : null;
 const win = (typeof window !== 'undefined') ? window : null;
@@ -166,6 +167,13 @@ async function start() {
   if (starting || shell || !initMsg) return;
   starting = true;
   try {
+    /* THE MOBILE CLASS GOES ON FIRST. `html.arc-mobile` is what every phone rule
+     * in the sheets keys off, and the splash is on screen for about three
+     * seconds before the shell exists - painting it here rather than in
+     * createShell is the difference between a loader that is already phone-shaped
+     * and one that re-lays itself out the moment the school opens. Idempotent:
+     * the shell calls it again for the harness case where boot never ran. */
+    try { installDeviceClass(); } catch (e) { /* never worth a boot */ }
     // The sfx consumer first, so a cue fired during the shell's own boot is heard.
     // OPTIONAL by construction: no audio must never cost us the page.
     try {

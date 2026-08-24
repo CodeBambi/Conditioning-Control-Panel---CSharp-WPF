@@ -261,6 +261,7 @@ export default {
   meaty: true,
   flagship: false,
   timeBudgetSec: 300,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   title: 'The Deep End',
 
   manifest: {

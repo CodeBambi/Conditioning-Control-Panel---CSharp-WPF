@@ -664,6 +664,46 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     the player just withdrew. The account's prior window ages out inside 24h instead. That gap is
     the server's to close, not the host's to fake.
 
+- **THE MEDIA COUNTER IS A WEB-ONLY SEAM, AND IT HANGS OFF ONE STRICT FLAG** (2026-08-24,
+  `MEDIA-CONTRACT.md` v1 in the site repo's `scripts/arcademy-web-ext`). The browser host shim
+  owns media on the web the way `ArcademyHostService` owns it in the app, and `shell/settings.js`
+  renders its **Media** group ONLY where `init.settings.mediaControls === true`. Strictly true is
+  the whole point: the C# host never sets the flag, so on the app it is `undefined`, the group is
+  never built, and no `media.*` key can leave the page - which matters because `ApplySetting`
+  would bag one under its own name in the per-game scalar bag as junk nothing ever reads. With
+  the flag up the read-only "Asset source" row steps aside and the live group replaces it; with
+  it absent the settings room renders exactly what it rendered before any of this existed
+  (verified against the pre-change tree, digest for digest).
+  - **Five keys, all on the ordinary `set-setting` / `setting` echo**: `media.remoteConsent`
+    (bool), `media.niches` (the FULL selected array, never a delta), `media.librarySelect`
+    (`{name, selected}`), and the two ACTIONS `media.pickLocal` (`'folder'|'zip'|'gallery'`) and
+    `media.clearLocal`. An action stores nothing and echoes `value: null`; its RESULT arrives as
+    a `local-media` push instead.
+  - **The echo carries what is STORED, and here the host says no out loud.** A `media.niches`
+    list that sanitizes to empty is REFUSED and the host echoes the list it still holds, so the
+    last box a player unticks comes straight back up under them. The group paints a `pending`
+    marker from the post until the echo lands and then repaints from the echo, and it carries one
+    line (`media_niches_snapback`) for the refusal, because an unexplained snap-back reads as a
+    dropped tap. `isGlobalSettingKey()` now answers true for any `media.*` key, which is what
+    keeps that refusal echo out of the per-game flat bag on the way through `shell.js onSetting`.
+  - **THE GESTURE RULE, and it fails silently.** `media.pickLocal` is posted SYNCHRONOUSLY as the
+    FIRST statement of the click handler. A file picker opens only while the browser's transient
+    user activation is still standing and the shim's transport hands `postMessage` straight into
+    its router, so one `await` in front of that line makes the picker never open, with no error
+    anywhere to read.
+  - **Sub add/remove are deliberately NOT `media.*` keys.** The group borrows `probeSub` and
+    `removeLibrarySub` from `shell.js`'s live `createAssets` handle (now passed into
+    `createSettingsPage`), so an add rides SORT's `probe-sub` frame and a remove rides
+    `library-remove` rather than a second copy of either. The list repaints ONLY from the host's
+    `library` push - never from the provider's optimistic local copy, which is the same law trap 1
+    states for a setting.
+  - **Two host pushes, both on `bridge.on`** (the same loose seam `provider/remote.js subscribe`
+    wraps, and multi-subscriber per trap 11, so listening here never steals the provider's own
+    `library` frames): `local-media {images, videos, skipped, active}` after every ingest, every
+    clear and once after a cancelled picker, and `local-media-progress {frac, phase}` through a
+    zip ingest only. Both write through to the page's view of `init.settings` so a second trip
+    through the front office does not repaint yesterday's answer.
+
 ## 4. Traps (each one cost real time)
 
 1. **Only the echo moves a setting.** Every control posts `set-setting` and paints
