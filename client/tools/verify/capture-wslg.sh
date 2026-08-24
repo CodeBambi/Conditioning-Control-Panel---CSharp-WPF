@@ -109,6 +109,11 @@ if [ -n "$SCALE" ]; then
   export AVALONIA_GLOBAL_SCALE_FACTOR="$SCALE"
 fi
 export CCP_X11_SOFTWARE=1
+# xinput.py imports find_window from xgetimage.py rather than keeping a third copy of the window
+# search, and an import writes __pycache__ into a tracked directory that nothing ignores. Leaving
+# untracked bytecode behind after every capture is how a harness starts showing up in git status
+# and then in someone's commit.
+export PYTHONDONTWRITEBYTECODE=1
 
 pkill -f "CcpClient[.]Desktop" 2>/dev/null || true
 sleep 1
