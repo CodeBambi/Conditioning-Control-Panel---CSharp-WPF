@@ -150,12 +150,18 @@ public sealed class MediaFoundationCameraCapture : ICameraCaptureSource
         {
             if (!StartPlatform(out var startupFailure))
             {
+                _attempted.Add("no rung: Media Foundation would not start on this Windows installation");
                 return startupFailure;
             }
 
             activate = FindActivate(device, out var matchFailure);
             if (activate is null)
             {
+                // A line even though no format was tried. AttemptedRungs is what makes "this launch
+                // never asked a camera to open" checkable at the seam, so it must be non-empty after
+                // EVERY call — including one that walked the whole device list and matched nothing,
+                // which has still asked Windows for this user's cameras.
+                _attempted.Add("no rung: no Media Foundation device is the camera the roster named");
                 return matchFailure;
             }
 

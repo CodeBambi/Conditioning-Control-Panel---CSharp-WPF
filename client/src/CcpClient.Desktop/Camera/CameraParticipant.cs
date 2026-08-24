@@ -21,7 +21,7 @@ namespace CcpClient.Desktop.Camera;
 /// start only after current explicit consent AND an explicit user start, and that opening the
 /// dashboard, restoring settings or finding a calibration never start it. Restoring settings is
 /// literally what <see cref="StartAsync"/> does, so it is the exact path that must not look — and it
-/// does not: <see cref="Enumerations"/> AND <see cref="CaptureOpens"/> both stay zero across a whole
+/// does not: <see cref="Enumerations"/> AND <see cref="CameraOpenAttempts"/> both stay zero across a whole
 /// launch. The capture verb that now exists lives on a separate seam
 /// (<see cref="ICameraCaptureSource"/>) behind <see cref="StartCaptureAsync"/>, which refuses at the
 /// engine gate before a device is enumerated on every product build.</para>
@@ -116,17 +116,22 @@ public sealed class CameraParticipant : IBackgroundParticipant
     public int Enumerations { get; private set; }
 
     /// <summary>
-    /// How many times this participant has OPENED a camera. <b>Zero across a whole launch, zero
-    /// after restoring settings, and zero after a user grants consent</b> — the capability contract's
-    /// "the camera starts only after current explicit consent AND an explicit user start, and never
-    /// from opening the dashboard, restoring settings or finding a calibration" turned into a number
-    /// somebody can fail.
+    /// How many times this participant has ASKED a camera to open. <b>Zero across a whole launch,
+    /// zero after restoring settings, and zero after a user grants consent</b> — the capability
+    /// contract's "the camera starts only after current explicit consent AND an explicit user start,
+    /// and never from opening the dashboard, restoring settings or finding a calibration" turned into
+    /// a number somebody can fail.
     ///
-    /// <para>It counts SUCCESSFUL opens, because a refused open touched no device. A counter that
-    /// also counted refusals would go up on the paths that prove the gate WORKS, which is the wrong
-    /// way round.</para>
+    /// <para><b>It counts the ASK and not the success, and that correction was forced by a mutation
+    /// that should have failed and did not.</b> It first counted only opens that WORKED, on the
+    /// reasoning that a refused open touched no device. That is false: reaching
+    /// <see cref="ICameraCaptureSource.Open"/> at all starts the Media Foundation platform and
+    /// enumerates this user's video devices before it can fail. A launch that tried to open a camera
+    /// and was refused by the driver would have left a success-counter at zero and passed the fact
+    /// that exists to forbid exactly that. The privacy question is "did this process ask?", so that
+    /// is what is counted.</para>
     /// </summary>
-    public int CaptureOpens { get; private set; }
+    public int CameraOpenAttempts { get; private set; }
 
     /// <summary>Whether a camera is open right now, asked of the capture route rather than
     /// remembered here — a field this process remembers writing is not an answer about a device.</summary>
@@ -245,7 +250,7 @@ public sealed class CameraParticipant : IBackgroundParticipant
     /// grant handler makes the same separation in as many words — <i>"Persist consent. Camera stays
     /// closed"</i> (<c>Dialogs/WebcamConsentDialog.xaml.cs:142-143</c>) — and here it is structural:
     /// granting consent reaches neither <see cref="ICameraDeviceSource.Enumerate"/> nor
-    /// <see cref="ICameraCaptureSource.Open"/>, and <see cref="CaptureOpens"/> is held at zero across
+    /// <see cref="ICameraCaptureSource.Open"/>, and <see cref="CameraOpenAttempts"/> is held at zero across
     /// a whole launch that includes a grant.</para>
     /// </summary>
     public async Task<bool> GrantConsentAsync(CameraConsentRequest request, DateTimeOffset grantedUtc)
@@ -267,18 +272,25 @@ public sealed class CameraParticipant : IBackgroundParticipant
     /// <summary>
     /// Withdraw consent and persist the withdrawal, dropping whatever the last enumeration learned.
     ///
-    /// <para><b>The roster is dropped because it was learned under a consent that no longer exists.</b>
-    /// Upstream's revoke stops the service and clears the calibration before clearing the fields
-    /// (<c>Services/Webcam/WebcamTrackingService.cs:1057-1068</c>); this build has neither a running
-    /// service nor a calibration, and the roster is the only camera-derived thing it holds.</para>
+    /// <para><b>IF A CAMERA IS OPEN, IT IS CLOSED FIRST — before the flag is even cleared.</b>
+    /// Upstream stops the service before clearing the consent fields
+    /// (<c>Services/Webcam/WebcamTrackingService.cs:1057-1068</c>) and the order is the whole point:
+    /// withdrawing consent while a camera is streaming has to mean the camera STOPS, not that the
+    /// next start will be refused. A revoke that only wrote a file and left the indicator lit would
+    /// be the single worst thing this capability could do to somebody who just changed their mind.</para>
+    ///
+    /// <para>The roster is dropped for the same reason: it was learned under a consent that no longer
+    /// exists.</para>
     /// </summary>
     public async Task RevokeConsentAsync()
     {
+        var wasOpen = CaptureRunning;
+        await StopCaptureAsync().ConfigureAwait(false);
         _store.Mutate(CameraConsent.Revoke);
         LastInventory = null;
         await _store.Save().ConfigureAwait(false);
-        _log.Log("camera: consent revoked — the stored grant and its contract version are cleared, and the last "
-            + "device roster is dropped");
+        _log.Log("camera: consent revoked — the stored grant and its contract version are cleared, the last "
+            + $"device roster is dropped, and {(wasOpen ? "THE OPEN CAMERA WAS RELEASED FIRST" : "no camera was open")}");
     }
 
     // =========================================================================================
@@ -356,6 +368,9 @@ public sealed class CameraParticipant : IBackgroundParticipant
                     + "product does not fall back to whichever other camera happens to be attached"));
         }
 
+        // Counted BEFORE the ask, not after a success: reaching Open at all starts the capture
+        // platform and touches this user's devices, whatever it then returns.
+        CameraOpenAttempts++;
         var failure = await Task.Run(
             () => _capture.Open(device.Value, cancellationToken), cancellationToken).ConfigureAwait(false);
         if (failure is not null)
@@ -364,7 +379,6 @@ public sealed class CameraParticipant : IBackgroundParticipant
             return failure;
         }
 
-        CaptureOpens++;
         _log.Log($"camera: OPEN — a camera is delivering frames after {_capture.AttemptedRungs.Count} ladder "
             + $"rung(s) on {_capture.AdoptedRung}. Frames are measured and dropped; none is kept, saved or logged");
         return OpenState();

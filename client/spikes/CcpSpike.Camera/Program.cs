@@ -63,9 +63,9 @@ internal static class Program
             Console.WriteLine();
             Console.WriteLine("[1] start WITHOUT consent");
             Report(await participant.StartCaptureAsync(preferred, CancellationToken.None));
-            Console.WriteLine($"    enumerations={participant.Enumerations} opens={participant.CaptureOpens} "
+            Console.WriteLine($"    enumerations={participant.Enumerations} opens={participant.CameraOpenAttempts} "
                 + $"running={participant.CaptureRunning}");
-            if (participant.CaptureOpens != 0)
+            if (participant.CameraOpenAttempts != 0)
             {
                 Console.WriteLine("    FAIL: a camera was opened without consent");
                 return 1;
@@ -78,8 +78,8 @@ internal static class Program
                 new CameraConsentRequest(true, true, true, CameraConsent.ConfirmationWord),
                 DateTimeOffset.UtcNow);
             Console.WriteLine($"    granted={granted} enumerations={participant.Enumerations} "
-                + $"opens={participant.CaptureOpens}");
-            if (participant.CaptureOpens != 0 || participant.Enumerations != 0)
+                + $"opens={participant.CameraOpenAttempts}");
+            if (participant.CameraOpenAttempts != 0 || participant.Enumerations != 0)
             {
                 Console.WriteLine("    FAIL: granting consent touched a camera");
                 return 1;
@@ -114,7 +114,7 @@ internal static class Program
             }
 
             Console.WriteLine($"    open took {opened.ElapsedMilliseconds}ms, running={participant.CaptureRunning}, "
-                + $"opens={participant.CaptureOpens}");
+                + $"opens={participant.CameraOpenAttempts}");
             if (!participant.CaptureRunning)
             {
                 Console.WriteLine("    no camera opened — the rungs above say why");
@@ -146,7 +146,7 @@ internal static class Program
             Console.WriteLine("[6] RE-OPEN — this can only succeed if step 5 really let the device go");
             var reopen = await participant.StartCaptureAsync(preferred, CancellationToken.None);
             Report(reopen);
-            Console.WriteLine($"    running={participant.CaptureRunning} opens={participant.CaptureOpens}");
+            Console.WriteLine($"    running={participant.CaptureRunning} opens={participant.CameraOpenAttempts}");
             var reDelivered = await participant.PumpAsync(10, CancellationToken.None);
             Console.WriteLine($"    delivered={reDelivered} on the second open");
             await participant.StopCaptureAsync();

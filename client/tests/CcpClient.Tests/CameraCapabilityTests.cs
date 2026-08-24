@@ -537,9 +537,19 @@ public sealed class CameraCapabilityTests
         // with no fields has nowhere to put one, and every pixel parameter below is a ref struct the
         // compiler will not let anybody store.
         Assert.True(boundary.IsAbstract && boundary.IsSealed, "the pixel boundary must be a static class");
-        Assert.Empty(boundary.GetFields(
-            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static
-            | BindingFlags.DeclaredOnly));
+        var boundaryStorage = boundary
+            .GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                | BindingFlags.Static | BindingFlags.DeclaredOnly)
+            // `const` fields are compile-time literals baked into every call site: they hold the
+            // ported acceptance thresholds and cannot store anything at run time, let alone a frame.
+            // Every OTHER field is storage, and the boundary may have none.
+            .Where(field => !field.IsLiteral)
+            .Select(field => field.Name)
+            .ToList();
+        Assert.True(
+            boundaryStorage.Count == 0,
+            "the pixel boundary gained storage, so a frame handed to it could now outlive the call: "
+            + string.Join(", ", boundaryStorage));
 
         var offenders = new List<string>();
         var scanned = 0;
@@ -854,12 +864,21 @@ public sealed class CameraCapabilityTests
             Assert.NotEqual(CameraReasonCodes.CameraConsentAbsent, state.Reason.Code);
             Assert.NotEqual(CameraReasonCodes.CameraPermissionDenied, state.Reason.Code);
 
-            // The REAL participant, with the REAL route for this platform, asked it nothing.
+            // The REAL participant, with the REAL routes for this platform, asked it nothing.
             var participant = Assert.Single(host.Participants.OfType<CcpClient.Desktop.Camera.CameraParticipant>());
             Assert.Equal(0, participant.Enumerations);
             Assert.Null(participant.LastInventory);
             Assert.False(participant.EngineAdmitted);
             Assert.False(participant.Consent.Current.Granted);
+
+            // AND NO CAMERA WAS OPENED, which is the claim the capture slice added. Enumerations
+            // alone stopped being enough the moment an Open verb existed: a launch that opened a
+            // device without enumerating one would have passed the line above and lit this user's
+            // camera indicator.
+            Assert.Equal(0, participant.CameraOpenAttempts);
+            Assert.False(participant.CaptureRunning);
+            Assert.Equal(0, participant.FramesRead);
+            Assert.Empty(participant.CaptureAttempts);
         }
         finally
         {

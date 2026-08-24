@@ -53,8 +53,19 @@ public interface ICameraCaptureSource : IDisposable
     /// </summary>
     string? AdoptedRung { get; }
 
-    /// <summary>Every rung this source ATTEMPTED on the last <see cref="Open"/>, in order, with the
-    /// outcome of each. Strings only: no device identity, no frame data, no pixel statistics.</summary>
+    /// <summary>
+    /// What the last <see cref="Open"/> did, in order: the rungs it climbed and the outcome of each,
+    /// or the reason it never reached a rung at all. Strings only — no device identity, no frame
+    /// data, no pixel statistics.
+    ///
+    /// <para><b>EMPTY MEANS OPEN HAS NEVER BEEN CALLED ON THIS SOURCE, and that is load-bearing.</b>
+    /// Every implementation must write at least one line for every call, including calls that fail
+    /// before any format is tried, so that "this launch never asked a camera to open" is checkable
+    /// from the SEAM rather than from a counter the caller maintains. A counter on the caller is
+    /// exactly what a mutation slipped past: code that reaches this interface directly leaves a
+    /// participant's own tally at zero, and the operating system has still been asked for the user's
+    /// device list by then.</para>
+    /// </summary>
     IReadOnlyList<string> AttemptedRungs { get; }
 
     /// <summary>How many frames have been read since the last successful <see cref="Open"/>. A
@@ -141,6 +152,8 @@ public static class CameraCaptureLadder
 public sealed class UnsupportedCameraCaptureSource(string backend, string detail, string dependency)
     : ICameraCaptureSource
 {
+    private readonly List<string> _attempted = [];
+
     /// <inheritdoc/>
     public string Backend { get; } = backend;
 
@@ -157,7 +170,7 @@ public sealed class UnsupportedCameraCaptureSource(string backend, string detail
     public string? AdoptedRung => null;
 
     /// <inheritdoc/>
-    public IReadOnlyList<string> AttemptedRungs => [];
+    public IReadOnlyList<string> AttemptedRungs => _attempted;
 
     /// <inheritdoc/>
     public int FramesRead => 0;
@@ -166,6 +179,11 @@ public sealed class UnsupportedCameraCaptureSource(string backend, string detail
     public CapabilityState? Open(CameraDevice device, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        // Recorded even though no rung was climbed, because an EMPTY AttemptedRungs has to mean
+        // "nobody asked" on every implementation or it means nothing on any of them.
+        _attempted.Clear();
+        _attempted.Add("no rung: this build has no capture route here, so nothing was attempted");
         return new CapabilityState.DependencyMissing(
             dependency, new CapabilityReason(CameraReasonCodes.CameraCaptureUnsupported, detail));
     }
@@ -238,9 +256,12 @@ public static class CameraHardwareKey
         }
 
         // Cut the trailing interface GUID — the ONLY part that differs between the DirectShow and
-        // Media Foundation views of one camera.
+        // Media Foundation views of one camera. `>= 0` and not `> 0`: a string whose device path IS
+        // nothing but an interface GUID has no hardware in it at all, and cutting at index 0 leaves
+        // the empty string that becomes the null below. Written `> 0` first, which kept the raw GUID
+        // as a "key" and would have matched two unrelated devices that expose the same interface.
         var guid = value.LastIndexOf("#{", StringComparison.Ordinal);
-        if (guid > 0)
+        if (guid >= 0)
         {
             value = value[..guid];
         }
