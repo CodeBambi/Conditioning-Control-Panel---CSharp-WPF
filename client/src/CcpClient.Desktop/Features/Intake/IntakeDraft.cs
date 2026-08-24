@@ -147,8 +147,12 @@ public static class IntakeDraft
 
         [JsonPropertyName("draftedUtc")] public DateTimeOffset DraftedUtc { get; init; }
 
-        /// <summary>COMPUTED completion XP (IntakeHostService.cs:389-397), never granted —
-        /// no greenfield XP store exists (typed seam).</summary>
+        /// <summary>COMPUTED completion XP (IntakeHostService.cs:389-397). NO LONGER
+        /// UNGRANTED: this used to say "never granted — no greenfield XP store exists", and that
+        /// stopped being true when the ledger landed. <c>IntakeHostWindow.axaml.cs:567</c> now
+        /// calls <c>Progression.Grant(xp, "intake completion")</c>, so this number reaches a
+        /// user's level. Corrected 2026-08-24 after a lane read the comment, believed it, and had
+        /// to check the call site to find out otherwise.</summary>
         [JsonPropertyName("xpComputed")] public int XpComputed { get; init; }
 
         [JsonPropertyName("profile")] public IntakeProfiler.Profile Profile { get; init; } = new();
