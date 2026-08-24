@@ -103,4 +103,32 @@ public static partial class DtrhBarkRouting
 
         return pipeline;
     }
+
+    /// <summary>
+    /// STOP what <see cref="CreatePipeline"/> put on the app-wide arbitration, and NOTHING ELSE —
+    /// the mirror of the composition above, called from the host window's teardown
+    /// (<c>DtrhHostWindow.TeardownBarkPipeline</c>). Null-tolerant and idempotent, because that
+    /// teardown is best-effort and runs on paths where the pipeline was never built (m2 test mode,
+    /// a host with no audio owner).
+    ///
+    /// <para><b>Voice, and only voice.</b> A bark is the only thing this window plays on the shared
+    /// arbitration: <c>BarkPipeline</c> reaches it through <c>PlayVoicePriority</c>/<c>QueueVoice</c>
+    /// and nothing else (<c>Companion/BarkPipeline.cs:617-618</c>). The window's OTHER sounds — the
+    /// page's whispers and one-shots — are the DTRH-local engine on its own device
+    /// (<c>DtrhNativeEffects</c> over <c>SoundFlowDtrhAudio</c>), which
+    /// <c>TeardownNativeEffects</c> owns, and which <c>Audio/SoundArbitration.cs:104-106</c> keeps
+    /// deliberately outside this core.</para>
+    ///
+    /// <para><b>Why this is a call and not a line inside the window.</b> It used to be
+    /// <c>PanicReset()</c>, which stops EVERY channel — correct while DTRH was the only consumer of
+    /// an arbitration it built itself, and a live regression the day the flash clip and the bubble
+    /// pops started using the same app-wide one (<c>Effects/EffectSounds.cs:212,:247</c>): closing
+    /// this window cut off a whisper and a pop that were never its own. The window is not drivable
+    /// (see this file's type summary for why), so the choice of channel lives here, where a fact can
+    /// make it.</para>
+    /// </summary>
+    /// <param name="arbitration">The app-wide arbitration the window consumed, or null if it never
+    /// got one.</param>
+    public static void StopPipelineAudio(SoundArbitration? arbitration) =>
+        arbitration?.StopChannel(SoundChannel.Voice, "dtrh host window closed");
 }

@@ -428,7 +428,9 @@ public sealed class SoundArbitration : IDisposable
     /// </summary>
     public SoundOutcome SetPreferredDevice(string? deviceName)
     {
-        StopAllChannels("device change");
+        // EVERY channel: the device under all of them is being swapped, so this is one of the two
+        // total paths (see AllChannels) rather than a scoped stop with a wide argument.
+        StopChannels(AllChannels, "device change");
         return Initialize(deviceName);
     }
 
@@ -701,7 +703,46 @@ public sealed class SoundArbitration : IDisposable
         }
     }
 
-    // ---------- panic ----------
+    // ---------- scoped stop / panic ----------
+
+    /// <summary>
+    /// EVERY channel, read off the enum rather than listed by hand: the paths that must not miss
+    /// one (<see cref="PanicReset"/>, the device change) are total by construction, so a channel
+    /// added to <see cref="SoundChannel"/> joins them without an edit anyone can forget.
+    /// </summary>
+    private static readonly SoundChannel[] AllChannels = Enum.GetValues<SoundChannel>();
+
+    /// <summary>
+    /// Stop ONE channel and leave every other channel PLAYING: its active player(s) are stopped and
+    /// disposed, its queue is cleared, its generation is bumped so in-flight backend callbacks
+    /// become stale no-ops. Idempotent; safe on a channel that holds nothing.
+    ///
+    /// <para><b>The channel IS the owner here, and that is the arbitration's own shape rather than
+    /// a new concept.</b> This type has exactly one ownership axis — <see cref="SoundChannel"/>
+    /// (the §6 channel ownership at the top of this file): per-channel exclusive state with its own
+    /// generation, outcomes typed by channel, and no consumer identity anywhere (every play method
+    /// takes a path and a gain, nothing else). A per-play owner TOKEN would be a concept the
+    /// arbitration does not have, and for voice and whisper it would decide nothing a channel stop
+    /// does not already decide, because both are exclusive stop-replace: a second consumer's line
+    /// has already replaced the first's player long before anyone closes anything.</para>
+    ///
+    /// <para><b>Why it exists.</b> This arbitration is app-wide
+    /// (<see cref="Audio.AudioParticipant"/>), so "stop what I started" and "stop everything" stopped
+    /// being the same act the moment a second consumer landed. The DTRH host window plays on
+    /// <see cref="SoundChannel.Voice"/> only (its barks — <c>Companion/BarkPipeline.cs:617-618</c>);
+    /// the flash clip is on <see cref="SoundChannel.Whisper"/> and both pops are on
+    /// <see cref="SoundChannel.Sfx"/> (<c>Effects/EffectSounds.cs:212,:247</c>). Closing the first
+    /// must not cut off the second.</para>
+    ///
+    /// <para><b>It is not the panic path and must never be used as one.</b>
+    /// <see cref="PanicReset"/> is what stops everything when something has gone wrong; it also
+    /// force-releases ducks, which a scoped stop deliberately does not touch (a duck is held by
+    /// whoever took it, not by a channel).</para>
+    /// </summary>
+    /// <param name="channel">The channel to silence.</param>
+    /// <param name="why">Logged reason — a stop nobody can account for afterwards is the defect
+    /// this whole seam exists to make traceable.</param>
+    public void StopChannel(SoundChannel channel, string why) => StopChannels([channel], why);
 
     /// <summary>
     /// Panic cleanup: stop+dispose EVERY channel player, clear the voice queue, clear whisper
@@ -709,37 +750,15 @@ public sealed class SoundArbitration : IDisposable
     /// become stale no-ops. Idempotent and callback-race safe (pre-approach consult binding).
     /// WPF had no single StopAll entry (only ForceUnduck + per-channel stops separately) —
     /// this composes those WPF outcomes into one path (outcome parity, not divergence).
+    ///
+    /// <para>It shares <see cref="DetachChannels"/> with <see cref="StopChannel"/> but is NOT a
+    /// scoped stop with a wider argument: it passes <see cref="AllChannels"/>, so totality is a
+    /// property of the enum rather than of this method remembering three field names, and it keeps
+    /// the <see cref="ForceUnduck"/> that a scoped stop has no business doing.</para>
     /// </summary>
     public void PanicReset()
     {
-        List<IAudioPlayer> toDispose;
-        int cleared;
-        bool wasWhisperBusy;
-        lock (_gate)
-        {
-            _voiceGeneration++;
-            _whisperGeneration++;
-            toDispose = [];
-            if (_voice is not null)
-            {
-                toDispose.Add(_voice);
-                _voice = null;
-            }
-
-            if (_whisper is not null)
-            {
-                toDispose.Add(_whisper);
-                _whisper = null;
-            }
-
-            toDispose.AddRange(_sfxPool);
-            _sfxPool.Clear();
-            cleared = _voiceQueue.Count;
-            _voiceQueue.Clear();
-            CancelPacingTimerLocked();
-            wasWhisperBusy = _whisperBusy;
-            _whisperBusy = false;
-        }
+        var toDispose = DetachChannels(AllChannels, out var cleared, out var wasWhisperBusy);
 
         ForceUnduck();
         foreach (var player in toDispose)
@@ -1073,49 +1092,101 @@ public sealed class SoundArbitration : IDisposable
         }
     }
 
-    private void StopAllChannels(string why)
+    private void StopChannels(ReadOnlySpan<SoundChannel> channels, string why)
     {
-        List<IAudioPlayer> toDispose;
-        bool wasWhisperBusy;
-        lock (_gate)
-        {
-            _voiceGeneration++;
-            _whisperGeneration++;
-            toDispose = [];
-            if (_voice is not null)
-            {
-                toDispose.Add(_voice);
-                _voice = null;
-            }
-
-            if (_whisper is not null)
-            {
-                toDispose.Add(_whisper);
-                _whisper = null;
-            }
-
-            toDispose.AddRange(_sfxPool);
-            _sfxPool.Clear();
-            _voiceQueue.Clear();
-            CancelPacingTimerLocked();
-            wasWhisperBusy = _whisperBusy;
-            _whisperBusy = false;
-        }
+        var toDispose = DetachChannels(channels, out var cleared, out var wasWhisperBusy);
 
         foreach (var player in toDispose)
         {
             StopDispose(player);
         }
 
-        if (toDispose.Count > 0)
+        if (toDispose.Count > 0 || cleared > 0)
         {
-            _log($"sound: stopped {toDispose.Count} channel player(s) ({why})");
+            _log($"sound: stopped {toDispose.Count} channel player(s) and cleared {cleared} queued line(s) ({why})");
         }
 
         if (wasWhisperBusy)
         {
             WhisperBusyChanged?.Invoke(false);
         }
+    }
+
+    /// <summary>
+    /// Take the named channels' state OFF the arbitration under one <c>_gate</c> and hand the
+    /// players back to be stopped outside it (a player stop is a native call and never runs under
+    /// the gate). The generation bump per channel is what makes an in-flight backend callback for a
+    /// detached player a stale no-op (the F2 class, WPF AvatarTubeWindow.Speech.cs:1623-1632).
+    ///
+    /// <para>Untouched channels keep everything: their player, their busy flag, their generation.
+    /// That is the entire difference between a scoped stop and a panic, and it lives here so both
+    /// callers cannot drift apart.</para>
+    /// </summary>
+    /// <param name="channels">Which channels to detach — one for a scoped stop,
+    /// <see cref="AllChannels"/> for panic and the device change.</param>
+    /// <param name="clearedLines">Queued voice lines discarded (zero unless
+    /// <see cref="SoundChannel.Voice"/> is among them).</param>
+    /// <param name="clearedWhisperBusy">Whisper busy was set and has been cleared — the caller owes
+    /// a <see cref="WhisperBusyChanged"/> false OUTSIDE the gate.</param>
+    private List<IAudioPlayer> DetachChannels(
+        ReadOnlySpan<SoundChannel> channels, out int clearedLines, out bool clearedWhisperBusy)
+    {
+        List<IAudioPlayer> toDispose = [];
+        var lines = 0;
+        var busyCleared = false;
+        lock (_gate)
+        {
+            foreach (var channel in channels)
+            {
+                switch (channel)
+                {
+                    case SoundChannel.Voice:
+                        _voiceGeneration++;
+                        if (_voice is not null)
+                        {
+                            toDispose.Add(_voice);
+                            _voice = null;
+                        }
+
+                        lines += _voiceQueue.Count;
+                        _voiceQueue.Clear();
+                        CancelPacingTimerLocked();
+                        break;
+
+                    case SoundChannel.Whisper:
+                        _whisperGeneration++;
+                        if (_whisper is not null)
+                        {
+                            toDispose.Add(_whisper);
+                            _whisper = null;
+                        }
+
+                        if (_whisperBusy)
+                        {
+                            _whisperBusy = false;
+                            busyCleared = true;
+                        }
+
+                        break;
+
+                    case SoundChannel.Sfx:
+                        toDispose.AddRange(_sfxPool);
+                        _sfxPool.Clear();
+                        break;
+
+                    default:
+                        // Unreachable today. It exists because AllChannels is total over the enum
+                        // and this switch is not: a channel added above without a case here would
+                        // survive a PANIC in silence, which is the one outcome panic may not have.
+                        _log($"sound: channel {channel} has no detach case — NOTHING was stopped on it");
+                        break;
+                }
+            }
+        }
+
+        clearedLines = lines;
+        clearedWhisperBusy = busyCleared;
+        return toDispose;
     }
 
     private void StopDispose(IAudioPlayer? player)

@@ -278,24 +278,21 @@ public partial class DtrhHostWindow : Window
     /// in CompositionRoot's preDrainFlush — the window close is its flush point), then STOP what
     /// this window put on the shared arbitration and stop the store. Idempotent, best-effort.
     ///
-    /// <para><b>PanicReset, not Dispose, and the distinction is the whole lift.</b> The
-    /// user-observable outcome is identical — every player this window started is stopped and
-    /// disposed, the voice queue is cleared and the ducks are released, which is exactly what
-    /// Dispose did on its way through (SoundArbitration.Dispose calls PanicReset first). What is no
-    /// longer done is tearing down the application's audio device because one window closed. The
-    /// arbitration is owned by <see cref="Audio.AudioParticipant"/> and is disposed with the app.</para>
-    ///
-    /// <para><b>The ceiling on that, named rather than discovered later.</b> A panic reset stops
-    /// EVERY channel, so once a second consumer plays through the same arbitration — the flash and
-    /// bubble sounds are the next ones queued — closing this window would silence that consumer too.
-    /// It is exactly today's outcome while DTRH is the only consumer, and the day a second one lands
-    /// this call has to become a stop of the channels this window used rather than of all of
-    /// them.</para>
+    /// <para><b>A SCOPED stop, not Dispose and no longer a panic reset.</b> Two things this must
+    /// not do. It must not tear down the application's audio device because one window closed — the
+    /// arbitration is owned by <see cref="Audio.AudioParticipant"/> and is disposed with the app.
+    /// And it must not stop channels this window never played: the ceiling this comment used to
+    /// NAME as hypothetical went live the day the flash clip and the bubble pops landed on the same
+    /// app-wide arbitration (Effects/EffectSounds.cs:212,:247), and until then a close here cut off
+    /// an in-flight whisper and a live pop that were never DTRH's.
+    /// <see cref="DtrhBarkRouting.StopPipelineAudio"/> is that stop, scoped to the one channel this
+    /// window's barks use; the panic path stays exactly where it belongs, on the arbitration's own
+    /// teardown.</para>
     /// </summary>
     private void TeardownBarkPipeline()
     {
         try { _bark?.FlushAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
-        try { _barkArbitration?.PanicReset(); } catch { /* best-effort */ }
+        try { DtrhBarkRouting.StopPipelineAudio(_barkArbitration); } catch { /* best-effort */ }
         try { _barkStore?.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { _assetSelectionStore?.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         // The ledger flushes BEFORE it stops (contract §11) — its own Dispose does both, so the
