@@ -71,18 +71,32 @@ public sealed class AudioCuePool : IAudioCuePool
 
     private readonly string _folder;
     private readonly Random _random;
+    private readonly bool _withoutReplacement;
     private readonly object _gate = new();
     private List<string> _cached = [];
+    private Queue<string> _queue = new();
 
     /// <param name="assetsRoot">The user-media root (<c>SessionParticipant.AssetsRootFor</c>).</param>
     /// <param name="moduleFolder">The module's own subfolder, upstream's own name
-    /// (<c>mindwipe</c>, <c>braindrain</c>).</param>
-    public AudioCuePool(string assetsRoot, string moduleFolder, Random? random = null)
+    /// (<c>mindwipe</c>, <c>braindrain</c>, <c>flashes_audio</c>, <c>bubbles</c>).</param>
+    /// <param name="random">The draw source, injected so a fact pins an ORDER rather than
+    /// re-deriving one.</param>
+    /// <param name="withoutReplacement">
+    /// Take the flash module's draw instead of the two immersion modules': a shuffled queue dealt
+    /// out and refilled only when it empties, so every clip in the folder is heard once before any
+    /// is heard twice (<c>Services/Flash/FlashService.cs:3315-3329</c>). The default is upstream's
+    /// OTHER draw - one uniform pick per firing, WITH replacement, so the same clip can come up
+    /// twice running (<c>Services/LockCard/MindWipeService.cs:755</c>). <b>A user hears the
+    /// difference</b>, which is why it is a parameter and not a preference.
+    /// </param>
+    public AudioCuePool(
+        string assetsRoot, string moduleFolder, Random? random = null, bool withoutReplacement = false)
     {
         ArgumentException.ThrowIfNullOrEmpty(assetsRoot);
         ArgumentException.ThrowIfNullOrEmpty(moduleFolder);
         _folder = Path.Combine(assetsRoot, SoundsFolderName, moduleFolder);
         _random = random ?? new Random();
+        _withoutReplacement = withoutReplacement;
     }
 
     /// <inheritdoc/>
@@ -115,17 +129,40 @@ public sealed class AudioCuePool : IAudioCuePool
                 _cached = Enumerate();
             }
 
-            return _cached.Count == 0 ? null : _cached[_random.Next(_cached.Count)];
+            if (_cached.Count == 0)
+            {
+                return null;
+            }
+
+            if (!_withoutReplacement)
+            {
+                return _cached[_random.Next(_cached.Count)];
+            }
+
+            if (_queue.Count == 0)
+            {
+                // Upstream's refill, expression and all: shuffle the whole folder into a queue and
+                // deal from it (`new Queue<string>(files.OrderBy(_ => _random.Next()))`,
+                // Services/Flash/FlashService.cs:3325). The refill re-reads the folder here where
+                // upstream re-reads its own 60-second file cache (:3321) - strictly fresher, and the
+                // user-visible property (no clip repeats until the folder is exhausted) is identical.
+                _queue = new Queue<string>(_cached.OrderBy(_ => _random.Next()));
+            }
+
+            return _queue.Dequeue();
         }
     }
 
     /// <summary>Drops the cached enumeration; the next draw re-reads the folder. WPF's
-    /// <c>ReloadAudioFiles</c> (<c>MindWipeService.cs:189-192</c>).</summary>
+    /// <c>ReloadAudioFiles</c> (<c>MindWipeService.cs:189-192</c>), and - for the shuffled draw -
+    /// its <c>ClearFileCache</c>, which throws the half-dealt queue away with the file list
+    /// (<c>Services/Flash/FlashService.cs:3489</c>).</summary>
     public void Invalidate()
     {
         lock (_gate)
         {
             _cached = [];
+            _queue = new Queue<string>();
         }
     }
 

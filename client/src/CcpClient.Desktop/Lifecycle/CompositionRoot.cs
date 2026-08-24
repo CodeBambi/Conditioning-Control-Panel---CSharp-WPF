@@ -276,7 +276,14 @@ public sealed class CompositionRoot
             infra, Path.GetDirectoryName(SettingsPathFactory())!,
             SessionClockFactory?.Invoke(), FlashImagePoolFactory?.Invoke(),
             haptics: haptics.Limb,
-            scriptedClock: ScriptedClockFactory?.Invoke());
+            scriptedClock: ScriptedClockFactory?.Invoke(),
+            // The app-wide audio owner constructed above, handed over for the same reason the haptic
+            // limb is: the session's flash clip and its two bubble pops belong on the ONE
+            // arbitration, and a session that built its own would be a second native engine on the
+            // same endpoint. This is the CONSUMER the audio lift left the seam for — the arbitration
+            // has had a bounded SFX pool and a busy-signalling whisper channel since it landed and
+            // nothing outside the DTRH window played through either.
+            appAudio: audio);
         return
         [
             store,
