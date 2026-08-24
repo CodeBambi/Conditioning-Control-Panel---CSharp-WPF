@@ -71,6 +71,17 @@ Rules:
 3. Quarantine moves (not copies) so the next save writes a clean file, and records the backup path in the typed outcome for later import/UI surfacing.
 4. Load failure kinds reuse the shared vocabulary: `Quarantined`/`NewerSchema` surface as `Degraded`; an unexpected I/O exception escaping load is trapped once at the participant-start boundary per the startup and async-lifecycle contracts (typed `Failed`, classified by the owner).
 
+5. **"Preserved, never deleted" binds the STORE, not the USER.** Rules 1-4 exist so the store
+   cannot destroy unreadable user data and silently run on defaults. They do NOT oblige the product
+   to keep quarantined bytes through an explicit, user-initiated erasure. Rule 3 is the reason:
+   it records the backup path *for later import*, so bytes left behind after a "forget everything"
+   remain IMPORTABLE — and an erasure that leaves a recoverable copy is a lie told to the person who
+   asked for it. Upstream deletes its quarantined copy on wipe for exactly this reason
+   (`Services/Companion/MemoryStore.cs:587-590`: leaving it would let an import "resurrect the wiped
+   conversation"). DECIDED 2026-08-24, raised by the lane that built the three forget scopes rather
+   than assumed by it. The narrow scopes must still leave quarantined bytes alone: only the scope
+   that says *everything* may take them, and a fact must pin that the others do not.
+
 ## 6. Unknown-member policy: preserve, never strip
 
 1. Every persisted model type declares `[JsonExtensionData]`; unknown members round-trip verbatim through load → save. A newer build's members survive a round-trip through an older build's model at every declared level.

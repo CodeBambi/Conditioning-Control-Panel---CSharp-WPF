@@ -816,8 +816,14 @@ if ($Surface -eq 'session-history' -and (Test-Path $sessionLogsDir)) {
 # Scoped to this surface deliberately. Every other capture here is indifferent to it, and a memory
 # document is USER CHAT - the deterministic-start set above is unconditional, and this must not be.
 if ($Surface -eq 'companion-transcript' -and (Test-Path $companionMemoryFile)) {
-    Remove-Item $companionMemoryFile -Force
-    Write-Output "deterministic start: the companion's persisted record cleared ($companionMemoryFile)"
+    # MOVED ASIDE, NEVER DELETED. This file is the developer's own companion chat, and a capture
+    # command is not a reason to destroy it. The port's persistence contract already answers this
+    # shape for the store (§5: quarantine MOVES the original bytes and records where they went), and
+    # a harness that deletes what the product would preserve is the harness lying about the product.
+    # Restoring is a rename.
+    $aside = "$companionMemoryFile.capture-aside-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    Move-Item $companionMemoryFile $aside -Force
+    Write-Output "deterministic start: the companion's persisted record moved aside to $aside (rename it back to restore)"
 }
 if ($Surface -eq 'goon-page' -and (Test-Path $goonProfileDir)) {
     # Only for this surface: blowing away a WebView2 profile is not free (the next launch rebuilds
