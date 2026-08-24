@@ -19,11 +19,15 @@ namespace CcpClient.Desktop.Features.Arcademy;
 /// once-per-boot guard sits AHEAD of the fullscreen post upstream, so a second <c>ready</c>
 /// produces NOTHING — not a second init and not a second fullscreen. Ported as it stands.</para>
 ///
-/// <para><b>What upstream does at this point that this build does not:</b> <c>SeedNativeState</c>
-/// (<c>:415-439</c>) pushes a <c>suspend</c> when a mandatory video is already playing or
-/// AudioOnlySession flipped during boot. That is native-state suspension — slice 5 of the board
-/// row — and it is ABSENT rather than stubbed, because a <c>suspend</c> this host never sends is
-/// safer than one it sends without the video and browser-media services that make it true.</para>
+/// <para><b>NATIVE-STATE SUSPENSION (slice 5) is here too</b> — <see cref="SeedNativeState"/>
+/// (<c>:409-440</c>) at the tail of the handshake and <see cref="NativeVideoChanged"/> for the
+/// edges (<c>:1714</c>, <c>:1716-1730</c>). <b>Upstream has three producers and this build has
+/// one.</b> The mandatory video is real here (<c>Effects.MandatoryVideoEffect</c>, wired by
+/// <see cref="ArcademyNativeSuspension"/>); <c>AudioOnlySession</c> (<c>:1832-1852</c>) and the
+/// browser-media watch (<c>:1701-1712</c>) have NO input in this build — there is no audio-only
+/// session and no browsing surface at all — so they are ABSENT rather than stubbed, for the same
+/// reason the launch gate does not carry a hard-coded <c>false</c>: a producer with no input is a
+/// producer that lies.</para>
 ///
 /// <para><b>There is no echo-suppression flag, and that is a considered absence.</b> Upstream
 /// raises <c>_suppressSettingEcho</c> around its write (<c>:1173-1182</c>) because
@@ -131,10 +135,16 @@ public sealed class ArcademySession : IDisposable
     /// reason is that un-freezing there "would drop a class back on top of a video the user is
     /// supposed to be watching".
     ///
-    /// <para>This build has no video service and no audio-only session wired to the Arcademy —
-    /// that is native-state suspension, slice 5 of the board row — so the honest default is
-    /// <c>false</c>: nothing here can own the screen, so nothing can outrank the user's own resume.
-    /// Slice 5 attaches its two predicates here and changes nothing else on this path.</para>
+    /// <para><b>It is ONE predicate reading a LIVE state, and it has two readers</b> — exactly as
+    /// upstream, which asks <c>App.Video?.IsPlaying</c> both at the resume hold (<c>:359</c>) and
+    /// at the boot seed (<c>:415</c>). <see cref="ArcademyNativeSuspension"/> points it at the
+    /// port's mandatory video; the default stays <c>false</c>, because a session nobody wired a
+    /// native producer to has nothing that can own the screen.</para>
+    ///
+    /// <para><b>Upstream's second disjunct has no input here.</b> Its <c>|| AudioOnlySession</c>
+    /// (<c>:359-364</c>) reads a setting this build does not have, so it is absent rather than a
+    /// constant <c>false</c> pretending to be a gate — the same call the launch path already made
+    /// (<see cref="ArcademyLaunch"/>).</para>
     /// </summary>
     public Func<bool> NativeStateOwnsScreen { get; set; } = static () => false;
 
@@ -169,7 +179,97 @@ public sealed class ArcademySession : IDisposable
         _initPosted = true;
         _post(ArcademyProtocol.BuildInit(_store.Current, Facts, _meta?.Snapshot()));   // :399, :568
         _post(ArcademyProtocol.BuildFullscreen(FullscreenState()));        // :400
+        SeedNativeState();                                                 // :402
         _log.Log($"arcademy: sent init (protocol {ArcademyProtocol.Version})");
+    }
+
+    // ====================== native-state suspension (slice 5) ======================
+
+    /// <summary>The <c>suspend</c> reason a covering native video carries (<c>:1714</c>,
+    /// <c>:1726</c>, <c>:422</c>). Protocol vocabulary the PAGE reads: only a <c>"panic"</c>
+    /// suspend offers a Resume affordance, and only an <c>"audio-only"</c> one says the streak is
+    /// safe (<c>arcademy/shell/shell.js:1259-1263</c>) — so the literal is load-bearing rather
+    /// than a log word.</summary>
+    public const string VideoSuspendReason = "video";
+
+    /// <summary>
+    /// <b>Seed the CURRENT native state onto a freshly-booted page</b> (<c>SeedNativeState</c>,
+    /// <c>:409-440</c>), at upstream's own point in the handshake: after <c>init</c> and
+    /// <c>fullscreen</c>, never before.
+    ///
+    /// <para><b>The order is load-bearing on BOTH sides.</b> Host-side, <c>init</c> is a snapshot
+    /// of SETTINGS and not of what is happening right now, and every other producer here is
+    /// EDGE-driven — so a page that opened while a video was already covering the screen "never
+    /// heard about it and dealt a board over the video" (<c>:410-413</c>). Page-side, a
+    /// <c>suspend</c> that arrived before <c>boot.js</c> registered its handlers would reach
+    /// nobody at all, and one that arrives after them but before the shell exists is BUFFERED and
+    /// replayed once there is something to render it into
+    /// (<c>arcademy/boot.js:195-205</c>, <c>:148-153</c>).</para>
+    ///
+    /// <para><b>One producer, so no priority ladder.</b> Upstream resolves three in order — video,
+    /// then AudioOnlySession, then a browser video behind <c>ProtectBrowserVideoPlayback</c>
+    /// (<c>:417-437</c>) — with an early return after each, so the reason the page is told is the
+    /// first one that is true. This build has only the video, which is why the reason is a
+    /// constant here; the ladder returns with the second input, not before.</para>
+    /// </summary>
+    private void SeedNativeState()
+    {
+        if (!NativeStateOwnsScreen())
+        {
+            return;
+        }
+
+        _log.Log("arcademy: seeding suspend — a mandatory video is already playing");   // :421
+        _post(ArcademyProtocol.BuildSuspend(true, VideoSuspendReason));                  // :422
+    }
+
+    /// <summary>
+    /// <b>A covering native video started or ended</b> (<c>OnVideoStarted</c> <c>:1714</c>,
+    /// <c>OnVideoEnded</c> <c>:1716-1730</c>). The class yields: the page drops every effect,
+    /// pauses the class and shows the class_suspended treatment
+    /// (<c>arcademy/shell/shell.js:1250-1272</c>) until this says the video is over.
+    ///
+    /// <para><b>THE PANIC SUSPEND OUTRANKS THE VIDEO'S OWN UN-FREEZE</b> (<c>:1720-1723</c>), and
+    /// that asymmetry is the whole of the restore order: the START edge is unconditional, because
+    /// a video really is covering the class whatever else is true, while the END edge is REFUSED
+    /// while a panic press stands — "a video ending is not them asking to be put back in a class.
+    /// It lifts on their resume-request and nowhere else". Restoring in the other order would
+    /// un-freeze a class the user hit the emergency stop on.</para>
+    ///
+    /// <para><b>Level, not edge, is the CALLER's problem.</b> Upstream hangs these on two distinct
+    /// events so a repeat cannot happen; this takes the transition already resolved, which is what
+    /// <see cref="ArcademyNativeSuspension"/> does with the module's live state.</para>
+    ///
+    /// <para><b>Not ported, and named rather than skipped:</b> upstream's un-freeze also reclaims
+    /// keyboard focus for the page (<c>_host?.FocusWeb()</c>, <c>:1728</c>, "video clicks steal
+    /// activation"). This build has no Arcademy host window to focus — <see cref="ArcademyLaunch"/>
+    /// opens origins and shows nothing — so there is no surface to hand focus back to, and a call
+    /// into nothing would be a claim rather than a behaviour.</para>
+    /// </summary>
+    /// <param name="playing">True when a native video now covers the screen, false when the one
+    /// that did has ended.</param>
+    public void NativeVideoChanged(bool playing)
+    {
+        if (_disposed)
+        {
+            return;                                                        // :296 — no live host, no push
+        }
+
+        if (playing)
+        {
+            _log.Log("arcademy: a mandatory video started — suspending the class");
+            _post(ArcademyProtocol.BuildSuspend(true, VideoSuspendReason));   // :1714
+            return;
+        }
+
+        if (_panicSuspended)
+        {
+            _log.Log("arcademy: video ended but a panic suspend still stands");   // :1723
+            return;
+        }
+
+        _log.Log("arcademy: the mandatory video ended — lifting the suspend");
+        _post(ArcademyProtocol.BuildSuspend(false, VideoSuspendReason));      // :1726
     }
 
     /// <summary>Route one page→host frame. Never throws; every outcome is typed and logged
