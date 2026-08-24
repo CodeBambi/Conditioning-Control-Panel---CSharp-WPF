@@ -55,6 +55,10 @@
 
 import { makeRng } from '../../core/rng.js';
 
+const PIXEL = 3;           // CSS px per rendered texel - the arcade-cabinet
+                           // pass (owner 2026-08-24): the ribbon renders at
+                           // 1/PIXEL and the stylesheet's pixelated upscale
+                           // makes it chunky; matches the 3D tier's constant
 const HOLD = 0.86;         // t where the spiral stops shrinking - matches 3D
 const SQUASH = 0.8;        // the ground plane's foreshortening at this camera
 const RIM_F = 0.20;        // basin rim radius as a fraction of min(W,H)
@@ -235,10 +239,13 @@ export function createTube2D(opts = {}) {
   function resize() {
     try {
       W = mount.clientWidth || 800; H = mount.clientHeight || 600;
-      const dpr = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
-      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+      /* the arcade-cabinet pass, this tier's cut: a 1/PIXEL backing store
+         nearest-upscaled by the stylesheet (was a 2x-dpr crisp render) */
+      canvas.width = Math.max(1, Math.round(W / PIXEL));
+      canvas.height = Math.max(1, Math.round(H / PIXEL));
       canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.setTransform(1 / PIXEL, 0, 0, 1 / PIXEL, 0, 0);
+      g.imageSmoothingEnabled = false;    // the ghost sprite crunches too
       /* dead centre, NOT nudged down: the DOM bubble is pinned to 50%/50% and
          the crater has to be the thing it lands in */
       CX = W / 2; CY = H / 2;

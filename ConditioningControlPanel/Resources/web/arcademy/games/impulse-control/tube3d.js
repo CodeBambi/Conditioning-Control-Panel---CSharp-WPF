@@ -101,8 +101,9 @@
  *
  * MOTION: reduced -> no spin, no march, no morphing or crossfading (the
  * journey's first stop is drawn once and held), no hue cycle, no ken-burns, no
- * comet, no orbit, no particles; pulses are opacity steps. perf -> pixelRatio
- * 1, antialias off, half the particles, band redraw throttled to 4Hz.
+ * comet, no orbit, no particles; pulses are opacity steps. perf -> half the
+ * particles, band redraw throttled to 4Hz (resolution is already floored for
+ * everyone by the arcade-cabinet pass below).
  *
  * TRAPS (each one cost real time): widening the crater's lit lip turns it into
  * a lit egg; nothing may run near-parallel to the chute (z-fight sawtooth);
@@ -350,15 +351,23 @@ export async function createTube3D(opts = {}) {
 
   const canvas = document.createElement('canvas');
   canvas.className = 'g-ic-tube-canvas';
+  /* THE PICTURE IS CHUNKY ON PURPOSE (the arcade-cabinet pass, owner
+     2026-08-24): the tube renders at 1/PIXEL of the viewport and the
+     stylesheet's image-rendering:pixelated does a nearest-neighbour upscale,
+     so every band, glow and particle lands as a fat screen texel. AA stays
+     OFF - it would soften the texels before the upscale and cost the look its
+     edges - and the whole thing is cheaper than the old 2x-dpr render. The
+     DOM bubble stays crisp on top, a sprite over the cabinet screen. */
+  const PIXEL = 3;                        // CSS px per rendered texel
   const renderer = new THREE.WebGLRenderer({
-    canvas, alpha: true, antialias: !perf, powerPreference: 'low-power',
+    canvas, alpha: true, antialias: false, powerPreference: 'low-power',
   });
   // Some webviews hand back a dead context without throwing; probe it.
   const gl = renderer.getContext();
   if (!gl || (typeof gl.isContextLost === 'function' && gl.isContextLost())) {
     throw new Error('webgl context unavailable');
   }
-  renderer.setPixelRatio(Math.min(perf ? 1 : 2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1));
+  renderer.setPixelRatio(1 / PIXEL);
   mount.appendChild(canvas);
 
   const scene = new THREE.Scene();
