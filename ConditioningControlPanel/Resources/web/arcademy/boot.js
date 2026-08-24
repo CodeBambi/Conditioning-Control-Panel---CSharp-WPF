@@ -119,6 +119,13 @@ function armBootDeadline() {
  * exit (fade + zoom-through); the `hidden` attribute stays the ground truth a
  * beat later. FAILURE PATHS NEVER WAIT - failBoot below still snaps
  * `hidden = true` directly, so an error card is never delayed by a celebration.
+ *
+ * THE SPLASH-COMPLETE EDGE (FIRST BELL, 2026-08-24) hangs off the HAPPY PATH of
+ * this function and nowhere else: once `hidden` has actually landed, the shell
+ * is told, and it decides whether the opening has anything to play. failBoot
+ * never calls it, so an error card can no more be held up by a scene than by
+ * the splash itself (trap 66). The call is guarded and fire-and-forget - the
+ * loader comes down whatever the shell does with the news.
  * -------------------------------------------------------------------------- */
 const INTRO_MIN_MS = 2950;
 const INTRO_EXIT_MS = 320;
@@ -132,7 +139,11 @@ function dismissLoader() {
     try {
       if (el.hidden) return;             // a failBoot got there first
       el.classList.add('is-done');
-      setTimeout(() => { try { el.hidden = true; } catch (e) { /* noop */ } }, INTRO_EXIT_MS);
+      setTimeout(() => {
+        try { el.hidden = true; } catch (e) { /* noop */ }
+        try { if (shell && shell.onSplashDone) shell.onSplashDone(); }
+        catch (e) { warn('onSplashDone threw: ' + ((e && e.message) || e)); }
+      }, INTRO_EXIT_MS);
     } catch (e) { try { el.hidden = true; } catch (e2) { /* noop */ } }
   }, wait);
 }

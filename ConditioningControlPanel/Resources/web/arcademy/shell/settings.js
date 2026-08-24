@@ -144,7 +144,7 @@ function mult(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2) 
  * @param {string=} o.gameKey   THE SPLIT (owner ruling 2026-08-24): set, the
  *                              page is SCOPED - tiers 1 + 2 unchanged, then
  *                              exactly ONE game group (the running class),
- *                              never the other eight. The campus / Registrar
+ *                              never the other eight. The campus / Front Office
  *                              keep calling with no key and get the full sheet.
  *                              An unknown key falls back to the full page (a
  *                              missing group would hide real knobs; too many is
@@ -501,7 +501,7 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     const close = () => { try { if (onClose) onClose(); } catch (e) { /* noop */ } };
 
     /* THE SPLIT. A scoped page shows the one game the player is actually in;
-     * the full list stays the campus/Registrar's. Scope resolves ONCE, here:
+     * the full list stays the campus/Front Office's. Scope resolves ONCE, here:
      * a gameKey that matches nothing (a retired class, a typo'd caller) falls
      * back to the full sheet rather than silently hiding every knob. */
     const list = Array.isArray(games) ? games : [];

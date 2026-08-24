@@ -292,6 +292,28 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
   widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
                x affordance, the edge dock, and the bubble's `.bubble-left` /
                `.bubble-low` flips (right margin / top edge).
+vn/          FIRST BELL: the once-ever opening, and the ONLY thing in this bundle
+             that is allowed to sit between the splash and the campus. Four
+             scenes, all first-run: s01 the gates (2 captions), s02 the
+             admissions desk (paper #1) ending in THE BOARD HANDOFF, s03 the
+             walk to Homeroom, m01 the second slip after the first-ever stamp.
+             Spec: `<Screenshots>/arcademy-vn-proposals/FIRST-BELL.md`. See
+             trap 71 - the safety laws are the feature.
+  index.js     createFirstBell({store, rows, firstNight, canInterrupt, onMoment,
+               reducedMotion, base, log}) -> {armed, splashDone, gateClass,
+               afterCeremony, seenState, bankAll, destroy}. Mints its OWN fixed
+               layer (z 58: over EMI, under the toast) - index.html grows no id.
+  scenes.js    PURE data: the step lists, the plate names and BOARD_ZONE
+               (x 25-60%, y 18-48% of the 16:9 frame, the panel SET-NOTES
+               reserved). A step is caption / paper / hold / fx / swap / board.
+  lex.js       VN_LEX + PAPERS. The two papers are stored as CLAUSE rows joined
+               with one space, so every row clears the 96-char mod-skin cap
+               (trap 26) while the joined paragraph stays verbatim.
+  style.js     the skin, injected as <style id="arc-vn-style"> the way a game
+               injects its own (styles.css is shell chrome only).
+  demo.html    standalone scene tester, no shell and no bridge; `?beat=<id>`
+               (gates|desk|board|walk|mail|coldopen|reduced, plus `&hold=1`)
+               jumps straight to one beat so it can be shot headlessly.
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
@@ -1104,7 +1126,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     entry; it renders tiers 1+2 plus that game's group only (an unknown key falls back
     to the FULL page - too many knobs is the lesser bug than hidden ones). ctx.settings
     is a startClass snapshot, so the scoped page prints `applies_next_class` instead of
-    pretending to live-apply. The campus gear / Registrar stay argless = full sheet.
+    pretending to live-apply. The campus gear / Front Office stay argless = full sheet.
 
 69. **Deck gates split two ways since W2 (2026-08-24): `armed()` = visuals and keeps
     capsOk; `sounds()` = cues and NEVER tests capsOk.** bgIntensity 0 is the player's
@@ -1142,6 +1164,38 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     before the first gesture, so the opening greet's babble is dropped. Never queue it
     for retro-play - a mascot who talks over a beat that already passed is worse than
     one who missed it.
+
+71. **THE OPENING IS FURNITURE, NOT A GATE, AND THAT IS AN INVARIANT WITH FIVE
+    CONSEQUENCES (FIRST BELL, 2026-08-24).** `vn/` is the first thing this bundle has
+    ever put between the splash and a live campus, so every one of its four seams is
+    built to be a NO-OP by default rather than a step that has to succeed.
+    - **Every entry point takes a continuation and runs it exactly once.**
+      `settler()` in `vn/index.js` is the ONE funnel - success, a throw, a missing plate,
+      a spent flag and a watchdog all land there and all close the layer and call back.
+      If you add a fifth seam, hand it to `settler()` too; do not grow a second exit.
+    - **The plates are checked BEFORE anything mounts.** A missing png must never cost
+      the player a black rectangle with a caption on it, so `ensurePlate()` gates the
+      mount and the four plates are warmed at construction while the campus paints. A
+      scene that stands down leaves its ledger entry ARMED for the next eligible night.
+    - **`base` is DOCUMENT-relative, not module-relative.** An `Image` src and an inline
+      `background-image` both resolve against `index.html`, so the default is `./` and
+      only `vn/demo.html` passes `../`. A module-relative `../` asks the host for
+      `https://ccp.game/art/...` and silently gets nothing - which looks exactly like a
+      missing plate.
+    - **s03 spends its flag BEFORE it calls back**, because the callback re-enters
+      `startClass` and a flag written afterwards would gate the same class twice. Same
+      shape as m01: `afterCeremony()` spends `m01` and then decides whether to draw, so a
+      ceremony that cleared onto a live class still burns the beat instead of queueing it.
+    - **Escape is never touched.** boot.js owns the key at the window and the shipped
+      hold-Esc exit has to work on every VN frame, so `vn/index.js` reads only Enter and
+      calls `preventDefault` nowhere. The board dealt into the wall is decoration too -
+      no `onSelect`, `aria-hidden`, `tabIndex -1` - because the row the player actually
+      clicks is the campus's, one layer down.
+    Persistence is `vnSeen`, a plain page-owned key beside EMI's `emiVoice` (no C# change
+    needed; `ArcademyMetaStore.Set` takes any new top-level key). First-run only is
+    enforced at construction: `shell.js isFirstNight()` reads "no card enrolled and no
+    graded day", and a false answer BANKS all four flags so an upgrading player never
+    meets a frame of it.
 
 ## 5. The game module contract (short version)
 

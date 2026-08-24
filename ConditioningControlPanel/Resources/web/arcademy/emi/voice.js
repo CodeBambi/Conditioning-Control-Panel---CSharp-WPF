@@ -883,7 +883,7 @@ export function createVoice(o) {
    * DOM double, so the whole thing is a try/catch that no-ops clean. The campus
    * paints class rooms as `.campus-room`, sealed wings as `.campus-room.locked`
    * and every office as `.campus-room.facility` - and because Records is one of
-   * those offices and nothing in the markup tells it from the Registrar, a
+   * those offices and nothing in the markup tells it from the Front Office, a
    * FACILITY reports as geofenced rather than risking rec 3. */
   function hitTest(x, y) {
     try {

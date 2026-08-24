@@ -3,7 +3,7 @@
  *
  * The home screen: a blueprint floor plan of the school at night. Rooms ARE the
  * games (fixed geography - a game always lives in its room), facilities are
- * diegetic (Registrar = settings, Records = report card), tonight's classes
+ * diegetic (Front Office = settings, Records = report card), tonight's classes
  * glow pink with numbered route stops, the locked wings are Semesters II/III.
  * Ported from planning/arcademy/mockups/arcademy-campus-hub.html, wired to real
  * timetable/grade/streak state instead of placeholder data.
@@ -47,11 +47,12 @@ const SVGNS = 'http://www.w3.org/2000/svg';
  * shared a 112x66 broom cupboard with no room for their own art. The Arcademy is
  * still dark (DoorAvailable = false), so that could be fixed once, and was:
  *   - ECHO took the north-east front and INSTANT RECALL the south-east one -
- *     the two rooms Records and the Registrar used to hold. Their
+ *     the two rooms Records and the Front Office counter used to hold. Their
  *     lexicon identity travelled with them: the Music Room is still the Music
  *     Room, and both are ordinary corridor rooms now (side/door/stop defaults).
- *   - RECORDS + THE REGISTRAR moved into the EAST WING, which stopped being a
- *     semester and became the FRONT OFFICE: two compact rooms, a sign each.
+ *   - RECORDS + THE FRONT OFFICE COUNTER (ex-Registrar) moved into the EAST WING,
+ *     which stopped being a semester and became the FRONT OFFICE: two compact
+ *     rooms, a sign each.
  *   - The WEST WING was rebuilt around a HORIZONTAL alley (the Main Hall simply
  *     carries on west at y 450..490) so its two classes get storefronts deep
  *     enough for a logo band instead of two 96-unit shelves.
@@ -83,7 +84,7 @@ export const ROOMS = Object.freeze({
     descEn: 'Things went missing in a wall of moving pictures. Find them before they move again.',
   },
   /* THE POOL - the natatorium on the south lawn, and the one DETACHED class.
-   * The corridor's south wall is full (104 | Entrance Hall | Registrar), so the
+   * The corridor's south wall is full (104 | Entrance Hall | Front Office), so the
    * Deep End's door is the 20px alley between 104 and the hall and a covered walk
    * runs down it to the water: `door` is still a corridor x, so doorFor(),
    * stopAnchor() and routeFor() need no change at all - the numbered stop lands in
@@ -197,9 +198,9 @@ export const ROOMS = Object.freeze({
  * -------------------------------------------------------------------------- */
 export const WINGS = Object.freeze({
   /* THE EAST WING IS THE FRONT OFFICE. It holds no classes at all now - Records
-   * and the Registrar took the two compact rooms, and its caption says so
-   * instead of naming a semester it no longer contains. `office` is what tells
-   * the plan that: the wing draws the same floor and alley, and the caption is
+   * and the Front Office counter took the two compact rooms, and its caption
+   * says so instead of naming a semester it no longer contains. `office` is
+   * what tells the plan that: the wing draws the same floor and alley, and the caption is
    * composed from the two rows the office already owns (NO new lexicon keys -
    * lot 2 moves rooms, never the string table). */
   east: {
@@ -253,7 +254,7 @@ function mouthSpan(w) {
  * front office is not one, so it says what it is instead - composed from the
  * two rows it already owns, because lot 2 moves rooms and never mints a key. */
 function wingCaption(w) {
-  if (w && w.office) return t('campus_records', 'Records') + ' · ' + t('campus_registrar', 'Registrar');
+  if (w && w.office) return t('campus_records', 'Records') + ' · ' + t('campus_registrar', 'Front Office');
   return t('semester', 'Semester') + ' ' + ((w && w.roman) || 'I');
 }
 
@@ -704,7 +705,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       g.appendChild(svgText(w.labelX, w.labelY, 'campus-rsub', t(w.nameKey, w.nameEn).toUpperCase()));
       /* ONE LINE FOR THE OFFICE. A wing that holds CLASSES names its semester
        * under its own name; the front office would only be repeating the two
-       * signs standing twenty units above it (RECORDS, REGISTRAR), so it says
+       * signs standing twenty units above it (RECORDS, FRONT OFFICE), so it says
        * what it is and stops. The pair is still the hover card's status line -
        * wingCaption() is the one source for both. */
       if (!w.office) {
@@ -995,7 +996,16 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       g.appendChild(neon);
     }
     const nameY = o.nameY != null ? o.nameY : (o.side === 'n' ? y + 156 : y + 176);
-    g.appendChild(svgText(cx, nameY, 'campus-rname', String(o.name || '').toUpperCase()));
+    /* THE COMPACT PLATE FITS ITS ROOM. A compact facility is 108 units wide and
+     * `.campus-rname` is 13.5px on .14em of tracking, so ~10 uppercase glyphs is
+     * all that fits: "FRONT OFFICE" (the ex-Registrar, renamed 2026-08-24) is
+     * 114 units of ink and its last letter would land past the plan's right
+     * SAFE BAND edge (x 1368) on any window taller than 16:9. One step down on
+     * the size, measured by name LENGTH so a mod-skinned name gets the same
+     * treatment, keeps the whole plate inside the room. */
+    const longName = !!o.compact && String(o.name || '').length > 10;
+    g.appendChild(svgText(cx, nameY, 'campus-rname' + (longName ? ' tight' : ''),
+      String(o.name || '').toUpperCase()));
     const sub = o.rm
       ? (t('campus_rm', 'RM') + ' ' + o.rm + (o.sub ? ' · ' + o.sub : ''))
       : (o.sub || '');
@@ -1042,16 +1052,16 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   /* a bank of drawers along the counter's own wall - the whole term, in ink */
   [1278, 1302, 1326].forEach((x) => recordsG.appendChild(svg('rect', { x, y: 448, width: 20, height: 12 }, 'campus-furnf')));
 
-  /* Registrar (settings) - office, lower counter */
+  /* Front Office (ex-Registrar; settings) - office, lower counter */
   const regG = facility({
     rect: [1260, 476, 108, 84], door: 518, side: 'w', compact: true,
     neonY: 484, nameY: 522,
     sign: t('settings', 'Settings'),
-    name: t('campus_registrar', 'Registrar'),
+    name: t('campus_registrar', 'Front Office'),
     rm: '002',
     onClick: () => { if (handlers.registrar) handlers.registrar(); },
     tip: () => ({
-      name: t('campus_registrar', 'Registrar'),
+      name: t('campus_registrar', 'Front Office'),
       status: t('settings', 'Settings'),
       desc: t('campus_desc_registrar', 'Every setting is a form. Every consent, a waiver with a stamp.'),
     }),
@@ -1240,7 +1250,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   bell.appendChild(bellText);
   topCluster.appendChild(bell);
   /* Settings stays one click away even with the topbar gone - the gear is the
-   * shortcut, the Registrar room is the diegetic front door to the same page. */
+   * shortcut, the Front Office room is the diegetic front door to the same page. */
   const gear = el('button', 'campus-gearbtn', '⚙');
   gear.type = 'button';
   gear.setAttribute('aria-label', t('settings', 'Settings'));
@@ -1500,7 +1510,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       ccGo.disabled = true;
       cardAction = null;
       // EMI SEAM: a sealed wing refused. A facility that OPENS (Records, the
-      // Registrar) is not a locked click and never fires one.
+      // Front Office) is not a locked click and never fires one.
       try { fireMoment('lockedClick', { what: 'sealed' }); } catch (e) { /* noop */ }
     } else {
       ccGo.textContent = t('campus_step_inside', 'Step inside').toUpperCase();
