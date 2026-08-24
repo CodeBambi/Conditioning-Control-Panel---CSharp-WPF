@@ -152,6 +152,14 @@ public sealed class AudioParticipant : IBackgroundParticipant
     /// <c>Services/AudioService.cs:292-293</c>), and a machine with no endpoints at all answers
     /// <see cref="SoundOutcome.Unavailable"/> with the re-probe discipline behind it (WPF #779,
     /// <c>AudioService.cs:163-166</c>) — never an exception into the caller.</para>
+    ///
+    /// <para><b>A FAILED init is remembered too, and that is deliberate.</b> Recovery from a dead
+    /// endpoint belongs to the arbitration's own cooldown re-probe, which a PLAY attempt schedules
+    /// once per window (<c>SoundArbitration.ReadyLocked</c>, WPF #779 parity) — where
+    /// <see cref="SoundArbitration.Initialize"/> is an unconditional native device attempt with no
+    /// cooldown in front of it. Retrying here per consumer would put a device attempt on every
+    /// window that opens while an endpoint is down, which is the spin that discipline exists to
+    /// stop.</para>
     /// </summary>
     public SoundOutcome EnsureDevice()
     {
