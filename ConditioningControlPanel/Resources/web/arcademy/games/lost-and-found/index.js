@@ -2,9 +2,9 @@
  * games/lost-and-found/index.js - LOST & FOUND (family: search, flagship).
  *
  * Where's Waldo, except the crowd is alive: a dense mosaic of looping tiles
- * drifts, glitches and swaps under you while you hunt one clip five times. The
- * Distraction Engine is the difficulty slider - effect dials rise FIRST, classic
- * difficulty (density, near-twin share) second (GROUND-RULES §6 ordering).
+ * drifts, glitches and swaps under you while you hunt one clip a whole class
+ * long. The Distraction Engine is the difficulty slider - effect dials rise
+ * FIRST, classic difficulty (density, near-twin share) second (§6 ordering).
  *
  * ---------------------------------------------------------------------------
  * WHERE THE RULES LIVE
@@ -17,12 +17,21 @@
  *   styles.js     this game's CSS, namespaced .g-lf-*
  *
  * ---------------------------------------------------------------------------
- * THE FIVE-FIND ARC (synthesis ruling - the class has a beginning/middle/end)
- *   finds 1-2  the tier's baseline board
- *   find  3    THE MODIFIER: the board wakes up (hotter heat, wider swap bursts),
- *              announced, for the rest of the class
- *   find  5    THE FINAL BELL: announced, and the clutch ease ("the board
+ * THE ARC, AND IT IS PER-TIER (synthesis ruling - the class has a beginning /
+ * middle / end; the class-length wave of 2026-08-24 made the LENGTH a tier dial)
+ *   the class is findsForTier(tier) finds:  t1 26  t2 22  t3 16  t4 13,
+ *              all sized to ~250s of typical competent play against a 300s bell
+ *              (constants.js carries the arithmetic)
+ *   first third  the tier's baseline board
+ *   ~1/3 in     THE MODIFIER: the board wakes up (hotter heat, wider swap
+ *              bursts), announced, for the rest of the class
+ *              (modifierFindForTier: 9 / 7 / 5 / 4)
+ *   last find  THE FINAL BELL: announced, and the clutch ease ("the board
  *              relents") is GUARANTEED rather than conditional on the clock
+ *
+ * ONE WALL, MANY FINDS. The target RELOCATES between finds on the same tile
+ * wall, so a longer class costs no extra tiles and no extra look signatures -
+ * density, DENSITY_HARD_CAP and the signature pool are untouched by the wave.
  *
  * TASTE OF THE TWIST (SYNTHESIS #2, from grade_tier 2): the first relocation of
  * the class is telegraphed and slowed once, so the player MEETS the signature
@@ -36,7 +45,7 @@
  * ==========================================================================*/
 
 import {
-  FINDS_PER_CLASS, MODIFIER_AFTER_FIND, FINAL_BELL_FIND, PLAYTEST, TIERS,
+  findsForTier, modifierFindForTier, finalBellFindForTier, PLAYTEST, TIERS,
   MOBILE_DENSITY, HEAT_BAND, MODIFIER_HEAT_STEP, BEAT_MS, TICK_MS,
   ASSEMBLE_STAGGER_MS, CLAIM_TIMEOUT_MS, POOL_OVERPROVISION, DISCRETE_STEP_MS,
   DENSITY_LEVELS, DENSITY_HARD_CAP, DENSITY_COARSE_CAP,
@@ -46,7 +55,7 @@ import { createHud } from './hud.js';
 import { createTrickster } from './trickster.js';
 import { createCasino } from './casino.js';
 import { injectStyles } from './styles.js';
-import { scoreClass } from './grade.js';
+import { scoreClass, sGateStreakFor } from './grade.js';
 import { createTimers, probeReduced, probeCoarse, clamp, clamp01, shuffle } from './util.js';
 
 /* ----------------------------------------------------------------------------
@@ -98,12 +107,18 @@ export default {
   family: 'search',
   // MEATY-ELIGIBLE (orchestrator ruling): Lost & Found fills the timetable's one
   // meaty slot in Semester 1, since The Deep End - the dossier's meaty comfort
-  // class - is not in this build. The class itself is still ~120s; `meaty` only
-  // widens the budget the shell may hand us (up to 300s, BUILD-CONTRACT §7) and
-  // we grade against whatever budget arrives (grade.js parSecFor).
+  // class - is not in this build. `meaty` is what lets the shell hand us the
+  // full 300s (BUILD-CONTRACT §7), and as of the class-length wave (2026-08-24)
+  // we ASK for all of it: the class is a per-tier find count sized to ~250s of
+  // typical competent play, so the bell is a real ceiling instead of decoration.
+  // We still grade against whatever budget actually arrives (grade.js parSecFor)
+  // and start() re-clamps it to 30..300.
+  //
+  // KEEP IN SYNC: games/registry.js GAME_META mirrors this number (it is the
+  // parachute the timetable reads for a suspended class) - CLAUDE.md §2.
   meaty: true,
   flagship: true,
-  timeBudgetSec: 120,
+  timeBudgetSec: 300,
   title: 'Lost & Found',
 
   manifest: {
@@ -156,7 +171,14 @@ export default {
     let dials = TIERS[1];
     let density = 16;
     let zen = false;
-    let budgetSec = 120;
+    let budgetSec = 300;
+    /* THE LENGTH OF THIS CLASS, resolved from the tier in start(). Every arc
+       beat below is a function of these three, never of a literal find number.
+       They are seeded with tier 1's answers so anything that reads them before
+       start() (a harness, a stray tick) sees a coherent class, never a 5. */
+    let findsTarget = findsForTier(1);
+    let modifierFind = modifierFindForTier(1);
+    let bellFind = finalBellFindForTier(1);
     let reduced = false;
     let coarse = false;
 
@@ -205,7 +227,7 @@ export default {
     /* ------------------------------------------------------- small helpers */
     const heatNow = () => clamp01(
       dials.heat
-      + HEAT_BAND * (finds / FINDS_PER_CLASS)
+      + HEAT_BAND * (finds / findsTarget)
       + (modifierOn ? MODIFIER_HEAT_STEP : 0)
       - (clutchOn ? PLAYTEST.CLUTCH_HEAT_EASE : 0)
     );
@@ -834,11 +856,15 @@ export default {
     }
 
     /**
-     * The class-rules sheet, ahead of the briefing. Policy is the shell's
-     * "Skip class tutorials" contract: default shows every class; with the
-     * skip on, a class still explains itself ONCE per grade tier. Dismissal
-     * is the sheet's own button only - peek is already bound, so any key
-     * shortcut here would spend the player's A-cap on a tutorial.
+     * The class-rules sheet, ahead of the briefing. THE LAW, uniform across
+     * every open class (owner ruling 2026-08-24): it SHOWS the first time this
+     * player meets the mosaic at this grade tier and AUTO-SKIPS every later
+     * class at that tier, whatever the setting says; the shell's "Skip class
+     * tutorials" switch (ctx.hideTutorial) means "skip even the first showing".
+     * No meta = no memory = the sheet shows. Dismissal is the sheet's own
+     * button only - peek is already bound, so any key shortcut here would spend
+     * the player's A-cap on a tutorial. The GATE lives at the call site in
+     * start(), because the skip path there is beginClass() itself.
      */
     function howto(onDone) {
       phase = 'briefing';
@@ -858,7 +884,7 @@ export default {
         hud.hideHowto();
         hud.dim(false);
         onDone();
-      });
+      }, findsTarget);        // the sheet SAYS the number, so it is handed it
       if (!cardNode) { done = true; hud.dim(false); onDone(); }
     }
 
@@ -875,8 +901,14 @@ export default {
           if (node && node.style) node.style.opacity = '';
         });
       });
-      hud.showBriefing(targetLook(), t('lf_briefing', 'Memorize her, then find her five times.'));
-      hud.setProgress(0, FINDS_PER_CLASS);
+      // The count is a NUMBER in the sentence now, so the row carries a {n} slot
+      // and a new key (the old lf_briefing row still says "five times" in every
+      // shipped lexicon - reusing it would have printed the old number).
+      hud.showBriefing(
+        targetLook(),
+        t('lf_briefing_n', 'Memorize her, then find her {n} times.').replace('{n}', String(findsTarget))
+      );
+      hud.setProgress(0, findsTarget);
       hud.setChips(0, 0);
 
       const previewMs = Math.round(dials.previewSec * 1000);
@@ -964,13 +996,13 @@ export default {
       findStartedAt = Date.now();
       findPausedBase = pausedMs;
       if (hud) {
-        hud.setProgress(finds, FINDS_PER_CLASS);
+        hud.setProgress(finds, findsTarget);
         hud.dim(false);
       }
       if (board) { board.freeze(false); board.clearMark('g-lf-found'); }
       setHeat();
       armPity();
-      if (finds + 1 === FINAL_BELL_FIND && !bellRung) {
+      if (finds + 1 === bellFind && !bellRung) {
         bellRung = true;
         if (casino) casino.bell(true);       // the frame goes gold for the last hunt
         announce(t('lf_final_bell', 'Final bell'), 2000);
@@ -1012,7 +1044,7 @@ export default {
       const left = secLeft();
       hud.setClock(left);
       if (left <= 0) { finish(false); return; }
-      if (finds === FINDS_PER_CLASS - 1 && left <= PLAYTEST.CLUTCH_SEC_LEFT) clutch();
+      if (finds === findsTarget - 1 && left <= PLAYTEST.CLUTCH_SEC_LEFT) clutch();
     }
 
     /* --------------------------------------------------------------- clicks */
@@ -1036,9 +1068,13 @@ export default {
       findTimes.push(took);
       finds += 1;
       /* THE CONFIRM: the press that lands her, on the beat of the press. The
-         pitch climbs one step per find, so the class audibly ladders up its own
-         arc (five finds = five rungs; the cap is there for a longer budget). */
-      cue('pop', 0.45, { pitch: Math.min(1.5, 1 + 0.06 * (finds - 1)) });
+         pitch climbs across the WHOLE class - first find at 1.0, last find at
+         1.5, however many finds this tier deals. It used to be a flat +0.06 a
+         find against a cap of 1.5, which at 13-26 finds pinned the ladder at the
+         top from find 9 onward and spent two thirds of the class saying the same
+         thing. */
+      const arc = findsTarget > 1 ? (finds - 1) / (findsTarget - 1) : 1;
+      cue('pop', 0.45, { pitch: Math.min(1.5, 1 + 0.5 * arc) });
       if (cleanThisFind) {
         cleanStreak += 1;
         if (cleanStreak > bestCleanStreak) bestCleanStreak = cleanStreak;
@@ -1052,25 +1088,35 @@ export default {
       /* ---- the found ceremony (board dims, target spotlights, sting) ---- */
       if (hud) {
         hud.dim(true);
-        hud.setProgress(finds, FINDS_PER_CLASS);
+        hud.setProgress(finds, findsTarget);
         hud.showSpot(targetLook(), t('lf_found', 'Found her'));
       }
       if (board) { board.freeze(true); board.mark(tile, 'g-lf-found', true); }
       // THE SPOTLIGHT: the ceremony's own sting, ducking everything under it.
-      cue('sting', clamp01(0.45 + 0.05 * cleanStreak), { duck: 'spotlight' });
+      // The streak term is WINDOWED at five, or a long class would sit pinned at
+      // 1.0 from the fifth clean find on and the sting would stop meaning it.
+      cue('sting', clamp01(0.45 + 0.05 * Math.min(cleanStreak, 5)), { duck: 'spotlight' });
       // THE CHIME LADDER (Deck II): each find stacks one more rising layer on
       // the sting, so the class gets audibly richer as it climbs. Capped at 4
-      // layers; the fifth find pays its own way (the royal jackpot below).
+      // layers; the LAST find pays its own way (the royal jackpot below). The
+      // level rides class PROGRESS, not the raw find count - a flat per-find
+      // term clipped to 1.0 two thirds of the way through a 26-find class.
       for (let L = 0; L < Math.min(finds, 4); L++) {
         timers.after(110 * (L + 1), () => {
-          cue('streak', clamp01(0.2 + 0.07 * L + 0.03 * finds));
+          cue('streak', clamp01(0.2 + 0.07 * L + 0.15 * (finds / findsTarget)));
         });
       }
-      if (casino) casino.payout(finds);   // one pulse of the frame, brighter up the ladder
+      // one pulse of the frame, brighter up the ladder - the ladder is the whole
+      // class, so the frame is told how long the class is
+      if (casino) casino.payout(finds, findsTarget);
       try { ctx.ceremonies.stamp({ text: t('lf_found', 'Found her'), target: hud && hud.stampAnchor }); } catch (e) { /* optional */ }
-      try { ctx.ceremonies.streakMeter({ target: hud && hud.streakMount, filled: cleanStreak, gold: cleanStreak >= 3 }); } catch (e) { /* optional */ }
+      // GOLD IS THE S GATE'S OWN STREAK, not a flat 3. On a 26-find class three
+      // clean finds in a row is Tuesday; the gate number (8/7/5/4 by tier) is
+      // the streak that is actually buying the player something.
+      const goldStreak = sGateStreakFor(findsTarget);
+      try { ctx.ceremonies.streakMeter({ target: hud && hud.streakMount, filled: cleanStreak, gold: cleanStreak >= goldStreak }); } catch (e) { /* optional */ }
       if (!reduced) {
-        try { ctx.engine.sustain('ambient_field', { kind: cleanStreak >= 3 ? 'goldleaf' : 'confetti' }); } catch (e) { /* optional */ }
+        try { ctx.engine.sustain('ambient_field', { kind: cleanStreak >= goldStreak ? 'goldleaf' : 'confetti' }); } catch (e) { /* optional */ }
         timers.after(900, () => { try { ctx.engine.stop('ambient_field'); } catch (e) { /* ignore */ } });
       }
 
@@ -1078,10 +1124,10 @@ export default {
       /* The LEDGER half of this block is untouched by Deck II: the roll still
          happens on every find and `jackpots` (graded, XP_PER_JACKPOT) still
          moves only when the canon says jackpot. What Deck II changes is the
-         SHOW on the fifth find: the final bell always pays a ROYAL jackpot
+         SHOW on the LAST find: the final bell always pays a ROYAL jackpot
          visual at intensity 1.0 - engine jackpotSpec's own rarity dial - and a
          same-find canon jackpot folds into it instead of playing twice. */
-      const finalFind = finds >= FINDS_PER_CLASS;
+      const finalFind = finds >= findsTarget;
       let roll = null;
       try { roll = reward.roll({ heat: heatNow(), success: true, streak: cleanStreak }); } catch (e) { roll = null; }
       if (roll && roll.jackpot) jackpots += 1;
@@ -1097,7 +1143,7 @@ export default {
       }
 
       /* ---- the arc ------------------------------------------------------- */
-      if (finds >= MODIFIER_AFTER_FIND && !modifierOn) {
+      if (finds >= modifierFind && !modifierOn) {
         modifierOn = true;
         announce(t('lf_modifier', 'The board wakes up'), 2000);
         say('modifier engaged after find ' + finds);
@@ -1107,7 +1153,7 @@ export default {
       timers.after(ceremonyMs, () => {
         if (phase === 'done') return;
         if (hud) hud.hideSpot();
-        if (finds >= FINDS_PER_CLASS) { finish(true); return; }
+        if (finds >= findsTarget) { finish(true); return; }
         relocate();
         // the churn resumes unless the board has already relented
         if (!clutchOn) churnTimer = timers.every(dials.swapMs, () => { if (!halted) noiseSwap(); });
@@ -1200,6 +1246,10 @@ export default {
         bestCleanStreak,
         density,
         drift: dials.drift,
+        // the length of THIS class - every scaled threshold in grade.js hangs
+        // off it, and the par clamp needs the ceremony overhead it implies
+        findsTarget,
+        ceremonySec: (reduced ? PLAYTEST.FOUND_CEREMONY_MS_REDUCED : PLAYTEST.FOUND_CEREMONY_MS) / 1000,
         timeBudgetSec: zen ? null : budgetSec,
         jackpots,
       });
@@ -1211,7 +1261,7 @@ export default {
         cue('stamp_bad', 0.3);
       }
 
-      say('class over: ' + finds + '/' + FINDS_PER_CLASS + ' finds, median '
+      say('class over: ' + finds + '/' + findsTarget + ' finds, median '
         + score.medianSec.toFixed(1) + 's (par ' + score.par.toFixed(1) + 's), '
         + misclicks + ' misses, ' + peeks + ' peeks, best clean ' + bestCleanStreak
         + ', ' + relocations + ' relocations, composite ' + score.composite.toFixed(3)
@@ -1266,7 +1316,15 @@ export default {
         const spec = classSpec || {};
         tier = clamp(Math.round(Number(spec.gradeTier) || 1), 1, 4);
         dials = TIERS[tier] || TIERS[1];
-        budgetSec = clamp(Number(spec.timeBudgetSec) || 120, 30, 300);
+        // THE LENGTH OF THE CLASS is the tier's, and it is resolved exactly once
+        // here so no beat below can disagree with another about how long the
+        // class is (constants.js carries the pacing arithmetic).
+        findsTarget = findsForTier(tier);
+        modifierFind = modifierFindForTier(tier);
+        bellFind = finalBellFindForTier(tier);
+        // The fallback is the module's own declared budget, not a stale 120: a
+        // spec with no budget must not deal a 26-find class two minutes.
+        budgetSec = clamp(Number(spec.timeBudgetSec) || 300, 30, 300);
         zen = !!(ctx.settings && ctx.settings.lf_zen);
         reduced = probeReduced();
         coarse = probeCoarse();
@@ -1295,7 +1353,11 @@ export default {
         trickster = createTrickster({
           seed: String(spec.seed || 'lf'),
           tier,
-          budgetSec: zen ? 180 : budgetSec,
+          // zen has no bell, so the deck is given a NOMINAL span to spread its
+          // cards across - the length of the same class played timed. It was
+          // 180s when the class was 5 finds; a zen class is the tier's full
+          // find count now, so cards would have stopped two thirds of the way in
+          budgetSec: zen ? 300 : budgetSec,
           timers, board, hud, reduced, coarse,
           // A player who capped effects off gets no trickery either (Law VI).
           capsOk: !(ctx.caps && Number(ctx.caps.bgIntensity) === 0),
@@ -1327,7 +1389,8 @@ export default {
 
         say('class start: tier ' + tier + ', density ' + density + '/' + dials.density
           + (coarse ? ' (coarse)' : '') + (reduced ? ' (reduced motion)' : '')
-          + ', budget ' + (zen ? 'zen' : budgetSec + 's'));
+          + ', budget ' + (zen ? 'zen' : budgetSec + 's')
+          + ', ' + findsTarget + ' finds (modifier ' + modifierFind + ', bell ' + bellFind + ')');
 
         // learn the display's true frame interval while the wall is still
         // cheap - the briefing frames are the cleanest baseline we ever get
@@ -1341,9 +1404,13 @@ export default {
           beginHunt();
           if (hud) hud.setClock(zen ? null : budgetSec);
         });
-        // Rules sheet first. ctx.hideTutorial is the shell's "Skip class
-        // tutorials" switch (absent on old harnesses -> falsy -> always show).
-        if (ctx.hideTutorial && howtoSeenTiers().indexOf(tier) >= 0) beginClass();
+        // Rules sheet first, and it is FREE OF THE CLOCK: clockStartedAt is
+        // taken inside beginClass, on the far side of GO and the briefing.
+        // AUTO-SKIP once this tier is on the record; ctx.hideTutorial (the
+        // shell's "Skip class tutorials" switch, absent on old harnesses ->
+        // falsy) skips the first showing too. Both skip paths are the same
+        // instant dismiss the sheet's own GO performs: beginClass().
+        if (ctx.hideTutorial || howtoSeenTiers().indexOf(tier) >= 0) beginClass();
         else howto(beginClass);
       },
 
@@ -1379,7 +1446,8 @@ export default {
       diagnostics() {
         return {
           phase, tier, density, zen, budgetSec, reduced, coarse,
-          finds, misclicks, misclickStreak, cleanStreak, bestCleanStreak,
+          finds, findsTarget, modifierFind, bellFind,
+          misclicks, misclickStreak, cleanStreak, bestCleanStreak,
           jackpots, relocations, findTimes: findTimes.slice(),
           modifierOn, bellRung, clutchOn, tasteShown,
           heat: heatNow(), secLeft: zen ? null : secLeft(),

@@ -1,5 +1,5 @@
 /* ============================================================================
- * games/sort/index.js - SORT: room 201, East Wing. Family tracking, 120s, not
+ * games/sort/index.js - SORT: room 201, East Wing. Family tracking, 180s, not
  * meaty. BUILD-CONTRACT module.
  *
  * A stack of three cards breathes centre stage. Drag right for YOURS, left for
@@ -52,7 +52,13 @@
  *
  * CLOCK. `now()` and the timer helpers resolve `performance` / `setTimeout` off
  * the global at CALL time, so a scratch harness can swap in a fake clock and
- * drive a whole 120s class in milliseconds with no test-only code in here.
+ * drive a whole 180s class in milliseconds with no test-only code in here.
+ *
+ * THE BUDGET IS THE ONLY LENGTH DIAL. This room is bell-driven end to end -
+ * `paintClock` rings at `budgetMs` and `nextCard` reshuffles for ever - so the
+ * clock scales by itself. The three things that were COUNTS sized for the old
+ * 120s bell moved with it in the class-length wave: deck.js's SIZE_BY_TIER, the
+ * media claim below, and trickster.js's deal window.
  * ==========================================================================*/
 
 import { makeRng, hash01, shuffled } from '../../core/rng.js';
@@ -177,19 +183,37 @@ function isVideoUrl(url, mime) {
   if (mime && /^video\//i.test(String(mime))) return true;
   return /\.(mp4|webm|m4v|mov)(\?|#|$)/i.test(String(url || ''));
 }
+/** m:ss for a remaining-ms figure. The HUD's opening face and every tick after
+ *  it come through here, so the chip can never disagree with the clock. */
+function clockFace(leftMs) {
+  const secs = Math.ceil(Math.max(0, Number(leftMs) || 0) / 1000);
+  return Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+}
 
 /* -------------------------------------------------------------- the dials -- */
+/** THE CLASS LENGTH, and the ONE place this file writes it. The module export
+ *  below reads it, so does the HUD clock's opening face - a hard-coded '2:00'
+ *  on the chip was the 120s bell's last hiding place, and it sat on screen for
+ *  the whole door and rules sheet before paintClock ever ran. registry.js
+ *  GAME_META.sort mirrors the number (the parachute law). */
+const BUDGET_SEC = 180;
 const RING_TICK_MS = 50;
 const RING_TICK_MS_REDUCED = 100;
 const SPRING_MS = SWIPE.SPRING_MS;
 const INTRO_MS = 900;
 const AUTO_SUBMIT_MS = 45000;
-/** Live <video> nodes this class may hold at once (trap 36). */
+/** Live <video> nodes this class may hold at once (trap 36). A CONCURRENCY
+ *  ceiling, not a supply one: the stack is three cards deep whatever the class
+ *  is long, so a bigger claim never asks for a third decode. Stays 2. */
 const DECODER_CEILING = 2;
-/** Rows the provider preloads ahead, per tag. */
+/** Rows the provider preloads ahead, per tag. Also a look-ahead and not a
+ *  supply figure - six rows in front of a cursor is six rows whether the deck
+ *  is 60 long or 120. Stays 6. */
 const PREWARM = 6;
-/** The claim, when the door never resolved one for us (QUICK SORT floor). */
-const QUICK_CLAIM = Object.freeze({ loops: 48, stills: 32, canvasSafe: false });
+/** The claim, when the door never resolved one for us (QUICK SORT floor).
+ *  Moved 48/32 -> 72/48 with the deck (see claimOpts): a 120-card tier-4 deck
+ *  fed by an 80-row claim would be repeats before the bell. */
+const QUICK_CLAIM = Object.freeze({ loops: 72, stills: 48, canvasSafe: false });
 /** How hard a minor jackpot rolls on a PERFECT at rung 2 or above. */
 const MINOR_CHANCE = 0.16;
 /** A cue's level may never exceed the tier's ceiling. */
@@ -207,7 +231,9 @@ export default {
   family: 'tracking',
   meaty: false,
   flagship: false,
-  timeBudgetSec: 120,
+  /* 180s since the class-length wave (was 120s). registry.js GAME_META.sort
+     mirrors this - the timetable reads a SUSPENDED class's descriptor too. */
+  timeBudgetSec: BUDGET_SEC,
   title: 'Sort',
 
   manifest: {
@@ -424,7 +450,11 @@ export default {
     function claimOpts(resolved) {
       return {
         sources: (resolved && Array.isArray(resolved.sources)) ? resolved.sources : [],
-        want: { loops: 48, stills: 32 },
+        /* A HINT, and it tracks DECK.SIZE_BY_TIER: 120 rows for the 120-card
+           tier-4 deck (was 80 for the 80-card / 120s one). The provider still
+           resolves on perSourceMin per tag, so a small library is not a
+           failure - it is a THIN pile and the door already said so. */
+        want: { loops: 72, stills: 48 },
         perSourceMin: DECK.PER_SOURCE_MIN,
         /* The provider re-serves a dry tag in a SEEDED shuffle, so this string
          * has to be stable for a day or a retake would re-serve differently.
@@ -599,7 +629,8 @@ export default {
       const hud = el('div', 'g-sort-hud');
       const chipChain = chip('is-chain', t('sort_chip_chain', 'Chain'), '0');
       const chipSorted = chip('is-sorted', t('sort_chip_sorted', 'Sorted'), '0');
-      const chipClock = chip('is-clock', t('sort_chip_clock', 'Time left'), '2:00');
+      const chipClock = chip('is-clock', t('sort_chip_clock', 'Time left'),
+        clockFace(BUDGET_SEC * 1000));
       const ladder = el('div', 'g-sort-ladder');
       const rungs = [];
       for (let i = 0; i <= CHAIN.MAX_RUNG; i++) {
@@ -809,8 +840,9 @@ export default {
       if (S.cursor >= S.cards.length) {
         /* THE PASSES COME BACK FIRST, then the deck is re-shuffled and walked
          * again. Repeats are fine in a sort - they are the whole reason the
-         * SEEN trickster is free - and a 0.75s ring burns 160 cards in 120s,
-         * so a deck that could run out would be a room that stopped. */
+         * SEEN trickster is free - and a 0.75s ring burns ~200 cards in 180s
+         * against a 120-card deck, so a deck that could run out would be a room
+         * that stopped. Recycling is the design, not the shortfall. */
         if (S.passQueue.length) {
           const back = S.passQueue.splice(0, S.passQueue.length);
           S.cards = S.cards.concat(back);
@@ -1130,12 +1162,13 @@ export default {
     function paintClock() {
       if (!S || !S.nodes || !S.nodes.chipClock) return;
       const left = Math.max(0, S.budgetMs - (now() - S.startedAt));
-      const secs = Math.ceil(left / 1000);
-      const mm = Math.floor(secs / 60);
-      const ss = String(secs % 60).padStart(2, '0');
-      S.nodes.chipClock.set(mm + ':' + ss);
+      S.nodes.chipClock.set(clockFace(left));
       if (S.budgetMs > 0 && left <= 0) bell();
     }
+    /* HEAT IS A RATIO, NOT A STOPWATCH: `progress` is elapsed over the class's
+     * OWN budget and the rung term is a fraction of MAX_RUNG, so the 120 -> 180
+     * budget move stretches the same curve over a longer class rather than
+     * changing its shape. Nothing here needed a number. */
     function heat() {
       if (!S) return 0;
       const progress = S.budgetMs > 0 ? clamp01((now() - S.startedAt) / S.budgetMs) : 0;
@@ -1155,9 +1188,15 @@ export default {
 
     /* ==================================================================== *
      * THE RULES SHEET. SORT's rulebook is the ghost round at the door, so
-     * this is deliberately one drawn card between two words. Shown every
-     * class by default; with "Skip class tutorials" on, still ONCE PER TIER
-     * (the shell's contract, and the memory is the game's own).
+     * this is deliberately one drawn card between two words. THE LAW, uniform
+     * across every open class (owner ruling 2026-08-24): it SHOWS the first
+     * time this player meets the room at this grade tier and AUTO-SKIPS every
+     * later class at that tier, whatever the setting says; "Skip class
+     * tutorials" (ctx.hideTutorial) means "skip even the first showing". The
+     * memory is the game's own, and no meta = no memory = the sheet shows.
+     * The sheet is FREE OF THE CLOCK - openClass()'s GO callback is where
+     * S.startedAt is taken, and the setup door before it is outside the
+     * budget too.
      * ==================================================================== */
     function howtoSeenTiers() {
       const m = metaOf();
@@ -1165,7 +1204,7 @@ export default {
     }
     function howto(onDone) {
       const seen = howtoSeenTiers();
-      if (ctx.hideTutorial === true && seen.indexOf(S.gradeTier) >= 0) { onDone(); return; }
+      if (ctx.hideTutorial === true || seen.indexOf(S.gradeTier) >= 0) { onDone(); return; }
       const veil = el('div', 'g-sort-howto');
       const card = el('div', 'g-sort-howto-card');
       if (!veil || !card) { onDone(); return; }
@@ -1262,6 +1301,13 @@ export default {
         howtoEl: null, endEl: null, result: null,
         thin: false, hot: !!pending.hot,
       };
+
+      /* THE CHIP TELLS THE TRUTH FROM THE FIRST FRAME. mount() drew it with
+         this module's own budget; the shell may hand a class a different one
+         (a retake, a harness, a future short period), and the clock does not
+         start ticking until openRoom(), so paint the real figure now. */
+      try { if (nodes.chipClock) nodes.chipClock.set(clockFace(S.budgetMs)); }
+      catch (e) { /* a chip that will not paint is not a class */ }
 
       const fade = Number(settingOf('sort_bg_fade', 0.35));
       const capBg = (() => { try { return Number(ctx.caps && ctx.caps.bgIntensity); } catch (e) { return 1; } })();

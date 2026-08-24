@@ -2,7 +2,7 @@
  * games/sort/deck.js - THE DECK. PURE, seeded, and the ONLY place that decides
  * which side of the room a card belongs on.
  *
- * SORT deals 60 / 70 / 80 / 80 cards by grade tier, 55% of them TARGET, the
+ * SORT deals 90 / 105 / 120 / 120 cards by grade tier, 55% of them TARGET, the
  * rest NOISE, interleaved off the class seed with a run cap of 4 (3 at tier 4)
  * so the room never turns into "press right eleven times". Loops are preferred
  * 60/40 over stills wherever a source has both, because a still stack reads as
@@ -30,8 +30,16 @@
 export const DECK = Object.freeze({
   /** Share of the deck that is TARGET (the right pile). */
   TARGET_SHARE: 0.55,
-  /** Cards dealt, by grade tier. */
-  SIZE_BY_TIER: Object.freeze({ 1: 60, 2: 70, 3: 80, 4: 80 }),
+  /** Cards dealt, by grade tier.
+   *  THE DECK IS A COUNT AND THE CLASS IS A CLOCK, so the two have to move
+   *  together. At the 180s budget (the class-length wave; it was 120s and
+   *  60/70/80/80) a competent player sees roughly 148 cards at tier 1 and 200
+   *  at tier 4, so 90/105/120/120 distinct rows is ~1.6-1.7 passes over the
+   *  deck - the same "you start meeting cards again near the end" feel the
+   *  120s class had at 60/80. Repeats are not a failure here (nextCard()
+   *  reshuffles for ever and the SEEN trickster wants them); the size is only
+   *  how long the room stays fresh. */
+  SIZE_BY_TIER: Object.freeze({ 1: 90, 2: 105, 3: 120, 4: 120 }),
   /** Longest run allowed on one side, by grade tier. */
   MAX_RUN_BY_TIER: Object.freeze({ 1: 4, 2: 4, 3: 4, 4: 3 }),
   /** Preference roll toward a loop when a source has both kinds. */

@@ -96,7 +96,15 @@ export const CASINO = Object.freeze({
   /** THE REVEAL, and the badge's own life. */
   REVEAL_MS: 620,
   BADGE_MS: 1100,
-  /** The full jackpot show is spent after this many; the royal is exempt. */
+  /** The full jackpot show is spent after this many; the royal is exempt.
+   *  UNCHANGED at the 180s budget, on purpose. This is a SCARCITY, not a rate:
+   *  it is shared by the three MAJOR_RUNGS (chain.js: 3 / 5 / 7, which are
+   *  streak-triggered at 8 / 16 / 27 clean swipes and so still land inside the
+   *  first ~30 cards however long the class runs) and by every minor roll after
+   *  them. A longer class therefore spends the three full shows on its climb
+   *  exactly as before and pays the extra minutes in payout lights and deeper
+   *  chimes - which is the whole point of the budget. Raising it would make the
+   *  interruption the room's default rather than its ceiling. */
   FULL_SHOWS: 3,
   /** The chime STACK: an octave under from rung 3, a third over from rung 6. */
   LOW_FROM_RUNG: 3,

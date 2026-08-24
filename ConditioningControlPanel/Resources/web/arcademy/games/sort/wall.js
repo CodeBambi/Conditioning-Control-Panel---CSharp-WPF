@@ -4,9 +4,9 @@
  *
  * Every committed card THUDS into the next slot and stays there. That is the
  * whole trick: the room's decoration is your own work, so by the bell the stage
- * is wearing a hundred and twenty seconds of your taste. A WRONG card lands
- * dimmed (40%) and stays dim - the wall is an honest ledger, and the one place
- * in the room a mistake is still visible a minute later.
+ * is wearing three minutes of your taste. A WRONG card lands dimmed (40%) and
+ * stays dim - the wall is an honest ledger, and the one place in the room a
+ * mistake is still visible a minute later.
  *
  * WHEN IT APPEARS is the tier dial (pitch section 10): tier 1 sees the wall only
  * at the end card, tier 2 from rung 3, tier 3 from rung 2, tier 4 from rung 1.
@@ -35,8 +35,16 @@ export const WALL = Object.freeze({
   /** The THUD, and its reduced-motion twin. */
   THUD_MS: 340,
   THUD_MS_REDUCED: 120,
-  /** Tiles before the wall starts recycling its oldest slot. */
-  CAP: 96,
+  /** Tiles before the wall starts recycling its oldest slot.
+   *  96 -> 120 with the 180s budget (the class-length wave). The cap is a
+   *  RECYCLE RATE, not a memory: a competent tier-4 player commits ~200 cards
+   *  in 180s, which at 96 would have wiped the wall through twice over and made
+   *  the early class un-findable at the bell. 120 - the largest deck
+   *  (DECK.SIZE_BY_TIER) - keeps it to ~1.7 passes, the same feel the 120s
+   *  class had at 96, and holds the tidy invariant that the wall can show at
+   *  most one whole deck. It is 25% more <img> tiles and no more decodes: a
+   *  wall tile is always a still (see DECODER BUDGET below). */
+  CAP: 120,
   /** Column counts the layout will consider. */
   COLS: Object.freeze([6, 7, 8, 9, 10, 11, 12]),
   /** The full-bleed hold at the bell. */
@@ -84,7 +92,7 @@ export function layout(stageW, stageH, cols) {
  * Columns for a wall that has to show THIS MANY tiles at once, near square.
  * layout() solves the empty stage; it does not know how many cards landed, so a
  * long class overruns the bottom of the room once the tiles are honestly square
- * (nine columns of 176px squares is five rows, and a 120s class lands far more
+ * (nine columns of 176px squares is five rows, and a 180s class lands far more
  * than forty-five). The bell is the one moment every tile has to be on stage at
  * once, so bleed() re-solves with the count in hand. Never returns FEWER columns
  * than it was handed: the mosaic may tighten to fit, never re-inflate.

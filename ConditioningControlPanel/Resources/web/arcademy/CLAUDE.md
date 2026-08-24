@@ -96,9 +96,13 @@ games/registry.js  guarded allSettled registry + tier math + class_suspended stu
                    own family/meaty/flagship/timeBudgetSec, because the timetable
                    reads a suspended class's descriptor too
 games/<key>/index.js  one folder per game; games NEVER import each other
-  daily-trigger/   the daily word (homeroom, flagship)  - bank/board/ladder/words-*
-  lost-and-found/  the mosaic hunt (MEATY, flagship)    - board/grade/hud/util
-  deja-vu/         the pair memory                      - script (the swap plan)
+  daily-trigger/   the daily word (homeroom, flagship, CLOCKLESS - no seconds chip, no time bar;
+                   the ~1-min wordle is the ruled shape, trap 81) - bank/board/ladder/words-*
+  lost-and-found/  the mosaic hunt (MEATY, flagship, 300s; finds are PER-TIER 26/22/16/13
+                   via findsForTier, and every gate that was a count is now a rate - trap 83) - board/grade/hud/util
+  deja-vu/         the pair memory (300s, MULTI-BOARD:  - script (the swap plan)
+                   clear -> fresh seeded board (classSeed|bN) with one-notch escalation, bell = the
+                   only end and the NORMAL end, timeout auto-C removed - trap 82)
   impulse-control/ the Drop Tube (pop/withhold)         - lex/schedule/scoring/render/style/tube3d/tube2d
                    (seeded three.js chute, vendored r185 in ../vendor/; tube2d = no-WebGL ladder)
                    + the House Rules decks casino (THE FLOOR: bulb-ring marquee, chime ladder,
@@ -125,14 +129,14 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    TRACKABILITY INVARIANT: occlusion hides at most ONE link of a swap chain and every
                    occlusion carries a tell) / grade / lex MD_LEX; keybinds pick1..pick5; md_stake_mode
                    ask|bank|ride (greed scored UPWARD only, ride cap 5), md_shell_skin themed|minimal|contrast
-  sort/            the two-pile swipe (tracking, 120s)   - room 201, The Sorting Room, built
+  sort/            the two-pile swipe (tracking, 180s)   - room 201, The Sorting Room, built
                    on the Entrance Hall's west span after Misdirection's retirement (lot 2
                    gave the old parlour to the front office). Right = TARGET, left = NOISE, and
                    the piles are the PLAYER'S OWN NICHES, picked at a setup DOOR that runs
                    BEFORE the class clock (`manifest.setup` + `instance.setup()`, §5). Truth is
                    the `tag` the host stamped on the row, never pixels; the deck comes from
                    `ctx.assets.claimTagged` (§3), never `claim()`
-  echo/            the Simon ring (memory, 105s)          - sequence (PURE: warm start 3..6 off bestLen, decoy
+  echo/            the Simon ring (memory, 120s)          - sequence (PURE: warm start 3..6 off bestLen, decoy
                    plan from tier 2 telegraphed) / grade / lex EC_LEX; keybinds pad1..pad6; six pads always live,
                    the TIER restricts the alphabet; tones = engine audio_trigger 'pad' x pitch (+1 semitone per
                    link, cap 7); a fail is NOT the class (new sequences until the bell); Encore once, auto
@@ -160,9 +164,10 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    largest that wraps every dealt phrase into three lines AND spells every word
                    whole; measured with a hidden 100px RULER (`.g-ec-ruler`) because a centred word
                    box reports `scrollWidth === clientWidth` even while the word hangs out of it
-  instant-recall/  the vigil (recall, 120s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
+  instant-recall/  the vigil (recall, 180s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
                    GUARANTEE in the last 15s, density sawtooth, plants, templates LAST_WORD/EFFECT/STING/TWO,
-                   THE CADENCE (owner 2026-08-23, "about 5 rounds per minute"): 9-11 stops a 120s class at
+                   THE CADENCE (owner 2026-08-23, "about 5 rounds per minute"): a RATE, not a count -
+                   scaleStops holds every budget inside 4.4-5.6/min, so 180s deals 14-16 stops at
                    EVERY tier, ONE question each - tier moves the window (6/6/5/4s) and the template pool,
                    never the rate. MIN_GAP_MS is DERIVED, not tasted: window + VERDICT_MS + DEAL_BEAT_MS +
                    FRESH_MS + slop, so even a fully blanked stop leaves >= 4s of live wall, and seedDues
@@ -212,11 +217,12 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    Sub words are HELD, not brightened: `fire('sub_flash', {holdMs: SUB_HOLD_MS[tier]})` plus a
                    game-local plate on `.g-ir-stage .ae-sub-word` (the alpha is still the engine's clamped
                    channel); `CADENCE.subliminal.min` 1000 -> 1400 so two held words cannot overlap.
-  anomaly/         the odd-one-out grid (search, 90s)     - rounds (PURE: kinds/deltas at PERCEPTIBLE floors,
+  anomaly/         the odd-one-out grid (search, 300s)    - rounds (PURE: kinds/deltas at PERCEPTIBLE floors,
                    relocations cap 2/round, drift) / grade / lex AN_LEX; the odd index lives in CLOSURE ONLY -
                    never a DOM attr/class (suite asserts it); decks get a canMelt(i)/meltCandidates() oracle
                    and nothing else; an_kinds all|gentle
-  composure/       the sliding picture (puzzle, 120s, MEATY) - board (PURE, seeded SOLVABLE scramble w/ parity)
+  composure/       the sliding picture (puzzle, 300s, MEATY, MULTI-BOARD: a solve BANKS and
+                   re-deals seeded scrambles until the bell, trap 82) - board (PURE, seeded SOLVABLE scramble w/ parity)
                    / solver (PURE baseline: optimal 3x3 IDA*, 4x4/5x5 BFS over tracked-tiles+gap - the greedy
                    textbook solver deadlocked 1 board in 5) / grade (par from the solver) / lex CP_LEX;
                    manifest.peek TRUE (the shell's hold-to-reveal = A-cap); cp_mode timed|zen (zen ends
@@ -1389,6 +1395,66 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     The Esc ladder is byte-for-byte the ladder it was (boot.js's outer rungs,
     shell.js's inner ones, the host's panic rung above both). If you ever need to
     branch on a key here, do not: put it in the ladder that already owns keys.
+
+81. **CLASS LENGTH IS A RULED QUANTITY, AND MEATY IS NOT THE LENGTH FLAG (2026-08-24).**
+    The owner ruled a per-class length table (L&F/anomaly/composure/deja-vu/deep-end 300s,
+    sort/instant-recall 180s, echo 120s, daily-trigger and impulse-control deliberately short;
+    daily-trigger is also `clockless` - no seconds chip, no time bar, the flag rides the
+    descriptor through normalizePool/classFrom and the registry parachute). Do NOT "fix" a
+    long non-meaty class by flipping `meaty: true`: `meatyOk` deals EXACTLY ONE meaty class
+    per day, so the flag is the anchor-slot marker and flipping it for length would cap long
+    classes at one per night and starve the quick slots. Both clamp ceilings are 300
+    (`QUICK_MAX_SEC` == `MEATY_MAX_SEC`); the per-module `timeBudgetSec` is the real number,
+    and the registry row must mirror it byte-for-byte (the parachute law). Consequence the
+    meaty cap no longer covers: a night can legally deal two or three 300s classes (~16.5 min
+    worst of 28 simulated) - a total-minutes ceiling would be a NEW timetable rule.
+
+82. **IN A MULTI-BOARD CLASS THE BELL IS THE ONLY END, AND THE LOOP NEEDS A LATCH.**
+    Composure and deja-vu clear-and-re-deal until the bell: `onSolved()`/`win()` BANK and
+    deal the next seeded board (`classSeed|bN` - board 1 must stay byte-identical to the
+    single-board era), they never call finish. Exactly-one-endClass survives only because a
+    `closing`/`belled` latch is set FIRST by every terminal path and checked by every
+    callback that could re-enter (tap, settle, mutate, deal, howto, trickster). When you add
+    any async beat (celebration, deal cascade), assume the bell WILL fire inside it and test
+    that seam. Class-level things stay class-level: deja-vu's casino lights ONCE (`start()`
+    re-rolls its identity - calling it per board re-skins the room), ambience retunes rather
+    than restarts, and composure's pressure deck needs its `deal()` hook or the effects
+    ladder freezes at RUNG_MAX after the first bank.
+
+83. **EVERYTHING SIZED AS A COUNT WAS CALIBRATED TO THE OLD BUDGET - STRETCH THE CLASS AND
+    EVERY COUNT MUST BECOME A RATE.** The 0824 length wave found the same bug in five
+    shapes: anomaly's round plan capped at 24 and looped its seeded deal (now sized off a
+    fast-player 2.4s round, COUNT_MAX 140); sort's trickster window covered cards 8..60
+    whatever the budget (now a span of expectedCards); L&F's S-gate allowed 1 misclick
+    against 26 finds (mathematically unreachable - now a rate per find, and streak/peek/par
+    gates scale too, with run-length statistics rather than linear ratios where the quantity
+    is an unbroken run); sort's deck dealt 1.6 passes at 120s and would have dealt 2.5+
+    (deck +50%, wall cap 120); composure's wash count was a flat count (now scaled to
+    budget with a 34% burial cap). When a budget moves, grep the game for every literal that
+    was tuned against the old seconds and ask "count or rate?" - the count answers are bugs.
+
+84. **`node --check` PARSES style.js AS A SCRIPT, SO A STRAY BACKTICK INSIDE A TEMPLATE-
+    LITERAL STYLESHEET SAILS THROUGH.** The composure rebuild hit it: the file still parses
+    (the backtick just re-opens a template) and only an ESM `import()` smoke run finds the
+    break. Any edit to a `STYLE_TEXT`-style sheet must be smoke-imported, not just checked.
+
+85. **THE CLASS-RULES SHEET IS FREE OF THE CLOCK, AND IT AUTO-SKIPS ONCE SEEN (owner ruling
+    2026-08-24, uniform across every open class).** Two halves, and both are per-game code -
+    the shell owns neither. (a) THE GATE: the sheet SHOWS the first time a player meets that
+    class at that grade tier and AUTO-SKIPS every later class at that tier, off the game's own
+    `gameMeta.howtoTiers` set. `ctx.hideTutorial` ("Skip class tutorials") no longer *narrows*
+    a show-every-class default - it now means "skip even the first showing", so every gate reads
+    `hideTutorial === true || seen.indexOf(tier) >= 0` where it used to read `&&`. The tier is
+    recorded on the GO press and NOWHERE else, so a class left before GO still explains itself
+    next time; no meta at all = an empty list = the sheet shows, which is the fallback we want.
+    (b) THE CLOCK: every class arms its clock inside the GO callback, never above it - echo was
+    the offender (`startClock()` sat beside `bindInput()/claimAssets()`, so a 120s class charged
+    the player for reading, and a slow reader could hear the bell over the sheet). What may stay
+    on the clock is a GAME beat after GO: instant-recall's and echo's BRIEF line, deja-vu's
+    per-board deal+preview. What is deliberately OUTSIDE it: sort's setup DOOR (§5) and the
+    sheet itself. Impulse Control has no wall clock at all (the plan is the length), so its sheet
+    is free either way. THE SKIP PATH MUST EQUAL AN INSTANT DISMISS: whatever the GO callback
+    ran, the auto-skip runs - which is why every game routes both through the same `onDone`.
 
 ## 5. The game module contract (short version)
 

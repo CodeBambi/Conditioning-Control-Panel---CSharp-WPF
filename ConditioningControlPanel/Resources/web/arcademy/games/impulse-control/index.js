@@ -56,8 +56,9 @@
  *   - suspend(on) freezes EVERYTHING - decks first, then timers, tube loop and
  *     CSS - and the bubble in flight is dealt again from the mouth on resume
  *     (never scored across a freeze).
- *   - the rules sheet obeys the shell's tutorial contract: shown every class by
- *     default, and still ONCE PER NEW TIER when "Skip class tutorials" is on.
+ *   - the rules sheet obeys the school's tutorial law: shown the FIRST class at
+ *     a new grade tier and auto-skipped at that tier ever after, with "Skip
+ *     class tutorials" skipping even that first showing.
  *
  * CLOCK. `now()` and the timer helpers resolve `performance` / `setTimeout` off
  * the global at CALL time, so the scratch harness swaps in a fake clock and
@@ -554,16 +555,22 @@ export default {
       } catch (e) { return []; }
     }
     /**
-     * The sheet, ahead of the incoming beat. Policy is the shell's "Skip class
-     * tutorials" contract: default shows every class; with the skip on, a class
-     * still explains itself ONCE per grade tier. Dismissal is the sheet's own
+     * The sheet, ahead of the incoming beat. THE LAW, uniform across every open
+     * class (owner ruling 2026-08-24): the sheet SHOWS the first time this
+     * player meets the tube at this grade tier and AUTO-SKIPS every later class
+     * at that tier, whatever the setting says; the shell's "Skip class
+     * tutorials" switch (ctx.hideTutorial) means "skip even the first showing".
+     * No meta = no memory = the sheet shows. Dismissal is the sheet's own
      * button only - binding the POP key here would teach the player to press
-     * it at a bubble that has not been dealt.
+     * it at a bubble that has not been dealt. The sheet costs the class nothing
+     * either way: this class has no wall clock at all (the plan is the length),
+     * so there is no budget for a reader to burn.
      */
     function howto(onDone) {
       const seen = howtoSeenTiers();
       const skip = (dev && devSkipHowto)
-        || (ctx.hideTutorial === true && seen.indexOf(S.gradeTier) >= 0);
+        || ctx.hideTutorial === true
+        || seen.indexOf(S.gradeTier) >= 0;
       if (skip) { onDone(); return; }
       if (!S.render || typeof S.render.showHowto !== 'function') { onDone(); return; }
       let done = false;

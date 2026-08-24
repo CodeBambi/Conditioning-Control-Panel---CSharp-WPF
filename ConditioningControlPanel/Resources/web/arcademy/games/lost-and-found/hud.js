@@ -5,7 +5,8 @@
  *
  *  1. EVERY string goes through ctx.lexicon (t(key, fallback)) - the mod skin
  *     changes display strings only, and this game never reads modId. Numbers
- *     (4 / 5, 00:47) are numbers, so they need no key.
+ *     (4 / 26, 00:47) are numbers, so they need no key - but a sentence with a
+ *     number IN it still needs one, with a {n} slot the caller fills.
  *  2. The peek control is BUILT here but OWNED by the shell: we hand the node to
  *     ctx.peek.attach() and never track the A-cap ourselves (peek.js trap 9).
  *     lf_peek_input resolves auto -> tap-toggle on a coarse pointer, else hold.
@@ -16,6 +17,14 @@
 
 import { paintLook } from './board.js';
 import { el } from './util.js';
+
+/** Most tally slots the HUD chip will ever draw. Past this the strip stops
+ *  being one-dot-per-find and becomes a proportional meter of this many
+ *  segments - see setProgress(). The exact count is always in the numerals. */
+const SLOT_CAP = 10;
+/** ...and the same ceiling for the drawn rules-sheet tally, which is a PICTURE
+ *  of "several finds, and she moves between them", not a countable promise. */
+const HOWTO_SLOTS = 6;
 
 function fmtClock(sec) {
   const s = Math.max(0, Math.round(Number(sec) || 0));
@@ -132,11 +141,11 @@ export function createHud(o) {
   /**
    * The class-rules sheet (Law IV: the rules are DRAWN, the words only caption).
    * Three vignettes: her polaroid against a live mini-wall (one tile wears her
-   * exact look via the same paintLook as the board), the five-find tally, and
+   * exact look via the same paintLook as the board), the find tally, and
    * the peek keycap. All motion is CSS animation, so the shell's reduced-motion
    * rule freezes it and the sheet stays readable as a still.
    */
-  function buildHowto(look, onBegin) {
+  function buildHowto(look, onBegin, finds) {
     const node = el('div', 'g-lf-card g-lf-howto');
     if (!node) return null;
     node.appendChild(el('h4', null, t('lf_howto_title', 'Class rules')));
@@ -175,13 +184,18 @@ export function createHud(o) {
     node.appendChild(row([pol, el('span', 'g-lf-hw-eq', '→'), wall],
       t('lf_howto_find', 'She hides on a wall that never sits still. Spot the tile that matches her picture.')));
 
-    /* 2 — the tally: five finds, and she relocates after each */
+    /* 2 — the tally: she relocates after every find, and the class is however
+       many finds this TIER deals (13-26 since the class-length wave). The drawn
+       strip stays HOWTO_SLOTS wide whatever the number - it is a picture of the
+       verb, and the sentence beside it carries the actual count. */
+    const want = Math.max(3, Math.min(HOWTO_SLOTS, Math.round(Number(finds) || HOWTO_SLOTS)));
     const slots = el('span', 'g-lf-hw-slots');
-    for (let i = 0; i < 5 && slots; i++) {
+    for (let i = 0; i < want && slots; i++) {
       slots.appendChild(el('span', 'g-lf-hw-slot' + (i < 2 ? ' on' : i === 2 ? ' next' : '')));
     }
     node.appendChild(row([slots],
-      t('lf_howto_five', 'Every find, she relocates. Catch her five times.')));
+      t('lf_howto_finds_n', 'Every find, she relocates. Catch her {n} times.')
+        .replace('{n}', String(Math.max(1, Math.round(Number(finds) || 0)) || '?'))));
 
     /* 3 — the peek verb (same key label the foot button wears) */
     node.appendChild(row([el('span', 'g-lf-hw-key', coarse ? t('peek', 'Peek') : keyLabel)],
@@ -218,11 +232,29 @@ export function createHud(o) {
     streakMount,
     stampAnchor,
 
-    /** "4 / 5" - numerals need no lexicon row. The tally slots mirror it. */
+    /**
+     * "4 / 26" - numerals need no lexicon row, and THEY are the exact truth.
+     * The tally slots mirror it, but only while one slot per find still fits on
+     * a polaroid: a class is 13-26 finds now (the class-length wave), and 26
+     * slots at 11px + 4px of gap is a 476px strip nailed across the HUD chip.
+     * Above SLOT_CAP the strip becomes a SEGMENT METER of SLOT_CAP segments
+     * lit in proportion, which is why the numerals sit above it - the meter
+     * rounds, the numerals never do.
+     */
     setProgress(found, total) {
       if (tcount) tcount.textContent = found + ' / ' + total;
       if (slots) {
-        const want = Math.max(0, total | 0);
+        const n = Math.max(0, total | 0);
+        const meter = n > SLOT_CAP;
+        const want = meter ? SLOT_CAP : n;
+        // one dot = one find, or one segment = one SLOT_CAP-th of the class
+        const lit = meter
+          ? (found > 0 ? Math.max(1, Math.round((found / Math.max(1, n)) * SLOT_CAP)) : 0)
+          : found;
+        if (slots.classList) {
+          if (meter) slots.classList.add('g-lf-slots-meter');
+          else slots.classList.remove('g-lf-slots-meter');
+        }
         while (slots.children && slots.children.length > want) {
           try { slots.children[slots.children.length - 1].remove(); } catch (e) { break; }
         }
@@ -235,7 +267,7 @@ export function createHud(o) {
         for (let i = 0; i < kids.length; i++) {
           const k = kids[i];
           if (!k || !k.classList) continue;
-          if (i < found) k.classList.add('on'); else k.classList.remove('on');
+          if (i < lit) k.classList.add('on'); else k.classList.remove('on');
         }
       }
     },
@@ -282,10 +314,12 @@ export function createHud(o) {
     },
 
     /** The class-rules sheet. Dismissed ONLY by its own button (a stray click
-     *  on a tutorial must never count as read). Caller owns dim(). */
-    showHowto(look, onBegin) {
+     *  on a tutorial must never count as read). Caller owns dim().
+     *  `finds` = the finds this tier's class asks for; the sheet says the
+     *  number out loud, so it must never be guessed here. */
+    showHowto(look, onBegin, finds) {
       api.hideHowto();
-      howtoCard = buildHowto(look, onBegin);
+      howtoCard = buildHowto(look, onBegin, finds);
       if (view && howtoCard) view.appendChild(howtoCard);
       // THE SHEET ARRIVING. Its three rows paint in ONE frame with no stagger,
       // so the House Book's answer is one `slide`, not a blip ladder.

@@ -9,17 +9,29 @@
  * per-game rulings). Keeping the whole script in pure functions is what makes
  * that testable headless and impossible to drift by accident.
  *
- *   dialsFor(tier, opts)            tier -> every difficulty dial
+ *   dialsFor(tier, opts)            tier -> every difficulty dial (BOARD 1)
+ *   dialsForBoard(tier, cleared, o) THE LADDER: board N's dials (see ESCALATION)
  *   buildLayout(seed, dials)        deal order + pair-per-cell assignment
  *   buildSwapSchedule(seed, dials)  the glitch_swap script (settled windows)
  *   buildDriftSchedule(seed, dials) the row_drift script (tier 4)
+ *   boardCostSec(dials)             preview + deal + a typical clear + ceremony
+ *   expectedClears(dials, budget)   the S gate, in boards (see THE ARITHMETIC)
  *   compositeFor(inputs)            the game's inputs to the SHARED rubric
  *   flavorXpFor(tracked)            the capped flavor bonus (SYNTHESIS #4)
+ *
+ * THE CLASS IS MANY BOARDS (owner ruling, class-length wave 2026-08-24). Clear a
+ * board and the machine deals a fresh one; the 300s bell is the NORMAL end of
+ * the class, not a punishment. Every board re-derives from the CLASS seed plus
+ * '|b<N>', so the whole night is still one pure function of (seed, tier,
+ * settings) and a retake replays every board identically.
  *
  * EFFECTS ARE THE DIFFICULTY (GROUND-RULES §6): tier 2 raises effects on the
  * SAME 4x3 grid as tier 1, and only tiers 3/4 grow the board. The one grid the
  * player may choose (boardSizes) is a per-game setting whose below-par values
- * cap the class at A - the shell computes that cap, never this file.
+ * cap the class at A - the shell computes that cap, never this file. THE BOARD
+ * NEVER GROWS ACROSS BOARDS either: escalation moves the EFFECT dials and the
+ * preview, never the pair count, so the player's chosen grid is the grid all
+ * night and the grade's per-board arithmetic stays honest.
  * ==========================================================================*/
 
 import { makeRng, makeTaggedRoll, shuffled } from '../../core/rng.js';
@@ -57,8 +69,17 @@ export const TIMING = Object.freeze({
   driftTellMs: 520,
   cramRevealMs: 800,        // ghost reveal (the shared peek verb's window)
   settleMs: 140,            // pause before a settled-board mutation window
+  /* THE LAST CALL (this constant was dead until the class-length wave - it is
+   * wired now rather than deleted). In the final `lastCallMs` of the class the
+   * room beats a three-note drum, one note every `endgameDrumMs`, so the bell
+   * is HEARD coming instead of arriving. Audio + one hint line only: no CSS, so
+   * it survives reduced motion and a 0-capped bgIntensity intact. */
   endgameDrumMs: 620,
+  lastCallMs: 10000,
   ceremonyMs: 420,          // stamp before the class hands over to the report card
+  /* The clear celebration between boards. Deliberately short - the beat is a
+   * breath, not a cutscene, because the bell is spending real seconds on it. */
+  boardClearMs: 700,
 });
 
 /* ----------------------------------------------------------------------------
@@ -126,6 +147,107 @@ export function dialsFor(tier, opts = {}) {
     parSec: Math.round(pairs * base.parPerPair),
     belowTierPar: pairs < (BOARD_PAR[t] || base.pairs),
   });
+}
+
+/* ----------------------------------------------------------------------------
+ * THE ESCALATION LADDER - one gentle notch per CLEARED board.
+ *
+ * A 300s class is many boards, so a board 6 that plays exactly like board 1
+ * would be a treadmill. Every clear bumps the EFFECT dials one notch; the pair
+ * count never moves (see the header). Two rules hold it honest:
+ *
+ *   THE CAP. Nothing may ever exceed the dials of ONE TIER ABOVE the player's
+ *   own (plus a single extra swap at the very top, which is the only place the
+ *   ladder has nowhere left to climb). A tier-1 player who clears six boards is
+ *   playing a hard tier 1, never a tier 3.
+ *   THE STOP. The ladder stops climbing at `maxBump` cleared boards. Board 5
+ *   and board 9 are the same room, so a long clean run is rewarded with pace,
+ *   not with an unwinnable board at minute five.
+ *
+ * The ladder is PURE (cleared -> dials); nothing here is random, so the seeded
+ * schedules built on top of these dials still replay exactly on a retake.
+ * -------------------------------------------------------------------------- */
+export const ESCALATION = Object.freeze({
+  maxBump: 4,             // the ladder stops climbing after 4 cleared boards
+  swapPerBoard: 0.5,      // +1 swap every 2 clears (ceil), capped below
+  swapOverCeil: 1,        // the cap: (tier+1)'s budget, plus this one extra
+  driftFromBump: 3,       // a drift joins from the 3rd clear - and only at t>=3
+  loosenFromBump: 4,      // adjacent-only relaxes this late, and only if t+1 does
+  effectsFromBump: 2,     // sub_flash / wash / bubbles / crt adopt (t+1)'s values
+  previewStepMs: 250,     // the memorize beat shrinks a notch a board...
+  previewFloorMs: 2500,   // ...never below tier 4's own floor
+  heatPerBoard: 0.04,     // the engine's heat scalar creeps
+  heatCeil: 0.95,
+});
+
+/**
+ * Board N's dials.  `cleared` is how many boards the player has ALREADY cleared
+ * this class (0 for the first board, which is exactly `dialsFor`).
+ *
+ * WORKED EXAMPLES (the comment is the spec):
+ *   tier 1, cleared 1 -> swapBudget 1 (a first taste of the twist), preview
+ *                        4750ms, effects still off (effectsFromBump is 2)
+ *   tier 1, cleared 2 -> swapBudget 1, sub_flash + wash + crt 0.25 on (tier 2's
+ *                        own values), preview 4500ms
+ *   tier 1, cleared 4+-> swapBudget 2 = tier 2's budget (1) + swapOverCeil (1).
+ *                        That is the ceiling; board 9 is board 5.
+ *   tier 4, cleared 1+-> swapBudget 7 = tier 4's 6 + swapOverCeil. Drift 3 from
+ *                        the 3rd clear. Preview already at the floor.
+ *
+ * @param {number} tier 1..4
+ * @param {number} cleared boards already cleared this class
+ * @param {Object=} opts {pairs} - the player's board-size choice, board 1's and
+ *        every later board's alike (escalation never touches the grid).
+ */
+export function dialsForBoard(tier, cleared, opts = {}) {
+  const base = dialsFor(tier, opts);
+  const done = Math.max(0, Math.round(Number(cleared) || 0));
+  const bump = Math.min(ESCALATION.maxBump, done);
+  if (bump <= 0) return Object.assign({}, base, { board: 1, bump: 0, deckTier: base.tier });
+
+  const t = base.tier;
+  const ceilTier = Math.min(4, t + 1);          // THE CAP, in one number
+  const ceil = TIER_TABLE[ceilTier];
+  const on = bump >= ESCALATION.effectsFromBump;   // the effect dials unlock together
+
+  const swapBudget = Math.min(
+    ceil.swapBudget + ESCALATION.swapOverCeil,
+    base.swapBudget + Math.ceil(bump * ESCALATION.swapPerBoard),
+  );
+  // Drift is a tier-3/4 verb. Handing a tier-1 player a sliding row because they
+  // played well is a different game, not a harder one.
+  const drift = t >= 3
+    ? Math.min(ceil.drift + (t === 4 ? 1 : 0), base.drift + (bump >= ESCALATION.driftFromBump ? 1 : 0))
+    : base.drift;
+
+  const out = Object.assign({}, base, {
+    board: done + 1,
+    bump,
+    swapBudget,
+    drift,
+    previewMs: Math.max(
+      ESCALATION.previewFloorMs,
+      base.previewMs - bump * ESCALATION.previewStepMs,
+    ),
+    heat: Math.min(ESCALATION.heatCeil, Math.max(base.heat, base.heat + ESCALATION.heatPerBoard * bump)),
+    subFlash: base.subFlash || (on && ceil.subFlash),
+    wash: base.wash || (on && ceil.wash),
+    bubbles: on ? Math.max(base.bubbles, ceil.bubbles) : base.bubbles,
+    crt: on ? Math.max(base.crt, ceil.crt) : base.crt,
+    burstPressure: base.burstPressure || (on && ceil.burstPressure),
+    ambient: on ? Math.max(base.ambient, ceil.ambient) : base.ambient,
+    plainFloor: on ? Math.min(base.plainFloor, ceil.plainFloor) : base.plainFloor,
+    // adjacent-only is the gentlest law there is, so it relaxes LAST and only
+    // where the tier above would already have relaxed it (t>=3).
+    adjacentOnly: base.adjacentOnly
+      && !(bump >= ESCALATION.loosenFromBump && ceil.adjacentOnly === false),
+    /* THE DECKS RIDE THE SAME CAP. trickster.js gates the fake shuffle, the
+     * re-deal and the lie on a TIER, so a ladder that never moved that number
+     * would leave the House cards frozen at board 1 while the honest dials
+     * climbed. It moves exactly one notch and never further. */
+    deckTier: on ? ceilTier : t,
+  });
+  return out;
 }
 
 /* ----------------------------------------------------------------------------
@@ -298,50 +420,149 @@ export function matchedLoopPolicy(setting, tier, posterOnly) {
 
 /* ----------------------------------------------------------------------------
  * GRADING INPUTS (the shared rubric owns the letters - core/grades.js)
+ *
+ * THE CLASS IS BOARDS NOW, so the composite is boards-cleared + accuracy +
+ * combo + mutation survival. There is no time term any more and NO timeout
+ * clamp: the bell is how a 300s class ends, and clamping it to an automatic C
+ * would have graded every single class C. What replaces it is a per-tier
+ * EXPECTATION - how many boards a good player clears in the budget - so the
+ * bell is scored against what the tier could reasonably have done with it.
+ *
+ * -------- THE ARITHMETIC (300s budget; the work is shown) -------------------
+ * A board costs: preview + the deal cascade + a typical clear + the ceremony.
+ *   CLEAR_SEC_PER_PAIR is anchored on the two MEASURED clears we have (tier 1
+ *   ~30s for 6 pairs = 5.0s/pair; tier 4 ~73s for 10 pairs = 7.3s/pair) and the
+ *   middle two are interpolated.
+ *
+ *   tier 1: 5.00 preview + 12 x .12 deal + 6 x 5.0 clear + .42 = 36.9s
+ *   tier 2: 4.00 preview + 12 x .12 deal + 6 x 5.6 clear + .42 = 39.4s
+ *   tier 3: 3.00 preview + 16 x .12 deal + 8 x 6.8 clear + .42 = 59.8s
+ *   tier 4: 2.50 preview + 20 x .12 deal + 10 x 7.3 clear + .42 = 78.3s
+ *
+ * Raw capacity in 300s is 300/cost = 8.1 / 7.6 / 5.0 / 3.8 boards. Nobody plays
+ * a whole class at their own typical pace with the ladder climbing under them,
+ * so the S gate is that capacity x S_PACE (0.82), rounded:
+ *
+ *   tier 1: 8.13 x .82 = 6.67 -> 7 boards
+ *   tier 2: 7.61 x .82 = 6.24 -> 6 boards
+ *   tier 3: 5.02 x .82 = 4.11 -> 4 boards
+ *   tier 4: 3.83 x .82 = 3.14 -> 3 boards
+ *
+ * `boardCostSec` reads the DIALS, not the tier, so a player who chose a 6-pair
+ * board at tier 4 is expected to clear MORE of them - which is what stops the
+ * board-size setting being a way to farm clears (the below-par A-cap is the
+ * shell's separate, unchanged answer to the same setting).
+ *
+ * -------- THE GATES ---------------------------------------------------------
+ * composite = .58 clears + .30 accuracy + .12 combo (+ .03 per tracked, max 3)
+ * against grades.js's S .92 / A .75 / B .50.
+ *
+ *   S at tier 1: 7/7 boards (.58) + accuracy at or above par (.30) + a combo of
+ *                8 (.12) = 1.00. Miss one board and 6/7 (.497) needs both the
+ *                full combo and the tracked bonus to reach .92 - which is the
+ *                point: an S is a clean night, not a lucky one.
+ *   A at tier 4: 2/3 boards (.387) + accuracy .40 against par .46 (.261) +
+ *                combo 6 (.09) = .738, and two tracked-through-the-static
+ *                matches (+.06) carry it to .798 = A.
+ *   B          : roughly "half the expected boards at a competent accuracy" -
+ *                4/7 at tier 1 with accuracy .42 lands .579.
+ *
+ * ACCURACY IS SCORED AGAINST PAR, not against 1.0. Concentration accuracy has a
+ * ceiling a human cannot reach (a 6-pair board is 6 attempts only if you
+ * memorised all twelve faces in five seconds), so a raw pairs/attempts term
+ * would have made the accuracy weight unearnable and quietly turned the whole
+ * grade into a clears counter.
+ *
+ * PARTIAL PROGRESS ON THE LIVE BOARD COUNTS, linearly: the bell falling on 5 of
+ * 6 pairs is worth .833 of a board. Linear is deliberate - it is the same
+ * fraction of the same work, and any curve would only be a second opinion about
+ * how hard the last pair is.
  * -------------------------------------------------------------------------- */
+
+/** Anchored on the two measured clears; the middle two are interpolated. */
+export const CLEAR_SEC_PER_PAIR = Object.freeze({ 1: 5.0, 2: 5.6, 3: 6.8, 4: 7.3 });
+/** The S gate is this fraction of raw capacity (the ladder is climbing). */
+export const S_PACE = 0.82;
+/** Achievable pairs/attempts for a strong player at each tier. Bigger boards
+ *  and more mutations mean a lower reachable accuracy, not a worse player. */
+export const PAR_ACCURACY = Object.freeze({ 1: 0.62, 2: 0.58, 3: 0.52, 4: 0.46 });
+
+/** Seconds one whole board costs: preview + deal cascade + clear + ceremony. */
+export function boardCostSec(dials) {
+  const d = dials || dialsFor(1);
+  const preview = Math.max(0, Number(d.previewMs) || 0) / 1000;
+  const deal = (Number(d.cells) || 12) * (TIMING.dealStaggerMs / 1000);
+  const perPair = CLEAR_SEC_PER_PAIR[d.tier] || CLEAR_SEC_PER_PAIR[1];
+  const clear = (Number(d.pairs) || 6) * perPair;
+  return preview + deal + clear + (TIMING.ceremonyMs / 1000);
+}
+
+/**
+ * Boards a good player clears in `budgetSec` - the S gate, in boards.
+ * ALWAYS pass BOARD 1's dials: the ladder makes later boards dearer, and that
+ * is exactly what S_PACE is already paying for.
+ */
+export function expectedClears(dials, budgetSec) {
+  const budget = Math.max(1, Number(budgetSec) || 300);
+  const cost = Math.max(1, boardCostSec(dials));
+  return Math.max(1, Math.round((budget / cost) * S_PACE));
+}
+
 export const COMPOSITE_WEIGHTS = Object.freeze({
-  accuracy: 0.46,     // pairs / attempts
-  time: 0.30,         // par / elapsed
-  combo: 0.16,        // max combo against the shared cap of 8
-  trackedEach: 0.03,  // "tracked through the static", max 3 instances
+  clears: 0.58,       // boards cleared (+ the live board's fraction) vs expectation
+  accuracy: 0.30,     // class-wide pairs / attempts, against the tier's par
+  combo: 0.12,        // best combo against the shared cap of 8
+  trackedEach: 0.03,  // "tracked through the static", max 3 instances (a bonus)
 });
 export const TRACKED_CAP = 3;
 export const COMBO_CAP = 8;
 
 /**
- * @param {Object} i {tier, pairs, matched, attempts, elapsedSec, maxCombo,
- *                    tracked, timeout, parSec}
- * @returns {{composite:number, accuracy:number, timeScore:number,
- *            comboScore:number, trackedBonus:number, timeout:boolean}}
+ * @param {Object} i {tier, boardsCleared, livePairs, liveMatched, matched,
+ *                    attempts, maxCombo, tracked, expectedClears, timeout}
+ *   `matched` / `attempts` are the CLASS totals (every board summed); the live
+ *   board's own two numbers ride `liveMatched` / `livePairs` so the partial can
+ *   be priced without double-counting.
+ * @returns {{composite:number, clears:number, clearScore:number,
+ *            accuracy:number, accuracyScore:number, comboScore:number,
+ *            trackedBonus:number, expected:number, timeout:boolean}}
  */
 export function compositeFor(i) {
   const src = i || {};
-  const pairs = Math.max(1, Math.round(Number(src.pairs) || 1));
-  const matched = Math.max(0, Math.min(pairs, Math.round(Number(src.matched) || 0)));
-  const attempts = Math.max(matched, Math.round(Number(src.attempts) || 0));
-  const parSec = Math.max(1, Number(src.parSec) || pairs * 7);
-  const elapsed = Math.max(0.001, Number(src.elapsedSec) || 0);
-  const timeout = !!src.timeout;
+  const tier = Math.max(1, Math.min(4, Math.round(Number(src.tier) || 1)));
+  const expected = Math.max(1, Math.round(Number(src.expectedClears) || 1));
 
+  const cleared = Math.max(0, Math.round(Number(src.boardsCleared) || 0));
+  const livePairs = Math.max(0, Math.round(Number(src.livePairs) || 0));
+  const liveMatched = Math.max(0, Math.min(livePairs, Math.round(Number(src.liveMatched) || 0)));
+  const partial = livePairs > 0 ? liveMatched / livePairs : 0;
+  const clears = cleared + partial;
+  const clearScore = Math.max(0, Math.min(1, clears / expected));
+
+  const matched = Math.max(0, Math.round(Number(src.matched) || 0));
+  const attempts = Math.max(matched, Math.round(Number(src.attempts) || 0));
   const accuracy = attempts > 0 ? matched / attempts : 0;
-  // an unfinished board can never score full accuracy: unmatched pairs count as
-  // outstanding attempts, so bailing at 1/10 pairs does not read as 100%
-  const completion = matched / pairs;
-  const timeScore = Math.max(0, Math.min(1, parSec / elapsed));
+  const par = PAR_ACCURACY[tier] || PAR_ACCURACY[1];
+  const accuracyScore = Math.max(0, Math.min(1, accuracy / par));
+
   const comboScore = Math.max(0, Math.min(1, (Number(src.maxCombo) || 0) / COMBO_CAP));
   const trackedBonus = Math.min(TRACKED_CAP, Math.max(0, Math.round(Number(src.tracked) || 0)))
     * COMPOSITE_WEIGHTS.trackedEach;
 
-  let composite = (COMPOSITE_WEIGHTS.accuracy * accuracy * completion)
-    + (COMPOSITE_WEIGHTS.time * timeScore * completion)
+  let composite = (COMPOSITE_WEIGHTS.clears * clearScore)
+    + (COMPOSITE_WEIGHTS.accuracy * accuracyScore)
     + (COMPOSITE_WEIGHTS.combo * comboScore)
     + trackedBonus;
   composite = Math.max(0, Math.min(1, composite));
-  // Dossier: the 90s bell without a clear is an automatic C. The rubric's C band
-  // is "below B", so the timeout clamps under the B threshold rather than
-  // inventing a letter here (grades.js owns letters).
-  if (timeout) composite = Math.min(composite, 0.49);
-  return { composite, accuracy, completion, timeScore, comboScore, trackedBonus, timeout };
+  /* NO TIMEOUT CLAMP. The bell is the class's normal end (owner ruling, the
+   * class-length wave): it is reported for the share payload and the log, and
+   * it changes NOTHING about the letter. The old `Math.min(composite, 0.49)`
+   * lived here and would now grade an S run C. */
+  return {
+    composite, clears, clearScore, expected, partial,
+    accuracy, accuracyScore, comboScore, trackedBonus,
+    timeout: !!src.timeout,
+  };
 }
 
 /** +3 XP per tracked-through-a-swap match, capped 3/class (=9, under the 15 cap). */
@@ -372,4 +593,7 @@ export function createReward(seed) {
   };
 }
 
-export default { dialsFor, buildLayout, buildSwapSchedule, buildDriftSchedule, compositeFor };
+export default {
+  dialsFor, dialsForBoard, buildLayout, buildSwapSchedule, buildDriftSchedule,
+  boardCostSec, expectedClears, compositeFor,
+};

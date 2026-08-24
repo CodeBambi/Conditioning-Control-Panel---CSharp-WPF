@@ -46,6 +46,17 @@
  * a first-sighting for the doppelganger) waits for one more card and then
  * folds. A retake replays the identical deal.
  *
+ * THE WINDOW IS THE CLASS, NOT A CONSTANT. The slots are card INDICES, and how
+ * many cards a class contains is a function of its BUDGET and its tier's ring
+ * pace - so the window has to be too. It used to be
+ * `FIRST_CARD + MIN_GAP * budget + 12`, a span sized by eye for the old 120s
+ * bell; at the 180s budget that same span covered barely the first 30% of the
+ * class and every lie in the room was spent before the halfway mark.
+ * `expectedCards` below reads the pace straight off chain.js and the plan is
+ * laid over the first WINDOW_FRAC of it. The DEAL COUNTS are deliberately
+ * unchanged: 8 lies over the first ~150 cards of a tier-4 class reads as a RATE
+ * (about one every 19 cards, ~17s), which is what a trickster deck is for.
+ *
  * TABLE LAW AUDIT (House Rules)
  *   I   ledger honest - nothing here reads or writes chain, rung, accuracy,
  *       the grade or card.tag, and no card can change WHEN the ring closes or
@@ -75,6 +86,7 @@
  * ==========================================================================*/
 
 import { makeRng } from '../../core/rng.js';
+import { capForTier, rungForStreak, ringMsFor } from './chain.js';
 
 export const TRICKSTER = Object.freeze({
   /** Dealt slots per class, by tier. Tier 1 deals nothing at all. */
@@ -85,6 +97,30 @@ export const TRICKSTER = Object.freeze({
   MIN_GAP: 5,
   /** A slot whose card cannot carry it waits this many cards, then folds. */
   RETRY_MAX: 1,
+
+  /* ----------------------------------------------------------- THE WINDOW --
+   * How much of a class may carry a lie, and the pace model that answers how
+   * long a class IS. Read only by expectedCards() and buildPlan().
+   */
+  /** The plan covers the first this-much of the class's expected card count.
+   *  Not 1.0: the last stretch is where a player is holding their best rung and
+   *  the room wants that finish clean, and a slot dealt past the last card the
+   *  class actually reaches is a lie that never happens. */
+  WINDOW_FRAC: 0.78,
+  /** The budget buildPlan assumes when a caller hands it none. Mirrors
+   *  index.js's own `timeBudgetSec` (and registry.js GAME_META.sort). */
+  DEFAULT_BUDGET_SEC: 180,
+  /** THE PACE, and it is two numbers because a card costs two things. A
+   *  competent player swipes inside the gold arc (chain.js: the last 40% of
+   *  the ring), so they spend most of a ring but never all of it... */
+  PACE_RING_FRAC: 0.85,
+  /** ...plus the part of a card that is not the ring at all: the fling, the
+   *  thud into the wall and the next card's spring. Sized off swipe.js's own
+   *  travel, and it is why a 0.75s ring is not a 0.75s card. */
+  PACE_OVERHEAD_MS: 180,
+  /** A guard rail on the pace walk, never a design number: the loop below may
+   *  not run past this many cards whatever it is handed. */
+  MAX_EXPECTED_CARDS: 900,
 
   /** The seven cards. */
   CARDS: Object.freeze(['freeze', 'glimpse', 'doppel', 'ghost', 'flicker', 'crooked', 'label']),
@@ -140,10 +176,60 @@ export function bendRingFace(remain, honest, bend) {
 }
 
 /* ============================================================================
- * THE PLAN, PURE. Slots are CARD INDICES, because a card is the only moment a
- * lie can attach to in this room. Same seed and tier, same deal, forever.
+ * HOW LONG A CLASS IS, IN CARDS. PURE, and the whole reason this file imports
+ * chain.js: the ring pace lives there and a second copy of it here would rot.
+ *
+ * THE WALK. A card costs `ring * PACE_RING_FRAC + PACE_OVERHEAD_MS`, and the
+ * ring is whatever rung the player's clean streak has earned (chain.js's
+ * RUNG_STEPS ladder, ceilinged by the tier's own cap). So the model walks the
+ * climb the way a player actually climbs it - card 1 is a 2.4s ring and card 35
+ * is a 0.75s one - instead of pretending the whole class runs at the floor
+ * ring, which would over-count a tier-4 class by about a fifth.
+ *
+ * It assumes a CLEAN run, and that is the right end of the band to model from:
+ * a player who is wrong a lot plays a SHORTER class in cards, so the plan runs
+ * out of class before it runs out of slots and the last slots simply never
+ * arrive - a case this deck already has a path for. Modelling the sloppy player
+ * instead would crowd every lie back into the opening for everybody else.
+ *
+ * WHAT IT ANSWERS at the shipped 180s budget (and at the 120s budget this room
+ * used to run, for the record):
+ *
+ *     tier   cap rung   floor ring     120s     180s
+ *       1        5         1200ms       ~95     ~143
+ *       2        6         1050ms      ~102     ~157
+ *       3        7          900ms      ~112     ~175
+ *       4        8          750ms      ~124     ~197
+ *
+ * @param {number} budgetSec  the class's own timeBudgetSec
+ * @param {number} tier       grade tier 1..4
+ * @returns {number} cards a clean, competent run of that class reaches
  * ==========================================================================*/
-export function buildPlan({ seed, tier, reduced } = {}) {
+export function expectedCards(budgetSec, tier) {
+  const tr = Math.max(1, Math.min(4, Math.round(Number(tier) || 1)));
+  const secs = Number(budgetSec);
+  const sec = isFinite(secs) && secs > 0 ? Math.min(600, secs) : TRICKSTER.DEFAULT_BUDGET_SEC;
+  const cap = capForTier(tr);
+  let left = sec * 1000;
+  let n = 0;
+  while (n < TRICKSTER.MAX_EXPECTED_CARDS) {
+    const cost = ringMsFor(rungForStreak(n, cap)) * TRICKSTER.PACE_RING_FRAC
+      + TRICKSTER.PACE_OVERHEAD_MS;
+    if (!(cost > 0) || cost > left) break;           // the bell lands mid-card
+    left -= cost;
+    n += 1;
+  }
+  return n;
+}
+
+/* ============================================================================
+ * THE PLAN, PURE. Slots are CARD INDICES, because a card is the only moment a
+ * lie can attach to in this room. Same seed and tier and BUDGET, same deal,
+ * forever - `budgetSec` joins the plan's inputs, and the room reads it off the
+ * class state it already holds, so a retake of the same class deals the same
+ * lies in the same places.
+ * ==========================================================================*/
+export function buildPlan({ seed, tier, reduced, budgetSec } = {}) {
   const tr = Math.max(1, Math.min(4, Math.round(Number(tier) || 1)));
   const budget = TRICKSTER.DEALS[tr] || 0;
   const cards = reduced ? TRICKSTER.STILL_CARDS.slice() : TRICKSTER.CARDS.slice();
@@ -151,9 +237,22 @@ export function buildPlan({ seed, tier, reduced } = {}) {
   const rWhen = makeRng(String(seed || 'sort') + '|sort-trickster|when');
   const rWhat = makeRng(String(seed || 'sort') + '|sort-trickster|what');
 
-  /* the class is roughly 60-160 cards long depending on how fast you play, so
-     the plan is laid over a window the slowest run still reaches */
-  const span = TRICKSTER.FIRST_CARD + TRICKSTER.MIN_GAP * budget + 12;
+  /* THE WINDOW. `span` is the EXCLUSIVE end of the draw below, so the last card
+     that can carry a lie is span - 1.
+       window  the first WINDOW_FRAC of the class THIS budget and tier deal
+       floorSp the old fixed span, kept as a FLOOR and nothing else: it is the
+               narrowest window `budget` slots MIN_GAP apart can fit in at all,
+               so a missing or nonsense budget can never deal a plan tighter
+               than the deck was designed to allow
+     At 180s the window always wins - tier 4 is 8 + floor(.78 * 197) = 161
+     against a floor of 60 - and the eight slots land ~19 cards apart instead
+     of ~6, which is the difference between a rate and a burst. */
+  const expect = expectedCards(budgetSec, tr);
+  /* NOT named `window`: this module is loaded in a browser and a local const by
+     that name would shadow the global for the whole function. */
+  const windowEnd = TRICKSTER.FIRST_CARD + Math.floor(TRICKSTER.WINDOW_FRAC * expect);
+  const floorSp = TRICKSTER.FIRST_CARD + TRICKSTER.MIN_GAP * budget + 12;
+  const span = Math.max(floorSp, windowEnd);
   const at = [];
   for (let i = 0; i < budget; i++) {
     at.push(TRICKSTER.FIRST_CARD + Math.floor(rWhen() * (span - TRICKSTER.FIRST_CARD)));
@@ -288,6 +387,10 @@ export function create(o) {
   let stopped = false;
   let paused = false;
   let plan = [];
+  /* what the plan above was laid over. Diagnostics only - the deal itself is
+     already frozen into `plan` and nothing reads these back. */
+  let planBudgetSec = 0;
+  let planExpected = 0;
   let folded = 0;
   let played = 0;                     // cards ARMED so far: the slot index
   let topNode = null;
@@ -612,10 +715,25 @@ export function create(o) {
       if (destroyed || started) return;
       started = true;
       stopped = false;
-      plan = buildPlan({ seed, tier, reduced });
+      /* THE BUDGET IS READ HERE, not at create(): the room owns the clock and
+         `budgetMs` is only on the state once start() has run (index.js sets it
+         in start(), and both the ordinary start and the late-build guard land
+         after that). A state that cannot answer falls back to
+         DEFAULT_BUDGET_SEC rather than to a window of nothing. */
+      const budgetSec = (() => {
+        try {
+          const ms = Number((readState() || {}).budgetMs);
+          return isFinite(ms) && ms > 0 ? ms / 1000 : TRICKSTER.DEFAULT_BUDGET_SEC;
+        } catch (e) { return TRICKSTER.DEFAULT_BUDGET_SEC; }
+      })();
+      planBudgetSec = budgetSec;
+      planExpected = expectedCards(budgetSec, tier);
+      plan = buildPlan({ seed, tier, reduced, budgetSec });
       say('trickster: dealt ' + plan.length + ' slots'
         + (plan.length ? ' (' + plan.map((s) => s.card + '@' + s.at).join(', ') + ')' : '')
-        + ' tier ' + tier + (reduced ? ' reduced' : '') + (capsOk() ? '' : ' CAPPED'));
+        + ' tier ' + tier + ', budget ' + Math.round(budgetSec) + 's over ~'
+        + planExpected + ' cards'
+        + (reduced ? ' reduced' : '') + (capsOk() ? '' : ' CAPPED'));
     },
 
     /** This deck has no heat: a lie is not louder because the room is hotter. */
@@ -646,6 +764,11 @@ export function create(o) {
         armed: armedBase && capsOk(),
         started, stopped, paused, destroyed, reduced, tier,
         budget: TRICKSTER.DEALS[tier] || 0,
+        /* the window the plan was laid over, so a harness can assert the deal
+           is a RATE over the whole class and not a burst in its opening */
+        budgetSec: planBudgetSec,
+        expectedCards: planExpected,
+        lastSlot: plan.length ? plan[plan.length - 1].at : 0,
         played, folded,
         plan: plan.map((s) => ({ at: s.at, card: s.card, used: s.used, tries: s.tries })),
         dealt: dealtCards.slice(),
@@ -670,4 +793,4 @@ export function create(o) {
   return api;
 }
 
-export default { TRICKSTER, create, buildPlan, bendRingFace };
+export default { TRICKSTER, create, buildPlan, bendRingFace, expectedCards };

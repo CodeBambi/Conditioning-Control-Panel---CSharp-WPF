@@ -1,6 +1,19 @@
 /* ============================================================================
  * games/deja-vu/index.js - DEJA VU (memory / pairs; family: memory).
  *
+ * THE CLASS IS MANY BOARDS (owner ruling, the class-length wave 2026-08-24).
+ * The one-board law this header used to carry is GONE: clear a board, take a
+ * short breath, and the machine deals a fresh one - new seeded shuffle, new
+ * face draw, the tricksters re-armed - until the 300s bell. The BELL IS THE
+ * NORMAL END of a class now, not a punishment; it truncates whatever is live
+ * (deal, preview, a flip, a mutation, a celebration), locks input and grades.
+ * The grade is boards cleared + accuracy + mutation survival, normalised
+ * against what the tier could clear in the budget (script.js, THE ARITHMETIC).
+ * Two clocks, and keeping them apart is the whole trick: ONE class-level bell
+ * clock (`elapsedMs` vs `budgetMs`, never reset) and a PER-BOARD play window
+ * (`boardPlayMs`, re-stamped every time input opens) so a board's own accuracy
+ * and clear time are measurable without the bell ever restarting.
+ *
  * Pairs matching where the board gaslights you - but HONESTLY. Three laws hold
  * the whole design together (dossier + SYNTHESIS rulings):
  *
@@ -38,18 +51,35 @@
 import { injectDejaVuStyle } from './style.js';
 import {
   TIMING, scaled, setTimeScale, getTimeScale,
-  dialsFor, buildLayout, buildSwapSchedule, buildDriftSchedule,
+  dialsForBoard, buildLayout, buildSwapSchedule, buildDriftSchedule,
   neighborsOf, isAdjacent, lineCells, plainShareFor, heatFor,
   matchedLoopPolicy, compositeFor, flavorXpFor, createReward,
+  expectedClears, boardCostSec,
   BOARD_SIZES, BOARD_PAR,
 } from './script.js';
 import { createDvCasino } from './casino.js';
 import { createDvTrickster, DV_TRICKSTER } from './trickster.js';
-import { makeTaggedRoll } from '../../core/rng.js';
+import { makeTaggedRoll, makeRng, shuffled } from '../../core/rng.js';
 
 /** Distinct glyphs so a class is fully playable with ZERO media (the floor
- *  under the poster-frame-only floor). Deliberately font-safe, no emoji. */
+ *  under the poster-frame-only floor). Deliberately font-safe, no emoji.
+ *  PER BOARD the order is re-shuffled (seeded) so two glyph boards in a row do
+ *  not wear the same twelve faces in the same twelve places. */
 const GLYPHS = ['◆', '●', '▲', '■', '✦', '◇', '○', '△', '□', '✥', '✲', '✹'];
+
+/** The specimen rack keeps filling across boards; past this many chips the
+ *  oldest is retired so the aside cannot overflow its frame. */
+const RACK_MAX = 24;
+
+/** How many distinct faces the class claims ONCE and then re-deals per board.
+ *  Must not exceed manifest.assetNeeds.loops (16) - that is the real ceiling on
+ *  distinct faces, and a board only ever wears `pairs` of them. */
+const FACE_POOL_WANT = 16;
+
+/** The class-level last call: the final `TIMING.lastCallMs` gets a three-note
+ *  drum so the bell is heard coming. Wires TIMING.endgameDrumMs, which was a
+ *  dead constant until this wave. */
+const LAST_CALL_NOTES = 3;
 
 /** THE TIER AUDIO CEILING (House Book): every cue this class requests is
  *  clamped to its grade tier's ceiling, indexed by gradeTier-1. The clamp
@@ -104,7 +134,11 @@ export default {
   family: 'memory',
   meaty: false,
   flagship: false,
-  timeBudgetSec: 90,
+  /* THE CLASS LENGTH (class-length wave 2026-08-24). 90 -> 300: at 90s this
+   * class was exactly one board and the bell was a failure state. At 300 it is
+   * a run of boards and the bell is the whistle. `games/registry.js` GAME_META
+   * mirrors this number (the parachute) - the two must move together. */
+  timeBudgetSec: 300,
   title: 'Deja Vu',
 
   manifest: {
@@ -157,7 +191,12 @@ export default {
 
     /* ---- class state ---------------------------------------------------- */
     let spec = null;
-    let dials = null;
+    let dials = null;            // BOARD N's dials (dialsForBoard, re-derived per board)
+    let baseDials = null;        // BOARD 1's dials - the grade's stable reference
+    let classSeed = '';          // the class seed; every board is classSeed + '|b<N>'
+    let classTier = 1;
+    let chosenPairs = null;      // the player's board-size override, or null
+    let expectClears = 1;        // the S gate, in boards (script.js expectedClears)
     let layout = null;
     let swaps = [];
     let drifts = [];
@@ -165,11 +204,26 @@ export default {
     let roll = null;
     let rollReward = null;
     let pool = null;
-    let pairUrls = [];
+    let facePool = [];           // up to FACE_POOL_WANT distinct urls, claimed ONCE
+    let facesDirty = false;      // BREADCRUMB ONLY (diagnostics): the pool landed
+                                 // mid-board, so this board played on glyphs.
+                                 // Nothing gates on it - dealFaces() runs for
+                                 // every board regardless and clears it.
+    let facesLocked = false;     // a preview has started: nothing may re-face this board
+    let pairUrls = [];           // THIS board's pairId -> url (re-drawn per board)
+    let boardGlyphs = GLYPHS.slice();   // THIS board's glyph order (re-shuffled per board)
     let reduced = false;
     let posterOnly = false;
     let loopPolicy = { play: true, reason: 'auto' };
     let retake = false;
+    let ambienceKey = '';        // the sustained-dial signature, so a restart is rare
+
+    /* ---- THE BOARD LOOP -------------------------------------------------- */
+    let boardNo = 0;             // 1-based; 0 = nothing dealt yet
+    let boardsCleared = 0;       // the class's score, and the grade's main term
+    let belled = false;          // the bell has taken the board (one-way)
+    let lastCallDone = false;    // the last-ten-seconds drum has beaten
+    const boardLog = [];         // {board, pairs, attempts, clearSec} per cleared board
 
     let casino = null;                  // House Rules Deck II (marquee / almost / ken-burns)
     let trickster = null;               // House Rules Deck III (shuffle / re-deal / flicker)
@@ -178,16 +232,25 @@ export default {
     let watchLie = -1;                  // cell index: flip the liar NEXT and it pays
     let calledLies = 0;
 
+    /* PER BOARD (reset by startBoard) */
     let attempts = 0;
     let matched = 0;
-    let combo = 0;
-    let maxCombo = 0;
     let mismatchStreak = 0;
+    let settledWindow = 0;
+    let swapsFired = 0;              // THIS board's, so the chip reads x/budget
+    /* CLASS-LEVEL (never reset). `totalAttempts` / `totalMatched` bank the
+     * finished boards; the live board's own two counters are added on top
+     * wherever a class total is wanted, so nothing is ever double-counted. */
+    let totalAttempts = 0;
+    let totalMatched = 0;
+    let totalSwaps = 0;              // swaps survived across every finished board
+    let casinoLit = false;           // the lab identity is rolled once (see armPlay)
+    let combo = 0;              // deliberately CARRIED across boards: clearing a
+                                // board is not a reason to break your streak
+    let maxCombo = 0;
     let tracked = 0;
-    let swapsFired = 0;
     let driftsFired = 0;
     let bubblesPopped = 0;
-    let settledWindow = 0;
     let jackpots = 0;
     const faceUp = [];
     let flipping = 0;                   // cards mid-flip (a third tap must not land)
@@ -198,13 +261,18 @@ export default {
     /* ---- clock ---------------------------------------------------------- */
     let clockId = 0;
     let lastTick = 0;
+    /* ONE CLASS-LEVEL BELL CLOCK. `elapsedMs` counts the whole class, across
+     * every board, and is never reset - it is the only thing `budgetMs` is ever
+     * compared against. The two play stamps below are GRADE clocks and have
+     * nothing to do with the bell. */
     let elapsedMs = 0;
-    let playStartedMs = 0;              // measured AFTER the preview (clear time)
-    let budgetMs = 90000;
+    let classPlayMs = -1;               // the FIRST board's play start (total live play)
+    let boardPlayMs = 0;                // THIS board's play start (its own clear time)
+    let budgetMs = 300000;
 
     /* ---- dom ------------------------------------------------------------ */
     let stage = null; let grid = null; let well = null; let hint = null; let bench = null;
-    let meterWrap = null; let swapChip = null; let clockChip = null;
+    let meterWrap = null; let swapChip = null; let clockChip = null; let boardChip = null;
     let peekBtn = null; let cramRow = null; let rack = null;
 
     /* ==================================================================== *
@@ -274,11 +342,23 @@ export default {
       lastBumpAt = now;
       tick('bump', 0.3);
     }
+    /** Class progress, 0..1 - the engine's heat curve and the plain-share ramp
+     *  both ride it. It is a CLASS number now (boards done against the tier's
+     *  expectation), not a board number: a per-board progress would have reset
+     *  the heat to nothing every time the player cleared something. */
     function progress() {
       if (!dials) return 0;
-      const byPairs = matched / Math.max(1, dials.pairs);
+      const done = boardsCleared + (matched / Math.max(1, dials.pairs));
+      const byBoards = done / Math.max(1, expectClears);
       const byTime = budgetMs > 0 ? elapsedMs / budgetMs : 0;
-      return Math.max(0, Math.min(1, Math.max(byPairs, byTime)));
+      return Math.max(0, Math.min(1, Math.max(byBoards, byTime)));
+    }
+
+    /** THIS board's glyph, from the board's own seeded glyph order. */
+    function glyphFor(pairId) {
+      const n = boardGlyphs.length || 1;
+      const i = Math.round(Number(pairId) || 0);
+      return boardGlyphs[((i % n) + n) % n];
     }
 
     /* ==================================================================== *
@@ -306,10 +386,16 @@ export default {
       const meterHost = el('span', 'g-dv-meterhost');
       meterWrap.appendChild(meterHost);
       hud.appendChild(meterWrap);
-      if (dials.swapBudget > 0) {
-        swapChip = el('span', 'chip num', swapChipText());
-        hud.appendChild(swapChip);
-      }
+      /* THE BOARD COUNTER is the class's running score now, so it is always
+       * there. The swap chip is ALWAYS MINTED too and merely hidden while the
+       * budget is zero: the escalation ladder can hand a tier-1 player a swap
+       * on board 2, and a chip that only existed if board 1 had a budget would
+       * have left that swap silently unaccounted for. */
+      boardChip = el('span', 'chip num', boardChipText());
+      hud.appendChild(boardChip);
+      swapChip = el('span', 'chip num', swapChipText());
+      swapChip.hidden = !(dials.swapBudget > 0);
+      hud.appendChild(swapChip);
       clockChip = el('span', 'chip num', clockText());
       hud.appendChild(clockChip);
       if (retake) {
@@ -335,8 +421,11 @@ export default {
       stage.appendChild(wrap);
       bench = wrap;                       // the casino's marquee frames the bench
 
+      /* THE CELLS ARE NOT BUILT HERE any more - `startBoard()` mints them, and
+       * mints them again for every board. buildDom owns the CHROME (the lab,
+       * the HUD, the empty grid, the rack, the hint) and that chrome lives for
+       * the whole class. */
       cells = [];
-      for (let i = 0; i < dials.cells; i++) cells.push(buildCell(i));
 
       /* Cram Assist = the shared peek verb, skinned. */
       cramRow = el('div', 'g-dv-cram');
@@ -361,12 +450,17 @@ export default {
       root.appendChild(stage);
     }
 
-    /** File a matched pair into the rack (decoration; must never throw). */
+    /** File a matched pair into the rack (decoration; must never throw).
+     *  The rack is CLASS-LEVEL - it keeps filling across boards, because a
+     *  growing shelf of specimens is the nicest read on "how far did I get".
+     *  It is capped at RACK_MAX chips (a 7-board tier-1 class files 42) and the
+     *  oldest slide is retired rather than letting the aside overflow. */
     function rackAdd(pairId) {
       if (!rack) return;
       try {
-        const glyph = GLYPHS[((pairId % GLYPHS.length) + GLYPHS.length) % GLYPHS.length];
-        rack.appendChild(el('span', 'g-dv-slide', glyph));
+        rack.appendChild(el('span', 'g-dv-slide', glyphFor(pairId)));
+        const slides = rack.querySelectorAll ? rack.querySelectorAll('.g-dv-slide') : null;
+        if (slides && slides.length > RACK_MAX) slides[0].remove();
       } catch (e) { /* the rack is scenery */ }
     }
 
@@ -392,8 +486,8 @@ export default {
     /** One media node per card, created once and never re-created on a flip. */
     function applyMedia(cell) {
       const url = pairUrls[cell.pairId];
-      const glyph = GLYPHS[((cell.pairId % GLYPHS.length) + GLYPHS.length) % GLYPHS.length];
-      if (cell.face && cell.face._url === url) return;
+      const glyph = glyphFor(cell.pairId);
+      if (cell.face && cell.face._url === url && cell.face._glyph === glyph) return;
       if (cell.face) { try { cell.face.remove(); } catch (e) { /* noop */ } cell.face = null; }
       let node;
       if (url && isVideoUrl(url) && !posterOnly) {
@@ -430,6 +524,10 @@ export default {
     function swapChipText() {
       return t('dv_swaps', 'swaps') + ' ' + swapsFired + '/' + dials.swapBudget;
     }
+    /** The class's score: boards cleared. Same shape as the swap chip. */
+    function boardChipText() {
+      return t('dv_boards', 'boards') + ' ' + boardsCleared;
+    }
     function clockText() {
       const left = Math.max(0, Math.ceil((budgetMs - elapsedMs) / 1000));
       const m = Math.floor(left / 60);
@@ -437,7 +535,12 @@ export default {
       return (m > 0 ? m + ':' + String(s).padStart(2, '0') : left + 's');
     }
     function paintHud() {
-      if (swapChip) swapChip.textContent = swapChipText();
+      if (boardChip) boardChip.textContent = boardChipText();
+      if (swapChip) {
+        swapChip.textContent = swapChipText();
+        // the ladder can open a budget mid-class, so visibility is repainted too
+        swapChip.hidden = !(dials && dials.swapBudget > 0);
+      }
       if (clockChip) clockChip.textContent = clockText();
     }
     function paintMeter() {
@@ -456,6 +559,118 @@ export default {
     }
 
     /* ==================================================================== *
+     * THE BOARD LOOP - the class's spine.
+     *
+     * startBoard(n) -> deal -> preview -> armPlay -> the attempt loop -> win()
+     * -> a short celebration -> startBoard(n+1) -> ... until bell().
+     *
+     * EVERY BOARD IS ITS OWN SEEDED DEAL. The board seed is
+     * `classSeed + '|b<N>'`, which re-rolls the layout, the deal cascade, the
+     * swap schedule, the drift schedule, the face draw AND the glyph order - so
+     * two boards in a row never wear the same face-to-position map even when
+     * the face pool is small enough that the FACES themselves repeat (the pool
+     * is 16 and a board wears at most 10 of them). The whole night is still one
+     * pure function of the class seed, so a retake replays board for board.
+     * ==================================================================== */
+
+    /** This board's seed. Board 1 included: '|b1' is part of the contract. */
+    function boardSeed(n) { return classSeed + '|b' + n; }
+
+    /**
+     * Draw THIS board's faces and glyphs off the board seed.
+     * The urls come from the class's single claimed pool (`facePool`, up to 16
+     * distinct); each board shuffles that pool and takes the first `pairs`, so
+     * the SUBSET and its pairing both move every board. Short pool = the
+     * leftovers play on their glyph face, which is always distinct - the same
+     * legibility floor claimAssets has always kept.
+     */
+    function dealFaces(n) {
+      const want = dials.pairs;
+      boardGlyphs = shuffled(GLYPHS.slice(), makeRng(classSeed + '|dv|glyphs|b' + n));
+      const draw = facePool.length
+        ? shuffled(facePool.slice(), makeRng(classSeed + '|dv|faces|b' + n))
+        : [];
+      pairUrls = [];
+      for (let pid = 0; pid < want; pid++) pairUrls[pid] = draw[pid] || null;
+      facesDirty = false;
+    }
+
+    /** Mint this board's cells into the (emptied) grid. */
+    function buildCells() {
+      if (!grid) return;
+      try { grid.textContent = ''; } catch (e) { /* noop */ }
+      grid.style.setProperty('--g-dv-cols', String(dials.cols));
+      grid.style.setProperty('--g-dv-rows', String(dials.rows));
+      grid.classList.remove('jiggle', 'scanning', 'rewind');
+      cells = [];
+      for (let i = 0; i < dials.cells; i++) cells.push(buildCell(i));
+    }
+
+    /**
+     * Deal board `n`. Also the ONE place the escalation ladder is applied and
+     * the ONE place the House tricksters are re-armed.
+     * @param {number} n 1-based board number
+     */
+    function startBoard(n) {
+      if (dead || ended || belled) return;
+      /* A CLEAN SLATE. Every timer still in flight belongs to the board that
+       * just ended (a casino flash, a trickster flicker); none of them may land
+       * on the new board. This call is safe from inside a run() step because
+       * after() removes its own id before it runs the step. */
+      clearTimers();
+
+      boardNo = n;
+      /* THE LADDER: board N's dials are the player's tier bumped one gentle
+       * notch per CLEARED board, capped at roughly one tier above (see
+       * script.js ESCALATION). The pair count never moves - the player's
+       * board-size choice is the board all night. */
+      dials = dialsForBoard(classTier, boardsCleared, { pairs: chosenPairs });
+
+      const bseed = boardSeed(n);
+      layout = buildLayout(bseed, dials);
+      swaps = buildSwapSchedule(bseed, dials);
+      drifts = buildDriftSchedule(bseed, dials, swaps);
+
+      /* per-board counters (the class totals were banked by the caller) */
+      attempts = 0;
+      matched = 0;
+      mismatchStreak = 0;
+      settledWindow = 0;
+      swapsFired = 0;
+      flipping = 0;
+      faceUp.length = 0;
+      revealed.length = 0;
+      swapAttempt.clear();
+      drumrolled = false;
+      watchLie = -1;
+      clearLie();
+      busy = true;                       // input is closed until this preview is over
+      facesLocked = false;
+
+      dealFaces(n);
+      buildCells();
+
+      /* THE TRICKSTERS RE-ARM PER BOARD. The deck's cards are per-class by
+       * construction (one fake shuffle, one re-deal, N flickers), so a class of
+       * seven boards with one class-level deck would have shown its signature
+       * once in five minutes. A fresh deck per board, seeded on the BOARD seed,
+       * deals a fresh shuffle/re-deal window every time - and on the ladder's
+       * own deckTier, so the House cards climb with the honest dials and stop
+       * at the same cap. The old deck is destroyed first: its pending timers
+       * are already cancelled above, and destroy() makes any survivor a no-op. */
+      if (trickster) { try { trickster.destroy(); } catch (e) { /* noop */ } }
+      trickster = makeTrickster(bseed, dials.deckTier);
+
+      paintHud();
+      setHint('dv_deal_hint', 'Dealing the board.');
+      say('board ' + n + ': ' + dials.cols + 'x' + dials.rows + ' (' + dials.pairs
+        + ' pairs), preview ' + dials.previewMs + 'ms, swaps ' + dials.swapBudget
+        + (dials.drift ? ', drift ' + dials.drift : '') + ', bump ' + dials.bump
+        + ', deck tier ' + dials.deckTier);
+      deal();
+    }
+
+    /* ==================================================================== *
      * PHASE 0 - deal & preview (with the first poison beat)
      * ==================================================================== */
     function deal() {
@@ -471,6 +686,11 @@ export default {
     }
 
     function preview() {
+      /* THE MEMORIZE BEAT IS PER BOARD and it is kept deliberately: it is the
+       * whole encoding moment, and it is tier- (and ladder-) dialled, shrinking
+       * a notch per cleared board toward tier 4's own floor. It spends bell
+       * time; that is priced into the grade's board cost (script.js). */
+      facesLocked = true;      // nothing may re-face a board the player is reading
       setHint('dv_preview_hint', 'Memorize the board.');
       if (grid) grid.classList.add('scanning');       // the machine shows you
       for (const c of cells) {
@@ -511,10 +731,20 @@ export default {
     }
 
     function armPlay() {
-      playStartedMs = elapsedMs;
+      /* THE TWO CLOCKS. `boardPlayMs` is re-stamped every board (this board's
+       * own accuracy window and clear time); `classPlayMs` is stamped ONCE, on
+       * the first board, and is the class's total live-play figure. Neither
+       * touches `elapsedMs`, which is the bell's and only the bell's. */
+      boardPlayMs = elapsedMs;
+      if (classPlayMs < 0) classPlayMs = elapsedMs;
       setHint('dv_play_hint', 'Find the pairs.');
       openAmbience();
-      if (casino) casino.start();          // the lab dresses + the marquee lights
+      /* THE LAB IS DRESSED ONCE A CLASS. casino.start() re-rolls the seeded lab
+       * identity (hue, monogram, sweep) off its own stream, so calling it at
+       * every board would have re-skinned the room seven times in five minutes
+       * and read as seven different classes. The marquee's mount is already
+       * self-guarded; the dressing is not. */
+      if (casino && !casinoLit) { casinoLit = true; casino.start(); }
       if (trickster) trickster.start();
       const open = () => { busy = false; settled(true); };
       /* FAKE SHUFFLE (House Rules): the pantomime rides the tail of the
@@ -527,7 +757,7 @@ export default {
      * PHASE 1 - the attempt loop
      * ==================================================================== */
     function onTap(i) {
-      if (dead || paused || ended) return;                // shell states, not a refusal
+      if (dead || paused || ended || belled) return;      // shell states, not a refusal
       const cell = cells[i];
       // Everything below IS a refused press - a locked or already-turned
       // slide, a third tap while two are up, or a filler seat. One knock.
@@ -685,7 +915,7 @@ export default {
      * THE SETTLED BOARD - the one window where the board may lie
      * ==================================================================== */
     function settled(first) {
-      if (dead || ended) return;
+      if (dead || ended || belled) return;
       heat();
       endgameCheck();
       if (first) { busy = false; return; }
@@ -697,7 +927,7 @@ export default {
     }
 
     function mutate() {
-      if (dead || ended) return;
+      if (dead || ended || belled) return;
       const open = unmatchedCells();
       const enough = open.length > 2;
       /* DEJA RE-DEAL (House Rules, the native signature) outranks the smaller
@@ -705,7 +935,8 @@ export default {
        * they are, and it consumes the window the same way. */
       if (trickster && trickster.redealDue(settledWindow, open.length)) { runRedeal(); return; }
       // `<=` not `===`: a window the player raced past is not a spent budget,
-      // it simply fires at the next settled board (the budget is per class).
+      // it simply fires at the next settled board. THE BUDGET IS PER BOARD now
+      // (a 300s class is many boards); an unspent one dies with its board.
       const swap = swaps.find((s) => !s.done && s.window <= settledWindow);
       if (swap && enough) { runSwap(swap); return; }
       const drift = drifts.find((d) => !d.done && d.window <= settledWindow);
@@ -721,7 +952,7 @@ export default {
      *  card's REAL face and pairId never change; only the shown frame lies. */
     function wearLie(cell, wearPairId) {
       const url = pairUrls[wearPairId];
-      const glyph = GLYPHS[((wearPairId % GLYPHS.length) + GLYPHS.length) % GLYPHS.length];
+      const glyph = glyphFor(wearPairId);
       const node = el('div', 'g-dv-lie');
       if (url && !isVideoUrl(url)) {
         const img = el('img');
@@ -794,7 +1025,8 @@ export default {
     /**
      * The scheduled candidates are tried first; if the player has locked all of
      * them (locked pairs are exempt, forever) the budget must NOT silently
-     * evaporate - SYNTHESIS #2 promises one swap per class from tier 2. This walk
+     * evaporate - SYNTHESIS #2 promises one swap per BOARD from tier 2 (it read
+     * "per class" when a class was one board). This walk
      * is a pure function of (schedule entry, board state), so it stays
      * deterministic and a retake still replays the same script.
      */
@@ -957,7 +1189,7 @@ export default {
      * PHASE 2 - endgame, the bell, the ceremony
      * ==================================================================== */
     function endgameCheck() {
-      if (dead || ended) return;
+      if (dead || ended || belled) return;
       const left = unmatchedCells();
       if (left.length !== 2) return;
       for (const i of left) cells[i].card.classList.add('spot');
@@ -988,26 +1220,81 @@ export default {
       sustainSafe('wash', { variant });
     }
 
+    /**
+     * A BOARD IS CLEAR. Not the class - the class ends at the bell and nowhere
+     * else. Bank the board's numbers, take one short celebration beat, deal the
+     * next one. The ambience is NOT stopped here (it is class-level dressing and
+     * a gap between boards would read as a fault) and the combo deliberately
+     * survives the handover.
+     */
     function win() {
-      if (ended) return;
-      stopAmbience();
+      if (dead || ended || belled) return;
+      busy = true;                          // the board is over; nothing may land
+      boardsCleared += 1;
+      const clearSec = Math.max(0, (elapsedMs - boardPlayMs) / 1000);
+      boardLog.push({
+        board: boardNo, pairs: dials.pairs, attempts, clearSec: Math.round(clearSec * 10) / 10,
+      });
+      totalAttempts += attempts;
+      totalMatched += matched;
+      totalSwaps += swapsFired;
       if (casino) { casino.payout(10); casino.bell(false); }
       setHint('dv_clear', 'Board clear.', true);
       try { ctx.ceremonies.stamp({ text: t('dv_stamp_clear', 'CLEAR'), target: grid }); } catch (e) { /* noop */ }
       tick('stamp', 0.8);
-      after(TIMING.ceremonyMs, () => finish(false));
+      paintHud();
+      say('board ' + boardNo + ' clear in ' + clearSec.toFixed(1) + 's ('
+        + attempts + ' attempts) - ' + boardsCleared + ' cleared, '
+        + Math.max(0, Math.ceil((budgetMs - elapsedMs) / 1000)) + 's left');
+      /* The next board is dealt on a plain timer, NOT on a "is there time?"
+       * test: a board that only half-fits still earns its partial credit, and
+       * the bell truncating a fresh deal is a beat this class is built for. */
+      after(TIMING.boardClearMs, () => startBoard(boardNo + 1));
     }
 
+    /** The last ten seconds: a three-note drum so the bell is heard coming.
+     *  Audio plus one hint line - no CSS, so reduced motion loses nothing and a
+     *  0-capped bgIntensity still hears it. */
+    function lastCall() {
+      if (lastCallDone || dead || ended || belled) return;
+      lastCallDone = true;
+      setHint('dv_last_call', 'Last ten seconds.', true);
+      for (let n = 0; n < LAST_CALL_NOTES; n++) {
+        after(n * TIMING.endgameDrumMs, () => tick('near_miss', 0.4 + 0.08 * n, { pitch: 0.9 - 0.06 * n }));
+      }
+    }
+
+    /**
+     * THE BELL. It is the class's normal end and it may fall on ANYTHING - a
+     * deal cascade, a preview, a flip mid-air, a swap tell, a re-deal, a clear
+     * celebration. So it truncates rather than waits: input is locked first,
+     * every pending step is cancelled, the board is left exactly where it stood
+     * (its partial progress is worth real credit) and the ceremony is the only
+     * timer left alive.
+     */
     function bell() {
-      if (ended) return;
+      if (ended || belled) return;
+      belled = true;
+      busy = true;                           // 1. input is shut BEFORE anything else
+      stopClock();
+      clearTimers();                         // 2. truncate: no step from the live board runs
+      flipping = 0;
+      faceUp.length = 0;
+      clearLie();
+      watchLie = -1;
+      if (grid) grid.classList.remove('scanning', 'rewind', 'jiggle');
+      for (const c of cells) { try { c.card.classList.remove('flipping', 'judge', 'tell'); } catch (e) { /* noop */ } }
+      if (trickster) { try { trickster.stop(); } catch (e) { /* noop */ } }
       stopAmbience();
       if (casino) casino.dimOut();           // the bell is never silence
-      setHint('dv_bell', 'The bell. Time is up.', true);
+      setHint('dv_bell', 'The bell. Class over.', true);
       try { ctx.ceremonies.stamp({ text: t('dv_stamp_bell', 'BELL'), tone: 'pink', target: grid }); } catch (e) { /* noop */ }
       tick('stamp_bad', 0.6);
-      after(TIMING.ceremonyMs, () => finish(true));
+      after(TIMING.ceremonyMs, () => finish(true));   // 3. the ONE surviving timer
     }
 
+    /** THE ONE endClass. bell() is its only caller now - a board clear deals the
+     *  next board instead of ending the class - and `ended` makes it idempotent. */
     function finish(timeout) {
       if (ended) return;
       ended = true;
@@ -1016,14 +1303,21 @@ export default {
       if (trickster) trickster.stop();
       if (casino) casino.stop();
       busy = true;
-      const elapsedSec = Math.max(0.001, (elapsedMs - playStartedMs) / 1000);
+      /* Total live play (deals and previews included), against the CLASS clock.
+       * `classPlayMs` is -1 if the bell somehow beat the first armPlay, in which
+       * case the whole class was its opening and elapsedMs is the honest read. */
+      const elapsedSec = Math.max(0.001, (elapsedMs - Math.max(0, classPlayMs)) / 1000);
+      const livePairs = playablePairs();
       const scoreIn = {
-        tier: dials.tier,
-        pairs: playablePairs(),
-        matched,
-        attempts,
-        elapsedSec,
-        parSec: dials.parSec,
+        tier: baseDials ? baseDials.tier : dials.tier,
+        /* THE CLASS TOTALS: banked boards plus the live board. The live board's
+         * own two numbers ride separately so its partial can be priced once. */
+        matched: totalMatched + matched,
+        attempts: totalAttempts + attempts,
+        boardsCleared,
+        livePairs,
+        liveMatched: matched,
+        expectedClears: expectClears,
         maxCombo,
         tracked,
         timeout: !!timeout,
@@ -1052,9 +1346,16 @@ export default {
           game: 'deja_vu',
           retake,
           grade_inputs: {
-            tier: dials.tier, pairs: playablePairs(), matched, attempts,
-            clearTimeSec: Math.round(elapsedSec), maxCombo, tracked, calledLies,
-            swapsFired, driftsFired, bubblesPopped, jackpots,
+            tier: scoreIn.tier,
+            pairs: baseDials ? baseDials.pairs : dials.pairs,
+            boardsCleared,
+            expectedClears: expectClears,
+            livePairs, liveMatched: matched,
+            matched: scoreIn.matched, attempts: scoreIn.attempts,
+            playTimeSec: Math.round(elapsedSec), maxCombo, tracked, calledLies,
+            swapsFired: totalSwaps + swapsFired,   // CLASS total, not the live board's
+            driftsFired, bubblesPopped, jackpots,
+            boards: boardLog.slice(),
             timeout: !!timeout,
             peekHold: peekHoldMult(),
           },
@@ -1062,10 +1363,12 @@ export default {
       };
       lastReport = report;
       try { lastSnapshot = instance.snapshot(); } catch (e) { /* diagnostics only */ }
-      say('class over: ' + matched + '/' + playablePairs() + ' pairs, ' + attempts + ' attempts, '
-        + Math.round(elapsedSec) + 's (par ' + dials.parSec + 's), combo ' + maxCombo
+      say('class over: ' + boardsCleared + '/' + expectClears + ' boards'
+        + (livePairs ? ' + ' + matched + '/' + livePairs + ' on the live one' : '')
+        + ', ' + scoreIn.matched + ' pairs in ' + scoreIn.attempts + ' attempts ('
+        + (score.accuracy * 100).toFixed(0) + '%, par ' + (score.accuracyScore * 100).toFixed(0) + '%)'
+        + ', ' + Math.round(elapsedSec) + 's live, combo ' + maxCombo
         + ', tracked ' + tracked + (calledLies ? ', called ' + calledLies + ' lies' : '')
-        + ', swaps ' + swapsFired + '/' + dials.swapBudget
         + (timeout ? ', BELL' : '') + ' -> composite ' + score.composite.toFixed(3));
       try {
         ctx.endClass(report);
@@ -1075,10 +1378,23 @@ export default {
     /* ==================================================================== *
      * AMBIENCE (the tier dials that are not mutations)
      * ==================================================================== */
+    /**
+     * Called at every board's armPlay, not once a class.
+     *
+     * THE RESTART RULE: `engine/sustained.js` answers a repeat sustain of a live
+     * kind with the SAME handle and a retune - it does not read the new options.
+     * The escalation ladder can raise crt / bubbles / ambient between boards, so
+     * when (and only when) that signature actually moves we ask for a restart.
+     * Every other board re-uses what is already lit, which is what keeps the
+     * room continuous instead of blinking off and on at every handover.
+     */
     function openAmbience() {
       heat();
-      if (dials.ambient) sustainSafe('ambient_field', { kind: 'motes', density: dials.ambient });
-      if (dials.crt) sustainSafe('crt', { level: dials.crt, variant: dials.tier >= 4 ? 'chroma' : 'scanline' });
+      const key = [dials.ambient, dials.crt, dials.bubbles, dials.tier >= 4 ? 'chroma' : 'scanline'].join('|');
+      const restart = ambienceKey !== '' && ambienceKey !== key;
+      ambienceKey = key;
+      if (dials.ambient) sustainSafe('ambient_field', { kind: 'motes', density: dials.ambient, restart });
+      if (dials.crt) sustainSafe('crt', { level: dials.crt, variant: dials.tier >= 4 ? 'chroma' : 'scanline', restart });
       if (dials.bubbles) {
         /* The dossier's poppable decoys: popping one costs ~300ms of jiggle and
          * NEVER counts as a flip or touches the grade (the rubric already prices
@@ -1086,6 +1402,7 @@ export default {
         sustainSafe('bubble_field', {
           max: dials.bubbles,
           variant: 'drift',
+          restart,
           onPop: () => {
             bubblesPopped += 1;
             tick('bubble_pop', 0.4);
@@ -1176,50 +1493,91 @@ export default {
         if (paused) return;
         elapsedMs += dt / Math.max(0.0001, getTimeScale());
         paintHud();
+        // the drum first: it must beat BEFORE the bell it is announcing
+        if (!lastCallDone && (budgetMs - elapsedMs) <= TIMING.lastCallMs) run(lastCall);
         if (elapsedMs >= budgetMs) { stopClock(); run(bell); }
       }, scaled(250));
     }
     function stopClock() { if (clockId) { clearInterval(clockId); clockId = 0; } }
 
     /* ---- assets --------------------------------------------------------- */
+    /**
+     * ONE CLAIM A CLASS, many boards off it. The class draws up to
+     * FACE_POOL_WANT distinct urls into `facePool` and every board shuffles that
+     * pool for its own subset (dealFaces). Faces MAY repeat across a long class
+     * - the pool is 16 and a tier-1 night is seven 6-pair boards - but WHICH six
+     * and where they sit is a fresh seeded draw every time.
+     *
+     * PAIRS MUST STAY LEGIBLE. Two pairs wearing the same art is an unwinnable
+     * board, so the pool holds only DISTINCT urls and a board that runs short
+     * plays the leftovers on their glyph faces (always distinct) rather than
+     * repeating someone else's clip.
+     */
     function claimAssets() {
       // NEVER block a draw: the board is already dealing on glyph faces and the
       // urls drop in when the pool resolves (empty remote -> local, silently).
       Promise.resolve()
         .then(() => ctx.assets.claim({
-          loops: Math.max(12, dials.pairs + 6), stills: 4, targets: 0, canvasSafe: false,
+          loops: FACE_POOL_WANT, stills: 4, targets: 0, canvasSafe: false,
         }))
         .then((p) => {
           if (dead || !p || typeof p.next !== 'function') return;
           pool = p;
-          /* PAIRS MUST STAY LEGIBLE. Two different pairs wearing the same art is
-           * an unwinnable board, so a pair only ever gets a url no other pair
-           * has; when the pool runs short the leftovers play on their glyph
-           * face (always distinct) instead of repeating someone else's clip. */
-          const distinct = [];
-          const want = dials.pairs;
-          for (let n = 0; n < want * 4 && distinct.length < want; n++) {
+          for (let n = 0; n < FACE_POOL_WANT * 3 && facePool.length < FACE_POOL_WANT; n++) {
             const got = p.next('loop');
             const u = got && got.url;
-            if (u && distinct.indexOf(u) < 0) distinct.push(u);
+            if (u && facePool.indexOf(u) < 0) facePool.push(u);
           }
-          for (let pid = 0; pid < want; pid++) pairUrls[pid] = distinct[pid] || null;
+          say('asset pool ready (' + facePool.length + ' distinct loops; a board wears '
+            + (dials ? dials.pairs : '?') + ')');
+          /* THE LATE POOL. If the player is already reading a preview or a live
+           * board, re-facing it would be a lie the tell system never promised -
+           * so the draw is banked and the NEXT board is the first with media.
+           * Only a board still dealing (nothing memorised yet) is re-faced in
+           * place, which is the old behaviour where it was honest. */
+          if (facesLocked || faceUp.length || matched > 0) {
+            facesDirty = true;
+            say('asset pool landed mid-board - the next board is the first with faces');
+            return;
+          }
+          dealFaces(boardNo || 1);
           for (const c of cells) applyMedia(c);
-          say(distinct.length >= want
-            ? 'asset pool ready (' + distinct.length + ' distinct loops for ' + want + ' pairs)'
-            : 'asset pool short (' + distinct.length + '/' + want
-              + ' distinct loops) - the rest play on glyph faces');
         })
         .catch((e) => say('asset claim failed - glyph faces stand: ' + ((e && e.message) || e)));
     }
 
+    /* ---- the House tricksters, minted per BOARD -------------------------- *
+     * One factory so board 1 and board 7 are wired identically. `tier` is the
+     * LADDER's deckTier, not the player's raw tier (see startBoard).
+     * ---------------------------------------------------------------------- */
+    function makeTrickster(seed, tier) {
+      const capsOk = !(ctx.caps && Number(ctx.caps.bgIntensity) === 0);
+      return createDvTrickster({
+        seed, tier,
+        timers: deckTimers,
+        reduced, capsOk,
+        cue: tick,                     // THE CUE ROAD - clamped, never capsOk-gated
+        isHalted: () => dead || paused || ended || belled,
+        stats: () => ({
+          swaps: swapsFired,
+          budget: dials.swapBudget,
+          secLeft: Math.max(0, Math.ceil((budgetMs - elapsedMs) / 1000)),
+        }),
+        chipEl: (which) => (which === 'swaps' ? swapChip : clockChip),
+        chipText: (which) => (which === 'swaps' ? swapChipText() : clockText()),
+        log: say,
+      });
+    }
+
     /* ---- the class rules sheet (Deck VI, Law IV: drawn, not told) --------- */
     /**
-     * Three vignettes in this lab's own language: the pair turning face-up and
+     * FOUR vignettes in this lab's own language: the pair turning face-up and
      * locking, the settled board trading two slides AFTER its shudder (law 2 +
-     * law 3 of this file, drawn rather than told), and the whole board
-     * re-dealing without losing a pair. Every figure is CSS on the same slide
-     * chrome the board uses, so the sheet costs no media.
+     * law 3 of this file, drawn rather than told), the whole board re-dealing
+     * without losing a pair, and THE RUN - a clear followed by a fresh board,
+     * which is the class-length rule drawn instead of announced. Every figure
+     * is CSS on the same slide chrome the board uses, so the sheet costs no
+     * media and the fourth row added no CSS at all.
      */
     let howtoEl = null;
 
@@ -1292,6 +1650,25 @@ export default {
         fig.appendChild(grid6);
       }, t('dv_howto_redeal', 'Sometimes the whole board re-deals. Same pairs - only the seats change.'));
 
+      /* 4 - THE RUN. A pair locks, and behind it a fresh board drops in. Built
+         entirely from the chrome the three rows above already use (turn + lock
+         + redeal), so the class length is DRAWN like everything else on this
+         sheet and style.js grows nothing. */
+      row((fig) => {
+        const line = el('span', 'g-dv-hw-line');
+        line.appendChild(slide('turn a', GLYPHS[0]));
+        line.appendChild(slide('turn b', GLYPHS[0]));
+        fig.appendChild(line);
+        fig.appendChild(el('span', 'g-dv-hw-lock'));
+        const fresh = el('span', 'g-dv-hw-grid');
+        for (let i = 0; i < 6; i++) {
+          const c = slide('down redeal');
+          c.style.setProperty('--dv-hw-i', String(i));
+          fresh.appendChild(c);
+        }
+        fig.appendChild(fresh);
+      }, t('dv_howto_boards', 'Clear the board and a fresh one deals. The bell ends class.'));
+
       const go = el('button', 'g-dv-hw-go', t('dv_howto_go', 'Deal the board'));
       go.type = 'button';
       go.addEventListener('click', () => {
@@ -1307,14 +1684,16 @@ export default {
     }
 
     /**
-     * Policy is the shell's "Skip class tutorials" contract: by default the
-     * sheet shows EVERY class; with the skip on, the lab still explains itself
-     * ONCE per grade tier. Dismissal is the sheet's own button and nothing
+     * THE LAW, uniform across every open class (owner ruling 2026-08-24): the
+     * sheet SHOWS the first time this player meets the lab at this grade tier
+     * and AUTO-SKIPS every later class at that tier, whatever the setting says;
+     * the skip means "skip even the first showing" (owner ruling 2026-08-24).
+     * No meta = no memory = the sheet shows. Dismissal is its own button and nothing
      * else - Cram Assist is bound to a key the moment the board deals, and a
      * key shortcut here would spend the player's A-cap on a tutorial.
      */
     function howto(onDone) {
-      if (ctx.hideTutorial === true && howtoSeenTiers().indexOf(dials ? dials.tier : 1) >= 0) {
+      if (ctx.hideTutorial === true || howtoSeenTiers().indexOf(dials ? dials.tier : 1) >= 0) {
         onDone(); return;
       }
       if (!stage) { onDone(); return; }
@@ -1348,19 +1727,34 @@ export default {
      * ==================================================================== */
     const instance = {
       start(classSpec) {
-        spec = classSpec || { gradeTier: 1, seed: 'deja_vu|none', timeBudgetSec: 90 };
+        spec = classSpec || { gradeTier: 1, seed: 'deja_vu|none', timeBudgetSec: 300 };
         const tier = Math.max(1, Math.min(4, Math.round(Number(spec.gradeTier) || 1)));
         const seed = String(spec.seed == null ? 'deja_vu' : spec.seed);
-        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 90) * 1000);
+        classSeed = seed;
+        classTier = tier;
+        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 300) * 1000);
         reduced = probeReduced();
         posterOnly = reduced;
 
+        /* THE BOARD SIZE is the player's for the WHOLE class - the escalation
+         * ladder never touches the grid, so a below-par choice is still exactly
+         * one A-cap the shell computes from the manifest, not a per-board one. */
         const chosen = ctx.settings ? ctx.settings.boardSize : null;
         const pairs = Number(chosen);
-        dials = dialsFor(tier, { pairs: Number.isFinite(pairs) ? pairs : null });
-        layout = buildLayout(seed, dials);
-        swaps = buildSwapSchedule(seed, dials);
-        drifts = buildDriftSchedule(seed, dials, swaps);
+        chosenPairs = Number.isFinite(pairs) ? pairs : null;
+        /* Board 1's dials are also the GRADE's reference: `expectedClears` is
+         * computed off them once, before the ladder has moved anything, because
+         * S_PACE is already the allowance for the ladder making later boards
+         * dearer (script.js, THE ARITHMETIC). */
+        baseDials = dialsForBoard(tier, 0, { pairs: chosenPairs });
+        dials = baseDials;
+        expectClears = expectedClears(baseDials, budgetMs / 1000);
+        layout = buildLayout(boardSeed(1), dials);
+        swaps = buildSwapSchedule(boardSeed(1), dials);
+        drifts = buildDriftSchedule(boardSeed(1), dials, swaps);
+        /* Class-level streams: the variable-ratio reward and the garnish rolls
+         * are the CLASS's, not a board's, so a long run keeps one honest
+         * schedule instead of restarting its luck every board. */
         roll = makeTaggedRoll(seed + '|dv|play');
         rollReward = createReward(seed);
         loopPolicy = matchedLoopPolicy(ctx.settings && ctx.settings.dv_matched_loops, tier, posterOnly);
@@ -1381,28 +1775,19 @@ export default {
 
         /* The House decks (House Rules floor map: the memory lies + the
          * lighting rig). Both disarm on a 0-capped bgIntensity; both replay
-         * identically on a retake (same seed, same streams). */
+         * identically on a retake (same seed, same streams).
+         *
+         * TWO LIFETIMES, deliberately. The CASINO is the room - one lab
+         * identity, one marquee, lit once and never re-dressed, because a class
+         * that changed its own hue every board would read as a different class.
+         * The TRICKSTER is the deal, and startBoard mints a fresh one per board
+         * (see makeTrickster) so its once-a-class cards land once a BOARD. */
         const capsOk = !(ctx.caps && Number(ctx.caps.bgIntensity) === 0);
         casino = createDvCasino({
           seed, stage, bench, grid,
           timers: deckTimers,
           reduced, capsOk,
           cue: tick,                     // THE CUE ROAD - clamped, never capsOk-gated
-          log: say,
-        });
-        trickster = createDvTrickster({
-          seed, tier,
-          timers: deckTimers,
-          reduced, capsOk,
-          cue: tick,                     // THE CUE ROAD - clamped, never capsOk-gated
-          isHalted: () => dead || paused || ended,
-          stats: () => ({
-            swaps: swapsFired,
-            budget: dials.swapBudget,
-            secLeft: Math.max(0, Math.ceil((budgetMs - elapsedMs) / 1000)),
-          }),
-          chipEl: (which) => (which === 'swaps' ? swapChip : clockChip),
-          chipText: (which) => (which === 'swaps' ? swapChipText() : clockText()),
           log: say,
         });
 
@@ -1413,18 +1798,19 @@ export default {
            Assist is not bound to a key, so a class read at leisure grades
            exactly like one that skipped the sheet. */
         howto(() => {
-          if (dead || ended) return;
+          if (dead || ended || belled) return;
           wireCram();
-          startClock();
-          deal();
+          startClock();                  // THE bell clock: one per class, never reset
+          startBoard(1);
         });
 
         liveClass = instance;
         lastReport = null;
         lastSnapshot = null;
-        say('tier ' + tier + ' board ' + dials.cols + 'x' + dials.rows + ' (' + dials.pairs
-          + ' pairs), preview ' + dials.previewMs + 'ms, swap budget ' + dials.swapBudget
-          + (dials.drift ? ', drift ' + dials.drift : '') + (retake ? ', RETAKE' : ''));
+        say('tier ' + tier + ': ' + Math.round(budgetMs / 1000) + 's, ' + dials.cols + 'x'
+          + dials.rows + ' (' + dials.pairs + ' pairs) a board, ~'
+          + boardCostSec(baseDials).toFixed(0) + 's a board -> S at ' + expectClears
+          + ' cleared' + (retake ? ', RETAKE' : ''));
       },
 
       pause() {
@@ -1475,7 +1861,14 @@ export default {
         return {
           tier: dials ? dials.tier : null,
           dials: dials ? Object.assign({}, dials) : null,
+          baseDials: baseDials ? Object.assign({}, baseDials) : null,
           seed: spec ? spec.seed : null,
+          boardSeed: boardNo ? boardSeed(boardNo) : null,
+          boardNo, boardsCleared, expectClears, belled, lastCallDone,
+          boards: boardLog.slice(),
+          totalAttempts, totalMatched, totalSwaps, casinoLit,
+          facePool: facePool.slice(),
+          facesDirty, facesLocked,
           retake,
           cols: dials ? dials.cols : 0,
           rows: dials ? dials.rows : 0,
@@ -1499,7 +1892,7 @@ export default {
           casino: casino ? casino.diagnostics() : null,
           faceUp: faceUp.slice(),
           revealed: revealed.slice(),
-          elapsedMs, budgetMs, ended, busy, paused,
+          elapsedMs, budgetMs, classPlayMs, boardPlayMs, ended, busy, paused,
           loopPolicy: Object.assign({}, loopPolicy),
           posterOnly, reduced,
           pairUrls: pairUrls.slice(),

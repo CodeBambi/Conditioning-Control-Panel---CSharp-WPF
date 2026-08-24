@@ -409,7 +409,7 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     gt.appendChild(switchRow({
       key: SETTING_KEYS.hideTutorial,
       label: 'Skip class tutorials',
-      hint: 'Classes still explain themselves once per grade tier.',
+      hint: 'Skips the class rules sheet, even the first time you meet a class.',
       value: !!src.hideTutorial,
     }));
 

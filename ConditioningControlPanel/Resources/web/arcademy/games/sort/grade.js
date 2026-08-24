@@ -22,6 +22,14 @@
  * playing the game the room is about).
  *
  * FLAVOUR XP: sorted / 5, cap 15. Game-owned; the XP table itself is C#'s.
+ *
+ * THE CLASS LENGTH IS NOT IN THIS FILE. Every term above is a RATIO of the
+ * class's own ledger (correct/swipes, bestRung/rungCap, perfect/correct), so
+ * the 120 -> 180 budget move needs nothing here and cannot tilt a grade: a
+ * longer class gives a player more swipes to be accurate over, never an easier
+ * bar. The one absolute is the flavour XP cap, and it stays 15 deliberately -
+ * the XP economy is not part of the class-length wave, and a 120s class already
+ * reached the cap at 75 sorted cards.
  * ==========================================================================*/
 
 export const GRADE = Object.freeze({

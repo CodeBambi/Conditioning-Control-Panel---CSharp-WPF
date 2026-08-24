@@ -68,9 +68,22 @@ export const HOMEROOM_KEY = 'daily_trigger';
 export const CLASSES_PER_DAY = 4;
 /** GROUND-RULES §3 amendment 3 + DECISIONS #3. */
 export const FAMILIES = Object.freeze(['word', 'memory', 'search', 'tracking', 'reflex', 'comfort']);
-/** DECISIONS #3, at the four-class pace: "one meaty (<=300s) + three quick". */
+/* THE CEILINGS ARE BOTH 300 NOW, AND `meaty` NO LONGER MEANS "LONG" (owner
+ * ruling, the class-length wave). DECISIONS #3 used to read "one meaty (<=300s)
+ * + three quick (<=180s)", and the two constants were the two halves of that
+ * sentence. They are not any more:
+ *   - THE BUDGET IS PER-MODULE. Each game's own `timeBudgetSec` is the class
+ *     length; the timetable never shortens a class to fit a slot. So a
+ *     non-meaty class may legitimately run 300s (Anomaly, Deja Vu) and a meaty
+ *     one may be shorter than a quick one (Instant Recall's 180s).
+ *   - `meaty` IS THE ANCHOR-SLOT FLAG. It says "this class is the one the night
+ *     is built around", which is what meatyOk/meatyCapOk below deal - exactly
+ *     one anchor a day, never two. Nothing about it is a duration any more.
+ * Both constants therefore hold the SAME number and clampBudget's `meaty`
+ * argument is a no-op today; they stay separate so a future ruling can move one
+ * ceiling without hunting every call site. */
 export const MEATY_MAX_SEC = 300;
-export const QUICK_MAX_SEC = 180;
+export const QUICK_MAX_SEC = 300;
 export const MIN_BUDGET_SEC = 30;
 /** Mockup's departure-board periods. */
 export const PERIOD_LABELS = Object.freeze(['09:00', '09:05', '09:10', '09:15']);
@@ -128,6 +141,14 @@ export function daysBetween(a, b) {
 /* ----------------------------------------------------------------------------
  * POOL NORMALIZATION
  * -------------------------------------------------------------------------- */
+/**
+ * A budget is the MODULE's to declare; this only fences it into the legal band.
+ * Both ceilings are 300 (see the TUNABLES note), so `meaty` changes nothing
+ * today - it is kept because the ceiling is per class TYPE by contract, not
+ * because an anchor class is allowed to be longer than a quick one.
+ * A missing / junk / non-positive value falls back to 120s, the ordinary class
+ * length, rather than to whatever the ceiling happens to be.
+ */
 function clampBudget(v, meaty) {
   const max = meaty ? MEATY_MAX_SEC : QUICK_MAX_SEC;
   const n = Number(v);
@@ -156,6 +177,13 @@ function normalizePool(registry) {
       meaty,
       flagship: !!g.flagship,
       timeBudgetSec: clampBudget(g.timeBudgetSec, meaty),
+      /* CLOCKLESS (owner ruling, the class-length wave). A class that keeps a
+       * budget for its own bell but shows NO seconds anywhere: no board chip,
+       * no room-card chip, no proctor chip, and no time bar. Daily Trigger is
+       * the only one today - a one-minute wordle whose ritual is the board, not
+       * the countdown. It is a DESCRIPTOR fact carried through to the dealt
+       * class (classFrom) because the shell reads the class, never the module. */
+      clockless: !!g.clockless,
     }));
   }
   out.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
@@ -189,8 +217,13 @@ function daysAgo(history, date, window, key) {
  * -------------------------------------------------------------------------- */
 /**
  * NEVER TWO MEATY CLASSES ON ONE BOARD. This is the half of DECISIONS #3 that
- * does NOT relax: a night is one meaty plus quick ones, and two 300-second
- * classes back to back is a different night than the one that was designed.
+ * does NOT relax: a night is built around exactly ONE anchor class, and two
+ * anchors back to back is a different night than the one that was designed.
+ * NOTE WHAT IT NO LONGER GUARANTEES (the class-length wave): the cap counts
+ * ANCHORS, not seconds, and since budgets went per-module a board can carry two
+ * or three 300s classes as long as only one of them is flagged. If the night's
+ * total length ever needs a ceiling, that is a NEW rule to write here - this
+ * one was never it, it only used to look like it when meaty meant long.
  *
  * It has to be separate from meatyOk below because relaxation drops a whole
  * hard filter, and the old single predicate carried BOTH halves - so the moment
@@ -253,6 +286,7 @@ function classFrom(g, slot) {
     flagship: g.flagship,
     homeroom: slot === 1,
     timeBudgetSec: g.timeBudgetSec,
+    clockless: !!g.clockless,          // see normalizePool: no chip, no bar
     timeLabel: PERIOD_LABELS[slot - 1] || PERIOD_LABELS[PERIOD_LABELS.length - 1],
     missing: false,
   };
@@ -278,9 +312,13 @@ function fromOverride(date, entry, pool) {
       // Calendar names a game this build does not ship: keep the row (the day is
       // verbatim) but flag it so the shell renders class_suspended instead of
       // blanking the board.
+      /* 120, LITERALLY, not QUICK_MAX_SEC. The ceiling is 300 now, and a
+       * class that could not open must not advertise the longest chip on the
+       * board - the row exists only so the shell can render class_suspended.
+       * 120s is the ordinary class length, the same floor clampBudget uses. */
       classes.push({
         slot, gameKey: key, family: 'misc', meaty: false, flagship: false,
-        homeroom: slot === 1, timeBudgetSec: QUICK_MAX_SEC,
+        homeroom: slot === 1, timeBudgetSec: 120, clockless: false,
         timeLabel: PERIOD_LABELS[slot - 1] || PERIOD_LABELS[PERIOD_LABELS.length - 1],
         missing: true,
       });
@@ -376,7 +414,7 @@ const walkCache = new Map();
 const WALK_CACHE_MAX = 8;
 
 function signature(pool, calendar) {
-  const p = pool.map((g) => `${g.key}:${g.family}:${g.meaty ? 1 : 0}${g.flagship ? 'F' : ''}:${g.timeBudgetSec}`).join(',');
+  const p = pool.map((g) => `${g.key}:${g.family}:${g.meaty ? 1 : 0}${g.flagship ? 'F' : ''}${g.clockless ? 'C' : ''}:${g.timeBudgetSec}`).join(',');
   // Contents, not just date keys: two calendars naming the same date must not
   // share a memo entry (a key-only signature served the first one's board).
   const c = calendar
@@ -428,7 +466,8 @@ export function clearTimetableCache() { walkCache.clear(); }
  *
  * @param {Object}  o
  * @param {string}  o.dateSeed          init.utcDateSeed ('YYYY-MM-DD')
- * @param {Array|Object} o.registry     game descriptors {key, family, meaty, flagship, timeBudgetSec}
+ * @param {Array|Object} o.registry     game descriptors {key, family, meaty, flagship,
+ *                                      timeBudgetSec, clockless}
  * @param {Object=} o.overrideCalendar  {'2026-09-01': {classes:[...], banner:'...'}} or null
  * @returns {{dateSeed:string, source:'seed'|'override', banner:?string,
  *            relaxed:string[], classes:Array<Object>}}

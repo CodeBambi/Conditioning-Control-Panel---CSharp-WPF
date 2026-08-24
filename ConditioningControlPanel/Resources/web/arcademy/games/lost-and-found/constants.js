@@ -12,10 +12,57 @@
  * near-twin share) follows.
  * ==========================================================================*/
 
-/** The arc is five finds. SYNTHESIS ruling: find 3 = modifier, find 5 = bell. */
-export const FINDS_PER_CLASS = 5;
-export const MODIFIER_AFTER_FIND = 3;      // "the board wakes up"
-export const FINAL_BELL_FIND = 5;          // guaranteed clutch cinematics
+/* ----------------------------------------------------------------------------
+ * THE ARC, AND IT IS PER-TIER NOW (owner ruling 2026-08-24, the class-length
+ * wave). The class used to be FIVE finds against a 120s bell at every tier,
+ * which meant a competent tier-1 player was done in ~50s of a two-minute class
+ * and the bell was decoration. The budget is 300s now (see index.js's module
+ * descriptor) and the COUNT is what makes every tier land in the same place.
+ *
+ * THE TARGET: ~4:00-4:30 (240-270s) of typical competent play, whatever the
+ * tier. The bell at 300s stays a HARD cap and a par player may ride it.
+ *
+ * THE ARITHMETIC (one tile wall, the target relocates between finds, so more
+ * finds cost NO new tiles - density and the look-signature pool are untouched):
+ *
+ *   hunt seconds per find, typical competent play, medium density:
+ *     t1  7.8s   (48 tiles)   t2  9.8s   (62 tiles)
+ *     t3 13.8s   (92 tiles)   t4 17.8s  (123 tiles)
+ *   ...+ FOUND_CEREMONY_MS (1.8s) of ceremony per find, which is dead clock:
+ *     cycle  t1 9.6s   t2 11.6s   t3 15.6s   t4 19.6s
+ *   ...and the briefing is NOT on the clock (index.js starts the clock in
+ *   briefing's own onDone), so the whole budget is n x cycle:
+ *     t1 26 x 9.6  = 249.6s     t2 22 x 11.6 = 255.2s
+ *     t3 16 x 15.6 = 249.8s     t4 13 x 19.6 = 254.8s
+ *   Every tier lands ~250s, ~50s under the bell - which is the headroom the
+ *   MISCLICK_TIME_PENALTY_SEC (3s a miss) eats into, deliberately.
+ *
+ * (t2/t3 hunt seconds are interpolated from the two MEASURED tiers through the
+ * game's own par formula: measured hunt / uncapped parSecFor is 0.551 at t1 and
+ * 0.535 at t4, so 0.543 x par is the tier-fair estimate in between.)
+ * -------------------------------------------------------------------------- */
+export const FINDS_BY_TIER = Object.freeze({ 1: 26, 2: 22, 3: 16, 4: 13 });
+
+/** The modifier ("the board wakes up") lands about a THIRD of the way in - the
+ *  same shape as the old find 3 of 5, never a fixed find number. */
+export const MODIFIER_FIND_RATIO = 1 / 3;
+
+/** How many finds this tier's class is. Anything unusable answers tier 1. */
+export function findsForTier(tier) {
+  const t = Math.round(Number(tier));
+  return FINDS_BY_TIER[t >= 1 && t <= 4 ? t : 1] || FINDS_BY_TIER[1];
+}
+
+/** The find that turns the modifier on, per tier (>= 2, so it is never find 1). */
+export function modifierFindForTier(tier) {
+  return Math.max(2, Math.round(findsForTier(tier) * MODIFIER_FIND_RATIO));
+}
+
+/** The final bell = the tier's last find. Kept as its own verb because the bell
+ *  is an ARC beat (announced, guaranteed clutch), not merely "the end". */
+export function finalBellFindForTier(tier) {
+  return findsForTier(tier);
+}
 
 /* ----------------------------------------------------------------------------
  * PLAYTEST BLOCK - flagged for tuning by the dossier / synthesis rulings.
@@ -157,7 +204,12 @@ export const PLAYTEST = Object.freeze({
    *  plenty of motion of its own by then. */
   SHEEN_MAX_DENSITY: 64,
 
-  /** Found ceremony length; the hunt resumes after it. */
+  /** Found ceremony length; the hunt resumes after it. NOTE it is DEAD CLOCK:
+   *  the class timer runs through it, so at the per-tier find counts this is
+   *  23s (t4) to 47s (t1) of the 300s budget. Both the pace arithmetic at the
+   *  top of this file and RUBRIC.PAR_CEREMONY_SEC account for it. Shortening it
+   *  is the obvious lever if a 4-minute class feels ceremony-heavy in play-test
+   *  - it is an owner call, not one this wave made. */
   FOUND_CEREMONY_MS: 1800,
   FOUND_CEREMONY_MS_REDUCED: 900,
 
@@ -253,29 +305,76 @@ export const RUBRIC = Object.freeze({
   PAR_PER_DRIFT_SEC: 4.0,
   /** A class can never be graded against a par it has no time to reach. */
   PAR_BUDGET_SHARE: 0.9,
+  /** ...and "time to reach" is HUNTING time. Every find spends a found ceremony
+   *  the player cannot hunt through, and at 13-26 finds that is 23-47s of the
+   *  budget, not the 9s it was at five. The clamp subtracts it before dividing,
+   *  or par would be a bar a par player physically cannot clear. Callers may
+   *  override with `ceremonySec` (reduced motion runs the 900ms ceremony). */
+  PAR_CEREMONY_SEC: 1.8,
 
   /** timeScore anchors: .6*par -> 1.0, par -> .78, 1.6*par -> .44, 2.4*par -> 0 */
   TIME_ZERO_MULT: 2.4,
   TIME_SPAN_MULT: 1.8,
 
-  /** one misclick per find zeroes the accuracy term. */
+  /** one misclick per find zeroes the accuracy term. A RATE - it needed no
+   *  rescaling when the class grew (missScore already divides by the finds). */
   MISS_TOLERANCE: 1.0,
-  /** three peeks zero the peek term (each one is a soft tax, never a fail). */
-  PEEK_TAX: 0.34,
+  /** The peek tax zeroes the term at this SHARE of the class's finds (floored
+   *  at 3, which is exactly the old flat "three peeks" on a five-find class).
+   *  A flat count would have been a fixed -0.10 on any 4-minute class the
+   *  moment the player peeked twice, i.e. not a graded tax at all. The hard
+   *  part of peek was never this term - it is the shell's flat A-cap. */
+  PEEK_ZERO_RATIO: 0.35,
+  PEEK_ZERO_MIN: 3,
 
   WEIGHTS: Object.freeze({ time: 0.40, miss: 0.25, peek: 0.10, streak: 0.25 }),
 
-  /** S needs a clean streak, sub-par median AND near-perfect accuracy (§14 gate). */
-  S_GATE_CLEAN_STREAK: 3,
-  S_GATE_MAX_MISCLICKS: 1,
+  /** S needs a clean streak, sub-par median AND near-perfect accuracy (§14 gate).
+   *  Both halves are RATIOS of the class now, with floors that reproduce the old
+   *  3-and-1 exactly at five finds. The streak ratio is 0.32 rather than the old
+   *  3/5 = 0.60 because an unbroken run does NOT scale linearly: at a competent
+   *  85% clean-find rate the chance of ever running 60% of a 26-find class is a
+   *  few percent, where 3-of-5 was ~80%. Measured (exact run DP): a 0.32 ratio
+   *  gives 8/7/5/4 by tier and pass rates 0.82/0.85/0.93/0.96 against today's
+   *  0.798 - i.e. the gate stays a gate instead of quietly becoming impossible. */
+  S_GATE_CLEAN_STREAK_RATIO: 0.32,
+  S_GATE_CLEAN_STREAK_MIN: 3,
+  /** Misclicks ARE linear, so this one is a plain per-find rate: 1-in-5, the old
+   *  number restated. 5/4/3/3 by tier; binomial P(pass) at a 15% miss rate is
+   *  0.82/0.77/0.79/0.88 against today's 0.835. */
+  S_GATE_MISCLICK_RATE: 0.2,
+  S_GATE_MISCLICKS_MIN: 1,
 
-  /** Timed round timeout with fewer than 5 finds = C floor with partial credit. */
-  TIMEOUT_COMPOSITE_CEIL: 0.49,
+  /** The best clean streak that scores a full 1.0 on the streak term, as
+   *  BASE + PER_FIND x finds. It is AFFINE, not a ratio, and that is the whole
+   *  point: the longest run in n tries grows like log(n), so a flat ratio would
+   *  deflate the term at long classes and inflate it at short ones. Fitted to
+   *  hold typical competent play (85% clean) at the ~0.76 it scores today:
+   *  divisors 15/14/11/10 by tier -> 0.78/0.77/0.81/0.78. */
+  STREAK_FULL_BASE: 5,
+  STREAK_FULL_PER_FIND: 0.4,
+  STREAK_FULL_MIN: 3,
 
-  /** flavorXp (shell clamps at 15 too - BUILD-CONTRACT §8). */
+  /** THE BELL WITH PARTIAL FINDS IS A NORMAL OUTCOME NOW, not a fail.
+   *  At five finds "the bell caught you" meant you never finished a 5-find
+   *  class in two minutes, so the old rule (composite x finds/5, hard-capped at
+   *  0.49 = a guaranteed C) was fair. At 13-26 finds a 12/13 bell run is a good
+   *  class, and a flat C would be a lie. So completion is a CREDIT LINE: find
+   *  this share of the class and the composite is untouched, below it credit
+   *  falls away proportionally (and reaches zero at zero finds). S is still out
+   *  of reach on a timeout - grade.js's sGate requires `complete`, which caps
+   *  the class at A - and the ceiling below is belt-and-braces for that. */
+  TIMEOUT_FULL_CREDIT_RATIO: 0.85,
+  TIMEOUT_COMPOSITE_CEIL: 0.90,
+
+  /** flavorXp (shell clamps at 15 too - BUILD-CONTRACT §8). DELIBERATELY NOT
+   *  rescaled with the find count: the XP economy is app-wide and this class
+   *  must not start paying 2-5x what its neighbours do. The consequence is that
+   *  the cap SATURATES mid-class - find 8 of 13-26 tops it out and every find
+   *  after it is worth no XP - which is intended, not an oversight. */
   XP_PER_FIND: 2,
   XP_PER_JACKPOT: 2,
   XP_CAP: 15,
 });
 
-export default { FINDS_PER_CLASS, TIERS, PLAYTEST, RUBRIC };
+export default { FINDS_BY_TIER, findsForTier, TIERS, PLAYTEST, RUBRIC };

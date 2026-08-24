@@ -1447,7 +1447,11 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     ccChips.textContent = '';
     if (r.tier) chip(tierLabel(r.tier));
     if (r.family) chip(familyLabel(r.family));
-    if (r.timeBudgetSec) chip(r.timeBudgetSec + 's');
+    /* A CLOCKLESS ROOM WEARS NO SECONDS (the class-length wave). Daily Trigger
+     * still runs a budget and still rings; the door card just does not count it
+     * out, the same suppression the departure board and the proctor strip make.
+     * `clockless` rides in on the shell's descriptor list (noteDescriptors). */
+    if (r.timeBudgetSec && !r.clockless) chip(r.timeBudgetSec + 's');
     if (r.homeroom) chip(t('homeroom', 'Homeroom'));
     ccStamp.textContent = r.done ? String(r.grade).toUpperCase()
       : (r.unlocked ? t('punchcard_unlocked_chip', 'Unlocked') : '');
@@ -1607,6 +1611,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       if (!r) continue;
       r.family = c.family;
       r.timeBudgetSec = c.timeBudgetSec;
+      r.clockless = !!c.clockless;
       r.homeroom = !!c.homeroom;
       r.tier = c.tier;
       // Only ever ADD what the descriptor knows: campusState already set this
