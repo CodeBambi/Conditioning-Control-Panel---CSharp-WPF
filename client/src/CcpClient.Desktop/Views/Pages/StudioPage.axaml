@@ -2324,10 +2324,21 @@
                for the same reason the shell's does: WPF paints the running one red
                (MainWindow.StartStop.cs:756) and captions it STOP SESSION with the time left
                (en.json:2321, MainWindow.Presets.cs:1752). -->
-          <StackPanel Orientation="Horizontal" Spacing="10">
+          <!-- A WRAP PANEL AND NOT A HORIZONTAL STACK, and it is a repair rather than a preference.
+               Four buttons — a running STOP caption carrying a countdown, Pause, Edit session and
+               Recent sessions — do not fit on one line of the Studio door's module column, which is
+               roughly 690 DIP. A StackPanel does not care: it arranges past its own right edge and
+               the LAST button silently leaves the visible strip. That was measured rather than
+               guessed — adding the fourth button broke a landed rack fact whose only crime was
+               clicking `ScriptedSessionHistoryButton`, which had been pushed out from under the
+               pointer. It is the same defect the toolbar above records at 0 DIP wide: present,
+               correct, and unreachable. A WrapPanel flows the overflow onto a second line instead.
+               The spacing is on the children because WrapPanel has no Spacing of its own. -->
+          <WrapPanel Orientation="Horizontal">
             <Button x:Name="ScriptedSessionStartButton"
                     Classes="session-start"
                     HorizontalAlignment="Left"
+                    Margin="0,0,10,6"
                     AutomationProperties.AutomationId="ScriptedSessionStartButton"
                     AutomationProperties.Name="Start Session"
                     Content="Start Session" />
@@ -2343,10 +2354,33 @@
                     Classes="module-action"
                     IsVisible="False"
                     HorizontalAlignment="Left"
+                    Margin="0,0,10,6"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="ScriptedSessionPauseButton"
                     AutomationProperties.Name="Pause"
                     Content="Pause" />
+
+            <!-- EDIT SESSION — upstream's rack row action (MainWindow/MainWindow.SessionIO.cs:538
+                 builds it as a ✎ on every row, :1819-1868 handles it). It is a strip button acting
+                 on the SELECTION rather than a per-row hover action, because this rack's rows are
+                 RadioButtons whose whole job is to carry a selection: a button inside a RadioButton
+                 is a click target that would have to swallow the gesture that selects the row it is
+                 in, and the port already routes Start, Stop and Pause through the same selection.
+
+                 IT IS OFFERED FOR A BUILT-IN TOO, which is upstream's rule (:538 is outside the
+                 non-built-in branch at :540) and is the ONLY way the copy rule is reachable: a user
+                 with four shipped sessions and no editable ones would never be able to make a first
+                 custom session. Saving one makes a copy and never touches the shipped file
+                 (Session/SessionEditorRules.cs, Session/CustomSessionStore.cs). -->
+            <Button x:Name="ScriptedSessionEditButton"
+                    Classes="module-action"
+                    HorizontalAlignment="Left"
+                    Margin="0,0,10,6"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ScriptedSessionEditButton"
+                    AutomationProperties.Name="Edit session"
+                    ToolTip.Tip="Change the selected session's name, length and description"
+                    Content="Edit session" />
 
             <!-- RECENT SESSIONS — upstream's own door button, on this door because the rack is
                  (MainWindow/MainWindow.Presets.cs:1440 -> SessionLogHistoryWindow;
@@ -2356,12 +2390,13 @@
             <Button x:Name="ScriptedSessionHistoryButton"
                     Classes="module-action"
                     HorizontalAlignment="Left"
+                    Margin="0,0,10,6"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="ScriptedSessionHistoryButton"
                     AutomationProperties.Name="Recent sessions"
                     ToolTip.Tip="Browse the last 20 sessions and the videos/images each one played"
                     Content="Recent sessions" />
-          </StackPanel>
+          </WrapPanel>
 
           <Border Classes="notice">
             <StackPanel Spacing="4">

@@ -163,11 +163,21 @@ public static class ScriptedSessionRack
 /// <para><b>Upstream's <c>recent</c> is not here, and it is upstream's DEFAULT.</b> It orders by
 /// the backing file's last-write time (<c>MainWindow/MainWindow.SessionIO.cs:336-349</c>), which is
 /// recency only because upstream's user can create, import and edit sessions — every one of those
-/// stamps a file. Nothing in this build writes a <c>.session.json</c>, so every stamp here is the
-/// moment the install laid the file down, and "Recent" would be install order wearing a name that
-/// claims otherwise. <see cref="Installed"/> is the honest form of the same default, and it is this
-/// port's deterministic file-name order (<see cref="ScriptedSession.ReadFolder"/>) rather than
-/// upstream's <c>Directory.GetFiles</c> order.</para>
+/// stamps a file. The order was refused on the ground that "nothing in this build writes a
+/// <c>.session.json</c>, so every stamp here is the moment the install laid the file down".</para>
+///
+/// <para><b>THAT PREMISE DIED WITH THE EDITOR AND THE REFUSAL IS RESTATED RATHER THAN LEFT TO
+/// ROT.</b> <see cref="CustomSessionStore.Save"/> writes a session file on an explicit user
+/// gesture, so a CUSTOM session's stamp is now real recency. It is still not ported, and the reason
+/// is a different and smaller one: the four shipped files are still stamped at install, so
+/// <c>recent</c> would sort the user's half meaningfully and the built-in half arbitrarily — and as
+/// upstream's DEFAULT it would re-order the whole rack on every save, moving the row the user just
+/// edited out from under the pointer. Adding it is now a portable change rather than an
+/// unportable one, and it belongs to whichever slice also decides whether it may be the default.
+/// <see cref="Installed"/> stays the default here: it is this port's deterministic file-name order
+/// (<see cref="ScriptedSession.ReadFolder"/>, built-ins then customs per
+/// <see cref="CustomSessionStore.Catalogue"/>) rather than upstream's <c>Directory.GetFiles</c>
+/// order, and a save never moves a row that was already on screen.</para>
 ///
 /// <para><b>Upstream's <c>xp</c> is not here either</b>
 /// (<c>MainWindow/MainWindow.SessionIO.cs:333-334</c>, ordering by

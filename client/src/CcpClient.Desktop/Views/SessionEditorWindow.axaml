@@ -1,0 +1,197 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="CcpClient.Desktop.Views.SessionEditorWindow"
+        Title="Session Editor"
+        Width="560" Height="560"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#FF141018">
+  <!--
+    SESSION EDITOR — upstream's Windows/SessionEditorWindow.xaml(.cs), opened from the rack row's
+    edit action (MainWindow/MainWindow.SessionIO.cs:538 builds the button, :1819-1868 handles it).
+
+    WHAT IS HERE IS THE THREE FIELDS UPSTREAM BINDS TO CONTROLS DIRECTLY, and no more: the name
+    (SessionEditorWindow.xaml:80), the duration slider (:109-112) and the description
+    (:234-239). Upstream's constructor loads exactly those three out of a session it is handed
+    (SessionEditorWindow.xaml.cs:64-66) and its save reads exactly those three back (:1141-1142,
+    plus the slider's own handler at :1027).
+
+    WHAT IS DELIBERATELY NOT HERE is the rest of that window, and it is most of it: the drag-and-drop
+    TIMELINE (:119-148), the twenty feature icons that drag onto it (:150-196), the per-feature
+    settings popup (:251-255), the four-step tutorial overlay (:257-381), and Import/Export
+    (:215-218). They are one feature — authoring a session's timeline — and this port models no
+    timeline at all: ScriptedSession carries the FLATTENED Settings the four shipped files write,
+    and nothing here can author, draw or persist a segment. The window says so on screen rather than
+    only in this comment, which is the port's standing rule for a refusal (§9 D7).
+
+    NOT A DIALOG. Upstream is modal (editor.ShowDialog(), MainWindow.SessionIO.cs:1828) and this is
+    not: the port's own window convention is Show(owner) with the launch site keeping exactly one
+    alive (Navigation/SessionRecapLaunch.cs, Navigation/LoomLaunch.cs), because nothing in this
+    shell blocks on a window's result and an async ShowDialog inside a click handler would be the
+    async-void shape the async-lifecycle contract bans. The consequence is real and bounded: the
+    rack stays live behind this window, so a user can start a session while editing one. Nothing
+    breaks if they do — a run holds its own ScriptedSession instance, and an edit of a built-in
+    produces a COPY, so neither the running object nor the shipped file is what the save touches.
+  -->
+  <Window.Styles>
+    <Style Selector="Border.plate">
+      <Setter Property="Background" Value="#FF241E2A" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="TextBlock.field-label">
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="Opacity" Value="0.7" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+    <Style Selector="TextBox.field">
+      <Setter Property="Background" Value="#FF1B1620" />
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+    <Style Selector="Button.editor-action">
+      <Setter Property="Background" Value="#FF2A2130" />
+      <Setter Property="Foreground" Value="#FFE8E0EE" />
+      <Setter Property="BorderBrush" Value="#FFD05CE8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="16,8" />
+    </Style>
+    <Style Selector="Button.editor-danger">
+      <Setter Property="BorderBrush" Value="#FFF23557" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="20">
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+      <TextBlock Grid.Column="0" x:Name="Header"
+                 AutomationProperties.AutomationId="SessionEditorHeader"
+                 Foreground="#FFD05CE8" FontSize="20" FontWeight="Bold"
+                 Text="Session Editor" />
+      <!-- THE PROVENANCE LINE, and it is load-bearing rather than decorative: editing a built-in
+           produces a second session with the SAME NAME unless the user changes it, so the one
+           question this window has to answer before anything else is "am I about to change the
+           shipped session or make my own copy of it". Upstream answers it on the rack row instead,
+           with a YOURS / BUILT-IN pill (MainWindow/MainWindow.SessionIO.cs:508-517, :588-597); the
+           port now carries that badge on the row too, and this line is the same fact stated where
+           the decision is being made. -->
+      <TextBlock Grid.Column="1" x:Name="ProvenanceLine"
+                 AutomationProperties.AutomationId="SessionEditorProvenance"
+                 Foreground="#FFE8E0EE" Opacity="0.7" FontSize="12"
+                 VerticalAlignment="Center" TextAlignment="Right" Text="" />
+    </Grid>
+
+    <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,12,0,0">
+      <TextBlock x:Name="RefusalLine"
+                 AutomationProperties.AutomationId="SessionEditorRefusal"
+                 Foreground="#FFF23557" FontSize="12" TextWrapping="Wrap"
+                 IsVisible="False" Text="" />
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <!-- DELETE is upstream's rack action rather than an editor button
+             (MainWindow/MainWindow.SessionIO.cs:540-544, offered only for a session that is not
+             built-in, and :1946-1960 confirms first). It is HERE because this window is the only
+             surface the port gives a custom session, and without it the editor would be a one-way
+             door: a user could create their own sessions and could never remove one except through
+             the file system. The confirmation is the caption's own second gesture rather than a
+             third dialog idiom — the rack's confirmation strip already establishes the rule the
+             ceremony has to keep, which is that a destructive act takes two separate gestures. -->
+        <Button x:Name="DeleteButton"
+                Classes="editor-action editor-danger"
+                IsVisible="False"
+                AutomationProperties.AutomationId="SessionEditorDeleteButton"
+                AutomationProperties.Name="Delete"
+                Content="Delete" />
+        <Button x:Name="CancelButton"
+                Classes="editor-action"
+                AutomationProperties.AutomationId="SessionEditorCancelButton"
+                AutomationProperties.Name="Cancel"
+                Content="Cancel" />
+        <Button x:Name="SaveButton"
+                Classes="editor-action"
+                AutomationProperties.AutomationId="SessionEditorSaveButton"
+                AutomationProperties.Name="Save Session"
+                Content="Save Session" />
+      </StackPanel>
+    </StackPanel>
+
+    <Border Classes="plate">
+      <StackPanel Spacing="12">
+        <StackPanel>
+          <TextBlock Classes="field-label" Text="Name" />
+          <TextBox x:Name="NameBox"
+                   Classes="field"
+                   AutomationProperties.AutomationId="SessionEditorNameBox"
+                   AutomationProperties.Name="Session name"
+                   Text="" />
+        </StackPanel>
+
+        <StackPanel>
+          <TextBlock Classes="field-label" Text="Duration" />
+          <Grid ColumnDefinitions="*,Auto">
+            <!-- Upstream's slider, with upstream's bounds and upstream's snap
+                 (SessionEditorWindow.xaml:109-112). The numbers are read off SessionEditorRules so
+                 the control and the clamp cannot drift apart. -->
+            <Slider Grid.Column="0" x:Name="DurationSlider"
+                    VerticalAlignment="Center"
+                    IsSnapToTickEnabled="True"
+                    AutomationProperties.AutomationId="SessionEditorDurationSlider"
+                    AutomationProperties.Name="Session duration in minutes" />
+            <TextBlock Grid.Column="1" x:Name="DurationValue"
+                       AutomationProperties.AutomationId="SessionEditorDurationValue"
+                       Foreground="#FFE8E0EE" FontSize="12" FontWeight="SemiBold"
+                       VerticalAlignment="Center" Margin="10,0,0,0" MinWidth="60"
+                       TextAlignment="Right" Text="" />
+          </Grid>
+        </StackPanel>
+
+        <StackPanel>
+          <TextBlock Classes="field-label" Text="Description" />
+          <!-- MULTI-LINE AND DELIBERATELY NOT WRAPPED, and the reason is measured rather than
+               aesthetic. Upstream's box wraps (SessionEditorWindow.xaml:235). An Avalonia TextBox
+               with TextWrapping="Wrap" holding text long enough to need a second line does not
+               terminate under the headless platform's stub text metrics: Show() never returns and
+               the process climbs past 19 GB. Reproduced from first principles and narrowed to the
+               one property — the same box with NoWrap and the same text shows in 1.5 s, and the
+               same box with Wrap and the word "short" shows in 1.3 s, so it is the WRAPPING of
+               real text and neither the height, the AcceptsReturn nor the scrollbar policy.
+               (Each of those four was run as its own probe; MinHeight and an always-visible bar
+               were tried and neither helps.)
+
+               So the choice was between a description field this port's evidence base cannot open
+               at all and one that scrolls sideways. Horizontal scrolling is the smaller loss and
+               it is honest: the box still accepts newlines, so authored paragraphs are still
+               authored, and the rack row shows the first line either way. Recorded as a
+               divergence; the day the harness can measure wrapped editable text this is one
+               attribute. -->
+          <TextBox x:Name="DescriptionBox"
+                   Classes="field"
+                   Height="110"
+                   AcceptsReturn="True"
+                   TextWrapping="NoWrap"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   AutomationProperties.AutomationId="SessionEditorDescriptionBox"
+                   AutomationProperties.Name="Session description"
+                   Text="" />
+          <TextBlock Foreground="#FFE8E0EE" Opacity="0.6" FontSize="11" Margin="0,4,0,0"
+                     TextWrapping="Wrap"
+                     Text="The rack row shows the first line; the whole thing is on its tooltip." />
+        </StackPanel>
+
+        <!-- WHAT THIS EDITOR DOES NOT EDIT, said where the user is rather than only in a comment.
+             §9 D7's rule: absent rather than greyed, and NAMED rather than silently missing. -->
+        <TextBlock x:Name="AbsenceLine"
+                   AutomationProperties.AutomationId="SessionEditorAbsence"
+                   Foreground="#FFE8E0EE" Opacity="0.6" FontSize="11"
+                   TextWrapping="Wrap" Text="" />
+      </StackPanel>
+    </Border>
+  </DockPanel>
+</Window>

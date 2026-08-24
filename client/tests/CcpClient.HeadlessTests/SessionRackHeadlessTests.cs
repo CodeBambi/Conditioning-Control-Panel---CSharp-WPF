@@ -118,14 +118,18 @@ public class SessionRackHeadlessTests : HeadlessTest
             ["SessionRowDistantDoll", "SessionRowGamerGirl", "SessionRowGoodGirlsDontCum", "SessionRowMorningDrift"],
             rows.Select(r => r.Name));
 
-        // Upstream's cells: icon, name, the description's first line, difficulty and duration
-        // (MainWindow/MainWindow.SessionIO.cs:428-497).
+        // Upstream's cells: icon, name, the description's first line, the provenance badge, and
+        // difficulty with duration (MainWindow/MainWindow.SessionIO.cs:428-497, badge at :508-517).
+        // The badge joined this list when the editor landed — before it every row was built-in and
+        // upstream's own pill carried no information here; now a saved edit puts a session of the
+        // same name in the rack beside its original and the badge is what separates them.
         var texts = rows[3].GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();
         Assert.Equal(
             [
                 "\U0001F305",
                 "Morning Drift",
                 "Let the morning carry you gently into that soft, floaty space...",
+                "BUILT-IN",
                 "Easy · 30 min",
             ],
             texts);
