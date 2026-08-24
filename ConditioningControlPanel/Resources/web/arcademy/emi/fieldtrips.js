@@ -173,6 +173,31 @@ export const POIS = Object.freeze([
 ]);
 
 /* ---------------------- helpers ---------------------------------------- */
+/* ----------------------------------------------------------------------------
+ * SHE IS GOING SOMEWHERE. Two cues, both on the trip itself.
+ * shell/audio.js holds the only audio node on the page (trap 18), so this is a
+ * REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() set. A dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+/* The CRT power-off is the picture; this is the air it moves. Departure and
+ * return are the same sweep, the way home pitched down a little so the pair
+ * reads as one round trip rather than as two separate events. A CANCELLED trip
+ * never sounds its return - she did not get home.
+ */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
 
 /** Is the page actually being looked at? An idle edge on a hidden tab is not
@@ -341,6 +366,7 @@ export function createFieldTrips(o = {}) {
       onDone: (info) => {
         cancelLive = null;
         if (info && info.cancelled) return;
+        sfx('whoosh', 0.3, { pitch: 0.9 });
         /* HOME AGAIN. The beat rides the ordinary moment path, so voice.js owns
          * whether b28 is spent - this file never writes a story flag. */
         try { fire(TRIP_HOME_MOMENT, { id: c.poi.id, lineKey: c.poi.lineKey }); }
@@ -348,6 +374,9 @@ export function createFieldTrips(o = {}) {
       },
     });
     if (!cancel) return false;
+    // DEPARTURE, and only once the widget has actually accepted the trip: a
+    // refusal (mid-say, mid-drag, dismissed...) answers null and stays silent.
+    sfx('whoosh', 0.35);
     bank(key);
     tripsThisSession += 1;
     cancelLive = cancel;

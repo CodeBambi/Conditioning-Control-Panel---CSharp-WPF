@@ -589,6 +589,31 @@ function svgText(x, y, cls, text, extra) {
   n.textContent = text == null ? '' : String(text);
   return n;
 }
+/* ----------------------------------------------------------------------------
+ * THE CAMPUS HAS TWO SOUNDS: a door, and the pad under the cursor.
+ * shell/audio.js holds the only audio node on the page (trap 18), so this is a
+ * REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() set. A dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
+/** The hover pad is a chip, not a chime: a pointer sweeping the plan must not
+ *  play a tune. One cue per 150ms, whatever the mouse is doing. */
+const HOVER_GAP_MS = 150;
+let lastHoverCue = 0;
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -1474,6 +1499,13 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       let d;
       try { d = dataFn(); } catch (e) { d = null; }
       if (!d) return;
+      /* The pointer has landed on something the plan can name. Throttled, and
+       * deliberately under everything else on the stage - this is the felt of
+       * the table, not an announcement. */
+      try {
+        const now = Date.now();
+        if (now - lastHoverCue >= HOVER_GAP_MS) { lastHoverCue = now; sfx('pad', 0.15); }
+      } catch (e) { /* noop */ }
       tipName.textContent = d.name || '';
       tipStatus.textContent = d.status || '';
       tipDesc.textContent = d.desc || '';
@@ -1591,6 +1623,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   }
 
   function popCard() {
+    /* THE DOOR. `card.swing` IS the door-open animation (the mockup's reflow
+     * trick, one line down), so the thump belongs here rather than at any of the
+     * four click handlers that reach it - one verb, one sound. */
+    sfx('door', 0.35);
     cardOpen = true;
     scrim.classList.add('on');
     tip.classList.remove('on');

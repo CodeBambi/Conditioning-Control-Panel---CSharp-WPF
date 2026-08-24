@@ -626,6 +626,19 @@ internal static class ArcademyHostService
             effectIntensity = s?.ChaosEffectIntensity ?? 0.85,
             audioLevels = BuildAudioLevels(s),
             audioMute = s?.ArcademyAudioMute ?? false,
+            // THE AUTOPLAY GRANT (AV CLUB). The view is launched with
+            // --autoplay-policy=no-user-gesture-required, so shell/audio.js owes nobody a
+            // gesture and may build its graph at boot - which is the only way the opening
+            // splash gets a sound at all, since it is over before the player has touched
+            // anything. It is a statement about THIS host, not a setting: a page served
+            // anywhere else never sees the field and waits for a click, exactly as it does now.
+            autoplayOk = true,
+            // ...and WHICH recorded cues are actually on disk. A media element answers "no such
+            // file" asynchronously, long after the beat it was meant to land on, so a page left
+            // to probe would either drop the first cue of every sampled name or lie about what
+            // it has. The host serves the folder; it can simply say. Bare names, no paths -
+            // shell/audio.js owns the SAMPLES map and intersects this list with it.
+            sfxSamples = BuildSfxSamples(),
             masterVolume = Math.Clamp((s?.MasterVolume ?? 32) / 100.0, 0.0, 1.0),
             remoteMediaEnabled = RemoteMediaEnabled(),
             remoteMediaRatio = Math.Clamp((s?.RemoteMediaRatio ?? 30) / 100.0, 0.0, 1.0),
@@ -698,6 +711,42 @@ internal static class ArcademyHostService
             drops = Level("drops", 0.4),
             music = Level("music", 1.0),
         };
+    }
+
+    /// <summary>
+    /// The RECORDED cues that exist right now: every <c>.mp3</c> in the page's own
+    /// <c>assets/sfx</c> folder, projected as bare names (<c>bell</c>, not <c>bell.mp3</c>).
+    /// The page holds the name -> path map and ignores anything it does not know, so this list
+    /// is an ANSWER, never an instruction - a stray file cannot make the shell fetch it.
+    /// Only the ccp.game tree is scanned: the page asks for these by a RELATIVE url, so a copy
+    /// living under any other mapped origin would not be reachable and saying it was there
+    /// would make the page drop the cue instead of synthesising it. Missing folder, no
+    /// permission, no files: an empty list, and every cue falls to its oscillator recipe
+    /// exactly as it did before the sample door existed.
+    /// Cached for the process - the folder ships with the build and cannot change under a
+    /// running app, and BuildInit is re-projected on every relaunch of the window.
+    /// </summary>
+    private static string[]? _sfxSamples;   // null = not scanned yet, never "none found"
+
+    private static string[] BuildSfxSamples()
+    {
+        if (_sfxSamples != null) return _sfxSamples;
+        try
+        {
+            var dir = Path.Combine(AppContext.BaseDirectory, "Resources", "web", "arcademy", "assets", "sfx");
+            if (!Directory.Exists(dir)) return _sfxSamples = Array.Empty<string>();
+            _sfxSamples = Directory.EnumerateFiles(dir, "*.mp3", SearchOption.TopDirectoryOnly)
+                .Select(f => Path.GetFileNameWithoutExtension(f) ?? string.Empty)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .OrderBy(n => n, StringComparer.Ordinal)
+                .ToArray();
+            return _sfxSamples;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.BuildSfxSamples: {E}", ex.Message);
+            return _sfxSamples = Array.Empty<string>();
+        }
     }
 
     /// <summary>

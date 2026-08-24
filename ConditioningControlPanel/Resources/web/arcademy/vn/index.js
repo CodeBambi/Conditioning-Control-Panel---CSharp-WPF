@@ -61,6 +61,7 @@ export const VN_DIALS = Object.freeze({
   BOARD_DEAL_REDUCED_MS: 700,
   PAPER_OUT_MS: 300,      // the slip tucking back into the tray
   MAIL_DELAY_MS: 700,     // let the screen under the ceremony settle first
+  HOLD_TICK_MS: 250,      // the clock under a held skip (AV CLUB)
   /* WATCHDOGS. If any of these fire the VN has a bug, and a bug may not cost
    * the player their night: the continuation runs and the layer comes down. */
   COLD_OPEN_CAP_MS: 150000,
@@ -84,6 +85,25 @@ function attr(node, name, value) {
 function cls(node, name, on) {
   try { if (node && node.classList) node.classList[on ? 'add' : 'remove'](name); }
   catch (e) { /* noop */ }
+}
+
+/* ONE AUDIO DOOR (AV CLUB, 2026-08-24). Every sound this file makes is a
+ * REQUEST on `document` - shell/audio.js owns the only audio graph on the page
+ * (trap 18) and shell/ceremonies.js set the pattern verbatim. The VN is
+ * furniture (trap 76), so its voice is furniture too: a cue may never throw, a
+ * dropped cue is not an error, and nothing here waits on a sound. */
+function sfx(name, level, extra) {
+  try {
+    if (!doc || typeof doc.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    doc.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
 }
 
 /** Compose one paper paragraph from its clause rows (vn/lex.js PAPERS). */
@@ -195,6 +215,8 @@ export function createFirstBell(o) {
   let zoneNode = null;
   let glowNode = null;
   let skipBtn = null;
+  let skipRelease = null;       // the pill's own "let go" verb, for a teardown
+  let lastPlate = null;         // the plate on the wall, so a repaint is silent
   let boardApi = null;
   let advance = null;           // the live "next step" verb, or null
   let skipTo = null;            // the live "end this scene now" verb, or null
@@ -288,12 +310,17 @@ export function createFirstBell(o) {
   }
 
   function unmountLayer() {
+    /* A SCENE CAN END UNDER A HELD PILL (a watchdog, a caption's autoMs, the
+     * board settling), and a tick loop is the one thing here that would keep
+     * counting into the campus. Let go of it before the button is gone. */
+    if (skipRelease) { try { skipRelease(); } catch (e) { /* noop */ } skipRelease = null; }
     if (win && win.removeEventListener) { try { win.removeEventListener('keydown', onKey); } catch (e) { /* noop */ } }
     if (boardApi) { try { boardApi.destroy(); } catch (e) { /* noop */ } boardApi = null; }
     if (layer) { try { layer.remove(); } catch (e) { /* noop */ } }
     layer = null; frame = null; bg = null; neon = null;
     capNode = null; tapNode = null; paperNode = null;
     zoneNode = null; glowNode = null; skipBtn = null;
+    lastPlate = null;
   }
 
   /** Fade the layer out, then drop it. Reduced motion cuts straight to the drop. */
@@ -319,16 +346,41 @@ export function createFirstBell(o) {
     skipBtn.appendChild(el('span', 'arc-vn-skip-label', tx('vn_skip')));
 
     let holdTimer = 0;
+    let tickTimer = 0;
+
+    /* THE CLOCK UNDER THE HOLD (AV CLUB). 1200ms is a long time to wonder
+     * whether the pill heard you, so the reach for the door counts itself out
+     * loud - one soft tick every 250ms, and the fill bar is no longer the only
+     * thing saying "keep holding". The loop is a self-rescheduling `later()`,
+     * which is what puts it under killTimers/destroy with every other beat in
+     * this file rather than beside them. It stops three ways: a release, the
+     * hold completing, and the layer coming down (unmountLayer above). */
+    const stopTicks = () => {
+      if (!tickTimer) return;
+      try { clearTimeout(tickTimer); } catch (e) { /* noop */ }
+      timers.delete(tickTimer);
+      tickTimer = 0;
+    };
+    const tick = () => {
+      sfx('clock_tick', 0.2);
+      tickTimer = later(tick, VN_DIALS.HOLD_TICK_MS);
+    };
+
     const release = () => {
       if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
+      stopTicks();
       cls(skipBtn, 'is-holding', false);
     };
+    skipRelease = release;
     const start = (e) => {
       if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
       if (holdTimer) return;
       cls(skipBtn, 'is-holding', true);
+      // The first tick is 250ms in, so a tap on the pill is silent.
+      tickTimer = later(tick, VN_DIALS.HOLD_TICK_MS);
       holdTimer = setTimeout(() => {
         holdTimer = 0;
+        stopTicks();
         cls(skipBtn, 'is-holding', false);
         // The hold landed: end the current scene at its own handoff edge.
         try { if (skipTo) skipTo(); } catch (err) { say('vn skip threw: ' + ((err && err.message) || err)); }
@@ -346,6 +398,10 @@ export function createFirstBell(o) {
 
   /* ---------------------- input ----------------------------------------- */
   function onTap() {
+    /* ONE TICK PER PAGE ACTUALLY TURNED. A tap into a scene with no live
+     * advance (a hold, the board dealing) says nothing, and a paper answers
+     * with its own stamp in showPaper rather than with this. */
+    if (advance && !paperNode) sfx('blip', 0.15, { pitch: 1.1 });
     try { if (advance) advance(); } catch (e) { say('vn advance threw: ' + ((e && e.message) || e)); }
   }
 
@@ -377,6 +433,12 @@ export function createFirstBell(o) {
   /** Paint an ALREADY-DECODED plate. Never awaits: ensurePlate is the gate. */
   function applyPlate(url, motion) {
     if (!bg || !url) return;
+    /* THE CUT HAS AIR IN IT. A new plate is a camera move, so it gets one soft
+     * sweep - but only when the plate actually CHANGES (the skip path repaints
+     * the desk it is already standing on) and only when there is motion to
+     * hear, because reduced motion renders every plate as a static frame. */
+    if (!reduced && url !== lastPlate) sfx('whoosh', 0.3);
+    lastPlate = url;
     cls(bg, 'is-lit', false);
     bg.style.backgroundImage = 'url("' + base + url + '")';
     attr(bg, 'data-motion', reduced ? 'still' : (motion || 'still'));
@@ -410,10 +472,14 @@ export function createFirstBell(o) {
     paperNode.appendChild(el('p', 'arc-vn-paper-sign', tx(spec.sign)));
     frame.appendChild(paperNode);
     const mine = paperNode;
-    later(() => cls(mine, 'is-up', true), 20);
+    // The slip and its sound leave the tray together.
+    later(() => { cls(mine, 'is-up', true); sfx('paper', 0.35); }, 20);
     cls(tapNode, 'is-up', true);
 
     advance = () => {
+      // READ AND FILED. The dismissal is the one beat in the VN with a hand in
+      // it, so it lands on the school's own stamp rather than a page-turn tick.
+      sfx('stamp', 0.3, { pitch: 1.05 });
       advance = null;
       paperNode = null;
       cls(mine, 'is-up', false);

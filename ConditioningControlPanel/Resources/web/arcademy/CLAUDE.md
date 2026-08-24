@@ -1525,6 +1525,35 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     is free either way. THE SKIP PATH MUST EQUAL AN INSTANT DISMISS: whatever the GO callback
     ran, the auto-skip runs - which is why every game routes both through the same `onDone`.
 
+86. **THE SAMPLE DOOR IS HONEST ONLY BECAUSE THE HOST SAYS WHAT EXISTS (`init.sfxSamples`).**
+    `shell/audio.js` maps cue names to `./assets/sfx/<name>.mp3` but plays a sample ONLY when
+    the host listed its bare name in `init.sfxSamples` (the C# side scans the folder once,
+    `ArcademyHostService.BuildSfxSamples`). A media element reports a missing file
+    asynchronously, so probing from the page would either lie to `hasSample()` or eat the
+    first cue of every sampled name. Consequences: dropping a new mp3 into `assets/sfx/`
+    IS the wiring (add the name to `SAMPLES` if it is new); a browser/test shim that wants
+    samples audible MUST list the names in its fake init; `intro_bed`/`flap_deal` are
+    SAMPLE-ONLY (no synth recipe - absent file = silence, by design); every other sampled
+    name falls back to its recipe. `autoplayOk` in init (also new) arms the mixer with no
+    gesture - the host passes `--autoplay-policy=no-user-gesture-required`, a plain browser
+    without the flag stays gesture-gated.
+
+87. **SPLITFLAP'S CUE TIMING IS HARD-COUPLED TO THE CSS CASCADE.** `cueCascade()` staggers
+    its `flap` row ticks at `ROW_STEP_MS = 400` and lands `commit` at `(rows-1)*400 + 1500`,
+    mirroring `styles.css`'s `--r * .4s` stagger and meta fade. Change one, move both. The
+    cues live in `replay()` only - `animate:false` builds stay dead silent (the boot builds
+    the campus board that way), and BOTH the timetable deal and the VN board handoff sing
+    through `replay()`, so a cue added at the build site would double the handoff.
+
+88. **THE MIXER-SLIDER PREVIEW RIDES THE ECHO, NOT THE DRAG.** `shell/settings.js` fires its
+    preview cue only when the host echoes back a write that THIS page made (it checks the
+    row's `pending` class before `row.apply` clears it) - a host-initiated settings push
+    never beeps at the player, and the cue lands after `audio.js`'s own `setting` subscriber
+    so it sounds at the NEW level. Known gap (pre-existing, unfixed): an app-side mixer
+    change echoes the WHOLE `audioLevels` object and neither audio.js nor settings.js
+    consumes that shape - live levels move on relaunch, not mid-session.
+
+
 ## 5. The game module contract (short version)
 
 ```js

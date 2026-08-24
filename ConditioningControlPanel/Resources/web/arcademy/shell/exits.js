@@ -31,6 +31,31 @@
 
 import { t } from '../core/lexicon.js';
 
+/* ----------------------------------------------------------------------------
+ * THE WAY OUT MAKES A SOUND.
+ * shell/audio.js holds the only audio node on the page (trap 18), so this is a
+ * REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() set. A dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+/* ONE cue in this file, and it is on the PILL - the leave-campus verb itself.
+ * Not on the confirm's Go and not on any signed button: those all land on a
+ * screen change, and shell.js's clearScreen() already cues the swap. A door
+ * thump on top of that swap would be the double this wave exists to avoid.
+ */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -231,7 +256,12 @@ export function campusPill(o) {
   btn.appendChild(wrap);
 
   if (typeof s.onActivate === 'function') {
-    btn.addEventListener('click', () => { try { s.onActivate(); } catch (e) { /* noop */ } });
+    btn.addEventListener('click', () => {
+      // Reaching for the door. The confirm that opens next is the shell's; this
+      // is the hand on the handle, and it sounds whether or not you go through.
+      sfx('door', 0.3);
+      try { s.onActivate(); } catch (e) { /* noop */ }
+    });
   }
   return btn;
 }

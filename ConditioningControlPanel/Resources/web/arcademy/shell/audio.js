@@ -31,6 +31,28 @@
  * AUTOPLAY: no AudioContext is created until the first user gesture; requests
  * before that are dropped silently (a beep the browser refuses is not an error).
  * No AudioContext at all (headless, old webview) -> every call is a no-op.
+ * THE ONE EXCEPTION is `autoplayOk` (AV CLUB, 2026-08-24): the app's own host
+ * launches this WebView2 with `--autoplay-policy=no-user-gesture-required`, so
+ * inside the app there is nothing to wait for and waiting COSTS us the only cue
+ * that can never be re-fired - the opening splash, which is over before the
+ * player has touched anything. The caller passes the option (boot.js reads the
+ * host's `init.autoplayOk`); it is OFF by default, because a page served
+ * anywhere else is still bound by the browser's policy and a context created
+ * into a refusal is a context that plays nothing.
+ *
+ * SAMPLES (AV CLUB, 2026-08-24). A handful of cues want a RECORDED sound, not a
+ * synthesised one - a school bell and a paper swish are exactly the two things
+ * an oscillator is worst at. `SAMPLES` maps those names onto files under
+ * `./assets/sfx/`, and a sample name resolves CLIP-FIRST: the same clip path a
+ * `detail.url` takes (same bus, same mute/level/duck laws, keyed on the cue's
+ * own name so a re-fire cuts itself), with the SOUNDS recipe as the floor
+ * underneath. Two names - `intro_bed` and `flap_deal` - have no recipe at all
+ * and are deliberately SILENT until their file ships: a stitched-together
+ * imitation of a bed track is worse than no bed track.
+ * A sample is only tried when the host has SAID the file is there
+ * (`init.sfxSamples`, and see `available` below) - an absent field means no
+ * samples, which is exactly the shape of the build today and sounds precisely
+ * as it did before this wave.
  *
  * CLIPS (2026-08-23, Echo's trigger bubbles). A cue may carry `detail.url` - a
  * SAME-ORIGIN `ccp.*` media file (the app's own whisper clips). It is then
@@ -116,7 +138,64 @@ const SOUNDS = {
      of the blip's gain. It is anticipation, not a sound in its own right - the
      moment a player NOTICES it, it is wrong (vox.js DOT_TICKS turns it off). */
   emi_tick:  { type: 'triangle', f0: 336, f1: 322, ms: 30, gain: 0.16, attack: 0.35 },
+  /* THE SHELL'S OWN VOICE (AV CLUB, 2026-08-24). Everything above this line
+     belongs to a game or to the mascot; these seven are the SCHOOL - a board
+     that flaps, a door that shuts, the bell, the clock over it, a form being
+     stamped, paper, and the air moving when EMI leaves the room. They are
+     chrome, so they are quiet by construction: every gain here sits under a
+     game one-shot's, because a player notices shell furniture only when it is
+     too loud.
+
+     `flap` is the split-flap board's single vane - 35ms of dry high noise, and
+     it is short on purpose: twelve of them cascade inside half a second, and
+     any tail at all turns the deal into a hiss. `clock_tick` is its opposite
+     number, the same gesture with the brightness taken off, because a clock
+     under a bell should read as pressure rather than as a tick you count.
+
+     `door` and `commit` both end in a `thunk` (the tone plus a lowpassed body
+     hit) - that is what makes a school sound like a building. `commit` then
+     LAYERS a two-note fifth over the thunk: a confirmation needs a low half
+     that says "landed" and a bright half that says "and it was good", and one
+     oscillator cannot be both.
+
+     `bell` is the only long sound in the table. Two sine partials a slightly
+     sharp fifth apart, both drooping across the decay, is the cheapest thing
+     that reads as a strike rather than as a beep - the sharpness is the point
+     (a clean fifth sounds like a chord; an inharmonic one sounds like metal).
+
+     `paper` and `whoosh` are the same noise band with different manners:
+     paper is a short swish that gets out of the way, whoosh is 350ms with a
+     soft attack and a RISING filter, so it arrives instead of just existing. */
+  flap:      { noise: true, hp: 1400, lp: 6200, ms: 35,  gain: 0.5 },
+  door:      { type: 'sine',     f0: 118, f1: 62,  ms: 180, gain: 0.9, thunk: true },
+  bell:      { type: 'sine',     f0: 784, f1: 712, ms: 600, gain: 0.5, attack: 0.012,
+               layer: { type: 'sine', f0: 1179, f1: 1064, ms: 520, gain: 0.26, attack: 0.012 } },
+  clock_tick:{ noise: true, hp: 620,  lp: 2400, ms: 40,  gain: 0.4 },
+  commit:    { type: 'sine',     f0: 165, f1: 84,  ms: 250, gain: 0.85, thunk: true,
+               layer: { arp: [392, 587.33], ms: 90, gain: 0.34 } },
+  paper:     { noise: true, hp: 1500, lp: 6000, ms: 140, gain: 0.45, attack: 0.25 },
+  whoosh:    { noise: true, hp: 300,  lp: 1800, ms: 350, gain: 0.5, attack: 0.4, sweep: 3.2 },
 };
+
+/** THE SAMPLE DOOR (AV CLUB, 2026-08-24): cue name -> a file beside the page.
+ *  Same origin as index.html (the host maps the whole folder), which is what
+ *  lets the element feed the bus graph rather than slipping the mixer. */
+const SAMPLES = {
+  intro_bed:  './assets/sfx/intro_bed.mp3',
+  bell:       './assets/sfx/bell.mp3',
+  flap_deal:  './assets/sfx/flap_deal.mp3',
+  stamp:      './assets/sfx/stamp.mp3',
+  stamp_bad:  './assets/sfx/stamp_bad.mp3',
+  door:       './assets/sfx/door.mp3',
+  paper:      './assets/sfx/paper.mp3',
+  whoosh:     './assets/sfx/whoosh.mp3',
+};
+
+/** The two names with NO recipe under them. A missing file is SILENCE here, not
+ *  a fallback: an oscillator impression of a bed track or of a whole board
+ *  dealing at once would be a different sound wearing the same name, and the
+ *  cue sites that fire these two are the ones nobody gets to hear twice. */
+const SAMPLE_ONLY = new Set(['intro_bed', 'flap_deal']);
 
 const clamp01 = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : 0);
 
@@ -141,8 +220,13 @@ const clampPitch = (v) => (
  * @param {Object} o.init    the init projection (audioLevels / audioMute / masterVolume)
  * @param {Object=} o.bridge the shell bridge (for the `setting` echo). Optional.
  * @param {Function=} o.log
+ * @param {boolean=} o.autoplayOk  ARM AT CREATION (default false). The app's host
+ *   launches the view with `--autoplay-policy=no-user-gesture-required`, so no
+ *   gesture is owed; the caller passes `init.autoplayOk === true` rather than
+ *   this file reading the projection, because "may I make noise unasked" is a
+ *   property of the HOST the page is in, not of the page.
  */
-export function createAudio({ init, bridge, log } = {}) {
+export function createAudio({ init, bridge, log, autoplayOk } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const src = init || {};
   const doc = (typeof document !== 'undefined') ? document : null;
@@ -159,8 +243,24 @@ export function createAudio({ init, bridge, log } = {}) {
   let ac = null;
   let out = null;                    // master gain
   const busGain = Object.create(null);   // bus -> {level: GainNode, duck: GainNode}
-  let gestured = false;
-  const stats = { handled: 0, played: 0, dropped: 0, ducks: 0, clips: 0, last: null };
+  let gestured = autoplayOk === true;
+  const stats = { handled: 0, played: 0, dropped: 0, ducks: 0, clips: 0, samples: 0, last: null };
+
+  /* WHICH SAMPLES ARE ACTUALLY THERE, and why the page is not the one to guess.
+   * A media element cannot answer "does this file exist" synchronously - it 404s
+   * asynchronously, long after the beat it was meant to land on - so a page that
+   * probed would either drop the first cue of every sampled name or lie to
+   * `hasSample()`. The HOST already knows: it serves the folder off disk. So it
+   * says so, once, in `init.sfxSamples` (bare names, no path), and this set is
+   * that list intersected with SAMPLES. No field, no samples: every name falls
+   * to its recipe and the two sample-only names stay silent, which is precisely
+   * how the build sounds before any file ships. A name that then fails to load
+   * anyway (a truncated file, a codec this webview will not take) is struck off
+   * on its `error` and never tried again this session. */
+  const available = new Set();
+  if (Array.isArray(src.sfxSamples)) {
+    for (const n of src.sfxSamples) { if (SAMPLES[String(n)]) available.add(String(n)); }
+  }
 
   function ensureContext() {
     if (ac || !Ctor || !gestured) return ac;
@@ -219,8 +319,21 @@ export function createAudio({ init, bridge, log } = {}) {
   /** Frequencies live in a 20Hz..20kHz sanity window whatever the pitch asks for. */
   const hz = (f, pitch) => Math.max(20, Math.min(20000, f * pitch));
 
-  function playRecipe(rec, bus, amp, pitch) {
+  /* TWO FIELDS THE TABLE GREW (AV CLUB, 2026-08-24), both of them one branch:
+   *   `layer` - a SECOND recipe fired with the same amp and pitch, so a cue can
+   *     be two things at once (commit's low thunk under its bright fifth, the
+   *     bell's second partial). One level deep only: `depth` refuses a recipe
+   *     that layers itself, because a table is data and data can be edited into
+   *     a loop by somebody who never reads this file.
+   *   `sweep` - a multiplier on a NOISE recipe's filter centre, ramped across
+   *     the envelope. A static band is a texture; a moving one is a gesture,
+   *     and `whoosh` needed to be a gesture.
+   * Neither field exists on any older recipe, so nothing above sounds different. */
+  function playRecipe(rec, bus, amp, pitch, depth) {
     const p = clampPitch(pitch);
+    if (rec.layer && !(depth > 0)) {
+      try { playRecipe(rec.layer, bus, amp, pitch, 1); } catch { /* a layer is a garnish */ }
+    }
     const env = ac.createGain();
     voiceOut(bus, env);
     // Duration is deliberately NOT scaled: a pitch ratchet should climb, not
@@ -234,7 +347,11 @@ export function createAudio({ init, bridge, log } = {}) {
       s.loop = true;
       const f = ac.createBiquadFilter();
       f.type = 'bandpass';
-      f.frequency.value = hz(Math.sqrt(Math.max(40, rec.hp) * Math.max(80, rec.lp)), p);
+      const centre = hz(Math.sqrt(Math.max(40, rec.hp) * Math.max(80, rec.lp)), p);
+      f.frequency.setValueAtTime(centre, t);
+      if (rec.sweep > 0 && rec.sweep !== 1) {
+        f.frequency.linearRampToValueAtTime(hz(centre * rec.sweep, 1), t + dur);
+      }
       f.Q.value = rec.bits ? 1.6 : 0.7;
       s.connect(f); f.connect(env);
       s.start(t); s.stop(stop);
@@ -304,8 +421,10 @@ export function createAudio({ init, bridge, log } = {}) {
     stop();
   }
 
-  /** @returns {boolean} true if the clip was taken (played or scheduled). */
-  function playClip(d, bus, amp) {
+  /** @param {string=} sampleName  set when the url came from SAMPLES, so a file
+   *   that turns out not to be playable can strike itself off `available`.
+   *  @returns {boolean} true if the clip was taken (played or scheduled). */
+  function playClip(d, bus, amp, sampleName) {
     if (typeof Audio !== 'function') return false;
     const url = String(d.url == null ? '' : d.url);
     if (!url) return false;
@@ -364,7 +483,18 @@ export function createAudio({ init, bridge, log } = {}) {
       killClip(rec, fadeMs);
     }, maxMs);
     try { el.addEventListener('ended', () => { if (clips.get(key) === rec) { clips.delete(key); killClip(rec, 0); } }); } catch { /* ignore */ }
-    try { el.addEventListener('error', () => { if (clips.get(key) === rec) { clips.delete(key); killClip(rec, 0); } }); } catch { /* ignore */ }
+    try {
+      el.addEventListener('error', () => {
+        if (clips.get(key) === rec) { clips.delete(key); killClip(rec, 0); }
+        // The file the host promised is not playable. Take the name back rather
+        // than spending a decoder on it once a beat for the rest of the night;
+        // from the next cue on it is a recipe again (or, for the sample-only
+        // pair, honest silence).
+        if (sampleName && available.delete(sampleName)) {
+          say('[audio] sample ' + sampleName + ' will not load - falling back');
+        }
+      });
+    } catch { /* ignore */ }
 
     try {
       const p = el.play();
@@ -418,14 +548,31 @@ export function createAudio({ init, bridge, log } = {}) {
     // relative loudness ladder the games ratchet is preserved, just audible.
     const amp = Math.sqrt(clamp01(d.level == null ? 0.5 : d.level));
     if (amp <= 0 || levels[bus] <= 0) { stats.dropped += 1; return; }
+    const name = String(d.name || '');
     try {
       // A url is a CLIP, whatever the name says. If the host cannot play one we
       // fall through to the recipe rather than going silent.
-      const took = d.url ? playClip(d, bus, amp) : false;
-      if (took) stats.clips += 1;
-      else playRecipe(SOUNDS[String(d.name || '')] || SOUNDS.blip, bus, amp, pitch);
-      stats.played += 1;
-    } catch (err) { stats.dropped += 1; say('[audio] ' + (d.name || '?') + ' failed: ' + ((err && err.message) || err)); }
+      let took = d.url ? playClip(d, bus, amp) : false;
+      // ...and a SAMPLED name is a url the caller did not have to know about.
+      // The slot is the name, so a cue that re-fires cuts its own tail instead
+      // of stacking (twelve flaps in half a second is the case that matters).
+      if (!took && available.has(name)) {
+        took = playClip(
+          Object.assign({}, d, { url: SAMPLES[name], key: d.key == null ? name : d.key }),
+          bus, amp, name
+        );
+        if (took) stats.samples += 1;
+      }
+      if (took) { stats.clips += 1; stats.played += 1; }
+      else if (SAMPLE_ONLY.has(name)) {
+        // No file, no imitation. The cue is spent, not queued (trap 70: a beat
+        // played late is worse than a beat missed).
+        stats.dropped += 1;
+      } else {
+        playRecipe(SOUNDS[name] || SOUNDS.blip, bus, amp, pitch);
+        stats.played += 1;
+      }
+    } catch (err) { stats.dropped += 1; say('[audio] ' + (name || '?') + ' failed: ' + ((err && err.message) || err)); }
     if (d.duck) duck(d.duck);
   }
 
@@ -448,10 +595,14 @@ export function createAudio({ init, bridge, log } = {}) {
     }
   }
 
+  /* The gesture listeners stay wired even when we are armed at creation, and
+   * they no longer bail on the flag alone: a browser that suspends the context
+   * anyway (a backgrounded tab, a policy the flag did not actually lift) is
+   * fixed by the first real touch, which is the cheapest safety net there is. */
   function onGesture() {
-    if (gestured) return;
+    const first = !gestured;
     gestured = true;
-    ensureContext();
+    if (first || !ac) ensureContext();
     if (ac && ac.state === 'suspended' && typeof ac.resume === 'function') { try { ac.resume(); } catch { /* ignore */ } }
   }
 
@@ -460,6 +611,10 @@ export function createAudio({ init, bridge, log } = {}) {
     doc.addEventListener('pointerdown', onGesture, true);
     doc.addEventListener('keydown', onGesture, true);
   }
+  // Armed: build the graph now rather than on the first cue, because the first
+  // cue this exists for is the splash's, and a context spun up inside that beat
+  // arrives after it.
+  if (gestured) ensureContext();
   const offSetting = (bridge && typeof bridge.on === 'function') ? bridge.on('setting', onSetting) : () => {};
   if (!Ctor) say('[audio] no AudioContext in this host - sfx are inert');
 
@@ -468,7 +623,15 @@ export function createAudio({ init, bridge, log } = {}) {
     onSetting,
     stopClips: stopAllClips,           // the shell cuts every clip on teardown
     liveClips: () => clips.size,
-    stats: () => Object.assign({ mute, master, levels: Object.assign({}, levels), gestured, live: !!ac }, stats),
+    /** Is there a REAL file behind this cue name right now? The one honest
+     *  answer to "may I use the recording instead of the impression" - the
+     *  intro asks before it decides whether to play a bed or to stitch the
+     *  beats by hand, and a false here has to mean "stitch", never "be quiet". */
+    hasSample: (name) => available.has(String(name || '')),
+    stats: () => Object.assign(
+      { mute, master, levels: Object.assign({}, levels), gestured, autoplayOk: autoplayOk === true, live: !!ac },
+      stats
+    ),
     destroy() {
       if (doc && doc.removeEventListener) {
         doc.removeEventListener('arcademy-sfx', onSfx);

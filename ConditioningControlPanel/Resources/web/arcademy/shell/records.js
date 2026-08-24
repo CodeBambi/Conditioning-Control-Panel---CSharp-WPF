@@ -28,6 +28,26 @@ import { t } from '../core/lexicon.js';
 import { exitBar, sign as signExit } from './exits.js';
 import { cardFace, HOLES, holesLine } from './punchcard.js';
 
+/* ----------------------------------------------------------------------------
+ * THE OFFICE OPENS, AND THE CARDS TURN.
+ * shell/audio.js holds the only audio node on the page (trap 18), so this is a
+ * REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() set. A dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -66,6 +86,9 @@ export function createRecords({ gameName, punchCard, log } = {}) {
     const s = state || {};
     const keys = Array.isArray(s.gameKeys) ? s.gameKeys.slice() : [];
     root.textContent = '';
+    // The docket coming out. `shell.js showRecords()` renders once per visit, so
+    // a render IS an open - there is no repaint path into this screen.
+    sfx('paper', 0.25);
 
     /* ---------------------------- the desk ------------------------------ */
     const desk = el('div', 'arc-records-desk');
@@ -124,7 +147,12 @@ export function createRecords({ gameName, punchCard, log } = {}) {
       slot.appendChild(el('span', 'arc-records-slotline', entry.card.enrolled
         ? holesLine(entry.card.punches)
         : t('records_not_enrolled', 'Not enrolled - attend the class')));
-      slot.addEventListener('click', () => { selected = entry.key; paintDocket(); });
+      slot.addEventListener('click', () => {
+        // One leaf turning: the wall hands the desk a different card.
+        sfx('flap', 0.2);
+        selected = entry.key;
+        paintDocket();
+      });
       wall.appendChild(slot);
     }
 
