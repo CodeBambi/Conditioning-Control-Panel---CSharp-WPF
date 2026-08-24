@@ -325,6 +325,20 @@ export function createRecords({ gameName, punchCard, log } = {}) {
     attr(wall, 'role', 'list');
     desk.appendChild(wall);
 
+    /* THE WALL PANEL (ANNEX-OS.md §1). Gated by the shell: the prop only
+     * exists once the reveal has fired, and the shell decides that - this
+     * screen just draws what it was handed (the punchCard-cap law above).
+     * No badge, no toast, no pulse: the cold seam in a warm room IS the
+     * signpost, same pre-attentive doctrine as EMI's off-channels. */
+    if (typeof s.onAnnex === 'function') {
+      const panel = el('button', 'arc-records-annexdoor');
+      panel.type = 'button';
+      attr(panel, 'aria-label', t('annex_door', 'A wall panel, ajar'));
+      panel.appendChild(el('span', 'arc-records-annexseam'));
+      panel.addEventListener('click', () => { sfx('door', 0.3); s.onAnnex(); });
+      desk.appendChild(panel);
+    }
+
     const docket = el('div', 'arc-records-docket');
     desk.appendChild(docket);
 

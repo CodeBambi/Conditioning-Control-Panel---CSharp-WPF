@@ -95,6 +95,14 @@ shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-car
                    (recordsPage.dismissSpotlight(), trap 48's shape); reduced
                    motion (html.arc-reduced / the media query) = one plain fade,
                    no cues
+shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
+                     (cut to black -> a thud from below -> EMI startled -> one
+                     second of the records office at night with a wall panel
+                     ajar). An OVERLAY, never a screen (module-local stage +
+                     one Esc rung, traps 48/50), z 48 so EMI's layer paints
+                     over the black for free. Fires on the tenth hole of the
+                     LAST card and sets `annexRevealSeen` - the only gate the
+                     ajar panel on the records wall reads
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)
@@ -364,6 +372,28 @@ vn/          FIRST BELL: the once-ever opening, and the ONLY thing in this bundl
   demo.html    standalone scene tester, no shell and no bridge; `?beat=<id>`
                (gates|desk|board|walk|mail|coldopen|reduced, plus `&hold=1`)
                jumps straight to one beat so it can be shot headlessly.
+annex/       THE RECORDS ANNEX: the lab under the Records Office. A SCREEN
+             (shell.showAnnex), the records.js way - the shell owns the store,
+             the bridge and EMI; nothing below this line imports any of them.
+  lab.js       the room: four 1376x768 slides (wide control room / monitor wall
+               / clerk's desk / binder shelf), the paper props and the laptop
+               that zooms into the OS. Esc folds inward-out (paper -> OS window
+               -> laptop -> close-up) and the shell's own rung walks home to
+               records. Assets resolve module-relative (the nine-broken-logos
+               law); the monitor wall LIFTS createCamWall, never copies it.
+  cams.js      the camera wall: nine small SVG crops of the SAME campus plan
+               campus.js draws, walked by ghosts.js's pixel students, plus the
+               locked laptop feed. Chrome only - no bridge, no store, no fetch;
+               the clock is diegetic and .an-lite drops every decorative
+               animation in one place (trap 36: no live clones of the plan).
+  os.js        the dated windowed desktop on the laptop: login, FILES, REGISTRY,
+               SUBJECT SEARCH, TERMINAL. Carries punches 1-3 (punch 4 is the
+               dossier on the desk, lab.js's). Renders truths it was handed and
+               computes none: LIVE counts or LINK DOWN, never a fiction, and
+               counts under REDACT_UNDER draw as black bars.
+  docs.js      THE PAPERS: pure data, every document the OS and the props show.
+               No imports, no DOM. UNIT EMI skips file 05 on purpose (story lock
+               0823) and the closing glyph renders only at four punches.
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
@@ -372,6 +402,18 @@ floor, never a contract: a scratch script diffs every `t('key'` / lexicon table 
 table, see §7) or the shell renders raw keys for the settings
 page's `label_key` / `hint_key`. Impulse Control exports its table as data
 (`impulse-control/lex.js` `IC_LEX`) - copy the values, do not re-word them.
+
+**THE ANNEX.** The gate is two steps: `annexRevealSeen` (set by `shell/annexreveal.js`)
+arms the ajar panel on the Records Office wall, and only picking that panel opens the lab.
+The lab is a SCREEN, not an overlay - `showAnnex()` mints it with narrow caps only
+(`t`, `lite`, `subject`, `annexState`/`saveAnnex`, `liveFile`, `fetchStats`, `onExit`).
+The shell brackets EMI around it (`setEnabled(false)`, restored on EVERY path out) and flips
+the voice's `labSeen` on first entry. Progress is ONE page-owned meta blob under the key
+`annex` = `{visited, os, p1..p4}`, never four keys. The fence words (retention, engagement,
+metric, subject, experiment, data) are legal DOWNSTAIRS ONLY - `annex/docs.js` and the
+`annex_*` lexicon rows - and nowhere else in the school. The REGISTRY's live counts arrive
+through the host verb `annex-stats` (C# fetches the public aggregate; a null body is LINK
+DOWN, and the page never invents a number).
 
 ## 3. Cross-agent seams — change these only with the other side
 
