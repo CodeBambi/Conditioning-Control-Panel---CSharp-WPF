@@ -22,9 +22,9 @@ namespace CcpClient.HeadlessTests;
 /// input, real engine state — never compositor/window-manager/presentation claims. The
 /// rendered-frame evidence matrix is the Windows-headed Step 4's job.
 /// </summary>
-public class AvatarTubeHeadlessTests
+public class AvatarTubeHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Dashboard, AvatarTubeParticipant Participant, AvatarTubeDemonstratorWindow Tube)>
+    private async Task<(ApplicationHost Host, MainWindow Dashboard, AvatarTubeParticipant Participant, AvatarTubeDemonstratorWindow Tube)>
         BootAsync(ManualAvatarClock? clock = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp015-headless-" + Guid.NewGuid().ToString("N"));
@@ -34,6 +34,7 @@ public class AvatarTubeHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());
         var dashboard = new MainWindow(host);
         dashboard.Show();

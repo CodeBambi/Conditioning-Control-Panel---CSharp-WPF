@@ -29,9 +29,9 @@ namespace CcpClient.HeadlessTests;
 /// containers, rendered text and hit-testable controls. Nothing here claims composited pixels, a
 /// legible layout, colour, focus, window activation, or anything at all on Linux.</para>
 /// </summary>
-public class TrainerCardHeadlessTests
+public class TrainerCardHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window, string RecordPath)> BootAsync(
+    private async Task<(ApplicationHost Host, MainWindow Window, string RecordPath)> BootAsync(
         string? seededRecord)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-trainer-card-headless-" + Guid.NewGuid().ToString("N"));
@@ -53,6 +53,7 @@ public class TrainerCardHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         window.Intake.DataDirectory = intakeDir;

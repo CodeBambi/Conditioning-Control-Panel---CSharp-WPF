@@ -28,9 +28,9 @@ namespace CcpClient.HeadlessTests;
 /// window activation, z-order or that the Loom's web surface presents — those are
 /// presentation-verified and belong to the headed capture.</para>
 /// </summary>
-public class NavigationShellHeadlessTests
+public class NavigationShellHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
+    private async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp091-headless-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot { SettingsPathFactory = () => Path.Combine(dir, "settings.json") };
@@ -39,6 +39,7 @@ public class NavigationShellHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         // No demo flags, no drive strings: this is the product path a user gets from a cold start.
         var window = new MainWindow(host!);

@@ -34,7 +34,7 @@ namespace CcpClient.HeadlessTests;
 /// classes, real input routing. Nothing here claims composited pixels, and nothing here claims a
 /// human ever saw a minimized window or a tray icon.</para>
 /// </summary>
-public class SchedulerRowHeadlessTests
+public class SchedulerRowHeadlessTests : HeadlessTest
 {
     /// <summary>2026-08-17 is a Monday, 08:00 local: enabled days all ticked, outside a 16:00-22:00
     /// window.</summary>
@@ -53,7 +53,7 @@ public class SchedulerRowHeadlessTests
         public void TickAt(TimeSpan timeOfDay) => Clock.AdvanceTo(MondayMorning.Date + timeOfDay);
     }
 
-    private static async Task<Boot> BootAsync()
+    private async Task<Boot> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp118-shell-" + Guid.NewGuid().ToString("N"));
         var clock = new ManualScheduleClock(MondayMorning);
@@ -67,6 +67,7 @@ public class SchedulerRowHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());

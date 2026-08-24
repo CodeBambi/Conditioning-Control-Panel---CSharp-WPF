@@ -24,9 +24,9 @@ namespace CcpClient.HeadlessTests;
 /// brushes, hit-test routing and real input. <b>Nothing here claims a composited pixel</b>; that a
 /// toast is legible where it is drawn is the headed <c>toast</c> surface's job.</para>
 /// </summary>
-public class ToastHostHeadlessTests
+public class ToastHostHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
+    private async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-toast-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot { SettingsPathFactory = () => Path.Combine(dir, "settings.json") };
@@ -35,6 +35,7 @@ public class ToastHostHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());

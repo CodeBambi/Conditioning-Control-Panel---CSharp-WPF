@@ -42,7 +42,7 @@ namespace CcpClient.HeadlessTests;
 /// <c>IsEnabled</c>, and real input routing. No composited pixel is claimed — the headed
 /// <c>studio-dial</c> captures are what claim those.</para>
 /// </summary>
-public class SessionFeatureLockHeadlessTests
+public class SessionFeatureLockHeadlessTests : HeadlessTest
 {
     /// <summary>
     /// The thirty dials a running scripted session owns, in the order the logical tree yields them.
@@ -133,7 +133,7 @@ public class SessionFeatureLockHeadlessTests
         public StudioPage Studio => (StudioPage)Window.PageFor(ShellRoutes.Studio);
     }
 
-    private static async Task<Boot> BootAsync()
+    private async Task<Boot> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-session-lock-" + Guid.NewGuid().ToString("N"));
         var clock = new ManualScriptedClock();
@@ -147,6 +147,7 @@ public class SessionFeatureLockHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());

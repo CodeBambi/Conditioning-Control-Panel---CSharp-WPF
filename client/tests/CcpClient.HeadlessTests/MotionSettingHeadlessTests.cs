@@ -21,9 +21,9 @@ namespace CcpClient.HeadlessTests;
 /// changes. <b>Nothing here claims a hosted page moved</b> — that needs a browser engine, a headed
 /// run and a machine with Windows animation effects off.</para>
 /// </summary>
-public class MotionSettingHeadlessTests
+public class MotionSettingHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
+    private async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-motion-shell-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot
@@ -35,6 +35,7 @@ public class MotionSettingHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());

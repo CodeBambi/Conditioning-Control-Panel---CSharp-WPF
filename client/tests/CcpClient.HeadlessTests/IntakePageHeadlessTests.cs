@@ -41,9 +41,9 @@ namespace CcpClient.HeadlessTests;
 /// real input routing, hit-test flags, style-resolved brushes. Nothing here claims composited
 /// pixels, window activation, that the intake host window presents, or that a run boots.</para>
 /// </summary>
-public class IntakePageHeadlessTests
+public class IntakePageHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window, List<IntakeLaunchCoordinator> Opened)>
+    private async Task<(ApplicationHost Host, MainWindow Window, List<IntakeLaunchCoordinator> Opened)>
         BootAsync(IntakePassService.IIntakeEntitlementSource? entitlement = null, List<string>? diagnostics = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp095-headless-" + Guid.NewGuid().ToString("N"));
@@ -59,6 +59,7 @@ public class IntakePageHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         // No demo flags, no drive strings: the product path a user gets from a cold start.
         var window = new MainWindow(host!);

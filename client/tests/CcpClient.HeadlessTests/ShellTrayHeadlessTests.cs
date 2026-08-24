@@ -26,7 +26,7 @@ namespace CcpClient.HeadlessTests;
 /// really disappearing or reappearing, a tray icon being visible to a human, a real click, or
 /// <c>TrackPopupMenu</c>'s modal loop — all of those are headed.</para>
 /// </summary>
-public class ShellTrayHeadlessTests
+public class ShellTrayHeadlessTests : HeadlessTest
 {
     [AvaloniaFact]
     public void AvaloniaHidesOwnedWindowsWithTheirOwner_WhichIsWhyTheShellIsNeverHidden()
@@ -247,6 +247,7 @@ public class ShellTrayHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         window.Show();
@@ -294,6 +295,7 @@ public class ShellTrayHeadlessTests
         ApplicationHost? host = null;
         Assert.IsType<StartupOutcome.Success>(await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None));
+        Track(host!);
 
         var window = new MainWindow(host!);
         window.Show();
@@ -358,6 +360,7 @@ public class ShellTrayHeadlessTests
         ApplicationHost? host = null;
         Assert.IsType<StartupOutcome.Success>(await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None));
+        Track(host!);
 
         var owner = new Window { Width = 500, Height = 380 };
         owner.Show();

@@ -36,7 +36,7 @@ namespace CcpClient.HeadlessTests;
 /// leaves and returns on a desktop — those are presentation-verified and belong to a headed
 /// capture.</para>
 /// </summary>
-public class PlayPageHeadlessTests
+public class PlayPageHeadlessTests : HeadlessTest
 {
     /// <summary>The only "credential" this file handles. It says what it is.</summary>
     private const string FixtureToken = "SP094-FIXTURE-NOT-A-REAL-TOKEN-8b3d7a";
@@ -47,7 +47,7 @@ public class PlayPageHeadlessTests
     private static HostLoginEntitlement Capability(TierLookup? authorityAnswer) =>
         new(new FixtureReader(), authorityAnswer is null ? null : new FixtureAuthority(authorityAnswer));
 
-    private static async Task<(ApplicationHost Host, MainWindow Window, DtrhLaunch Dtrh)> BootAsync(
+    private async Task<(ApplicationHost Host, MainWindow Window, DtrhLaunch Dtrh)> BootAsync(
         TierLookup? authorityAnswer, List<string>? diagnostics = null, IHostAuthTokenReader? reader = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp094-headless-" + Guid.NewGuid().ToString("N"));
@@ -66,6 +66,7 @@ public class PlayPageHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         // No demo flags, no drive strings: the product path a user gets from a cold start.
         var window = new MainWindow(host!);
@@ -480,6 +481,7 @@ public class PlayPageHeadlessTests
         ApplicationHost? host = null;
         Assert.IsType<StartupOutcome.Success>(await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None));
+        Track(host!);
         var window = new MainWindow(host!);
         window.Show();
         window.UpdateLayout();

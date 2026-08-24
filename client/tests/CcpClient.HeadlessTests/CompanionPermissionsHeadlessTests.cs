@@ -20,7 +20,7 @@ namespace CcpClient.HeadlessTests;
 /// headless pointer input — no compositor, no pixel and no focus claim. The headed seat owns
 /// those.
 /// </summary>
-public class CompanionPermissionsHeadlessTests
+public class CompanionPermissionsHeadlessTests : HeadlessTest
 {
     /// <summary>
     /// The default-closed fact AT THE SURFACE: the master switch is off and the ten per-effect
@@ -148,7 +148,7 @@ public class CompanionPermissionsHeadlessTests
 
     // =====================================================================================
 
-    private static async Task<(ApplicationHost Host, MainWindow Window, CompanionWindow Companion)> OpenAsync()
+    private async Task<(ApplicationHost Host, MainWindow Window, CompanionWindow Companion)> OpenAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-ai-perms-headless-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot { SettingsPathFactory = () => Path.Combine(dir, "settings.json") };
@@ -157,6 +157,7 @@ public class CompanionPermissionsHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         window.Show();

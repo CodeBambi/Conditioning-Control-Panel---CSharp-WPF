@@ -35,7 +35,7 @@ namespace CcpClient.HeadlessTests;
 /// <para>Draw-level only (verification-harness.md): visual tree and lifecycle. No composited pixel
 /// is claimed here, and a headless close is not a headed one.</para>
 /// </summary>
-public class SessionRecapOnAppCloseTests
+public class SessionRecapOnAppCloseTests : HeadlessTest
 {
     /// <summary>Long enough to clear <see cref="ScriptedSessionLogStore.PersistenceMinDuration"/>
     /// (upstream's 30 s, <c>Services/Session/SessionLogService.cs:22-24</c>), because half the
@@ -157,7 +157,7 @@ public class SessionRecapOnAppCloseTests
         Settings = new ScriptedSessionSettings(),
     };
 
-    private static async Task<Boot> BootAsync()
+    private async Task<Boot> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-recap-close-" + Guid.NewGuid().ToString("N"));
         var clock = new DeadScriptedClock();
@@ -173,6 +173,7 @@ public class SessionRecapOnAppCloseTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());

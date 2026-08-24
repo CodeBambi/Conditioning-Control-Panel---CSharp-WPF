@@ -28,9 +28,9 @@ namespace CcpClient.HeadlessTests;
 /// visibility, real input routing. Nothing here claims composited pixels, that a class is
 /// playable, or that any page or browser exists — there is none in this build.</para>
 /// </summary>
-public class ArcademyEntryHeadlessTests
+public class ArcademyEntryHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
+    private async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-arcademy-headless-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot { SettingsPathFactory = () => Path.Combine(dir, "settings.json") };
@@ -39,6 +39,7 @@ public class ArcademyEntryHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         // No demo flags, no drive strings: the product path a user gets from a cold start.
         var window = new MainWindow(host!);

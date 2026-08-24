@@ -34,7 +34,7 @@ namespace CcpClient.HeadlessTests;
 /// on screen</b>. It cannot be: the on-screen half of Flash Images needs an always-on-top
 /// click-through surface that this build does not have, and the module panel says so.</para>
 /// </summary>
-public class StudioRackHeadlessTests
+public class StudioRackHeadlessTests : HeadlessTest
 {
     private sealed record Boot(ApplicationHost Host, MainWindow Window, ManualSessionClock Clock, StubPool Pool)
     {
@@ -47,7 +47,7 @@ public class StudioRackHeadlessTests
             FlashSchedule.MaximumInterval(Session.Preset.Current.FlashesPerHour) + TimeSpan.FromSeconds(1);
     }
 
-    private static async Task<Boot> BootAsync(int imageCount = 4)
+    private async Task<Boot> BootAsync(int imageCount = 4)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp098-shell-" + Guid.NewGuid().ToString("N"));
         var clock = new ManualSessionClock();
@@ -66,6 +66,7 @@ public class StudioRackHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         // Phase 4: the real dispatch boundary, so the effect's UI projection takes the real

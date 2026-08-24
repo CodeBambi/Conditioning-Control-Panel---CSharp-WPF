@@ -35,7 +35,7 @@ namespace CcpClient.HeadlessTests;
 /// classes, real input routing. Nothing here claims a composited pixel — the headed
 /// <c>session-row</c> and <c>session-start</c> captures are what claim those.</para>
 /// </summary>
-public class SessionRackHeadlessTests
+public class SessionRackHeadlessTests : HeadlessTest
 {
     private sealed record Boot(ApplicationHost Host, MainWindow Window, ManualScriptedClock Clock)
     {
@@ -44,7 +44,7 @@ public class SessionRackHeadlessTests
         public StudioPage Studio => (StudioPage)Window.PageFor(ShellRoutes.Studio);
     }
 
-    private static async Task<Boot> BootAsync()
+    private async Task<Boot> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-session-rack-" + Guid.NewGuid().ToString("N"));
         var clock = new ManualScriptedClock();
@@ -58,6 +58,7 @@ public class SessionRackHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());

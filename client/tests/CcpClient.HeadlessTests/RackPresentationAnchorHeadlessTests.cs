@@ -28,9 +28,9 @@ namespace CcpClient.HeadlessTests;
 /// screen. Headed captures and interaction checks establish presentation; a headless frame never
 /// discharges them.</para>
 /// </summary>
-public class RackPresentationAnchorHeadlessTests
+public class RackPresentationAnchorHeadlessTests : HeadlessTest
 {
-    private static async Task<MainWindow> BootAsync()
+    private async Task<MainWindow> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp122-headless-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot { SettingsPathFactory = () => Path.Combine(dir, "settings.json") };
@@ -39,6 +39,7 @@ public class RackPresentationAnchorHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         window.Show();

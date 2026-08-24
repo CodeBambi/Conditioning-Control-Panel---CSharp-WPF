@@ -20,9 +20,9 @@ namespace CcpClient.HeadlessTests;
 /// Presentation facts (working-area containment, real wheel/trackpad/touch) are the
 /// Windows-headed evidence matrix's job.
 /// </summary>
-public class FeaturePopupHeadlessTests
+public class FeaturePopupHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
+    private async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp013-headless-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot { SettingsPathFactory = () => Path.Combine(dir, "settings.json") };
@@ -31,6 +31,7 @@ public class FeaturePopupHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
         var window = new MainWindow(host!);
         window.Show();
         return (host!, window);

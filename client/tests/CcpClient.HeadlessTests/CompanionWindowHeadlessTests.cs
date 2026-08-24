@@ -18,9 +18,9 @@ namespace CcpClient.HeadlessTests;
 /// resolution, real binding application — NO compositor/window-manager/pixel claims.
 /// Badge pixels and interaction evidence are the avalonia-live headed seat's job (Step 3).
 /// </summary>
-public class CompanionWindowHeadlessTests
+public class CompanionWindowHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
+    private async Task<(ApplicationHost Host, MainWindow Window)> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp046-headless-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot { SettingsPathFactory = () => Path.Combine(dir, "settings.json") };
@@ -29,6 +29,7 @@ public class CompanionWindowHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
         var window = new MainWindow(host!);
         window.Show();
         window.UpdateLayout();

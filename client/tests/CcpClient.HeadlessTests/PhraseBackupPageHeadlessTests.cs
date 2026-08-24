@@ -38,9 +38,9 @@ namespace CcpClient.HeadlessTests;
 /// <para>Draw-level only: visual tree, real input, real document state. Nothing here claims a
 /// dialog opened, a pixel composited, or that any of it is legible.</para>
 /// </summary>
-public class PhraseBackupPageHeadlessTests
+public class PhraseBackupPageHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window, SystemPage Page, ScriptedPicker Picker)>
+    private async Task<(ApplicationHost Host, MainWindow Window, SystemPage Page, ScriptedPicker Picker)>
         BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-phrase-page-" + Guid.NewGuid().ToString("N"));
@@ -50,6 +50,7 @@ public class PhraseBackupPageHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());

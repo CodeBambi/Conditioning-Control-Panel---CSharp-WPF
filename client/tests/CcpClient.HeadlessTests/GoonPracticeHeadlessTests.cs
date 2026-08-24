@@ -24,9 +24,9 @@ namespace CcpClient.HeadlessTests;
 /// embedded browser, which a headless frame cannot present and which no test should start. A
 /// compile is not a load and a load is not a duel; both of those remain owed to a headed run.</para>
 /// </summary>
-public class GoonPracticeHeadlessTests
+public class GoonPracticeHeadlessTests : HeadlessTest
 {
-    private static async Task<(ApplicationHost Host, MainWindow Window)> BootAsync(string dir)
+    private async Task<(ApplicationHost Host, MainWindow Window)> BootAsync(string dir)
     {
         var root = new CompositionRoot
         {
@@ -38,6 +38,7 @@ public class GoonPracticeHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         window.Show();
@@ -175,7 +176,7 @@ public class GoonPracticeHeadlessTests
 
     /// <summary>Builds the REAL host window (real AXAML, real participant, real rail) without
     /// showing it, and disposes the participant afterwards.</summary>
-    private static async Task WithHostWindowAsync(Func<GoonHostWindow, Task> body)
+    private async Task WithHostWindowAsync(Func<GoonHostWindow, Task> body)
     {
         var dir = TempDir();
         var (host, shell) = await BootAsync(dir);

@@ -29,7 +29,7 @@ namespace CcpClient.HeadlessTests;
 /// classes, real input routing. Nothing here claims composited pixels, and — said plainly because it
 /// is the whole shape of this packet — <b>nothing here claims anything ever moved</b>.</para>
 /// </summary>
-public class HapticsRowHeadlessTests
+public class HapticsRowHeadlessTests : HeadlessTest
 {
     private sealed record Boot(ApplicationHost Host, MainWindow Window)
     {
@@ -38,7 +38,7 @@ public class HapticsRowHeadlessTests
         public StudioPage Studio => (StudioPage)Window.PageFor(ShellRoutes.Studio);
     }
 
-    private static async Task<Boot> BootAsync()
+    private async Task<Boot> BootAsync()
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-sp119-shell-" + Guid.NewGuid().ToString("N"));
         var root = new CompositionRoot
@@ -50,6 +50,7 @@ public class HapticsRowHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());

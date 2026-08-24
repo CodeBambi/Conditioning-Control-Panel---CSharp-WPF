@@ -33,14 +33,14 @@ namespace CcpClient.HeadlessTests;
 /// <para>Draw-level ONLY (verification-harness.md evidence class): visual tree, control state, real
 /// input routing. No composited pixel is claimed here.</para>
 /// </summary>
-public class StudioPickerHeadlessTests
+public class StudioPickerHeadlessTests : HeadlessTest
 {
     private sealed record Boot(ApplicationHost Host, MainWindow Window, string SpiralsFolder, ManualScriptedClock Clock)
     {
         public StudioPage Studio => (StudioPage)Window.PageFor(ShellRoutes.Studio);
     }
 
-    private static async Task<Boot> BootAsync(params string[] spiralFiles)
+    private async Task<Boot> BootAsync(params string[] spiralFiles)
     {
         var dir = Path.Combine(Path.GetTempPath(), "ccp-studio-picker-" + Guid.NewGuid().ToString("N"));
         var spirals = SpiralLibrary.Folder(Path.Combine(dir, "assets"));
@@ -61,6 +61,7 @@ public class StudioPickerHeadlessTests
         var outcome = await StartupPhaseRunner.RunAsync(
             Program.CreateStartupPhases(root, trace, h => host = h), trace, CancellationToken.None);
         Assert.IsType<StartupOutcome.Success>(outcome);
+        Track(host!);
 
         var window = new MainWindow(host!);
         host!.BindUiDispatch(new AvaloniaUiDispatch());
