@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>FIRST BELL — scene tester</title>
+<!-- No shell, no bridge, no host. This page loads the REAL vn modules (and the
+     REAL shell/splitflap.js through them) against a fake in-memory store and a
+     fake timetable, so a change to vn/index.js, vn/style.js, vn/scenes.js or
+     vn/lex.js is visible here before it reaches the Arcademy. The pattern is
+     emi/demo.html's.
+
+     ?beat=<id> jumps straight to one beat on load, which is what makes the
+     scenes screenshottable headlessly:
+
+       ?beat=gates     s01 from the top (two captions, the neon buzz)
+       ?beat=desk      s02 (the push-in, paper #1, then the board handoff)
+       ?beat=board     s02, auto-advanced to the board deal
+       ?beat=walk      s03 (the midway pan, then the Homeroom threshold)
+       ?beat=mail      m01 (paper #2, then the EMI line on the log)
+       ?beat=coldopen  the whole cold open, gates through board
+       ?beat=reduced   the cold open with reduced motion forced on
+
+     Add &hold=1 to any of them to fire a hold-to-skip 1.4s in. -->
+<link rel="stylesheet" href="../styles.css">
+<style>
+  html, body { height:100%; }
+  body {
+    margin:0; background:var(--ground, #14142B); color:var(--ink, #F2EBDD);
+    font-family:var(--body, system-ui, sans-serif); line-height:1.45;
+  }
+  .wrap { max-width:940px; margin:0 auto; padding:16px 14px 80px; }
+  header {
+    display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+    border-bottom:3px solid var(--gold, #F0C24B); padding-bottom:8px; margin-bottom:14px;
+  }
+  h1 { font-family:var(--disp, serif); font-size:28px; margin:0; color:var(--pink, #FF69B4); letter-spacing:.08em; }
+  .eyebrow { font-family:var(--mono, monospace); font-size:10px; color:var(--gold, #F0C24B); letter-spacing:1px; }
+  .lab { font-family:var(--mono, monospace); font-size:10px; color:var(--gold, #F0C24B);
+         letter-spacing:1px; margin:18px 0 6px; text-transform:uppercase; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip {
+    font-family:var(--body, sans-serif); font-size:13px; min-height:38px; padding:6px 12px;
+    background:var(--panel, #252542); color:var(--ink, #F2EBDD);
+    border:2px solid var(--line, #3A3A5E); border-radius:8px; cursor:pointer;
+  }
+  .chip:hover { border-color:var(--pink, #FF69B4); }
+  .chip.on { background:var(--pink, #FF69B4); color:var(--navy, #1A1A2E); border-color:var(--pink, #FF69B4); }
+  .note { color:var(--ink-faint, #8A84A8); font-size:12px; margin:14px 0 0; }
+  pre#log {
+    background:#0C0C1C; border:1px solid var(--line, #3A3A5E); border-radius:8px;
+    padding:10px 12px; font-family:var(--mono, monospace); font-size:11.5px;
+    max-height:280px; overflow:auto; margin:6px 0 0; white-space:pre-wrap;
+  }
+  .stateline { font-family:var(--mono, monospace); font-size:11.5px; color:var(--lav, #B8A6E8); }
+  /* The demo's own stand-in for "the campus is painted underneath". It is NOT
+     the real hub - it exists so the VN layer has something to cover and to
+     uncover, which is half of what the beats are judged on. */
+  .fakehub {
+    margin-top:10px; border:1px solid var(--line, #3A3A5E); border-radius:12px;
+    padding:18px; background:
+      radial-gradient(90% 120% at 50% 0%, rgba(255,105,180,.10), transparent 60%),
+      var(--navy, #1A1A2E);
+    min-height:120px;
+  }
+  .fakehub h2 { font-family:var(--disp, serif); font-size:18px; margin:0 0 10px; letter-spacing:.06em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>FIRST BELL</h1>
+    <span class="eyebrow">scene tester · vn/index.js + scenes.js + lex.js + style.js + shell/splitflap.js</span>
+  </header>
+
+  <p class="lab">Beats</p>
+  <div class="chips" id="beats"></div>
+
+  <p class="lab">Ledger + options</p>
+  <div class="chips">
+    <button class="chip" id="reset" type="button">Reset ledger</button>
+    <button class="chip" id="bank" type="button">Bank all (returning player)</button>
+    <button class="chip" id="reduced" type="button" aria-pressed="false">Reduced motion: off</button>
+    <button class="chip" id="tap" type="button">Tap (advance)</button>
+    <button class="chip" id="hold" type="button">Hold to skip</button>
+  </div>
+  <p class="stateline" id="state">ledger: {}</p>
+
+  <div class="fakehub">
+    <h2>THE CAMPUS (stand-in)</h2>
+    <p class="note" style="margin:0">
+      The shell paints the real hub here before the VN mounts. A beat that leaves
+      this visible when it should not, or covers it when it should not, is the bug.
+    </p>
+  </div>
+
+  <p class="lab">Log</p>
+  <pre id="log"></pre>
+
+  <p class="note">
+    Escape is never bound by the VN. In the app that key is boot.js's hold-to-exit
+    ladder and it has to keep working on every frame; here it simply does nothing.
+  </p>
+</div>
+
+<script type="module">
+import { createFirstBell, VN_STORE_KEY, paragraph } from './index.js';
+import { PAPERS, VN_LEX } from './lex.js';
+import { SCENE_IDS } from './scenes.js';
+
+const logEl = document.getElementById('log');
+const stateEl = document.getElementById('state');
+const params = new URLSearchParams(location.search);
+
+function say(msg) {
+  const line = new Date().toISOString().slice(11, 23) + '  ' + msg;
+  logEl.textContent += (logEl.textContent ? '\n' : '') + line;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ---- the fake store: core/store.js's get/set, in memory ------------------ */
+const cell = Object.create(null);
+const store = {
+  get(key, fallback) { const v = cell[key]; return v === undefined ? fallback : v; },
+  set(key, value) { cell[key] = value; paint(); return value; },
+};
+
+/* ---- fake board rows: the shape shell.js's buildRows(true) returns -------- */
+const ROWS = [
+  { id: 'daily_trigger',  time: '19:00', label: 'Daily Trigger',  chips: [{ text: 'Homeroom', kind: 'homeroom' }] },
+  { id: 'lost_and_found', time: '20:10', label: 'Lost & Found',   chips: [] },
+  { id: 'echo',           time: '21:20', label: 'Echo',           chips: [] },
+  { id: 'the_deep_end',   time: '22:30', label: 'The Deep End',   chips: [] },
+];
+
+let reduced = params.get('beat') === 'reduced';
+let vn = null;
+
+function paint() {
+  const blob = cell[VN_STORE_KEY];
+  const seen = (blob && blob.seen) || {};
+  stateEl.textContent = 'ledger: { '
+    + SCENE_IDS.map((id) => id + ':' + (seen[id] ? 'seen' : '-')).join(', ') + ' }';
+}
+
+function build() {
+  if (vn) { try { vn.destroy(); } catch (e) { /* noop */ } }
+  document.documentElement.classList[reduced ? 'add' : 'remove']('arc-reduced');
+  vn = createFirstBell({
+    store,
+    rows: () => ROWS,
+    firstNight: () => true,
+    canInterrupt: () => true,
+    onMoment: (name, p) => say('EMI moment: ' + name + ' ' + JSON.stringify(p || {})),
+    reducedMotion: reduced,
+    base: '../',
+    log: say,
+  });
+  say('vn built (armed: ' + (vn && vn.armed) + ')');
+  paint();
+  return vn;
+}
+
+function seed(ids) {
+  cell[VN_STORE_KEY] = { v: 1, seen: Object.fromEntries((ids || []).map((k) => [k, true])) };
+  build();
+}
+
+/* ---- driving the layer from outside, the way a player would -------------- */
+function tap() {
+  const layer = document.getElementById('arc-vn');
+  if (!layer) { say('tap: nothing on screen'); return; }
+  layer.click();
+}
+
+function hold() {
+  const pill = document.querySelector('.arc-vn-skip');
+  if (!pill) { say('hold: nothing on screen'); return; }
+  pill.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  say('holding the skip pill...');
+}
+
+/* ---- the beats ----------------------------------------------------------- */
+const BEATS = {
+  gates:    { seed: [],                       run: (v) => v.splashDone(() => say('>> cold open handed back to the shell')) },
+  coldopen: { seed: [],                       run: (v) => v.splashDone(() => say('>> cold open handed back to the shell')) },
+  reduced:  { seed: [],                       run: (v) => v.splashDone(() => say('>> cold open handed back to the shell')) },
+  desk:     { seed: ['s01'],                  run: (v) => v.splashDone(() => say('>> cold open handed back to the shell')) },
+  board:    { seed: ['s01'],                  run: (v) => { v.splashDone(() => say('>> cold open handed back to the shell')); setTimeout(tap, 1400); } },
+  walk:     { seed: ['s01', 's02'],           run: (v) => say('gateClass took it: ' + v.gateClass({ gameKey: 'daily_trigger', homeroom: true }, () => say('>> the class starts now'))) },
+  mail:     { seed: ['s01', 's02', 's03'],    run: (v) => say('afterCeremony took it: ' + v.afterCeremony()) },
+};
+
+const beatsBox = document.getElementById('beats');
+for (const id of Object.keys(BEATS)) {
+  const b = document.createElement('button');
+  b.className = 'chip';
+  b.type = 'button';
+  b.textContent = id;
+  b.addEventListener('click', () => play(id));
+  beatsBox.appendChild(b);
+}
+
+function play(id) {
+  const spec = BEATS[id];
+  if (!spec) { say('unknown beat "' + id + '"'); return; }
+  if (id === 'reduced') { reduced = true; document.getElementById('reduced').textContent = 'Reduced motion: on'; }
+  say('--- beat: ' + id + ' ---');
+  seed(spec.seed);
+  /* WAIT FOR THE PLATES. In the app the cold open has warmed every plate long
+     before a door is clicked; a beat fired straight off ?beat= can race the
+     decode (headless virtual time makes it a certainty), and gateClass would
+     truthfully answer false. Poll the warm state briefly, then run anyway so a
+     genuinely missing plate still demonstrates the stand-down. */
+  let tries = 0;
+  (function armed() {
+    const ps = (vn && vn.plateState) ? vn.plateState() : {};
+    if (tries++ < 30 && Object.keys(ps).length < 4) { setTimeout(armed, 100); return; }
+    spec.run(vn);
+    if (params.get('hold') === '1') setTimeout(hold, 1400);
+  })();
+}
+
+document.getElementById('reset').addEventListener('click', () => { seed([]); say('ledger cleared'); });
+document.getElementById('bank').addEventListener('click', () => {
+  if (!vn) build();
+  vn.bankAll('demo button');
+  paint();
+});
+document.getElementById('reduced').addEventListener('click', (e) => {
+  reduced = !reduced;
+  e.currentTarget.textContent = 'Reduced motion: ' + (reduced ? 'on' : 'off');
+  e.currentTarget.setAttribute('aria-pressed', String(reduced));
+  build();
+});
+document.getElementById('tap').addEventListener('click', tap);
+document.getElementById('hold').addEventListener('click', hold);
+
+/* THE COPY CHECK, on every load: the two papers must compose back to the
+   owner-vetted paragraphs. A split that lost or doubled a space would print
+   here rather than being found in a screenshot. */
+say('paper 1, para 1: ' + paragraph(PAPERS.p1.paras[0]));
+say('paper 2, para 1: ' + paragraph(PAPERS.p2.paras[0]));
+const over = Object.keys(VN_LEX).filter((k) => VN_LEX[k].length > 96);
+say('rows over the 96-char mod-skin cap: ' + (over.length ? over.join(', ') : 'none'));
+
+build();
+const wanted = params.get('beat');
+if (wanted) play(wanted);
+</script>
+</body>
+</html>
