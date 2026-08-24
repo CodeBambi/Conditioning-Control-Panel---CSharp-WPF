@@ -8,12 +8,23 @@ namespace CcpClient.Tests;
 /// <summary>
 /// The session rack's presentation checks, and the capture path that earns them.
 ///
-/// <para><b>What this file is NOT.</b> It is not the evidence. The evidence is five real captures
-/// of the running shell on a real Windows desktop, checked by <c>CcpVerify</c> against
-/// <c>client/tools/verify/checks.json</c>: each of the four checks scored 1.0000 on its own capture
-/// and 0.0000 on the other state's, and 0.0000 on a capture of the whole dashboard — a photograph
-/// that CONTAINS both surfaces and still cannot pass either check. A headless assembly cannot
-/// photograph anything and no fact here claims to.</para>
+/// <para><b>What this file is NOT.</b> It is not the evidence. The evidence is real captures of the
+/// running shell on a real Windows desktop, checked by <c>CcpVerify</c> against
+/// <c>client/tools/verify/checks.json</c>: every check scores 1.0000 on its own capture and 0.0000
+/// on the other state's, and none of them passes on a capture of the whole dashboard — a photograph
+/// that CONTAINS these surfaces and still cannot pass any of their checks (0.000 for both stripes,
+/// 0.008 and 0.000 for the history pair). A headless assembly cannot photograph anything and no
+/// fact here claims to.</para>
+///
+/// <para><b>Two of those captures were re-taken, and the reason is worth keeping.</b> Both were
+/// cropped to a flat fill by design — the 4x20 DIP difficulty stripe, and a 5 DIP band inside the
+/// history row's own top padding — so each photographed ONE colour, which the capture step's
+/// non-vacuity gate refuses because it is not evidence that anything was drawn. The answer was a
+/// wider crop rather than an exemption: the stripe is now photographed with the 10 DIP row gutter
+/// either side of it (43x35 at scale 1.75) and the history cell with the list plate's own top
+/// border above it (350x40), and each check samples its subject's interior of that picture. Same
+/// fractions as before — 140/140 and 2352/2352 on their own captures, 0 on their siblings' — over
+/// pictures that now say where the colour STOPS.</para>
 ///
 /// <para><b>What it IS.</b> The things that rot silently between headed runs: a check demoted out
 /// of the class a headless frame can never discharge, a surface or state the script can no longer
@@ -332,13 +343,13 @@ public class ScriptedSessionPresentationTests
     }
 
     /// <summary>
-    /// THE DERIVATION AND THE PRODUCT AGREE. The stripe cell is 7x35 pixels at scale 1.75 and is
-    /// derived, not searched for: a <see cref="Border"/> has no automation peer (harness surprise
-    /// #1), so the capture computes the cell from the row's rect and the meta cell's rect using the
-    /// row's own geometry constants. If the product changes one of them and the script does not,
-    /// the capture aims 14 pixels away from the thing it names — and a stripe check that
-    /// photographs the row's background would simply fail, which looks like a regression in the
-    /// product rather than in the harness.
+    /// THE DERIVATION AND THE PRODUCT AGREE. The stripe cell is 43x35 pixels at scale 1.75 — a 7x35
+    /// stripe and the 18 px gutter either side of it — and is derived, not searched for: a
+    /// <see cref="Border"/> has no automation peer (harness surprise #1), so the capture computes
+    /// the cell from the row's rect and the meta cell's rect using the row's own geometry constants.
+    /// If the product changes one of them and the script does not, the capture aims 14 pixels away
+    /// from the thing it names — and a stripe check that photographs the row's background would
+    /// simply fail, which looks like a regression in the product rather than in the harness.
     ///
     /// <para>The script's own cross-check ("the row grid does not close") catches this at capture
     /// time, and it really did: it refused a stripe 43 DIP short of the trailing edge and that
@@ -362,6 +373,13 @@ public class ScriptedSessionPresentationTests
         // And the cross-check itself is still there: a derivation with no proof that the grid
         // closes is a derivation that can aim anywhere and say nothing.
         Assert.Contains("the session row grid does not close", script, StringComparison.Ordinal);
+
+        // THE CELL KEEPS THE STRIPE'S BOUNDARY IN THE PICTURE, one gutter either side. Cropped to
+        // the bare stripe the capture was a flat fill, which the capture step's non-vacuity gate
+        // refuses — and a check over one flat colour could not tell the stripe from a screen
+        // painted the same green. Shrink the cell back to the stripe alone and the surface stops
+        // being capturable at all, which is how it broke the first time.
+        Assert.Contains("$capW = $stripeW + (2 * $pad)", script, StringComparison.Ordinal);
     }
 
     private static DecodedImage Solid(int width, int height, (byte R, byte G, byte B) color)

@@ -20,9 +20,10 @@ namespace CcpClient.Tests;
 /// whether somebody should be looking at it.</para>
 ///
 /// <para><b>It deliberately does NOT ban the probe.</b> The channel is content-free, UIA-readable
-/// on Windows, and logged once on first layout so it is stderr-readable on Linux — which is the
+/// on Windows, and logged to stderr whenever the geometry it describes CHANGES — which is the
 /// only way this port has ever read its rail geometry on a platform where every screen capture
-/// comes back black. A guard that removed the probe would take the Linux leg's evidence with it.
+/// comes back black. (Once on first layout is what it used to be, and on X11 that line was stale
+/// before it was read.) A guard that removed the probe would take the Linux leg's evidence with it.
 /// So this pins the GATE, not the absence of the channel.</para>
 /// </summary>
 public class DiagnosticFooterGuardTests
