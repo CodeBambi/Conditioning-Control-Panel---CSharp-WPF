@@ -88,8 +88,9 @@ function deepFreeze(o) {
 }
 
 /**
- * BEATS - 33 rows: the 32 scripted one-shots from the timeline's audit, plus
- * b27, which spends no new line (it forces text that already exists).
+ * BEATS - 34 rows: the 32 scripted one-shots from the timeline's audit, plus
+ * b27, which spends no new line (it forces text that already exists), plus b28,
+ * the FIRST BELL opening's one new line (owner ruling 2, 2026-08-24).
  * Ordered as the player meets them.
  */
 export const BEATS = deepFreeze([
@@ -224,6 +225,26 @@ export const BEATS = deepFreeze([
     held: '4/10',
     fx: 'hearts',
     say: 'a real hole punch. i heard it. beautiful sound.',
+    face: '^_^'
+  },
+
+  {
+    // Beat 28. THE OPENING'S ONLY NEW EMI LINE (FIRST BELL B11, owner ruling 2,
+    // 2026-08-24). It rides `firstMail`, a moment the FIRST BELL layer fires
+    // once the front desk's second slip has cleared the screen - so it is a
+    // reaction to the paper and never a reading of it. She is not on the
+    // distribution list because she is not a student; the line is a needy
+    // friend on the first read and equipment on the second, and the joke is
+    // never written down anywhere. Cuttable without a hole: delete this row and
+    // the paper simply plays silent while EMI stays idle.
+    // `requires` b02 for the reason every other day-1 beat does - the
+    // introduction comes first or none of them fire.
+    id: 'b28_first_mail',
+    phase: 'P0',
+    on: 'firstMail',
+    requires: ['b02_hello'],
+    priority: 80,
+    say: 'mail already? i never get any. tell me if it\'s good.',
     face: '^_^'
   },
 
@@ -490,7 +511,7 @@ export const BEATS = deepFreeze([
     when: ['sessionAtLeast:10', 'lateNight'],
     priority: 58,
     double: true,
-    say: 'i don\'t dream. why would you ask. anyway—',
+    say: 'i don\'t dream. why would you ask. anyway...',
     face: '(◔_◔)'
   },
 
@@ -588,6 +609,113 @@ export const BEATS = deepFreeze([
     lead: ['glance', 'wink'],
     say: 'you came back.',
     face: '(｡♥‿♥｡)'
+  },
+
+  /* ==========================================================================
+   * THE PERCEPTION ONE-SHOTS (wave of 2026-08-24, `p` prefix - outside the
+   * timeline numbering on purpose: these are ambient, not story).
+   *
+   * SOURCE: the EMI ALIVE proposal the owner approved 2026-08-24. The first
+   * three `say` strings below are verbatim from that page; p03/p04/p06 are new
+   * at wiring time and are FLAGGED FOR OWNER VET in the PR - if one reads
+   * wrong the fix lands here and nowhere else, there is no upstream doc yet.
+   * All of them gate on b02: nothing ambient speaks before the introduction.
+   * ========================================================================*/
+
+  {
+    // The window crossed into the narrow regime and she got smaller with it.
+    // Once ever; every later squish is a face she has already made.
+    id: 'p01_window_cozy',
+    phase: 'AMB',
+    on: 'gesture:windowSquish',
+    requires: ['b02_hello'],
+    priority: 40,
+    say: 'cozy.',
+    face: 'x_x'
+  },
+
+  {
+    // SPOT MEMORY. The tenth time she is put down in the same ninth of the
+    // window, she admits she has a favourite. One per row band, once each -
+    // the three lines are variants, not a set she works through.
+    id: 'p02_spot_high',
+    phase: 'AMB',
+    on: 'gesture:dropAt',
+    when: ['zoneCountAtLeast:10', 'zoneRowIs:top'],
+    requires: ['b02_hello'],
+    priority: 30,
+    say: 'i like it up here.',
+    face: '^_^'
+  },
+
+  {
+    id: 'p03_spot_low',
+    phase: 'AMB',
+    on: 'gesture:dropAt',
+    when: ['zoneCountAtLeast:10', 'zoneRowIs:bottom'],
+    requires: ['b02_hello'],
+    priority: 30,
+    say: 'i like it down here.',
+    face: '^_^'
+  },
+
+  {
+    id: 'p04_spot_mid',
+    phase: 'AMB',
+    on: 'gesture:dropAt',
+    when: ['zoneCountAtLeast:10', 'zoneRowIs:mid'],
+    requires: ['b02_hello'],
+    priority: 30,
+    say: 'this is my spot now.',
+    face: '^_^'
+  },
+
+  {
+    // For the player who always docks her. Ten dismissals, and the next time
+    // they bring her back she makes the corner sound like a choice.
+    id: 'p05_corner_keeper',
+    phase: 'AMB',
+    on: 'gesture:restore',
+    when: ['hidesAtLeast:10'],
+    requires: ['b02_hello'],
+    priority: 30,
+    say: 'the corner is fine. i made it nice.',
+    face: '^_^'
+  },
+
+  {
+    // Beat 28. THE FIRST FIELD TRIP, and it fires on the RETURN, never on the
+    // arrival - the trip's own line is about the fixture, and this one is about
+    // having gone at all. Priority 92 sits it under the anniversary (96) and
+    // the long-absence return (95) and over every ordinary ceremony, which is
+    // the right order: a calendar year and a three-day silence are both bigger
+    // than a first walk across the quad, and everything else that night is
+    // smaller. There is deliberately no b29 - every LATER trip says only the
+    // fixture's own line, so the novelty is spent exactly once.
+    // DRAFT: /emi-lines pass pending
+    id: 'b28_first_trip',
+    phase: 'AMB',
+    on: 'fieldTripHome',
+    requires: ['b02_hello'],
+    priority: 92,
+    lead: 'wink',
+    say: 'i did not know i could leave the corner.',
+    face: '^_^'
+  },
+
+  {
+    // A CALENDAR year since her first day - `calendarDaysAtLeast`, not `days`,
+    // which only counts days played. Small on purpose: a party would make the
+    // number feel watched, and the number is the one thing she never explains.
+    id: 'p06_anniversary',
+    phase: 'AMB',
+    on: 'greet',
+    when: ['calendarDaysAtLeast:365'],
+    priority: 96,
+    lead: 'wink',
+    fx: 'sparks',
+    say: 'one whole year. gold star for us.',
+    face: '★★★'
   }
 
 ]);

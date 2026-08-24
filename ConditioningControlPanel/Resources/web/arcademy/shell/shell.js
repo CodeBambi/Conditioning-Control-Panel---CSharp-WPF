@@ -43,7 +43,15 @@ import { createCeremonies } from './ceremonies.js';
 import { createPeek } from './peek.js';
 import { createKeybinds } from './keybinds.js';
 import { campusPill, createConfirm, exitBar, sign as signExit } from './exits.js';
+import { installDeviceClass } from '../core/device.js';
+import { requireOrientation, clearOrientation } from './orientgate.js';
 import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
+/* FIRST BELL - the once-ever opening (vn/). It mints its own layer, owns its own
+ * ledger (`vnSeen`, a sibling of EMI's `emiVoice`) and NEVER gates a shipped
+ * seam: every entry point takes a continuation and runs it exactly once - on
+ * success, on a throw, on a missing plate and on a watchdog. A returning
+ * player's whole experience of this import is one controller that stands down. */
+import { createFirstBell } from '../vn/index.js';
 import { createRecords } from './records.js';
 import { createAnnexReveal } from './annexreveal.js';
 import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
@@ -354,6 +362,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   if (reducedMotion && document.documentElement) {
     document.documentElement.classList.add('arc-reduced');
   }
+  /* THE MOBILE SEAM (core/device.js). One decision, painted on <html> as
+   * `arc-mobile` and kept there across a rotate, so the stylesheet's phone rules
+   * and every `isMobile()` in the JS can never disagree. boot.js installs it too;
+   * it is idempotent, and a shell driven straight by a test harness needs its own
+   * call rather than boot's. */
+  installDeviceClass();
 
   /* ---------------------- state ----------------------------------------- */
   /* THE GRADE EMI SPEAKS ABOUT. Set by finishClass, read once by showReport, so
@@ -422,6 +436,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * boots, an empty seen ledger and no introduction). This flag says "the board
    * has been arrived at once"; everything after it is the guard as it was. */
   let greeted = false;
+  /* FIRST BELL. The opening's controller (vn/index.js) or null - null is the
+   * whole story on a platform with no document, and a returning player's
+   * controller is live but permanently stood down. `splashSpent` makes
+   * onSplashDone idempotent: boot.js calls it once, but a second call must be
+   * free rather than a second cold open. */
+  let vn = null;
+  let splashSpent = false;
   let board = null;
   let campus = null;               // the night-campus hub (OPTIONAL - see showBoard)
   // THE STUDENT BODY (PRESENCE.md). Optional in exactly the way the campus is:
@@ -609,6 +630,25 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     try { return !store.punchCard(gameKey).enrolled; } catch (e) { return false; }
   }
 
+  /**
+   * HAS THIS SCHOOL EVER BEEN ATTENDED? The FIRST BELL opening is first-run only
+   * (its law 3), and this is the whole test: not one card enrolled and not one
+   * graded day on the books. Both are already-derived reads - `enrolledAt` is
+   * the host's own enrollment flag and `days` is the page's graded view - so
+   * nothing new is stored to answer it, and a player restored from the server
+   * mirror reads as a returning player for free.
+   * A throw answers FALSE, which stands the opening down: the safe answer to
+   * "I cannot tell" is the one that shows nobody anything.
+   */
+  function isFirstNight() {
+    try {
+      for (const entry of games.list) if (store.punchCard(entry.key).enrolled) return false;
+      const days = store.get('days');
+      if (days && typeof days === 'object' && Object.keys(days).length) return false;
+      return true;
+    } catch (e) { return false; }
+  }
+
   function clearScreen() {
     // The card ceremony is deliberately NOT dropped here. It rides ON the report
     // card, and `onPayout` re-renders that report on the same screen - a wipe
@@ -620,6 +660,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
     if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
     extrasBox = null;
+    /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
+     * funnels through here, so dropping it here is what stops a gate the campus
+     * asked for from hanging over the report card behind it. The screens that
+     * still want one (the campus, a class whose board has a shape) re-arm after
+     * they have built, which is also how the card knows which words to wear. */
+    try { clearOrientation(); } catch (e) { /* noop */ }
     // Every screen switch funnels through here, so no throw path can strand
     // the immersive stage lock (the campus's arc-campus-on unwinds in its own
     // destroy above, same guarantee).
@@ -694,7 +740,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (!compact) {
         if (c.homeroom) chips.push({ text: t('homeroom', 'Homeroom'), kind: 'homeroom' });
         chips.push({ text: t('family_' + c.family, c.family) });
-        chips.push({ text: c.timeBudgetSec + 's', kind: 'num' });
+        /* A CLOCKLESS CLASS SHOWS NO SECONDS, ANYWHERE (the class-length wave).
+         * The budget is still real and still rings the bell; Daily Trigger just
+         * does not wear it. Same suppression on the campus room card and in the
+         * proctor strip, and the time bar is not mounted at all. */
+        if (!c.clockless) chips.push({ text: c.timeBudgetSec + 's', kind: 'num' });
       }
       if (suspended) chips.push({ text: t('class_suspended', 'Class Suspended'), kind: 'warn' });
       if (done) {
@@ -751,6 +801,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       gameKey: c.gameKey,
       family: c.family,
       timeBudgetSec: c.timeBudgetSec,
+      clockless: !!c.clockless,          // the room card hides the seconds chip
       homeroom: !!c.homeroom,
       tier: tierFor(store.gameMeta(c.gameKey)),
       endless: endlessFor(c.gameKey),
@@ -955,9 +1006,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         ghosts = null;
       }
       // The window IS the campus: the topbar's content is diegetic in-scene
-      // (crest, student ID, Registrar/gear), so the bar itself steps aside.
+      // (crest, student ID, Front Office/gear), so the bar itself steps aside.
       // Every other screen re-shows it through renderTopbar().
       if (dom.topbar) dom.topbar.hidden = true;
+      /* THE CAMPUS WANTS THE PHONE SIDEWAYS (owner bug A). The plan is a fixed
+       * 16:9 geography and `meet` now fits all of it, but "all of it" inside a
+       * 9:19.5 slot is a strip of architecture two rooms wide with the rest of
+       * the school as sky. There is nothing to pan, so there is nothing to fix
+       * by scrolling: the card asks for the turn and lifts itself on the way
+       * back. It is armed ONLY for the real campus - the plain-board fallback
+       * below is an ordinary scrolling panel and reads fine upright. */
+      requireOrientation('landscape', { reason: 'campus' });
     } catch (e) {
       say('campus hub failed (' + ((e && e.message) || e) + ') - plain board fallback');
       // If the stage built and a LATER line threw, its bell interval and the
@@ -986,7 +1045,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    * THE SPLIT (owner ruling 2026-08-24). `gameKey` scopes the page to one
    * class: the pause card passes the running class's key so a player mid-class
    * sees the globals plus THEIR room's knobs, never the other eight. The
-   * campus gear and the Registrar keep calling with no argument and get the
+   * campus gear and the Front Office keep calling with no argument and get the
    * full sheet - the between-classes page is the right home for "everything".
    */
   function showSettings(gameKey) {
@@ -1002,6 +1061,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       bridge,
       games: games.list,
       keybinds,
+      /* THE DOOR'S TWO WRITE VERBS, lent to the web Media group so its add
+       * and remove buttons ride SORT's `probe-sub` / `library-remove` frames
+       * rather than a second copy of them. The group only renders behind
+       * `init.settings.mediaControls === true`, so on the app this is an
+       * unread argument. */
+      assets,
       log: say,
       gameKey: gameKey || null,
       onClose: () => (active ? showClassScreen() : showBoard()),
@@ -1233,7 +1298,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       justUnlocked: !!spec.justUnlocked,
       reducedMotion,
       onPunched: spec.onPunched,
-      onDone: () => { punchStage = null; if (finalSeal) maybeAnnexReveal(spec.gameKey); },
+      onDone: () => {
+        punchStage = null;
+        /* FIRST BELL SEAM (m01, the second slip). The FIRST-EVER card ceremony
+         * has cleared: the front desk's note slides out from under the live
+         * board, and EMI's one new line lands after it. Once-ever, guarded, and
+         * the VN itself refuses to mount over a live class (canInterrupt) - so
+         * the ordinary "Done" path and a screen change both read the same. */
+        try { if (vn) vn.afterCeremony(); }
+        catch (e) { say('first bell mail skipped (' + ((e && e.message) || e) + ')'); }
+        /* THE ANNEX REVEAL: the school's LAST seal. The two seams can never
+         * collide - a first-ever ceremony cannot be the tenth card's tenth
+         * hole - so this simply runs after the mail check. */
+        if (finalSeal) maybeAnnexReveal(spec.gameKey);
+      },
       log: say,
     });
     return punchStage;
@@ -1504,10 +1582,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * right. The shell owns the clock (see timeBar* below) because a game must
      * never be able to make the flow of time lie - and it never ENDS a class:
      * the game's own bell is authoritative, the bar just goes pink and holds.
-     * A FREE SWIM has no budget, so it has no bar (panel carries arc-endless). */
+     * A FREE SWIM has no budget, so it has no bar (panel carries arc-endless).
+     * A CLOCKLESS CLASS has a budget and still refuses one: the bar is the loud
+     * half of "you are being timed", and homeroom's minute is a ritual, not an
+     * exam. Nothing downstream needs a guard - timeBarSet / timeBarTick /
+     * timeBarPaint all return on a null `timebar`, exactly as they do for a
+     * free swim, so the clock simply never starts. */
+    const clockless = !!cls.clockless;
     let timebar = null;
     let timefill = null;
-    if (!endless) {
+    if (!endless && !clockless) {
       timebar = el('div', 'arc-timebar');
       timefill = el('div', 'arc-timebar-fill');
       timebar.appendChild(timefill);
@@ -1537,11 +1621,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (retake) bar.appendChild(el('span', 'chip', t('retake', 'Retake')));
     bar.appendChild(el('span', 'arc-spacer'));
     // A free swim is untimed, so the clock chip would be a lie. The chip that
-    // replaces it names what this is instead.
+    // replaces it names what this is instead. A CLOCKLESS class gets neither:
+    // it IS timed, it simply never says so, so there is nothing honest to put
+    // in the slot and the strip closes over it.
     const clock = endless
       ? el('span', 'chip', t('free_swim', 'Free Swim'))
-      : el('span', 'chip num', cls.timeBudgetSec + 's');
-    bar.appendChild(clock);
+      : (clockless ? null : el('span', 'chip num', cls.timeBudgetSec + 's'));
+    if (clock) bar.appendChild(clock);
     panel.appendChild(bar);
 
     return { panel, root, clock, timebar, timefill, pill };
@@ -1771,6 +1857,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function startClass(cls, opts) {
     if (suspendedGlobally) { shout(t('class_suspended', 'Class Suspended')); return; }
+    /* FIRST BELL SEAM (s03, the walk to Homeroom). ADDITIVE AND ONCE-EVER: the
+     * VN plays one caption on the midway and a beat on the Homeroom threshold,
+     * then re-enters this function with the flag already spent, so the shipped
+     * class takeover is byte-for-byte the next thing that happens. A false, a
+     * throw, a spent flag, a missing plate and a class that is not Homeroom all
+     * fall straight through to the class - the VN may never be a gate. */
+    try {
+      if (vn && vn.gateClass({ gameKey: cls.gameKey, homeroom: !!cls.homeroom },
+        () => startClass(cls, opts))) return;
+    } catch (e) { say('first bell walk skipped (' + ((e && e.message) || e) + ')'); }
     dismissEndCard();
     dismissPunchStage();
     dismissAnnexStage();
@@ -1783,7 +1879,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const manifest = (mod && mod.manifest) || {};
     const gameMeta = store.gameMeta(cls.gameKey);
     const gradeTier = tierFor(gameMeta);
-    // A free swim has NO budget: 0 is the contract the game reads as "no bell".
+    /* A free swim has NO budget: 0 is the contract the game reads as "no bell".
+     * Otherwise the CLASS's own budget, fenced by the ceiling for its type -
+     * and since the class-length wave both ceilings are 300 and `meaty` is the
+     * anchor-slot flag rather than a length, so this Math.min only ever bites a
+     * calendar override that asked for more than five minutes. The `||` arm is
+     * a belt: the timetable clamps every dealt budget to >= MIN_BUDGET_SEC and
+     * freeSwimClass now carries the descriptor's own, so nothing reaches here
+     * with a falsy one. */
     const timeBudgetSec = endless ? 0 : Math.min(
       cls.timeBudgetSec || QUICK_MAX_SEC,
       cls.meaty ? MEATY_MAX_SEC : QUICK_MAX_SEC
@@ -1979,6 +2082,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
     dom.screen.appendChild(chrome.panel);
     setStage('arc-class-on');
+    /* THE ROOM ASKS FOR A SHAPE (games/registry.js `orientation`). Phones only,
+     * and 'any' arms nothing at all, so nine tenths of the desktop code path is
+     * a no-op here. Armed AFTER the stage is mounted so the card lands over a
+     * built class rather than over the screen it replaced, and the freeze rides
+     * the same hook in both directions - the card going up stops the clock, the
+     * card coming down starts it again. */
+    requireOrientation(entry.orientation, {
+      reason: 'class',
+      onChange: (blocking) => orientFreeze(blocking),
+    });
     // The host only flips _classActive off this frame and ignores fields it does
     // not know, so `endless` is free to carry: a free swim opens the same
     // bracket and closes it with `class-left` from teardownClass (never with
@@ -2127,16 +2240,26 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    */
   function freeSwimClass(gameKey) {
     const onBoard = timetable.classes.find((c) => c.gameKey === gameKey);
-    if (onBoard) return Object.assign({}, onBoard, { timeBudgetSec: 0 });
+    if (onBoard) return Object.assign({}, onBoard);
     const d = descriptors(games.list).find((x) => x.key === gameKey)
       || { key: gameKey, family: 'comfort', meaty: false };
     return {
       gameKey,
       family: d.family || 'comfort',
       meaty: !!d.meaty,
+      clockless: !!d.clockless,
       homeroom: false,
       timeLabel: '',
-      timeBudgetSec: 0,
+      /* THE DESCRIPTOR'S OWN BUDGET, not zero and not a ceiling. Two callers,
+       * and only one of them is a swim: `startFreeSwim` passes {endless:true}
+       * and startClass zeroes the budget itself, so an untimed swim is untimed
+       * whatever is written here - but THE EARNED DOOR and the dev door start
+       * this object as an ordinary GRADED, TIMED class, and they used to land
+       * on startClass's `|| QUICK_MAX_SEC` fallback. That was already wrong
+       * (Daily Trigger ran 180s through the unlock door) and the class-length
+       * wave made it wronger by moving the quick ceiling to 300. Budgets are
+       * per-module now, so the door runs the module's own class length. */
+      timeBudgetSec: Number(d.timeBudgetSec) > 0 ? Number(d.timeBudgetSec) : 120,
     };
   }
 
@@ -2339,6 +2462,38 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ---------------------- pause / suspend / teardown -------------------- */
+  /* ---------------------- the rotate freeze -----------------------------
+   * The turn-your-phone card covers the class, so the clock and the game behind
+   * it have to stop: grading a player on seconds they could not see would be the
+   * shell making the flow of time lie, which is the one thing the class clock
+   * exists to prevent.
+   *
+   * IT IS NOT pauseClass, DELIBERATELY. pauseClass mints the Paused card with its
+   * own Resume / Settings / Leave buttons, and a card stacked under a card the
+   * player cannot reach is exactly the two-dialog race trap 29 was written about.
+   * This is the quiet half of the same funnel - the bar and the game instance and
+   * nothing else - and it REFUSES to act while the class is already frozen for a
+   * reason of its own (a real pause, a host suspend), so lifting the gate can
+   * never resume something the player stopped on purpose.
+   * -------------------------------------------------------------------- */
+  let orientFrozen = false;
+  function orientFreeze(on) {
+    const want = !!on;
+    if (!active) { orientFrozen = false; return; }
+    if (want === orientFrozen) return;
+    /* THE GUARD RUNS IN BOTH DIRECTIONS. Refusing to freeze an already-frozen
+     * class is the obvious half; the half that bites is the LIFT. A host suspend
+     * can land while the card is up, and un-freezing then would call resume() on
+     * a class the host stopped - the card would come down and the game would
+     * carry on playing behind a suspend overlay. Dropping the bookkeeping without
+     * resuming hands the class back to whoever actually owns its pause. */
+    if (active.paused || active.suspendEl) { orientFrozen = false; return; }
+    orientFrozen = want;
+    timeBarSet(!want);
+    try { want ? active.instance.pause() : active.instance.resume(); }
+    catch (e) { say('rotate freeze threw: ' + ((e && e.message) || e)); }
+  }
+
   function pauseClass(on) {
     if (!active) return;
     active.paused = !!on;
@@ -2479,6 +2634,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // that fired afterwards would paint a bar that is no longer on the page.
     if (a.clockTimer) { try { clearInterval(a.clockTimer); } catch (e) { /* noop */ } a.clockTimer = 0; }
     a.clockRunning = false;
+    // The freeze belongs to the class, not to the page: leaving it armed would
+    // have the NEXT class start life believing it was already stopped.
+    orientFrozen = false;
     active = null;
     // TELL THE HOST THE CLASS IS OVER. `class-started` has a closing bracket now:
     // without it the host's `_classActive` stayed true for the rest of the session
@@ -2601,6 +2759,21 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       } catch (e) { say('punch ceremony failed: ' + ((e && e.message) || e)); }
     },
 
+    /**
+     * THE SPLASH IS DOWN (boot.js, trap 66's happy path only). The campus is
+     * already painted underneath with `animate:false` and has not been touched
+     * yet, which is exactly the frame FIRST BELL's cold open wants. Idempotent,
+     * guarded, and a no-op for everyone except a genuine first night - and the
+     * failBoot path never calls it at all, so an error card is never held up by
+     * a scene (the same law that keeps the splash itself off that path).
+     */
+    onSplashDone() {
+      if (splashSpent) return;
+      splashSpent = true;
+      try { if (vn) vn.splashDone(() => {}); }
+      catch (e) { say('first bell cold open skipped (' + ((e && e.message) || e) + ')'); }
+    },
+
     /** {type:'suspend'} */
     onSuspend(m) { applySuspend(!!(m && m.on), m && m.reason); },
 
@@ -2706,6 +2879,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       setStage(null);
       if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
       if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
+      if (vn) { try { vn.destroy(); } catch (e) { /* noop */ } vn = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
       if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } }
     },
@@ -2723,8 +2897,35 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         ? document.getElementById('arc-emi') : null);
     // `shout` is boot.js's toast (#arc-toast). EMI borrows it for exactly one
     // line - the first time the player ever dismisses her with the x.
-    if (emiLayer) mountEmi({ layer: emiLayer, store, toast: shout, log: say });
+    /* `assets` + `settings` are THE OFF CHANNELS' media seam (W3): NOW WATCHING
+     * draws through the provider the same way a class does (the host fetches,
+     * the page never does) and falls back to `init.settings.localAssets`. Both
+     * are optional to her - absent means the channel is absent. */
+    if (emiLayer) mountEmi({ layer: emiLayer, store, toast: shout, log: say, assets, settings: src.settings });
   } catch (e) { say('EMI failed to mount (the shell is unaffected): ' + ((e && e.message) || e)); }
+
+  /* FIRST BELL. Built here, BEFORE the first showBoard(), for the same reason
+   * EMI is: the controller warms its plates while the campus paints, so nothing
+   * waits on a decode when boot.js hands the splash edge over. Nothing plays at
+   * construction - `onSplashDone` above is the only thing that starts a scene,
+   * and on any night but the first the controller banks its whole ledger and
+   * never speaks. A throw here costs the opening and nothing else. */
+  try {
+    vn = createFirstBell({
+      store,
+      // The SAME rows the campus board deals, so the wall over the admissions
+      // desk and the board behind the plaque can never disagree.
+      rows: () => buildRows(true),
+      firstNight: isFirstNight,
+      // A slip may not land over live play; the mail defers (and is spent).
+      canInterrupt: () => !active && screen !== 'class',
+      // EMI's ONE verb, injected. vn/ imports nothing from emi/ (trap 60).
+      onMoment: (name, payload) => fireMoment(name, payload),
+      reducedMotion,
+      log: say,
+    });
+    if (vn) say('first bell: ' + (vn.armed ? 'armed' : 'nothing left to play'));
+  } catch (e) { say('first bell unavailable (the shell is unaffected): ' + ((e && e.message) || e)); }
 
   showBoard();
   return api;

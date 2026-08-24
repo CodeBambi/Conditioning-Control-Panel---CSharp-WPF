@@ -30,23 +30,26 @@ export const CP_LEX = Object.freeze({
   cp_chip_clock: 'Time left',
   cp_chip_locked: 'Pieces home',
   cp_chip_calm: 'Composure',
+  cp_chip_banked: 'Pictures done',
 
   /* ---- the drawn class-rules sheet (Deck VI, Law IV) -------------------- */
   cp_howto_title: 'Class rules',
   cp_howto_slide: 'Tap a piece beside the gap and it slides in. Arrows, WASD and swipes do the same.',
   cp_howto_lock: 'A piece that reaches its own place locks with a snap. It can still be slid.',
   cp_howto_wash: 'The room will bury the board. Keep sliding - the picture underneath never moved.',
+  cp_howto_bank: 'Finish a picture and the next one deals. The bell ends the class, not the solve.',
   cp_howto_go: 'Start the picture',
 
   /* ---- proctor lines (.g-cp-msg, one at a time) ------------------------- */
-  cp_brief: 'One picture, cut apart and still moving. Put it back together.',
-  cp_brief_zen: 'No clock tonight. Slide until it is whole again.',
+  cp_brief: 'One picture, cut apart and still moving. Put it back together, then again.',
+  cp_brief_zen: 'No clock tonight. Slide until it is whole, then again if you like.',
   cp_play_hint: 'Tap a piece beside the gap. Arrows, WASD or swipe.',
   cp_lock_line: 'That one is home.',
   cp_backtrack_line: 'Back where it was. Breathe.',
   cp_wash_line: 'Keep sliding. The board is still exactly where you left it.',
   cp_rescue_line: 'Take the lit piece. The grade eases; the class does not end.',
   cp_solved_line: 'Whole. Watch it play.',
+  cp_bank_line: 'Banked. Here is a fresh one.',
   cp_bell_warn: 'Twenty seconds.',
   cp_bell_line: 'The bell. Hands off the board.',
   cp_zen_done: 'Whole, in your own time.',
@@ -65,7 +68,10 @@ export const CP_LEX = Object.freeze({
   /* ---- the end card (.g-cp-end) ----------------------------------------- */
   cp_end_title: 'Composure report',
   cp_end_title_zen: 'Zen board',
-  cp_end_solved: 'Solved',
+  /* A COUNT since the class-length wave, not a Yes/No: the class deals boards
+   * until the bell, so what the report leads with is how many pictures came
+   * back. `cp_end_yes` / `cp_end_no` retired with the question. */
+  cp_end_solved: 'Pictures finished',
   cp_end_moves: 'Moves',
   cp_end_par: 'Baseline',
   cp_end_locked: 'Pieces home',
@@ -73,8 +79,6 @@ export const CP_LEX = Object.freeze({
   cp_end_thrash: 'Panic moves',
   cp_end_assists: 'Assists',
   cp_end_time: 'Time',
-  cp_end_yes: 'Yes',
-  cp_end_no: 'No',
   cp_end_best: 'Best solve',
   cp_end_best_line: 'Your standing mark on this board. Beat it next class.',
   cp_end_best_first: 'Your first finished picture on this board.',

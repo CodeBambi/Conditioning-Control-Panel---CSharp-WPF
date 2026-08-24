@@ -13,7 +13,8 @@
  *                 [data-mode=zen] is the warm room, [data-mode=timed] the cool.
  *   .g-cp-backdrop  the casino's lighting rig (pointer-events:none, z 0):
  *                 wall / lamp / motes / dark / flash / royal / vig layers
- *   .g-cp-hud     four chips: moves, clock, locked, calm
+ *   .g-cp-hud     five chips: moves, clock, locked, BANKED (the multi-board
+ *                 counter, hidden until the first picture lands), calm
  *   .g-cp-frame   THE EASEL: the wooden frame + mat around the board, the
  *                 stand drawn under it (::after), the marquee + the casino's
  *                 overlay (.g-cp-cs) and the trickster's .g-cp-preview live
@@ -51,7 +52,10 @@
  * close their seam entirely; a locked tile beside a loose one keeps a hair of
  * it. [data-phase=solved] (and the board's own .is-solved, which outlives a
  * phase change) closes every seam, drops every shadow and sends one light
- * sweep across the canvas while the clip plays clean.
+ * sweep across the canvas while the clip plays clean - and then, since the
+ * class-length wave, the DEAL BEAT takes it away again: a solve BANKS the
+ * picture and a fresh scramble deals ([data-phase=dealing] / .is-dealing),
+ * because only the bell ends a timed class now.
  *
  * THE OTHER CORE HOOKS. .g-cp-board.is-bump (240ms, an illegal press) knocks
  * the whole canvas against the easel - chrome, never a tile. The stage's
@@ -66,13 +70,15 @@
  * index.js; this file only makes it visible.
  *
  * THE SHEET (Deck VI, Law IV): .g-cp-howto is drawn, not told. index.js
- * builds three rows, each a .g-cp-hw-fig.g-cp-hw-slide|lock|wash span holding
- * three blank parts (i.g-cp-hw-a/-b/-c); this sheet makes the span a mini 3x3
- * board out of gradients and the parts its moving pieces: a tile sliding into
- * the gap under a finger, a tile snapping home with its seam lighting up and
- * closing, a pink wash breathing over a board where a tile keeps sliding.
- * index.js owns the policy and the captions; the GO button is the only live
- * thing on the sheet.
+ * builds four rows, each a .g-cp-hw-fig.g-cp-hw-slide|lock|wash|bank span
+ * holding three blank parts (i.g-cp-hw-a/-b/-c); this sheet makes the span a
+ * mini 3x3 board out of gradients and the parts its moving pieces: a tile
+ * sliding into the gap under a finger, a tile snapping home with its seam
+ * lighting up and closing, a pink wash breathing over a board where a tile
+ * keeps sliding, and the finished picture flashing gold and dropping away as
+ * a fresh scramble deals in behind it (THE BANK - a solve does not end the
+ * class any more, the bell does). index.js owns the policy and the captions;
+ * the GO button is the only live thing on the sheet.
  *
  * THE END CARD: .g-cp-end is the panel; rows are .g-cp-end-row > .g-cp-end-k
  * + .g-cp-end-v; the grade arrives as an OBJECT - .g-cp-end-seal[data-grade]
@@ -236,6 +242,13 @@ export const STYLE_TEXT = `
 .g-cp-chip.g-cp-calm::before{content:"";position:absolute;left:0;top:0;bottom:0;z-index:-1;
   width:calc(var(--cp-calm,1) * 100%);background:color-mix(in srgb, var(--pink), transparent 82%);
   transition:width .5s ease}
+/* THE BANK COUNTER. Gold, because it is the one chip that only ever goes up -
+   index.js keeps it hidden until the first picture banks. */
+.g-cp-chip.g-cp-banked{border-color:var(--gold);color:var(--gold);
+  box-shadow:0 0 12px color-mix(in srgb, var(--gold), transparent 68%)}
+.g-cp-stage[data-phase="solved"] .g-cp-chip.g-cp-banked,.g-cp-stage[data-phase="dealing"] .g-cp-chip.g-cp-banked{
+  animation:g-cp-bankchip 620ms ease-out 1 both}
+@keyframes g-cp-bankchip{0%{transform:scale(1)}35%{transform:scale(1.22)}100%{transform:scale(1)}}
 .g-cp-stage[data-mode="zen"] .g-cp-chip.g-cp-clock{opacity:.7}
 .g-cp-stage.g-cp-bell .g-cp-chip.g-cp-clock{border-color:var(--gold);color:var(--gold);
   animation:g-cp-bellchip 1s ease-in-out infinite alternate}
@@ -406,6 +419,25 @@ export const STYLE_TEXT = `
   animation:g-cp-solvesweep 1.8s ease-out .3s 1 both}
 @keyframes g-cp-solvesweep{0%{opacity:1;background-position:140% 0}100%{opacity:0;background-position:-40% 0}}
 
+/* ---- THE DEAL BEAT (multi-board, 2026-08-24) ------------------------------
+   A solve BANKS the picture and a fresh scramble deals; the bell is the only
+   thing that ends a timed class. Same two hooks as the solve, one board apart:
+   index.js sets data-phase="dealing" on the stage AND .is-dealing on the
+   board, holds both for DEAL_MS with input closed, then hands play back.
+   The whole beat is ONE board-level animation on purpose - a per-tile stagger
+   over n*n elements is a lot of compositing for something the player sees six
+   or seven times in a class, and the tiles are already mid-transform from the
+   solve's dissolve. The html.arc-reduced rule at the foot of this sheet kills
+   it for free; the phase attribute stays readable. (NO BACKTICKS ANYWHERE IN
+   HERE - this whole sheet is one template literal, and a backtick in a comment
+   closes it. node --check will not catch that, because the file then still
+   parses as a script; only importing it as a MODULE does.)                  */
+.g-cp-stage[data-phase="dealing"] .g-cp-tile,.g-cp-board.is-dealing .g-cp-tile{cursor:default}
+.g-cp-stage[data-phase="dealing"] .g-cp-board,.g-cp-board.is-dealing{animation:g-cp-deal 640ms cubic-bezier(.2,.7,.3,1) both}
+@keyframes g-cp-deal{0%{opacity:.2;filter:brightness(1.6) saturate(.7);transform:scale(1.035)}
+  50%{opacity:1;filter:brightness(1.05) saturate(1)}
+  100%{opacity:1;filter:none;transform:none}}
+
 /* ---- the burial (data-wash="1" while a wash is up) --------------------------
    The engine's wash buries the board from its own fixed layer; the studio
    answers from underneath: the lamp dips, the motes freeze, the canvas cools
@@ -554,6 +586,22 @@ export const STYLE_TEXT = `
   background:radial-gradient(70% 70% at 50% 40%, hsla(330,90%,70%,.75), hsla(292,70%,55%,.55) 60%, hsla(262,60%,40%,.4));
   mix-blend-mode:screen;filter:blur(1px);animation:g-cp-hwwash 3s ease-in-out infinite}
 @keyframes g-cp-hwwash{0%,25%{opacity:0}40%,75%{opacity:.9}90%,100%{opacity:0}}
+/* 4 - BANK (multi-board): a = the finished picture filling the whole figure
+   and flashing gold, then dropping away; b + c = the fresh scramble dealing
+   in behind it. One 3.4s loop, same grammar as the three rows above.        */
+.g-cp-hw-bank .g-cp-hw-a{inset:0;width:auto;height:auto;border-radius:3px;z-index:3;
+  background:linear-gradient(135deg, hsl(330,60%,58%), hsl(292,50%,50%) 55%, hsl(262,55%,46%));
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);animation:g-cp-hwbank 3.4s ease-in-out infinite}
+.g-cp-hw-bank .g-cp-hw-b{left:0;top:0;background:linear-gradient(135deg, hsl(262,45%,42%), hsl(292,40%,38%));
+  box-shadow:0 3px 8px rgba(0,0,0,.6);animation:g-cp-hwdealt 3.4s ease-in-out infinite}
+.g-cp-hw-bank .g-cp-hw-c{left:var(--hw-s);top:var(--hw-s);
+  background:linear-gradient(135deg, hsl(292,40%,38%), hsl(262,45%,42%));
+  box-shadow:0 3px 8px rgba(0,0,0,.6);animation:g-cp-hwdealt 3.4s ease-in-out .12s infinite}
+@keyframes g-cp-hwbank{0%,22%{opacity:1;transform:scale(1);filter:none}
+  34%{opacity:1;transform:scale(1.04);filter:brightness(1.7) saturate(1.3)}
+  48%,100%{opacity:0;transform:scale(.92);filter:none}}
+@keyframes g-cp-hwdealt{0%,44%{opacity:0;transform:scale(1.3)}58%,88%{opacity:1;transform:scale(1)}
+  100%{opacity:0;transform:scale(1)}}
 .g-cp-hw-go{pointer-events:auto;align-self:center;margin-top:14px;padding:10px 26px;border-radius:999px;cursor:pointer;
   font-family:var(--disp);font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--ground);
   background:linear-gradient(180deg, color-mix(in srgb, var(--lav), white 15%), var(--lav));

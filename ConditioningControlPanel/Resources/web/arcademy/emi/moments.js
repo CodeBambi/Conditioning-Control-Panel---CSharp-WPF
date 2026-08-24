@@ -169,6 +169,11 @@ export function fireMoment(name, payload) {
     seen.tabAway = 0; seen.suspend = 0;
   }
 
+  /* OFF CHANNELS (W3): the deck has to know when the SCREEN changed hands - a
+   * class, a suspend - because "no channel during a class" is a leg of the idle
+   * gate and nothing else in EMI tracks it. One line, unknown names ignored. */
+  try { if (typeof emi.noteMoment === 'function') emi.noteMoment(name); } catch (e) { /* noop */ }
+
   /* THE VOICE FIRST. It is asked about EVERY name, including the ones this
    * table has no row for (`exitIntent`, `lockedClick`, the card ceremonies) -
    * which is why the unknown-moment check now sits below this line instead of

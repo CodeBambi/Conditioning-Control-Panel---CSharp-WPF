@@ -23,6 +23,8 @@
  *    eats a sentence reads as a bug, not as a mascot).
  * ==========================================================================*/
 
+import { isMobile, onDeviceChange } from '../core/device.js';
+
 /* ---------------------- dials (designer-tunable) -------------------------
  * EVERY tunable EMI has is in this one frozen object, so the owner can retune
  * her feel by hand without reading the code around it. One line each. */
@@ -33,6 +35,17 @@ export const DIALS = Object.freeze({
   W_NARROW_VW: 900,        // px of viewport width below which W_NARROW is the default
   W_MIN: 110,              // clamp floor for a stored/explicit width
   W_MAX: 220,              // clamp ceiling for the same
+  /* THE PHONE CEILING (the mobile pass). On a 390px-wide screen a 150px EMI owns
+   * more than a third of the glass and stands right on top of a game's board, so
+   * the phone gets its own default and its own hard ceiling - roughly 57% of the
+   * desktop default, which is still four times the 44px touch floor, so she is
+   * every bit as easy to grab as she was. It is a DISPLAY clamp and never a
+   * stored one: `userWidth` keeps whatever the player chose on their desktop and
+   * that is what persists, so a phone session can never shrink the size they set
+   * on the big screen (see effectiveWidth / save). */
+  W_MOBILE: 86,            // px wide on a phone, whatever the window says
+  W_MOBILE_MAX: 96,        // ...and the ceiling a stored desktop width is clamped to there
+  MARGIN_MOBILE: 8,        // px kept between EMI and the edge on a phone (see MARGIN)
   ASPECT_W: 859,           // mascot-body-blank.png, natural size
   ASPECT_H: 869,
   MARGIN: 4,               // px kept between EMI and the viewport edge
@@ -55,6 +68,19 @@ export const DIALS = Object.freeze({
   BLINK_EVERY_MS: 5200,    // resting blink cadence
   BLINK_HOLD_MS: 110,      // ...and how long the eyes stay shut
 
+  /* --- perception (the wave of 2026-08-24) ------------------------------ */
+  GAZE_MAX_PX: 3,          // the face may lean at most this many px toward the cursor
+  GAZE_DIV: 60,            // px of cursor distance per px of lean (bigger = subtler)
+  GAZE_EASE: 0.15,         // per-frame easing toward the target (0..1)
+  APPROACH_PX: 120,        // cursor within this many px of her EDGE = she notices
+  APPROACH_COOLDOWN_MS: 30000, // one noticing per this window, so she is not a doorbell
+  GLANCE_SPEED: 1.2,       // px/ms; entering the radius faster than this earns the glance chain
+  LINGER_MS: 2000,         // hover this long without clicking = expectant
+  LINGER_AWAY_MS: 4000,    // ...and this much longer with no pet = the look-away
+  DANGLE_MAX_DEG: 6,       // carried tilt is clamped here (physics reads as care, not slapstick)
+  DANGLE_K: 4,             // deg of tilt per px/ms of horizontal drag speed
+  DANGLE_SETTLE_MS: 260,   // the spring back to upright on release
+
   /* --- the idle sway (five body frames; antenna + hand tips only) ------- */
   SWAY_STEP_MS: 200,       // one step of the ping-pong walk
   SWAY_CENTER_MIN_MS: 600, // ...and the pause when it passes back through centre
@@ -66,6 +92,13 @@ export const DIALS = Object.freeze({
   SAY_HOLD_MIN_MS: 3000,   // a landed line NEVER holds less than this...
   SAY_HOLD_BASE_MS: 1400,  // ...and a long one grows: BASE + PER_CHAR x length
   SAY_HOLD_PER_CHAR_MS: 45,
+
+  /* --- the field trip (wave W2a) --------------------------------------- */
+  CRT_MS: 200,             // ONE power-off: squish to a line (~140) + flash dot (~60).
+                           // MIRRORS widget.css `emi-crt-off`/`emi-crt-on`, the way
+                           // BODY_MS mirrors emi.css. Change both or she moves in the light.
+  TRIP_GAP_PX: 14,         // px she stands off the fixture she came to look at
+  TRIP_BEAT_MS: 320,       // the pause after the line, before the tube goes dark again
 
   /* --- persistence ----------------------------------------------------- */
   SAVE_DEBOUNCE_MS: 600,   // one write per interaction, never per pointermove
@@ -192,6 +225,15 @@ function blankStats() {
   return {
     pets: 0, petStreaks3: 0, drags: 0, flings: 0, hides: 0, dockRestores: 0,
     bubblesSeen: 0, firstSeenAt: null, lastSeenAt: null, msVisible: 0,
+    /* THE OFF CHANNELS (W3). EXACTLY THREE counters, and they ride the same
+     * debounced blob: how many channels ever played, how many times she was
+     * caught on one, and how many times she actually showed you. Cooldowns and
+     * the per-session cap are SESSION-LOCAL by design and are not here. */
+    takeovers: 0, caught: 0, reveals: 0,
+    /* WHERE SHE GETS PUT DOWN: drop counts per ninth of the viewport (z0..z8,
+     * row-major). The favourite-spot beats read the count off the dropAt
+     * payload; nothing else looks in here. */
+    zones: {},
   };
 }
 
@@ -200,7 +242,16 @@ function readStats(raw) {
   if (!raw || typeof raw !== 'object') return s;
   for (const k of Object.keys(s)) {
     const v = raw[k];
-    if (k === 'firstSeenAt' || k === 'lastSeenAt') {
+    if (k === 'zones') {
+      if (v && typeof v === 'object') {
+        for (const zk of Object.keys(v)) {
+          const n = v[zk];
+          if (/^z[0-8]$/.test(zk) && typeof n === 'number' && isFinite(n) && n >= 0) {
+            s.zones[zk] = Math.round(n);
+          }
+        }
+      }
+    } else if (k === 'firstSeenAt' || k === 'lastSeenAt') {
       if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) s[k] = v;
     } else if (typeof v === 'number' && isFinite(v) && v >= 0) {
       s[k] = Math.round(v);
@@ -222,8 +273,14 @@ function readStats(raw) {
  * @param {Function=} o.toast         the SHELL's toast (boot.js -> createShell's `shout`)
  * @param {Function=} o.log
  */
-export function createWidget({ root, face, chains, fx, store, toast, log } = {}) {
+export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, log, assets, settings } = {}) {
   const say = typeof log === 'function' ? log : () => {};
+  /* OFF CHANNELS (W3): the two things NOW WATCHING needs and nothing else in
+   * this file does - the shell's provider handle (media through the HOST, the
+   * only remote path this bundle has) and `init.settings` (the player's own
+   * local library). Both optional; absent means the channel plans itself out. */
+  const channelAssets = assets || null;
+  const channelSettings = settings || null;
   /* THE SHELL'S TOAST, NOT A SECOND ONE. `#arc-toast` already exists, already
    * stacks above EMI (z 60 vs 50) and already expires its own nodes; minting a
    * rival would put two notice systems on one page. */
@@ -243,7 +300,13 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
    * box she follows the window: full size on a roomy one, smaller on a narrow
    * one. Persisting the auto width would freeze the first window she ever saw. */
   let userSized = num(saved.w) !== null;
-  let width = userSized ? clamp(num(saved.w), DIALS.W_MIN, DIALS.W_MAX) : autoWidth();
+  /* TWO WIDTHS, AND THE DIFFERENCE MATTERS. `userWidth` is what the player chose
+   * and the ONLY thing that is ever persisted; `width` is what this device is
+   * allowed to draw, which on a phone is `userWidth` clamped to the phone ceiling.
+   * Collapsing them would let one phone session overwrite the size the player set
+   * on their desktop, because the same blob is shared by both. */
+  let userWidth = userSized ? clamp(num(saved.w), DIALS.W_MIN, DIALS.W_MAX) : null;
+  let width = effectiveWidth();
   // Anchor = the TOP-LEFT corner as a fraction of the viewport, so a resize
   // moves EMI proportionally and then re-clamps instead of drifting off-screen.
   let fx0 = num(saved.x);
@@ -271,12 +334,14 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   }
 
   function blob() {
-    const out = Object.assign({}, stats, { msVisible: visibleMs() });
+    // `zones` is the one nested object: cloned so the store never holds a live
+    // reference into the counters.
+    const out = Object.assign({}, stats, { msVisible: visibleMs(), zones: Object.assign({}, stats.zones) });
     const b = { x: fx0, y: fy0, hidden, stats: out };
     // `w` is written ONLY when it was chosen, never when it was derived from the
     // window - see `userSized`. An auto width in the blob would out-vote the
     // viewport rule for ever after the first drag.
-    if (userSized) b.w = width;
+    if (userSized && userWidth != null) b.w = userWidth;
     if (hintShown) b.hintShown = true;
     return b;
   }
@@ -422,6 +487,11 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   let playChain = null;
   let makeSay = null;
   let showFx = null;
+  /* HER VOICE (emi/vox.js), injected the same way and just as optional. It owns
+   * no audio node - it only asks shell/audio.js for blips - so from here it is
+   * three calls hanging off setBubble(), the one place that already knows the
+   * difference between typing, a landed line and a cleared bubble. */
+  let vox = null;
   /* CONSTRUCTION-TIME ATTACH IS NOT A REPAINT. `attach({face, chains, fx})` runs
    * once from inside createWidget - a caller may hand the renderer straight to
    * the constructor instead of injecting it a tick later - and at that point the
@@ -436,6 +506,8 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     const f = mods && mods.face;
     const c = mods && mods.chains;
     const x = mods && mods.fx;
+    const v = mods && mods.vox;
+    if (v && typeof v.speak === 'function') vox = v;
     if (!painter && f && canvas && typeof canvas.getContext === 'function') {
       const mk = typeof f === 'function' ? f : (f && typeof f.createFace === 'function' ? f.createFace : null);
       try {
@@ -459,7 +531,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       if (built) idle();
     }
   }
-  attach({ face, chains, fx });
+  attach({ face, chains, fx, vox: vox0 });
 
   /* ---------------------- motion preference ----------------------------- */
   function reducedMotion() {
@@ -482,14 +554,25 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   function sizePx() {
     return { w: width, h: Math.round(width * DIALS.ASPECT_H / DIALS.ASPECT_W) };
   }
-  /** The default width for THIS window. Owner's rule: 150 on >= 900px, 116 below. */
+  /** The default width for THIS window. Owner's rule: 150 on >= 900px, 116 below,
+   *  and a flat W_MOBILE on a phone, where neither of those is small enough. */
   function autoWidth() {
+    if (isMobile()) return DIALS.W_MOBILE;
     return viewport().w >= DIALS.W_NARROW_VW ? DIALS.W_DEFAULT : DIALS.W_NARROW;
   }
-  /** Re-derive the width after a resize. No-op once the user has sized her. */
+  /** What this device may DRAW: the chosen width (or the window's default),
+   *  fenced by the phone ceiling. Never what gets stored - see `userWidth`. */
+  function effectiveWidth() {
+    const base = (userSized && userWidth != null) ? userWidth : autoWidth();
+    return isMobile() ? Math.min(base, DIALS.W_MOBILE_MAX) : base;
+  }
+  /** The margin this device keeps between EMI and the edge. */
+  function margin() { return isMobile() ? DIALS.MARGIN_MOBILE : DIALS.MARGIN; }
+  /** Re-derive the drawn width after a resize or a rotate. Runs even when the
+   *  player has sized her, because crossing onto or off a phone changes the
+   *  ceiling and only the ceiling - `userWidth` is not touched either way. */
   function refitWidth() {
-    if (userSized) return false;
-    const next = autoWidth();
+    const next = effectiveWidth();
     if (next === width) return false;
     width = next;
     return true;
@@ -498,13 +581,18 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   function place() {
     const vp = viewport();
     const s = sizePx();
+    const m = margin();
     if (fx0 == null || fy0 == null) {
-      // First run: park her bottom-right, clear of the dock's corner.
-      fx0 = (vp.w - s.w - 24) / vp.w;
-      fy0 = (vp.h - s.h - 56) / vp.h;
+      /* First run: park her bottom-right, clear of the dock's corner. A phone has
+       * no room for the desktop's 24/56 standoff, so she docks tight into the
+       * corner there and leaves the middle of the glass to the board. */
+      const padX = isMobile() ? 6 : 24;
+      const padY = isMobile() ? 10 : 56;
+      fx0 = (vp.w - s.w - padX) / vp.w;
+      fy0 = (vp.h - s.h - padY) / vp.h;
     }
-    const left = clamp(fx0 * vp.w, DIALS.MARGIN, Math.max(DIALS.MARGIN, vp.w - s.w - DIALS.MARGIN));
-    const top = clamp(fy0 * vp.h, DIALS.MARGIN, Math.max(DIALS.MARGIN, vp.h - s.h - DIALS.MARGIN));
+    const left = clamp(fx0 * vp.w, m, Math.max(m, vp.w - s.w - m));
+    const top = clamp(fy0 * vp.h, m, Math.max(m, vp.h - s.h - m));
     el.style.width = s.w + 'px';
     el.style.left = Math.round(left) + 'px';
     el.style.top = Math.round(top) + 'px';
@@ -589,11 +677,17 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     catch (e) { say('emi: draw threw - ' + ((e && e.message) || e)); }
   }
 
+  /* THE BUBBLE IS ALSO WHERE SHE IS AUDIBLE. This function already knows the
+   * only three states her voice cares about - typing, landed, gone - and EVERY
+   * cancel path in this file funnels through the `null` branch, so hanging the
+   * voice here (and nowhere else) is what makes "dismiss mid-babble cuts her
+   * instantly" true by construction instead of by discipline. See trap 70. */
   function setBubble(text) {
     if (text == null || text === '') {
       bubble.hidden = true;
       bubble.textContent = '';
       bubble.classList.remove('dots', 'pop');
+      if (vox) { try { vox.stop(); } catch (e) { /* a voice may never break a bubble */ } }
       return;
     }
     const s = String(text);
@@ -601,8 +695,20 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     bubble.textContent = s;
     bubble.hidden = false;
     bubble.classList.remove('dots', 'pop');
-    if (dots) bubble.classList.add('dots');
-    else { bubble.classList.add('pop'); stats.bubblesSeen += 1; }
+    if (dots) {
+      bubble.classList.add('dots');
+      if (vox) { try { vox.tick(); } catch (e) { /* noop */ } }
+    } else {
+      bubble.classList.add('pop'); stats.bubblesSeen += 1;
+      /* THE MOOD IS DRAWN ONE LINE LATER. playChain hands us the bubble BEFORE
+       * it hands the frame to `draw`, which is what resolves `bodyFrame` for a
+       * makeSay line - so we ask on the microtask and read the pose she is
+       * actually wearing. Same tick, same frame, chains.js untouched. */
+      if (vox) {
+        const speak = () => { try { vox.speak(s, { face: bodyFrame }); } catch (e) { /* noop */ } };
+        if (typeof queueMicrotask === 'function') queueMicrotask(speak); else speak();
+      }
+    }
   }
 
   /* BODY MOVES GO ON THE ROOT. Agent A's keyframes animate `transform` on `.emi`
@@ -643,6 +749,11 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   function busy() { return !!current; }
 
   function cancelChain() {
+    /* OFF CHANNELS (W3): A SAY OUTRANKS THE GLASS. Every path that takes her
+     * face - a chain, a say, a drag, a hide, a disable, destroy - already
+     * funnels through here, which is why this is the ONE hook the wave needs
+     * instead of ten. See emi/takeover.js law 3. */
+    killTakeover();
     if (current && current.handle && typeof current.handle.cancel === 'function') {
       try { current.handle.cancel(); } catch (e) { /* noop */ }
     }
@@ -663,6 +774,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     stopBlink();
     stopSway();
     clearBody();
+    restGaze();      // a performance owns the whole glass; the lean eases home
     /* THE POSE. A chain that declares `bodyFrame` (chains.js owns that table)
      * HOLDS it for the whole run - a pose that flickered per 90ms glitch frame
      * would read as a broken sprite, not as a mood. A chain that declares none
@@ -696,6 +808,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     killTimers();
     stopBlink();
     stopSway();
+    restGaze();
     if (o.clearBubble !== false) setBubble(null);
     setBodyFrame(frameKey(o.bodyFrame) || frameForFace(text));
     drawFace(text, o.frameOpts || {});
@@ -776,6 +889,37 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   let armTimer = null;
   let petTimes = [];
   let petCooldownUntil = 0;
+  /* THE DANGLE. Carried, she tilts a few degrees against the direction of
+   * travel and springs upright on release - an inline `rotate` on the root,
+   * which is safe exactly while dragging: no body-move keyframe runs then, and
+   * the ones that run at release (bounce/thud) out-rank an inline transform for
+   * as long as they play. Smoothed so a jittery hand does not read as a shiver. */
+  let dangleV = 0;            // smoothed horizontal speed, px/ms
+  let dangleDeg = 0;          // the tilt currently applied
+
+  function clearDangle(immediate) {
+    dangleV = 0;
+    dangleDeg = 0;
+    if (!el.style) return;
+    if (immediate || reducedMotion()) {
+      el.style.transition = '';
+      el.style.transform = '';
+      return;
+    }
+    el.style.transition = 'transform ' + DIALS.DANGLE_SETTLE_MS + 'ms cubic-bezier(.2,1.5,.4,1)';
+    el.style.transform = '';
+    // Untracked on purpose: killTimers() must not be able to strand the
+    // transition on the root (it would slow every later dangle, nothing more).
+    setTimeout(() => { try { el.style.transition = ''; } catch (e) { /* noop */ } },
+      DIALS.DANGLE_SETTLE_MS + 50);
+  }
+
+  /** Which ninth of the viewport a point is in: z0..z8 row-major, plus the row band. */
+  function zoneOf(x, y, vp) {
+    const col = clamp(Math.floor(x * 3 / Math.max(1, vp.w)), 0, 2);
+    const row = clamp(Math.floor(y * 3 / Math.max(1, vp.h)), 0, 2);
+    return { z: row * 3 + col, row: row === 0 ? 'top' : (row === 1 ? 'mid' : 'bottom') };
+  }
 
   function disarmHold() {
     if (armTimer !== null) { clearTimeout(armTimer); armTimer = null; }
@@ -812,6 +956,8 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     dragMax = 0;
     dragTold = false;
     disarmHold();
+    clearDangle(true);
+    poiForget();                     // W2a: the drag's fixture snapshot dies with the drag
     el.classList.remove('dragging', 'armed');
   }
 
@@ -824,6 +970,10 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
 
   function onDown(ev) {
     if (!enabled || hidden) return;
+    /* TOUCH ALWAYS WINS (W2a, trap 75). A finger on her at ANY point of a field
+     * trip ends it on the spot - she stays where the trip had put her, upright,
+     * and the press below carries on into a perfectly ordinary drag. */
+    cancelTrip({ stay: true });
     // The x is a real button: let it have its own click, and never start a drag
     // from it (a dismiss that could turn into a fling is a trap, not a feature).
     if (inX(ev)) return;
@@ -858,7 +1008,8 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     el.classList.add('dragging');
     // The reaction is a raw face, not a chain: a chain would fight the next
     // frame of movement. A live SAY keeps the glass (law 3).
-    if (!saying()) { cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setDragFace(DRAG_FACE); }
+    poiSnapshot();                   // W2a: measure the fixtures ONCE, not per move
+    if (!saying()) { cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setDragFace(carryFace()); }
   }
 
   function onMove(ev) {
@@ -896,7 +1047,30 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
         else if (t - fastSince > DIALS.FLING_MS && !saying()) { wasFling = true; setDragFace(FLING_FACE); }
       } else if (fastSince) {
         fastSince = 0;
-        if (!saying()) setDragFace(DRAG_FACE);
+        if (!saying()) setDragFace(carryFace());
+      }
+
+      /* FIELD-TRIP ANTICIPATION (W2a). Carried over a fixture she has a line
+       * about, she lights up. ENTER/LEAVE ONLY: the rects were measured once at
+       * beginDrag and the repaint rides setDragFace's dedupe, so a pointermove
+       * over open ground costs a handful of number compares and nothing else. */
+      if (poiCache) {
+        const onPoi = overPoi(left, top);
+        if (onPoi !== poiOver) {
+          poiOver = onPoi;
+          if (!saying() && dragFace !== FLING_FACE) setDragFace(carryFace());
+        }
+      }
+
+      // THE DANGLE: lean against the travel, clamped and smoothed. Style is
+      // only written when the tilt moved a visible amount.
+      if (!reducedMotion()) {
+        dangleV = dangleV * 0.8 + (dx / dt) * 0.2;
+        const deg = clamp(-dangleV * DIALS.DANGLE_K, -DIALS.DANGLE_MAX_DEG, DIALS.DANGLE_MAX_DEG);
+        if (Math.abs(deg - dangleDeg) > 0.3) {
+          dangleDeg = deg;
+          try { el.style.transform = 'rotate(' + deg.toFixed(1) + 'deg)'; } catch (e) { /* noop */ }
+        }
       }
     }
     if (moved > 0) { lastX = ev.clientX; lastY = ev.clientY; lastT = t; }
@@ -914,6 +1088,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       dragging = false;
       dragFace = null;
       el.classList.remove('dragging');
+      clearDangle(false);
       const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { left: 0, top: 0 };
       commit(r.left, r.top);
       if (wasFling) stats.flings += 1;
@@ -929,15 +1104,25 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       const flung = wasFling;
       const travelled = realDrag();
       wasFling = false;
-      // ONE write per interaction, on the END of it (never per pointermove).
-      save();
       if (travelled) {
-        if (flung) emitGesture('fling');
         // WHERE SHE LANDED, in viewport coordinates: her CENTRE, which is the
         // point a hit-test should ask about. voice.js does the asking. A press
         // that never travelled is NOT a drop - she is exactly where she was.
         const sz = sizePx();
-        emitGesture('dropAt', { x: Math.round(r.left + sz.w / 2), y: Math.round(r.top + sz.h / 2) });
+        const px = Math.round(r.left + sz.w / 2);
+        const py = Math.round(r.top + sz.h / 2);
+        // ...and the SPOT MEMORY: which ninth of the window she was put down
+        // in, counted for life. The favourite-spot beats read the count off
+        // this payload, so the voice never has to open the widget's blob.
+        const zi = zoneOf(px, py, viewport());
+        const zk = 'z' + zi.z;
+        stats.zones[zk] = (stats.zones[zk] || 0) + 1;
+        // ONE write per interaction, on the END of it (never per pointermove).
+        save();
+        if (flung) emitGesture('fling');
+        emitGesture('dropAt', { x: px, y: py, zone: zi.z, zoneRow: zi.row, zoneCount: stats.zones[zk] });
+      } else {
+        save();
       }
       return;
     }
@@ -967,6 +1152,9 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     // LAW 3: a line in flight is never cut for a head-pat. Ignore, do not queue -
     // a reaction that lands four seconds late reads as a glitch.
     if (saying()) return;
+    /* OFF CHANNELS (W3): the press that CAUGHT her mid-channel is not also a
+     * head-pat. One-shot, false on every ordinary day. */
+    if (takeoverAtePet()) return;
     stats.pets += 1;
     touchSeen();
     const t = nowMs();
@@ -1012,7 +1200,11 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     // A live press has to be let go BEFORE she goes: a latched drag would let the
     // next pointerup commit a position read off a display:none element.
     endPress();
+    cancelTrip();                    // W2a: dismissed mid-trip = home first, then the dock
     cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody(); setBubble(null);
+    clearApproachTimers();
+    restGaze();
+    try { canvas.style.transform = ''; } catch (e) { /* noop */ }
     el.hidden = true;
     dock.hidden = false;
     /* THE ONE-SHOT HINT. The dock is 28px and .35 opacity in a corner, so the
@@ -1055,16 +1247,263 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   el.addEventListener('pointercancel', onCancel);
   el.addEventListener('pointerleave', () => { if (!pressing) el.classList.remove('armed'); });
 
+  /* ---------------------- perception ------------------------------------
+   * She notices you BEFORE you touch her. Three pieces, all read off one
+   * document-level pointermove (rAF-shaped, ~16 samples/s):
+   *
+   *   GAZE      the face leans a few px toward the cursor. NOT a canvas
+   *             repaint - the glyph is expensive to draw (widget header), so
+   *             the lean is a CSS transform on the canvas element, which is
+   *             free. Idle-only: a chain, a say or a drag eases it home.
+   *   APPROACH  cursor near her edge = a perk (o_o); arriving FAST = the
+   *             glance chain. One per APPROACH_COOLDOWN_MS.
+   *   LINGER    hovering without committing = expectant, then one look-away
+   *             if the pet never comes. The episode resets when you leave.
+   *
+   * All of it is a spectator: it plays through raw()/play() like every other
+   * reaction, so law 3 (a SAY is never cut) holds without a special case, and
+   * the voice hears `approach`/`hoverLinger` through the same gesture tap as
+   * every pointer verb (no pools yet - wave 2b's writing slot). */
+  let gazeTX = 0, gazeTY = 0, gazeX = 0, gazeY = 0, gazeRaf = null;
+  let apInside = false, apCoolUntil = 0, apPets0 = 0;
+  let apLingerTimer = null, apAwayTimer = null;
+  let apLastX = 0, apLastY = 0, apLastT = 0;
+
+  function gazeActive() {
+    return !!painter && !hidden && enabled && !dragging && !busy() && !reducedMotion();
+  }
+  function gazeStep() {
+    gazeRaf = null;
+    const ax = gazeActive() ? gazeTX : 0;
+    const ay = gazeActive() ? gazeTY : 0;
+    gazeX += (ax - gazeX) * DIALS.GAZE_EASE;
+    gazeY += (ay - gazeY) * DIALS.GAZE_EASE;
+    // SETTLED = STOP. The loop only runs while the lean is travelling; a
+    // pointermove (or restGaze) nudges it back to life. A resting rAF that
+    // rewrote the same transform every frame would be the repaint-per-move
+    // mistake in a nicer hat.
+    if (Math.abs(gazeX - ax) + Math.abs(gazeY - ay) < 0.05) {
+      gazeX = ax; gazeY = ay;
+      try { canvas.style.transform = ax === 0 && ay === 0 ? '' : 'translate(' + ax.toFixed(2) + 'px,' + ay.toFixed(2) + 'px)'; } catch (e) { /* noop */ }
+      return;
+    }
+    try { canvas.style.transform = 'translate(' + gazeX.toFixed(2) + 'px,' + gazeY.toFixed(2) + 'px)'; } catch (e) { /* noop */ }
+    if (typeof requestAnimationFrame === 'function') gazeRaf = requestAnimationFrame(gazeStep);
+  }
+  function nudgeGaze() {
+    if (gazeRaf == null && typeof requestAnimationFrame === 'function') {
+      gazeRaf = requestAnimationFrame(gazeStep);
+    }
+  }
+  /** Ease the lean home NOW (a hide, a disable, a drag taking over). */
+  function restGaze() {
+    gazeTX = 0; gazeTY = 0;
+    nudgeGaze();
+  }
+
+  function clearApproachTimers() {
+    if (apLingerTimer !== null) { clearTimeout(apLingerTimer); apLingerTimer = null; }
+    if (apAwayTimer !== null) { clearTimeout(apAwayTimer); apAwayTimer = null; }
+  }
+  /** May a perception face go up right now? Never over a chain, a say, a press. */
+  function canPerk() {
+    return !!painter && !hidden && enabled && !pressing && !dragging && !busy() && !saying();
+  }
+
+  function onDocMove(ev) {
+    if (!enabled || hidden || !ev) return;
+    const t = nowMs();
+    if (t - apLastT < 60) return;                       // ~16 samples/s is plenty
+    const px = apLastX, py = apLastY, pt = apLastT;
+    apLastX = ev.clientX; apLastY = ev.clientY; apLastT = t;
+
+    let r = null;
+    try { r = el.getBoundingClientRect ? el.getBoundingClientRect() : null; } catch (e) { /* noop */ }
+    if (!r || !r.width) return;
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const dx = ev.clientX - cx;
+    const dy = ev.clientY - cy;
+    const d = Math.hypot(dx, dy);
+
+    // GAZE: the lean is proportional and capped, and the loop eases it home
+    // on its own the moment gazeActive() goes false.
+    gazeTX = clamp(dx / DIALS.GAZE_DIV, -DIALS.GAZE_MAX_PX, DIALS.GAZE_MAX_PX);
+    gazeTY = clamp(dy / DIALS.GAZE_DIV, -DIALS.GAZE_MAX_PX, DIALS.GAZE_MAX_PX);
+    nudgeGaze();
+
+    // APPROACH: measured from her EDGE, so a bigger EMI is not a bigger doorbell.
+    const inside = d < r.width / 2 + DIALS.APPROACH_PX;
+    if (inside === apInside) return;
+    apInside = inside;
+    if (!inside) { clearApproachTimers(); return; }
+
+    if (t < apCoolUntil) return;
+    apCoolUntil = t + DIALS.APPROACH_COOLDOWN_MS;
+    apPets0 = stats.pets;
+    // Arriving fast earns the GLANCE (she tracks the fly-by); walking up earns
+    // the quiet perk. Both are idle-frame on purpose - noticing is not a beat.
+    const speed = pt > 0 ? Math.hypot(ev.clientX - px, ev.clientY - py) / Math.max(1, t - pt) : 0;
+    if (canPerk()) {
+      if (speed > DIALS.GLANCE_SPEED && CHAINS && CHAINS.glance) play(CHAINS.glance, { bodyFrame: 'idle' });
+      else raw('o_o', { hold: 900, bodyFrame: 'idle' });
+    }
+    emitGesture('approach', { fast: speed > DIALS.GLANCE_SPEED });
+
+    clearApproachTimers();
+    apLingerTimer = setTimeout(() => {
+      apLingerTimer = null;
+      if (!apInside || !canPerk()) return;
+      raw('^_^', { hold: 1100, bodyFrame: 'idle' });
+      emitGesture('hoverLinger');
+      apAwayTimer = setTimeout(() => {
+        apAwayTimer = null;
+        // Still hovering, still no pet: one small look-away. She is not hurt,
+        // she is making a point.
+        if (!apInside || !canPerk() || stats.pets > apPets0) return;
+        raw('¬_¬', { hold: 1000, bodyFrame: 'idle' });
+      }, DIALS.LINGER_AWAY_MS);
+    }, DIALS.LINGER_MS);
+  }
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('pointermove', onDocMove, { passive: true });
+  }
+
+  /* ==========================================================================
+   * THE OFF CHANNELS (W3) - ONE BLOCK, DELIBERATELY.
+   *
+   * EMI is a television, and a television left alone changes the channel. The
+   * whole wave is ONE capability - `screenTakeover(painter, {ms})` - and it
+   * lives in `emi/takeover.js` + `emi/channels.js`, both loaded the way the
+   * renderer is: dynamically, optionally, in a catch. A broken deck costs EMI
+   * her channels and NOTHING else; face.js is never touched and never read.
+   *
+   * Everything this file contributes is here plus two marked one-liners
+   * (`cancelChain()`'s preempt hook and `pet()`'s swallow), so a second merge
+   * into this file has exactly three places to look.
+   * ======================================================================== */
+
+  /* THE SECOND CANVAS. Same locked rect as `.emi-screen` (emi.css), laid over
+   * it, hidden at rest. face.js keeps painting underneath the whole time. */
+  const glass = document.createElement('canvas');
+  glass.className = 'emi-glass';
+  /* THE LOCKED GEOMETRY, SIZED AT BIRTH. face.js paints at res 152 and derives
+   * its height as round(152 x 0.903) = 137; a canvas left on the 300x150 UA
+   * default would stretch every channel off her bezel the first frame anything
+   * painted. The deck re-asserts these two numbers, but a node that is right
+   * before the deck ever lands is one less way to be wrong. */
+  glass.width = 152;
+  glass.height = 137;
+  glass.hidden = true;
+  el.appendChild(glass);
+
+  let deck = null;
+  /** The painter table, once the deck module lands: `screenTakeover('pong')`. */
+  let CHANNEL_TABLE = null;
+  /** The `cancelChain()` hook. Hoisted, so the caller above may be older. */
+  function killTakeover() {
+    if (!deck) return;
+    try { deck.preempt(); } catch (e) { /* a channel may never break a face */ }
+  }
+  /** The `pet()` hook: did the last press already spend itself on a channel? */
+  function takeoverAtePet() {
+    if (!deck) return false;
+    try { return !!deck.swallowPet(); } catch (e) { return false; }
+  }
+
+  (function loadChannels() {
+    if (typeof canvas.getContext !== 'function') return;   // faceless platform: no deck
+    import('./takeover.js').catch((e) => {
+      say('emi: takeover.js unavailable (' + ((e && e.message) || e) + ')');
+      return null;
+    }).then((m) => {
+      if (!m || typeof m.createDeck !== 'function') return;
+      CHANNEL_TABLE = m.CHANNELS || null;
+      let media = null;
+      try {
+        media = m.createMediaBroker({
+          assets: channelAssets, settings: channelSettings,
+          rand: Math.random, doc: document, log: say,
+        });
+      } catch (e) { media = null; say('emi: media broker unavailable - ' + ((e && e.message) || e)); }
+      try {
+        deck = m.createDeck({
+          root, el, glass, media,
+          emi: {
+            raw, play, chains: () => CHAINS, busy, saying,
+            /* HER VOICE THROUGH THE ONE DOOR. index.js's `say` is the same three
+             * lines; a channel that minted its own would be a second call site
+             * for the bubble and therefore for the vox (trap 70). */
+            say(line, opts) {
+              if (!makeSay || !painter) return false;
+              const o = opts || {};
+              let chain = null;
+              try { chain = makeSay(line, o.face || '^_^', sayHoldMs(line, o.hold)); }
+              catch (e) { return false; }
+              return play(chain, { protect: true, force: true });
+            },
+          },
+          state: {
+            hidden: () => hidden,
+            enabled: () => enabled,
+            dragging: () => dragging || pressing,
+            reducedMotion,
+            face: () => IDLE_FACE,
+          },
+          data: {
+            days() {
+              try { return store && typeof store.get === 'function' ? store.get('days') : null; }
+              catch (e) { return null; }
+            },
+            labSeen() {
+              try {
+                const v = store && typeof store.get === 'function' ? store.get('emiVoice') : null;
+                return !!(v && v.labSeen);
+              } catch (e) { return false; }
+            },
+          },
+          seed: String((stats.firstSeenAt || '') + '|' + (isoDay() || '')),
+          onStat(key) {
+            if (!Object.prototype.hasOwnProperty.call(stats, key)) return;
+            stats[key] += 1;
+            save();
+          },
+          log: say,
+        });
+      } catch (e) { deck = null; say('emi: createDeck threw - ' + ((e && e.message) || e)); }
+    }).catch(() => {});
+  }());
+
   /* ---------------------- viewport ------------------------------------- */
   /* A resize re-derives the default width AND re-clamps the anchor, in that
    * order - clamping against the old size would park her by a stale edge. */
+  // Seeded from the boot-time window: a page that OPENS narrow never "squished".
+  let wasNarrowVp = viewport().w < DIALS.W_NARROW_VW;
   function onResize() {
+    /* A RESIZE MOVED THE FIXTURE (W2a, trap 73). The anchor she is standing at
+     * was solved against the old viewport, so the trip is over: she goes home
+     * and the scheduler may offer another one later. */
+    cancelTrip();
     refitWidth();
     if (!hidden && enabled) place();
+    // THE SQUISH: crossing into the narrow-window regime, once per crossing.
+    // The voice's one-shot beat makes "once ever" out of it; later crossings
+    // reach a beat already seen and land as silence.
+    const narrow = viewport().w < DIALS.W_NARROW_VW;
+    if (narrow !== wasNarrowVp) {
+      wasNarrowVp = narrow;
+      if (narrow && !hidden && enabled) emitGesture('windowSquish');
+    }
   }
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('resize', onResize);
   }
+  /* A ROTATE IS NOT ALWAYS A RESIZE. Some engines land `orientationchange` with
+   * innerWidth/innerHeight still reporting the old box, so the resize handler
+   * refits against numbers that are about to change. core/device.js already
+   * re-checks on the next frame and again a beat later, so riding its seam is
+   * what makes the phone ceiling and the corner dock survive a turn. */
+  const unDevice = onDeviceChange(onResize);
 
   /* THE LAST FLUSH. msVisible is only true if it is banked before the page goes,
    * and a debounced write in flight would be lost with it. */
@@ -1073,6 +1512,335 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('pagehide', onPageHide);
   }
+
+
+  /* ========================================================================
+   * THE FIELD TRIP (wave W2a, 2026-08-24) - EMI'S ONE AUTONOMOUS VERB
+   *
+   * Everything this wave adds to the widget lives between these two rules,
+   * deliberately: `feat/emi-off-channels` is editing this file at the same
+   * time. The only code outside the block is eight one-line hooks, each marked
+   * `W2a` - endPress, onDown, beginDrag, onMove, hide, onResize, setEnabled,
+   * destroy - plus three members on the handle.
+   *
+   * WHAT A TRIP IS. She powers her tube off where she stands, reappears beside
+   * a campus fixture, says one line about it, powers off again and comes back
+   * to the player's saved spot. It is a scripted rare delight and NOT wandering:
+   * WHEN it may happen is `emi/fieldtrips.js`'s problem, and it is the only
+   * caller. This file owns HOW, and the how is four laws:
+   *
+   *   1. THE RECT IS RESOLVED AT FIRE TIME, NEVER AT SCHEDULE TIME. Screens
+   *      resize, the campus repaints, the plan is `xMidYMid slice` - a rect
+   *      captured when the trip was queued is a rect that has moved by the
+   *      time she gets there. `apparate` therefore takes a GETTER and calls it
+   *      inside the dark, one frame before she lands. See trap 73.
+   *   2. TOUCH ALWAYS WINS. A pointerdown on her at any point of the ladder
+   *      ends the trip on the spot: she stays where she is, upright, with no
+   *      stranded animation class, and the press carries on into an ordinary
+   *      drag. Trap 75.
+   *   3. SHE NEVER STARTS ONE OVER HERSELF. Mid-say, mid-chain, mid-press,
+   *      dismissed, disabled or already travelling, `apparate` refuses and
+   *      answers null. The caller does not need a guard.
+   *   4. THE SAVED SPOT IS NEVER WRITTEN. The trip moves `el.style.left/top`
+   *      and never `fx0`/`fy0`, so "come home" is just `place()` and a crash,
+   *      a reload or a cancel can never lose where the player put her. The one
+   *      exception is the touch cancel, which commits the spot she was ACTUALLY
+   *      standing on - from the trip's own bookkeeping, never from
+   *      `getBoundingClientRect`, which mid-squish reports a 1px line.
+   * ======================================================================*/
+
+  /** The carried face over a registered fixture: pure delight. `*_*` is already
+   *  paired to the `pet` pose in FACE_BODY_FRAME, so the body follows for free. */
+  const POI_FACE = '*_*';
+
+  /** Normalise anything rect-shaped (a DOMRect, a plain object, a getter's
+   *  answer) into our own numbers, or null. Never throws on junk. */
+  function rectNow(src) {
+    let r = null;
+    try { r = typeof src === 'function' ? src() : src; } catch (e) { return null; }
+    if (!r || typeof r !== 'object') return null;
+    const left = num(r.left);
+    const top = num(r.top);
+    if (left === null || top === null) return null;
+    let w = num(r.width);
+    let h = num(r.height);
+    if (w === null) { const rt = num(r.right); w = rt === null ? null : rt - left; }
+    if (h === null) { const bt = num(r.bottom); h = bt === null ? null : bt - top; }
+    if (w === null || h === null || !(w > 0) || !(h > 0)) return null;
+    return { left, top, width: w, height: h, right: left + w, bottom: top + h };
+  }
+
+  /** How much of her box would sit on top of the fixture, in square px. */
+  function overlapArea(left, top, s, rect) {
+    const ox = Math.min(left + s.w, rect.right) - Math.max(left, rect.left);
+    const oy = Math.min(top + s.h, rect.bottom) - Math.max(top, rect.top);
+    return (ox > 0 && oy > 0) ? ox * oy : 0;
+  }
+
+  /**
+   * WHERE SHE STANDS TO LOOK AT SOMETHING. Four candidates - right, left, under,
+   * over - each clamped into the viewport and then scored. The clamp runs BEFORE
+   * the overlap test on purpose: against a fixture in the corner the clamp is
+   * what drags a candidate back over the very thing she came to see, and a test
+   * on the raw candidate would never notice.
+   */
+  function anchorFor(rect) {
+    const vp = viewport();
+    const s = sizePx();
+    const g = DIALS.TRIP_GAP_PX;
+    const lo = DIALS.MARGIN;
+    const maxX = Math.max(lo, vp.w - s.w - lo);
+    const maxY = Math.max(lo, vp.h - s.h - lo);
+    const midY = rect.top + rect.height / 2 - s.h / 2;
+    const midX = rect.left + rect.width / 2 - s.w / 2;
+    const cands = [
+      { left: rect.right + g, top: midY },
+      { left: rect.left - g - s.w, top: midY },
+      { left: midX, top: rect.bottom + g },
+      { left: midX, top: rect.top - g - s.h },
+    ];
+    let best = null;
+    for (const c of cands) {
+      const left = Math.round(clamp(c.left, lo, maxX));
+      const top = Math.round(clamp(c.top, lo, maxY));
+      const over = overlapArea(left, top, s, rect);
+      const pushed = Math.abs(left - c.left) + Math.abs(top - c.top);
+      // Clean beats compromised; among compromises, least overlap then least
+      // clamping. There is ALWAYS an answer - a mascot with nowhere to stand
+      // would be a trip that hangs half way through.
+      if (!best || over < best.over || (over === best.over && pushed < best.pushed)) {
+        best = { left, top, over, pushed };
+      }
+      if (over === 0 && pushed < 1) break;
+    }
+    return { left: best.left, top: best.top };
+  }
+
+  /* ---- the drag's fixture snapshot ------------------------------------ */
+  /* MEASURED ONCE PER DRAG, NEVER PER MOVE. A getBoundingClientRect for every
+   * registered fixture on every pointermove is the same mistake the drag-face
+   * dedupe exists to prevent, multiplied by the size of the registry - and a
+   * drag cannot resize the window, so one snapshot is also the correct answer. */
+  let poiRectsFn = null;
+  let poiCache = null;
+  let poiOver = false;
+
+  function poiForget() { poiCache = null; poiOver = false; }
+
+  function poiSnapshot() {
+    poiForget();
+    if (!poiRectsFn) return;
+    let list = null;
+    try { list = poiRectsFn(); } catch (e) { return; }
+    if (!Array.isArray(list) || !list.length) return;
+    const out = [];
+    for (const r of list) { const n = rectNow(r); if (n) out.push(n); }
+    if (out.length) poiCache = out;
+  }
+
+  /** Is her CENTRE inside one of the snapshotted fixtures? */
+  function overPoi(left, top) {
+    if (!poiCache) return false;
+    const s = sizePx();
+    const cx = left + s.w / 2;
+    const cy = top + s.h / 2;
+    for (const r of poiCache) {
+      if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) return true;
+    }
+    return false;
+  }
+
+  /** The face a CARRY currently wears, fixture or not. The fling face outranks
+   *  both while it lasts; this is only what she falls back to. */
+  function carryFace() { return poiOver ? POI_FACE : DRAG_FACE; }
+
+  /* ---- the tube ------------------------------------------------------- */
+  /* THE POWER-OFF IS A KEYFRAME AND THAT IS THE WHOLE ARGUMENT (trap 71). The
+   * `.emi` root's INLINE transform belongs to the dangle; a CSS animation
+   * out-ranks an inline style for as long as it runs, which is exactly why the
+   * squish is allowed to own the root and the carry tilt is not disturbed.
+   * The reflow is trap 4's lesson: re-adding the same class without one is a
+   * keyframe the browser coalesces away. */
+  function crtClear() {
+    try {
+      el.classList.remove('crt-off');
+      el.classList.remove('crt-on');
+      el.classList.remove('crt-blank');
+    } catch (e) { /* noop */ }
+  }
+  function crt(cls) {
+    crtClear();
+    if (!cls) return;
+    try { void el.offsetWidth; el.classList.add(cls); } catch (e) { /* noop */ }
+  }
+  /** 0 under reduced motion: the CSS drops the squish, so waiting for it would
+   *  only be a pause in an empty room. */
+  function crtMs() { return reducedMotion() ? 0 : DIALS.CRT_MS; }
+
+  /* ---- the trip ------------------------------------------------------- */
+  /* {timer, left, top, onDone} - `left`/`top` are the trip's OWN bookkeeping of
+   * where it last put her, because a rect read mid-squish is a 1px line. */
+  let trip = null;
+
+  function tripping() { return !!trip; }
+
+  /** One step at a time, on a timer this trip owns. NOT `later()`: the say in
+   *  the middle goes through `play()`, and `play()` calls `killTimers()`. */
+  function tripStep(ms, fn) {
+    if (!trip) return;
+    if (trip.timer !== null) clearTimeout(trip.timer);
+    const mine = trip;
+    trip.timer = setTimeout(() => {
+      if (trip !== mine) return;
+      trip.timer = null;
+      try { fn(); }
+      catch (e) { say('emi: trip step threw - ' + ((e && e.message) || e)); cancelTrip(); }
+    }, Math.max(0, ms));
+  }
+
+  /** Move her for the TRIP only: style plus the bubble flip, never the fractions. */
+  function tripPlaceAt(left, top) {
+    const vp = viewport();
+    const s = sizePx();
+    if (trip) { trip.left = left; trip.top = top; }
+    try {
+      el.style.left = Math.round(left) + 'px';
+      el.style.top = Math.round(top) + 'px';
+    } catch (e) { /* noop */ }
+    faceBubble(left, top, s.w, vp.w);
+  }
+
+  /**
+   * END A TRIP. Two shapes and they are genuinely different:
+   *   cancelTrip()            -> she comes HOME (a dismiss, a resize, a disable,
+   *                              a destroy, the caller's own cancel)
+   *   cancelTrip({stay:true}) -> she stops WHERE SHE IS and that spot becomes
+   *                              hers (a finger landed on her: trap 75)
+   * Both clear every animation class and every protected say, so whatever
+   * happens next starts from a mascot in a known state.
+   */
+  function cancelTrip(opts) {
+    if (!trip) return false;
+    const t = trip;
+    trip = null;
+    if (t.timer !== null) { clearTimeout(t.timer); t.timer = null; }
+    /* THE FILL IS FORWARDS, SO TAKING THE CLASS OFF IS NOT OPTIONAL (trap 74).
+     * A welded `scaleY(1)` would out-rank the dangle's inline rotate for ever. */
+    crtClear();
+    cancelChain();
+    killTimers();
+    setBubble(null);
+    const stay = !!(opts && opts.stay);
+    if (stay) { commit(t.left, t.top); save(); }
+    else place();
+    if (typeof t.onDone === 'function') {
+      try { t.onDone({ cancelled: true, stay }); } catch (e) { /* noop */ }
+    }
+    idle();
+    return true;
+  }
+
+  /**
+   * APPARATE: the whole trip, as one call.
+   *
+   * @param {Function|Object} getRect  a RECT-GETTER, e.g.
+   *        `() => node.getBoundingClientRect()`. A bare rect is accepted and is
+   *        a bug waiting to happen - see law 1 and trap 73.
+   * @param {{line?:string, face?:string, onDone?:Function}=} opts
+   * @returns {Function|null} a cancel function, or null when she refused.
+   */
+  function apparate(getRect, opts) {
+    const o = opts || {};
+    if (!getRect) return null;
+    // LAW 3: she never starts one over herself.
+    if (!enabled || hidden || trip || pressing || dragging || busy() || saying()) return null;
+    if (!el || !el.classList) return null;
+    // Nothing to travel TO is not a failure, it is a fixture that is not on
+    // screen. Answer null and let the scheduler try again another night.
+    if (!rectNow(getRect)) return null;
+
+    const line = typeof o.line === 'string' && o.line.trim() ? o.line : null;
+    const face = typeof o.face === 'string' && o.face ? o.face : '^_^';
+    trip = { timer: null, left: 0, top: 0, onDone: typeof o.onDone === 'function' ? o.onDone : null };
+
+    // Where she is standing right now, in pixels, so a cancel during the very
+    // first squish still knows the spot it is being asked to keep.
+    const start = place();
+    trip.left = start.left;
+    trip.top = start.top;
+
+    stopBlink();
+    stopSway();
+    clearBody();
+    restGaze();
+
+    /* 1. THE TUBE GOES OFF. */
+    crt('crt-off');
+    tripStep(crtMs(), () => {
+      /* 2. THE DARK. The rect is resolved HERE - law 1 - and a fixture that has
+       *    gone since the trip was scheduled sends her straight home. */
+      crt('crt-blank');
+      const rect = rectNow(getRect);
+      if (!rect) { cancelTrip(); return; }
+      const spot = anchorFor(rect);
+      tripPlaceAt(spot.left, spot.top);
+      crt('crt-on');
+      tripStep(crtMs(), () => {
+        /* 3. THE LINE. Through the ordinary say path, so the bubble, the pose,
+         *    the hold and the Blipese babble are all the ones she already has
+         *    (trap 70: the voice hangs off setBubble and nowhere else). */
+        crtClear();
+        let wait = DIALS.TRIP_BEAT_MS;
+        if (line) {
+          wait = SAY_LEAD_MS + sayHoldMs(line) + DIALS.TRIP_BEAT_MS;
+          let spoke = false;
+          if (makeSay && painter) {
+            try { spoke = play(makeSay(line, face, sayHoldMs(line)), { protect: true, force: true }); }
+            catch (e) { spoke = false; }
+          }
+          // FACELESS STILL TALKS. The body png and the bubble are the half of
+          // EMI that never needed a 2d context, and the trip is worth more than
+          // the reaction frame on top of it.
+          if (!spoke) { setBubble(line); wait = sayHoldMs(line) + DIALS.TRIP_BEAT_MS; }
+        }
+        tripStep(wait, () => {
+          /* 4. HOME. The same two beats, backwards. */
+          cancelChain();
+          killTimers();
+          setBubble(null);
+          crt('crt-off');
+          tripStep(crtMs(), () => {
+            crt('crt-blank');
+            // `place()` reads the fractions the trip never touched, which IS the
+            // player's saved spot (law 4). No arithmetic, so no drift.
+            const home = place();
+            if (trip) { trip.left = home.left; trip.top = home.top; }
+            crt('crt-on');
+            tripStep(crtMs(), () => {
+              const t = trip;
+              trip = null;
+              crtClear();
+              idle();
+              if (t && typeof t.onDone === 'function') {
+                try { t.onDone({ cancelled: false, stay: false }); } catch (e) { /* noop */ }
+              }
+            });
+          });
+        });
+      });
+    });
+
+    return () => cancelTrip();
+  }
+
+  /** THE REGISTRY SEAM. `emi/fieldtrips.js` hands over a function answering the
+   *  live rects of every fixture EMI has a line about; the widget uses them for
+   *  exactly ONE thing, the carried `*_*`. Null clears it. */
+  function setPoiRects(fn) {
+    poiRectsFn = typeof fn === 'function' ? fn : null;
+    if (!poiRectsFn) poiForget();
+  }
+  /* ===================== end of the field trip ========================== */
 
   /* ---------------------- first paint ----------------------------------- */
   built = true;
@@ -1098,6 +1866,9 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     hasFace() { return !!painter; },
     saying, busy,
     setBubble,
+    /* W2a - the field trip. `apparate` takes a RECT-GETTER (trap 73), refuses
+     * over any live verb, and answers a cancel function or null. */
+    apparate, setPoiRects, tripping,
     hide, show,
     get hidden() { return hidden; },
     /** True once the first-dismiss hint has been spent (persisted). */
@@ -1110,8 +1881,11 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     setWidth(px) {
       const n = num(px);
       if (n === null) return width;
-      const next = clamp(Math.round(n), DIALS.W_MIN, DIALS.W_MAX);
+      // The CHOSEN width is stored raw; what gets drawn is that fenced by the
+      // device ceiling, so setting 200 on a phone stores 200 and draws 96.
+      userWidth = clamp(Math.round(n), DIALS.W_MIN, DIALS.W_MAX);
       userSized = true;
+      const next = effectiveWidth();
       if (next !== width) { width = next; if (!hidden && enabled) place(); }
       save();
       return width;
@@ -1124,6 +1898,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       if (!enabled) {
         accrueVisible();
         endPress();
+        cancelTrip();                // W2a: switched off mid-trip = home first
         cancelChain(); killTimers(); stopBlink(); stopSway(); clearBody();
         root.hidden = true;
         save(true);
@@ -1134,18 +1909,58 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     },
     get enabled() { return enabled; },
     /** Read-only lifetime telemetry (a copy - nothing outside may mutate it). */
-    stats() { return Object.assign({}, stats, { msVisible: visibleMs() }); },
+    stats() {
+      return Object.assign({}, stats, { msVisible: visibleMs(), zones: Object.assign({}, stats.zones) });
+    },
     /** Test/host seam: force the debounced write out now. */
     flush,
+    /* ---- OFF CHANNELS (W3): the one capability, plus its test seams ---- */
+    /**
+     * screenTakeover(painterOrId, {ms}) - lay a channel over her glass. Returns
+     * false when the deck refused (no material, not idle, a say is up), and a
+     * refusal is a perfectly normal answer.
+     */
+    screenTakeover(which, opts) {
+      // `which`, not `painter`: `painter` is the FACE renderer in this closure.
+      if (!deck) return false;
+      const p = typeof which === 'string' ? (CHANNEL_TABLE && CHANNEL_TABLE[which]) : which;
+      if (!p) return false;
+      try { return !!deck.screenTakeover(p, opts || {}); } catch (e) { return false; }
+    },
+    /** The deck itself: the suites drive the wheel and the clock through it. */
+    get channels() { return deck; },
+    /** A shell moment changed hands (a class, a suspend). One line in moments.js. */
+    noteMoment(name) {
+      if (!deck) return;
+      const busyNow = name === 'classStart' || name === 'suspend' || name === 'tabAway';
+      const freeNow = name === 'win' || name === 'miss' || name === 'fail' || name === 'resume'
+        || name === 'reportCard' || name === 'greet' || name === 'dayDone';
+      if (busyNow) { try { deck.setScene(true); } catch (e) { /* noop */ } }
+      else if (freeNow) { try { deck.setScene(false); } catch (e) { /* noop */ } }
+    },
     destroy() {
       accrueVisible();
+      cancelTrip();                  // W2a: never leave a trip timer behind
       save(true);
       // clearBody() is the easy one to miss: `bodyTimer` outlives everything else
       // and its callback re-adds `.breath` to a node that is no longer in the page.
       cancelChain(); killTimers(); stopBlink(); stopSway(); disarmHold(); clearBody();
+      clearApproachTimers();
+      if (gazeRaf != null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(gazeRaf); gazeRaf = null;
+      }
+      // Her voice is a setTimeout ladder of its own and nothing above clears it.
+      if (vox) { try { vox.stop(); } catch (e) { /* noop */ } }
+      // OFF CHANNELS (W3): the deck owns a rAF, a wheel timer and five document
+      // listeners of its own; nothing above reaches any of them.
+      if (deck) { try { deck.destroy(); } catch (e) { /* noop */ } deck = null; }
       if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
+      if (typeof document !== 'undefined' && document.removeEventListener) {
+        document.removeEventListener('pointermove', onDocMove);
+      }
       if (typeof window !== 'undefined' && window.removeEventListener) {
         window.removeEventListener('resize', onResize);
+        try { unDevice(); } catch (e2) { /* noop */ }
         window.removeEventListener('pagehide', onPageHide);
       }
       try { el.remove(); } catch (e) { /* noop */ }

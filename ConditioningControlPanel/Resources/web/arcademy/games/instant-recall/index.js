@@ -1,7 +1,7 @@
 /* ============================================================================
  * games/instant-recall/index.js - INSTANT RECALL, "the vigil" (family: recall).
  *
- * One class is ONE continuous 120-second WALL. A full-bleed mosaic of the
+ * One class is ONE continuous 180-second WALL. A full-bleed mosaic of the
  * player's own media fills the stage and every tile keeps changing itself on
  * its own beat (the FYP look, the Just Drop backdrop); CCP's own classic
  * effects fire over it denser and denser - and then, without warning,
@@ -14,7 +14,8 @@
  *   the wall -> effect emissions on the density sawtooth, every one of them
  *               written to the LEDGER (the truth tail) with what the engine
  *               ACTUALLY did. THE WALL'S OWN SWAPS ARE NEVER LEDGER ENTRIES.
- *   (five of those a minute now - vigil.js THE CADENCE. The gap between two
+ *   (five of those a minute now - vigil.js THE CADENCE, which is a RATE and
+ *    not a count: 180s deals 14-16 stops at every tier. The gap between two
  *    stops is DERIVED from the freeze it has to outlast, so however long the
  *    player takes there are always >= 4s of live wall and >= 2 fresh ledger
  *    entries before the next freeze: a question always has something new.)
@@ -53,8 +54,10 @@
  *   III  NEVER STILL. The wall turns over the whole class - at any moment some
  *        tile is mid-swap; the only still frame is the freeze, and the freeze
  *        IS the mechanic.
- *   IV   IMAGES OVER TEXT. The class-rules sheet is drawn (style.js) and
- *        dismissed by GO only, once per grade tier under `ctx.hideTutorial`.
+ *   IV   IMAGES OVER TEXT. The class-rules sheet is drawn (style.js), is
+ *        dismissed by GO only, shows ONCE per grade tier and is FREE OF THE
+ *        CLOCK - `ctx.hideTutorial` skips even that first showing, and
+ *        startClock() runs inside the GO callback.
  *   V    SEEDED. vigil.js deals the whole show off the class seed before a
  *        frame renders. The only Math.random in this game is the frame
  *        governor's (montage.js), which never consumes the seeded stream.
@@ -226,17 +229,24 @@ function loadDecks() {
 export default {
   key: GAME_KEY,
   family: 'recall',
-  /* MEATY (owner ruling). Not because 120s is long - it is not - but because
-   * the ten-game pool re-opened web CLAUDE.md trap 6: no-repeat-3 outranks the
-   * meaty preference, so TWO meaty classes left roughly a third of dealt nights
-   * with no meaty slot filled at all. A third meaty class closes the gap. The
-   * budget, the family and the flagship flag are unchanged - and this file's
-   * behaviour does not branch on `meaty` anywhere: it is a timetable fact, not
-   * a difficulty one. `games/registry.js` GAME_META must mirror it (the
-   * parachute is read for a suspended class too). */
+  /* MEATY = THE ANCHOR SLOT, not a length. The ten-game pool re-opened web
+   * CLAUDE.md trap 6: no-repeat-3 outranks the anchor preference, so TWO anchor
+   * classes left roughly a third of dealt nights with no anchor at all. A third
+   * closes the gap. This file's behaviour does not branch on `meaty` anywhere -
+   * it is a timetable fact, not a difficulty one - and it says nothing about
+   * seconds: the vigil runs 180s while Anomaly, a non-anchor class, runs 300.
+   * `games/registry.js` GAME_META must mirror both fields (the parachute is
+   * read for a suspended class too).
+   *
+   * THE BUDGET IS 180s (owner ruling, the class-length wave; it was 120). The
+   * cadence is a RATE, so nothing else moved: vigil.js scales the per-120s
+   * STOPS_BAND by budget and then holds it inside STOPS_PER_MIN {4.4, 5.6},
+   * which deals 14-15 stops at tiers 1-2 and 15-16 at tiers 3-4, all of them
+   * inside maxStopsFor()'s legal fit for 180s (15/15/16/18). */
   meaty: true,
   flagship: false,
-  timeBudgetSec: 120,
+  timeBudgetSec: 180,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Instant Recall',
 
   manifest: {
@@ -291,7 +301,7 @@ export default {
     let plan = null;
     let reduced = false;
     let retake = false;
-    let budgetMs = 120000;
+    let budgetMs = 180000;
     let pool = null;
     let montage = null;
     let ledger = null;
@@ -647,7 +657,8 @@ export default {
     }
 
     /* ==================================================================== *
-     * THE CLASS-RULES SHEET (Law IV: drawn, GO-only, once per tier)
+     * THE CLASS-RULES SHEET (Law IV: drawn, GO-only, once per tier, and never
+     * on the clock - startClock() is inside the GO callback)
      * ==================================================================== */
     function howtoSeenTiers() {
       try {
@@ -668,13 +679,16 @@ export default {
       } catch (e) { /* best effort - the sheet just shows again next time */ }
     }
     /**
-     * The sheet: three drawn panels and a GO button. Policy is the shell's
-     * "Skip class tutorials" contract - default shows every class; with the
-     * skip on, a class still explains itself ONCE per grade tier. Dismissal is
-     * the sheet's own button only.
+     * The sheet: three drawn panels and a GO button. THE LAW, uniform across
+     * every open class (owner ruling 2026-08-24): it SHOWS the first time this
+     * player meets the vigil at this grade tier and AUTO-SKIPS every later
+     * class at that tier, whatever the setting says; the shell's "Skip class
+     * tutorials" switch (ctx.hideTutorial) means "skip even the first showing".
+     * No meta = no memory = the sheet shows. Dismissal is the sheet's own
+     * button only, and the clock is armed past GO, never over the sheet.
      */
     function howto(onDone) {
-      if (ctx.hideTutorial === true && howtoSeenTiers().indexOf(tier) >= 0) { onDone(); return; }
+      if (ctx.hideTutorial === true || howtoSeenTiers().indexOf(tier) >= 0) { onDone(); return; }
       howtoEl = el('div', 'g-ir-howto');
       howtoEl.appendChild(el('h3', 'g-ir-howto-title', t('ir_howto_title', IR_LEX.ir_howto_title)));
       /* THREE FIGURES (Law IV, drawn): the wall / the freeze / the pick. The
@@ -2253,11 +2267,11 @@ export default {
      * ==================================================================== */
     const instance = {
       start(classSpec) {
-        spec = classSpec || { gradeTier: 1, seed: GAME_KEY + '|none', timeBudgetSec: 120 };
+        spec = classSpec || { gradeTier: 1, seed: GAME_KEY + '|none', timeBudgetSec: 180 };
         tier = Math.max(1, Math.min(4, Math.round(Number(spec.gradeTier) || 1)));
         seed = String(spec.seed == null ? GAME_KEY : spec.seed);
         retake = !!spec.retake;
-        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 120) * 1000);
+        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 180) * 1000);
         reduced = probeReduced(ctx);
         const densityValue = ctx.settings ? ctx.settings.ir_density : 'standard';
 

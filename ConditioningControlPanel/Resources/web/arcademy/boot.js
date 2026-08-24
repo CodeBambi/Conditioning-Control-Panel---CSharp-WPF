@@ -25,6 +25,7 @@
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
+import { installDeviceClass } from './core/device.js';
 
 const doc = (typeof document !== 'undefined') ? document : null;
 const win = (typeof window !== 'undefined') ? window : null;
@@ -119,6 +120,13 @@ function armBootDeadline() {
  * exit (fade + zoom-through); the `hidden` attribute stays the ground truth a
  * beat later. FAILURE PATHS NEVER WAIT - failBoot below still snaps
  * `hidden = true` directly, so an error card is never delayed by a celebration.
+ *
+ * THE SPLASH-COMPLETE EDGE (FIRST BELL, 2026-08-24) hangs off the HAPPY PATH of
+ * this function and nowhere else: once `hidden` has actually landed, the shell
+ * is told, and it decides whether the opening has anything to play. failBoot
+ * never calls it, so an error card can no more be held up by a scene than by
+ * the splash itself (trap 66). The call is guarded and fire-and-forget - the
+ * loader comes down whatever the shell does with the news.
  * -------------------------------------------------------------------------- */
 const INTRO_MIN_MS = 2950;
 const INTRO_EXIT_MS = 320;
@@ -132,7 +140,11 @@ function dismissLoader() {
     try {
       if (el.hidden) return;             // a failBoot got there first
       el.classList.add('is-done');
-      setTimeout(() => { try { el.hidden = true; } catch (e) { /* noop */ } }, INTRO_EXIT_MS);
+      setTimeout(() => {
+        try { el.hidden = true; } catch (e) { /* noop */ }
+        try { if (shell && shell.onSplashDone) shell.onSplashDone(); }
+        catch (e) { warn('onSplashDone threw: ' + ((e && e.message) || e)); }
+      }, INTRO_EXIT_MS);
     } catch (e) { try { el.hidden = true; } catch (e2) { /* noop */ } }
   }, wait);
 }
@@ -155,6 +167,13 @@ async function start() {
   if (starting || shell || !initMsg) return;
   starting = true;
   try {
+    /* THE MOBILE CLASS GOES ON FIRST. `html.arc-mobile` is what every phone rule
+     * in the sheets keys off, and the splash is on screen for about three
+     * seconds before the shell exists - painting it here rather than in
+     * createShell is the difference between a loader that is already phone-shaped
+     * and one that re-lays itself out the moment the school opens. Idempotent:
+     * the shell calls it again for the harness case where boot never ran. */
+    try { installDeviceClass(); } catch (e) { /* never worth a boot */ }
     // The sfx consumer first, so a cue fired during the shell's own boot is heard.
     // OPTIONAL by construction: no audio must never cost us the page.
     try {

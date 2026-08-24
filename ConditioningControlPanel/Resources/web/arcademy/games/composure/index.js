@@ -1,6 +1,7 @@
 /* ============================================================================
  * games/composure/index.js - COMPOSURE (the sliding picture; family: puzzle,
- * Semester III). One 120s class, or an untimed Zen board.
+ * Semester III). One 300s class of as many boards as you can bank, or an
+ * untimed Zen table that banks them until you leave.
  *
  * THE PITCH. A 15-puzzle whose picture never sits still: every tile is a
  * clipped viewport into ONE looping clip (N <img> of the SAME url at different
@@ -23,10 +24,17 @@
  *   RESCUE   the critic's top fix, and it is LAW: 20s with no new piece home
  *            lights the baseline solver's next move (.is-hint) and fails the
  *            declared sGate, so a C-player finishes and the class stays honest.
- *   SOLVE    seams dissolve, the clip plays clean, the jackpot ladder rolls.
- *   BELL     timed classes always fill their 120s or end on the solve.
- *   ZEN      untimed, gentle, its own board size, and it ends with
- *            endClass({zen:true}) - 'pass', no letter (core/grades.js).
+ *   SOLVE    seams dissolve, the clip plays clean, the jackpot ladder rolls -
+ *            and then the picture BANKS and a fresh scramble deals.
+ *   BELL     THE LAW, and it replaced the old one: a timed class always fills
+ *            its bell. A solve BANKS and RE-DEALS; it never ends the class.
+ *            The bell is the single ending, and the board that was still in
+ *            progress when it rang is graded as partial progress ON TOP of
+ *            every banked solve (grade.js compositeFor).
+ *   ZEN      untimed, gentle, its own board size. It banks and re-deals the
+ *            same way - there is simply no bell, so the player's own Finish
+ *            button is the ending, and it ends with endClass({zen:true}) -
+ *            'pass', no letter (core/grades.js).
  *
  * PEEK IS THE SHELL'S. `manifest.peek` opts into shell/peek.js, and this game
  * only says what a reveal SHOWS (the solved reference). The A-cap is the
@@ -42,11 +50,18 @@
  *        engine one-shot over it is decoration (fireSafe welds clickSafe on).
  *   III  something always breathes - the subject is a loop, and the backdrop
  *        and the casino keep moving even on a still board.
- *   IV   the class rules are DRAWN (.g-cp-howto, three figures + one GO), the
- *        dismissal is GO only, and ctx.hideTutorial + gameMeta.howtoTiers mean
- *        a skipping player still gets it once per grade tier.
+ *   IV   the class rules are DRAWN (.g-cp-howto, four figures + one GO), the
+ *        dismissal is GO only, the sheet is FREE OF THE CLOCK (startClock()
+ *        runs in openClass, past GO), and gameMeta.howtoTiers means every
+ *        player gets it ONCE per grade tier - ctx.hideTutorial skips that
+ *        first showing too.
  *   V    scramble, wash windows, sub_flash cadence and every deck are scoped
- *        off the class seed; a retake replays the identical board and show.
+ *        off the class seed; a retake replays the identical boards and show.
+ *        THE BOARD SEEDS ARE INDEXED: board 1 is `<seed>|cp-scramble|<n>`,
+ *        exactly what this class always dealt, and boards 2..k append `|b2`,
+ *        `|b3` and so on. So today's opening board is byte-for-byte the one it
+ *        was before the class grew, and every re-deal after it is a function
+ *        of the seed and the board index - never of the wall clock.
  *   VI   pause/resume/suspend/destroy: the timer registry defers, the decks
  *        ride it, no timer survives destroy, the window listener is removed,
  *        and a suspend force-hides the peek.
@@ -80,7 +95,7 @@ import { nextMove, baselineLength } from './solver.js';
 import { makeTaggedRoll } from '../../core/rng.js';
 import {
   PLAYTEST, buildPlan, compositeFor, hardGates, flavorXp, parFor, heatFor, cadenceMs,
-  gridForTier, scrambleWalkFor,
+  gridForTier, scrambleWalkFor, expectedBoardsFor,
 } from './grade.js';
 
 const GAME_KEY = 'composure';
@@ -201,18 +216,25 @@ function injectFallbackStyle() {
 export default {
   key: GAME_KEY,
   family: 'puzzle',
-  /* MEATY, and it is a TIMETABLE fact, not a claim about this class's length -
-   * the budget is still 120s. core/timetable.js ranks no-repeat-3 ABOVE the
-   * meaty preference (CLAUDE.md trap 6), so a ten-game pool with two meaty
-   * classes filled the meaty slot on only ~46% of dealt nights, and three on
-   * 75% (a cycle of four). With four (Lost & Found, The Deep End, Instant
-   * Recall and this one) a dealt fortnight carries one on 28/28 nights.
-   * NOTHING in this module branches on the flag - it is the registry's and the
-   * timetable's to read. Keep it in step with games/registry.js GAME_META,
-   * which is the parachute a suspended class is dealt from. */
+  /* MEATY, and it is a TIMETABLE fact first: core/timetable.js ranks
+   * no-repeat-3 ABOVE the meaty preference (CLAUDE.md trap 6), so a ten-game
+   * pool with two meaty classes filled the meaty slot on only ~46% of dealt
+   * nights, and three on 75% (a cycle of four). With four (Lost & Found, The
+   * Deep End, Instant Recall and this one) a dealt fortnight carries one on
+   * 28/28 nights. NOTHING in this module branches on the flag - it is the
+   * registry's and the timetable's to read. Keep it in step with
+   * games/registry.js GAME_META, which is the parachute a suspended class is
+   * dealt from.
+   *
+   * As of the class-length wave (2026-08-24) the flag is ALSO honest about the
+   * length: 300s, and every tier really fills it. It used to be a 120s class
+   * that a year-1 player finished in ~35-40s on the solve, so "meaty" was a
+   * label the class did not earn; a solve now BANKS the picture and deals a
+   * fresh scramble, and only the bell ends a timed class. */
   meaty: true,
   flagship: false,
-  timeBudgetSec: 120,
+  timeBudgetSec: 300,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Composure',
 
   manifest: {
@@ -262,6 +284,15 @@ export default {
     let reported = false;
     let busy = true;                 // input closed until the rules sheet is done
     let opened = false;              // the board is the player's
+    /* THE BANK BEAT: a solve is celebrating and the next scramble is dealing.
+     * Input is closed, and it is closed SILENTLY (see press()) - the beat is a
+     * scene the player earned, not a wall they walked into. */
+    let banking = false;
+    /* AN ENDING HAS BEGUN (the bell rang, or zen's Finish was pressed). This is
+     * the guard that keeps the file's pinned law true across the re-deal loop:
+     * a bank timer that lands after the bell must NOT deal a board under the
+     * end card, and there must still be exactly one endClass. */
+    let closing = false;
 
     /* ---- class state ---------------------------------------------------- */
     let spec = null;
@@ -283,7 +314,13 @@ export default {
     let pressure = null;
     let styleOk = false;
 
-    /* ---- the ledger (Law I: computed here, never by a deck) ------------- */
+    /* ---- the ledger (Law I: computed here, never by a deck) -------------
+     * TWO SCOPES, and mixing them up is the whole risk of the multi-board
+     * rework. CLASS-cumulative: moves, bumps, backtracks, thrash, washes,
+     * subFlashes, jackpots, rescueEpisodes, rescueUsed, banked, parBanked,
+     * bestLockStreak, elapsedMs. PER-BOARD, reset on every deal: state, par,
+     * baseline, mhStart, locked, lastMove, lockStreak, boardMoves, solved,
+     * rescueActive, hintId, lastLockAtMs. */
     let moves = 0;
     let bumps = 0;
     let backtracks = 0;
@@ -293,7 +330,17 @@ export default {
     let bestLocked = 0;
     let lockStreak = 0;
     let bestLockStreak = 0;
+    /** The LIVE board is whole. Transient now: true from the solve until the
+     *  next board deals, which is also the window the bell can catch. */
     let solved = false;
+    /* ---- THE BANK (multi-board) ---------------------------------------- */
+    let boardIndex = 0;              // 0-based; board 1 is the seed's own deal
+    let banked = 0;                  // pictures finished and banked this class
+    let boardMoves = 0;              // slides on the LIVE board only
+    let parBanked = 0;               // the sum of every banked board's own par
+    let bestSolveMoves = 0;          // fewest moves any ONE board took tonight
+    let underParSolve = false;       // any one board came in at or under its par
+    let expectedBoards = 1;          // the S/A normaliser, off tier + budget
     let washOn = false;
     let washes = 0;
     let subFlashes = 0;
@@ -325,7 +372,10 @@ export default {
     let boardEl = null; let previewEl = null; let peekEl = null; let peekMedia = null;
     let wellEl = null; let msgEl = null; let endEl = null; let howtoEl = null;
     let movesChip = null; let clockChip = null; let lockedChip = null; let calmChip = null;
+    let bankedChip = null;
     let peekBtn = null; let finishBtn = null;
+    /** The class's earned par at the ending; renderEnd draws it beside moves. */
+    let endParEarned = 0;
     const cellEls = [];
     const tileEls = new Map();       // tile id -> element
     let queued = null;               // THE QUEUE: one slot, last press wins
@@ -497,9 +547,18 @@ export default {
       calmChip = el('span', 'g-cp-chip g-cp-calm', '');
       calmChip.setAttribute('aria-label', t('cp_chip_calm', CP_LEX.cp_chip_calm));
       calmChip.hidden = true;
+      /* THE BANK COUNTER. Hidden until the first picture lands (like the calm
+       * chip) so a class that never banks one never grows a zero. It is NOT in
+       * the trickster's chipEl/chipText seam and must not be: the bank count is
+       * the class's own ledger, and a lie about how many pictures you finished
+       * is a lie about the grade, not about the board (Law I). */
+      bankedChip = el('span', 'g-cp-chip g-cp-banked', '0');
+      bankedChip.setAttribute('aria-label', t('cp_chip_banked', CP_LEX.cp_chip_banked));
+      bankedChip.hidden = true;
       hud.appendChild(movesChip);
       hud.appendChild(clockChip);
       hud.appendChild(lockedChip);
+      hud.appendChild(bankedChip);
       hud.appendChild(calmChip);
 
       /* THE PEEK CONTROL. The node is built here and OWNED by the shell: it is
@@ -685,6 +744,10 @@ export default {
       if (clockChip) clockChip.textContent = clockText();
       if (movesChip) movesChip.textContent = movesText();
       if (lockedChip) lockedChip.textContent = lockedText();
+      if (bankedChip) {
+        bankedChip.hidden = banked <= 0;
+        bankedChip.textContent = String(banked);
+      }
       paintCalm();
     }
     function paintCalm() {
@@ -811,7 +874,13 @@ export default {
       if (dead) return false;
       /* A press in a phase that cannot take one - the rules sheet, a pause, a
        * suspend, the end card - is REFUSED, and a refusal is never silent (W2). */
-      if (paused || ended || !state || !opened) { bumpCue(); return false; }
+      if (paused || ended || closing || !state || !opened) { bumpCue(); return false; }
+      /* THE BANK BEAT IS A SCENE, NOT A WALL. The picture the player just
+       * finished is playing itself whole and the next scramble is dealing; a
+       * press in that window is not a refusal, so it neither thuds nor takes
+       * the queue slot (a queued press would land on the FRESH board, which is
+       * the one thing the deal must never hand them). */
+      if (banking) return false;
       if (busy) {
         if (PLAYTEST.QUEUE_SLOTS > 0) { queued = { kind, v }; return false; }
         bumpCue();                       // no queue slot to take it: simply refused
@@ -854,7 +923,8 @@ export default {
       const res = slide(state, pos);
       if (!res.moved) { bump(); return false; }
       busy = true;
-      moves += 1;
+      moves += 1;                    // the CLASS's slide count (pace, calm)
+      boardMoves += 1;               // ...and this board's, for the standing best
 
       /* 1. the tile rides to its new cell (vars only - style.js owns the ride) */
       const node = tileEls.get(res.id);
@@ -960,10 +1030,17 @@ export default {
      * 20s with no new piece home lights the baseline solver's next move and
      * fails the declared sGate. The class never ends because of it, and the
      * board is never played for the player: one cell, lit.
+     *
+     * THE STATE IS PER BOARD (multi-board, 2026-08-24). `lastLockAtMs`,
+     * `rescueActive` and the lit hint all reset on every deal - twenty seconds
+     * into a brand new scramble is not being stuck, and a hint left over from
+     * the board before points at a tile that has moved. What does NOT reset is
+     * `rescueUsed` and the episode count: the sGate was a promise about the
+     * CLASS, and the tax is about the class too.
      * ==================================================================== */
     function rescueEnabled() { return zen ? PLAYTEST.RESCUE_IN_ZEN : true; }
     function checkRescue() {
-      if (!rescueEnabled() || solved || ended || !opened || rescueActive || !state) return;
+      if (!rescueEnabled() || solved || banking || closing || ended || !opened || rescueActive || !state) return;
       if ((elapsedMs - lastLockAtMs) < PLAYTEST.RESCUE_MS) return;
       rescueActive = true;
       rescueEpisodes += 1;
@@ -1005,7 +1082,13 @@ export default {
       for (const w of plan.washes) after(w.atMs, () => runWash(w));
     }
     function runWash(w) {
-      if (dead || ended || solved) return;
+      if (dead || ended || closing) return;
+      /* A wash that comes due DURING a bank beat waits for it rather than
+       * being dropped. The room does not bury the reward it just handed you,
+       * and the schedule is the CLASS's (one spread across the whole bell),
+       * so losing a window would quietly thin the burial every time somebody
+       * solved. The poll is a pause-aware timer like everything else here. */
+      if (banking || solved) { after(600, () => runWash(w)); return; }
       washes += 1;
       washOn = true;
       if (stage) stage.setAttribute('data-wash', '1');
@@ -1068,16 +1151,82 @@ export default {
     }
 
     /* ==================================================================== *
-     * THE ENDINGS - solve / bell / zen's own button. Exactly one endClass.
+     * THE BANK LOOP + THE ENDINGS.
+     *
+     * THE PINNED LAW IS UNCHANGED AND IT IS THE POINT: exactly one endClass,
+     * ever. What changed is that a SOLVE is no longer one of the ways out. A
+     * solve banks the picture and deals a fresh scramble; only the bell (timed)
+     * or zen's own Finish button closes the class, and both of those set
+     * `closing` FIRST, which is what a pending bank timer tests before it deals
+     * anything. So the bell landing in the middle of a celebration is safe in
+     * both orders: the deal refuses, and finish() still guards on `ended`.
      * ==================================================================== */
+
+    /** Board 1 is `<seed>|cp-scramble|<n>[|zen]` - byte-for-byte the seed this
+     *  class dealt before it grew. Every board after it appends `|b2`, `|b3`. */
+    function scrambleSeedFor(index) {
+      const base = seed + '|cp-scramble|' + n + (zen ? '|zen' : '');
+      return index <= 0 ? base : base + '|b' + (index + 1);
+    }
+
+    /**
+     * Deal the board at `boardIndex` onto the live model and reset the
+     * PER-BOARD half of the ledger. Same tier dials every board; the only
+     * thing that moves is the scramble depth at tiers 1-2 (grade.js
+     * SCRAMBLE_WALK_STEP), which is a pure function of the index.
+     *
+     * The tile ELEMENTS are never rebuilt: a re-deal is the same n*n-1 ids in
+     * new cells, so paintTiles() re-points them and the <img> viewports (which
+     * are keyed to a tile's HOME, not its cell) never even reload.
+     */
+    function dealCurrentBoard() {
+      const scrambleSeed = scrambleSeedFor(boardIndex);
+      const walk = scrambleWalkFor(tier, zen, boardIndex);
+      state = dealBoard(n, scrambleSeed, { walk });
+      if (!isSolvable(state.cells, n)) {
+        say('FATAL-ish: the dealt board failed the parity test - re-dealing solved-adjacent');
+        state = dealBoard(n, scrambleSeed + '|repair', { walk: Math.max(20, n * n * 2) });
+      }
+      mhStart = manhattan(state);
+      locked = lockedCount(state);
+      bestLocked = Math.max(bestLocked, locked);
+
+      /* THE BASELINE, per board. par is derived from a real solve of THIS
+       * scramble, not a table someone guessed (dossier open question 3). A
+       * solver that cannot answer leaves par on the per-tile fallback and the
+       * rescue without a hint - never a throw inside a live class. */
+      baseline = -1;
+      try { baseline = baselineLength(cloneState(state)); } catch (e) { baseline = -1; }
+      par = parFor(baseline, tier, n);
+
+      /* the per-board half of the ledger */
+      boardMoves = 0;
+      lastMove = null;
+      lockStreak = 0;
+      solved = false;
+      rescueActive = false;
+      lastLockAtMs = elapsedMs;
+    }
+
+    /** A picture came back whole: BANK it, celebrate, then deal the next one. */
     function onSolved() {
-      if (solved || ended) return;
+      if (solved || ended || closing) return;
       solved = true;
+      banking = true;
       busy = true;
+      /* THE BANK ITSELF, and it happens HERE rather than at the deal: the
+       * counter must tick the instant the picture lands, and if the bell rings
+       * during the celebration this solve is already paid for. Which is also
+       * why grade.js scores a `boardSolved` live board at ZERO - its whole is
+       * in `banked` and counting both would pay for it twice. */
+      banked += 1;
+      parBanked += par;
+      if (!(bestSolveMoves > 0) || boardMoves < bestSolveMoves) bestSolveMoves = boardMoves;
+      if (boardMoves <= par) underParSolve = true;
       clearQueue();
+      clearGrab();
       clearHint();
       rescueActive = false;
-      stopClock();
       setPhase('solved');
       if (boardEl) boardEl.classList.add('is-solved');
       if (stage) stage.setAttribute('data-solved', '1');
@@ -1091,17 +1240,70 @@ export default {
       msg(zen ? 'cp_zen_done' : 'cp_solved_line', zen ? CP_LEX.cp_zen_done : CP_LEX.cp_solved_line);
       tick('jackpot', 0.8);
       fireSafe('flash_burst', { count: 3, alpha: 0.45 });
+      say('BANKED board ' + (boardIndex + 1) + ' in ' + boardMoves + ' moves (par ' + par
+        + ') - ' + banked + ' this class');
+      /* The clock is NOT stopped: the bell owns the class now. */
       const playMs = reduced ? PLAYTEST.SOLVE_PLAY_MS_REDUCED : PLAYTEST.SOLVE_PLAY_MS;
-      after(playMs, () => finish('solved'));
+      after(playMs, dealNextBoard);
     }
 
+    /** The celebration is over: scatter the picture into a fresh scramble. */
+    function dealNextBoard() {
+      /* The bell (or zen's Finish) won the race. Nothing deals under an end
+       * card - this single test is what keeps "exactly one endClass" true. */
+      if (dead || ended || closing) return;
+      boardIndex += 1;
+      clearQueue();
+      clearGrab();
+      clearHint();
+      if (boardEl) boardEl.classList.remove('is-solved');
+      if (stage) stage.removeAttribute('data-solved');
+      setPhase('dealing');
+      if (boardEl) boardEl.classList.add('is-dealing');
+
+      dealCurrentBoard();
+      paintTiles(false);
+      applyLockClasses(homeMask(state));
+      paintHud();
+      heat();
+      /* The decks' own royal state has to come down with the board. Both
+       * `deal` hooks are null-safe through deck(), and pressure's is not
+       * optional polish: its setProgress() early-returns while royalOn, so
+       * without it the CCP-effects ladder would freeze after the first bank. */
+      deck('casino', 'deal', { bell: bellOn });
+      deck('pressure', 'deal');
+      deck('trickster', 'deal');
+      msg('cp_bank_line', CP_LEX.cp_bank_line, 2400);
+      tick('lift', 0.42);
+      say('dealing board ' + (boardIndex + 1) + ' (walk ' + scrambleWalkFor(tier, zen, boardIndex)
+        + ', mh ' + mhStart + ', baseline ' + baseline + ', par ' + par + ')');
+
+      after(reduced ? PLAYTEST.DEAL_MS_REDUCED : PLAYTEST.DEAL_MS, () => {
+        if (dead || ended || closing) return;
+        if (boardEl) boardEl.classList.remove('is-dealing');
+        setPhase('play');
+        banking = false;
+        busy = false;
+        clearQueue();               // nothing pressed at the celebration rides in
+        lastLockAtMs = elapsedMs;   // the stall clock starts with the new board
+      });
+    }
+
+    /**
+     * THE ONE ENDING for a timed class. It fires whatever the board is doing -
+     * mid-slide, mid-celebration, mid-deal - and `closing` is set BEFORE
+     * anything else so the pending bank timer finds it.
+     */
     function bell() {
-      if (dead || ended || solved) return;
+      if (dead || ended || closing) return;
+      closing = true;
+      banking = false;
       busy = true;
       clearQueue();
       clearGrab();
       clearHint();
       bellOn = true;
+      if (boardEl) boardEl.classList.remove('is-dealing');
       setPhase('ended');
       deck('casino', 'bell', true);
       deck('casino', 'dimOut');
@@ -1114,11 +1316,17 @@ export default {
       after(reduced ? PLAYTEST.CEREMONY_MS_REDUCED : PLAYTEST.CEREMONY_MS, () => finish('bell'));
     }
 
-    /** ZEN's own way out. Exactly once - the button disables itself. */
+    /** ZEN's own way out, and zen's ONLY way out - a zen solve banks and
+     *  re-deals exactly like a timed one, so the table keeps dealing until the
+     *  player says stop. Exactly once: the button disables itself, and
+     *  `closing` stops any bank beat in flight from dealing board k+1. */
     function onFinishPressed() {
-      if (dead || ended || finished || !zen) return;
+      if (dead || ended || finished || closing || !zen) return;
       finished = true;
+      closing = true;
+      banking = false;
       try { if (finishBtn) finishBtn.disabled = true; } catch (e) { /* noop */ }
+      if (boardEl) boardEl.classList.remove('is-dealing');
       stopClock();
       finish('left');
     }
@@ -1126,6 +1334,8 @@ export default {
     function finish(reason) {
       if (ended) return;
       ended = true;
+      closing = true;
+      banking = false;
       busy = true;
       stopClock();
       stopAmbience();
@@ -1139,19 +1349,31 @@ export default {
 
       const tiles = tileCount(n);
       const mhNow = manhattan(state);
+      /* THE WHOLE CLASS, not the last board: banked solves + whatever the live
+       * board was worth when the bell rang, normalised by what this year is
+       * expected to fill the bell with. `boardSolved` is the bell-caught-the-
+       * celebration case and tells grade.js to score the live board at zero
+       * (its whole is already inside `banked`). */
       const graded = compositeFor({
-        gradeTier: tier, solved, n, moves, par,
+        gradeTier: tier, banked, expectedBoards, boardSolved: solved,
+        n, moves, par, parBanked,
         manhattanStart: mhStart, manhattanNow: mhNow,
         locked, tiles, backtracks, thrash, assists: rescueEpisodes,
       });
       const gates = hardGates(rescueUsed);
-      const fx = flavorXp({ solved, moves, par, bestMovesBefore });
+      const fx = flavorXp({ banked, bestSolveMoves, bestMovesBefore, underParSolve });
+      endParEarned = Math.round(graded.parEarned);
 
-      /* meta: the standing dare per board size, and how many pictures came back */
+      /* meta: the standing dare per board size, and how many pictures came back
+       * across the player's whole history. The dare is a PER-BOARD number, so
+       * it is the best single board of the class that goes up against it -
+       * never the class's cumulative move count. */
       const bestKey = 'bestMoves' + n;
       try {
-        const patch = { solves: solvesBefore + (solved ? 1 : 0), lastSeed: seed, lastPlayedAt: Date.now() };
-        if (solved && (!(bestMovesBefore > 0) || moves < bestMovesBefore)) patch[bestKey] = moves;
+        const patch = { solves: solvesBefore + banked, lastSeed: seed, lastPlayedAt: Date.now() };
+        if (bestSolveMoves > 0 && (!(bestMovesBefore > 0) || bestSolveMoves < bestMovesBefore)) {
+          patch[bestKey] = bestSolveMoves;
+        }
         ctx.store.mergeGameMeta(GAME_KEY, patch);
       } catch (e) { say('meta write failed (class unaffected): ' + ((e && e.message) || e)); }
 
@@ -1167,15 +1389,19 @@ export default {
 
       lastReport = Object.assign({}, report, {
         inputs: {
-          tier, n, zen, seed, retake, reason, solved, moves, bumps, par, baseline,
+          tier, n, zen, seed, retake, reason, moves, bumps, baseline,
+          banked, boardIndex, boardsDone: graded.boardsDone, expectedBoards,
+          boardSolved: solved, boardMoves, par, parBanked, parEarned: graded.parEarned,
+          bestSolveMoves, underParSolve,
           locked, tiles, backtracks, thrash, assists: rescueEpisodes, rescueUsed,
           manhattanStart: mhStart, manhattanNow: mhNow, elapsedMs, washes, subFlashes,
           jackpots, bestLockStreak, terms: graded.terms, tax: graded.tax,
         },
       });
       try { lastSnapshot = instance.snapshot(); } catch (e) { /* diagnostics only */ }
-      say('class over (' + reason + '): ' + (solved ? 'SOLVED' : locked + '/' + tiles + ' home') + ' in '
-        + moves + ' moves (par ' + par + ', baseline ' + baseline + '), '
+      say('class over (' + reason + '): ' + banked + ' banked of ' + expectedBoards + ' expected, '
+        + 'live board ' + (solved ? 'WHOLE' : locked + '/' + tiles + ' home') + ', '
+        + moves + ' moves (par earned ' + Math.round(graded.parEarned) + '), '
         + backtracks + ' backtracks / ' + thrash + ' panic'
         + (rescueUsed ? ', RESCUE' : '') + (zen ? ' -> zen pass' : ' -> composite ' + graded.composite.toFixed(3)));
 
@@ -1200,18 +1426,28 @@ export default {
         endEl.appendChild(r);
         return r;
       };
-      const yes = t('cp_end_yes', CP_LEX.cp_end_yes);
-      const no = t('cp_end_no', CP_LEX.cp_end_no);
-      row('g-cp-end-solved', t('cp_end_solved', CP_LEX.cp_end_solved), solved ? yes : no);
+      /* THE HEADLINE IS THE BANK. `cp_end_solved` used to be a Yes/No about
+       * the one board; a class that deals boards until the bell has a COUNT
+       * instead, so the row was re-worded rather than a new key minted (and
+       * cp_end_yes / cp_end_no went with the question they answered). The
+       * locked row underneath is the board that was still in progress. */
+      row('g-cp-end-solved', t('cp_end_solved', CP_LEX.cp_end_solved), String(banked));
       row('', t('cp_end_locked', CP_LEX.cp_end_locked), locked + '/' + tileCount(n));
       row('', t('cp_end_moves', CP_LEX.cp_end_moves), String(moves));
-      row('', t('cp_end_par', CP_LEX.cp_end_par), String(par));
+      /* ...and the baseline it is measured against is the class's EARNED par
+       * (every banked board's own, plus the live board's pro-rated), so the
+       * two numbers still read as a pair. */
+      row('', t('cp_end_par', CP_LEX.cp_end_par), String(Math.max(0, Math.round(endParEarned))));
       row('', t('cp_end_backtracks', CP_LEX.cp_end_backtracks), String(backtracks));
       row('', t('cp_end_thrash', CP_LEX.cp_end_thrash), String(thrash));
       if (rescueEpisodes > 0) row('g-cp-end-assist', t('cp_end_assists', CP_LEX.cp_end_assists), String(rescueEpisodes));
       row('', t('cp_end_time', CP_LEX.cp_end_time), mmss(secElapsed()));
 
-      const bestNow = solved && (!(bestMovesBefore > 0) || moves < bestMovesBefore) ? moves : bestMovesBefore;
+      /* The standing dare is a PER-BOARD number: the best single board of this
+       * class against the best single board of every class before it. */
+      const bestNow = (bestSolveMoves > 0 && (!(bestMovesBefore > 0) || bestSolveMoves < bestMovesBefore))
+        ? bestSolveMoves
+        : bestMovesBefore;
       const dare = el('div', 'g-cp-end-dare');
       dare.appendChild(el('span', 'g-cp-end-k', t('cp_end_best', CP_LEX.cp_end_best)));
       dare.appendChild(el('span', 'g-cp-end-v', bestNow > 0 ? String(bestNow) : '--'));
@@ -1283,10 +1519,16 @@ export default {
 
     /* ==================================================================== *
      * THE DRAWN CLASS-RULES SHEET (Deck VI, Law IV)
-     * Three figures and ONE way out. Policy is the shell's "Skip class
-     * tutorials" contract: on by default every class; with the skip on, a
-     * class still explains itself once per grade tier. CORE builds the
-     * structure and owns the policy; style.js draws it.
+     * FOUR figures and ONE way out - the fourth is the bank rule, which is a
+     * class rule and therefore belongs on the drawn sheet rather than in a
+     * proctor line the player can miss. THE LAW, uniform across every open
+     * class (owner ruling 2026-08-24): the sheet SHOWS the first time this
+     * player meets this class at this grade tier and AUTO-SKIPS every later
+     * class at that tier, whatever the setting says; the shell's "Skip class
+     * tutorials" switch (ctx.hideTutorial) means "skip even the first
+     * showing". It is also FREE OF THE CLOCK - openClass() (and startClock()
+     * inside it) is on the far side of GO. CORE builds the structure and owns
+     * the policy; style.js draws it.
      * ==================================================================== */
     function howtoSeenTiers() {
       try {
@@ -1296,7 +1538,9 @@ export default {
     }
     function howto(onDone) {
       const seen = howtoSeenTiers();
-      if (ctx.hideTutorial === true && seen.indexOf(tier) >= 0) { onDone(); return; }
+      /* AUTO-SKIP once this tier is on the record; hideTutorial skips the
+       * first showing too. No meta = an empty list = the sheet shows. */
+      if (ctx.hideTutorial === true || seen.indexOf(tier) >= 0) { onDone(); return; }
       if (!stage) { onDone(); return; }
       let done = false;
       howtoEl = el('div', 'g-cp-howto');
@@ -1317,6 +1561,10 @@ export default {
       figRow('g-cp-hw-slide', t('cp_howto_slide', CP_LEX.cp_howto_slide));
       figRow('g-cp-hw-lock', t('cp_howto_lock', CP_LEX.cp_howto_lock));
       figRow('g-cp-hw-wash', t('cp_howto_wash', CP_LEX.cp_howto_wash));
+      /* THE BANK. In zen there is no bell to promise, but the re-deal is the
+       * same, so the row is drawn either way - a zen player who solves and
+       * sees a fresh scramble has been told it was coming. */
+      figRow('g-cp-hw-bank', t('cp_howto_bank', CP_LEX.cp_howto_bank));
       const go = el('button', 'g-cp-hw-go', t('cp_howto_go', CP_LEX.cp_howto_go));
       go.setAttribute('type', 'button');
       try { go.type = 'button'; } catch (e) { /* noop */ }
@@ -1473,6 +1721,7 @@ export default {
       msg('cp_play_hint', CP_LEX.cp_play_hint, 3000);
       opened = true;
       busy = false;
+      banking = false;
       lastLockAtMs = 0;
       elapsedMs = 0;
       deck('casino', 'start');
@@ -1487,12 +1736,15 @@ export default {
      * ==================================================================== */
     const instance = {
       start(classSpec) {
-        spec = classSpec || { gradeTier: 1, seed: GAME_KEY + '|none', timeBudgetSec: 120 };
+        spec = classSpec || { gradeTier: 1, seed: GAME_KEY + '|none', timeBudgetSec: 300 };
         tier = Math.max(1, Math.min(4, Math.round(Number(spec.gradeTier) || 1)));
         seed = String(spec.seed == null ? GAME_KEY : spec.seed);
         retake = !!spec.retake;
         reduced = probeReduced(ctx);
-        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 120) * 1000);
+        /* The shell's budget is the truth; the module's own timeBudgetSec (and
+         * registry.js's mirror of it) is the 300s parachute. Min-clamped only,
+         * so a shell that hands us a longer class simply gets more boards. */
+        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 300) * 1000);
 
         const mode = String((ctx.settings && ctx.settings.cp_mode) != null ? ctx.settings.cp_mode : 'timed')
           .trim().toLowerCase();
@@ -1503,26 +1755,20 @@ export default {
 
         plan = buildPlan({ seed, gradeTier: tier, n, zen, timeBudgetSec: budgetMs / 1000 });
 
-        /* THE BOARD. Seeded, and SOLVABLE by construction (board.js repairs a
-         * bad parity). The assertion below is belt and braces: a board that
-         * cannot be solved is the one thing this class may never deal. */
-        const scrambleSeed = seed + '|cp-scramble|' + n + (zen ? '|zen' : '');
-        state = dealBoard(n, scrambleSeed, { walk: scrambleWalkFor(tier, zen) });
-        if (!isSolvable(state.cells, n)) {
-          say('FATAL-ish: the dealt board failed the parity test - re-dealing solved-adjacent');
-          state = dealBoard(n, scrambleSeed + '|repair', { walk: Math.max(20, n * n * 2) });
-        }
-        mhStart = manhattan(state);
-        locked = lockedCount(state);
-        bestLocked = locked;
+        /* How many whole boards this year is expected to hold in this budget -
+         * the number the PROGRESS term is divided by, and therefore the whole
+         * S/A bar. 7 / 5 / 3 / 2 at 300s; grade.js's header carries the
+         * arithmetic behind those four numbers. */
+        expectedBoards = expectedBoardsFor(tier, budgetMs / 1000);
 
-        /* THE BASELINE. par is derived from a real solve of THIS scramble, not
-         * a table someone guessed (dossier open question 3). A solver that
-         * cannot answer leaves par on the per-tile fallback and the rescue
-         * without a hint - never a throw inside a live class. */
-        baseline = -1;
-        try { baseline = baselineLength(cloneState(state)); } catch (e) { baseline = -1; }
-        par = parFor(baseline, tier, n);
+        /* BOARD 1. Seeded, and SOLVABLE by construction (board.js repairs a
+         * bad parity); the deal, the parity belt-and-braces and the per-board
+         * baseline all live in dealCurrentBoard() now, because every bank runs
+         * them again. boardIndex 0 is the UN-SUFFIXED seed, so tonight's
+         * opening board is exactly the one this class dealt before it grew. */
+        boardIndex = 0;
+        bestLocked = 0;
+        dealCurrentBoard();
 
         /* Law V: even the FALLBACK reward roll (used only when the engine is
          * absent) runs off the class seed, in its own append-only namespace. */
@@ -1562,7 +1808,8 @@ export default {
         lastReport = null;
         lastSnapshot = null;
         say('tier ' + tier + ' ' + n + 'x' + n + ' ' + (zen ? 'ZEN' : Math.round(budgetMs / 1000) + 's')
-          + ', scramble mh ' + mhStart + ', baseline ' + baseline + ', par ' + par
+          + ', expect ' + expectedBoards + ' board(s), scramble mh ' + mhStart
+          + ', baseline ' + baseline + ', par ' + par + ', ' + plan.washes.length + ' washes'
           + (reduced ? ', reduced' : '') + (retake ? ', RETAKE' : ''));
       },
 
@@ -1597,6 +1844,8 @@ export default {
         clearGrab();
         clearHint();
         opened = false;
+        banking = false;
+        closing = true;
         stopClock();
         clearTimers();
         stopAmbience();
@@ -1644,6 +1893,9 @@ export default {
       forceRescue() { lastLockAtMs = elapsedMs - PLAYTEST.RESCUE_MS - 1; checkRescue(); },
       /** Run a wash window now (harness only). */
       forceWash(ms) { runWash({ atMs: 0, ms: Math.max(200, Number(ms) || 1200), alpha: 0.3, variant: 'pink' }); },
+      /** Bank the live board and deal the next one NOW, skipping the beat
+       *  (harness only - the real path is a solve). */
+      forceDeal() { dealNextBoard(); },
       /** End as the bell would (harness only). */
       forceBell() { stopClock(); bell(); },
 
@@ -1653,7 +1905,10 @@ export default {
           plan: plan ? {
             washes: plan.washes.length, subFlashMs: plan.subFlashMs, heatCap: plan.heatCap,
             audioCeil: plan.audioCeil, bubbles: plan.bubbles, rowDrift: plan.rowDrift,
+            budgetMs: plan.budgetMs,
           } : null,
+          boardIndex, banked, banking, closing, boardMoves, parBanked,
+          bestSolveMoves, underParSolve, expectedBoards,
           board: state ? serialize(state) : '',
           cells: state ? state.cells.slice() : [],
           blank: state ? state.blank : -1,
@@ -1671,7 +1926,7 @@ export default {
           liveTileEls: tileEls.size,
           subjectUrl,
           stage, frame, boardEl, previewEl, peekEl, wellEl, msgEl, endEl, howtoEl,
-          movesChip, clockChip, lockedChip, calmChip, peekBtn, finishBtn,
+          movesChip, clockChip, lockedChip, calmChip, bankedChip, peekBtn, finishBtn,
           casino: casino && typeof casino.diagnostics === 'function' ? (() => { try { return casino.diagnostics(); } catch (e) { return null; } })() : null,
           trickster: trickster && typeof trickster.diagnostics === 'function' ? (() => { try { return trickster.diagnostics(); } catch (e) { return null; } })() : null,
           pressure: pressure && typeof pressure.diagnostics === 'function' ? (() => { try { return pressure.diagnostics(); } catch (e) { return null; } })() : null,

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -1167,7 +1167,7 @@ internal static class ArcademyHostService
         ["campus_desc_the_deep_end"] = "Sink tile into tile. The deeper you go, the harder the board is to read.",
         ["campus_records"] = "Records",
         ["campus_desc_records"] = "Report card, attendance ledger, grades. Your whole term, in ink.",
-        ["campus_registrar"] = "Registrar",
+        ["campus_registrar"] = "Front Office",
         ["campus_desc_registrar"] = "Every setting is a form. Every consent, a waiver with a stamp.",
         ["campus_entrance_hall"] = "Entrance Hall",
         ["campus_desc_entrance"] = "The notice board carries announcements. The trophy case waits for your diplomas.",
@@ -1277,7 +1277,7 @@ internal static class ArcademyHostService
         // Mirrors shell/enrollment.js's ENROLL_LEX verbatim - copy the values, do not
         // re-word them (the IC_LEX rule). Three cards per class, in the campus voice:
         // what the room is for, what it makes you do, what it is doing to you.
-        ["enroll_daily_trigger_1"] = "Homeroom takes attendance first, and the register is one word long.",
+        ["enroll_daily_trigger_1"] = "Homeroom goes first, and the whole lesson is one word long.",
         ["enroll_daily_trigger_2"] = "Everyone in the school sits the same word tonight. Six chances, no help.",
         ["enroll_daily_trigger_3"] = "Say it enough mornings and you stop deciding what it means.",
         ["enroll_lost_and_found_1"] = "Things go missing here constantly. Nobody files a report.",
@@ -1307,6 +1307,37 @@ internal static class ArcademyHostService
         ["enroll_composure_1"] = "The Studio grades one thing: can you finish a picture while interfered with.",
         ["enroll_composure_2"] = "Slide the tiles back into order while the room blurs what order was.",
         ["enroll_composure_3"] = "Nothing in here is fast. Composure is the subject and it cannot be rushed.",
+        // ---- FIRST BELL, the once-ever opening (Resources/web/arcademy/vn/lex.js) -------
+        // Mirrors VN_LEX row for row. The two PAPERS are stored as CLAUSE rows and joined
+        // with a single space by vn/index.js paragraph(): every row therefore stays under
+        // the 96-character mod-skin cap, which a whole paragraph could never do (a value
+        // over 96 is dropped by MergeModTable and can never be re-voiced - see trap 26).
+        // Splitting is a storage decision; the joined text is the owner-vetted paragraph
+        // byte for byte and no word of it may be edited here.
+        ["vn_skip"] = "Hold to skip",
+        ["vn_tap"] = "Tap to continue",
+        ["vn_s01_cap1"] = "The gates open at dusk and classes run every night, holidays included.",
+        ["vn_s01_cap2"] = "Your enrollment went through last week. First bell rings in the main hall.",
+        ["vn_p1_title"] = "WELCOME TO THE ARCADEMY",
+        ["vn_p1_a"] = "Hi! You're all set.",
+        ["vn_p1_b"] = "Tonight's four classes go up on the big board over this desk at first bell,",
+        ["vn_p1_c"] = "homeroom first and then whatever order you feel like.",
+        ["vn_p1_d"] = "You don't need to bring anything, every room already has its own machine",
+        ["vn_p1_e"] = "and the machine has everything.",
+        ["vn_p1_f"] = "Nobody's at the desk after dark, so if a cabinet acts up,",
+        ["vn_p1_g"] = "give it one gentle kick and leave us a note in the tray.",
+        ["vn_p1_h"] = "Have a great first night!",
+        ["vn_s03_cap"] = "Homeroom is room 101, first door on your left, just follow the footprint decals.",
+        ["vn_p2_title"] = "NICE ONE!",
+        ["vn_p2_a"] = "That's your first stamp of the year.",
+        ["vn_p2_b"] = "Three classes are still lit on the board if you're up for another,",
+        ["vn_p2_c"] = "and if you're done for tonight that's fine too,",
+        ["vn_p2_d"] = "the board deals fresh at dusk either way.",
+        ["vn_p2_e"] = "Replay anything as much as you like,",
+        ["vn_p2_f"] = "the card just takes one stamp per class a night.",
+        ["vn_p2_g"] = "Spare tokens can go in the fountain, it's supposed to be good luck,",
+        ["vn_p2_h"] = "or at least that's what everybody writes in the yearbook.",
+        ["vn_sign"] = "- the front desk",
         // ---- per-game rows (Semester 1) -------------------------------------------------
         // Keys that are not prefixed by a game: the shell and more than one class render
         // them (Daily Trigger mints them today).
@@ -1353,7 +1384,9 @@ internal static class ArcademyHostService
         ["dt_whisper_3"] = "You already typed it.",
         ["dt_whisper_4"] = "The stars are lying, not me.",
         // ---- Deja Vu (games/deja-vu) --------------------------------------------------
-        ["dv_bell"] = "The bell. Time is up.",
+        ["dv_bell"] = "The bell. Class over.",
+        ["dv_boards"] = "boards",
+        ["dv_last_call"] = "Last ten seconds.",
         ["dv_called_it"] = "You called the lie.",
         ["dv_card"] = "Card",
         ["dv_clear"] = "Board clear.",
@@ -1386,7 +1419,7 @@ internal static class ArcademyHostService
         ["dv_swaps"] = "swaps",
         ["dv_tracked"] = "Tracked through the static.",
         // ---- Lost & Found (games/lost-and-found) --------------------------------------
-        ["lf_briefing"] = "Memorize her, then find her five times.",
+        ["lf_briefing_n"] = "Memorize her, then find her {n} times.",
         ["lf_clutch"] = "The board relents",
         ["lf_final_bell"] = "Final bell",
         ["lf_find_prompt"] = "Find her",
@@ -1395,7 +1428,7 @@ internal static class ArcademyHostService
         ["lf_found"] = "Found her",
         ["lf_howto_title"] = "Class rules",
         ["lf_howto_find"] = "She hides on a wall that never sits still. Spot the tile that matches her picture.",
-        ["lf_howto_five"] = "Every find, she relocates. Catch her five times.",
+        ["lf_howto_finds_n"] = "Every find, she relocates. Catch her {n} times.",
         ["lf_howto_go"] = "Start the hunt",
         ["lf_jackpot"] = "Jackpot",
         ["lf_melt"] = "The wall runs like wax",
@@ -1580,6 +1613,7 @@ internal static class ArcademyHostService
         ["dt_howto_type"] = "Type a word into the row, then Enter. One answer a day, the same for everyone.",
         // ---- Deja Vu class-rules sheet (2026-08-23)
         ["dv_howto_flip"] = "Turn two slides. A matching pair stays lit. Anything else turns back over.",
+        ["dv_howto_boards"] = "Clear the board and a fresh one deals. The bell ends class.",
         ["dv_howto_go"] = "Deal the board",
         ["dv_howto_redeal"] = "Sometimes the whole board re-deals. Same pairs - only the seats change.",
         ["dv_howto_swap"] = "The board only moves while nothing is face up, and it always shudders first.",
@@ -2010,8 +2044,10 @@ internal static class ArcademyHostService
         ["cp_backtrack_line"] = "Back where it was. Breathe.",
         ["cp_bell_line"] = "The bell. Hands off the board.",
         ["cp_bell_warn"] = "Twenty seconds.",
-        ["cp_brief"] = "One picture, cut apart and still moving. Put it back together.",
-        ["cp_brief_zen"] = "No clock tonight. Slide until it is whole again.",
+        ["cp_bank_line"] = "Banked. Here is a fresh one.",
+        ["cp_brief"] = "One picture, cut apart and still moving. Put it back together, then again.",
+        ["cp_brief_zen"] = "No clock tonight. Slide until it is whole, then again if you like.",
+        ["cp_chip_banked"] = "Pictures done",
         ["cp_chip_calm"] = "Composure",
         ["cp_chip_clock"] = "Time left",
         ["cp_chip_locked"] = "Pieces home",
@@ -2023,15 +2059,14 @@ internal static class ArcademyHostService
         ["cp_end_best_line"] = "Your standing mark on this board. Beat it next class.",
         ["cp_end_locked"] = "Pieces home",
         ["cp_end_moves"] = "Moves",
-        ["cp_end_no"] = "No",
-        ["cp_end_par"] = "Baseline",
-        ["cp_end_solved"] = "Solved",
+                ["cp_end_par"] = "Baseline",
+        ["cp_end_solved"] = "Pictures finished",
+        ["cp_howto_bank"] = "Finish a picture and the next one deals. The bell ends the class, not the solve.",
         ["cp_end_thrash"] = "Panic moves",
         ["cp_end_time"] = "Time",
         ["cp_end_title"] = "Composure report",
         ["cp_end_title_zen"] = "Zen board",
-        ["cp_end_yes"] = "Yes",
-        ["cp_finish"] = "Finish",
+                ["cp_finish"] = "Finish",
         ["cp_howto_go"] = "Start the picture",
         ["cp_howto_lock"] = "A piece that reaches its own place locks with a snap. It can still be slid.",
         ["cp_howto_slide"] = "Tap a piece beside the gap and it slides in. Arrows, WASD and swipes do the same.",

@@ -103,6 +103,17 @@ export default {
   meaty: false,
   flagship: true,
   timeBudgetSec: 90,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
+  /* CLOCKLESS (owner ruling, the class-length wave). Homeroom keeps its budget
+   * - the bell is real and still ends the class - but the SECONDS are never
+   * drawn: no chip on the departure board, none on the campus room card, none
+   * in the proctor strip, and no time bar over the stage. A wordle is a board
+   * and six rows, and a draining hairline made a one-minute ritual read like a
+   * timed exam. It is a DESCRIPTOR flag: core/timetable.js carries it onto the
+   * dealt class and shell/shell.js + shell/campus.js are the only readers, so
+   * nothing in this file branches on it. games/registry.js GAME_META mirrors it
+   * (the parachute is read for a suspended class too). */
+  clockless: true,
   title: 'Daily Trigger',
 
   manifest: {
@@ -931,14 +942,18 @@ export default {
     }
 
     /**
-     * Policy is the shell's "Skip class tutorials" contract: by default the
-     * sheet shows EVERY class; with the skip on, homeroom still explains itself
-     * ONCE per grade tier (the tier is what changes the room). Dismissal is the
-     * sheet's own button and nothing else - every letter key is already a verb
-     * here, so a keyboard shortcut would type into the board it is covering.
+     * THE LAW, uniform across every open class (owner ruling 2026-08-24): the
+     * sheet SHOWS the first time this player meets homeroom at this grade tier
+     * (the tier is what changes the room) and AUTO-SKIPS every later class at
+     * that tier, whatever the setting says. The shell's "Skip class tutorials"
+     * switch (ctx.hideTutorial) means "skip even the first showing". No meta =
+     * no memory = the sheet shows. Dismissal is the sheet's own button and
+     * nothing else - every letter key is already a verb here, so a keyboard
+     * shortcut would type into the board it is covering. The sheet is also
+     * free of the clock: startMs is taken in beginClass, past GO.
      */
     function howto(onDone) {
-      if (ctx.hideTutorial === true && howtoSeenTiers().indexOf(tier) >= 0) { onDone(); return; }
+      if (ctx.hideTutorial === true || howtoSeenTiers().indexOf(tier) >= 0) { onDone(); return; }
       if (!wrap) { onDone(); return; }
       let done = false;
       let sheet = null;

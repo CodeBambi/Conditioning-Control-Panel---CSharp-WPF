@@ -46,7 +46,7 @@ import { cardFace, thud, THUD_PITCH, HOLES, ENROLL_PUNCHES } from './punchcard.j
  * -------------------------------------------------------------------------- */
 export const ENROLL_LEX = Object.freeze({
   /* --- Homeroom: the daily word ---------------------------------------- */
-  enroll_daily_trigger_1: 'Homeroom takes attendance first, and the register is one word long.',
+  enroll_daily_trigger_1: 'Homeroom goes first, and the whole lesson is one word long.',
   enroll_daily_trigger_2: 'Everyone in the school sits the same word tonight. Six chances, no help.',
   enroll_daily_trigger_3: 'Say it enough mornings and you stop deciding what it means.',
 

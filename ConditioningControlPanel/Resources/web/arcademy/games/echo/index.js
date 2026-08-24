@@ -1,5 +1,5 @@
 /* ============================================================================
- * games/echo/index.js - ECHO (Simon; family: memory; Semester II, 105s).
+ * games/echo/index.js - ECHO (Simon; family: memory; Semester II, 120s).
  *
  * Six pads in a ring. The room plays a sequence - each pad lights and sounds
  * its own note - and you play it back. Clear it and the sequence grows by one.
@@ -87,8 +87,9 @@
  *        every engine one-shot over the ring is decoration (fireSafe() welds
  *        clickSafe on, bubbles are never poppable here).
  *   III  something always breathes: the ambient field runs from the first beat.
- *   IV   the class-rules sheet is DRAWN, GO-only, and honours ctx.hideTutorial
- *        with a once-per-grade-tier memory in gameMeta.howtoTiers (IC's policy).
+ *   IV   the class-rules sheet is DRAWN, GO-only and FREE OF THE CLOCK: it
+ *        shows ONCE per grade tier (gameMeta.howtoTiers) and ctx.hideTutorial
+ *        skips even that first showing. startClock() runs in the GO callback.
  *   V    stream, decoy plan, the per-round face deal, the clip roll, casino,
  *        trickster and pressure are all scoped off the class seed; a retake
  *        replays the identical class. Nothing here calls Math.random.
@@ -239,7 +240,11 @@ export default {
   family: 'memory',
   meaty: false,
   flagship: false,
-  timeBudgetSec: 105,
+  /* 120s (owner ruling, the class-length wave; it was 105). Nothing in the
+   * class is a count - the room deals sequences until the bell and a fail is
+   * not the class - so the extra fifteen seconds are simply more rounds. */
+  timeBudgetSec: 120,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Echo',
 
   manifest: {
@@ -293,7 +298,7 @@ export default {
     let reduced = false;
     let retake = false;
     let audible = true;
-    let budgetMs = 105000;
+    let budgetMs = 120000;
     let pool = null;
     let rollLocal = null;
     let subRoll = null;                 // the seeded sub_flash word stream
@@ -1784,10 +1789,13 @@ export default {
     }
 
     /* ==================================================================== *
-     * THE CLASS-RULES SHEET (Law IV / Deck VI) - drawn, GO-only, and the
-     * shell's "Skip class tutorials" contract: with the skip ON a class still
-     * explains itself ONCE PER GRADE TIER, and that memory is the GAME's
-     * (gameMeta.howtoTiers), never the shell's. Impulse Control's policy.
+     * THE CLASS-RULES SHEET (Law IV / Deck VI) - drawn, GO-only and FREE OF
+     * THE CLOCK. THE LAW, uniform across every open class (owner ruling
+     * 2026-08-24): the sheet SHOWS the first time this player meets this class
+     * at this grade tier and AUTO-SKIPS every later class at that tier,
+     * whatever the setting says; the shell's "Skip class tutorials" switch
+     * means "skip even the first showing". The memory is the GAME's
+     * (gameMeta.howtoTiers), never the shell's, and no meta = the sheet shows.
      * ==================================================================== */
     function howtoSeenTiers() {
       try {
@@ -1814,7 +1822,8 @@ export default {
     function howto(onDone) {
       const seen = howtoSeenTiers();
       const skip = (ctx.dev === true && spec && spec.devSkipHowto === true)
-        || (ctx.hideTutorial === true && seen.indexOf(tier) >= 0);
+        || ctx.hideTutorial === true
+        || seen.indexOf(tier) >= 0;
       if (skip) { onDone(); return; }
       howtoEl = el('div', 'g-ec-howto');
       howtoEl.setAttribute('role', 'dialog');
@@ -2013,10 +2022,10 @@ export default {
      * ==================================================================== */
     const instance = {
       start(classSpec) {
-        spec = classSpec || { gradeTier: 1, seed: GAME_KEY + '|none', timeBudgetSec: 105 };
+        spec = classSpec || { gradeTier: 1, seed: GAME_KEY + '|none', timeBudgetSec: 120 };
         tier = Math.max(1, Math.min(4, Math.round(Number(spec.gradeTier) || 1)));
         seed = String(spec.seed == null ? GAME_KEY : spec.seed);
-        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 105) * 1000);
+        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 120) * 1000);
         retake = !!spec.retake;
         reduced = probeReduced(ctx);
         audible = ctx.audioAudible !== false;
@@ -2144,7 +2153,6 @@ export default {
 
         bindInput();
         claimAssets();
-        startClock();
         /* THE FIT has to run once the pads have a real width, and again whenever
          * the window changes it. Law VI: the listener comes off in destroy(). */
         scheduleFit();
@@ -2165,6 +2173,12 @@ export default {
         msg('ec_brief', EC_LEX.ec_brief);
         howto(() => {
           if (dead || ended) return;
+          /* THE CLOCK STARTS AT GO AND NOWHERE ELSE (owner ruling 2026-08-24).
+           * It used to be armed above, beside bindInput/claimAssets, which
+           * charged the player for reading the rules sheet - the one thing the
+           * class asks them to read. The BRIEF beat below IS on the clock: it
+           * is a game beat, not the sheet, exactly as Instant Recall's is. */
+          startClock();
           after(reduced ? PLAYTEST.BRIEF_MS_REDUCED : PLAYTEST.BRIEF_MS, () => {
             if (dead || ended) return;
             deck('casino', 'start');
@@ -2252,7 +2266,7 @@ export default {
       chipText(which) { return chipText(which); },
       /** The live round (the suite asserts the dealt plan against sequence.js). */
       round() { return round; },
-      /** End the class as the bell would (the suite never waits 105s). */
+      /** End the class as the bell would (the suite never waits the budget). */
       ringBell() { run(bell); },
       /** Deal the NEXT round's faces, as a cleared sequence would. Diagnostics
        *  only - the shell never calls it; the suite uses it to walk a pool

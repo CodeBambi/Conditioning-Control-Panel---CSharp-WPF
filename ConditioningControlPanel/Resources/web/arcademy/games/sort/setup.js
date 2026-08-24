@@ -2,7 +2,7 @@
  * games/sort/setup.js - THE DOOR. Room 201's setup + tutorial, and the only
  * place the player chooses what SORT means tonight.
  *
- * It runs OUTSIDE the 120s class clock (shell/shell.js calls instance.setup()
+ * It runs OUTSIDE the 180s class clock (shell/shell.js calls instance.setup()
  * after create() and before beginPlay()), so it can afford to explain itself.
  * Five steps, and every one shows before it tells:
  *

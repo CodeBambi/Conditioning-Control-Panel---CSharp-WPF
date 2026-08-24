@@ -692,6 +692,21 @@ export function createCpPressure(o) {
       retune();
     },
     /**
+     * THE BANK (multi-board, 2026-08-24). A solve no longer ends the class: it
+     * banks the picture and a fresh scramble deals, so the ROYAL is a beat and
+     * has to come back down. This is NOT optional polish - `setProgress` above
+     * early-returns while `royalOn`, so without this the whole CCP-effects
+     * ladder would freeze at RUNG_MAX from the first bank to the bell.
+     */
+    deal() {
+      if (!started || stopped) return;
+      royalOn = false;
+      streak = 0;
+      cls(ring, 'is-gold', bellOn);
+      stepTo(rungFor(frac, zen), false);
+      retune();
+    },
+    /**
      * The class's beats: 'slide' | 'lock' | 'thrash' | 'assist' | 'solved' |
      * 'bell' | 'wash' | 'unwash' (+ {streak?, tileEl?} as a second arg). Unknown
      * kinds are ignored.

@@ -1,5 +1,5 @@
 /* ============================================================================
- * games/anomaly/index.js - ANOMALY (odd-one-out; family: search; 90s).
+ * games/anomaly/index.js - ANOMALY (odd-one-out; family: search; 300s).
  *
  * A grid of the SAME loop, tiled N times, playing in lockstep because it IS
  * one url in every tile - one decoder, one clock. Exactly one tile carries a
@@ -23,7 +23,9 @@
  *           be draws the ghost outline - "it moved" - and refunds a second
  *   whiff   the round times out, the answer is revealed, and two whiffs in a
  *           row force ONE breather round (the dossier's comeback hook)
- *   bell    the 90s budget ends the class, never a round count
+ *   bell    the 300s budget ends the class, never a round count. The plan is
+ *           sized for a FAST player (rounds.js FAST_ROUND_MS), so five minutes
+ *           of clean tapping still never runs out of seeded rounds
  *
  * THE CRITIC'S TOP FIX IS LAW: the top tiers get harder through relocations,
  * drift and decoy pressure at PERCEPTIBLE deltas - never through a delta
@@ -46,8 +48,9 @@
  *       tile and its hitbox together, and every engine one-shot over the grid
  *       is decoration (fireSafe welds clickSafe/clickable off)
  *   III nothing is still - the grid breathes even at tier 1 (the decks)
- *   IV  images over text - the class-rules sheet is DRAWN and GO-only, and it
- *       respects ctx.hideTutorial + gameMeta.howtoTiers
+ *   IV  images over text - the class-rules sheet is DRAWN, GO-only and FREE OF
+ *       THE CLOCK; it shows ONCE per grade tier (gameMeta.howtoTiers) and
+ *       ctx.hideTutorial skips even that first showing
  *   V   seeded - rounds.js deals the whole show off classSpec.seed; a retake
  *       replays it. Relocations are SCHEDULE-DEALT, never live rng
  *   VI  exits sacred - pause/resume/suspend/destroy (the DV discipline), the
@@ -102,7 +105,7 @@ let lastSnapshot = null;
 
 /** Test seam: the scratch harness compresses the clock. Production = 1.
  *  It scales BOTH ends - a timer's real delay AND the logical time the ticker
- *  credits for a real millisecond - so a 90s class can be played end to end in
+ *  credits for a real millisecond - so a full class can be played end to end in
  *  under two seconds without the round deadlines drifting out of proportion. */
 let timeScale = 1;
 export function setTimeScale(f) { const v = Number(f); timeScale = Number.isFinite(v) && v > 0 ? v : 1; }
@@ -161,7 +164,16 @@ export default {
   family: 'search',
   meaty: false,
   flagship: false,
-  timeBudgetSec: 90,
+  /* 300s (owner ruling, the class-length wave; it was 90). Still not an anchor
+   * class: `meaty` is the timetable's one-per-night flag and has nothing to do
+   * with length any more, which is why the longest class on the board is not
+   * the flagged one. Grading is ratios over rounds OFFERED, and the bell was
+   * always the end rather than a round count, so the only thing five minutes
+   * needed was a plan deep enough to cover it - see rounds.js FAST_ROUND_MS /
+   * COUNT_MAX, which size the deal off a fast player rather than off the slow
+   * end of the round window. */
+  timeBudgetSec: 300,
+  orientation: 'portrait',   // phone only; see games/registry.js ORIENTATIONS
   title: 'Anomaly',
 
   manifest: {
@@ -207,7 +219,7 @@ export default {
     let reduced = false;
     let coarse = false;
     let retake = false;
-    let budgetMs = 90000;
+    let budgetMs = 300000;
     let pool = null;
     let rollLocal = null;
 
@@ -608,6 +620,12 @@ export default {
       if (ended || dead) return;
       if (budgetMs - elapsedMs <= MIN_ROUND_MS) { setPhase('verdict'); return; }
 
+      /* THE MODULO IS A BACKSTOP, NOT THE DEAL. rounds.js sizes the plan off a
+       * FAST player (FAST_ROUND_MS), so a 300s class cannot walk off the end of
+       * it and start replaying the seeded rounds it has already shown. This
+       * stays because a plan is a pure function of its inputs and a caller may
+       * always hand a budget nobody sized for; wrapping is a better failure
+       * than a crash on `undefined`. */
       let r = plan.rounds[roundIdx % plan.rounds.length];
       roundIdx += 1;
       if (whiffStreak >= PLAYTEST.BREATHER_AFTER_WHIFFS) {
@@ -1108,10 +1126,14 @@ export default {
     }
 
     /* ==================================================================== *
-     * THE CLASS-RULES SHEET (Deck VI, Law IV) - drawn, GO-only, and it
-     * respects the shell's "Skip class tutorials" contract exactly as
-     * Impulse Control does: default shows every class, with the skip on a
-     * class still explains itself ONCE per grade tier.
+     * THE CLASS-RULES SHEET (Deck VI, Law IV) - drawn, GO-only, and FREE OF
+     * THE CLOCK (startClock() lives in the GO callback, never above it).
+     * THE LAW, uniform across every open class (owner ruling 2026-08-24): the
+     * sheet SHOWS the first time this player meets this class at this grade
+     * tier and AUTO-SKIPS every later class at that tier, whatever the setting
+     * says. The shell's "Skip class tutorials" switch (ctx.hideTutorial) now
+     * means "skip even the first showing". No meta = no memory = the sheet
+     * shows, which is the fallback we want.
      * ==================================================================== */
     function howtoSeenTiers() {
       try {
@@ -1164,7 +1186,11 @@ export default {
     }
     function howto(onDone) {
       const seen = howtoSeenTiers();
-      if (ctx.hideTutorial === true && seen.indexOf(tier) >= 0) { onDone(); return; }
+      /* AUTO-SKIP once this tier is on the record; hideTutorial skips the
+       * first showing too. The skip path is an instant dismiss: the tier is
+       * already banked (or deliberately never wanted), nothing is mounted to
+       * hide, and the GO cue belongs to a press that did not happen. */
+      if (ctx.hideTutorial === true || seen.indexOf(tier) >= 0) { onDone(); return; }
       let done = false;
       const onGo = () => {
         if (done || dead) return;
@@ -1209,10 +1235,10 @@ export default {
      * ==================================================================== */
     const instance = {
       start(classSpec) {
-        spec = classSpec || { gradeTier: 1, seed: GAME_KEY + '|none', timeBudgetSec: 90 };
+        spec = classSpec || { gradeTier: 1, seed: GAME_KEY + '|none', timeBudgetSec: 300 };
         tier = clampTier(spec.gradeTier);
         seed = String(spec.seed == null ? GAME_KEY : spec.seed);
-        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 90) * 1000);
+        budgetMs = Math.max(20000, (Number(spec.timeBudgetSec) || 300) * 1000);
         retake = !!spec.retake;
         reduced = probeReduced(ctx);
         coarse = coarseOf(ctx);

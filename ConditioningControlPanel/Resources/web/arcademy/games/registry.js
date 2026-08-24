@@ -15,10 +15,31 @@
  * keeps that wing taped shut. That is the one-line release gate: ship a semester
  * dark by dropping its number from the set, open it by putting the number back.
  *
- * STATIC DESCRIPTORS. The timetable needs {family, meaty, flagship, timeBudgetSec}
- * for a game even when its module failed to load, so they live here as a fallback
- * table; a module that loads successfully overrides them with its own exported
- * values (the module is the source of truth, this table is the parachute).
+ * STATIC DESCRIPTORS. The timetable needs {family, meaty, flagship, timeBudgetSec,
+ * clockless} for a game even when its module failed to load, so they live here as
+ * a fallback table; a module that loads successfully overrides them with its own
+ * exported values (the module is the source of truth, this table is the parachute).
+ *
+ * TWO OF THOSE FIVE ARE NOT WHAT THEIR NAMES SUGGEST (the class-length wave):
+ *   `meaty`     is the ANCHOR-SLOT flag, not a length. The timetable deals
+ *               exactly one anchor class a night; it says nothing about seconds
+ *               and no module branches on it.
+ *   `clockless` is a class that runs a budget but SHOWS no clock - no seconds
+ *               chip on the board, on the room card or in the proctor strip,
+ *               and no time bar over the stage. Daily Trigger only, today.
+ *
+ * A SIXTH DESCRIPTOR, `orientation` (the mobile pass). 'landscape' | 'portrait' |
+ * 'any', and it is a PHONE fact only: `core/device.js` refuses the whole idea on a
+ * desktop window, so this field is invisible in the WebView2 build and costs a
+ * desktop player nothing. A mismatch on a phone puts the same turn-your-phone card
+ * over the class that the campus uses, and the card lifts by itself the moment the
+ * phone comes round. The defaults were read off each game's own stage arithmetic
+ * rather than guessed: the square-board classes all size themselves
+ * `min(dvh - chrome, vw - pad)` and their tiles fall under a thumb's width when the
+ * short side is the height, so they ask for PORTRAIT, while the two width-hungry
+ * boards (Lost and Found's drifting strips, Deja Vu's wide grid of 4:3 plates) ask
+ * for LANDSCAPE. Anything genuinely square or full-bleed stays 'any' and is never
+ * gated.
  *
  * TIER PROMOTION (shell rule, not per-game): tier = 1 + floor(promotions / 2),
  * capped at 4; a class promotes on an S or an A. Stored per game in the meta
@@ -42,42 +63,55 @@ export const GAME_PATHS = Object.freeze({
   the_deep_end: './the-deep-end/index.js',
 });
 
+/** The only three answers `orientation` may carry. Anything else reads as 'any'. */
+export const ORIENTATIONS = new Set(['landscape', 'portrait', 'any']);
+
 /** Fallback descriptors (see header). Families per SYNTHESIS #3. */
 export const GAME_META = Object.freeze({
-  daily_trigger: { family: 'word', meaty: false, flagship: true, timeBudgetSec: 90 },
+  /* CLOCKLESS (owner ruling, the class-length wave): homeroom keeps its ~1-min
+     wordle shape and its 90s bell, but the seconds are never SHOWN - the ritual
+     is the board and the six rows, not a countdown. Mirrors the module's own
+     export, same parachute law as meaty below. */
+  daily_trigger: { family: 'word', meaty: false, flagship: true, timeBudgetSec: 90, clockless: true, orientation: 'portrait' },
   // MEATY: mirrors the module's own export. This table is only the parachute the
   // suspended stub flies under, but the timetable reads a suspended class's
   // descriptor too, so a mismatch would quietly change the day's shape on the one
   // day the import fails.
-  lost_and_found: { family: 'search', meaty: true, flagship: true, timeBudgetSec: 120 },
-  deja_vu: { family: 'memory', meaty: false, flagship: false, timeBudgetSec: 90 },
-  impulse_control: { family: 'reflex', meaty: false, flagship: false, timeBudgetSec: 90 },
+  lost_and_found: { family: 'search', meaty: true, flagship: true, timeBudgetSec: 300, orientation: 'landscape' },
+  deja_vu: { family: 'memory', meaty: false, flagship: false, timeBudgetSec: 300, orientation: 'landscape' },
+  impulse_control: { family: 'reflex', meaty: false, flagship: false, timeBudgetSec: 90, orientation: 'any' },
   // MEATY, same law as lost_and_found above: this row must equal the module's own
   // exports, because the timetable reads a SUSPENDED class's descriptor too and a
   // mismatch would quietly reshape the day on the one day the import fails.
-  // The Deep End is the second meaty class (DECISIONS #3's 300s slot) and the first
-  // Semester III class brought forward - family 'comfort', never a flagship.
-  the_deep_end: { family: 'comfort', meaty: true, flagship: false, timeBudgetSec: 300 },
+  // The Deep End is the second ANCHOR class and the first Semester III class
+  // brought forward - family 'comfort', never a flagship. 300s is its own
+  // module's budget, not a privilege the anchor flag grants it.
+  the_deep_end: { family: 'comfort', meaty: true, flagship: false, timeBudgetSec: 300, orientation: 'portrait' },
   /* Semester II. Families per SYNTHESIS #3; 'recall' joins the list with Instant
      Recall (core/lexicon.js has no family_recall/family_puzzle row yet, so the
      chip degrades to the de-snaked key - readable English, never a raw token). */
-  misdirection: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120 },
-  /* SORT inherited Misdirection's family, not its room (lot 2 razed the
-     parlour; sort is room 203 by the Main Gate). Not meaty: 120s is the
-     class, and the pile-picking DOOR runs outside the clock (shell S3), so the
-     budget here is the sorting itself and nothing else. */
-  sort: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120 },
-  echo: { family: 'memory', meaty: false, flagship: false, timeBudgetSec: 105 },
-  // MEATY (ruled 2026-08-23): the third meaty class. With ten games no-repeat-3 binds again
-  // and outranks the meaty preference, so two meaty classes left ~a third of nights with the
-  // slot unfilled (trap 6 re-opened); see composure below for the full count. Mirrors the module's own export.
-  instant_recall: { family: 'recall', meaty: true, flagship: false, timeBudgetSec: 120 },
+  misdirection: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120, orientation: 'landscape' },
+  /* SORT inherited Misdirection's family AND its room number, not its room
+     (lot 2 razed the parlour; sort is room 201 by the Main Gate). Never the
+     night's anchor class, and the pile-picking DOOR runs outside the clock
+     (shell S3), so the 180s here is the sorting itself and nothing else.
+     120 -> 180 in the class-length wave: the room is bell-driven end to end, so
+     the budget scales the clock and nothing else - the deck, the media claim and
+     the trickster window all moved with it inside the module. */
+  sort: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 180, orientation: 'portrait' },
+  echo: { family: 'memory', meaty: false, flagship: false, timeBudgetSec: 120, orientation: 'portrait' },
+  // MEATY (ruled 2026-08-23): the third ANCHOR class. With ten games no-repeat-3 binds again
+  // and outranks the meaty preference, so two anchor classes left ~a third of nights with the
+  // slot unfilled (trap 6 re-opened); see composure below for the full count. The flag is a
+  // timetable fact and never a length - the vigil runs 180s, shorter than several non-anchor
+  // classes on the same board. Mirrors the module's own export.
+  instant_recall: { family: 'recall', meaty: true, flagship: false, timeBudgetSec: 180, orientation: 'portrait' },
   /* Semester III (The Deep End above was brought forward). */
-  anomaly: { family: 'search', meaty: false, flagship: false, timeBudgetSec: 90 },
-  // MEATY (ruled 2026-08-23, same reason as instant_recall): four meaty classes (L&F, The Deep
-  // End, Instant Recall, Composure) are what it takes for a no-repeat-3 pool to deal one meaty
+  anomaly: { family: 'search', meaty: false, flagship: false, timeBudgetSec: 300, orientation: 'portrait' },
+  // MEATY (ruled 2026-08-23, same reason as instant_recall): four ANCHOR classes (L&F, The Deep
+  // End, Instant Recall, Composure) are what it takes for a no-repeat-3 pool to deal one anchor
   // class EVERY night (measured 28/28; three gave 21/28). Mirrors the module's own export.
-  composure: { family: 'puzzle', meaty: true, flagship: false, timeBudgetSec: 120 },
+  composure: { family: 'puzzle', meaty: true, flagship: false, timeBudgetSec: 300, orientation: 'portrait' },
 });
 
 /**
@@ -188,6 +222,8 @@ function suspendedStub(key, reason) {
     meaty: !!(GAME_META[key] && GAME_META[key].meaty),
     flagship: !!(GAME_META[key] && GAME_META[key].flagship),
     timeBudgetSec: (GAME_META[key] && GAME_META[key].timeBudgetSec) || 90,
+    clockless: !!(GAME_META[key] && GAME_META[key].clockless),
+    orientation: (GAME_META[key] && GAME_META[key].orientation) || 'any',
     suspended: true,
     manifest: { effectsConsumed: [], assetNeeds: null, boardSizes: null, keybinds: null, settings: [], peek: false },
     create(ctx) {
@@ -281,6 +317,16 @@ export async function loadGames(log) {
       meaty: mod.meaty != null ? !!mod.meaty : !!fallback.meaty,
       flagship: mod.flagship != null ? !!mod.flagship : !!fallback.flagship,
       timeBudgetSec: mod.timeBudgetSec || fallback.timeBudgetSec || 90,
+      /* `clockless` is a TRISTATE read like meaty/flagship, not an `||` like the
+       * budget: a module that exports `clockless: false` must be able to say so
+       * over a parachute row that says true. */
+      clockless: mod.clockless != null ? !!mod.clockless : !!fallback.clockless,
+      /* `orientation` is a string enum, so it reads like `family` and not like the
+       * tristates above: a module that wants a say says it, and anything else (a
+       * module that never heard of the field, an unknown value, a class that failed
+       * to load) lands on the parachute and then on 'any', which gates nothing. */
+      orientation: ORIENTATIONS.has(mod.orientation) ? mod.orientation
+        : (ORIENTATIONS.has(fallback.orientation) ? fallback.orientation : 'any'),
     };
     list.push(entry);
     byKey[key] = entry;
@@ -295,7 +341,9 @@ export async function loadGames(log) {
 /** Descriptors for core/timetable.js - never the modules themselves. */
 export function descriptors(list) {
   return (Array.isArray(list) ? list : []).map((e) => ({
-    key: e.key, family: e.family, meaty: e.meaty, flagship: e.flagship, timeBudgetSec: e.timeBudgetSec,
+    key: e.key, family: e.family, meaty: e.meaty, flagship: e.flagship,
+    timeBudgetSec: e.timeBudgetSec, clockless: !!e.clockless,
+    orientation: e.orientation || 'any',
   }));
 }
 

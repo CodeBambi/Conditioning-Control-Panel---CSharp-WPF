@@ -74,6 +74,36 @@ export const SETTING_KEYS = Object.freeze({
   keybinds: 'keybinds',
 });
 
+/* ----------------------------------------------------------------------------
+ * THE MEDIA COUNTER'S KEYS - WEB ONLY (MEDIA-CONTRACT v1 §1, §3).
+ *
+ * The browser host shim owns media on the web the way ArcademyHostService owns
+ * it in the app, and it announces itself with exactly one flag:
+ * `init.settings.mediaControls === true`. These five keys are the whole
+ * surface, and they are gated on that flag STRICTLY, not truthily, because the
+ * C# host never sets it and a `media.*` key posted at the app would fall
+ * straight through ApplySetting's switch into the per-game scalar bag and sit
+ * there as junk under a name no game will ever read. Absent flag = this page
+ * renders exactly what it rendered before any of this existed, read-only
+ * "Asset source" row included.
+ *
+ * Two of the five are ACTIONS rather than values (`pickLocal`, `clearLocal`):
+ * they store nothing, the host echoes `value: null`, and the result of the work
+ * arrives separately as a `local-media` push.
+ * -------------------------------------------------------------------------- */
+export const MEDIA_KEYS = Object.freeze({
+  remoteConsent: 'media.remoteConsent',
+  niches: 'media.niches',
+  librarySelect: 'media.librarySelect',
+  pickLocal: 'media.pickLocal',
+  clearLocal: 'media.clearLocal',
+});
+
+/** True for anything on the web media counter. Nothing here is a per-game knob. */
+export function isMediaSettingKey(key) {
+  return typeof key === 'string' && key.slice(0, 6) === 'media.';
+}
+
 /** Every global key this page can write - used to tell an echo apart from a game's. */
 const GLOBAL_KEYS = new Set([
   SETTING_KEYS.masterIntensity, SETTING_KEYS.effectIntensity,
@@ -90,6 +120,9 @@ const GLOBAL_KEYS = new Set([
 /** True when a `setting` echo is a global, not a per-game knob. */
 export function isGlobalSettingKey(key) {
   const k = String(key || '');
+  // A `media.*` echo is the host's, never a game's: without this fence
+  // shell.js's onSetting would park `media.niches` in the per-game flat bag.
+  if (isMediaSettingKey(k)) return true;
   if (GLOBAL_KEYS.has(k)) return true;
   // the host also accepts the bare forms, so an echo may come back undotted
   const bare = k.replace(/^(caps|audioLevels)\./, '');
@@ -156,25 +189,39 @@ function mult(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2) 
  * @param {Object} o.init       the init projection
  * @param {Object} o.bridge
  * @param {Array} o.games       registry entries [{key, mod, ok, ...}]
+ * @param {Object=} o.assets     createAssets() handle. The MEDIA COUNTER borrows
+ *                              exactly two of the DOOR's verbs from it,
+ *                              `probeSub` and `removeLibrarySub`, so the add
+ *                              and remove buttons ride the `probe-sub` /
+ *                              `library-remove` frames SORT's door already
+ *                              minted rather than a second copy of them.
+ *                              Absent (or the null provider) and those two
+ *                              buttons are simply not offered.
  * @param {Object} o.keybinds   createKeybinds() handle
  * @param {Function=} o.onClose
  * @param {Function=} o.log
  * @param {string=} o.gameKey   THE SPLIT (owner ruling 2026-08-24): set, the
  *                              page is SCOPED - tiers 1 + 2 unchanged, then
  *                              exactly ONE game group (the running class),
- *                              never the other eight. The campus / Registrar
+ *                              never the other eight. The campus / Front Office
  *                              keep calling with no key and get the full sheet.
  *                              An unknown key falls back to the full page (a
  *                              missing group would hide real knobs; too many is
  *                              the lesser bug).
  */
-export function createSettingsPage({ init, bridge, games, keybinds, onClose, log, gameKey } = {}) {
+export function createSettingsPage({ init, bridge, games, keybinds, assets, onClose, log, gameKey } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const src = init || {};
   const root = el('div', 'arc-settings');
   /** setting key -> {apply(value), node} so an echo can find its row. */
   const rows = new Map();
   const flatBag = (src.settings && typeof src.settings === 'object') ? src.settings : {};
+  /** Host-frame unsubscribers (the media counter's two pushes). destroy() runs them. */
+  const offs = [];
+
+  /* MEDIA-CONTRACT §1. STRICTLY true. `undefined` is the app, and the app must
+   * see this page exactly as it saw it yesterday. */
+  const mediaControls = flatBag.mediaControls === true;
 
   function send(key, value) {
     if (!bridge || typeof bridge.send !== 'function') return;
@@ -350,10 +397,17 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
       'Owned by the app, shown here so you know what the school is working with. '
       + 'Change these in the app’s own settings.'));
 
-    const source = src.offlineMode ? 'local only (offline mode)'
-      : (src.remoteMediaEnabled ? 'local + online' : 'local only');
-    g.appendChild(readonlyRow('Asset source', source,
-      'Online media follows the app’s media source and consent.'));
+    /* THE SWAP (MEDIA-CONTRACT §9). On the app this row is the only thing the
+     * page says about media, and it is read-only because the app owns the
+     * setting. On the web the shim owns it and hands the player the real
+     * controls, so a row pointing at a settings screen that does not exist
+     * there steps aside for the Media group rather than doubling it. */
+    if (!mediaControls) {
+      const source = src.offlineMode ? 'local only (offline mode)'
+        : (src.remoteMediaEnabled ? 'local + online' : 'local only');
+      g.appendChild(readonlyRow('Asset source', source,
+        'Online media follows the app’s media source and consent.'));
+    }
     if (src.remoteMediaEnabled) {
       g.appendChild(readonlyRow('Online media share', pct(src.remoteMediaRatio)));
     }
@@ -427,7 +481,7 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     gt.appendChild(switchRow({
       key: SETTING_KEYS.hideTutorial,
       label: 'Skip class tutorials',
-      hint: 'Classes still explain themselves once per grade tier.',
+      hint: 'Skips the class rules sheet, even the first time you meet a class.',
       value: !!src.hideTutorial,
     }));
 
@@ -462,6 +516,443 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     frag.appendChild(g); frag.appendChild(gc); frag.appendChild(ga); frag.appendChild(gt);
     frag.appendChild(gp);
     return frag;
+  }
+
+  /* ---------------------- 2b. THE MEDIA COUNTER (web only) --------------
+   * MEDIA-CONTRACT v1. Everything below is dead code on the app: `build()`
+   * only calls buildMedia() when `mediaControls` is strictly true, so no
+   * `media.*` frame can ever leave a WebView2 window.
+   *
+   * THE LAW OF THIS GROUP IS TRAP 1, and it bites harder here than anywhere
+   * else on the page because the host REFUSES some of what it is asked. A
+   * niche list that sanitizes to nothing is refused outright and the echo
+   * carries the list the host still holds, so a control that painted itself
+   * on the click would end up showing a state the host never stored. So every
+   * control here posts, wears `pending`, and repaints from the echo.
+   *
+   * The two pushes (`library`, `local-media`) ride `bridge.on`, which is the
+   * same loose seam provider/remote.js's `subscribe` wraps and is
+   * multi-subscriber by design (trap 11) - listening here never steals the
+   * provider's own `library` frames.
+   * -------------------------------------------------------------------- */
+
+  /** Keep only ids the catalog actually knows, deduped, in the order given. */
+  function cleanNiches(list, known) {
+    const out = [];
+    const seen = new Set();
+    for (const v of (Array.isArray(list) ? list : [])) {
+      const id = String(v == null ? '' : v);
+      if (!id || seen.has(id)) continue;
+      if (known && known.length && known.indexOf(id) < 0) continue;
+      seen.add(id);
+      out.push(id);
+    }
+    return out;
+  }
+
+  /** The library, as PLAIN rows we may write `selected` on (the provider's are
+   *  frozen, and its sanitizer predates the field). `selected` absent reads as
+   *  in play: a host with no opinion about a sub is not hiding it. */
+  function cleanLibrary(list) {
+    const out = [];
+    const seen = new Set();
+    for (const e of (Array.isArray(list) ? list : [])) {
+      const name = typeof e === 'string' ? e : (e && typeof e.name === 'string' ? e.name : '');
+      if (!name) continue;
+      const k = name.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const o = (e && typeof e === 'object') ? e : {};
+      out.push({
+        name,
+        ok: o.ok != null ? !!o.ok : true,
+        videoCount: Math.max(0, o.videoCount | 0),
+        stillOnly: !!o.stillOnly,
+        selected: o.selected != null ? !!o.selected : true,
+      });
+    }
+    return out;
+  }
+
+  /** `{images, videos, skipped, active}`, whatever the frame actually carried. */
+  function cleanPile(m) {
+    const o = (m && typeof m === 'object') ? m : {};
+    const images = Math.max(0, o.images | 0);
+    const videos = Math.max(0, o.videos | 0);
+    return {
+      images,
+      videos,
+      skipped: Math.max(0, o.skipped | 0),
+      active: o.active != null ? !!o.active : (images + videos > 0),
+    };
+  }
+
+  /** Subscribe to a host frame for as long as this page is up. */
+  function listen(type, fn) {
+    if (!bridge || typeof bridge.on !== 'function') return;
+    try {
+      const off = bridge.on(type, fn);
+      if (typeof off === 'function') offs.push(off);
+    } catch (e) { say('media: no subscription for ' + type); }
+  }
+
+  /** The label + hint + trap-1 marker every media row wears. */
+  function mediaLabel(text, hint) {
+    const lab = el('span', 'arc-rowlabel', text);
+    if (hint) lab.appendChild(el('span', 'arc-hint', hint));
+    lab.appendChild(el('span', 'arc-media-wait', t('media_pending', 'writing it down')));
+    return lab;
+  }
+
+  /* --- the niches ------------------------------------------------------- */
+  function nicheRow() {
+    const catalog = Array.isArray(flatBag.remoteCatalog) ? flatBag.remoteCatalog : [];
+    const known = catalog.map((c) => String((c && c.id) || '')).filter(Boolean);
+    const row = el('div', 'arc-row arc-media-row');
+    row.appendChild(mediaLabel(
+      t('media_niches_head', 'What we pull'),
+      t('media_niches_hint', 'Tick as many as you like. The desk hangs on to the last one, since an'
+        + ' empty board leaves the rooms with nothing to work with.')));
+    const box = el('div', 'arc-media-chips');
+    const note = el('p', 'arc-note arc-media-say', '');
+    row.appendChild(box);
+    row.appendChild(note);
+
+    let selected = cleanNiches(flatBag.niches, known);
+    let asked = null;              // what the last click posted, so a refusal is readable
+
+    function paint() {
+      box.textContent = '';
+      if (!catalog.length) {
+        box.appendChild(el('p', 'arc-note', t('media_niches_none', 'The desk has no list to offer tonight.')));
+        return;
+      }
+      for (const c of catalog) {
+        const id = String((c && c.id) || '');
+        if (!id) continue;
+        const on = selected.indexOf(id) >= 0;
+        const label = el('label', 'arc-check' + (on ? ' on' : ''));
+        const input = el('input');
+        input.type = 'checkbox';
+        input.checked = on;
+        input.addEventListener('change', () => {
+          const next = input.checked ? selected.concat([id]) : selected.filter((x) => x !== id);
+          asked = next.slice();
+          note.textContent = '';
+          row.classList.add('pending');
+          // TRAP 1: the box may stand where the thumb left it, but `selected`
+          // does not move until applyEcho repaints from what is STORED.
+          send(MEDIA_KEYS.niches, next);
+        });
+        label.appendChild(input);
+        label.appendChild(el('span', null, String((c && c.label) || id)));
+        box.appendChild(label);
+      }
+    }
+    paint();
+
+    rows.set(MEDIA_KEYS.niches, {
+      node: row,
+      apply(v) {
+        const stored = cleanNiches(v, known);
+        /* THE REFUSAL (contract §3): a list that sanitizes to empty is refused
+         * and the host echoes what it still holds, so the box the player just
+         * cleared comes straight back up. Say why, or it reads as a dead tap. */
+        const refused = !!asked && asked.length === 0 && stored.length > 0;
+        selected = stored;
+        asked = null;
+        // The page is rebuilt on every visit, so bank the host's answer or a
+        // second trip through the front office repaints yesterday's ticks.
+        flatBag.niches = stored.slice();
+        paint();
+        row.classList.remove('pending');
+        note.textContent = refused
+          ? t('media_niches_snapback', 'That was the last one ticked, so it went straight back up.'
+            + ' Tick another and then you can drop it.')
+          : '';
+      },
+    });
+    return row;
+  }
+
+  /* --- the sub library -------------------------------------------------- */
+  function libraryRow() {
+    const canProbe = !!(assets && typeof assets.probeSub === 'function');
+    const canRemove = !!(assets && typeof assets.removeLibrarySub === 'function');
+    const row = el('div', 'arc-row arc-media-row');
+    row.appendChild(mediaLabel(
+      t('media_lib_head', 'Subs on your list'),
+      t('media_lib_hint', 'Untick one to sit it out for a while, or use the X and it comes off'
+        + ' the list everywhere.')));
+    const list = el('div', 'arc-media-lib');
+    const note = el('p', 'arc-note arc-media-say', '');
+    row.appendChild(list);
+
+    let library = cleanLibrary(flatBag.subLibrary);
+
+    function paint() {
+      list.textContent = '';
+      if (!library.length) {
+        list.appendChild(el('p', 'arc-note',
+          t('media_lib_empty', 'Nothing on your list yet, so type a name below and we will go'
+            + ' and see if it is really there.')));
+        return;
+      }
+      for (const r of library) {
+        const line = el('div', 'arc-media-libline');
+        const label = el('label', 'arc-check' + (r.selected ? ' on' : ''));
+        const input = el('input');
+        input.type = 'checkbox';
+        input.checked = !!r.selected;
+        input.disabled = r.ok === false;
+        input.addEventListener('change', () => {
+          row.classList.add('pending');
+          // Trap 1 again: the host flips the row and pushes a fresh `library`.
+          send(MEDIA_KEYS.librarySelect, { name: r.name, selected: !!input.checked });
+        });
+        label.appendChild(input);
+        label.appendChild(el('span', null, 'r/' + r.name));
+        line.appendChild(label);
+        const meta = r.stillOnly ? t('media_lib_stills', 'pictures only')
+          : (r.videoCount ? r.videoCount + ' ' + t('media_lib_clips', 'clips') : '');
+        if (meta) line.appendChild(el('span', 'arc-media-meta', meta));
+        if (canRemove) {
+          const x = el('button', 'arc-media-x', '✕');
+          x.type = 'button';
+          x.setAttribute('title', t('media_lib_remove', 'Take it off the list'));
+          x.setAttribute('aria-label', t('media_lib_remove', 'Take it off the list') + ' r/' + r.name);
+          x.addEventListener('click', () => {
+            row.classList.add('pending');
+            /* The provider drops its own copy optimistically; THIS list waits
+             * for the host's `library` push, which is the only thing that
+             * moves it. A pill that vanishes on a write the host refused is
+             * exactly the drift trap 1 exists to stop. */
+            try { Promise.resolve(assets.removeLibrarySub(r.name)).catch(() => {}); }
+            catch (e) { say('media: removeLibrarySub threw'); }
+          });
+          line.appendChild(x);
+        }
+        list.appendChild(line);
+      }
+    }
+    paint();
+
+    /* THE ADD BOX. `probe-sub` is the existing frame and the provider owns the
+     * round trip, its 15s backstop included, so there is no second probe here. */
+    if (canProbe) {
+      const add = el('div', 'arc-media-add');
+      const input = el('input');
+      input.type = 'text';
+      input.placeholder = t('media_lib_add_ph', 'name of a sub');
+      input.setAttribute('aria-label', t('media_lib_add_head', 'Add one'));
+      const btn = el('button', 'btn ghost', t('media_lib_add_btn', 'Add'));
+      btn.type = 'button';
+      let busy = false;
+
+      const submit = () => {
+        if (busy) return;
+        const name = String(input.value || '').trim().replace(/^\/?r\//i, '').trim();
+        if (!name) return;
+        if (library.some((r) => r.name.toLowerCase() === name.toLowerCase())) {
+          note.textContent = 'r/' + name + ' ' + t('media_probe_dupe', 'is already on your list.');
+          return;
+        }
+        busy = true;
+        btn.disabled = true;
+        note.textContent = t('media_probe_checking', 'Having a look for') + ' r/' + name;
+        let p = null;
+        try { p = assets.probeSub(name); } catch (e) { p = null; }
+        Promise.resolve(p).then((res) => {
+          busy = false;
+          btn.disabled = false;
+          const answered = String((res && res.name) || name);
+          if (res && res.ok) {
+            input.value = '';
+            note.textContent = 'r/' + answered + ' ' + t('media_probe_ok', 'is on your list now.');
+            // The row itself arrives on the host's `library` push, never here.
+          } else {
+            note.textContent = 'r/' + answered + ' '
+              + t('media_probe_missing', 'came back empty, so give the spelling another go.');
+          }
+        }).catch(() => {
+          busy = false;
+          btn.disabled = false;
+          note.textContent = 'r/' + name + ' '
+            + t('media_probe_missing', 'came back empty, so give the spelling another go.');
+        });
+      };
+
+      btn.addEventListener('click', submit);
+      input.addEventListener('keydown', (ev) => {
+        if (!ev || ev.key !== 'Enter') return;
+        if (typeof ev.preventDefault === 'function') ev.preventDefault();
+        submit();
+      });
+      add.appendChild(input);
+      add.appendChild(btn);
+      row.appendChild(add);
+    }
+    row.appendChild(note);
+
+    rows.set(MEDIA_KEYS.librarySelect, {
+      node: row,
+      apply(v) {
+        row.classList.remove('pending');
+        /* `null` = the host did not know the name, so nothing moved and the
+         * repaint below puts the tick back where the host still has it. */
+        if (v && typeof v === 'object' && typeof v.name === 'string') {
+          const k = v.name.toLowerCase();
+          for (const r of library) if (r.name.toLowerCase() === k) r.selected = !!v.selected;
+        }
+        paint();
+      },
+    });
+
+    /* THE PUSH IS THE TRUTH. Any surface can cause one (this box, SORT's door,
+     * the shim's own housekeeping), so the list only ever repaints from here. */
+    listen('library', (m) => {
+      const payload = (m && m.detail) || m;
+      if (!payload || !Array.isArray(payload.subLibrary)) return;
+      library = cleanLibrary(payload.subLibrary);
+      flatBag.subLibrary = payload.subLibrary;
+      row.classList.remove('pending');
+      paint();
+    });
+
+    return row;
+  }
+
+  /* --- the player's own pile -------------------------------------------- */
+  function localRow() {
+    const row = el('div', 'arc-row arc-media-row');
+    row.appendChild(mediaLabel(
+      t('media_local_head', 'Your own media'),
+      t('media_local_hint', 'Hand over a folder, a zip, or a few things off your camera roll, and'
+        + ' the rooms will deal them out like anything else. It stays on this device and it goes'
+        + ' when you close the page.')));
+    const btns = el('div', 'arc-media-btns');
+    const counts = el('p', 'arc-note arc-media-counts', '');
+    const bar = el('div', 'arc-media-bar');
+    const fill = el('i');
+    const phase = el('span', 'arc-media-phase', '');
+    bar.appendChild(fill);
+    bar.hidden = true;
+    row.appendChild(btns);
+    row.appendChild(counts);
+    row.appendChild(bar);
+    row.appendChild(phase);
+
+    let pile = cleanPile(flatBag.localMedia);
+
+    function paintCounts() {
+      if (!pile.active) {
+        counts.textContent = t('media_local_empty', 'Nothing of yours in the pile yet.');
+        return;
+      }
+      let line = String(t('media_local_counts', '{images} pictures and {videos} clips in the pile'))
+        .replace('{images}', String(pile.images))
+        .replace('{videos}', String(pile.videos));
+      if (pile.skipped) {
+        line += ', ' + String(t('media_local_skipped', '{n} we could not read'))
+          .replace('{n}', String(pile.skipped));
+      }
+      counts.textContent = line;
+    }
+    paintCounts();
+
+    /* THE THREE PICKERS. `what` is the contract's own string, verbatim. */
+    const PICKERS = [
+      ['folder', 'media_local_folder', 'A folder'],
+      ['zip', 'media_local_zip', 'A zip'],
+      ['gallery', 'media_local_gallery', 'Some files'],
+    ];
+    for (const spec of PICKERS) {
+      const btn = el('button', 'btn ghost', t(spec[1], spec[2]));
+      btn.type = 'button';
+      btn.addEventListener('click', () => {
+        /* THE GESTURE RULE (MEDIA-CONTRACT §6) AND IT IS THE WHOLE REASON THIS
+         * LINE IS FIRST. A file picker opens only while the browser's transient
+         * user activation is still standing, and the shim's transport delivers
+         * postMessage SYNCHRONOUSLY into its router - so the frame must be
+         * posted from inside this handler with nothing awaited, promised or
+         * timed out in front of it. Put ANY `await` above this line and the
+         * picker silently never opens, with no error anywhere to read. */
+        send(MEDIA_KEYS.pickLocal, spec[0]);
+        row.classList.add('pending');
+        counts.textContent = t('media_local_waiting', 'Waiting on your picker.');
+      });
+      btns.appendChild(btn);
+    }
+
+    const clear = el('button', 'btn ghost', t('media_local_clear', 'Clear the pile'));
+    clear.type = 'button';
+    clear.addEventListener('click', () => {
+      send(MEDIA_KEYS.clearLocal, true);
+      row.classList.add('pending');
+    });
+    btns.appendChild(clear);
+
+    /* Both actions store nothing and echo `null`; the pile itself arrives on
+     * the `local-media` push, so the echo only takes the marker down. */
+    const clearPending = { node: row, apply() { row.classList.remove('pending'); } };
+    rows.set(MEDIA_KEYS.pickLocal, clearPending);
+    rows.set(MEDIA_KEYS.clearLocal, clearPending);
+
+    listen('local-media', (m) => {
+      const payload = (m && m.detail) || m;
+      if (!payload) return;
+      pile = cleanPile(payload);
+      flatBag.localMedia = { images: pile.images, videos: pile.videos, skipped: pile.skipped, active: pile.active };
+      bar.hidden = true;
+      phase.textContent = '';
+      row.classList.remove('pending');
+      paintCounts();
+    });
+
+    /* Zip ingest only, and it may be ignored - a bar is just kinder on a phone. */
+    listen('local-media-progress', (m) => {
+      const payload = (m && m.detail) || m;
+      if (!payload) return;
+      const n = Number(payload.frac);
+      const frac = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
+      bar.hidden = false;
+      fill.style.width = Math.round(frac * 100) + '%';
+      phase.textContent = payload.phase === 'unpacking'
+        ? t('media_progress_unpacking', 'Unpacking')
+        : t('media_progress_reading', 'Reading');
+    });
+
+    return row;
+  }
+
+  /** The group itself. Only ever called behind the strict flag. */
+  function buildMedia() {
+    const g = group(t('media_head', 'Media'));
+    g.appendChild(el('p', 'arc-note',
+      t('media_note', 'This is the counter where you say what the rooms are allowed to pull from.'
+        + ' Anything you change is in play from your next class on, and whatever is running right'
+        + ' now keeps the pile it already has.')));
+
+    g.appendChild(switchRow({
+      key: MEDIA_KEYS.remoteConsent,
+      label: t('media_consent_label', 'Pull from online'),
+      hint: t('media_consent_hint', 'With this off nothing goes out to the network at all, and the'
+        + ' rooms run on whatever you have handed over yourself.'),
+      value: !!flatBag.remoteConsent,
+    }));
+    /* switchRow is the shared builder and stays that way; the media counter
+     * needs one extra thing from the echo, which is to bank the host's answer
+     * into the local view of init.settings so a second visit paints it. */
+    const consent = rows.get(MEDIA_KEYS.remoteConsent);
+    if (consent) {
+      const base = consent.apply;
+      consent.apply = (v) => { flatBag.remoteConsent = !!v; base(v); };
+    }
+
+    g.appendChild(nicheRow());
+    g.appendChild(libraryRow());
+    g.appendChild(localRow());
+    return g;
   }
 
   /* ---------------------- 3. per-game tier ------------------------------ */
@@ -547,7 +1038,7 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     const close = () => { try { if (onClose) onClose(); } catch (e) { /* noop */ } };
 
     /* THE SPLIT. A scoped page shows the one game the player is actually in;
-     * the full list stays the campus/Registrar's. Scope resolves ONCE, here:
+     * the full list stays the campus/Front Office's. Scope resolves ONCE, here:
      * a gameKey that matches nothing (a retired class, a typo'd caller) falls
      * back to the full sheet rather than silently hiding every knob. */
     const list = Array.isArray(games) ? games : [];
@@ -570,6 +1061,10 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     root.appendChild(head);
 
     root.appendChild(buildCeilings());
+    /* The Media group takes the place the read-only Asset source row held,
+     * for the same reason it sits there: it is the first thing a player asks
+     * about, and it is not one of the global CEILINGS below. Strict flag. */
+    if (mediaControls) root.appendChild(buildMedia());
     root.appendChild(buildGlobal());
     for (const entry of shown) {
       if (!entry || !entry.key) continue;
@@ -633,7 +1128,11 @@ export function createSettingsPage({ init, bridge, games, keybinds, onClose, log
     noteEcho(key, value) {
       if (typeof key === 'string' && key && !isGlobalSettingKey(key)) flatBag[key] = value;
     },
-    destroy() { rows.clear(); root.remove(); },
+    destroy() {
+      for (const off of offs.splice(0)) { try { off(); } catch (e) { /* noop */ } }
+      rows.clear();
+      root.remove();
+    },
   };
 }
 

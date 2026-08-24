@@ -10,7 +10,7 @@
  *                   which is exactly what the playbook wants the card to
  *                   teach. (Law 1 of index.js is untouched: no mutation, so
  *                   no settled-board window is even consumed.)
- *   DEJA RE-DEAL    the native signature. Once a class, at a seeded settled
+ *   DEJA RE-DEAL    the native signature. Once a BOARD, at a seeded settled
  *                   window, the machine re-shows the whole board - a second
  *                   preview, free - except from tier 3 exactly ONE unmatched
  *                   card wears a LIE face borrowed from another pair. Flip the
@@ -45,6 +45,14 @@
  * lost-and-found's fallbackSwapPair does - deterministic given board state.
  * ==========================================================================*/
 
+/* ONE DECK PER BOARD (class-length wave 2026-08-24). A 300s class is a RUN of
+ * boards, and every card in this file is a once-per-instance card (one fake
+ * shuffle, one re-deal, N flickers). So `index.js startBoard()` destroys this
+ * deck and mints a fresh one for every board, seeded on the BOARD seed
+ * (`<classSeed>|b<N>`) and dealt at the escalation ladder's `deckTier` rather
+ * than the player's raw tier. Nothing in here changed to make that work - the
+ * module was already a pure per-instance dealer - but a reader who assumes one
+ * deck per CLASS will mis-read every window number in it. */
 import { makeRng } from '../../core/rng.js';
 
 export const DV_TRICKSTER = Object.freeze({
@@ -55,7 +63,9 @@ export const DV_TRICKSTER = Object.freeze({
   /** How far toward each other the feint slides (fraction of the gap). */
   SHUFFLE_REACH: 0.58,
 
-  /** Re-deal: from tier 2; the lie face from tier 3. Board must be mid-game. */
+  /** Re-deal: from tier 2; the lie face from tier 3. Board must be mid-game.
+   *  These windows are counted in THIS board's settled windows, not the
+   *  class's - the counter resets with every fresh deal. */
   REDEAL_FROM_TIER: 2,
   LIE_FROM_TIER: 3,
   /** Seeded settled-window slot for the re-deal (min + spread). */

@@ -55,6 +55,11 @@
  *               awayCountAtLeast:N the tabAway/suspend escalation count
  *               hoursAtLeast:N     lifetime msVisible, in hours
  *               flingsAtLeast:N / bubblesAtLeast:N   the widget's own counters
+ * perception    calendarDaysAtLeast:N  calendar days since her first day (the
+ *               anniversary gate; `days` only counts days PLAYED)
+ *               hidesAtLeast:N     lifetime x-dismissals
+ *               zoneCountAtLeast:N / zoneRowIs:top|mid|bottom   spot memory,
+ *               off the dropAt payload (zone, zoneRow, zoneCount)
  *
  * FREQUENCY FIELDS honoured on a pool or a line: odds, ceremony, priority,
  * noRepeat, cooldownMs, maxPerSession, maxPerClass, oncePerStreak, onceEver,
@@ -239,6 +244,11 @@ export function createVoice(o) {
       punchesToday: intOf(b.punchesToday),
       dayBest: strOf(b.dayBest),
       prevDayBest: strOf(b.prevDayBest),
+      /* The CALENDAR anchor (perception wave): the local day EMI first spoke on
+       * this install, for `calendarDaysAtLeast`. `days` counts days PLAYED and
+       * cannot answer "a year since we met"; this can. A pre-wave blob gets it
+       * stamped on its next boot, which starts the clock late and never early. */
+      firstDayKey: strOf(b.firstDayKey),
     };
   }
 
@@ -457,6 +467,8 @@ export function createVoice(o) {
 
   function rollDay() {
     const key = dayKeyOf(new Date(now()));
+    // Above the same-day return: an existing blob mid-day still gets anchored.
+    if (!blob.firstDayKey) { blob.firstDayKey = key; touch(); }
     if (blob.lastDayKey === key) return;
     if (blob.lastDayKey) S.absenceDays = daysBetween(blob.lastDayKey, key);
     blob.lastDayKey = key;
@@ -606,6 +618,15 @@ export function createVoice(o) {
       const r = GRADE_RANK[blob.prevDayBest] || 0;
       return r > 0 && r <= GRADE_RANK.c;
     },
+    /* --- the perception wave (2026-08-24) ------------------------------- */
+    /** CALENDAR days since the first day she ever spoke - `days` counts days
+     *  played, which can never reach an anniversary honestly. */
+    calendarDaysAtLeast: (a) => !!blob.firstDayKey
+      && daysBetween(blob.firstDayKey, dayKeyOf(new Date(now()))) >= (Number(a) || 0),
+    hidesAtLeast: (a, c) => c.hides >= (Number(a) || 0),
+    /** Spot memory, read straight off the dropAt payload the widget builds. */
+    zoneCountAtLeast: (a, c) => Math.round(Number(c.p.zoneCount) || 0) >= (Number(a) || 0),
+    zoneRowIs: (a, c) => !!c.p.zoneRow && String(c.p.zoneRow) === String(a),
   };
 
   function holds(when, c) {
@@ -883,7 +904,7 @@ export function createVoice(o) {
    * DOM double, so the whole thing is a try/catch that no-ops clean. The campus
    * paints class rooms as `.campus-room`, sealed wings as `.campus-room.locked`
    * and every office as `.campus-room.facility` - and because Records is one of
-   * those offices and nothing in the markup tells it from the Registrar, a
+   * those offices and nothing in the markup tells it from the Front Office, a
    * FACILITY reports as geofenced rather than risking rec 3. */
   function hitTest(x, y) {
     try {
@@ -923,6 +944,7 @@ export function createVoice(o) {
       pets: Number(st.pets) || 0,
       flings: Number(st.flings) || 0,
       bubbles: Number(st.bubblesSeen) || 0,
+      hides: Number(st.hides) || 0,
       hours: (Number(st.msVisible) || 0) / 3600000,
       gradeUp: false,
     };
@@ -1018,6 +1040,28 @@ export function createVoice(o) {
       return blob.labSeen;
     },
     get labSeen() { return blob.labSeen; },
+
+    /* ---- THE FIELD-TRIP SEAM (wave W2a, 2026-08-24) --------------------
+     * A trip is not a moment: the line is landed by `widget.apparate`, not by
+     * the ladder in this file, so `emi/fieldtrips.js` cannot spend a one-shot
+     * through `fireBeat`. It needs the same LEDGER though - one POI, one
+     * visit, for ever - and minting a second seen-map beside this one is how
+     * two ledgers disagree. So the trips module reads and writes THIS one, by
+     * these three members and nothing else. `sessions` is exposed for the same
+     * reason: `state()` answers a deep JSON copy of the whole blob, which is a
+     * silly price for one integer a scheduler asks for on an idle edge. */
+    /** Has this id already fired? (Beat ids and POI ids share the namespace.) */
+    hasSeen(id) { return !!blob.seen[String(id)]; },
+    /** Bank one. Returns false when it was already banked - the caller's guard. */
+    markSeen(id) {
+      const k = String(id);
+      if (!k || blob.seen[k]) return false;
+      blob.seen[k] = true;
+      touch();
+      return true;
+    },
+    /** How many times EMI has been mounted, ever. The `sessionAtLeast` spine. */
+    get sessions() { return blob.sessions; },
     /** Test seams. A suite that rolls dice must not flake. */
     setRng(fn) { if (typeof fn === 'function') rng = fn; },
     setClock(fn) { if (typeof fn === 'function') clock = fn; },

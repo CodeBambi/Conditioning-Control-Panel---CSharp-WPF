@@ -26,6 +26,8 @@ export { DIALS, HINT_LINE, STORE_KEY, sayHoldMs, SAY_LEAD_MS };
 
 let singleton = null;
 let voice = null;
+/** emi/fieldtrips.js, once the voice it reads has landed. Null is normal. */
+let trips = null;
 let voicePending = null;
 /** () => bool: can EMI actually PERFORM right now (is her face attached). */
 let voiceGate = null;
@@ -52,6 +54,9 @@ export function getEmi() { return singleton; }
 /** The voice (emi/voice.js), once it has loaded. Null is the normal answer. */
 export function getVoice() { return voice; }
 
+/** The field-trip scheduler (emi/fieldtrips.js), once it has loaded. */
+export function getTrips() { return trips; }
+
 /**
  * ASK THE VOICE, SAFELY. `moments.js` routes every moment through here before
  * it reaches the wordless table.
@@ -65,7 +70,19 @@ export function getVoice() { return voice; }
  */
 export function voiceMoment(name, payload) {
   try {
-    if (voice && voice.ready && (!voiceGate || voiceGate())) return !!voice.onMoment(name, payload);
+    if (voice && voice.ready && (!voiceGate || voiceGate())) {
+      if (voice.onMoment(name, payload)) return true;
+      /* ...AND THEN THE FIELD TRIP (wave W2a). Asked LAST and only about the
+       * moments it declares, so a night with a line in it is never also a night
+       * she walks off in the middle of one. A launched trip answers true the
+       * same way a spoken line does: the wordless table stands down, because
+       * EMI is not there to make a face - she is on her way across the quad.
+       * The trips module is asked through the same wrapper the voice is, so a
+       * scheduler that throws can no more reach a screen transition than a
+       * decision engine that does. */
+      if (trips) return !!trips.offer(name, payload);
+      return false;
+    }
     if (singleton) voicePending = { name, payload, when: Date.now() };
   } catch (e) { /* a mascot may never break a screen transition */ }
   return false;
@@ -81,12 +98,16 @@ export function voiceMoment(name, payload) {
  * @param {Function=} o.log
  * @returns {Object|null} the controller, or null when there is nothing to mount
  */
-export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
+export function mountEmi({ layer, store, toast, enabled = true, log, assets, settings } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   if (!layer) return null;
   if (singleton) return singleton;
 
-  const widget = createWidget({ root: layer, store, toast, log: say });
+  /* OFF CHANNELS (W3): `assets` is the shell's provider handle and `settings`
+   * is `init.settings`. NOW WATCHING is the only thing in EMI that wants
+   * either, and both are optional - a host that hands neither simply plans that
+   * channel out of the wheel (never a stub, never a black glass). */
+  const widget = createWidget({ root: layer, store, toast, log: say, assets, settings });
   if (!widget) return null;
 
   /* THE OPENING BEAT LANDS LATE OR NOT AT ALL. The renderer is one dynamic
@@ -98,6 +119,8 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
 
   const PENDING_GRACE_MS = 2500;
   let pending = null;
+  /** emi/vox.js, once it lands. Null is a perfectly good answer (a silent EMI). */
+  let vox = null;
   function remember(fn) { if (!widget.hasFace()) pending = { fn: fn, when: Date.now() }; }
 
   /* THE RENDERER, LATE AND OPTIONAL. Three modules, one failure mode: EMI keeps
@@ -106,8 +129,16 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
     import('./face.js').catch((e) => { say('emi: face.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
     import('./chains.js').catch((e) => { say('emi: chains.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
     import('./fx.js').catch((e) => { say('emi: fx.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
-  ]).then(([f, c, x]) => {
-    try { widget.attach({ face: f, chains: c, fx: x }); }
+    /* HER VOICE, on the same terms as her face. `vox.js` owns no audio node -
+     * it asks shell/audio.js for blips - so a broken one costs the babble and
+     * nothing else: the bubble, the cadence and the whole wordless table stand. */
+    import('./vox.js').catch((e) => { say('emi: vox.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
+  ]).then(([f, c, x, v]) => {
+    if (v && typeof v.createVox === 'function') {
+      try { vox = v.createVox({ log: say }); }
+      catch (e) { vox = null; say('emi: createVox threw - ' + ((e && e.message) || e)); }
+    }
+    try { widget.attach({ face: f, chains: c, fx: x, vox }); }
     catch (e) { say('emi: attach threw - ' + ((e && e.message) || e)); }
     const p = pending;
     pending = null;
@@ -208,15 +239,36 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
     /** Force the debounced persistence write out now (host shutdown, tests). */
     flush() { widget.flush(); },
 
+    /* ---- THE OFF CHANNELS (W3) ---------------------------------------- */
+    /**
+     * Lay a channel over her glass. `painter` is a painter object or one of the
+     * ids in `emi/channels.js` CHANNELS. Returns false when the deck refused,
+     * which is the answer most of the time and is never an error.
+     */
+    screenTakeover(painter, opts) { return widget.screenTakeover(painter, opts); },
+    /** The deck (emi/takeover.js), once it has loaded. Test/debug handle only. */
+    get channels() { return widget.channels; },
+    /** A shell moment changed the screen's owner. moments.js is the one caller. */
+    noteMoment(name) { widget.noteMoment(name); },
+
     /** The decision engine, once it has loaded. A test/debug handle only. */
     get voice() { return voice; },
+    /** The field-trip scheduler (W2a), once it has loaded. Test/debug only. */
+    get trips() { return trips; },
     /** Debug: the one moment waiting on the voice + the face, by name. */
     get pendingMoment() { return voicePending ? voicePending.name : null; },
 
+    /** Her babble (emi/vox.js), once it has loaded. Test/debug handle only. */
+    get vox() { return vox; },
+
     destroy() {
       try { widget.destroy(); } catch (e) { /* noop */ }
+      try { if (trips) trips.destroy(); } catch (e) { /* noop */ }
       try { if (voice) voice.destroy(); } catch (e) { /* noop */ }
+      try { if (vox) vox.destroy(); } catch (e) { /* noop */ }
+      vox = null;
       voice = null;
+      trips = null;
       voicePending = null;
       voiceGate = null;
       if (singleton === api) singleton = null;
@@ -245,6 +297,22 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
       log: say,
     });
     flushVoice();
+    /* THE FIELD TRIPS, ONE MORE STEP OUT (wave W2a). Loaded after the voice
+     * because it reads the voice's session counter and writes the voice's seen
+     * ledger, and optionally for the same reason everything else in this file
+     * is optional: a broken scheduler costs EMI one rare delight, never her
+     * face, her verbs or the shell's boot. */
+    import('./fieldtrips.js').then((f) => {
+      if (singleton !== api || !f || typeof f.createFieldTrips !== 'function') return;
+      trips = f.createFieldTrips({
+        widget,
+        voice,
+        // The return beat rides the ordinary moment path, so story.js owns
+        // whether b28 is spent and this module never writes a story flag.
+        fire: (n, p) => voiceMoment(n, p),
+        log: say,
+      });
+    }).catch((e) => { say('emi: fieldtrips.js unavailable (' + ((e && e.message) || e) + ')'); });
   }).catch((e) => { say('emi: voice.js unavailable (' + ((e && e.message) || e) + ')'); });
 
   return api;

@@ -854,6 +854,24 @@ export function createCpTrickster(o) {
       if (washIsOn && !stopped && previewArmed && !isHalted()) playPreview();
     },
 
+    /**
+     * THE BANK (multi-board, 2026-08-24). The board under the lies has just
+     * been replaced, so any lie still on screen points at a tile that moved.
+     * Take them all off - but do NOT touch `deals`, `stopped` or the clock:
+     * the card schedule is the CLASS's (dealt against the bell), not the
+     * board's, and a re-deal is not the end of anything.
+     */
+    deal() {
+      if (!armed || destroyed) return;
+      previewArmed = null;
+      if (previewFold) { cancel(previewFold); previewFold = 0; }
+      if (previewTimer) { cancel(previewTimer); previewTimer = 0; }
+      if (previewClear) { cancel(previewClear); previewClear = 0; }
+      clearGhosts();
+      unmelt();
+      unghost();
+    },
+
     /** The class is over: no card may fire again, every lie comes off. */
     stop() {
       stopped = true;

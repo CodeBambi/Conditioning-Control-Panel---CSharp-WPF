@@ -96,9 +96,13 @@ games/registry.js  guarded allSettled registry + tier math + class_suspended stu
                    own family/meaty/flagship/timeBudgetSec, because the timetable
                    reads a suspended class's descriptor too
 games/<key>/index.js  one folder per game; games NEVER import each other
-  daily-trigger/   the daily word (homeroom, flagship)  - bank/board/ladder/words-*
-  lost-and-found/  the mosaic hunt (MEATY, flagship)    - board/grade/hud/util
-  deja-vu/         the pair memory                      - script (the swap plan)
+  daily-trigger/   the daily word (homeroom, flagship, CLOCKLESS - no seconds chip, no time bar;
+                   the ~1-min wordle is the ruled shape, trap 81) - bank/board/ladder/words-*
+  lost-and-found/  the mosaic hunt (MEATY, flagship, 300s; finds are PER-TIER 26/22/16/13
+                   via findsForTier, and every gate that was a count is now a rate - trap 83) - board/grade/hud/util
+  deja-vu/         the pair memory (300s, MULTI-BOARD:  - script (the swap plan)
+                   clear -> fresh seeded board (classSeed|bN) with one-notch escalation, bell = the
+                   only end and the NORMAL end, timeout auto-C removed - trap 82)
   impulse-control/ the Drop Tube (pop/withhold)         - lex/schedule/scoring/render/style/tube3d/tube2d
                    (seeded three.js chute, vendored r185 in ../vendor/; tube2d = no-WebGL ladder)
                    + the House Rules decks casino (THE FLOOR: bulb-ring marquee, chime ladder,
@@ -125,14 +129,14 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    TRACKABILITY INVARIANT: occlusion hides at most ONE link of a swap chain and every
                    occlusion carries a tell) / grade / lex MD_LEX; keybinds pick1..pick5; md_stake_mode
                    ask|bank|ride (greed scored UPWARD only, ride cap 5), md_shell_skin themed|minimal|contrast
-  sort/            the two-pile swipe (tracking, 120s)   - room 203, The Sorting Room, built
+  sort/            the two-pile swipe (tracking, 180s)   - room 201, The Sorting Room, built
                    on the Entrance Hall's west span after Misdirection's retirement (lot 2
                    gave the old parlour to the front office). Right = TARGET, left = NOISE, and
                    the piles are the PLAYER'S OWN NICHES, picked at a setup DOOR that runs
                    BEFORE the class clock (`manifest.setup` + `instance.setup()`, §5). Truth is
                    the `tag` the host stamped on the row, never pixels; the deck comes from
                    `ctx.assets.claimTagged` (§3), never `claim()`
-  echo/            the Simon ring (memory, 105s)          - sequence (PURE: warm start 3..6 off bestLen, decoy
+  echo/            the Simon ring (memory, 120s)          - sequence (PURE: warm start 3..6 off bestLen, decoy
                    plan from tier 2 telegraphed) / grade / lex EC_LEX; keybinds pad1..pad6; six pads always live,
                    the TIER restricts the alphabet; tones = engine audio_trigger 'pad' x pitch (+1 semitone per
                    link, cap 7); a fail is NOT the class (new sequences until the bell); Encore once, auto
@@ -160,9 +164,10 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    largest that wraps every dealt phrase into three lines AND spells every word
                    whole; measured with a hidden 100px RULER (`.g-ec-ruler`) because a centred word
                    box reports `scrollWidth === clientWidth` even while the word hangs out of it
-  instant-recall/  the vigil (recall, 120s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
+  instant-recall/  the vigil (recall, 180s, MEATY)        - vigil (PURE seeded script: stops w/ FINAL-STOP
                    GUARANTEE in the last 15s, density sawtooth, plants, templates LAST_WORD/EFFECT/STING/TWO,
-                   THE CADENCE (owner 2026-08-23, "about 5 rounds per minute"): 9-11 stops a 120s class at
+                   THE CADENCE (owner 2026-08-23, "about 5 rounds per minute"): a RATE, not a count -
+                   scaleStops holds every budget inside 4.4-5.6/min, so 180s deals 14-16 stops at
                    EVERY tier, ONE question each - tier moves the window (6/6/5/4s) and the template pool,
                    never the rate. MIN_GAP_MS is DERIVED, not tasted: window + VERDICT_MS + DEAL_BEAT_MS +
                    FRESH_MS + slop, so even a fully blanked stop leaves >= 4s of live wall, and seedDues
@@ -212,11 +217,12 @@ games/<key>/index.js  one folder per game; games NEVER import each other
                    Sub words are HELD, not brightened: `fire('sub_flash', {holdMs: SUB_HOLD_MS[tier]})` plus a
                    game-local plate on `.g-ir-stage .ae-sub-word` (the alpha is still the engine's clamped
                    channel); `CADENCE.subliminal.min` 1000 -> 1400 so two held words cannot overlap.
-  anomaly/         the odd-one-out grid (search, 90s)     - rounds (PURE: kinds/deltas at PERCEPTIBLE floors,
+  anomaly/         the odd-one-out grid (search, 300s)    - rounds (PURE: kinds/deltas at PERCEPTIBLE floors,
                    relocations cap 2/round, drift) / grade / lex AN_LEX; the odd index lives in CLOSURE ONLY -
                    never a DOM attr/class (suite asserts it); decks get a canMelt(i)/meltCandidates() oracle
                    and nothing else; an_kinds all|gentle
-  composure/       the sliding picture (puzzle, 120s, MEATY) - board (PURE, seeded SOLVABLE scramble w/ parity)
+  composure/       the sliding picture (puzzle, 300s, MEATY, MULTI-BOARD: a solve BANKS and
+                   re-deals seeded scrambles until the bell, trap 82) - board (PURE, seeded SOLVABLE scramble w/ parity)
                    / solver (PURE baseline: optimal 3x3 IDA*, 4x4/5x5 BFS over tracked-tiles+gap - the greedy
                    textbook solver deadlocked 1 board in 5) / grade (par from the solver) / lex CP_LEX;
                    manifest.peek TRUE (the shell's hold-to-reveal = A-cap); cp_mode timed|zen (zen ends
@@ -246,8 +252,39 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                holdMs). VERBATIM from the lock - re-time a chain there, not here.
                `glee` ((≧◡≦)) is the THREE-PETS / STREAK-STAMP beat; `love`
                ((｡♥‿♥｡)) is a different, rarer one. Do not swap them.
+  channels.js  THE OFF CHANNELS (W3): `SL_DIALS` + the eight painters + the
+               weighted wheel. DATA AND PAINT ONLY - no timer, no rAF, no DOM
+               node, no I/O, which is what makes the whole wave testable in
+               node against a fake 2d context. Every painter is
+               `{id, weight, cooldownMs, plan(ctx)->spec|null, prepare?,
+               start(g,spec), frame(g,spec,t), end(g,spec,reason), gag?, caught}`
+               and `g` is `{c, w:152, h:137, rm}` - face.js's own geometry.
+               CH1 pong / CH2 browsing / CH3 watching / CH4 reruns / CH5 shop
+               ride the wheel; CH6 wrong rides other channels' EXITS; CH7 saver
+               and CH8 offair are the DETERMINISTIC deep-idle pair. Every line
+               in a `caught` table is tagged `DRAFT: /emi-lines pass pending`.
+  takeover.js  `createDeck(...)` - `screenTakeover(painter, {ms})`, the blip,
+               the one rAF, the wheel timer, the five document listeners, the
+               caught arc (snap -> shiver -> offer -> reveal card -> afterglow)
+               and `createMediaBroker` (the wave's ONLY I/O). Traps 76-79.
   fx.js        showFx(host, kind) - hearts/sparks/tears/storm/bang as pixel glyphs.
+  vox.js       HER VOICE, "Blipese". createVox() -> {speak, tick, stop, destroy}
+               + the pure, harness-testable makeScore(text, mood) and the frozen
+               VOX_DIALS. It owns NO audio node (trap 18): it turns a line into a
+               SCORE of {atMs, pitch, gain} and fires one `arcademy-sfx` per blip
+               off its own setTimeout ladder, on the `voice` bus at level 0.4 -
+               deliberately under every game one-shot, and never with a `duck`.
+               Grain is per-SYLLABLE (vowel groups, 1..4); punctuation is prosody
+               (`?` lifts the sentence's last blips, cleanly and with no jitter;
+               `!` raises and hurries the whole line; `...` sags then rests); the
+               mood is the BODY FRAME FAMILY widget.js already resolved. Seeded
+               on the LINE TEXT via core/rng.js, so a line always sounds like
+               itself. Two ceilings, MAX_BLIPS 13 and BURST_MAX_MS 1400, and a
+               long line is compressed by giving up SYLLABLES - never by speeding
+               the gaps up, because the pace is the character. See trap 70.
+               Timbre lives in `shell/audio.js` SOUNDS: `emi_blip` / `emi_tick`.
   emi.css      the SKIN: .emi / .emi-body / .emi-screen (the locked glass rect) /
+               .emi-glass (THE SECOND CANVAS, the same rect, hidden at rest) /
                .emi-fx / .emi-bubble + the body moves (.breath .nod .shiver
                .bounce .thud .droop). Ships BOTH bundled fonts (fonts/*.woff2,
                OFL, licences beside them): Noto Sans Mono for the CANVAS face and
@@ -259,7 +296,8 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                exactly one thing to cancel and one place that knows a SAY is
                mid-line). It NEVER imports the renderer - face/chains/fx are
                injected through attach(), which is what keeps a broken face out
-               of the shell's boot path. DIALS at the top are the tunables.
+               of the shell's boot path (`vox` rides the same seam). DIALS at the
+               top are the tunables.
   index.js     mountEmi({layer, store, toast, enabled}) -> the ONE controller
                {emote, say, idle, hide, show, setEnabled, setWidth, stats, flush,
                destroy, el}. `toast` is the SHELL's toast, borrowed for exactly
@@ -275,7 +313,48 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                call site in shell.js is one unguarded line.
   widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
                x affordance, the edge dock, and the bubble's `.bubble-left` /
-               `.bubble-low` flips (right margin / top edge).
+               `.bubble-low` flips (right margin / top edge). Plus THE CRT
+               POWER-OFF (`emi-crt-off` / `emi-crt-on`, 200ms each, and the
+               `.crt-blank` frame between them) - the field trip's transition.
+  fieldtrips.js THE ONE AUTONOMOUS VERB (W2a, 2026-08-24): the POI registry and
+               the scheduler that decides she may use it. `widget.apparate()` is
+               HOW a trip happens; this is WHEN, and it is FIVE gates - never
+               before session 3, at most one a sitting, one visit per fixture
+               for ever (voice.js's own `seen` ledger via `hasSeen`/`markSeen`),
+               the right screen with the fixture actually measurable, and truly
+               idle. It owns NO timer and NO observer: it is a passive
+               `offer(name, payload)` that `index.js` calls when the voice has
+               declined a moment, and the only moment it answers to is
+               `idlePlayer` - which campus.js already fires on its attract
+               loop's own idle edge ("a mascot does not get a second idle
+               timer"). At rest the file measures nothing and costs nothing.
+               Six POIs, all campus scenery that `campus.update()` never
+               rebuilds; the Records door and every other `.facility` is OUT,
+               the same geofence voice.js keeps. The LINES are barks.js's
+               `FIELD_TRIPS` table, keyed by `lineKey`; a key with no row is a
+               POI that never travels.
+vn/          FIRST BELL: the once-ever opening, and the ONLY thing in this bundle
+             that is allowed to sit between the splash and the campus. Four
+             scenes, all first-run: s01 the gates (2 captions), s02 the
+             admissions desk (paper #1) ending in THE BOARD HANDOFF, s03 the
+             walk to Homeroom, m01 the second slip after the first-ever stamp.
+             Spec: `<Screenshots>/arcademy-vn-proposals/FIRST-BELL.md`. See
+             trap 76 - the safety laws are the feature.
+  index.js     createFirstBell({store, rows, firstNight, canInterrupt, onMoment,
+               reducedMotion, base, log}) -> {armed, splashDone, gateClass,
+               afterCeremony, seenState, bankAll, destroy}. Mints its OWN fixed
+               layer (z 58: over EMI, under the toast) - index.html grows no id.
+  scenes.js    PURE data: the step lists, the plate names and BOARD_ZONE
+               (x 25-60%, y 18-48% of the 16:9 frame, the panel SET-NOTES
+               reserved). A step is caption / paper / hold / fx / swap / board.
+  lex.js       VN_LEX + PAPERS. The two papers are stored as CLAUSE rows joined
+               with one space, so every row clears the 96-char mod-skin cap
+               (trap 26) while the joined paragraph stays verbatim.
+  style.js     the skin, injected as <style id="arc-vn-style"> the way a game
+               injects its own (styles.css is shell chrome only).
+  demo.html    standalone scene tester, no shell and no bridge; `?beat=<id>`
+               (gates|desk|board|walk|mail|coldopen|reduced, plus `&hold=1`)
+               jumps straight to one beat so it can be shot headlessly.
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
@@ -454,6 +533,27 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   a hide/show/destroy flushes immediately, and `pagehide` banks the last stretch of
   `msVisible`). A drag that wrote per frame would post sixty meta-commands a second across
   the bridge.
+- **`widget.apparate(getRect, {line, face, onDone})` IS THE WHOLE FIELD TRIP, and it
+  takes a GETTER** (W2a, 2026-08-24). Power-off where she stands -> reappear beside the
+  fixture -> land the line through the ordinary say path -> power off -> home. It returns
+  a cancel function, or **null** when she refused, and she refuses over every live verb
+  she has: mid-say, mid-chain, mid-press, mid-drag, dismissed, disabled, or already
+  travelling. So a caller needs no guard of its own - `emi/fieldtrips.js` deliberately
+  tests none of them twice.
+  - **The saved spot is never written.** A trip moves `el.style.left/top` and never
+    `fx0`/`fy0`, so "come home" is just `place()`. The ONE exception is the touch cancel
+    (`{stay:true}`), which commits the spot she was actually standing on - from the trip's
+    own bookkeeping, never from `getBoundingClientRect` (trap 74).
+  - **`widget.setPoiRects(fn)`** is the other half: a function answering the live rects of
+    every registered fixture. The widget calls it ONCE per drag - never per pointermove -
+    and uses it for exactly one thing, the carried `*_*`.
+  - **The return is a MOMENT, not a callback into the script.** A completed trip fires
+    `fieldTripHome {id, lineKey}` through the ordinary `voiceMoment` path, which is what
+    lets story.js own beat `b28_first_trip` and its once-ever flag. A CANCELLED trip fires
+    nothing - she did not get home, so there is nothing to be pleased about.
+  - **`voice.hasSeen(id)` / `voice.markSeen(id)` / `voice.sessions`** are the three members
+    the scheduler borrows, and they exist so there is ONE ledger. A POI id is in the same
+    namespace as a beat id; the `trip_` prefix is what keeps them apart.
 - **The shell's EMI seams are six one-liners and every one of them is `fireMoment(...)`.**
   `shell.js` mounts once (before the first `showBoard()`, so the opening `greet` has a face to
   wear) and fires at: the board being ARRIVED at (not repainted), `startClass`, the graded
@@ -462,6 +562,38 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   `showBoard({silent:true})` repaint is not an arrival, and `onPayout` re-rendering the report
   is not one either - without the `wasScreen` guards EMI greets you on every meta echo and
   talks over her own win face.
+- **THE OFF CHANNELS' MEDIA SEAM IS THE ONE THE CLASSES ALREADY USE** (W3,
+  2026-08-24). `shell.js` now hands `mountEmi` two extra things - `assets` (the
+  live `createAssets` handle) and `settings` (`init.settings`) - and NOW WATCHING
+  is the only thing in EMI that touches either. Four bright lines, and none of
+  them is negotiable:
+  - **Remote media goes through the HOST, over the bridge**, exactly as a class's
+    does: `emi/takeover.js createMediaBroker` calls `assets.claim({loops:2,
+    stills:2})` ONCE a sitting and `provider/remote.js` asks the host. The page
+    never talks to a server for media, and the host fetches Scrolller straight
+    from the player's own machine (`provider/remote.js` header, GROUND-RULES §8).
+  - **The gate is the app's, resolved host-side.**
+    `ArcademyHostService.RemoteMediaEnabled()` is literally
+    `MediaSource != "local" && HasRemoteMediaConsent`, projected as
+    `remoteMediaEnabled` / `remoteConsent` / `mediaSource` on `init.settings` and
+    read here through `assets.catalog()`. EMI re-derives nothing.
+  - **NO NSFW FILTERING OF REMOTE CONTENT, EVER.** There is no filter in
+    `takeover.js` and none may be added.
+  - **Consent off is the player's OWN library**, `init.settings.localAssets`
+    (trap 16's `{gifs, stills}`), titled with the filename. Neither available and
+    `watching.plan()` returns null: the channel is ABSENT from the wheel, never a
+    stub and never a black glass (trap 79).
+  - `canvasSafe` is deliberately **false** on that claim. The two-pool law exists
+    so a consumer that READS pixels never meets a tainted origin; the glass is
+    drawn to and never sampled, and the reveal card is a plain `<img>`. A
+    canvasSafe claim would have made the flagship channel local-only for every
+    consenting player.
+- **`fireMoment` now also tells EMI the SCREEN changed hands** (W3). One line in
+  `emi/moments.js` calls `emi.noteMoment(name)`, which maps `classStart` /
+  `suspend` / `tabAway` to "a class owns the screen" and `win` / `miss` / `fail` /
+  `resume` / `reportCard` / `greet` / `dayDone` back to "it does not". It is a leg
+  of the off-channel idle gate and nothing else in EMI tracked it. Unknown names
+  are ignored, and an EMI with no deck is a no-op.
 - **Protocol** (`bridge.PROTOCOL = 1`) must match the host's `PROTOCOL` int. A mismatch
   fails the boot on purpose — a page mis-reading the projection would mis-clamp settings.
 - **`ctx.assets.claimTagged()` IS THE SECOND POOL SHAPE, AND IT IS ADDITIVE** (SORT,
@@ -531,6 +663,46 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     revoke route, so the only "off" the wire could carry would be this client asserting a consent
     the player just withdrew. The account's prior window ages out inside 24h instead. That gap is
     the server's to close, not the host's to fake.
+
+- **THE MEDIA COUNTER IS A WEB-ONLY SEAM, AND IT HANGS OFF ONE STRICT FLAG** (2026-08-24,
+  `MEDIA-CONTRACT.md` v1 in the site repo's `scripts/arcademy-web-ext`). The browser host shim
+  owns media on the web the way `ArcademyHostService` owns it in the app, and `shell/settings.js`
+  renders its **Media** group ONLY where `init.settings.mediaControls === true`. Strictly true is
+  the whole point: the C# host never sets the flag, so on the app it is `undefined`, the group is
+  never built, and no `media.*` key can leave the page - which matters because `ApplySetting`
+  would bag one under its own name in the per-game scalar bag as junk nothing ever reads. With
+  the flag up the read-only "Asset source" row steps aside and the live group replaces it; with
+  it absent the settings room renders exactly what it rendered before any of this existed
+  (verified against the pre-change tree, digest for digest).
+  - **Five keys, all on the ordinary `set-setting` / `setting` echo**: `media.remoteConsent`
+    (bool), `media.niches` (the FULL selected array, never a delta), `media.librarySelect`
+    (`{name, selected}`), and the two ACTIONS `media.pickLocal` (`'folder'|'zip'|'gallery'`) and
+    `media.clearLocal`. An action stores nothing and echoes `value: null`; its RESULT arrives as
+    a `local-media` push instead.
+  - **The echo carries what is STORED, and here the host says no out loud.** A `media.niches`
+    list that sanitizes to empty is REFUSED and the host echoes the list it still holds, so the
+    last box a player unticks comes straight back up under them. The group paints a `pending`
+    marker from the post until the echo lands and then repaints from the echo, and it carries one
+    line (`media_niches_snapback`) for the refusal, because an unexplained snap-back reads as a
+    dropped tap. `isGlobalSettingKey()` now answers true for any `media.*` key, which is what
+    keeps that refusal echo out of the per-game flat bag on the way through `shell.js onSetting`.
+  - **THE GESTURE RULE, and it fails silently.** `media.pickLocal` is posted SYNCHRONOUSLY as the
+    FIRST statement of the click handler. A file picker opens only while the browser's transient
+    user activation is still standing and the shim's transport hands `postMessage` straight into
+    its router, so one `await` in front of that line makes the picker never open, with no error
+    anywhere to read.
+  - **Sub add/remove are deliberately NOT `media.*` keys.** The group borrows `probeSub` and
+    `removeLibrarySub` from `shell.js`'s live `createAssets` handle (now passed into
+    `createSettingsPage`), so an add rides SORT's `probe-sub` frame and a remove rides
+    `library-remove` rather than a second copy of either. The list repaints ONLY from the host's
+    `library` push - never from the provider's optimistic local copy, which is the same law trap 1
+    states for a setting.
+  - **Two host pushes, both on `bridge.on`** (the same loose seam `provider/remote.js subscribe`
+    wraps, and multi-subscriber per trap 11, so listening here never steals the provider's own
+    `library` frames): `local-media {images, videos, skipped, active}` after every ingest, every
+    clear and once after a cancelled picker, and `local-media-progress {frac, phase}` through a
+    zip ingest only. Both write through to the page's view of `init.settings` so a second trip
+    through the front office does not repaint yesterday's answer.
 
 ## 4. Traps (each one cost real time)
 
@@ -1008,8 +1180,9 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     dark, retire it rather than leaving the row to stub.
 58. **A ROOM CAN CHANGE HANDS, AND THE LEXICON ROWS DO NOT GO WITH IT.** When Misdirection
     was retired SORT first took its parlour whole; the lot-2 geography rework then razed the
-    parlour for the front office and sort built new (room 203, the Entrance Hall's donated
-    west span). `ROOMS` has a `sort` entry and no `misdirection` one - un-retiring that class
+    parlour for the front office and sort built new (room 201 since the 2026-08-24 renumber -
+    Misdirection's old plate followed its substitute; echo/IR slid back to 202/203 - on the
+    Entrance Hall's donated west span). `ROOMS` has a `sort` entry and no `misdirection` one - un-retiring that class
     now means giving it a room. Its `campus_room_misdirection` / `campus_desc_misdirection` / `game_misdirection`
     rows deliberately STAY: the host's `NeutralLexicon` is append-only and a retired class is
     not a deleted one. (The scratch campus suite asserted "misdirection has a room now" as of
@@ -1116,7 +1289,7 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     entry; it renders tiers 1+2 plus that game's group only (an unknown key falls back
     to the FULL page - too many knobs is the lesser bug than hidden ones). ctx.settings
     is a startClass snapshot, so the scoped page prints `applies_next_class` instead of
-    pretending to live-apply. The campus gear / Registrar stay argless = full sheet.
+    pretending to live-apply. The campus gear / Front Office stay argless = full sheet.
 
 69. **Deck gates split two ways since W2 (2026-08-24): `armed()` = visuals and keeps
     capsOk; `sounds()` = cues and NEVER tests capsOk.** bgIntensity 0 is the player's
@@ -1132,6 +1305,225 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     timers), refused input = `bump` .3 throttled 250ms. Hover sound exists in exactly
     ONE place in the school - the Lost & Found board (`tell` .12, 150ms throttle,
     hunt-phase only) - and that is an owner ruling, not an oversight to fix elsewhere.
+
+70. **EMI'S VOICE HANGS OFF `setBubble()`, AND THAT IS THE WHOLE SAFETY ARGUMENT.**
+    `emi/vox.js` babbles for as long as a landed line is up, which means something has
+    to guarantee it never outlives the bubble - a dismiss, a drag, a `setEnabled(false)`,
+    a replacement line and a `destroy()` must all cut her instantly. There is exactly
+    one place in `widget.js` that already knows the difference between typing (`.`/`..`/
+    `...`), a landed line and a cleared bubble, and EVERY cancel path in the file already
+    funnels through its `null` branch: `setBubble()`. So the voice is three one-liners
+    there (`tick` / `speak` / `stop`) and nothing anywhere else. Do NOT "improve" this by
+    calling `vox.speak()` from `play()`, from `voice.js` or from a moment - the moment a
+    second call site exists, one of the ten cancel paths stops cutting her and EMI keeps
+    talking over a screen she is no longer on. Two consequences worth knowing:
+    - the **pop branch speaks on a `queueMicrotask`**, because `playChain` hands the
+      bubble over BEFORE it hands the frame to `draw` - which is what resolves the pose
+      for a `makeSay` line. Same tick, same frame; it just reads `bodyFrame` (the mood)
+      after it exists. `chains.js` is owner-locked and stays untouched.
+    - **`stop()` is not a fade**, it clears the pending timers; the worst tail is the one
+      blip already in flight (<=56ms). That is the correct trade for an instant dismiss.
+    A cold boot is SILENT and that is also correct: `shell/audio.js` creates no context
+    before the first gesture, so the opening greet's babble is dropped. Never queue it
+    for retro-play - a mascot who talks over a beat that already passed is worse than
+    one who missed it.
+
+71. **THE `.emi` ROOT'S INLINE TRANSFORM BELONGS TO THE DANGLE.** While EMI is carried,
+    widget.js writes `rotate(...)` straight onto the root's style (the carry tilt); the
+    body-move keyframes (`bounce`/`thud`/`shiver`...) still win whenever they run because
+    CSS animations out-rank inline styles - which is the whole reason the dangle is legal.
+    Do NOT position EMI with a transform, and do NOT convert a body move to a transition:
+    a transition on `transform` would composite WITH the inline rotate instead of
+    replacing it, and the release spring (`clearDangle`) already owns the only transition
+    the root ever wears. The face's gaze lean is the same trick one level down: a CSS
+    translate on `.emi-screen` (the canvas ELEMENT), never a canvas repaint - a glyph
+    repaint per pointermove is the exact cost the drag-face dedupe exists to avoid.
+
+72. **A SCRIPTED SAY BEHIND A `lead` LANDS ON A TIMER, NOT ON THE CALL.** voice.js
+    schedules the bubble `chainMs(lead)` after the moment (~1200ms per unknown chain, and
+    a `lead: [a,b,c]` array is the SUM), so a synchronous suite that fires a beat and
+    reads `emi.say`'s log immediately sees NOTHING and reports a phantom regression. The
+    moment call still returns `true` the instant the beat is consumed - assert on that,
+    then await the lead before asserting the line. The perception suite
+    (`test-perception.mjs`, session scratchpad) does exactly this for p06/b25.
+
+73. **A FIXTURE RECT CAPTURED AT SCHEDULE TIME IS A RECT THAT HAS MOVED, SO
+    `apparate` TAKES A GETTER AND NOT A RECT.** A field trip is offered on an idle
+    edge and lands two power-offs later, and in between the window can resize, the
+    campus can repaint, and the SVG plan re-solves everything on it (`campus.plan`
+    is `preserveAspectRatio="xMidYMid slice"`, so viewBox units do not map linearly
+    to the viewport and a 40px window change moves every fixture). `apparate`
+    therefore resolves the rect INSIDE the dark, one frame before she lands, and the
+    registry's `anchor` is a function returning a function for exactly that reason.
+    Two things fall out and both are deliberate: a fixture that has GONE by fire time
+    sends her straight home instead of parking her at (0,0), and a resize mid-trip
+    cancels it outright (the anchor she is standing at was solved against a viewport
+    that no longer exists). Passing a bare rect still works and is the bug this trap
+    is named for.
+74. **THE CRT KEYFRAME FILLS `forwards`, SO TAKING THE CLASS OFF IS NOT OPTIONAL -
+    AND A RECT READ MID-SQUISH IS A 1PX LINE.** `emi-crt-off`/`emi-crt-on` animate
+    `transform` on the `.emi` root, which is legal precisely because a CSS animation
+    out-ranks the dangle's inline `rotate` while it runs (trap 71). But `forwards`
+    means a class nobody removes WELDS `scaleY(1)` onto the root and the dangle
+    silently stops working for ever after - the same lesson `droop` taught `BODY_MS`.
+    Every exit from a trip goes through `crtClear()` for that reason. The twin half:
+    `getBoundingClientRect` reports the TRANSFORMED box, so a position read while the
+    squish is running is a 1px-tall line at the wrong top. The trip therefore keeps
+    its own `{left, top}` and commits THAT, and nothing in the ladder ever measures
+    her.
+75. **TOUCH ALWAYS WINS, AND "WINS" MEANS SHE STAYS WHERE SHE IS.** A pointerdown on
+    EMI at any point of a trip ends it on the spot - `onDown` cancels before it does
+    anything else, so the press carries straight on into an ordinary drag with no
+    stranded animation class, no protected say still holding the glass, and no
+    teleport. The cancel COMMITS the spot she was standing on, which is the half that
+    is easy to miss: leaving the trip's pixel position on the element without writing
+    the fractions means the next resize (or the next launch) snaps her back to where
+    the trip started, several seconds after the player put her somewhere else. The
+    other cancels - a dismiss, a disable, a destroy, a resize, the caller's own -
+    bring her HOME instead, because none of them is the player choosing a spot.
+
+76. **THE OPENING IS FURNITURE, NOT A GATE, AND THAT IS AN INVARIANT WITH FIVE
+    CONSEQUENCES (FIRST BELL, 2026-08-24).** `vn/` is the first thing this bundle has
+    ever put between the splash and a live campus, so every one of its four seams is
+    built to be a NO-OP by default rather than a step that has to succeed.
+    - **Every entry point takes a continuation and runs it exactly once.**
+      `settler()` in `vn/index.js` is the ONE funnel - success, a throw, a missing plate,
+      a spent flag and a watchdog all land there and all close the layer and call back.
+      If you add a fifth seam, hand it to `settler()` too; do not grow a second exit.
+    - **The plates are checked BEFORE anything mounts.** A missing png must never cost
+      the player a black rectangle with a caption on it, so `ensurePlate()` gates the
+      mount and the four plates are warmed at construction while the campus paints. A
+      scene that stands down leaves its ledger entry ARMED for the next eligible night.
+    - **`base` is DOCUMENT-relative, not module-relative.** An `Image` src and an inline
+      `background-image` both resolve against `index.html`, so the default is `./` and
+      only `vn/demo.html` passes `../`. A module-relative `../` asks the host for
+      `https://ccp.game/art/...` and silently gets nothing - which looks exactly like a
+      missing plate.
+    - **s03 spends its flag BEFORE it calls back**, because the callback re-enters
+      `startClass` and a flag written afterwards would gate the same class twice. Same
+      shape as m01: `afterCeremony()` spends `m01` and then decides whether to draw, so a
+      ceremony that cleared onto a live class still burns the beat instead of queueing it.
+    - **Escape is never touched.** boot.js owns the key at the window and the shipped
+      hold-Esc exit has to work on every VN frame, so `vn/index.js` reads only Enter and
+      calls `preventDefault` nowhere. The board dealt into the wall is decoration too -
+      no `onSelect`, `aria-hidden`, `tabIndex -1` - because the row the player actually
+      clicks is the campus's, one layer down.
+    Persistence is `vnSeen`, a plain page-owned key beside EMI's `emiVoice` (no C# change
+    needed; `ArcademyMetaStore.Set` takes any new top-level key). First-run only is
+    enforced at construction: `shell.js isFirstNight()` reads "no card enrolled and no
+    graded day", and a false answer BANKS all four flags so an upgrading player never
+    meets a frame of it.
+
+77. **THE OFF CHANNELS ARE A SECOND CANVAS OVER THE FACE, AND THAT IS THE WHOLE
+    SAFETY ARGUMENT (W3, 2026-08-24).** `face.js` is owner-locked, so a wave that
+    turned EMI's glass into a pong board could not touch it - and does not.
+    `.emi-glass` is a SECOND canvas carrying the byte-for-byte rect `.emi-screen`
+    carries (`left:34.46% top:29.46% w:41.68% h:37.63%`, `152x137` internal, from
+    face.js's own `res` 152 / `h = w x 0.903`), laid over it at `z-index:1` and
+    `hidden` at rest. Three things fall out of that and every one of them is load
+    bearing: **the face keeps painting underneath the whole time** (proved: 4950
+    lit face pixels with a channel live), **killing a channel is hiding one node**
+    rather than restoring a renderer's state, and **a broken deck costs EMI her
+    channels and nothing else** - `takeover.js` is a dynamic import in a catch,
+    the `loadOptional` discipline again. If you ever move `.emi-screen`'s rect,
+    move `.emi-glass` in the same commit or the channels drift off her bezel; and
+    never, ever paint a channel by calling into the face renderer.
+78. **A SAY OUTRANKS THE GLASS, AND THE HOOK IS `cancelChain()` - ONE PLACE.**
+    Trap 70's lesson, one wave later: `widget.js`'s `cancelChain()` is already the
+    funnel EVERY path that takes her face goes through (a chain, a say, a drag, a
+    hide, a `setEnabled(false)`, `destroy()`), so the off-channel preempt is ONE
+    line there and nothing anywhere else. Add a second cancel site and one of
+    those ten paths stops killing the glass, which is a channel painting over a
+    bubble she is speaking through. The rest of the cancel law lives in the deck:
+    any pointer or key ANYWHERE cancels instantly (on EMI it is the channel's
+    caught beat, elsewhere it is a silent blip-off with no line), a class or a
+    suspend refuses a takeover outright (`noteMoment`), and `document.hidden`
+    kills one mid-flight. **Zero cost at rest is part of the same law**: one
+    repeating wheel timer, five passive document listeners, and NO rAF, no fetch
+    and no media element while nothing is up (proved in Chromium: zero
+    `requestAnimationFrame` calls in 1.2s of rest).
+79. **`plan()` REFUSES, IT NEVER STUBS - AND `prepare()` IS THE ONLY I/O IN THE
+    WAVE.** A channel that cannot fully play tonight is ABSENT from the wheel: no
+    tape on record and RERUNS does not exist, no library and no consent and NOW
+    WATCHING does not exist, reduced motion and PONG / code rain / THE WRONG
+    CHANNEL do not exist. Nothing in `channels.js` ever paints an apology, a
+    placeholder or an error face, because a mascot that shows you a broken channel
+    has told you something about the code instead of about herself. `plan()` also
+    does NO I/O - it asks the broker one synchronous question (`ready()`) - and the
+    fetch is the optional `prepare()`, which the deck races against
+    `FETCH_BUDGET_MS` (2000): a slow answer **skips the takeover entirely** rather
+    than opening on a black glass. The wheel's weights are meaningless without
+    this: `rollChannel` weights only what actually planned.
+80. **THE OFF CHANNELS BIND EMI'S FIRST KEY LISTENER, AND IT IS A PASSIVE READ.**
+    Trap 59 says EMI binds no key listener at all, and that rule was about the ESC
+    LADDER: she may add no rung to it. "Any input cancels" cannot mean "any input
+    except the keyboard", so `takeover.js` listens for `keydown` on `document`
+    with `{passive:true}`, in the BUBBLE phase, and does exactly two things -
+    stamps `lastInput` and kills a live channel. It never calls `preventDefault`
+    or `stopPropagation`, never inspects `ev.key`, and is removed on `destroy()`.
+    The Esc ladder is byte-for-byte the ladder it was (boot.js's outer rungs,
+    shell.js's inner ones, the host's panic rung above both). If you ever need to
+    branch on a key here, do not: put it in the ladder that already owns keys.
+
+81. **CLASS LENGTH IS A RULED QUANTITY, AND MEATY IS NOT THE LENGTH FLAG (2026-08-24).**
+    The owner ruled a per-class length table (L&F/anomaly/composure/deja-vu/deep-end 300s,
+    sort/instant-recall 180s, echo 120s, daily-trigger and impulse-control deliberately short;
+    daily-trigger is also `clockless` - no seconds chip, no time bar, the flag rides the
+    descriptor through normalizePool/classFrom and the registry parachute). Do NOT "fix" a
+    long non-meaty class by flipping `meaty: true`: `meatyOk` deals EXACTLY ONE meaty class
+    per day, so the flag is the anchor-slot marker and flipping it for length would cap long
+    classes at one per night and starve the quick slots. Both clamp ceilings are 300
+    (`QUICK_MAX_SEC` == `MEATY_MAX_SEC`); the per-module `timeBudgetSec` is the real number,
+    and the registry row must mirror it byte-for-byte (the parachute law). Consequence the
+    meaty cap no longer covers: a night can legally deal two or three 300s classes (~16.5 min
+    worst of 28 simulated) - a total-minutes ceiling would be a NEW timetable rule.
+
+82. **IN A MULTI-BOARD CLASS THE BELL IS THE ONLY END, AND THE LOOP NEEDS A LATCH.**
+    Composure and deja-vu clear-and-re-deal until the bell: `onSolved()`/`win()` BANK and
+    deal the next seeded board (`classSeed|bN` - board 1 must stay byte-identical to the
+    single-board era), they never call finish. Exactly-one-endClass survives only because a
+    `closing`/`belled` latch is set FIRST by every terminal path and checked by every
+    callback that could re-enter (tap, settle, mutate, deal, howto, trickster). When you add
+    any async beat (celebration, deal cascade), assume the bell WILL fire inside it and test
+    that seam. Class-level things stay class-level: deja-vu's casino lights ONCE (`start()`
+    re-rolls its identity - calling it per board re-skins the room), ambience retunes rather
+    than restarts, and composure's pressure deck needs its `deal()` hook or the effects
+    ladder freezes at RUNG_MAX after the first bank.
+
+83. **EVERYTHING SIZED AS A COUNT WAS CALIBRATED TO THE OLD BUDGET - STRETCH THE CLASS AND
+    EVERY COUNT MUST BECOME A RATE.** The 0824 length wave found the same bug in five
+    shapes: anomaly's round plan capped at 24 and looped its seeded deal (now sized off a
+    fast-player 2.4s round, COUNT_MAX 140); sort's trickster window covered cards 8..60
+    whatever the budget (now a span of expectedCards); L&F's S-gate allowed 1 misclick
+    against 26 finds (mathematically unreachable - now a rate per find, and streak/peek/par
+    gates scale too, with run-length statistics rather than linear ratios where the quantity
+    is an unbroken run); sort's deck dealt 1.6 passes at 120s and would have dealt 2.5+
+    (deck +50%, wall cap 120); composure's wash count was a flat count (now scaled to
+    budget with a 34% burial cap). When a budget moves, grep the game for every literal that
+    was tuned against the old seconds and ask "count or rate?" - the count answers are bugs.
+
+84. **`node --check` PARSES style.js AS A SCRIPT, SO A STRAY BACKTICK INSIDE A TEMPLATE-
+    LITERAL STYLESHEET SAILS THROUGH.** The composure rebuild hit it: the file still parses
+    (the backtick just re-opens a template) and only an ESM `import()` smoke run finds the
+    break. Any edit to a `STYLE_TEXT`-style sheet must be smoke-imported, not just checked.
+
+85. **THE CLASS-RULES SHEET IS FREE OF THE CLOCK, AND IT AUTO-SKIPS ONCE SEEN (owner ruling
+    2026-08-24, uniform across every open class).** Two halves, and both are per-game code -
+    the shell owns neither. (a) THE GATE: the sheet SHOWS the first time a player meets that
+    class at that grade tier and AUTO-SKIPS every later class at that tier, off the game's own
+    `gameMeta.howtoTiers` set. `ctx.hideTutorial` ("Skip class tutorials") no longer *narrows*
+    a show-every-class default - it now means "skip even the first showing", so every gate reads
+    `hideTutorial === true || seen.indexOf(tier) >= 0` where it used to read `&&`. The tier is
+    recorded on the GO press and NOWHERE else, so a class left before GO still explains itself
+    next time; no meta at all = an empty list = the sheet shows, which is the fallback we want.
+    (b) THE CLOCK: every class arms its clock inside the GO callback, never above it - echo was
+    the offender (`startClock()` sat beside `bindInput()/claimAssets()`, so a 120s class charged
+    the player for reading, and a slow reader could hear the bell over the sheet). What may stay
+    on the clock is a GAME beat after GO: instant-recall's and echo's BRIEF line, deja-vu's
+    per-board deal+preview. What is deliberately OUTSIDE it: sort's setup DOOR (§5) and the
+    sheet itself. Impulse Control has no wall clock at all (the plan is the length), so its sheet
+    is free either way. THE SKIP PATH MUST EQUAL AN INSTANT DISMISS: whatever the GO callback
+    ran, the auto-skip runs - which is why every game routes both through the same `onDone`.
 
 ## 5. The game module contract (short version)
 
@@ -1246,6 +1638,23 @@ enrollment, `justUnlocked`) plus the no-op silence, the door CTA order, and the 
 Office populated and empty. **A boot with no `punchCards` in `init.meta` now opens with an
 enrollment intro**, so the older suites seed an already-enrolled school in their `fakeInit`
 - a first night is `test-punchcard.mjs`'s subject, not theirs.
+
+`scratchpad/emi-w1/test-channels.mjs` + `proof-channels.mjs` (2026-08-24, W3) are
+THE OFF CHANNELS' pair. The node suite (**130 assertions**) drives the real
+`emi/channels.js` and `emi/takeover.js` against a fake 2d context, a fake document
+and a hand-cranked rAF over a virtual clock - the dials verbatim and frozen, every
+`plan()` refusal, the reduced-motion table, the weighted wheel over 4000 rolls,
+all eight painters through ten seconds without a throw, the 10s cap, the
+screensaver's exemption, the per-session cap, both cooldowns, the caught arc
+(snap -> shiver -> offer -> accept -> reveal card -> afterglow, and the decline),
+and `destroy()` taking every listener with it. The browser proof (**51
+assertions**, port 8752) mounts the REAL widget over the REAL sheets in Chromium
+and reads the glass back pixel by pixel: the second canvas landing on
+`.emi-screen`'s exact rect, face.js still painting underneath a live channel, a
+trusted click and a real keypress each cancelling instantly, the cap and the
+saver exemption on the WALL clock, the reveal card's layout and its
+`pointer-events:none`, and **zero rAF calls in 1.2s at rest**. Both drive a deck
+of their own on compressed dials - the shipped widget grows no test seam.
 
 **Browser pass, not just node.** The suites drive a DOM double, which cannot see a CSS rule
 that does not parse, a module that throws on evaluation, or trap 49. The recipe: serve the
