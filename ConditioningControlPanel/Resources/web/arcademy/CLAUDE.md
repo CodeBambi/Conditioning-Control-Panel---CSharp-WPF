@@ -247,6 +247,21 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                `glee` ((≧◡≦)) is the THREE-PETS / STREAK-STAMP beat; `love`
                ((｡♥‿♥｡)) is a different, rarer one. Do not swap them.
   fx.js        showFx(host, kind) - hearts/sparks/tears/storm/bang as pixel glyphs.
+  vox.js       HER VOICE, "Blipese". createVox() -> {speak, tick, stop, destroy}
+               + the pure, harness-testable makeScore(text, mood) and the frozen
+               VOX_DIALS. It owns NO audio node (trap 18): it turns a line into a
+               SCORE of {atMs, pitch, gain} and fires one `arcademy-sfx` per blip
+               off its own setTimeout ladder, on the `voice` bus at level 0.4 -
+               deliberately under every game one-shot, and never with a `duck`.
+               Grain is per-SYLLABLE (vowel groups, 1..4); punctuation is prosody
+               (`?` lifts the sentence's last blips, cleanly and with no jitter;
+               `!` raises and hurries the whole line; `...` sags then rests); the
+               mood is the BODY FRAME FAMILY widget.js already resolved. Seeded
+               on the LINE TEXT via core/rng.js, so a line always sounds like
+               itself. Two ceilings, MAX_BLIPS 13 and BURST_MAX_MS 1400, and a
+               long line is compressed by giving up SYLLABLES - never by speeding
+               the gaps up, because the pace is the character. See trap 70.
+               Timbre lives in `shell/audio.js` SOUNDS: `emi_blip` / `emi_tick`.
   emi.css      the SKIN: .emi / .emi-body / .emi-screen (the locked glass rect) /
                .emi-fx / .emi-bubble + the body moves (.breath .nod .shiver
                .bounce .thud .droop). Ships BOTH bundled fonts (fonts/*.woff2,
@@ -259,7 +274,8 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                exactly one thing to cancel and one place that knows a SAY is
                mid-line). It NEVER imports the renderer - face/chains/fx are
                injected through attach(), which is what keeps a broken face out
-               of the shell's boot path. DIALS at the top are the tunables.
+               of the shell's boot path (`vox` rides the same seam). DIALS at the
+               top are the tunables.
   index.js     mountEmi({layer, store, toast, enabled}) -> the ONE controller
                {emote, say, idle, hide, show, setEnabled, setWidth, stats, flush,
                destroy, el}. `toast` is the SHELL's toast, borrowed for exactly
@@ -1104,6 +1120,28 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     timers), refused input = `bump` .3 throttled 250ms. Hover sound exists in exactly
     ONE place in the school - the Lost & Found board (`tell` .12, 150ms throttle,
     hunt-phase only) - and that is an owner ruling, not an oversight to fix elsewhere.
+
+70. **EMI'S VOICE HANGS OFF `setBubble()`, AND THAT IS THE WHOLE SAFETY ARGUMENT.**
+    `emi/vox.js` babbles for as long as a landed line is up, which means something has
+    to guarantee it never outlives the bubble - a dismiss, a drag, a `setEnabled(false)`,
+    a replacement line and a `destroy()` must all cut her instantly. There is exactly
+    one place in `widget.js` that already knows the difference between typing (`.`/`..`/
+    `...`), a landed line and a cleared bubble, and EVERY cancel path in the file already
+    funnels through its `null` branch: `setBubble()`. So the voice is three one-liners
+    there (`tick` / `speak` / `stop`) and nothing anywhere else. Do NOT "improve" this by
+    calling `vox.speak()` from `play()`, from `voice.js` or from a moment - the moment a
+    second call site exists, one of the ten cancel paths stops cutting her and EMI keeps
+    talking over a screen she is no longer on. Two consequences worth knowing:
+    - the **pop branch speaks on a `queueMicrotask`**, because `playChain` hands the
+      bubble over BEFORE it hands the frame to `draw` - which is what resolves the pose
+      for a `makeSay` line. Same tick, same frame; it just reads `bodyFrame` (the mood)
+      after it exists. `chains.js` is owner-locked and stays untouched.
+    - **`stop()` is not a fade**, it clears the pending timers; the worst tail is the one
+      blip already in flight (<=56ms). That is the correct trade for an instant dismiss.
+    A cold boot is SILENT and that is also correct: `shell/audio.js` creates no context
+    before the first gesture, so the opening greet's babble is dropped. Never queue it
+    for retro-play - a mascot who talks over a beat that already passed is worse than
+    one who missed it.
 
 ## 5. The game module contract (short version)
 

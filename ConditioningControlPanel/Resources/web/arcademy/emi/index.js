@@ -98,6 +98,8 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
 
   const PENDING_GRACE_MS = 2500;
   let pending = null;
+  /** emi/vox.js, once it lands. Null is a perfectly good answer (a silent EMI). */
+  let vox = null;
   function remember(fn) { if (!widget.hasFace()) pending = { fn: fn, when: Date.now() }; }
 
   /* THE RENDERER, LATE AND OPTIONAL. Three modules, one failure mode: EMI keeps
@@ -106,8 +108,16 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
     import('./face.js').catch((e) => { say('emi: face.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
     import('./chains.js').catch((e) => { say('emi: chains.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
     import('./fx.js').catch((e) => { say('emi: fx.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
-  ]).then(([f, c, x]) => {
-    try { widget.attach({ face: f, chains: c, fx: x }); }
+    /* HER VOICE, on the same terms as her face. `vox.js` owns no audio node -
+     * it asks shell/audio.js for blips - so a broken one costs the babble and
+     * nothing else: the bubble, the cadence and the whole wordless table stand. */
+    import('./vox.js').catch((e) => { say('emi: vox.js unavailable (' + ((e && e.message) || e) + ')'); return null; }),
+  ]).then(([f, c, x, v]) => {
+    if (v && typeof v.createVox === 'function') {
+      try { vox = v.createVox({ log: say }); }
+      catch (e) { vox = null; say('emi: createVox threw - ' + ((e && e.message) || e)); }
+    }
+    try { widget.attach({ face: f, chains: c, fx: x, vox }); }
     catch (e) { say('emi: attach threw - ' + ((e && e.message) || e)); }
     const p = pending;
     pending = null;
@@ -208,9 +218,14 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
     /** Debug: the one moment waiting on the voice + the face, by name. */
     get pendingMoment() { return voicePending ? voicePending.name : null; },
 
+    /** Her babble (emi/vox.js), once it has loaded. Test/debug handle only. */
+    get vox() { return vox; },
+
     destroy() {
       try { widget.destroy(); } catch (e) { /* noop */ }
       try { if (voice) voice.destroy(); } catch (e) { /* noop */ }
+      try { if (vox) vox.destroy(); } catch (e) { /* noop */ }
+      vox = null;
       voice = null;
       voicePending = null;
       voiceGate = null;
