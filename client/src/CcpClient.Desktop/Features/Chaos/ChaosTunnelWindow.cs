@@ -18,9 +18,15 @@ namespace CcpClient.Desktop.Features.Chaos;
 /// (None/BorderOnly/Full) with a `Window.WindowDecorations` alias — the first attempt's
 /// "renamed/obsoleted" comment was half-wrong and its ExtendClientAreaToDecorationsHint
 /// substitute is REJECTED (that hint keeps chrome behaviors the tunnel must not have).
-/// Ex-styles ride the package's own `Win32Properties.AddWindowStylesCallback` seam at
-/// creation (WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW — never WS_EX_TRANSPARENT: clicks reach the
-/// page for power-up raycasting, WPF :31).
+/// Ex-styles ride the package's own `Win32Properties.AddWindowStylesCallback` seam
+/// (WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW — never WS_EX_TRANSPARENT: clicks reach the
+/// page for power-up raycasting, WPF :31). CORRECTED against the decompiled package and a
+/// headed run: that seam is NOT a one-shot at creation. `Avalonia.Win32.WindowImpl` invokes it
+/// from `UpdateWindowProperties` — on every window-property update (ShowInTaskbar, decorations,
+/// resizability, fullscreen exit), four times in one second on the headed run — each time over
+/// a base it rebuilds from a literal rather than reading back off the HWND. Hence
+/// <see cref="ChaosTunnelWin32.TunnelExStyle"/>, which rebuilds from a known base; that method's
+/// remarks carry the measured values and say exactly what the clear does and does not cover.
 /// </summary>
 public sealed class ChaosTunnelWindow : Window
 {
@@ -55,10 +61,12 @@ public sealed class ChaosTunnelWindow : Window
 
         if (OperatingSystem.IsWindows())
         {
-            // Ex-styles at CREATION via the v12 seam (first-attempt lesson ADAPT — same
-            // Win32 surface as WPF's post-show SetWindowLong, applied earlier).
+            // Ex-styles via the v12 seam (first-attempt lesson ADAPT — same Win32 surface as
+            // WPF's post-show SetWindowLong). The result is built FROM A KNOWN BASE rather than
+            // OR-ed onto whatever arrived: see ChaosTunnelWin32.TunnelExStyle for the upstream
+            // decision it follows and for what the base measurably is.
             Win32Properties.AddWindowStylesCallback(this, static (style, exStyle) =>
-                (style, exStyle | ChaosTunnelWin32.WsExNoactivate | ChaosTunnelWin32.WsExToolwindow));
+                (style, ChaosTunnelWin32.TunnelExStyle(exStyle)));
         }
 
         Opened += (_, _) =>

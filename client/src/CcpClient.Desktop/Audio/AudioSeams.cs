@@ -185,7 +185,7 @@ public sealed class SystemSoundClock(Action<Exception>? onCallbackFault = null) 
 ///       unavailable within the budget because a wedged native teardown holds it), so the
 ///       construction was ABANDONED; and
 ///   (b) the factory REFUSED at its outstanding-abandoned cap — no construction was
-///       started at all, so no pool thread was taken.
+///       started at all, so no construction thread was taken.
 /// The abandoned player never reaches the mixer, never plays, and is disposed exactly once by
 /// <see cref="OrphanSafePlayerFactory{TPlayer}"/>. Callers map this to their existing refusal
 /// vocabulary (SoundArbitration: SoundOutcome.Failed via the existing catches; DTRH effects: the
@@ -219,9 +219,10 @@ public sealed class PlayerConstructionTimeoutException : Exception
 ///   5. The ordinary path is observably unchanged — same object, same volume, attach before
 ///      return, same unwrapped exception surface, zero new log lines.
 ///   6. The OUTSTANDING abandoned constructions are BOUNDED. An abandoned construction
-///      keeps an OS pool thread that nothing in .NET can interrupt (no token cancels a blocked
+///      keeps an OS thread that nothing in .NET can interrupt (no token cancels a blocked
 ///      native ctor), so the count of abandoned-and-still-running constructions is itself the
-///      resource. At the cap this factory refuses a further construction with the same typed
+///      resource. It is a DEDICATED thread rather than a pool worker (see the dispatch in
+///      <see cref="Create"/>), so a wedged endpoint degrades nothing else in the app. At the cap this factory refuses a further construction with the same typed
 ///      no-player outcome BEFORE any thread is taken — never by making the caller wait again
 ///      (that is the bounded-wait rule reverted) and never by skipping the orphan's disposal (that trades a
 ///      bounded residue for an unbounded leak). The count is released the instant the native
@@ -231,7 +232,7 @@ public sealed class PlayerConstructionTimeoutException : Exception
 ///      cues would silence a working device. The bound is PER FACTORY INSTANCE (these are
 ///      per-window-open, not singletons), which is a named limit, not a session bound.
 ///
-/// Dump-proven: construction ALWAYS runs on a Task.Run pool thread, which never
+/// Dump-proven: construction ALWAYS runs on a thread this factory dispatched, which never
 /// carries a SynchronizationContext — the AssetDataProvider sync-over-async ctor would
 /// deadlock one. <see cref="_lifecycle"/> is a LEAF lock: nothing under it takes any other
 /// managed lock, so no lock cycle is possible (SoundArbitration._gate → TryEnter is bounded;
@@ -335,7 +336,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
             throw new InvalidOperationException($"{_tag}: backend torn down — player construction refused");
         }
 
-        // C1: refuse at the cap BEFORE any Task.Run — the refusal must not take the very
+        // C1: refuse at the cap BEFORE any dispatch — the refusal must not take the very
         // resource it exists to bound. Read-compare-throw only: no wait, no lock, no token. The
         // cap is SOFT by construction (K callers concurrently past the read can all construct),
         // so the real bound is cap + concurrently-in-flight callers per factory — still a bound,
@@ -343,19 +344,48 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         var outstanding = Volatile.Read(ref _outstandingAbandoned);
         if (outstanding >= _maxOutstandingAbandoned)
         {
-            _log($"{_tag}: player construction refused — {outstanding} abandoned construction(s) still parked (cap {_maxOutstandingAbandoned}); no pool thread started");
+            _log($"{_tag}: player construction refused — {outstanding} abandoned construction(s) still parked (cap {_maxOutstandingAbandoned}); no construction thread started");
             throw new PlayerConstructionTimeoutException(
                 $"{_tag}: player construction refused at the outstanding-parked cap ({_maxOutstandingAbandoned}) — typed no-player outcome, no construction started");
         }
 
         var slot = new ConstructionSlot();
-        // Pool thread — never a SynchronizationContext. The finally is where the
-        // parked thread is RELEASED, so the count falls at the native return, whatever the outcome.
-        var task = Task.Run(() =>
-        {
-            try { return _construct(path, volume); }
-            finally { SettleAccounting(slot); }
-        });
+        // A DEDICATED thread, never the thread pool's queues — and never a
+        // SynchronizationContext (a fresh thread has none, exactly as a pool thread has none, so
+        // the sync-over-async AssetDataProvider ctor is as safe here as it was). The finally is
+        // where the parked thread is RELEASED, so the count falls at the native return, whatever
+        // the outcome.
+        //
+        // WHY NOT Task.Run, WHICH THIS WAS. Task.Run from a thread-pool thread queues to THAT
+        // thread's local queue by preference, and the very next statement blocks that thread on
+        // the result — so the work item can only be reached by work-stealing, which a worker
+        // reaches only after its own local queue AND the global queue come up empty. A real
+        // caller does arrive on a pool thread: the queued-voice pacing fire is a
+        // System.Threading.Timer callback (SystemSoundClock.Schedule, this file) and it
+        // constructs its player there (SoundArbitration.cs:950, inside OnPacingFire). The
+        // consequence is the one the arbitration exists to avoid — a HEALTHY construction
+        // abandoned on dispatch latency alone, counted against the outstanding cap and making
+        // later cues likelier to be refused.
+        //
+        // MEASURED, not argued (16-core box, 200 ms budget, 25 trials of exactly this shape:
+        // pool-thread caller, every other worker parked on a native wait, instant construction):
+        // Task.Run abandoned 17/25 with a p50 dispatch of 509 ms; PreferFairness (global queue)
+        // abandoned 0/25 but still showed a 51-SECOND outlier under harder starvation, because
+        // the global queue is still a pool queue; LongRunning abandoned 0/25 in every regime with
+        // a worst dispatch of 1.4 ms. So this removes the class rather than lowering its
+        // probability. It also improves the resource story below: a wedged abandoned construction
+        // now parks a thread of its own instead of eating a pool worker the rest of the app needs.
+        // The cost is thread creation on the healthy path, measured at ~0.25 ms against a
+        // construction that does file IO and a native device attach.
+        var task = Task.Factory.StartNew(
+            () =>
+            {
+                try { return _construct(path, volume); }
+                finally { SettleAccounting(slot); }
+            },
+            CancellationToken.None,
+            TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
         // P4: the late-completion disposer — fires inline on the completing thread, exactly
         // once per task, gated by the abandonment check + the latch.
         _ = task.ContinueWith(
