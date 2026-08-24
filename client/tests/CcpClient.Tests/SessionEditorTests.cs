@@ -306,6 +306,48 @@ public class SessionEditorTests
     }
 
     /// <summary>
+    /// A SESSION WHOSE FILE IS NOT NAMED AFTER ITS ID IS STILL OVERWRITTEN, and this fact exists
+    /// because the mutation check found that nothing else could tell. Upstream's save prefers the
+    /// session's OWN file over a name derived from its id
+    /// (<c>Services/Session/SessionFileService.cs:231-242</c>); every session this port has written
+    /// so far is named for its id, so deleting that preference changed no answer and every fact
+    /// stayed green (mutation M19).
+    ///
+    /// <para>The scenario that makes it load-bearing is not hypothetical: the custom folder is a
+    /// folder, and a user who renames <c>abc.session.json</c> to something they can read owns a
+    /// session whose file name and id no longer agree. Without the preference their next edit
+    /// writes a SECOND file and the rack grows a duplicate row they never asked for.</para>
+    /// </summary>
+    [Fact]
+    public void AFileTheUserRenamedIsStillOverwritten_RatherThanDuplicatedUnderItsId()
+    {
+        var root = TempRoot();
+        var store = new CustomSessionStore(root, new Sink());
+        var mine = SessionEditorRules.Apply(BuiltIn(), "Mine", "", 45, () => "abc");
+        var first = store.Save(mine);
+        Assert.NotNull(first);
+
+        // The user renames it in their file manager. Nothing else about it changes.
+        var renamed = Path.Combine(store.Folder, "my favourite.session.json");
+        File.Move(first, renamed);
+
+        var reread = Assert.Single(store.Read());
+        Assert.Equal(renamed, reread.SourceFilePath);
+        Assert.Equal("abc", reread.Id);
+
+        var again = store.Save(SessionEditorRules.Apply(reread, "Mine, edited", "", 60));
+
+        Assert.Equal(renamed, again);
+        Assert.Equal(
+            ["my favourite.session.json"],
+            Directory.GetFiles(store.Folder, "*" + ScriptedSession.FileExtension)
+                .Select(Path.GetFileName));
+        Assert.Equal("Mine, edited", Assert.Single(store.Read()).Name);
+
+        Directory.Delete(root, recursive: true);
+    }
+
+    /// <summary>
     /// THE GUARD THAT DOES NOT DEPEND ON THE EDITOR BEING RIGHT. A session still carrying a path
     /// outside this folder is written into the folder under its own id, never back over the file it
     /// names. Upstream's save trusts <c>File.Exists</c> alone (<c>:233</c>), so the same call there
