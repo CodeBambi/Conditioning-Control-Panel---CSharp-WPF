@@ -49,7 +49,7 @@
 #                    Measured, all three: dashboard-background scores 0.671 on Linux/Studio and
 #                    FAILS, 0.973 on Linux/System, 0.982 on Windows/System.
 #                    The drive is probe-derived like the crop, so it is refused at a scale the
-#                    once-logged probe cannot describe — see the staleness guard below.
+#                    snapshotted probe cannot describe — see the scale guard below.
 set -euo pipefail
 
 SURFACE="${1:?surface: dashboard|rail-door}"
@@ -133,59 +133,62 @@ alive_or_die() {
 # harness reports a broken app when the app is healthy. The shell logs its rail layout probe
 # on first layout, so that line IS the window existing — waiting for it is both correct and
 # strictly faster on a warm run.
+#
+# WAIT FOR THE REQUESTED SCALE, not merely for a line. The probe now re-logs whenever its values
+# change, and on X11 the first layout runs BEFORE the scale factor lands — so at
+# AVALONIA_GLOBAL_SCALE_FACTOR=1.75 the app publishes `scale 1` first and `scale 1.75` a moment
+# later. Breaking on the first line would snapshot the scale-1 one, from which DIP*scale computes
+# a 175x44 rect where the door is 306x77; the guard below would then refuse a run that was about
+# to be perfectly good. The deadline still bounds it, and an app that never reaches the requested
+# scale still ends up refused rather than measured.
+probe_scale_of() { sed -E 's/.*@ scale ([0-9.]+) @.*/\1/' <<<"$1"; }
 DEADLINE=$((SECONDS + 40))
 PROBE=""
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
   alive_or_die "app exited during startup before it laid out a window"
   PROBE="$(grep -a 'layout-probe:' "$LOG" | tail -1 || true)"
-  [ -n "$PROBE" ] && break
+  [ -n "$PROBE" ] && { [ -z "$SCALE" ] || [ "$SCALE" = "$(probe_scale_of "$PROBE")" ]; } && break
   sleep 0.25
 done
 [ -n "$PROBE" ] || { echo "FAIL: no layout probe within 40s; stderr tail:"; tail -20 "$LOG"; exit 1; }
 
-# THE STDERR PROBE IS STALE ON LINUX UNDER A NON-UNIT SCALE FACTOR, and a rect derived from it
-# then aims at the wrong place while still producing a plausible, non-vacuous image.
+# THE STDERR PROBE USED TO BE STALE ON LINUX AND THIS GUARD IS WHAT IS LEFT OF THAT. Keep it: it
+# is now a live assertion that the log describes the window we are about to photograph, and it
+# costs one `sed`.
 #
-# WHAT IS ACTUALLY WRONG, from the source rather than from the symptom. MainWindow.axaml.cs:229-237
-# recomputes the on-screen probe TextBlock on every LayoutUpdated but calls LogDiagnostic exactly
-# once, behind `_layoutProbeLogged`, on the FIRST one. On Windows the first layout already carries
-# the final values. On Linux/X11 it does not: the first layout runs before the X11 scale factor and
-# the window placement have landed, so the once-logged copy freezes pre-scale, pre-placement
-# numbers while the on-screen copy goes on to be right.
-#
-# Measured 2026-08-24, both of Avalonia's X11 scale knobs, and the two copies read differently in
-# the SAME run:
-#   AVALONIA_GLOBAL_SCALE_FACTOR=1.75 -> X window 1925x1330; the selected door's real device rect
-#     measured 306x77 at 21,79 (exactly 1.75x); the ON-SCREEN probe read "174.9x44.0 DIP @ scale
-#     1.75 @ screen 37,116" — correct, and 37,116 is true root (window root 16,37 plus 21,79) —
-#     while STDERR still read "175.0x44.0 DIP @ scale 1 @ screen 12,45".
-#   AVALONIA_GLOBAL_SCALE_FACTOR=2 and AVALONIA_SCREEN_SCALE_FACTORS=XWAYLAND0=2 -> X window
-#     2200x1520, real device rect 350x88 at 24,89; stderr unchanged at "scale 1 @ screen 12,45".
-# AT SCALE 1 THE SCALE AGREES BUT THE ORIGIN IS STILL STALE, and that is the coincidence this
-# whole harness rests on. Measured in the same run: stderr said "@ screen 12,45" while the app's
-# on-screen probe, recomputed after the window was placed at root 16,37, said "@ screen 28,82" —
-# true root. The stale 12,45 is exactly the door's offset INSIDE the X window, which is precisely
-# what xgetimage.py's --crop wants, so every scale-1 crop here lands correctly by accident rather
-# than by contract. It is not silent: xgetimage.py bounds-checks the crop against the window and
-# the named checks would fail loudly on a wrong rectangle. Recorded so the next reader is not
-# surprised when a fix to the probe's logging moves these coordinates.
+# WHAT WAS WRONG, and it is FIXED IN THE PRODUCT rather than tolerated here.
+# MainWindow.axaml.cs recomputed the on-screen probe on every LayoutUpdated but called
+# LogDiagnostic exactly once, on the FIRST one. On Windows the first layout already carries the
+# final values. On Linux/X11 it does not: the first layout runs before the X11 scale factor and the
+# window placement have landed, so the once-logged copy froze pre-scale, pre-placement numbers
+# while the on-screen copy went on being right. The probe now logs whenever the values it describes
+# change, so the LAST line on stderr is the line on the screen. Measured 2026-08-24 at
+# AVALONIA_GLOBAL_SCALE_FACTOR=1.75: stderr's last line and the rendered footer both read
+# "174.9x44.0 DIP @ scale 1.75 @ screen 21,79" for the studio door, against a 1925x1330 X window.
 #
 # WHAT IT COST WHEN THIS WENT UNGUARDED, all three measured rather than imagined: `rail-door
 # selected 1.75` cropped 175x44 at 12,45, photographed the wrong part of the window, passed the
 # vacuity gate on 25 colours and scored 0/525; `rail-door unselected 1.75` scored 0.926 and PASSED
 # off pixels that were not a door border at all; and a `--click` aimed at the System door's stale
 # DIP coordinates landed on the PLAY door two rows up, so the capture was of the wrong page and
-# still scored 0.982 on dashboard-background.
+# still scored 0.982 on dashboard-background. The same three, re-measured after the fix:
+# rail-door-selected-border 884/918 = 0.963 and 0.000 on the other state's capture,
+# rail-door-unselected-border 892/918 = 0.972 and 0.004 on the other's, and the `--click` reached
+# the System door and the shell's own footer read `route: system`.
 #
-# Refuse rather than measure the wrong rectangle. Only the whole-window `dashboard` capture with
-# no drive needs no probe rect, so only that one stays available at other scales.
-PROBE_SCALE="$(sed -E 's/.*@ scale ([0-9.]+) @.*/\1/' <<<"$PROBE")"
+# WHY THE GUARD STAYS ANYWAY. The probe is read ONCE into $PROBE, as early as the app will publish
+# one, and an app still on its way to the requested scale would hand this script a line whose
+# scale factor is 1 — from which DIP*scale computes a 175x44 rect where the door is 306x77. That
+# is a WRONG-SIZE crop, and this refuses instead of taking it. Only the whole-window `dashboard`
+# capture with no drive needs no probe rect, so only that one stays available at other scales.
+PROBE_SCALE="$(probe_scale_of "$PROBE")"
 if [ -n "$SCALE" ] && [ "$SCALE" != "$PROBE_SCALE" ] \
    && { [ "$SURFACE" = "rail-door" ] || [ "$DRIVE" = click ]; }; then
-  echo "FAIL: asked for scale $SCALE but the app's once-logged layout probe reports scale"
-  echo "      $PROBE_SCALE, so its coordinates are stale and any crop or click taken from them"
-  echo "      lands in the wrong place. 'dashboard' with no --click needs no probe rect and is"
-  echo "      the only capture available at this scale."
+  echo "FAIL: asked for scale $SCALE but the app never published a layout probe at that scale"
+  echo "      within the deadline — its last one reports scale $PROBE_SCALE, from which DIP*scale"
+  echo "      computes a rect of the wrong SIZE, so any crop or click taken from it measures the"
+  echo "      wrong rectangle. 'dashboard' with no --click needs no probe rect and is the only"
+  echo "      capture available at this scale."
   exit 1
 fi
 
@@ -219,17 +222,27 @@ echo "first present: reached (whole-window capture is non-vacuous)"
 # input, and a capture would photograph a plausible-looking unfocused shell.
 python3 "$HERE/xinput.py" "$TITLE" --focus
 
-# Door rect from the app's own layout probe (stderr, first layout): DIP*scale = device pixels,
-# and the offsets are WINDOW-relative on WSLg (xgetimage.py records why). One log line carries
-# every door, so the requested door's id is part of the pattern.
+# Door rect from the app's own layout probe: DIP*scale = device pixels. One log line carries every
+# door, so the requested door's id is part of the pattern.
+#
+# TAKE `@ window`, NEVER `@ screen`, AND THAT IS A CONTRACT RATHER THAN A PREFERENCE. Both of this
+# script's consumers want WINDOW-relative device pixels — xgetimage.py's --crop takes them
+# directly, and xinput.py's --click adds the window's own root origin itself — and on X11 the
+# meaning of `@ screen` MOVES during startup. Measured in one WSLg run at scale 1.75, three
+# successive readings of the studio door: `scale 1 @ screen 12,45`, then
+# `scale 1.75 @ screen 21,79` (Avalonia still believes the window is at 0,0), then
+# `scale 1.75 @ screen 37,116` (the WM's placement landed — root 16,37 plus 21,79). Every earlier
+# version of this script read `@ screen` and happened to catch the middle reading, which is the
+# same kind of luck the once-logged probe was living on. `@ window` is the app's own subtraction
+# against its client-area origin (MainWindow.axaml.cs ProbeLine) and reads 21,79 in all three.
 door_rect() {
   local id="$1"
-  local re="door $id ([0-9.]+)x([0-9.]+) DIP @ scale ([0-9.]+) @ screen (-?[0-9]+),(-?[0-9]+)"
+  local re="door $id ([0-9.]+)x([0-9.]+) DIP @ scale ([0-9.]+) @ screen (-?[0-9]+),(-?[0-9]+) @ window (-?[0-9]+),(-?[0-9]+)"
   [[ "$PROBE" =~ $re ]] || { echo "FAIL: layout probe for door '$id' unreadable: $PROBE" >&2; exit 1; }
   DOOR_W=$(awk "BEGIN{printf \"%d\", ${BASH_REMATCH[1]} * ${BASH_REMATCH[3]}}")
   DOOR_H=$(awk "BEGIN{printf \"%d\", ${BASH_REMATCH[2]} * ${BASH_REMATCH[3]}}")
-  DOOR_X=${BASH_REMATCH[4]}
-  DOOR_Y=${BASH_REMATCH[5]}
+  DOOR_X=${BASH_REMATCH[6]}
+  DOOR_Y=${BASH_REMATCH[7]}
   DOOR_DIP="${BASH_REMATCH[1]}x${BASH_REMATCH[2]} DIP @ scale ${BASH_REMATCH[3]}"
 }
 

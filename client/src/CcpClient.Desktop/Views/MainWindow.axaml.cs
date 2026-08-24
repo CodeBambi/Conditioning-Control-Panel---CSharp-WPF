@@ -372,13 +372,37 @@ public partial class MainWindow : Window
         _doors[routeId].IsChecked = true;
     }
 
+    /// <summary>
+    /// One rail door's geometry, in the two spaces its two consumers need.
+    ///
+    /// <para><c>@ screen</c> is the door's origin in SCREEN coordinates, which is what
+    /// <c>capture.ps1</c> aims <c>SetCursorPos</c> and <c>CopyFromScreen</c> at on Windows.</para>
+    ///
+    /// <para><c>@ window</c> is the same origin relative to the window's own client area, and it
+    /// exists because <c>@ screen</c> ALONE IS NOT A USABLE CONTRACT ON X11. Measured on WSLg in a
+    /// single run at scale 1.75, three successive readings of the same door:
+    /// <c>scale 1 @ screen 12,45</c> (before the scale factor lands), then
+    /// <c>scale 1.75 @ screen 21,79</c> (scale landed, Avalonia still believes the window sits at
+    /// 0,0), then <c>scale 1.75 @ screen 37,116</c> (the window manager's placement landed — root
+    /// 16,37 plus 21,79). So the meaning of <c>@ screen</c> CHANGES COORDINATE SPACE during
+    /// startup on that platform, and the Linux harness needs window-relative pixels for both of
+    /// its jobs: <c>xgetimage.py --crop</c> takes them, and <c>xinput.py --click</c> adds the
+    /// window's root origin itself. Reading <c>@ screen</c> and hoping to catch it in the middle
+    /// state is exactly the accident this probe was fixed to stop relying on.</para>
+    ///
+    /// <para>The subtraction is done HERE, against the window's own <c>PointToScreen</c>, so both
+    /// numbers come out of the same platform call in the same pass and are self-consistent
+    /// whichever space that call is currently answering in.</para>
+    /// </summary>
     private string ProbeLine(ShellRoute route)
     {
         var door = _doors[route.Id];
         var topLeft = door.PointToScreen(new Point(0, 0));
+        var clientOrigin = this.PointToScreen(new Point(0, 0));
+        var inWindow = topLeft - clientOrigin;
         return string.Create(
             System.Globalization.CultureInfo.InvariantCulture,
-            $"layout-probe: door {route.Id} {door.Bounds.Width:F1}x{door.Bounds.Height:F1} DIP @ scale {RenderScaling:0.##} @ screen {topLeft.X},{topLeft.Y}");
+            $"layout-probe: door {route.Id} {door.Bounds.Width:F1}x{door.Bounds.Height:F1} DIP @ scale {RenderScaling:0.##} @ screen {topLeft.X},{topLeft.Y} @ window {inWindow.X},{inWindow.Y}");
     }
 
     /// <summary>
