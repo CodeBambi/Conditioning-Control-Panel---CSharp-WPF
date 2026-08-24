@@ -620,8 +620,12 @@ function svgNode(tag, attrs, cls) {
 
 function rect(x, y, w, h, cls) { return svgNode('rect', { x, y, width: w, height: h }, cls); }
 
-/** Build the pixel student. 10 units wide, ~16 tall, feet on the origin. */
-function buildSprite(id) {
+/** Build the pixel student. 10 units wide, ~16 tall, feet on the origin.
+ * EXPORTED for the Annex camera wall (annex/cams.js): the fake feeds draw
+ * THIS student, never a copy of it - one body for the whole school (the
+ * "lifted, not copied" rule above). Still pure: no snapshot, no schedule,
+ * no bridge - a caller gets a <g> of rects and owns where it stands. */
+export function buildSprite(id) {
   const tr = spriteTraitsFor(id);
   const g = svgNode('g', null, 'gh-sprite');
   if (!g) return null;
