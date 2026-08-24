@@ -42,7 +42,15 @@ public static class ScriptedSessionRack
     /// <param name="all">Every session the rack knows about, in the order it read them. This is
     /// also the TIE-BREAK for every sort, which is upstream's rule and upstream says why: without
     /// it "a sort on a field half the sessions share (three 45-minute Easy runs) would shuffle on
-    /// each repaint" (<c>MainWindow/MainWindow.SessionIO.cs:306-308</c>).</param>
+    /// each repaint" (<c>MainWindow/MainWindow.SessionIO.cs:306-308</c>).
+    ///
+    /// <para><b>The explicit <c>ThenBy</c> on the index below is belt-and-braces, and that was
+    /// measured rather than assumed:</b> <c>Enumerable.OrderBy</c> is a documented STABLE sort, so
+    /// deleting all four tie-breaks changes no answer and no fact can red on it (mutation M10 came
+    /// back green). It stays because the tie-break is a contract this rack owes the user — a rack
+    /// that reshuffled its ties under a repaint would be the defect upstream names — and leaving it
+    /// implicit would make that contract depend on a property of a library method that a future
+    /// hand-rolled comparer would silently drop.</para></param>
     /// <param name="difficulties">The bands the user has left switched on. All four by default; an
     /// empty set is a real state and it empties the rack, which is what <see cref="NoMatches"/> is
     /// for.</param>
