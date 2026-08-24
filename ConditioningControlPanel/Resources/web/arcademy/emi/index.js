@@ -175,6 +175,11 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
     /** Back to the resting state (0_0 + blink + breath). */
     idle() { widget.idle(); },
 
+    /** True while a PROTECTED line is on the bubble (a say in flight). A
+     *  read-only seam for beats that must not cut her off mid-sentence - the
+     *  Annex reveal probes it before its hard cut to black. */
+    get saying() { try { return !!widget.saying(); } catch (e) { return false; } },
+
     /** Dismiss to the dock. NOT the x: an API hide spends no first-time hint. */
     hide() { widget.hide(); },
     /** Restore from the dock, at the last saved position. */
