@@ -26,7 +26,10 @@ internal static class PointerWindowProbe
     private const uint WsExTopmost = 0x00000008;
     private const uint WsExNoactivate = 0x08000000;
     private const uint WsExTransparent = 0x00000020;
+    private const uint WsExAppwindow = 0x00040000;
     private const int GwlExstyle = -20;
+    private const uint GwOwner = 4;
+    private const int DwmwaCloaked = 14;
     private const uint SwpShowwindow = 0x0040;
     private const uint SwpNoactivate = 0x0010;
     private const uint SwpNomove = 0x0002;
@@ -40,14 +43,34 @@ internal static class PointerWindowProbe
     private const uint WmLbuttondown = 0x0201;
     private const uint WmLbuttonup = 0x0202;
     private const uint WmMouseactivate = 0x0021;
+    private const uint WmMousemove = 0x0200;
+    private const uint WmMousewheel = 0x020A;
+    private const uint WmKeydown = 0x0100;
+    private const uint WmActivate = 0x0006;
     private const uint PmRemove = 0x0001;
 
+    /// <summary>The left button's bit in a mouse message's <c>wParam</c>. A move carrying it is a
+    /// DRAG; a move without it is the pointer merely travelling.</summary>
+    private const nint MkLbutton = 0x0001;
+
     private const uint InputMouse = 0;
+    private const uint InputKeyboard = 1;
     private const uint MouseeventfMove = 0x0001;
     private const uint MouseeventfLeftdown = 0x0002;
     private const uint MouseeventfLeftup = 0x0004;
+    private const uint MouseeventfWheel = 0x0800;
     private const uint MouseeventfAbsolute = 0x8000;
     private const uint MouseeventfVirtualdesk = 0x4000;
+    private const uint KeyeventfKeyup = 0x0002;
+
+    /// <summary>One notch of the wheel, as <c>WM_MOUSEWHEEL</c> reports it.</summary>
+    internal const int WheelDelta = 120;
+
+    /// <summary>A key with no character and no default meaning on any standard layout — the same
+    /// choice, and the same reason, as <see cref="InputWindowProbe.VkF13"/>: a keystroke that
+    /// escapes to a window this harness does not own must not be able to TYPE anything into
+    /// it.</summary>
+    internal const ushort VkF13 = 0x7C;
 
     /// <summary>How many messages one pump drains, and how many pumps a bounded wait takes. Both are
     /// iteration counts with a yield, never a wall-clock wait.</summary>
@@ -236,6 +259,91 @@ internal static class PointerWindowProbe
             Index >= 0 && (FirstOrdinaryIndex < 0 || Index < FirstOrdinaryIndex);
     }
 
+    /// <summary>
+    /// The four OS read-backs the SHELL's documented rule for "is this window in the task
+    /// switcher" is built from, kept apart so a failure can name the clause that decided.
+    /// </summary>
+    /// <param name="Visible">The OS reports the window visible.</param>
+    /// <param name="Owner">The window's owner, or 0 when it is unowned. An OWNED window is
+    /// represented in the switcher by its owner, not by itself.</param>
+    /// <param name="ToolWindow"><c>WS_EX_TOOLWINDOW</c> is set — the shell's explicit "keep this
+    /// out of the task list" bit.</param>
+    /// <param name="AppWindow"><c>WS_EX_APPWINDOW</c> is set — the shell's explicit override that
+    /// forces an otherwise-excluded window back INTO the list.</param>
+    /// <param name="Cloaked">DWM reports the window cloaked (another virtual desktop, a suspended
+    /// UWP host). A cloaked window is not offered by the modern switcher.</param>
+    internal readonly record struct TaskSwitcherReading(
+        bool Visible, nint Owner, bool ToolWindow, bool AppWindow, bool Cloaked)
+    {
+        /// <summary>
+        /// The shell's documented predicate: a window is an ordinary task-switching window when it
+        /// is visible, not cloaked, and either unowned-and-not-a-tool-window or explicitly forced in
+        /// with <c>WS_EX_APPWINDOW</c>.
+        ///
+        /// <para><b>What this is and is not.</b> It is the rule the shell publishes and every
+        /// switcher-enumeration sample implements; it is NOT the switcher's rendered list, which no
+        /// public API exposes. A fact built on it says what the rule answers about a real window's
+        /// real, OS-read state — never what a human sees when they hold Alt.</para>
+        /// </summary>
+        internal bool IsOrdinaryTaskSwitchingWindow =>
+            Visible && !Cloaked && (AppWindow || (Owner == 0 && !ToolWindow));
+
+        internal string Clause => !Visible
+            ? "not visible"
+            : Cloaked ? "DWM-cloaked"
+            : AppWindow ? "WS_EX_APPWINDOW forces it in"
+            : Owner != 0 ? $"owned by 0x{Owner:X}"
+            : ToolWindow ? "WS_EX_TOOLWINDOW keeps it out"
+            : "visible, unowned, not a tool window";
+    }
+
+    /// <summary>Ask the OS all four parts of the task-switcher rule about one window.</summary>
+    internal static TaskSwitcherReading ReadTaskSwitcherState(nint window)
+    {
+        if (!WindowsHost || window == 0)
+        {
+            return new TaskSwitcherReading(false, 0, false, false, false);
+        }
+
+        var style = ExStyleOf(window);
+        var cloaked = DwmGetWindowAttribute(window, DwmwaCloaked, out var cloak, sizeof(int)) == 0 && cloak != 0;
+        return new TaskSwitcherReading(
+            Visible: IsWindowVisible(window),
+            Owner: GetWindow(window, GwOwner),
+            ToolWindow: (style & WsExToolwindow) != 0,
+            AppWindow: (style & WsExAppwindow) != 0,
+            Cloaked: cloaked);
+    }
+
+    /// <summary>Every visible top-level window this PROCESS owns, in z-order. The teardown suite
+    /// walks the z-order the same way; this one keeps the handles rather than counting them,
+    /// because the task-switcher rule is asked of each window individually.</summary>
+    internal static IReadOnlyList<nint> OurVisibleTopLevelWindows()
+    {
+        if (!WindowsHost)
+        {
+            return [];
+        }
+
+        var ours = new List<nint>();
+        var self = GetCurrentProcessId();
+        for (var candidate = GetTopWindow(0); candidate != 0; candidate = GetWindow(candidate, GwHwndnext))
+        {
+            if (!IsWindowVisible(candidate))
+            {
+                continue;
+            }
+
+            GetWindowThreadProcessId(candidate, out var owner);
+            if (owner == self)
+            {
+                ours.Add(candidate);
+            }
+        }
+
+        return ours;
+    }
+
     internal static string DescribeWindow(nint window)
     {
         if (!WindowsHost || window == 0)
@@ -294,6 +402,142 @@ internal static class PointerWindowProbe
         };
 
         return SendInput(3, inputs, Marshal.SizeOf<Input>()) == 3;
+    }
+
+    /// <summary>
+    /// Synthesise a DRAG at a point: an absolute move to the start, a button down, a run of
+    /// absolute moves with the button still held, and a button up — one <c>SendInput</c> batch, so
+    /// nothing can move the pointer or release the button between them.
+    ///
+    /// <para><b>Why the intermediate moves are separate events and not one jump.</b> The claim
+    /// being measured is that a passive region lets a drag reach the desktop underneath, and a drag
+    /// is <c>WM_MOUSEMOVE</c> carrying <c>MK_LBUTTON</c> — a single down/up pair with no motion
+    /// between them is a click, and would prove nothing about the move messages. The window
+    /// underneath counts only the moves that carry the button.</para>
+    ///
+    /// <para>The whole path must stay inside the rectangle under test: a drag that leaves it is a
+    /// drag over somebody else's window, and the count would be a reading of the desktop rather
+    /// than of the surface.</para>
+    /// </summary>
+    /// <param name="x">Where the press happens.</param>
+    /// <param name="y">Ditto.</param>
+    /// <param name="deltaX">Total horizontal travel, split evenly across <paramref name="steps"/>.</param>
+    /// <param name="deltaY">Total vertical travel.</param>
+    /// <param name="steps">How many move events the drag is made of. Must be positive.</param>
+    /// <returns>True when the OS accepted every event of the batch.</returns>
+    internal static bool InjectDragAt(int x, int y, int deltaX, int deltaY, int steps)
+    {
+        if (!WindowsHost || steps <= 0)
+        {
+            return false;
+        }
+
+        var inputs = new Input[2 + steps + 1];
+        var (startX, startY) = ToAbsolute(x, y);
+
+        inputs[0].type = InputMouse;
+        inputs[0].U.mi = new MouseInput
+        {
+            dx = startX,
+            dy = startY,
+            dwFlags = MouseeventfMove | MouseeventfAbsolute | MouseeventfVirtualdesk,
+        };
+        inputs[1].type = InputMouse;
+        inputs[1].U.mi = new MouseInput
+        {
+            dx = startX,
+            dy = startY,
+            dwFlags = MouseeventfLeftdown | MouseeventfAbsolute | MouseeventfVirtualdesk | MouseeventfMove,
+        };
+
+        for (var step = 1; step <= steps; step++)
+        {
+            var (stepX, stepY) = ToAbsolute(x + (deltaX * step / steps), y + (deltaY * step / steps));
+            inputs[1 + step].type = InputMouse;
+            inputs[1 + step].U.mi = new MouseInput
+            {
+                dx = stepX,
+                dy = stepY,
+                dwFlags = MouseeventfMove | MouseeventfAbsolute | MouseeventfVirtualdesk,
+            };
+        }
+
+        var (endX, endY) = ToAbsolute(x + deltaX, y + deltaY);
+        inputs[^1].type = InputMouse;
+        inputs[^1].U.mi = new MouseInput
+        {
+            dx = endX,
+            dy = endY,
+            dwFlags = MouseeventfLeftup | MouseeventfAbsolute | MouseeventfVirtualdesk | MouseeventfMove,
+        };
+
+        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == (uint)inputs.Length;
+    }
+
+    /// <summary>
+    /// Synthesise a wheel notch with the pointer parked at a point.
+    ///
+    /// <para><b>Where a wheel notch is DELIVERED is not a hit test</b>, and a fact built on this
+    /// must not pretend otherwise: <c>WM_MOUSEWHEEL</c> classically goes to the FOCUS window of the
+    /// foreground thread, and Windows 10 and 11 additionally route it to the window under the
+    /// pointer when "scroll inactive windows when I hover over them" is on — a per-user setting
+    /// this harness neither reads nor changes. Both routes are measured the same way here (the
+    /// pointer is moved onto the point AND the window underneath holds the focus), so the reading
+    /// is "the notch reached the desktop underneath" under whichever rule this machine uses.</para>
+    /// </summary>
+    /// <returns>True when the OS accepted both events.</returns>
+    internal static bool InjectWheelAt(int x, int y, int notches)
+    {
+        if (!WindowsHost)
+        {
+            return false;
+        }
+
+        var (nx, ny) = ToAbsolute(x, y);
+        var inputs = new Input[2];
+        inputs[0].type = InputMouse;
+        inputs[0].U.mi = new MouseInput
+        {
+            dx = nx,
+            dy = ny,
+            dwFlags = MouseeventfMove | MouseeventfAbsolute | MouseeventfVirtualdesk,
+        };
+        inputs[1].type = InputMouse;
+        inputs[1].U.mi = new MouseInput
+        {
+            dx = nx,
+            dy = ny,
+            mouseData = unchecked((uint)(notches * WheelDelta)),
+            dwFlags = MouseeventfWheel | MouseeventfAbsolute | MouseeventfVirtualdesk,
+        };
+
+        return SendInput(2, inputs, Marshal.SizeOf<Input>()) == 2;
+    }
+
+    /// <summary>
+    /// Inject one key down/up pair at OS level, through the same system input stream
+    /// <see cref="InjectClickAt"/> uses.
+    ///
+    /// <para>Declared here rather than borrowed from <see cref="InputWindowProbe"/> for the reason
+    /// that instrument's own header gives for re-declaring everything: the two probes are
+    /// deliberately independent copies, so "the keystroke arrived" and "the click arrived" are not
+    /// two readings of one code path.</para>
+    /// </summary>
+    /// <returns>True when the OS accepted both events. False means UIPI, the secure desktop, or a
+    /// locked workstation refused the injection.</returns>
+    internal static bool InjectKey(ushort virtualKey)
+    {
+        if (!WindowsHost)
+        {
+            return false;
+        }
+
+        var inputs = new Input[2];
+        inputs[0].type = InputKeyboard;
+        inputs[0].U.ki = new KeybdInput { wVk = virtualKey };
+        inputs[1].type = InputKeyboard;
+        inputs[1].U.ki = new KeybdInput { wVk = virtualKey, dwFlags = KeyeventfKeyup };
+        return SendInput(2, inputs, Marshal.SizeOf<Input>()) == 2;
     }
 
     /// <summary>Move the pointer without pressing anything, so a fact can restore the cursor it
@@ -415,6 +659,10 @@ internal static class PointerWindowProbe
         private int _downs;
         private int _ups;
         private int _activationsRefused;
+        private int _dragMoves;
+        private int _wheelNotches;
+        private int _keyDowns;
+        private int _activations;
 
         private ScratchTarget(nint module, ushort atom, nint window, WndProc proc, string className)
         {
@@ -433,8 +681,53 @@ internal static class PointerWindowProbe
 
         internal int ActivationsRefused => Volatile.Read(ref _activationsRefused);
 
-        /// <summary>Create and show a non-activating, topmost scratch target at a rectangle.</summary>
-        internal static ScratchTarget? Create(int x, int y, int width, int height, bool clickThrough = false)
+        /// <summary><c>WM_MOUSEMOVE</c> messages that arrived with <c>MK_LBUTTON</c> held — the
+        /// DRAG channel. A move without the button is not counted, because a pointer merely
+        /// travelling over a window proves nothing about dragging through it.</summary>
+        internal int DragMoves => Volatile.Read(ref _dragMoves);
+
+        /// <summary>Wheel notches delivered, summed by magnitude rather than counted by message, so
+        /// a machine that coalesces two notches into one <c>WM_MOUSEWHEEL</c> still reports the
+        /// travel the harness asked for.</summary>
+        internal int WheelNotches => Volatile.Read(ref _wheelNotches);
+
+        /// <summary><c>WM_KEYDOWN</c> messages delivered — the TYPE channel.</summary>
+        internal int KeyDowns => Volatile.Read(ref _keyDowns);
+
+        /// <summary>How many times the OS made this window ACTIVE (<c>WM_ACTIVATE</c> with anything
+        /// other than <c>WA_INACTIVE</c>). Zero is the reading that says a click somewhere above
+        /// this window did not reach down and activate it.</summary>
+        internal int Activations => Volatile.Read(ref _activations);
+
+        /// <summary>Create and show a topmost scratch target at a rectangle.</summary>
+        /// <param name="activatable">
+        /// <b>False (the default) is the landed behaviour</b>: <c>WS_EX_NOACTIVATE</c> plus an
+        /// <c>MA_NOACTIVATE</c> answer to every <c>WM_MOUSEACTIVATE</c>, which is what the pointer
+        /// and video routing runs want — a window that takes a click and takes NOTHING else.
+        ///
+        /// <para><b>True is required for two claims that cannot be made against such a window at
+        /// all.</b> "A passive region lets the user TYPE into the desktop underneath" needs a window
+        /// that can hold the foreground thread's keyboard focus, and a <c>WS_EX_NOACTIVATE</c>
+        /// window is exactly the one the OS will not give it to. "A handled overlay click does not
+        /// ACTIVATE the application underneath" needs a window the OS would otherwise have been
+        /// willing to activate, or the absence being asserted is a property of the instrument
+        /// instead of the surface.</para>
+        /// </param>
+        /// <param name="toolWindow">
+        /// <b>True (the default) is the landed behaviour.</b> False drops <c>WS_EX_TOOLWINDOW</c>,
+        /// which is what makes a visible unowned top-level window an ORDINARY task-switching window
+        /// by the shell's documented rule — the control the task-switcher fact needs so that "no
+        /// surface of ours is a task-switching window" is not merely a predicate that always
+        /// answers no.
+        /// </param>
+        internal static ScratchTarget? Create(
+            int x,
+            int y,
+            int width,
+            int height,
+            bool clickThrough = false,
+            bool activatable = false,
+            bool toolWindow = true)
         {
             if (!WindowsHost)
             {
@@ -449,12 +742,28 @@ internal static class PointerWindowProbe
                 switch (message)
                 {
                     case WmMouseactivate:
-                        if (built is not null)
+                        if (built is not null && !activatable)
                         {
                             Interlocked.Increment(ref built._activationsRefused);
                         }
 
-                        return 3;   // MA_NOACTIVATE
+                        // MA_NOACTIVATE. An activatable target must fall through to DefWindowProc
+                        // instead, or it would refuse the very activation the leak fact is asking
+                        // the operating system whether it performs.
+                        if (!activatable)
+                        {
+                            return 3;
+                        }
+
+                        break;
+
+                    case WmActivate:
+                        if (built is not null && (wParam & 0xFFFF) != 0)   // anything but WA_INACTIVE
+                        {
+                            Interlocked.Increment(ref built._activations);
+                        }
+
+                        break;
 
                     case WmLbuttondown:
                         if (built is not null)
@@ -468,6 +777,31 @@ internal static class PointerWindowProbe
                         if (built is not null)
                         {
                             Interlocked.Increment(ref built._ups);
+                        }
+
+                        return 0;
+
+                    case WmMousemove:
+                        if (built is not null && (wParam & MkLbutton) != 0)
+                        {
+                            Interlocked.Increment(ref built._dragMoves);
+                        }
+
+                        return 0;
+
+                    case WmMousewheel:
+                        if (built is not null)
+                        {
+                            var delta = (short)((wParam >> 16) & 0xFFFF);
+                            Interlocked.Add(ref built._wheelNotches, Math.Abs(delta) / WheelDelta);
+                        }
+
+                        return 0;
+
+                    case WmKeydown:
+                        if (built is not null)
+                        {
+                            Interlocked.Increment(ref built._keyDowns);
                         }
 
                         return 0;
@@ -492,7 +826,9 @@ internal static class PointerWindowProbe
                 return null;
             }
 
-            var exStyle = WsExNoactivate | WsExToolwindow | (clickThrough ? WsExTransparent : 0);
+            var exStyle = (activatable ? 0 : WsExNoactivate)
+                | (toolWindow ? WsExToolwindow : 0)
+                | (clickThrough ? WsExTransparent : 0);
             var window = CreateWindowExW(
                 exStyle, className, "CCP probe pointer target", WsPopup, x, y, width, height, 0, 0, module, 0);
 
@@ -673,6 +1009,11 @@ internal static class PointerWindowProbe
     private static extern bool PeekMessageW(out Msg msg, nint window, uint filterMin, uint filterMax, uint remove);
     [DllImport("user32.dll")] private static extern bool TranslateMessage(ref Msg msg);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint DispatchMessageW(ref Msg msg);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentProcessId();
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandleW(string? name);
     [DllImport("user32.dll")] private static extern nint GetDC(nint window);
     [DllImport("user32.dll")] private static extern int ReleaseDC(nint window, nint dc);
