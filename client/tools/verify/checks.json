@@ -1,4 +1,4 @@
-{
+﻿{
   "version": 1,
   "checks": [
     {
@@ -484,6 +484,52 @@
       "expectedColor": "#241E2A",
       "tolerance": 4,
       "minPixelFraction": 0.98
+    },
+
+    // THE POP QUIZ CARD. It is the first surface in this manifest that is NOT an Avalonia control:
+    // the card is a raw Win32 popup this process creates and paints with GDI
+    // (Input/Win32InputPresence.cs), so both colours below are the PAINTER's own constants rather
+    // than a brush in MainWindow.axaml - BackgroundColour 0x002E1A1A and QuestionColour 0x00B469FF,
+    // which are COLORREFs and therefore BGR: #1A1A2E and #FF69B4. PopQuizCardPresentationTests
+    // asserts that link mechanically, so a repainted card cannot leave these two behind.
+    //
+    // ONE state, because the card has one. What makes this evidence is the DRIVE rather than a
+    // second state: capture.ps1 switches the module on through its own box, paces it through its own
+    // slider, waits out the real schedule, and gates on the shell's own UIA text and on the input
+    // capability's Available - which is only returned when the OS confirmed the foreground, the
+    // keyboard focus and a differential INK read-back of the card's device context - before a pixel
+    // is read.
+    //
+    // THE GROUND BAND IS THE CARD'S LEFT MARGIN, x 0.01..0.05, and it is background by
+    // CONSTRUCTION rather than by luck: every text band the painter writes into is inset by at least
+    // width/12 (8.3%) on the left (Win32InputPresence.Band), so no glyph can ever enter this strip.
+    // Column 0 is excluded because it is the window's own outermost pixel.
+    //
+    // THE INK BAND IS THE QUESTION BLOCK, and it is the only check in this manifest whose
+    // minPixelFraction is deliberately LOW: it is text on a ground, so most of the box is ground and
+    // what is being asserted is that GLYPHS ARE REALLY THERE. A card the OS held blank - the exact
+    // Degraded case the module takes straight back down - scores 0.000 here.
+    {
+      "name": "popquiz-card-ground",
+      "surface": "popquiz-card",
+      "state": "asking",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.01, "y": 0.0, "w": 0.04, "h": 1.0 } },
+      "expectedColor": "#1A1A2E",
+      "tolerance": 4,
+      "minPixelFraction": 0.99
+    },
+    {
+      "name": "popquiz-card-question-ink",
+      "surface": "popquiz-card",
+      "state": "asking",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.33, "y": 0.20, "w": 0.34, "h": 0.16 } },
+      "expectedColor": "#FF69B4",
+      "tolerance": 24,
+      "minPixelFraction": 0.03
     }
   ]
 }

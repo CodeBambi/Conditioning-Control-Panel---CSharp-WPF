@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Capabilities;
+﻿using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Session;
@@ -217,11 +217,20 @@ public class ContinuousEffectSpineTests
         // (StudioTabView.xaml.cs:499).
         // A later packet adds a sixth that ships off (Bouncing Text,
         // CCP.Core/Models/AppSettings.cs:3598), and it lands after Spiral Overlay in the rack's order.
+        //
+        // AND AN ELEVENTH THAT SHIPS OFF (Pop Quiz, whose PopQuizEnabled ships false at
+        // Models/AppSettings.cs:3575). It lands between Brain Drain and the ramp, which is
+        // upstream's StartEngine order and the ONLY order there is for this module: upstream has no
+        // Studio rack row for it at all, its dials living on the Graded Intake door
+        // (Views/Tabs/GradedIntakeTabView.xaml:255-292), so nothing competes with
+        // MainWindow/MainWindow.StartStop.cs:255-258 - after Brain Drain (:241-244), before the ramp
+        // timer (:265-269).
         Assert.Equal(
             [
                 MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId, BouncingTextEffect.EffectId,
                 BubblePopEffect.EffectId, BubbleCountEffect.EffectId, LockCardEffect.EffectId,
-                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
+                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, PopQuizEffect.EffectId,
+                IntensityRampEffect.EffectId,
             ],
             rig.Engine.ArmRefusals.Select(r => r.Id));
     }
@@ -259,13 +268,22 @@ public class ContinuousEffectSpineTests
         // Bubble Pop then sits at the HEAD of that group, which is upstream's own rack order
         // (Add("bubbles", ...) at :499, before bubblecount at :501 and lockcard at :503) and is
         // uncontested by StartEngine, which never starts the ambient bubble game at all.
+        //
+        // AND AN ELEVENTH THAT SHIPS OFF (Pop Quiz, whose PopQuizEnabled ships false at
+        // Models/AppSettings.cs:3575). It lands between Brain Drain and the ramp, which is
+        // upstream's StartEngine order and the ONLY order there is for this module: upstream has no
+        // Studio rack row for it at all, its dials living on the Graded Intake door
+        // (Views/Tabs/GradedIntakeTabView.xaml:255-292), so nothing competes with
+        // MainWindow/MainWindow.StartStop.cs:255-258 - after Brain Drain (:241-244), before the ramp
+        // timer (:265-269).
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
                 SpiralOverlayEffect.EffectId, BouncingTextEffect.EffectId,
                 PinkFilterEffect.EffectId, BubblePopEffect.EffectId, BubbleCountEffect.EffectId,
                 LockCardEffect.EffectId,
-                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
+                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, PopQuizEffect.EffectId,
+                IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));
     }

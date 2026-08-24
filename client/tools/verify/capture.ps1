@@ -102,8 +102,8 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'toast')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'saved', 'refused')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'toast', 'popquiz-card')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'saved', 'refused', 'asking')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -131,7 +131,12 @@ $stateFiles = @(
     (Join-Path $env:APPDATA 'CcpClient\settings.json'),
     (Join-Path $env:APPDATA 'CcpClient\session_preset.json'),
     (Join-Path $env:APPDATA 'CcpClient\graded_run_awards.json'),
-    (Join-Path $env:APPDATA 'CcpClient\session_lockcard.json')
+    (Join-Path $env:APPDATA 'CcpClient\session_lockcard.json'),
+    # The FIFTH, and the Pop Quiz card's own subject. Its two dials are what decide whether a
+    # question ever comes up and how long the capture has to wait for it, and both are driven here
+    # through the real controls - so a document left behind by a previous run would mean the drive
+    # was confirming a state it did not set (PopQuizPresetDocument.FileName).
+    (Join-Path $env:APPDATA 'CcpClient\session_popquiz.json')
 )
 # AND THE PAGE'S OWN PREFS. Hygiene, and NOT what makes this deterministic.
 #
@@ -193,6 +198,12 @@ $statesFor = @{
     # `admitted` is what she gets after pressing the master switch once. A check that passed on both
     # would be saying the default is not a default.
     'companion-permissions' = @('closed', 'admitted')
+    # THE POP QUIZ CARD, and it has ONE state because the card has one: a question is up or it is
+    # not, and "not" is a photograph of the desktop. What makes this capture evidence is not a second
+    # state but the DRIVE - the module is switched on through its own box, paced through its own
+    # slider, and the card is waited for on the session's real clock, so a card that never appeared
+    # refuses by name instead of photographing whatever was there.
+    'popquiz-card' = @('asking')
     # THE IN-APP TOAST, AND ITS TWO STATES ARE TWO REAL OUTCOMES OF TWO REAL FILE DIALOGS: `saved`
     # is a phrase export that really wrote a file the user chose, `refused` is an import handed a
     # file that is not a backup. Same control, same derived band; the only thing that differs is the
@@ -212,6 +223,7 @@ using System;
 using System.Runtime.InteropServices;
 public class VerifyNative {
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, IntPtr extra);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     // The compositor fence. Identical to the one CcpClient.Tests' FlashPixelProbe.CaptureDesktop
@@ -230,6 +242,11 @@ public class VerifyNative {
     // is nothing to Invoke, while ENTER on the focused file-name edit commits BOTH variants.
     [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
     public const byte VK_RETURN = 0x0D;
+    // And the one key the PRODUCT reads on its own surface: Escape closes a pop quiz card with no
+    // answer, which is upstream's own behaviour (Windows/PopQuizWindow.xaml.cs:128-134). Pressed
+    // here so the capture ends by proving the card really takes keyboard input from a real
+    // keyboard, rather than by killing a process that still holds the user's foreground.
+    public const byte VK_ESCAPE = 0x1B;
     public const uint KEYUP = 0x0002;
     public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004;
     public const uint RIGHTDOWN = 0x0008, RIGHTUP = 0x0010;
@@ -780,6 +797,10 @@ $script:goonHwnd = [IntPtr]::Zero
 # names, so CloseMainWindow could send WM_CLOSE to either.
 $script:extraWindow = $null
 $script:extraHwnd = [IntPtr]::Zero
+# The pop quiz card, when one is up at capture time. It is not an Avalonia window and it holds the
+# user's keyboard, so it is taken down by the key the PRODUCT reads rather than by a WM_CLOSE from
+# here - see the teardown after the capture.
+$script:popQuizCard = $null
 
 if ($Surface -eq 'goon-page') {
     # =========================================================================================
@@ -1337,6 +1358,148 @@ elseif ($Surface -eq 'rack-row' -or $Surface -eq 'rack-row-dot') {
     else {
         $capX = $rowRect.X; $capY = $rowRect.Y; $capW = $rowRect.W; $capH = $rowRect.H
     }
+}
+elseif ($Surface -eq 'popquiz-card') {
+    # =============================================================================================
+    # THE POP QUIZ CARD, AND IT IS THE FIRST SURFACE IN THIS HARNESS THAT IS NOT AN AVALONIA
+    # CONTROL. The card is a raw Win32 popup this process creates, paints with GDI and gives the
+    # user's keyboard to (Input/Win32InputPresence.cs), so UIA publishes the WINDOW and NOT ONE WORD
+    # of what is written on it. That shapes the whole gate below: everything readable is read off the
+    # SHELL's own panel - which is Avalonia and does have peers - and the card contributes its
+    # existence, its rectangle, and its answer to a real key press.
+    #
+    # WHY THIS RUN TAKES A MINUTE AND CANNOT BE SHORTENED. There is no Test button in this build
+    # (upstream's BtnTestPopQuiz -> PopQuizService.TestPopQuiz shows one immediately,
+    # MainWindow/MainWindow.Lab.cs:646-649), so the only way to a card is the schedule. At the dial's
+    # ceiling of 100/hour that is 60/100 minutes +/-30% - 25.2s to 46.8s (Effects/PopQuizSchedule.cs)
+    # - and the wait below is bounded at 90s so a card that never comes is a finding, not a hang.
+    #
+    # NOTHING HERE IS SEEDED. Both dials are driven through the real controls and read back through
+    # UIA, because what this packet built is exactly those two controls being wired to the module at
+    # all - a seeded document would confirm the module and skip the claim.
+    # =============================================================================================
+    $scale = (Get-DoorRect $window 'studio').Scale
+    $viewport = Get-Rect (Get-Element $window 'RackScroll')
+
+    # (1) THE ROW. It is the last row of GAMES & CARDS and is below the scroll fold at this window
+    # size, so it is wheeled in one notch at a time and tested after each - never a fixed count.
+    $rowInfo = Scroll-RowIntoView $window $viewport 'RowPopQuiz'
+    Click-Rect $rowInfo.Rect
+    if (-not (Get-Selected (Get-Element $window 'RowPopQuiz'))) {
+        Fail 'the left-click did not open the Pop Quiz rack row (state drive failed)'
+    }
+    Write-Output "state drive: left-click on the Pop Quiz rack row -> IsSelected=True ($($rowInfo.Notches) wheel notch(es))"
+
+    # (2) THE PANEL'S OWN TEXT, BEFORE ANYTHING IS DRIVEN. A panel that failed to render is a
+    # perfectly plausible rectangle; a panel that rendered somebody else's module is worse.
+    $live = (Get-Element $window 'PopQuizLiveState').Current.Name
+    if ($live -ne 'Switched off. No question will come up, session or no session.') {
+        Fail "the Pop Quiz panel does not read as switched off on a cold start: '$live'"
+    }
+    $warning = (Get-Element $window 'PopQuizInterruptionNotice').Current.Name
+    if ($warning -notlike '*takes the keyboard*' -or $warning -notlike '*EVERY ANSWER IS CORRECT*') {
+        Fail "the panel does not warn what this module does before it is switched on: '$warning'"
+    }
+    $noTest = (Get-Element $window 'PopQuizTestNotice').Current.Name
+    if ($noTest -notlike '*no Test button*') { Fail "the panel does not admit the missing Test button: '$noTest'" }
+    Write-Output "panel gate: '$live' / the warning names the keyboard and that every answer is correct"
+
+    # (3) SWITCH IT ON, through the real box, and read the OS's own toggle state back.
+    Click-Rect (Get-Rect (Get-Element $window 'PopQuizEnableToggle'))
+    $toggle = Get-Toggle (Get-Element $window 'PopQuizEnableToggle')
+    if ("$toggle" -ne 'On') { Fail "the enable box did not turn on: ToggleState=$toggle" }
+    $live = (Get-Element $window 'PopQuizLiveState').Current.Name
+    if ($live -ne 'Armed. No question comes up until the session starts.') {
+        Fail "switching the module on did not arm it: '$live'"
+    }
+    Write-Output "state drive: enable box ToggleState=On -> '$live'"
+
+    # (4) DRIVE THE RATE TO ITS CEILING, through the real slider, by clicking its far right end.
+    # Read back the panel's own value label rather than the slider's internal value: the label is
+    # what a user sees, and it is upstream's own string (MainWindow/MainWindow.Lab.cs:643).
+    $sliderRect = Get-Rect (Get-Element $window 'PopQuizFrequencySlider')
+    Click-Rect @{ X = $sliderRect.X + $sliderRect.W - 4; Y = $sliderRect.Y; W = 3; H = $sliderRect.H }
+    $rate = (Get-Element $window 'PopQuizFrequencyValue').Current.Name
+    if ($rate -ne '100/session hr') {
+        Fail ("the frequency slider did not reach its ceiling: the panel reads '$rate'. This capture needs the " +
+    'ceiling because the wait below is sized from it')
+    }
+    Write-Output "state drive: frequency slider clicked at its right end -> panel reads '$rate'"
+
+    # (5) START THE SESSION, through the shell's one START button.
+    Click-Rect (Get-Rect (Get-Element $window 'SessionStartButton'))
+    $startCaption = (Get-Element $window 'SessionStartButton').Current.Name
+    Write-Output "state drive: START pressed -> the button reads '$startCaption'"
+
+    # (6) WAIT FOR A REAL QUESTION, on the module's real clock. Bounded, and it FAILS BY NAME with
+    # whatever the panel last said, so a run that never got a card reports the module's own account
+    # of why rather than a missing variable three lines later.
+    $card = $null
+    $cardDeadline = [Diagnostics.Stopwatch]::StartNew()
+    while ($cardDeadline.Elapsed.TotalSeconds -lt 90) {
+        $card = Get-NamedWindow $script:proc.Id 'CCP input prompt'
+        if ($null -ne $card) { break }
+        Start-Sleep -Milliseconds 250
+    }
+    if ($null -eq $card) {
+        $why = (Get-Element $window 'PopQuizCapabilityState').Current.Name
+        $state = (Get-Element $window 'PopQuizLiveState').Current.Name
+        Fail ("no pop quiz card appeared within $([int]$cardDeadline.Elapsed.TotalSeconds)s at 100 questions/hour " +
+    "(the schedule's own ceiling is 46.8s). The panel says: '$state' / '$why'")
+    }
+    Write-Output "card up after $([math]::Round($cardDeadline.Elapsed.TotalSeconds, 1))s (schedule: 25.2s..46.8s at 100/hour)"
+
+    # AND ITS CONTROL TYPE IS CHECKED, not only its name - the harness's own rule that a match on an
+    # identifier alone is dangerous, applied to a title.
+    #
+    # THE TYPE IS 'Pane', AND THAT IS A MEASURED FINDING RATHER THAN A GUESS. The first draft of this
+    # line demanded ControlType.Window and refused a card that was really on the screen: UIA
+    # classifies a captionless WS_POPUP with WS_EX_TOOLWINDOW as a PANE, not a Window
+    # (Input/Win32InputPresence.cs's CreateWindowEx - WsPopup, WsExToolwindow, no owner). It is still
+    # a top-level element and Get-NamedWindow finds it among the desktop root's children; what it is
+    # NOT is a Window peer, and a harness that assumed otherwise would report "no card" for a card
+    # every user could see.
+    if ("$($card.Current.ControlType.ProgrammaticName)" -ne 'ControlType.Pane') {
+        Fail ("the 'CCP input prompt' element is a $($card.Current.ControlType.ProgrammaticName); the card is a " +
+    'captionless popup and UIA publishes it as a Pane')
+    }
+    Write-Output "card type: $($card.Current.ControlType.ProgrammaticName) (a captionless WS_POPUP is a UIA Pane, not a Window)"
+
+    # (7) THE UIA TEXT GATE, READ BEFORE ANY PIXEL. The card publishes no text of its own, so these
+    # are the SHELL's words about it - and the second is the load-bearing half: this capability
+    # returns Available only when the operating system confirmed the foreground, the keyboard focus
+    # AND a differential ink read-back of the card's own device context
+    # (Input/Win32InputPresence.cs; InputCaptureObservation.BackgroundHeld / InkedPixels). A blank
+    # topmost window comes back Degraded, and the module takes such a card straight back down.
+    $asking = (Get-Element $window 'PopQuizLiveState').Current.Name
+    if ($asking -notlike 'Asking you now:*') {
+        Fail "a card is on screen but the panel does not say a question is up: '$asking'"
+    }
+    $capability = (Get-Element $window 'PopQuizCapabilityState').Current.Name
+    if ($capability -notlike 'The operating system gave the card the keyboard:*') {
+        Fail "the input capability did not report an available card: '$capability'"
+    }
+    Write-Output "card gate: '$asking'"
+    Write-Output "capability gate: '$capability'"
+
+    # (8) THE RECT, from the card's own window, cross-checked against the fraction of the primary
+    # display the module asks for (PopQuizEffect.CardWidthFraction 0.45, CardHeightFraction 0.5,
+    # centred through Effects/PrimaryDisplayPlacement). A card that had drifted to another size would
+    # still photograph plausibly, so the arithmetic is checked rather than trusted.
+    $cardRect = Get-Rect $card
+    $screenW = [int][VerifyNative]::GetSystemMetrics(0)
+    $screenH = [int][VerifyNative]::GetSystemMetrics(1)
+    $wantW = [int]($screenW * 0.45)
+    $wantH = [int]($screenH * 0.5)
+    if ([math]::Abs($cardRect.W - $wantW) -gt 2 -or [math]::Abs($cardRect.H - $wantH) -gt 2) {
+        Fail ("the card is $($cardRect.W)x$($cardRect.H) but 0.45 x 0.5 of the primary display " +
+    "(${screenW}x${screenH}) is ${wantW}x${wantH}")
+    }
+    Write-Output ("card rect $($cardRect.X),$($cardRect.Y) $($cardRect.W)x$($cardRect.H) = 0.45 x 0.5 of the " +
+    "primary display ${screenW}x${screenH} @ scale $scale")
+
+    $script:popQuizCard = $card
+    $capX = $cardRect.X; $capY = $cardRect.Y; $capW = $cardRect.W; $capH = $cardRect.H
 }
 elseif ($Surface -eq 'studio-dial') {
     # =============================================================================================
@@ -1952,6 +2115,36 @@ $g.CopyFromScreen($capX, $capY, 0, 0, $bmp.Size)
 Write-Output 'screen read fenced through DwmFlush (HRESULT 0)'
 $bmp.Save($outFile, [System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose(); $bmp.Dispose()
+
+# THE CARD'S LAST FACT, AND IT IS AN INTERACTION RATHER THAN A PICTURE. Escape closes a pop quiz
+# with no answer, which is upstream's own behaviour (Windows/PopQuizWindow.xaml.cs:128-134) and the
+# module's PopQuizResolution.Skipped. Pressed here on the REAL keyboard, into a window that holds
+# the real keyboard focus, and read back off the shell's own panel - so this run ends by proving the
+# card takes input from a person and not only that it was drawn. It is also how the card comes down:
+# a WM_CLOSE from this script would take it down without any of that being true.
+if ($null -ne $script:popQuizCard) {
+    [VerifyNative]::keybd_event([VerifyNative]::VK_ESCAPE, 0, 0, [IntPtr]::Zero)
+    [VerifyNative]::keybd_event([VerifyNative]::VK_ESCAPE, 0, [VerifyNative]::KEYUP, [IntPtr]::Zero)
+    $escDeadline = [Diagnostics.Stopwatch]::StartNew()
+    while ($escDeadline.Elapsed.TotalSeconds -lt 15) {
+        if ($null -eq (Get-NamedWindow $script:proc.Id 'CCP input prompt')) { break }
+        Start-Sleep -Milliseconds 200
+    }
+    if ($null -ne (Get-NamedWindow $script:proc.Id 'CCP input prompt')) {
+        Fail "the pop quiz card was still up $([int]$escDeadline.Elapsed.TotalSeconds)s after Escape was pressed"
+    }
+    $afterEsc = (Get-Element $window 'PopQuizLiveState').Current.Name
+    if ($afterEsc -notlike '*You skipped the last one with Esc.*') {
+        Fail "the card closed but the module did not record a skip: '$afterEsc'"
+    }
+    Write-Output ("card closed by a real Escape after $([math]::Round($escDeadline.Elapsed.TotalSeconds, 1))s -> " +
+    "'$afterEsc'")
+
+    # And stop the session, through the same button that started it, so the app is closed below in
+    # the state every other capture closes it in.
+    Click-Rect (Get-Rect (Get-Element $window 'SessionStartButton'))
+    Write-Output "session stopped: the button reads '$((Get-Element $window 'SessionStartButton').Current.Name)'"
+}
 
 # CLOSE THE GOON WINDOW FIRST, BY ITS OWN HANDLE.
 #

@@ -1,4 +1,4 @@
-using CcpVerify;
+﻿using CcpVerify;
 using Xunit;
 
 namespace CcpClient.Tests;
@@ -172,8 +172,8 @@ public class ToastPresentationTests
     {
         var script = CaptureScript();
         Assert.Contains("'toast' = @('saved', 'refused')", script, StringComparison.Ordinal);
-        Assert.Contains("'companion-permissions', 'toast')] [string]$Surface", script, StringComparison.Ordinal);
-        Assert.Contains("'admitted', 'saved', 'refused')] [string]$State", script, StringComparison.Ordinal);
+        Assert.Contains("'companion-permissions', 'toast', 'popquiz-card')] [string]$Surface", script, StringComparison.Ordinal);
+        Assert.Contains("'admitted', 'saved', 'refused', 'asking')] [string]$State", script, StringComparison.Ordinal);
 
         // And the UIA gate that runs BEFORE any pixel is read. A capture whose only assertion is a
         // colour cannot tell one message from another, and these two states differ by their words

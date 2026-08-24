@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Audio;
+﻿using CcpClient.Desktop.Audio;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Effects;
 using CcpClient.Desktop.Lifecycle;
@@ -56,13 +56,23 @@ public class AudioModuleSpineTests
         // at :503). Nothing in StartEngine competes for its position: the ambient game is started
         // from the dashboard card and from Services/Session/SessionEngine.cs:444, not from StartEngine's effect
         // sequence, so the rack's order stands unopposed here.
+        //
+        // POP QUIZ lands between Brain Drain and the ramp, and it is the ONE module here with a
+        // single upstream order rather than two to reconcile: upstream has no Studio rack row for it
+        // at all — its dials live on the Graded Intake door
+        // (Views/Tabs/GradedIntakeTabView.xaml:255-292) — so StartEngine's sequence is unopposed,
+        // and it starts the pop quiz at MainWindow/MainWindow.StartStop.cs:255-258, after Brain
+        // Drain (:241-244) and before the ramp timer (:265-269). Its RACK ROW is in GAMES & CARDS
+        // beside the other cards, which is the port's own placement for a row upstream does not
+        // have; the two orders differ on purpose and neither is a D90 tie-break.
         Assert.Equal(
             [
                 FlashImagesEffect.EffectId, MandatoryVideoEffect.EffectId, SubliminalsEffect.EffectId,
                 SpiralOverlayEffect.EffectId, BouncingTextEffect.EffectId,
                 PinkFilterEffect.EffectId, BubblePopEffect.EffectId, BubbleCountEffect.EffectId,
                 LockCardEffect.EffectId,
-                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, IntensityRampEffect.EffectId,
+                MindWipeEffect.EffectId, BrainDrainEffect.EffectId, PopQuizEffect.EffectId,
+                IntensityRampEffect.EffectId,
             ],
             rig.Engine.Effects.Select(e => e.Id));
     }

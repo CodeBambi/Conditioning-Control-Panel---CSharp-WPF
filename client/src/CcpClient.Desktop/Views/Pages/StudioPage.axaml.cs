@@ -1688,7 +1688,7 @@ public partial class StudioPage : UserControl
     /// </list>
     /// They reconcile because <c>Owned</c> is not about a session PRESCRIBING a value. Upstream's run
     /// takes CUSTODY of these two: it snapshots them into its spare settings at
-    /// <c>SessionEngine.cs:919-920</c> and writes them back at <c>:1544-1545</c>, so a dial the user
+    /// <c>Services/Session/SessionEngine.cs:919-920</c> and writes them back at <c>:1544-1545</c>, so a dial the user
     /// moved mid-session is silently discarded at the end. That is the harm the lock prevents, and it
     /// is exactly what the clause above is testing for.</para>
     ///

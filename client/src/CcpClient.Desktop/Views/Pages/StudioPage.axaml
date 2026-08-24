@@ -1433,7 +1433,7 @@
                NEITHER IS `session-owned`, AND THAT IS THE RESOLUTION OF A REAL CONFLICT — read
                the SessionOwnedMarker doc comment in StudioPage.axaml.cs before adding the class
                here. Upstream marks BOTH of these Owned (:269, :286) because upstream's run takes
-               CUSTODY of the two values (SessionEngine.cs:919-920 saves them, :1544-1545 writes
+               CUSTODY of the two values (Services/Session/SessionEngine.cs:919-920 saves them, :1544-1545 writes
                them back). This port's run borrows eleven documents and this is not one of them,
                so nothing is discarded at a restore and greying them would take control away for
                a harm this build does not have. -->
