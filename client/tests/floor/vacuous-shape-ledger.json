@@ -884,6 +884,30 @@
       "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag"
     },
     {
+      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_ListedTreeGrew_Fails_NamingTreeDeltaAndTheExactJsonEdit",
+      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
+      "line": 579,
+      "method": "UpstreamPayloadInventoryTests.Fixture_ListedTreeGrew_Fails_NamingTreeDeltaAndTheExactJsonEdit",
+      "shapes": [
+        "assertions-all-nested"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag. Same shape and same disposition as the seven sibling Fixture_* entries in this file"
+    },
+    {
+      "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_ListedTreeRenamedAtEqualCount_Fails_BecauseTheDigestIsOverTheLIST",
+      "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
+      "line": 615,
+      "method": "UpstreamPayloadInventoryTests.Fixture_ListedTreeRenamedAtEqualCount_Fails_BecauseTheDigestIsOverTheLIST",
+      "shapes": [
+        "assertions-all-nested"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "assertions live in the act: lambda, which WithFixtureRepo invokes exactly once — not a loop/conditional; the lambda=guarding rule is a deliberate conservative over-flag. Same shape and same disposition as the seven sibling Fixture_* entries in this file"
+    },
+    {
       "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_MatchingSet_Passes_ReachableBranchObservable",
       "path": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs",
       "line": 384,

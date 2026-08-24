@@ -1,16 +1,19 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "baseline": {
     "upstreamVersion": "v6.8.4",
     "merge": "6a8b4c724",
     "recorded": "2026-08-23",
-    "note": "Re-verified at the v6.8.3 -> v6.8.4 sync (4 upstream commits, merge 6a8b4c724). The SEVEN pre-existing trees are file-count IDENTICAL to the previous baseline (dtrh 1542, fyp 8, goon 184, intake 2138, player 3, tunnel 9, vendor 9), so no disposition changed. ONE TREE GREW: arcademy 88 -> 91 files, all three additions in games/impulse-control/ (casino.js, pressure.js, trickster.js) from the Impulse Control House Rules wave. THE GUARD DID NOT CATCH THE GROWTH AND COULD NOT: fileCountAtBaseline is record data rather than an assertion, and a not-ported tree has no per-tree manifest test to pin it, so a tree the port does not serve can grow by any amount with the suite green. That blind spot is filed as its own board row rather than papered over here. Previous baseline: v6.8.3 / merge fb89d087a (2026-08-22). Guard: client/tests/CcpClient.Tests/UpstreamPayloadInventoryTests.cs. A tree not listed here FAILS the suite; a listed tree that no longer exists upstream FAILS the suite."
+    "note": "Re-verified at the v6.8.3 -> v6.8.4 sync (4 upstream commits, merge 6a8b4c724). The SEVEN pre-existing trees are file-count IDENTICAL to the previous baseline (dtrh 1542, fyp 8, goon 184, intake 2138, player 3, tunnel 9, vendor 9), so no disposition changed. ONE TREE GREW: arcademy 88 -> 91 files, all three additions in games/impulse-control/ (casino.js, pressure.js, trickster.js) from the Impulse Control House Rules wave. THE GUARD DID NOT CATCH THE GROWTH AND COULD NOT: fileCountAtBaseline is record data rather than an assertion, and a not-ported tree has no per-tree manifest test to pin it, so a tree the port does not serve can grow by any amount with the suite green. That blind spot is filed as its own board row rather than papered over here. Previous baseline: v6.8.3 / merge fb89d087a (2026-08-22). Guard: client/tests/CcpClient.Tests/UpstreamPayloadInventoryTests.cs. A tree not listed here FAILS the suite; a listed tree that no longer exists upstream FAILS the suite. PIN CLOSED AT SCHEMA 2 (board row \"A not-ported upstream payload tree can grow by any amount with the whole suite green\"): every entry now carries fileCountAtBaseline + listSha256 and BOTH are asserted, for served and not-ported trees alike, so a tree that CHANGES is a named test failure rather than something a human happened to diff. listSha256 is SHA-256 over the tree's ordinal-sorted, '/'-normalized relative file paths, one per line, UTF-8 - a FILE-LIST digest, not a content digest: it catches an arrival, a removal, a rename and an equal swap, and it deliberately does NOT catch an edit inside an unchanged path, because this repository checks out with core.autocrlf=true and a content hash would differ between a Windows and a Linux checkout of the same commit. pinnedAt + pinReason make a bump carry its reason: the parser rejects a pinReason that does not contain the literal phrase \"<fileCountAtBaseline> files\" and the literal pinnedAt version, so the count cannot move while the sentence explaining it stays untouched."
   },
   "trees": [
     {
       "name": "arcademy",
       "disposition": "served",
       "fileCountAtBaseline": 91,
+      "listSha256": "0a1c676b02d04b6ef08b91347e7b36f84e449b64edbadcf62091f183112add28",
+      "pinnedAt": "v6.8.4",
+      "pinReason": "v6.8.4: 91 files, up from 88 at the v6.8.3 baseline. games/impulse-control/casino.js, pressure.js and trickster.js arrived with the Impulse Control House Rules wave, and the growth passed a green suite because fileCountAtBaseline was record data rather than an assertion. This is the drift that put the pin here.",
       "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/arcademy/** -> payload/arcademy); served read-only through Features/Dtrh/LoopbackServer.cs by Features/Arcademy/ArcademyParticipant.cs, whose page roots are the payload MIRROR rather than payload/arcademy because the shell borrows DTRH's spirals by relative url (shell/shell.js:76, games/the-deep-end/pressure.js:182); presence probed by Features/Arcademy/ArcademyServingRoots.Probe (typed Missing/Incomplete/Present); bytes, borrow, file count and the .svg allowlist row are pinned by ArcademyServingTests.",
       "boardRow": "Port the Arcademy upstream surface, decomposed into its eight slices [P1 OPEN] - SLICES 1 AND 2 LANDED (payload serving + boot handshake; init projection + set-setting echo loop). Slices 3-8 are still open.",
       "note": "New at v6.8.3, GREW at v6.8.4 (88 -> 91). Upstream Services/Arcademy/ArcademyHostService.cs and ArcademyMetaStore.cs render Resources/web/arcademy/ (a three.js campus shell: classes, ceremonies, report cards, split-flap board, keybinds, peek, audio). THE TREE IS NOW SERVED but THE SURFACE IS UNREACHABLE, and that is the ported fact rather than an unfinished one: THE DOOR IS SHUT UPSTREAM AS OF v6.8.4 - ArcademyHostService.DoorAvailable is a static readonly false (:116), the Play card ships Visibility=Collapsed (Views/Tabs/PlayTabView.xaml:1312) and is re-asserted from DoorAvailable on every repaint (MainWindow/MainWindow.PlayTab.cs:106-112), and Launch() refuses on the door BEFORE the T2 bar (:136-141). Upstream's stated reason is that Semester 1 landed ahead of its public reveal and 6.8.4 is an auth/stability patch. A HIDE, not a lockband, because a lockband advertises something the account could buy. Porting this surface VISIBLE would therefore ship a feature upstream is deliberately withholding, so the port carries the same single flag, defaulting closed: Features/Arcademy/ArcademyDoor.Available, with ArcademyLaunch.Attend refusing ahead of any allocation (no participant, no bound origin, no window) and ArcademyServingTests pinning that refusal. It also reaches the app-wide remote-media subsystem (FypOnlineCoordinator.For at ArcademyHostService.cs:1513), which is slice 7 and is NOT built: init projects remoteMediaEnabled=false and offlineMode=true, so the page opens no outbound fetch."
@@ -19,12 +22,18 @@
       "name": "dtrh",
       "disposition": "served",
       "fileCountAtBaseline": 1542,
+      "listSha256": "6848646844a1edd6f8e5076d6a0f154611130d561e0f0b76ac50855e0df236f6",
+      "pinnedAt": "v6.8.4",
+      "pinReason": "v6.8.4: 1542 files, unchanged from the v6.8.3 baseline. First list pin, measured at the v6.8.4 sync rather than reconstructed from history.",
       "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/dtrh/** -> payload/dtrh); served read-only through Features/Dtrh/LoopbackServer.cs; presence probed by DtrhParticipant.ProbePayloadRoot (typed Missing/Incomplete/Present)."
     },
     {
       "name": "fyp",
       "disposition": "not-ported",
       "fileCountAtBaseline": 8,
+      "listSha256": "a208ed8e5707008e17ad283c8597104069fe519de699d763bef1e5155c245c11",
+      "pinnedAt": "v6.8.4",
+      "pinReason": "v6.8.4: 8 files, unchanged since the tree arrived at v6.7. First list pin. NOT-PORTED and therefore covered by nothing else: no per-tree manifest test pins a tree the client does not serve, which is exactly how a not-ported tree could grow by any amount with the suite green.",
       "boardRow": "For You Feed desktop host + ghost mode (v6.7 — new upstream product surface) [P1 OPEN]",
       "note": "Upstream Services/Fyp/FypHostService.cs renders Resources/web/fyp/index.html (mosaic reel + ghost mode). No client host exists."
     },
@@ -32,6 +41,9 @@
       "name": "goon",
       "disposition": "served",
       "fileCountAtBaseline": 184,
+      "listSha256": "a88b98788041176951d054315b489117e8658a45d0241220f86cb8f11ff456bd",
+      "pinnedAt": "v6.8.4",
+      "pinReason": "v6.8.4: 184 files, unchanged from the v6.8.3 baseline and equal to GoonServingRoots.FileCountAtBaseline. First list pin.",
       "note": "The tree whose silent arrival (v6.6.3 -> v6.7.4, suite stayed 683/683 green) motivated this guard, and it went stale in the opposite direction at the wave-65 land: the port began serving it while this entry still read not-ported, and UpstreamPayloadInventoryTests validates SHAPE only -- it never compares a disposition to the csproj or the build output, so the stale entry stayed green. Flipped by the orchestrator at the land, from a blind audit. SERVING THE TREE IS NOT PLAYING THE GAME: no test has loaded the page, and duel playability is owed to a headed run.",
       "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/goon/** -> payload/goon), the fifth instance of that pattern; served read-only through the same Features/Dtrh/LoopbackServer.cs the DTRH tree uses, bound by Features/Goon/GoonParticipant; presence probed by Features/Goon/GoonServingRoots (typed Missing/Present). Landed in wave 65: 184 upstream files = 184 goon.payload/ manifest entries = 184 files in the build output, hash-compared, zero bytes forked into client/."
     },
@@ -39,28 +51,40 @@
       "name": "intake",
       "disposition": "served",
       "fileCountAtBaseline": 2138,
+      "listSha256": "68e9b64b556d29670543ca5d0e0c3c53f0aa3fa921daed3e062b23bb4ee4b070",
+      "pinnedAt": "v6.8.4",
+      "pinReason": "v6.8.4: 2138 files, unchanged from the v6.8.3 baseline. First list pin.",
       "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/intake/** -> payload/intake); served by the Graded Intake host (Features/Intake/IntakeHostWindow.axaml.cs); presence probed by Features/Intake/IntakeServingRoots.cs (typed Present/Missing/Incomplete)."
     },
     {
       "name": "player",
       "disposition": "not-ported",
       "fileCountAtBaseline": 3,
+      "listSha256": "faabe471907209545f992c3b26cef7609fd557a892d484b5d2d5b2df04395dc0",
+      "pinnedAt": "v6.8.4",
+      "pinReason": "v6.8.4: 3 files, unchanged from the v6.8.3 baseline. First list pin. NOT-PORTED and therefore covered by nothing else, the same blind spot the fyp entry names.",
       "boardRow": "Implement unified fullscreen video presentation [P0 BLOCKED]",
       "note": "The out-of-process browser video engine page (upstream Services/Video/Browser/BrowserVideoEngine.cs loads Resources/web/player/index.html). The v6.7.x upstream parity backlog row itemizes the engine-default + grace-pause delta."
     },
     {
       "name": "tunnel",
       "disposition": "served",
-      "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/tunnel/** -> payload/tunnel) plus the asset-manifest 9 copied entries; served by Features/Chaos/ChaosTunnelLoopback.cs (/tunnel/* under the host shell's section-4 origin discipline); window consumer Features/Chaos/ChaosTunnelWindow.cs (landed e1a4df6e).",
       "fileCountAtBaseline": 9,
+      "listSha256": "0361eb4b0d87ce9fffc4c19b32dbb3bb457e321c0bfdb6275d6d2b0eb198d7f7",
+      "pinnedAt": "v6.8.4",
+      "pinReason": "v6.8.4: 9 files, unchanged from the v6.8.3 baseline and equal to the asset manifest's copied-entry count. First list pin.",
+      "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/tunnel/** -> payload/tunnel) plus the asset-manifest 9 copied entries; served by Features/Chaos/ChaosTunnelLoopback.cs (/tunnel/* under the host shell's section-4 origin discipline); window consumer Features/Chaos/ChaosTunnelWindow.cs (landed e1a4df6e).",
       "boardRow": "Chaos tunnel backdrop surface (tunnel + vendor payload trees, v6.7.x) [P1 WIP]",
       "note": "The endless three.js rabbit-hole backdrop rendered under the whole Chaos game (upstream Chaos/ChaosTunnelService.cs). The DTRH host row's b1–b5 slice cut is declared complete and never enumerated this surface — recorded in archived-execution-record as a board reconciliation point for the orchestrator. SERVED since wave 18 (landed e1a4df6e): copied via the asset manifest as payload/tunnel (9) + payload/vendor/three (9 = the verified import-map resolution closure) and served by Features/Chaos/ChaosTunnelLoopback under the host shell's section-4 origin discipline. Orchestrator-flipped at land: this guard checks well-formedness only, so a stale not-ported entry stays green and is not honest."
     },
     {
       "name": "vendor",
       "disposition": "served",
-      "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/vendor/** -> payload/vendor) plus the asset-manifest 9 copied entries (the verified import-map resolution closure); served by Features/Chaos/ChaosTunnelLoopback.cs (/vendor/* under the host shell's section-4 origin discipline); consumed only by payload/tunnel/index.html's import map (landed e1a4df6e).",
       "fileCountAtBaseline": 9,
+      "listSha256": "7b1088cbc8b1e939265c63d4c42dfc50359bc3e305e6478760cf12519561c7da",
+      "pinnedAt": "v6.8.4",
+      "pinReason": "v6.8.4: 9 files, unchanged from the v6.8.3 baseline and equal to the verified import-map resolution closure. First list pin.",
+      "evidence": "Copied by the linked glob in client/src/CcpClient.Desktop/CcpClient.Desktop.csproj (Content Include web/vendor/** -> payload/vendor) plus the asset-manifest 9 copied entries (the verified import-map resolution closure); served by Features/Chaos/ChaosTunnelLoopback.cs (/vendor/* under the host shell's section-4 origin discipline); consumed only by payload/tunnel/index.html's import map (landed e1a4df6e).",
       "boardRow": "Chaos tunnel backdrop surface (tunnel + vendor payload trees, v6.7.x) [P1 WIP]",
       "note": "Shared top-level three.js. Consumed ONLY by tunnel/index.html's import map (../vendor/three); dtrh/intake ship their own vendored three inside the dtrh tree; goon vendors internally (goon/vendor/). Rides the tunnel surface's row. SERVED since wave 18 (landed e1a4df6e): copied via the asset manifest as payload/tunnel (9) + payload/vendor/three (9 = the verified import-map resolution closure) and served by Features/Chaos/ChaosTunnelLoopback under the host shell's section-4 origin discipline. Orchestrator-flipped at land: this guard checks well-formedness only, so a stale not-ported entry stays green and is not honest."
     }
