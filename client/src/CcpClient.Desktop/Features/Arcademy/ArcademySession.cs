@@ -24,7 +24,7 @@ namespace CcpClient.Desktop.Features.Arcademy;
 /// edges (<c>:1714</c>, <c>:1716-1730</c>). <b>Upstream has three producers and this build has
 /// one.</b> The mandatory video is real here (<c>Effects.MandatoryVideoEffect</c>, wired by
 /// <see cref="ArcademyNativeSuspension"/>); <c>AudioOnlySession</c> (<c>:1832-1852</c>) and the
-/// browser-media watch (<c>:1699-1712</c>) have NO input in this build — there is no audio-only
+/// browser-media watch (<c>:1701-1712</c>) have NO input in this build — there is no audio-only
 /// session and no browsing surface at all — so they are ABSENT rather than stubbed, for the same
 /// reason the launch gate does not carry a hard-coded <c>false</c>: a producer with no input is a
 /// producer that lies.</para>
