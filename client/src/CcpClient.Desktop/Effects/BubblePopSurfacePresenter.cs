@@ -480,9 +480,14 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
     /// <c>SpawnOnceLocked</c> also calls <c>Hit</c> and deliberately does not sound: a bubble nobody
     /// could click was never popped.</para>
     ///
-    /// <para><b>Raised OUTSIDE <c>_gate</c>.</b> The callback ends up inside the app-wide sound
-    /// arbitration, which holds a lock of its own; calling into it under this one would be a lock
-    /// order this class cannot see the other end of.</para>
+    /// <para><b>The callback is raised outside THIS method's <c>_gate</c> frame, and that is not
+    /// enough on its own — say so rather than imply otherwise.</b> A press only reaches here through
+    /// <see cref="StepOnce"/>, which pumps the surface while HOLDING <c>_gate</c>, so the callback
+    /// really does run under this class's lock however it is placed inside this method. What keeps
+    /// that safe is the callback itself: <see cref="EffectSounds.Pop"/> hands the play to another
+    /// thread and returns, so the app-wide arbitration's own lock is never taken under this one and
+    /// there is no lock order for the two to disagree about. A future <c>onPop</c> that blocked
+    /// would reintroduce the hazard, which is why it is written down here.</para>
     /// </summary>
     private void OnPress(PointerPress press)
     {
