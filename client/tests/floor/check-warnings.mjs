@@ -369,9 +369,10 @@ export function evaluate({ exitCode, output, slnText, outputSweep = null }) {
     if (outputSweep.truncated.length > 0) {
       problems.push(
         `${outputSweep.truncated.length} ZERO-BYTE BUILD OUTPUT(S) — this tree is CORRUPT and the ` +
-        "build did not notice, because a forced non-incremental build rebuilds its own outputs and " +
-        "does NOT re-derive a generated file whose timestamp is already newer than its inputs. " +
-        "Delete each one and rebuild:\n" +
+        "build just reported nothing about it: a build says what it COMPILED, not what is sitting " +
+        "in the output folder, so an empty .deps.json is fatal to the runner and invisible to " +
+        "0 warnings / 0 errors. Delete each one and rebuild; if it comes back empty, the volume is " +
+        "the suspect:\n" +
         outputSweep.truncated.map((f) => `      ${f}`).join("\n")
       );
     }

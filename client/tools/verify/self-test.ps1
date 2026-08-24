@@ -25,15 +25,20 @@
 # headless frame and no build can: the failure is a real window on a real desktop refusing to
 # photograph.
 #
-# WHY IT IS NOT THE DEFAULT, which is the decision this row asked for. The default legs cost four
-# builds and four captures; the sweep costs one build and THIRTY-SIX CAPTURES, several of which
-# are real scripted sessions that must be left running (session-history/kept exists precisely to
-# cross upstream's 30-second retention line), and it holds the machine-wide real-desktop lease for
-# the whole time - so every other lane's floor run and every other capture queues behind it. A
-# sweep that takes the better part of an hour and locks the desktop is a sweep nobody runs before a
-# push, and a check nobody runs is worth less than a fast one that always does. So: the fast legs
-# stay the thing you run every time, the sweep is the thing you run when you touched the harness,
-# a shared brush, a window's geometry, or before a wave lands.
+# WHY IT IS OPT-IN, which is the decision this row asked for - AND THE NUMBER THAT DECIDED IT IS
+# NOT THE ONE I EXPECTED. The estimate going in was "the better part of an hour, so nobody will run
+# it". MEASURED, whole sweep, this machine: 7.2 MINUTES for all 36 pairs. Most captures are 6-19 s
+# and only two are slow, both for honest reasons the surfaces exist to state - popquiz-card/asking
+# at 53 s waits for a real question to come up, and session-history/kept at 52 s must leave a real
+# session running past upstream's 30-second retention line.
+#
+# So the clock is NOT what makes this opt-in; the LEASE is. The sweep holds the machine-wide
+# real-desktop lease for those 7 minutes, and every other lane's floor run and every other capture
+# queues behind it - a cost paid by other people, which is exactly the kind a default should not
+# impose. At 7 minutes, though, the recommendation is far stronger than an hour would have allowed:
+# run it whenever you touch the harness, a shared brush or a window's geometry, and run it before a
+# wave lands. The fast legs stay the thing you run every time, because they answer a different
+# question (below) and cost no lease time to speak of.
 #
 # WHAT IT DOES NOT DO, deliberately: it does not seed a regression. The default legs prove the
 # named checks BITE; the sweep proves every surface still PHOTOGRAPHS and still passes its own
@@ -109,6 +114,15 @@ if ($Sweep) {
     $rows = @()
     $failed = 0
     $sweepClock = [Diagnostics.Stopwatch]::StartNew()
+    # Each row is printed AS IT COMPLETES as well as collected. A sweep is tens of minutes long and
+    # the app's own stdout goes straight to the console - capture.ps1 starts it with an inherited
+    # handle, so it never enters this pipeline - and without a row per pair the operator cannot tell
+    # a live run from a wedged one, or say which pair wedged it.
+    function Add-Row([string]$row) {
+        Write-Output $row
+        $script:rows += $row
+    }
+
     foreach ($pair in $pairs) {
         $surface, $state = $pair
         $key = "$surface/$state"
@@ -125,7 +139,7 @@ if ($Sweep) {
             if ([string]::IsNullOrWhiteSpace($reason)) {
                 $reason = ($captureOut.Trim() -split "`n" | Select-Object -Last 1)
             }
-            $rows += "  FAIL     $key ($([int]$clock.Elapsed.TotalSeconds)s) - capture exit ${captureExit}: $($reason.Trim())"
+            Add-Row "  FAIL      $key ($([int]$clock.Elapsed.TotalSeconds)s) - capture exit ${captureExit}: $($reason.Trim())"
             $failed++
             continue
         }
@@ -136,7 +150,7 @@ if ($Sweep) {
             # cannot be read as "every pair verified" - and CcpVerify is not even asked, because
             # EvaluateCapture REFUSES an empty selection by design (CheckEvaluator.cs:73-76), so
             # calling it here would manufacture a red for a pair the port chose not to check.
-            $rows += "  UNCHECKED $key ($([int]$clock.Elapsed.TotalSeconds)s) - captured, no named check is declared for this pair"
+            Add-Row "  UNCHECKED $key ($([int]$clock.Elapsed.TotalSeconds)s) - captured, no named check is declared for this pair"
             continue
         }
 
@@ -145,15 +159,20 @@ if ($Sweep) {
         $verifyExit = $LASTEXITCODE
         if ($verifyExit -ne 0 -or $verifyOut -notmatch 'ALL CHECKS PASSED') {
             $first = ($verifyOut -split "`n" | Where-Object { $_ -match 'FIRST FAILED CHECK|FAIL ' } | Select-Object -First 1)
-            $rows += "  FAIL     $key ($([int]$clock.Elapsed.TotalSeconds)s) - CcpVerify exit ${verifyExit}: $($first.Trim())"
+            Add-Row "  FAIL      $key ($([int]$clock.Elapsed.TotalSeconds)s) - CcpVerify exit ${verifyExit}: $($first.Trim())"
             $failed++
             continue
         }
-        $rows += "  PASS     $key ($([int]$clock.Elapsed.TotalSeconds)s) - $declared named check(s)"
+        Add-Row "  PASS      $key ($([int]$clock.Elapsed.TotalSeconds)s) - $declared named check(s)"
     }
 
+    # The failures again, together, at the end. The rows above are interleaved with the app's own
+    # stdout across tens of minutes of scrollback, which is exactly where a red goes to die.
     Write-Output '--- sweep results ---'
-    foreach ($row in $rows) { Write-Output $row }
+    foreach ($row in $rows) {
+        if ($row -match '^\s*FAIL') { Write-Output $row }
+    }
+    if ($failed -eq 0) { Write-Output '  no failing pair' }
     $minutes = [math]::Round($sweepClock.Elapsed.TotalMinutes, 1)
     if ($failed -gt 0) {
         Write-Output "SWEEP FAIL: $failed of $($pairs.Count) surface/state pairs did not produce a verified capture ($minutes min)"

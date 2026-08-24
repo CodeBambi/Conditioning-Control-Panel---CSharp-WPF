@@ -3427,12 +3427,13 @@ elseif ($Surface -eq 'companion-transcript') {
     # both captures must be at the SAME coordinates. The transcript is 440 DIP wide and CenterOwner
     # on a 480 DIP companion window
     # (client/src/CcpClient.Desktop/Features/Companion/CompanionTranscriptWindow.cs:57-58 and
-    # CompanionWindow.axaml:7),
-    # so its left edge sits 20 DIP in from the client edge; the settings Border insets its content by
-    # Padding 14 (:146), so the heading's own rect is 14 DIP in. The edge is therefore 6 DIP right of
-    # the heading. MEASURED AGAINST THAT: predicted 896, read back 897. The prediction is asserted
-    # below against the real rect, so a re-size on either window refuses by name instead of
-    # photographing the wrong side of a line that moved.
+    # CompanionWindow.axaml:7), so its left edge sits 20 DIP in from the client edge; the settings
+    # Border insets its content by Padding 14 (:146), so the heading's own rect is 14 DIP in. The
+    # edge is therefore 6 DIP right of the heading. MEASURED AGAINST THAT, on a real headed run:
+    # predicted 808, the transcript's real rect read back 809 - one pixel, which is the half-DIP the
+    # 6x1.75 rounding gives up. The prediction is asserted below against the real rect at a 3 px
+    # tolerance, so a resize on either window refuses by name instead of photographing the wrong
+    # side of a line that moved.
     # =============================================================================================
     $headRect = Get-Rect (Get-Element $companion 'PrivacyDialHead')
     # The settings Border's top rule: BorderThickness 0,1,0,0 then Padding 14,8, so the heading's
@@ -3457,7 +3458,7 @@ elseif ($Surface -eq 'companion-transcript') {
     if ($transcriptEdge -le ($capX + [int][math]::Round(4 * $scale)) -or
         $transcriptEdge -ge ($capX + $capW - [int][math]::Round(4 * $scale))) {
         Fail ("the transcript's predicted left edge $transcriptEdge is not at least 4 DIP inside the band " +
-    "$capX..$($capX + $capW); the band would not straddle it and `open` would be a flat fill again")
+    "$capX..$($capX + $capW); the band would not straddle it and the open capture would be a flat fill again")
     }
     Write-Output ("band $capX,$capY ${capW}x${capH} @ scale $scale - the settings panel's rule at $panelRuleTop " +
     "and the ground below it, straddling the transcript's predicted left edge at $transcriptEdge, above the " +

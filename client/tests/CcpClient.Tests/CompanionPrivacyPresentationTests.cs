@@ -223,7 +223,7 @@ public class CompanionPrivacyPresentationTests
             "'the dial seat band' 'the companion window'",
             "'the transcript sample band' 'the companion window'",
             "it would carry no boundary in `closed` and be a flat fill again",
-            "the band would not straddle it and `open` would be a flat fill again",
+            "the band would not straddle it and the open capture would be a flat fill again",
             "'the band right of the transcript edge' 'the transcript window'",
             "the whole band is covered and the capture carries no boundary",
         ];
