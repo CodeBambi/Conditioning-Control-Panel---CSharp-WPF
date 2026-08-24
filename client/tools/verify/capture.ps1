@@ -102,8 +102,8 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'trainer-card-level', 'session-row', 'session-start', 'session-history', 'studio-dial', 'audio-dial', 'companion-permissions', 'companion-privacy', 'companion-transcript', 'toast', 'popquiz-card', 'mantra-window')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'broad', 'titles', 'open', 'saved', 'refused', 'asking', 'fresh', 'earned', 'typed')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'trainer-card-level', 'trainer-card-record', 'session-row', 'session-start', 'session-history', 'studio-dial', 'audio-dial', 'companion-permissions', 'companion-privacy', 'companion-transcript', 'toast', 'popquiz-card', 'mantra-window')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'broad', 'titles', 'open', 'saved', 'refused', 'asking', 'fresh', 'earned', 'typed', 'read', 'unreadable')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -154,6 +154,7 @@ $stateFiles = @(
     (Join-Path $env:APPDATA 'CcpClient\audio.json')
 )
 $progressionFile = Join-Path $env:APPDATA 'CcpClient\progression.json'
+$awardsFile = Join-Path $env:APPDATA 'CcpClient\graded_run_awards.json'
 # AND THE PAGE'S OWN PREFS. Hygiene, and NOT what makes this deterministic.
 #
 # The goon PAGE keeps preferences in WebView2 localStorage, and one of them decides what is on
@@ -199,6 +200,19 @@ $statesFor = @{
     # the sampled band is fill. Each check must fail on the other capture; if it does not, the bar
     # is not reading the ledger at all.
     'trainer-card-level' = @('fresh', 'earned')
+    # THE RECORD'S THREE STATES, and the middle one is a finding rather than a choice. The card's
+    # own type has three (TrainerCardRecordState: NoRunsYet, Read, Unreadable); `no-runs-yet` is the
+    # landed `trainer-card` surface's state, and these are the other two - plus the earned row that
+    # `read` cannot be photographed without.
+    #
+    # A READ RECORD WITH NOTHING EARNED IS NOT PRODUCIBLE BY THIS BUILD, so there is no such capture
+    # to take. GradedRunAwards.RecordGradedRun awards top_of_the_class FIRST and UNCONDITIONALLY on a
+    # top-marks run, before the category is even looked at (GradedRunAwards.cs:245-248, upstream's
+    # GamificationBridge.cs:600), and the file is written ONLY when something was awarded or a
+    # category was new (:260-263). So the first bytes that record ever holds already carry an earned
+    # row. `read` is therefore ONE top-marks run - top_of_the_class earned, one category cleared -
+    # and `earned` is three distinct categories, which is the only way honor_roll is ever added.
+    'trainer-card-record' = @('read', 'unreadable', 'earned')
     # The two session-rack states are two different ROWS (a 30-minute Easy one and a 60-minute
     # Hard one), because the thing being photographed is a per-session colour: a stripe check that
     # cannot fail on another row is a check that is not reading the session's own data.
@@ -428,6 +442,26 @@ function Get-Texts($window) {
     $lines = @()
     foreach ($t in $els) { $lines += $t.Current.Name }
     return $lines
+}
+
+# Every Text descendant with its screen rect, in the order a reader meets them (top to bottom, then
+# left to right). Get-Texts above answers "is this sentence on the page"; this answers "these are the
+# card's lines, in this order, at these rects" - which is what a surface whose STATES differ by which
+# sentences are present, and by how long they are, has to gate on before it reads a pixel.
+function Get-TextRects($window) {
+    $cond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Text)
+    $els = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)
+    $out = @()
+    foreach ($t in $els) {
+        $r = $t.Current.BoundingRectangle
+        $out += [pscustomobject]@{
+            Name = $t.Current.Name
+            X = [int]$r.X; Y = [int]$r.Y; W = [int]$r.Width; H = [int]$r.Height
+        }
+    }
+    return @($out | Sort-Object Y, X)
 }
 
 # The shell publishes one probe line per rail door (MainWindow.axaml.cs ProbeLine); a UIA Text
@@ -941,6 +975,33 @@ if ($Surface -eq 'trainer-card-level' -and $State -eq 'earned') {
     New-Item -ItemType Directory -Force -Path (Split-Path $progressionFile) | Out-Null
     Set-Content -Path $progressionFile -Encoding utf8 -Value '{"schemaVersion":1,"level":42,"xp":1000.5,"highestLevelEver":42}'
     Write-Output "state drive: seeded $progressionFile with level 42, 1000.5 XP into it"
+}
+# THE AWARD RECORD'S TWO READABLE STATES AND ITS UNREADABLE ONE. Seeded for the reason the ledger
+# above is: the only producer is a whole graded intake behind an AI-drafted run this harness cannot
+# drive (IntakeHostWindow.axaml.cs:587 -> IntakeQuizRun.Record), and the thing photographed is not
+# the GRANTING - the unit suite owns that - it is whether the bytes on disk reach the card.
+#
+# EVERY SEED IS A RECORD THE PRODUCT ITSELF WOULD HAVE WRITTEN, which is the line between seeding and
+# staging. `read` is the file after ONE top-marks run in one category: top_of_the_class is awarded
+# first and unconditionally (GradedRunAwards.cs:245-248) and the category joins the set
+# (:253-259), so an awardedIds-empty file is NOT a state this build can be in and none is written
+# here. `earned` is the file after three top-marks runs in three distinct categories, which is the
+# only path that adds honor_roll (:254-257, the >= 3 clause). Categories are the port's own niches
+# lower-cased (IntakeNiche.All, normalised at GradedRunAwards.NormalizeCategory), never invented
+# strings. Both are written the way the store writes them - schemaVersion + camelCase members,
+# PersistenceStore.cs:89,92-94.
+#
+# `unreadable` is TRUNCATED JSON rather than a made-up error: TrainerCard.Read's JsonException arm
+# answers UnreadableInvalidJson, and truncation is what a half-finished write leaves behind.
+if ($Surface -eq 'trainer-card-record') {
+    New-Item -ItemType Directory -Force -Path (Split-Path $awardsFile) | Out-Null
+    $awardBytes = switch ($State) {
+        'read' { '{"schemaVersion":1,"perfectedCategories":["bambi"],"awardedIds":["top_of_the_class"]}' }
+        'earned' { '{"schemaVersion":1,"perfectedCategories":["bambi","sissy","drone"],"awardedIds":["top_of_the_class","honor_roll"]}' }
+        default { '{"schemaVersion":1,"perfectedCategories":["bambi"],"awardedIds":["top_of_' }
+    }
+    Set-Content -Path $awardsFile -Encoding utf8 -Value $awardBytes -NoNewline
+    Write-Output "state drive: seeded $awardsFile with $awardBytes"
 }
 if ($Surface -eq 'session-history' -and (Test-Path $sessionLogsDir)) {
     Remove-Item $sessionLogsDir -Recurse -Force
@@ -1480,6 +1541,258 @@ elseif ($Surface -eq 'trainer-card-level') {
     "$radius px corner radius; band y $bandTop..$bandBottom inside the $($track.H) px bar")
 
     $capX = $track.X; $capY = $track.Y; $capW = $track.W; $capH = $track.H
+}
+elseif ($Surface -eq 'trainer-card-record') {
+    # =============================================================================================
+    # THE TRAINER CARD'S RECORD STATES. The landed `trainer-card` surface photographs the card with
+    # NO record at all; this is the card with a record it could read and with one it could not, and
+    # the difference between the three captures is entirely what is in graded_run_awards.json.
+    #
+    # THE CLAIM IS AN EXTENT, NOT A COLOUR, which is the level bar's shape applied to text. Every
+    # line on this card is painted the same two ways - card ground #1B1622 behind, one of the
+    # shell's inks in front - so what separates the states is WHERE THE INK STOPS:
+    #
+    #   * `unreadable` is the only state that has a record note at all, and its sentence runs far
+    #     to the right of anything the award rows draw at that height;
+    #   * `earned` says "Earned." on the Honor Roll row, which stops well before a band that the
+    #     same row's "Not earned yet. 1 of 3 categories cleared at top marks." runs straight through.
+    #
+    # So each state declares ONE ink check and ONE ground check, and it is their CONJUNCTION that is
+    # unique to it - no single band separates all three, and pretending one did would be the vacuous
+    # kind of green this manifest has already paid for once. One ink plus one ground also means no
+    # uniform capture can pass any of the three states, which TrainerCardRecordPresentationTests
+    # asserts over this manifest rather than over the measurements.
+    #
+    # GATED ON THE CARD'S OWN TEXT BEFORE ANY PIXEL, and the gate is the whole tail of the card IN
+    # ORDER rather than a needle: the bands below are offsets into a layout, and a layout that
+    # gained or lost a line would put perfectly plausible pixels under every one of them.
+    # =============================================================================================
+    $intakeDoor = Get-DoorRect $window 'intake'
+    $scale = $intakeDoor.Scale
+    Click-Rect $intakeDoor
+    Assert-Route $window 'intake'
+    Write-Output "state drive: left-click on the Graded Intake door -> route: intake (probe: $($intakeDoor.Raw))"
+
+    # (1) THE CARD RENDERED. The page mounts on navigation but the card renders on
+    # AttachedToVisualTree (IntakePage.axaml.cs:77-81), so "the route is intake" does not imply the
+    # card read anything - an unrendered module photographs as a plausible empty rectangle.
+    $cardTitle = (Get-Element $window 'TrainerCardTitle').Current.Name
+    if ($cardTitle -ne 'Trainer Card') { Fail "the Trainer Card's title reads '$cardTitle', not 'Trainer Card'" }
+
+    # (2) THE RECORD NOTE, PRESENT OR ABSENT BY STATE, AND THE ABSENCE READ AS AN ABSENCE.
+    # IntakePage.RenderTrainerCard hides that TextBlock when the record has nothing to say for
+    # itself, and an Avalonia control with IsVisible=False has no automation peer at all - so
+    # Find-Element returning $null IS the read state, and Get-Element would fail the run instead.
+    $unreadableNote = 'This card cannot say what you have earned: graded_run_awards.json is not valid JSON.'
+    $recordNote = Find-Element $window 'TrainerCardRecordNote'
+    if ($State -eq 'unreadable') {
+        if ($null -eq $recordNote) {
+            Fail ("this capture is named 'unreadable' and the card is showing NO record note, so it read " +
+    'the seeded bytes as a record it understood. There is nothing unreadable on screen to photograph')
+        }
+        if ($recordNote.Current.Name -ne $unreadableNote) {
+            Fail ("the record note reads '$($recordNote.Current.Name)', not '$unreadableNote'. The seeded " +
+    'bytes are truncated JSON and TrainerCard.Read''s JsonException arm names that case; any other ' +
+    'sentence means the card failed for a different reason than this capture claims')
+        }
+    }
+    elseif ($null -ne $recordNote) {
+        Fail ("this capture is named '$State' - a record the card READ - and the card is showing a record " +
+    "note: '$($recordNote.Current.Name)'. The seeded record did not bind")
+    }
+
+    # (3) THE ABSENCE NO PIXEL CAN SEE, re-checked on the state where it matters most. An EARNED
+    # card is exactly where a share button would be tempting, and the card's own last line says
+    # there is none; a greyed-out one would be the fake-available shape the capability contract
+    # bans (IntakePage.axaml's own note, section 9 D7). Matched on BUTTONS only, because the
+    # sentence making the claim contains all four of those words itself.
+    $btnCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button)
+    foreach ($b in $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond)) {
+        if ($b.Current.Name -match 'shar|export|upload|publish|leaderboard') {
+            Fail ("a sharing-shaped BUTTON is on the Graded Intake page: '$($b.Current.Name)'. The card " +
+    'states there is no sharing, export, upload or publish path in this build, and upstream''s ' +
+    'counterpart traffic is owner-gated and unapproved')
+        }
+    }
+    $null = Get-Element $window 'BeginIntakeButton'   # the page's ONE button is still the launcher
+    Write-Output 'no sharing-shaped button anywhere on the page (UIA Button enumeration)'
+
+    # (4) THE CARD'S TAIL, IN ORDER, IN THIS STATE'S OWN WORDS. Not a needle list: the exact
+    # sequence of lines from the portrait note down, each one the model's own constant. A card that
+    # gained a line, lost one, or said "not earned" where the record says earned would put different
+    # pixels under every band below, and this refuses by name instead of photographing them.
+    $tocStatus = if ($State -eq 'unreadable') { 'This build cannot tell: the award record could not be read.' } else { 'Earned.' }
+    $honorStatus = switch ($State) {
+        'unreadable' { 'This build cannot tell: the award record could not be read.' }
+        'earned' { 'Earned.' }
+        default { 'Not earned yet. 1 of 3 categories cleared at top marks.' }
+    }
+    $expected = @('There is no portrait, wardrobe or banner art in this build either, so the card is words rather than a picture.')
+    if ($State -eq 'unreadable') { $expected += $unreadableNote }
+    $expected += @(
+        'Top of the Class', 'Score 90% or better on a quiz', $tocStatus,
+        'Honor Roll', 'Score 90% or better in 3 different categories', $honorStatus,
+        'Teacher''s Pet', 'Pass 25 quizzes',
+        'Not tracked here: this build counts no passed runs, so it cannot say how close this is, and it never awards it.',
+        'Held Back', 'Fail three quizzes in a row',
+        'Cannot be earned here: the graded intake has no fail state, so nothing in this build can lose three runs in a row.',
+        'All four of these are patron-exclusive in the shipping app. This build has no entitlement authority to ask, so it cannot tell whether you are a patron: it claims no tier for you, and grants what a run earns rather than refusing everyone.',
+        'This card is read from this machine and stays on it. There is no sharing, export, upload or publish path in this build.')
+
+    # (5) THE CROP, AND IT IS ANCHORED ON THE FIRST AWARD ROW RATHER THAN ON THE CARD.
+    #
+    # THAT ANCHOR IS THE WHOLE DESIGN, and it was chosen after measuring the alternative. An
+    # `unreadable` card carries ONE EXTRA LINE - the record note - which pushes every award row
+    # 24 DIP down the card. A crop anchored anywhere ABOVE the rows therefore puts a different line
+    # under every band in that one state, and the bands stop being about what the card SAYS and
+    # become about how far it slid. Anchored on the "Top of the Class" line, all three captures have
+    # the two ledger rows at the SAME offsets, and the only thing left that differs is where the ink
+    # on each STATUS line stops - which is exactly the record reaching the screen.
+    #
+    # The anchor is the row's own UIA rect, not a probe and not a constant: the four rows are an
+    # ItemsControl over the model's typed rows and their TextBlocks carry no AutomationId, so the
+    # line is found by the name upstream authored for it (Models/Achievement.cs:663-701).
+    $cropWidthDip = 460
+    $cropHeightDip = 110
+    $viewport = Get-Rect (Get-Element $window 'IntakeScroll')
+    $crop = $null
+    $portrait = $null
+    $tail = @()
+    $anchor = $null
+    $notches = 0
+    while ($true) {
+        $portrait = Get-Rect (Get-Element $window 'TrainerCardPortraitNote')
+        # The card's own column: every line from the portrait note down shares the content box's
+        # left edge, so this selects the card's tail out of the page without a probe. Two px of
+        # slack because UIA hands back a double and this rounds it.
+        $tail = @(Get-TextRects $window | Where-Object {
+            [math]::Abs($_.X - $portrait.X) -le 2 -and $_.Y -ge $portrait.Y })
+        $anchor = $tail | Where-Object { $_.Name -eq 'Top of the Class' } | Select-Object -First 1
+        if ($null -eq $anchor) { Fail "the Trainer Card has no 'Top of the Class' row to anchor the capture on" }
+        $crop = @{
+            X = $anchor.X; Y = $anchor.Y
+            W = [int][math]::Round($cropWidthDip * $scale); H = [int][math]::Round($cropHeightDip * $scale)
+        }
+        if (Test-Inside $crop $viewport) { break }
+
+        # Real input, one notch at a time, testing after each - never a fixed count. UIA reports
+        # UNCLIPPED bounds with IsOffscreen=False for content scrolled out of a viewport, so a page
+        # that grew a module would otherwise stop scrolling far enough while still reporting a
+        # plausible rect (the trainer-card finding).
+        if ($notches -ge 24) {
+            Fail ("the Trainer Card's award rows never came fully inside the page viewport after $notches " +
+    "wheel notches: crop $($crop.X),$($crop.Y) $($crop.W)x$($crop.H) vs viewport $($viewport.X)," +
+    "$($viewport.Y) $($viewport.W)x$($viewport.H)")
+        }
+        Wheel-Down $viewport
+        $notches++
+    }
+    Assert-Inside $crop $viewport 'the Trainer Card award rows' 'the Graded Intake viewport (IntakeScroll)'
+    Assert-Inside $crop $windowRect 'the Trainer Card award rows' 'the shell window'
+
+    if ($tail.Count -ne $expected.Count) {
+        Fail ("the Trainer Card's tail has $($tail.Count) lines and this state expects $($expected.Count):" +
+    "`n" + (($tail | ForEach-Object { "  '$($_.Name)'" }) -join "`n"))
+    }
+    for ($i = 0; $i -lt $expected.Count; $i++) {
+        if ($tail[$i].Name -ne $expected[$i]) {
+            Fail ("the Trainer Card's line $i reads '$($tail[$i].Name)' and this state expects " +
+    "'$($expected[$i])'. The bands this capture is sampled at are offsets into a layout, and a card " +
+    'saying something else at that offset is not evidence about what it says')
+        }
+    }
+    Write-Output ("record region $($crop.X),$($crop.Y) $($crop.W)x$($crop.H) @ scale $scale (derived: the " +
+    "'Top of the Class' line's top-left + $($cropWidthDip)x$($cropHeightDip) DIP); $notches wheel notch(es) " +
+    "to bring it inside the viewport $($viewport.X),$($viewport.Y) $($viewport.W)x$($viewport.H)")
+    Write-Output "card gate: $($tail.Count) lines in order; Top of the Class '$tocStatus'; Honor Roll '$honorStatus'"
+    foreach ($line in $tail) {
+        Write-Output ("  line y {0:F4}..{1:F4} x {2:F4}..{3:F4}  '{4}'" -f `
+            (($line.Y - $crop.Y) / $crop.H), (($line.Y + $line.H - $crop.Y) / $crop.H), `
+            (($line.X - $crop.X) / $crop.W), (($line.X + $line.W - $crop.X) / $crop.W), $line.Name)
+    }
+
+    # (6) THE FOUR BANDS checks.json SAMPLES, PROVED AGAINST THIS STATE'S MEASURED LAYOUT BEFORE
+    # ANY PIXEL IS READ. A fraction of a capture is only evidence if the thing it names is really at
+    # that fraction, and every one of these depends on a layout this script has just measured.
+    #
+    # THE MARGIN IS THE RULE, NOT THE NUMBER - the pop quiz lesson, and the level bar's. Each status
+    # line must be either a quarter CLEAR of the sampled column or a quarter PAST it; a status that
+    # ended anywhere near the band's edge would red a perfectly good capture the first time a
+    # sentence, a font or a window size moved, and this refuses at capture time instead.
+    $statusBandX = @(0.15, 0.45)        # x, shared by both status checks: the column the record decides
+    $tocStatusBandY = @(0.34, 0.41)     # y, and it must land ON the Top of the Class status line
+    $honorStatusBandY = @(0.84, 0.92)   # y, and it must land ON the Honor Roll status line
+    $rowNameBandX = @(0.02, 0.12)       # x, inside the row NAME's glyphs, which no record can change
+    $rowNameBandY = @(0.045, 0.115)     # y, and it must land ON the Top of the Class name line
+    $clearColumnBandX = @(0.75, 0.98)   # x, right of every line the card draws in this region
+    $clearColumnBandY = @(0.05, 0.95)   # y, most of the crop's height
+
+    function Fraction($line, [string]$part) {
+        switch ($part) {
+            'top' { return ($line.Y - $crop.Y) / $crop.H }
+            'bottom' { return ($line.Y + $line.H - $crop.Y) / $crop.H }
+            default { return ($line.X + $line.W - $crop.X) / $crop.W }
+        }
+    }
+
+    # The three lines the bands name, taken out of the tail by position rather than by text: the
+    # first award row is the anchor, so its three lines are the next three, and the Honor Roll
+    # status is three further on.
+    $anchorIndex = [array]::IndexOf(@($tail | ForEach-Object { $_.Name }), 'Top of the Class')
+    $tocNameLine = $tail[$anchorIndex]
+    $tocStatusLine = $tail[$anchorIndex + 2]
+    $honorStatusLine = $tail[$anchorIndex + 5]
+    if ($tocStatusLine.Name -ne $tocStatus -or $honorStatusLine.Name -ne $honorStatus) {
+        Fail ("the two status lines are not where the card's row order puts them: read " +
+    "'$($tocStatusLine.Name)' and '$($honorStatusLine.Name)'")
+    }
+
+    foreach ($band in @(
+            @{ What = 'Top of the Class status'; Band = $tocStatusBandY; Line = $tocStatusLine },
+            @{ What = 'Honor Roll status'; Band = $honorStatusBandY; Line = $honorStatusLine },
+            @{ What = 'Top of the Class name'; Band = $rowNameBandY; Line = $tocNameLine })) {
+        $top = Fraction $band.Line 'top'
+        $bottom = Fraction $band.Line 'bottom'
+        if ($band.Band[0] -lt $top -or $band.Band[1] -gt $bottom) {
+            Fail ("the $($band.What) band y $($band.Band[0])..$($band.Band[1]) of this capture is not inside " +
+    "that line, which measures $([math]::Round($top, 4))..$([math]::Round($bottom, 4)) of the crop. Those " +
+    'pixels are no longer the line checks.json names, so this capture would not be evidence about it')
+        }
+    }
+
+    # EVERY STATUS LINE IS EITHER CLEAR OF THE SAMPLED COLUMN OR STRAIGHT THROUGH IT. This is the
+    # whole inversion, asserted as geometry before it is asserted as pixels: a short status ("Earned.")
+    # must stop well before the band, and a long one must run well past it.
+    $widestStatus = 0.0
+    foreach ($line in @($tocStatusLine, $honorStatusLine)) {
+        $right = Fraction $line 'right'
+        if ($right -gt $widestStatus) { $widestStatus = $right }
+        if ($right -lt $statusBandX[0]) {
+            if ($right -gt ($statusBandX[0] * 0.8)) {
+                Fail ("'$($line.Name)' ends at $([math]::Round($right, 4)) of the crop and the sampled column " +
+    "starts at $($statusBandX[0]). It is clear of the band but only just, and a floor set near a boundary " +
+    'the product moves reds a good capture')
+            }
+        }
+        elseif ($right -lt ($statusBandX[1] / 0.8)) {
+            Fail ("'$($line.Name)' ends at $([math]::Round($right, 4)) of the crop and the sampled column ends " +
+    "at $($statusBandX[1]). It runs through the band but only just, and this capture would red the first " +
+    'time the sentence, the font or the window size moved')
+        }
+    }
+    if ($clearColumnBandX[0] -lt ($widestStatus + 0.05)) {
+        Fail ("the clear column starts at $($clearColumnBandX[0]) of the crop and the widest status line on " +
+    "this card reaches $([math]::Round($widestStatus, 4)). The band checks.json samples for empty card " +
+    'ground would contain the card''s own text')
+    }
+    Write-Output ("regions proved: status column x $($statusBandX[0])..$($statusBandX[1]) against " +
+    "'$tocStatus' ending at $([math]::Round((Fraction $tocStatusLine 'right'), 4)) and '$honorStatus' ending " +
+    "at $([math]::Round((Fraction $honorStatusLine 'right'), 4)); clear column from $($clearColumnBandX[0]), " +
+    "right of the widest at $([math]::Round($widestStatus, 4))")
+
+    $capX = $crop.X; $capY = $crop.Y; $capW = $crop.W; $capH = $crop.H
 }
 elseif ($Surface -eq 'toast') {
     # =============================================================================================

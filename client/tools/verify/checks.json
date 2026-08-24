@@ -771,6 +771,163 @@
       "expectedColor": "#9988DD",
       "tolerance": 12,
       "minPixelFraction": 0.01
+    },
+
+    // THE TRAINER CARD'S AWARD RECORD, in the two states the landed `trainer-card` surface does not
+    // have - a record this build READ, and one it could not - plus the earned row that the read
+    // state cannot be photographed without. Six checks over three states, two each.
+    //
+    // WHY "READ" AND "AN EARNED ROW" ARE ONE STATE HERE, and it is a finding rather than a
+    // shortcut. A Read record with nothing earned is not producible by this build:
+    // GradedRunAwards.RecordGradedRun awards top_of_the_class FIRST and UNCONDITIONALLY on a
+    // top-marks run, before the category is even looked at (GradedRunAwards.cs:245-248, upstream's
+    // GamificationBridge.cs:600), and the file is written ONLY when something was awarded or a
+    // category was new (:260-263). So the first bytes that record ever holds already carry an
+    // earned row. `read` is therefore ONE top-marks run and `earned` is three distinct categories,
+    // which is the only path that ever adds honor_roll.
+    //
+    // THE CLAIM IS AN EXTENT, NOT A COLOUR - the level bar's shape applied to text. Every line on
+    // this card is card ground #1B1622 behind and one of two inks in front, in all three states, so
+    // nothing here can be separated by hue. What the record decides is WHERE THE INK STOPS on the
+    // two ledger rows' status lines, and the sampled column x 0.15..0.45 is where that answer
+    // flips: "Earned." stops at 0.0857 of the crop, "Not earned yet. 1 of 3 categories cleared at
+    // top marks." runs to 0.6261, and "This build cannot tell: the award record could not be read."
+    // to 0.6658 (all measured off the lines' own UIA rects, at capture time, in every run).
+    //
+    // NO SINGLE BAND SEPARATES ALL THREE, AND PRETENDING ONE DID WOULD BE THE VACUOUS GREEN THIS
+    // MANIFEST HAS ALREADY PAID FOR. Each state is the CONJUNCTION of its two checks, and CcpVerify
+    // requires all of a state's checks, so:
+    //
+    //   read        = the Top of the Class column is CLEAR (its status is the short "Earned.")
+    //                 AND the Honor Roll column is INKED (its status is the progress sentence)
+    //   earned      = the Honor Roll column is CLEAR (that status is "Earned." too)
+    //                 AND the row's NAME is inked (nothing the record can move - the anti-uniform half)
+    //   unreadable  = BOTH columns are INKED (both statuses are the cannot-tell sentence)
+    //                 AND the card's right-hand column is empty (the anti-uniform half)
+    //
+    // MEASURED, EVERY CELL, AND EVERY INVERSION IS ZERO OR FAR. The last column is a genuinely
+    // WRONG capture rather than a sibling - the whole 1925x1330 dashboard - and all seven fail on it:
+    //
+    //                       read     earned   unreadable   dashboard
+    //   top-status clear    1.0000   1.0000   0.6043       0.2833   <- read's; unreadable reds on it
+    //   top-status ink      0.0000   0.0000   0.0756       0.0000   <- unreadable's; both siblings red 0
+    //   honor-status clear  0.6419   1.0000   0.6120       0.0000   <- earned's; both siblings red on it
+    //   honor-status ink    0.0783   0.0000   0.0739       0.0000   <- read's AND unreadable's; earned reds 0
+    //   row-name ink        0.1918   0.1918   0.1918       0.0104   <- state-independent by design
+    //   clear column        1.0000   1.0000   1.0000       0.2680   <- state-independent by design
+    //
+    // EVERY PAIR OF STATES IS SEPARATED AT A REGION BOTH OF THEM DECLARE, which is a property of
+    // this file and not of the three PNGs: read and unreadable both check the top-status region and
+    // disagree about it; read/unreadable and earned both check the honor-status region and disagree
+    // about it. That is why `unreadable` carries the honor-status ink check as well as the
+    // top-status one - it is redundant against the captures and it is what makes the earned/
+    // unreadable separation MECHANICAL. TrainerCardRecordPresentationTests asserts it over the
+    // manifest, so a later edit cannot quietly leave two states that no capture could tell apart.
+    //
+    // ONE INK AND ONE GROUND IN EVERY STATE, so no uniform capture can pass any of the three:
+    // #1B1622 at tolerance 2 and either ink at 16 are 184 and 205 apart on red, and 18 is as close
+    // as the two bands can reach. TrainerCardRecordPresentationTests asserts that arithmetic over
+    // this file rather than trusting the numbers above, because the failure it forbids has already
+    // happened once here: capture-wslg.sh printed CAPTURE PASS over an all-black image.
+    //
+    // THE TWO INKS ARE DIFFERENT COLOURS AND THAT IS WHAT SIZES THE TOLERANCE. A status line is
+    // page-blurb #FFE8E0EE at a local Opacity 0.9 (IntakePage.axaml's award template), which
+    // composites over the card's #FF1B1622 to #D3CBD9; a row NAME is module-title at no opacity, so
+    // it is #E8E0EE exactly. Those are 21 per channel apart, so 16 is the largest tolerance at
+    // which a title's glyphs cannot pass a status check and vice versa - the two ink bands stay two
+    // different claims. THE GROUND TOLERANCE IS 2, the trainer-card-ground number for the
+    // trainer-card-ground reason: the rack's #FF19141F is 3 away on its widest channel, so at the
+    // rail door's 24 these checks would pass on a photograph of the Studio rack.
+    //
+    // FLOORS SIT WELL BELOW THE MEASUREMENTS AND THE FAILURES ARE NOT NEAR THEM. Glyph coverage in
+    // a text band is a fraction the product varies - a different sentence is a different number of
+    // letters - so the ink floors are 0.02 against 0.0739..0.0783 and 0.05 against 0.1918, which is
+    // the pop quiz lesson applied rather than re-learned; the wrong captures score 0.0000 flat, not
+    // a near miss. The ground floors are 0.98 against EXACT 1.0000s (flat fills with no
+    // antialiasing in them, like the rack's) and the wrong captures score 0.604..0.642.
+    //
+    // WHAT THESE SIX DO NOT PROVE. They are evidence about colour and geometry at named offsets of
+    // a derived rect: that ink is present in this column and absent from that one. They are NOT
+    // evidence about legibility, wording, contrast or usability, and no check here reads a
+    // character. What proves the card is SAYING the right thing is the capture path, which reads
+    // the whole tail of the card off UIA - fifteen or sixteen lines, in order, each the model's own
+    // constant - and refuses by name before any pixel is read.
+    {
+      "name": "trainer-card-record-read-top-status-clear",
+      "surface": "trainer-card-record",
+      "state": "read",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.15, "y": 0.34, "w": 0.30, "h": 0.07 } },
+      "expectedColor": "#1B1622",
+      "tolerance": 2,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "trainer-card-record-read-honor-progress-ink",
+      "surface": "trainer-card-record",
+      "state": "read",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.15, "y": 0.84, "w": 0.30, "h": 0.08 } },
+      "expectedColor": "#D3CBD9",
+      "tolerance": 16,
+      "minPixelFraction": 0.02
+    },
+    {
+      "name": "trainer-card-record-earned-honor-status-clear",
+      "surface": "trainer-card-record",
+      "state": "earned",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.15, "y": 0.84, "w": 0.30, "h": 0.08 } },
+      "expectedColor": "#1B1622",
+      "tolerance": 2,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "trainer-card-record-earned-row-name-ink",
+      "surface": "trainer-card-record",
+      "state": "earned",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.045, "w": 0.10, "h": 0.07 } },
+      "expectedColor": "#E8E0EE",
+      "tolerance": 16,
+      "minPixelFraction": 0.05
+    },
+    {
+      "name": "trainer-card-record-unreadable-top-status-ink",
+      "surface": "trainer-card-record",
+      "state": "unreadable",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.15, "y": 0.34, "w": 0.30, "h": 0.07 } },
+      "expectedColor": "#D3CBD9",
+      "tolerance": 16,
+      "minPixelFraction": 0.02
+    },
+    {
+      "name": "trainer-card-record-unreadable-honor-status-ink",
+      "surface": "trainer-card-record",
+      "state": "unreadable",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.15, "y": 0.84, "w": 0.30, "h": 0.08 } },
+      "expectedColor": "#D3CBD9",
+      "tolerance": 16,
+      "minPixelFraction": 0.02
+    },
+    {
+      "name": "trainer-card-record-unreadable-clear-column",
+      "surface": "trainer-card-record",
+      "state": "unreadable",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.75, "y": 0.05, "w": 0.23, "h": 0.90 } },
+      "expectedColor": "#1B1622",
+      "tolerance": 2,
+      "minPixelFraction": 0.98
     }
   ]
 }
