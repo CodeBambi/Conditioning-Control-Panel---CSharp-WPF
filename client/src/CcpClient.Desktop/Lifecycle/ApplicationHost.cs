@@ -1,4 +1,4 @@
-﻿namespace CcpClient.Desktop.Lifecycle;
+namespace CcpClient.Desktop.Lifecycle;
 
 using CcpClient.Desktop.Capabilities;
 
