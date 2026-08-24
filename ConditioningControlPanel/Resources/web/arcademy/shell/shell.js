@@ -2598,7 +2598,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         ? document.getElementById('arc-emi') : null);
     // `shout` is boot.js's toast (#arc-toast). EMI borrows it for exactly one
     // line - the first time the player ever dismisses her with the x.
-    if (emiLayer) mountEmi({ layer: emiLayer, store, toast: shout, log: say });
+    /* `assets` + `settings` are THE OFF CHANNELS' media seam (W3): NOW WATCHING
+     * draws through the provider the same way a class does (the host fetches,
+     * the page never does) and falls back to `init.settings.localAssets`. Both
+     * are optional to her - absent means the channel is absent. */
+    if (emiLayer) mountEmi({ layer: emiLayer, store, toast: shout, log: say, assets, settings: src.settings });
   } catch (e) { say('EMI failed to mount (the shell is unaffected): ' + ((e && e.message) || e)); }
 
   showBoard();

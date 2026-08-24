@@ -81,12 +81,16 @@ export function voiceMoment(name, payload) {
  * @param {Function=} o.log
  * @returns {Object|null} the controller, or null when there is nothing to mount
  */
-export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
+export function mountEmi({ layer, store, toast, enabled = true, log, assets, settings } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   if (!layer) return null;
   if (singleton) return singleton;
 
-  const widget = createWidget({ root: layer, store, toast, log: say });
+  /* OFF CHANNELS (W3): `assets` is the shell's provider handle and `settings`
+   * is `init.settings`. NOW WATCHING is the only thing in EMI that wants
+   * either, and both are optional - a host that hands neither simply plans that
+   * channel out of the wheel (never a stub, never a black glass). */
+  const widget = createWidget({ root: layer, store, toast, log: say, assets, settings });
   if (!widget) return null;
 
   /* THE OPENING BEAT LANDS LATE OR NOT AT ALL. The renderer is one dynamic
@@ -212,6 +216,18 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
     stats() { return widget.stats(); },
     /** Force the debounced persistence write out now (host shutdown, tests). */
     flush() { widget.flush(); },
+
+    /* ---- THE OFF CHANNELS (W3) ---------------------------------------- */
+    /**
+     * Lay a channel over her glass. `painter` is a painter object or one of the
+     * ids in `emi/channels.js` CHANNELS. Returns false when the deck refused,
+     * which is the answer most of the time and is never an error.
+     */
+    screenTakeover(painter, opts) { return widget.screenTakeover(painter, opts); },
+    /** The deck (emi/takeover.js), once it has loaded. Test/debug handle only. */
+    get channels() { return widget.channels; },
+    /** A shell moment changed the screen's owner. moments.js is the one caller. */
+    noteMoment(name) { widget.noteMoment(name); },
 
     /** The decision engine, once it has loaded. A test/debug handle only. */
     get voice() { return voice; },

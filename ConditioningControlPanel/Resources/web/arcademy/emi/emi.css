@@ -66,6 +66,33 @@
   pointer-events: none;
 }
 
+/* THE OFF CHANNELS' GLASS (W3). A SECOND canvas on the EXACT rect above, laid
+ * over the face and hidden at rest. face.js keeps painting underneath it the
+ * whole time a channel is up - that is the entire safety argument: killing a
+ * channel is hiding one node, and the owner-locked renderer is never touched.
+ * Any change to `.emi-screen`'s rect has to be mirrored here or the channels
+ * drift off her bezel. */
+.emi-glass {
+  position: absolute;
+  left: 34.46%;
+  top: 29.46%;
+  width: 41.68%;
+  height: 37.63%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  pointer-events: none;
+  z-index: 1;
+}
+/* TRAP 27, AND IT BIT THIS WAVE IN TESTING. `[hidden]` is a USER-AGENT rule, so
+ * the author `display:block` above beat it and `glass.hidden = true` left a dead
+ * channel painted over her face. `styles.css` opens with a global
+ * `[hidden]{display:none !important}` that would have covered it, but EMI also
+ * ships standalone (demo.html, the browser proof) and a skin must not depend on
+ * the shell's reset to be able to hide its own node. Scoped, so it is not a
+ * competing global rule. */
+.emi-glass[hidden] { display: none; }
+
 .emi-fx {
   position: absolute;
   inset: 0;
