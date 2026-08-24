@@ -1,0 +1,186 @@
+/* ============================================================================
+ * annex/cams.css - the camera wall's own chrome. Loads AFTER styles.css (the
+ * shell sheet paints the campus classes and the pixel student; this sheet only
+ * adds the glass in front of them). EMI precedent: module folder, module sheet.
+ *
+ * TOKENS. Two literals, in :root, same sanction as the --room-* triples: they
+ * MIRROR LOCKED ART - the cold phosphor grade of the approved Annex slides
+ * (annex_pixel_establishing2 / annex_shot_monitors2). Everything else is
+ * color-mix off the shell's palette tokens, so a mod reskin carries the feeds.
+ *
+ * BUDGET (trap 36). The only infinite animations here are: one 3px scanline
+ * TRANSFORM loop shared by every feed, the REC dot's blink, and the laptop
+ * caret. No blend modes, no filters on anything that moves, and the lite rung
+ * (.an-lite on the wall, html.arc-reduced, prefers-reduced-motion) stops all
+ * of it in one block at the bottom.
+ * ==========================================================================*/
+
+:root {
+  --annex-cold: #8FE0CE;       /* lab phosphor - sampled off the slides' glass */
+  --annex-cold-deep: #0D2724;  /* dead-channel green-black under every feed */
+}
+
+/* ---- the wall (default layout: inspection grid; a host may re-lay tiles) -- */
+.an-camwall {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+/* ---- one channel --------------------------------------------------------- */
+.cam-tile {
+  position: relative;
+  aspect-ratio: 340 / 245;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--annex-cold-deep), black 30%);
+  border: 1px solid color-mix(in srgb, var(--annex-cold), transparent 78%);
+  border-radius: 3px;
+}
+.cam-tile svg.campus-plan { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* the campus seen through lab glass: darker sky than the campus's own dusk */
+.an-sky { fill: color-mix(in srgb, var(--campus-sky), black 22%); }
+
+/* ---- students ------------------------------------------------------------ */
+.an-actor { transition: opacity .35s ease; }
+.an-actor.an-in, .an-actor.an-out { opacity: 0; }
+/* the walk: a two-frame step, transform only, on the sprite group */
+.an-actor .gh-sprite { transform-box: fill-box; transform-origin: center 85%; }
+.an-actor.an-walk .gh-sprite { animation: an-step .38s steps(2) infinite; }
+@keyframes an-step { 50% { transform: translateY(-1px); } }
+/* THE LOOKER - the head tips up toward the corner the lens hangs in */
+.an-actor.an-look .gh-sprite { animation: none; transform: rotate(-7deg) translateY(-.5px); }
+
+/* ---- the glass ----------------------------------------------------------- */
+.cam-fx { position: absolute; inset: 0; pointer-events: none; }
+.cam-fx > div { position: absolute; inset: 0; }
+
+/* scanlines: pattern period 3px, drift by TRANSFORM over exactly one period */
+.cam-scan { overflow: hidden; opacity: .5; }
+.cam-scan::before {
+  content: '';
+  position: absolute; left: 0; right: 0; top: -6px; bottom: -6px;
+  background: repeating-linear-gradient(180deg,
+    color-mix(in srgb, black, transparent 40%) 0 1px, transparent 1px 3px);
+  animation: an-scan 1.3s linear infinite;
+}
+@keyframes an-scan { to { transform: translateY(3px); } }
+
+/* grain: one static seeded tile; only a cut makes it jump (steps, transform) */
+.cam-noise { opacity: .08; background-repeat: repeat; }
+.cam-cut .cam-noise { opacity: .5; animation: an-noisejump .26s steps(4); }
+@keyframes an-noisejump {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-14px, 8px); }
+  50% { transform: translate(9px, -12px); }
+  75% { transform: translate(-5px, -6px); }
+  100% { transform: translate(0, 0); }
+}
+.cam-cut svg.campus-plan { opacity: .72; }
+
+/* the tracking roll: a one-shot band falling through the frame */
+.cam-roll {
+  height: 34%;
+  background: linear-gradient(180deg, transparent,
+    color-mix(in srgb, var(--annex-cold), transparent 80%) 45%, transparent);
+  transform: translateY(-140%);
+  opacity: 0;
+}
+.cam-roll.go { animation: an-roll .55s linear; }
+@keyframes an-roll {
+  from { transform: translateY(-140%); opacity: 1; }
+  to { transform: translateY(340%); opacity: 1; }
+}
+
+/* the grade: cold tint + vignette, plain alpha - deliberately NO blend mode */
+.cam-grade {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(120% 96% at 50% 46%, transparent 56%,
+      color-mix(in srgb, black, transparent 42%) 100%),
+    color-mix(in srgb, var(--annex-cold), transparent 90%);
+}
+
+/* power-on: the emi crt beat, once per tile at start, transform+opacity only */
+.cam-boot svg.campus-plan, .cam-boot .cam-fx { animation: an-power .45s ease-out; }
+@keyframes an-power {
+  0% { transform: scaleY(.05); opacity: .1; }
+  55% { transform: scaleY(1.04); opacity: 1; }
+  100% { transform: scaleY(1); }
+}
+
+/* ---- OSD - live text, never baked into art. --pix is the sanctioned face
+ *      for exactly this kind of micro-label. ------------------------------- */
+.cam-osd {
+  position: absolute; inset: 5px 6px; pointer-events: none;
+  font-family: var(--pix);
+  font-size: 8px; line-height: 1;
+  color: color-mix(in srgb, var(--annex-cold), white 12%);
+  text-shadow: 0 0 4px color-mix(in srgb, var(--annex-cold), transparent 45%),
+               0 1px 0 color-mix(in srgb, black, transparent 30%);
+}
+.cam-osd-id { position: absolute; top: 0; left: 0; letter-spacing: .08em; }
+.cam-osd-rec { position: absolute; top: 0; right: 0; display: flex; gap: 4px; align-items: center; }
+.cam-osd-rec em { font-style: normal; }
+.cam-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--annex-cold);
+  box-shadow: 0 0 4px var(--annex-cold);
+  animation: an-blink 1.4s steps(2, jump-none) infinite;
+}
+@keyframes an-blink { 50% { opacity: .15; } }
+.cam-osd-room {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  letter-spacing: .06em; opacity: .85;
+  white-space: nowrap; overflow: hidden;   /* a long mod re-name crops, never wraps */
+}
+
+/* ---- the laptop: dark glass, locked prompt (the fake OS is the next phase) */
+.cam-laptop { aspect-ratio: 213 / 118; }
+.lap-screen {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 7px;
+  font-family: var(--pix);
+  color: color-mix(in srgb, var(--annex-cold), white 8%);
+  background:
+    radial-gradient(130% 120% at 50% 40%,
+      color-mix(in srgb, var(--annex-cold-deep), black 10%) 0%,
+      color-mix(in srgb, var(--annex-cold-deep), black 55%) 100%);
+}
+.lap-title { font-size: 9px; letter-spacing: .18em; }
+.lap-locked {
+  font-size: 7px; letter-spacing: .12em; opacity: .85;
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--annex-cold), transparent 55%);
+}
+.lap-prompt { font-size: 7px; letter-spacing: .1em; opacity: .7; display: flex; align-items: center; gap: 2px; }
+.lap-caret {
+  width: 5px; height: 8px;
+  background: var(--annex-cold);
+  animation: an-blink 1s steps(2, jump-none) infinite;
+}
+
+/* ---- THE LITE RUNG - every decorative animation dies here, nowhere else --- */
+.an-camwall.an-lite .cam-scan::before,
+html.arc-reduced .cam-scan::before,
+.an-camwall.an-lite .cam-dot,
+html.arc-reduced .cam-dot,
+.an-camwall.an-lite .lap-caret,
+html.arc-reduced .lap-caret,
+.an-camwall.an-lite .an-actor.an-walk .gh-sprite,
+html.arc-reduced .an-actor.an-walk .gh-sprite,
+.an-camwall.an-lite .cam-roll.go,
+html.arc-reduced .cam-roll.go,
+.an-camwall.an-lite .cam-cut .cam-noise,
+html.arc-reduced .cam-cut .cam-noise,
+.an-camwall.an-lite .cam-boot svg.campus-plan,
+html.arc-reduced .cam-boot svg.campus-plan,
+.an-camwall.an-lite .cam-boot .cam-fx,
+html.arc-reduced .cam-boot .cam-fx { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .cam-scan::before, .cam-dot, .lap-caret, .an-actor.an-walk .gh-sprite,
+  .cam-roll.go, .cam-cut .cam-noise,
+  .cam-boot svg.campus-plan, .cam-boot .cam-fx { animation: none; }
+  .an-actor { transition: none; }
+}

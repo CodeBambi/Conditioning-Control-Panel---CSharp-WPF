@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Annex — camera wall tester</title>
+<!-- No shell, no bridge, no remote anything. Loads the REAL shell sheet (it
+     paints the campus classes and the pixel student the feeds reuse) plus the
+     wall's own sheet, and the real modules under it. EMI demo precedent. -->
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="cams.css">
+<style>
+  body { margin: 0; padding: 18px 16px 60px; background: var(--ground); color: var(--ink); }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+           border-bottom: 3px solid color-mix(in srgb, var(--annex-cold), transparent 40%);
+           padding-bottom: 8px; margin-bottom: 14px; }
+  h1 { font-family: var(--disp); font-size: 22px; margin: 0; letter-spacing: .08em;
+       color: color-mix(in srgb, var(--annex-cold), white 15%); }
+  .eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--ink-dim); }
+  .modes { display: flex; gap: 8px; margin: 0 0 14px; }
+  .modes button { font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+       min-height: 36px; padding: 6px 14px; cursor: pointer;
+       background: var(--panel); color: var(--ink); border: 2px solid var(--line); }
+  .modes button[aria-pressed="true"] {
+       background: color-mix(in srgb, var(--annex-cold), var(--panel) 70%);
+       border-color: var(--annex-cold); color: var(--ground); }
+  .modes button:focus-visible { outline: 2px solid var(--annex-cold); outline-offset: 2px; }
+  /* [hidden] display:none arrives from the shell sheet's global reset (trap 27) */
+  /* composite stage: the art at 1376x768, scaled to fit, feeds under the mask */
+  #comphost { position: relative; overflow: hidden; }
+  .an-stage { position: relative; width: 1376px; height: 768px; transform-origin: 0 0; }
+  .an-art { position: absolute; inset: 0; width: 1376px; height: 768px;
+            image-rendering: pixelated; z-index: 1; pointer-events: none; }
+  .an-feeds { position: absolute; inset: 0; z-index: 2;
+              mask-size: 100% 100%; -webkit-mask-size: 100% 100%; }
+  /* in the stage, a tile is pinned to its extracted bbox and drops the grid look */
+  .an-feeds .cam-tile { position: absolute; border: none; border-radius: 0; aspect-ratio: auto; }
+  .note { color: var(--ink-faint); font-size: 12px; font-family: var(--mono); margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>THE ANNEX — CAMERA WALL</h1>
+    <span class="eyebrow">annex/cams.js · renderer tester</span>
+  </header>
+  <div class="modes" role="group" aria-label="view mode">
+    <button id="btnWall" aria-pressed="true">WALL</button>
+    <button id="btnComp" aria-pressed="false">COMPOSITE</button>
+    <button id="btnLite" aria-pressed="false">LITE</button>
+  </div>
+  <div id="wallhost"></div>
+  <div id="comphost" hidden>
+    <div class="an-stage">
+      <div class="an-feeds" id="feeds"></div>
+      <img class="an-art" src="demo-assets/annex_shot_monitors2.png" alt="">
+    </div>
+  </div>
+  <p class="note" id="note">feeds are seeded — a reload replays the same shift</p>
+</div>
+<script type="module">
+  import { createCamWall } from './cams.js';
+
+  const wallhost = document.getElementById('wallhost');
+  const comphost = document.getElementById('comphost');
+  const feeds = document.getElementById('feeds');
+  const stage = comphost.querySelector('.an-stage');
+
+  const wall = createCamWall({});
+  wallhost.appendChild(wall.root);
+  wall.start();
+
+  /* ---- composite geometry: the extracted quads, cam8's occluded CRT drawn
+   *      at its row's full height (the MASK hides what the laptop covers) ---- */
+  let placed = false;
+  async function placeTiles() {
+    if (placed) return;
+    const q = await (await fetch('demo-assets/screen_quads.json')).json();
+    const boxes = {};
+    for (const s of q.annex_shot_monitors2.screens) boxes[s.name] = s.bbox.slice();
+    boxes.cam8 = [581, 539, 215, 143];   // full glass; the laptop occlusion is the mask's job
+    for (const id of Object.keys(boxes)) {
+      const tile = wall.tiles[id];
+      if (!tile) continue;
+      const [x, y, w, h] = boxes[id];
+      tile.style.left = x + 'px';
+      tile.style.top = y + 'px';
+      tile.style.width = w + 'px';
+      tile.style.height = h + 'px';
+      feeds.appendChild(tile);
+    }
+    placed = true;
+  }
+
+  /* ---- the screen mask, luminance -> alpha once through a canvas (a live
+   *      chroma key is FORBIDDEN here: the bezel LEDs are the same green) ---- */
+  const maskImg = new Image();
+  maskImg.onload = () => {
+    const c = document.createElement('canvas');
+    c.width = maskImg.naturalWidth; c.height = maskImg.naturalHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(maskImg, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < d.data.length; i += 4) d.data[i + 3] = d.data[i];
+    ctx.putImageData(d, 0, 0);
+    const u = 'url(' + c.toDataURL('image/png') + ')';
+    feeds.style.webkitMaskImage = u;
+    feeds.style.maskImage = u;
+  };
+  maskImg.src = 'demo-assets/annex_shot_monitors2_screenmask.png';
+
+  function fitStage() {
+    const s = Math.min(1, comphost.clientWidth / 1376);
+    stage.style.transform = 'scale(' + s + ')';
+    comphost.style.height = Math.round(768 * s) + 'px';
+  }
+  addEventListener('resize', () => { if (!comphost.hidden) fitStage(); });
+
+  /* ---- mode toggles ---- */
+  const btnWall = document.getElementById('btnWall');
+  const btnComp = document.getElementById('btnComp');
+  const btnLite = document.getElementById('btnLite');
+  function setMode(comp) {
+    btnWall.setAttribute('aria-pressed', String(!comp));
+    btnComp.setAttribute('aria-pressed', String(comp));
+    if (comp) {
+      placeTiles().then(() => {
+        wallhost.hidden = true;
+        comphost.hidden = false;
+        fitStage();
+      });
+    } else {
+      // back to the grid: tiles return to the wall root and shed their pins
+      for (const id of Object.keys(wall.tiles)) {
+        const tile = wall.tiles[id];
+        tile.style.left = tile.style.top = tile.style.width = tile.style.height = '';
+        wall.root.appendChild(tile);
+      }
+      comphost.hidden = true;
+      wallhost.hidden = false;
+    }
+  }
+  btnWall.addEventListener('click', () => setMode(false));
+  btnComp.addEventListener('click', () => setMode(true));
+  btnLite.addEventListener('click', () => {
+    const on = wall.root.classList.toggle('an-lite');
+    btnLite.setAttribute('aria-pressed', String(on));
+  });
+  if (new URLSearchParams(location.search).get('mode') === 'composite') setMode(true);
+</script>
+</body>
+</html>
