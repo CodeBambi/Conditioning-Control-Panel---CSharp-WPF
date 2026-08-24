@@ -2390,7 +2390,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const want = !!on;
     if (!active) { orientFrozen = false; return; }
     if (want === orientFrozen) return;
-    if (want && (active.paused || active.suspendEl)) return;
+    /* THE GUARD RUNS IN BOTH DIRECTIONS. Refusing to freeze an already-frozen
+     * class is the obvious half; the half that bites is the LIFT. A host suspend
+     * can land while the card is up, and un-freezing then would call resume() on
+     * a class the host stopped - the card would come down and the game would
+     * carry on playing behind a suspend overlay. Dropping the bookkeeping without
+     * resuming hands the class back to whoever actually owns its pause. */
+    if (active.paused || active.suspendEl) { orientFrozen = false; return; }
     orientFrozen = want;
     timeBarSet(!want);
     try { want ? active.instance.pause() : active.instance.resume(); }
