@@ -9,6 +9,7 @@ using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Motion;
 using CcpClient.Desktop.Navigation;
 using CcpClient.Desktop.Views;
+using CcpClient.Desktop.Views.Pages;
 using Xunit;
 
 namespace CcpClient.HeadlessTests;
@@ -64,6 +65,11 @@ public class MotionSettingHeadlessTests : HeadlessTest
             .FirstOrDefault(c => c.Name == "MotionLevelPicker")
         ?? throw new InvalidOperationException("no MotionLevelPicker reachable through the System door");
 
+    private static TextBlock Blurb(MainWindow window) =>
+        window.GetVisualDescendants().OfType<TextBlock>()
+            .FirstOrDefault(t => t.Name == "MotionBlurb")
+        ?? throw new InvalidOperationException("no MotionBlurb reachable through the System door");
+
     private static TextBlock State(MainWindow window) =>
         window.GetVisualDescendants().OfType<TextBlock>()
             .FirstOrDefault(t => t.Name == "MotionLevelState")
@@ -85,6 +91,10 @@ public class MotionSettingHeadlessTests : HeadlessTest
             Assert.Equal((int)MotionLevel.Full, picker.SelectedIndex);
             Assert.Equal(MotionLevel.Full, HostedMotion.LevelOf(host));
             Assert.Contains(HostedMotion.NoReducedArgument, State(window).Text, StringComparison.Ordinal);
+
+            // The blurb the user actually reads is the one the unit facts check: the wiring is what
+            // a headless mount can prove and a unit fact cannot. Unset, the module ships blank.
+            Assert.Equal(MotionNotices.Blurb, Blurb(window).Text);
         }
         finally
         {

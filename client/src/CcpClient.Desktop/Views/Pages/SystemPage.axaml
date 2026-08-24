@@ -26,9 +26,16 @@
       <Border Classes="module" Margin="0,12,0,0">
         <StackPanel Spacing="6">
           <TextBlock Classes="module-title" Text="Motion" />
-          <TextBlock Classes="page-blurb"
+          <!--
+            The blurb's words are MotionNotices.Blurb, not a literal here: the *Notices.cs
+            convention this page already follows for Phrase backup, so a unit fact checks what the
+            user reads. Its first sentence is SCOPED to hosted pages on purpose - see that file.
+          -->
+          <TextBlock x:Name="MotionBlurb"
+                     Classes="page-blurb"
+                     AutomationProperties.AutomationId="MotionBlurb"
                      TextWrapping="Wrap"
-                     Text="How much movement this app is allowed to show. Full and Reduced both keep the pages this app hosts in motion; Off is the only setting that stops them." />
+                     Text="" />
           <ComboBox x:Name="MotionLevelPicker"
                     HorizontalAlignment="Left"
                     MinWidth="160"

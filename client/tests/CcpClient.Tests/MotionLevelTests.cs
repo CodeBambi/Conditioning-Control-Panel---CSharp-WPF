@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using CcpClient.Desktop.Lifecycle;
 using CcpClient.Desktop.Motion;
 using CcpClient.Desktop.Persistence;
+using CcpClient.Desktop.Views.Pages;
 using Xunit;
 
 namespace CcpClient.Tests;
@@ -69,18 +70,13 @@ public class MotionLevelTests
     public async Task TheHostedSurfacesReadTheUsersLevelOffTheStore_AndTheOsNeverChangesIt()
     {
         using var dir = new TempDir();
-        var path = dir.Path(MotionSettingsDocument.FileName);
-        var registry = new OperationRegistry();
-        var log = new ListLogSink();
-        var store = new PersistenceStore<MotionSettingsDocument>(
-            registry.OwnerFor("MotionSettings"), log, path, MotionSettingsDocument.CurrentSchemaVersion);
-        var host = new ApplicationHost(
-            log, [store], new StartupTrace(), registry, new UiDispatchBoundary());
-        await host.StartParticipantsAsync(TestContext.Current.CancellationToken);
+        var (host, store) = await BootAsync(dir);
 
-        // What every hosted surface calls. The log delegate below is the breadcrumb's only sink;
-        // whether it fires depends on THIS machine's animation flag, so the assertions here are on
-        // the returned argument, which does not.
+        // What every hosted surface calls, through the REAL OS read — the production path, whose
+        // answer must be the user's level on whatever machine this suite happens to run on. The
+        // breadcrumb is NOT asserted here, because on a machine with animations ON nothing is
+        // written: that is what made the old Assert.All over this list vacuous, and the OS matrix
+        // below now pins the breadcrumb for every OS answer instead.
         var lines = new List<string>();
         Assert.Equal(HostedMotion.NoReducedArgument, HostedMotion.BrowserArgument(host, "test", lines.Add));
 
@@ -92,11 +88,64 @@ public class MotionLevelTests
         Assert.Equal(MotionLevel.Off, HostedMotion.LevelOf(host));
         Assert.Equal(HostedMotion.ReducedArgument, HostedMotion.BrowserArgument(host, "test", lines.Add));
 
-        // Every breadcrumb that WAS written names the argument it is about, and none is written
-        // for the Off call (that user asked for it; nothing was overruled).
-        Assert.All(lines, line => Assert.Contains(HostedMotion.NoReducedArgument, line, StringComparison.Ordinal));
+        await host.ShutdownAsync();
+    }
+
+    /// <summary>
+    /// THE OS MATRIX, and the reason it exists: every fact above this one runs against whatever
+    /// Windows' "Animation effects" checkbox happens to be on the machine executing the suite. On a
+    /// machine with animations ON — which is most of them, and is this one — an edit that let the
+    /// OS choose the argument changes NOTHING any of them can see, and the row's whole defect walks
+    /// back in green. Supplying the OS answer removes the machine from the fact: the argument is
+    /// the user's level for all three OS answers, and the OS's only reachable effect is the
+    /// breadcrumb count (<c>Chaos/ChaosWebViewHost.cs:782-800</c>).
+    /// </summary>
+    [Theory]
+    // OS says animations are OFF — the machine this row is about. The argument does not move, and
+    // the breadcrumb fires for the two levels this app overrules.
+    [InlineData(MotionLevel.Full, false, HostedMotion.NoReducedArgument, 1)]
+    [InlineData(MotionLevel.Reduced, false, HostedMotion.NoReducedArgument, 1)]
+    [InlineData(MotionLevel.Off, false, HostedMotion.ReducedArgument, 0)]
+    // OS says animations are ON — nothing is overruled, so nothing is said.
+    [InlineData(MotionLevel.Full, true, HostedMotion.NoReducedArgument, 0)]
+    [InlineData(MotionLevel.Reduced, true, HostedMotion.NoReducedArgument, 0)]
+    [InlineData(MotionLevel.Off, true, HostedMotion.ReducedArgument, 0)]
+    // OS answer unknown (non-Windows, or a failed GET) is not a disagreement.
+    [InlineData(MotionLevel.Full, null, HostedMotion.NoReducedArgument, 0)]
+    [InlineData(MotionLevel.Reduced, null, HostedMotion.NoReducedArgument, 0)]
+    [InlineData(MotionLevel.Off, null, HostedMotion.ReducedArgument, 0)]
+    public async Task TheOsCanOnlyEverWriteALogLine_AndNeverChooseTheArgument(
+        MotionLevel level, bool? osClientAreaAnimation, string expectedArgument, int expectedBreadcrumbs)
+    {
+        using var dir = new TempDir();
+        var (host, store) = await BootAsync(dir);
+        store.Mutate(document => document.Level = level);
+
+        var lines = new List<string>();
+        Assert.Equal(
+            expectedArgument,
+            HostedMotion.BrowserArgument(host, "test", lines.Add, () => osClientAreaAnimation));
+
+        // The count first: an Assert.All whose list can legally be empty asserts nothing.
+        Assert.Equal(expectedBreadcrumbs, lines.Count);
+        Assert.All(lines, line => Assert.Contains(expectedArgument, line, StringComparison.Ordinal));
 
         await host.ShutdownAsync();
+    }
+
+    /// <summary>A started host carrying nothing but the motion store — what the five hosted
+    /// surfaces read their level off.</summary>
+    private static async Task<(ApplicationHost Host, PersistenceStore<MotionSettingsDocument> Store)> BootAsync(TempDir dir)
+    {
+        var registry = new OperationRegistry();
+        var log = new ListLogSink();
+        var store = new PersistenceStore<MotionSettingsDocument>(
+            registry.OwnerFor("MotionSettings"), log, dir.Path(MotionSettingsDocument.FileName),
+            MotionSettingsDocument.CurrentSchemaVersion);
+        var host = new ApplicationHost(
+            log, [store], new StartupTrace(), registry, new UiDispatchBoundary());
+        await host.StartParticipantsAsync(TestContext.Current.CancellationToken);
+        return (host, store);
     }
 
     [Fact]
@@ -268,5 +317,86 @@ public class MotionArgumentChokePointGuardTests
         throw new InvalidOperationException(
             $"repo root not found walking up from {AppContext.BaseDirectory} "
             + $"(anchor: {string.Join('/', RepoAnchorParts)}) — the motion choke-point guard refuses to skip");
+    }
+}
+
+/// <summary>
+/// WHAT THE MOTION MODULE SAYS, and whether it is TRUE OF THIS BUILD.
+///
+/// <para>The board row's third remainder: <see cref="MotionLevel.Reduced"/> has no consumer beyond
+/// the hosted flag, so the picker shipped a level with no local effect while the blurb's first
+/// sentence claimed the whole app. Upstream's claim is true upstream — <c>MotionFx</c> gates its
+/// interface (<c>Services/MotionFx.cs:12-68</c>) — and that cluster is not ported, so the port says
+/// the smaller true thing instead. These are unit facts rather than headless ones because the
+/// sentences live in <see cref="MotionNotices"/>, on the page's own <c>*Notices.cs</c>
+/// convention.</para>
+/// </summary>
+public class MotionNoticesTests
+{
+    [Fact]
+    public void TheBlurb_ScopesItselfToHostedPages_AndPromisesNothingAboutTheAppsOwnChrome()
+    {
+        // Sentence one is the one the review called out: it may not claim the app.
+        Assert.StartsWith(
+            "How much movement the pages this app hosts are allowed to show.",
+            MotionNotices.Blurb,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "this app's own windows and effects are not changed by it",
+            MotionNotices.Blurb,
+            StringComparison.Ordinal);
+        // And the outcome a user CAN act on survives the correction.
+        Assert.Contains(
+            "Off is the only setting that stops them",
+            MotionNotices.Blurb,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(MotionLevel.Full, HostedMotion.NoReducedArgument)]
+    [InlineData(MotionLevel.Reduced, HostedMotion.NoReducedArgument)]
+    [InlineData(MotionLevel.Off, HostedMotion.ReducedArgument)]
+    public void TheStateLine_NamesTheSwitchTheLevelWillWrite_AndWhenItArrives(MotionLevel level, string expected)
+    {
+        var line = MotionNotices.Describe(level, osClientAreaAnimation: true);
+
+        Assert.Contains(expected, line, StringComparison.Ordinal);
+        Assert.Contains("NEXT hosted page you open", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReducedSaysThatItCurrentlyDoesWhatFullDoes_AndOnlyReducedSaysIt()
+    {
+        // The level with no local consumer names itself. Without this sentence the picker ships an
+        // entry a user can choose and cannot tell apart from Full.
+        Assert.Contains(
+            "so today it does exactly what Full does",
+            MotionNotices.Describe(MotionLevel.Reduced, osClientAreaAnimation: true),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "does exactly what Full does",
+            MotionNotices.Describe(MotionLevel.Full, osClientAreaAnimation: true),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "does exactly what Full does",
+            MotionNotices.Describe(MotionLevel.Off, osClientAreaAnimation: true),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheOverrideSentence_IsSaidOnlyOnAMachineThisAppActuallyOverruled()
+    {
+        // Same rule as the hosted breadcrumb (HostedMotion.OverridesOsPreference), pinned here for
+        // the same reason: with the real OS read this sentence is unreachable on any machine whose
+        // animation effects are on.
+        const string sentence = "Windows animation effects are off on this machine";
+
+        Assert.Contains(sentence, MotionNotices.Describe(MotionLevel.Full, false), StringComparison.Ordinal);
+        Assert.Contains(sentence, MotionNotices.Describe(MotionLevel.Reduced, false), StringComparison.Ordinal);
+        // The user asked for Off, so nothing was overruled and nothing is said.
+        Assert.DoesNotContain(sentence, MotionNotices.Describe(MotionLevel.Off, false), StringComparison.Ordinal);
+        Assert.DoesNotContain(sentence, MotionNotices.Describe(MotionLevel.Full, true), StringComparison.Ordinal);
+        // Unknown (non-Windows, or a failed GET) is not a disagreement.
+        Assert.DoesNotContain(sentence, MotionNotices.Describe(MotionLevel.Full, null), StringComparison.Ordinal);
     }
 }

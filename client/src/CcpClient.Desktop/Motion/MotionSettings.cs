@@ -22,7 +22,13 @@ public enum MotionLevel
     /// <summary>Calmer CHROME. Upstream keeps crossfades and state transitions and drops ambient
     /// loops, particles and parallax (<c>AppSettings.cs:64-66</c>). It is NOT "stop": a user who
     /// asked for calmer chrome did not ask for a session that never moves
-    /// (<c>Chaos/ChaosWebViewHost.cs:809-811</c>).</summary>
+    /// (<c>Chaos/ChaosWebViewHost.cs:809-811</c>).
+    ///
+    /// <para><b>In THIS build it is Full's twin, and the page says so</b>
+    /// (<see cref="Views.Pages.MotionNotices"/>): the chrome it exists to calm is upstream's <c>MotionFx</c> cluster — ambient loops,
+    /// particles, hover pops, card breaths (<c>Services/MotionFx.cs:12-68</c>) — and none of that
+    /// is ported. The level is kept anyway because its ORDINAL is the persisted value and dropping
+    /// it would renumber Off.</para></summary>
     Reduced = 1,
 
     /// <summary>No animation at all — the explicit, in-app kill switch, and the ONE level that is
@@ -151,12 +157,26 @@ public static class HostedMotion
     /// this port's existing one and can answer "unknown" (non-Windows, or a failed GET), which is
     /// not a disagreement and logs nothing.</para>
     /// </summary>
-    public static string BrowserArgument(ApplicationHost? host, string logTag, Action<string> log)
+    /// <param name="readOsClientAreaAnimation">
+    /// The OS animation read, injectable and defaulting to the real one. <b>It is a seam because
+    /// this method's rule is otherwise only half-checkable</b>: on a machine whose animation
+    /// effects are ON the real read answers <c>true</c>, so an edit that let the OS choose the
+    /// argument (the exact defect this row exists to close) would change nothing that any test on
+    /// that machine could see. With the read supplied, the argument is pinned against every OS
+    /// answer on any machine. The OS still cannot reach the returned argument through it — it is
+    /// passed to <see cref="OverridesOsPreference"/>, which decides only whether to LOG.
+    /// </param>
+    public static string BrowserArgument(
+        ApplicationHost? host,
+        string logTag,
+        Action<string> log,
+        Func<bool?>? readOsClientAreaAnimation = null)
     {
         var level = LevelOf(host);
         var argument = PrefersReducedMotionArgument(level);
 
-        if (OverridesOsPreference(level, DtrhMotionPreference.ReadOsClientAreaAnimation()))
+        var os = (readOsClientAreaAnimation ?? DtrhMotionPreference.ReadOsClientAreaAnimation)();
+        if (OverridesOsPreference(level, os))
         {
             log($"{logTag}: Windows animation effects are OFF; hosted page is kept in motion anyway "
                 + $"({argument}) — the app's Motion setting ({level}) governs");

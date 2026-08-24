@@ -54,6 +54,7 @@ public partial class SystemPage : UserControl
         InitializePhraseBackup();
 
         _motion = HostedMotion.StoreOf(host);
+        MotionBlurb.Text = MotionNotices.Blurb;
         // Upstream's own bind: SelectedIndex IS the enum ordinal, clamped to the item count
         // (PerformanceSettingsSection.xaml.cs:94-95).
         MotionLevelPicker.SelectedIndex = (int)(_motion?.Current.Level ?? MotionLevel.Full);
@@ -104,38 +105,15 @@ public partial class SystemPage : UserControl
     }
 
     /// <summary>
-    /// What the choice actually does, said on the page.
-    ///
-    /// <para>"The next page you open" is not hedging: the switch is a Chromium command-line
-    /// argument fixed when a hosted surface's WebView2 environment is created
-    /// (<c>Chaos/ChaosWebViewHost.cs:832-836</c>), so a change cannot reach a window that is
-    /// already up.</para>
+    /// What the choice actually does, said on the page. The sentences are
+    /// <see cref="MotionNotices"/>'s, and the only thing this method adds is the two runtime
+    /// values they need: the stored level and this machine's OS animation flag.
     /// </summary>
     private void DescribeMotion()
     {
-        if (_motion is null)
-        {
-            MotionLevelState.Text =
-                "This build has no motion settings store, so the choice cannot be saved and hosted "
-                + "pages run at Full.";
-            return;
-        }
-
-        var level = _motion.Current.Level;
-        var line = level == MotionLevel.Off
-            ? "Pages this app hosts are told to stop moving (" + HostedMotion.ReducedArgument + ")."
-            : "Pages this app hosts are told to keep moving (" + HostedMotion.NoReducedArgument + ").";
-        line += " A change reaches the NEXT hosted page you open, not one already on screen.";
-
-        // The OS disagreement, said where the user can act on it — the same condition the hosted
-        // surfaces log (Chaos/ChaosWebViewHost.cs:782-800).
-        if (HostedMotion.OverridesOsPreference(level, DtrhMotionPreference.ReadOsClientAreaAnimation()))
-        {
-            line += " Windows animation effects are off on this machine; this setting overrides "
-                + "that for hosted pages, which is what stops a session playing as a set of stills.";
-        }
-
-        MotionLevelState.Text = line;
+        MotionLevelState.Text = _motion is null
+            ? MotionNotices.NoStore
+            : MotionNotices.Describe(_motion.Current.Level, DtrhMotionPreference.ReadOsClientAreaAnimation());
     }
 
     /// <summary>
