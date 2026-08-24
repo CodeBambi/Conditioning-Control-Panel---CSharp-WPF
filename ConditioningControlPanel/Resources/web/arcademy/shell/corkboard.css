@@ -1,0 +1,357 @@
+/* ============================================================================
+ * shell/corkboard.css - the skin for shell/corkboard.js.
+ *
+ * A real stylesheet file rather than a template literal in the module, which
+ * has one happy side effect: traps 37 and 84 (a backtick inside a CSS comment
+ * kills the whole sheet, and node --check cannot see it) simply cannot happen
+ * here. shell/corkboard.js links it once, lazily, resolved against the module.
+ *
+ * HOUSE LAWS OBEYED
+ *   trap 27  nothing here writes a bare `display:` on a node the shell toggles
+ *            with the hidden attribute, and no competing [hidden] rule is added.
+ *            The stage is REMOVED on close, never hidden.
+ *   trap 36  no keyframe animates background-position and no filter lands over
+ *            live content. The one drop-shadow filter is on a torn STATIC sheet
+ *            of paper, and the cork grain is rasterised once and never moves.
+ *   trap 46  the frame scrolls and the way out rides the sticky exit bar, so a
+ *            short window can never put Back below a fold.
+ *
+ * COLOUR: every value is a color-mix off the shell's own tokens, so
+ * init.palette reskins the whole wall for free (styles.css's law - no literal
+ * hex outside a token block). Cork is the school's gold pushed down into brown;
+ * the paper is the chalk-cream ink token pulled up into a sheet. The notes are
+ * deliberately LIGHT on a dark stage: a noticeboard whose paper is darker than
+ * the room is not a noticeboard.
+ *
+ * LAYER: z-index 38. Over the campus and its chrome (up to 36), under the
+ * engine fx layer (40), the punch ceremony (42/45), the annex reveal (48), EMI
+ * (50) and the toast (60).
+ * ==========================================================================*/
+
+.arc-corkstage {
+  /* --- the wall's own tokens, all derived --- */
+  --cork:        color-mix(in srgb, var(--gold) 26%, color-mix(in srgb, var(--navy), black 14%));
+  --cork-lo:     color-mix(in srgb, var(--cork), black 30%);
+  --cork-hi:     color-mix(in srgb, var(--cork), var(--ink) 14%);
+  --cork-grain:  color-mix(in srgb, var(--cork), black 46%);
+  --cork-frame:  color-mix(in srgb, var(--cork), black 52%);
+
+  --paper:       color-mix(in srgb, var(--ink) 82%, var(--panel));
+  --paper-lo:    color-mix(in srgb, var(--paper), var(--slate) 24%);
+  --paper-ink:   color-mix(in srgb, var(--ground) 76%, var(--panel));
+  --paper-dim:   color-mix(in srgb, var(--paper-ink), var(--paper) 42%);
+  --paper-under: color-mix(in srgb, var(--paper), var(--cork) 34%);
+
+  position:fixed; inset:0; z-index:38;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(14px, 4vh, 44px);
+  overflow:auto;                 /* the board scrolls, Back never clips (trap 46) */
+  background:
+    radial-gradient(900px 640px at 50% 28%, color-mix(in srgb, var(--gold), transparent 88%), transparent 68%),
+    radial-gradient(140% 120% at 50% 50%, var(--ground) 42%,
+                                          color-mix(in srgb, var(--ground), black 52%) 100%);
+  animation:arc-cork-dusk .22s ease-out both;
+}
+@keyframes arc-cork-dusk { from { opacity:0; } to { opacity:1; } }
+
+/* ---------------------------------------------------------------- the board */
+/* Two boxes on purpose: .arc-corkboard is the FRAMED OBJECT (the timber, the
+   shadow it throws on the room) and .arc-cork-frame is the cork face inside it.
+   Padding on one and grain on the other keeps the timber from tiling. */
+.arc-corkboard {
+  width:min(900px, 94vw); margin:auto;
+  padding:clamp(10px, 1.4vw, 16px);
+  border-radius:8px;
+  background:
+    linear-gradient(176deg,
+      color-mix(in srgb, var(--cork-frame), var(--ink) 12%),
+      var(--cork-frame) 46%,
+      color-mix(in srgb, var(--cork-frame), black 30%));
+  box-shadow:
+    0 34px 90px rgba(0,0,0,.72),
+    0 2px 0 color-mix(in srgb, var(--ink), transparent 88%) inset,
+    0 -3px 10px rgba(0,0,0,.5) inset;
+  transform:rotate(-.35deg);
+  animation:arc-cork-hang .42s cubic-bezier(.2,1.2,.4,1) both;
+}
+@keyframes arc-cork-hang {
+  from { transform:translateY(-18px) rotate(.9deg); opacity:0; }
+  to   { transform:translateY(0) rotate(-.35deg); opacity:1; }
+}
+
+.arc-cork-frame {
+  position:relative;
+  border-radius:4px;
+  padding:clamp(18px, 2.6vw, 34px) clamp(16px, 2.6vw, 34px) clamp(10px, 1.6vw, 18px);
+  color:var(--ink);
+  /* THE GRAIN. Static layers, rasterised once and never moved (trap 36):
+     THREE granule fields on co-prime periods so the repeat never settles into
+     a checkerboard, and a lit falloff so the top-left catches the hall light.
+     Two periods alone read as a dither grid - the third is what breaks it. */
+  background:
+    radial-gradient(circle at 22% 18%, color-mix(in srgb, var(--cork-hi), transparent 74%), transparent 60%),
+    radial-gradient(closest-side, color-mix(in srgb, var(--cork-grain), transparent 62%) 92%, transparent 100%) 0 0 / 7px 7px,
+    radial-gradient(closest-side, color-mix(in srgb, var(--cork-lo), transparent 66%) 92%, transparent 100%) 4px 5px / 11px 9px,
+    radial-gradient(closest-side, color-mix(in srgb, var(--cork-hi), transparent 72%) 90%, transparent 100%) 9px 2px / 17px 13px,
+    linear-gradient(168deg, var(--cork-hi), var(--cork) 40%, var(--cork-lo));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--cork-frame), black 20%),
+    0 14px 34px rgba(0,0,0,.42) inset;
+}
+
+/* --------------------------------------------------------------- the head */
+.arc-cork-head { position:relative; text-align:center; margin:0 0 clamp(14px, 2vw, 22px); }
+.arc-cork-head .arc-kicker { color:color-mix(in srgb, var(--gold), var(--ink) 30%); margin-bottom:4px; }
+.arc-cork-title {
+  font-size:clamp(22px, 3.6vw, 34px); margin:0 0 6px;
+  color:var(--ink); letter-spacing:.06em;
+  text-shadow:0 2px 0 rgba(0,0,0,.45), 0 0 26px rgba(0,0,0,.35);
+}
+.arc-cork-lede {
+  margin:0 auto; max-width:56ch; text-align:center;
+  color:color-mix(in srgb, var(--ink), var(--cork-lo) 34%);
+}
+
+/* --------------------------------------------------------------- the wall */
+.arc-cork-wall {
+  display:grid;
+  /* Two up, and bigger. A four-across wall makes every sheet a column of
+     single words; a corkboard wants paper you can actually read at a glance. */
+  grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));
+  gap:clamp(18px, 2.6vw, 34px) clamp(14px, 2.2vw, 28px);
+  padding:10px 0 6px;
+  align-items:start;
+}
+
+/* THE SLOT is what carries the hang. The sheet under it (::before) is the
+   second and third sheet of an old wall showing at the edges - a real element
+   would be three more nodes for nothing, and a pseudo on the SLOT paints under
+   the sheet by DOM order with no negative z-index games. */
+.arc-cork-slot {
+  position:relative;
+  transform:rotate(var(--rot, 0deg)) translateY(var(--lift, 0px));
+  animation:arc-cork-pinin .34s cubic-bezier(.2,1.3,.4,1) both;
+}
+.arc-cork-slot::before {
+  content:""; position:absolute; inset:8px -6px -9px 6px;
+  border-radius:2px;
+  background:var(--paper-under);
+  box-shadow:0 8px 18px rgba(0,0,0,.42);
+  transform:rotate(1.6deg);
+  opacity:.72;
+}
+.arc-cork-slot:nth-child(even)::before { transform:rotate(-2.1deg); inset:9px 5px -8px -7px; }
+
+@keyframes arc-cork-pinin {
+  from { transform:rotate(calc(var(--rot, 0deg) * 2.4)) translateY(-14px); opacity:0; }
+  to   { transform:rotate(var(--rot, 0deg)) translateY(var(--lift, 0px)); opacity:1; }
+}
+.arc-cork-slot:nth-child(2) { animation-delay:.05s; }
+.arc-cork-slot:nth-child(3) { animation-delay:.1s; }
+.arc-cork-slot:nth-child(4) { animation-delay:.15s; }
+.arc-cork-slot:nth-child(5) { animation-delay:.2s; }
+.arc-cork-slot:nth-child(6) { animation-delay:.25s; }
+
+/* -------------------------------------------------------------- the sheet */
+.arc-corknote {
+  position:relative;
+  padding:20px 16px 16px;
+  border-radius:2px;
+  color:var(--paper-ink);
+  background:linear-gradient(184deg, var(--paper), var(--paper-lo));
+  box-shadow:
+    0 10px 22px rgba(0,0,0,.5),
+    0 1px 0 rgba(255,255,255,.5) inset,
+    0 -10px 16px -12px rgba(0,0,0,.45) inset;
+}
+/* A sheet is never perfectly flat against cork: one corner lifts. */
+.arc-corknote::after {
+  content:""; position:absolute; right:0; bottom:0; width:26px; height:26px;
+  background:linear-gradient(315deg,
+    color-mix(in srgb, var(--cork-lo), transparent 25%) 48%,
+    color-mix(in srgb, var(--paper), black 16%) 50%);
+  box-shadow:-3px -3px 7px rgba(0,0,0,.28);
+}
+
+/* THE TORN CORNER. clip-path removes a box-shadow along with the corner, so a
+   torn sheet swaps its shadow for one drop-shadow pass. It is static paper -
+   no live decode underneath it, nothing re-rasters per frame (trap 36).
+   THE TEAR IS A CORNER, NOT A NOTCH: it may only eat the last tenth of the
+   height and the last seventh of the width. The first pass ran the polygon up
+   to 62% and the sheets came out looking like pennants. */
+.arc-corknote.is-torn {
+  clip-path:polygon(0 0, 100% 0, 100% 89%, 93% 91.5%, 96.5% 94%, 90% 96%, 94% 100%, 0 100%);
+  box-shadow:0 1px 0 rgba(255,255,255,.45) inset;
+  filter:drop-shadow(0 9px 15px rgba(0,0,0,.55));
+}
+.arc-corknote.is-torn::after { content:none; }
+
+/* THE PIN. Stationary, sitting proud of the paper, with the shadow it casts
+   down the sheet - the one place on this wall that is allowed to look glossy.
+   It hangs off the SLOT, never off the sheet: a torn sheet is a clip-path and
+   a clip-path clips its children, which sliced every pin on a torn notice
+   clean in half (caught in Chromium, invisible to the node run). */
+.arc-cork-pin {
+  position:absolute; top:-11px; left:var(--pin-x, 50%);
+  width:17px; height:17px; margin-left:-8.5px;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255,255,255,.85), transparent 46%),
+    radial-gradient(circle at 62% 74%, rgba(0,0,0,.35), transparent 58%),
+    var(--pin-hue, var(--pink));
+  box-shadow:0 4px 7px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.28);
+}
+.arc-cork-pin::after {
+  content:""; position:absolute; left:50%; top:12px;
+  width:3px; height:9px; margin-left:-1.5px;
+  background:linear-gradient(180deg, rgba(0,0,0,.42), transparent);
+  border-radius:0 0 2px 2px;
+}
+
+/* ---- the three kinds. Paper stock and pin, nothing mechanical. ----------
+   The pin hue is declared on the SLOT because that is where the pin hangs; the
+   paper stock stays on the sheet. Two selectors, one idea. */
+.arc-cork-slot.kind-notice  { --pin-hue:var(--pink); }
+.arc-cork-slot.kind-flyer   { --pin-hue:var(--gold); }
+.arc-cork-slot.kind-minutes { --pin-hue:var(--lav); }
+
+.arc-corknote.kind-notice  { --pin-hue:var(--pink); }
+.arc-corknote.kind-flyer {
+  --pin-hue:var(--gold);
+  background:linear-gradient(184deg,
+    color-mix(in srgb, var(--paper), var(--pink) 13%),
+    color-mix(in srgb, var(--paper-lo), var(--pink) 9%));
+}
+.arc-corknote.kind-minutes {
+  --pin-hue:var(--lav);
+  background:
+    repeating-linear-gradient(180deg, transparent 0 21px,
+      color-mix(in srgb, var(--paper-ink), transparent 88%) 21px 22px),
+    linear-gradient(184deg,
+      color-mix(in srgb, var(--paper), var(--lav) 8%),
+      color-mix(in srgb, var(--paper-lo), var(--lav) 6%));
+}
+.arc-corknote.kind-minutes .arc-cork-notebody { font-family:var(--mono); font-size:12px; }
+
+/* A sheet the player has had up before sits back a little. It is a TONE, not a
+   badge: nothing on this wall is a task. */
+.arc-corknote.is-read { opacity:.9; }
+.arc-corknote.is-fresh .arc-cork-kind {
+  background:color-mix(in srgb, var(--pink), var(--paper) 42%);
+  color:var(--paper);
+}
+
+.arc-cork-kind {
+  display:inline-block; margin:0 0 8px;
+  padding:2px 7px; border-radius:2px;
+  font-family:var(--mono); font-size:10px; letter-spacing:.2em;
+  background:color-mix(in srgb, var(--paper-ink), transparent 84%);
+  color:var(--paper-dim);
+}
+.arc-cork-notetitle {
+  font-family:var(--disp); font-size:15px; letter-spacing:.03em;
+  margin:0 0 8px; color:var(--paper-ink); line-height:1.25;
+}
+.arc-cork-notebody {
+  margin:0; font-size:13px; line-height:1.5;
+  color:color-mix(in srgb, var(--paper-ink), var(--paper) 18%);
+}
+
+/* Tear-off tabs, two of them already taken. */
+.arc-cork-tabs { display:flex; gap:3px; margin:12px 0 -6px; }
+.arc-cork-tab {
+  flex:1 1 auto; height:16px; border-radius:0 0 2px 2px;
+  background:color-mix(in srgb, var(--paper), black 6%);
+  box-shadow:1px 0 0 color-mix(in srgb, var(--paper-ink), transparent 84%) inset;
+}
+.arc-cork-tab.gone { background:color-mix(in srgb, var(--cork-lo), transparent 12%); box-shadow:none; }
+
+/* -------------------------------------------------------------- the rest */
+.arc-cork-empty {
+  grid-column:1 / -1; text-align:center; padding:26px 0;
+  color:color-mix(in srgb, var(--ink), var(--cork-lo) 40%);
+}
+.arc-cork-foot {
+  text-align:center; margin:14px 0 4px;
+  color:color-mix(in srgb, var(--ink-faint), var(--cork-hi) 30%);
+}
+.arc-cork-frame .arc-exitbar {
+  background:linear-gradient(180deg, transparent, color-mix(in srgb, var(--cork-lo), transparent 22%) 40%);
+  border-top:1px solid color-mix(in srgb, var(--cork-frame), transparent 40%);
+}
+
+/* ============================== THE PROP ================================= */
+/* A small board hung somewhere on the campus. The driver places it: override
+   --bp-x / --bp-y on the element, or position it from campus CSS. */
+.arc-boardprop {
+  --cork:       color-mix(in srgb, var(--gold) 26%, color-mix(in srgb, var(--navy), black 14%));
+  --cork-lo:    color-mix(in srgb, var(--cork), black 30%);
+  --cork-frame: color-mix(in srgb, var(--cork), black 52%);
+  --paper:      color-mix(in srgb, var(--ink) 82%, var(--panel));
+
+  position:absolute; left:var(--bp-x, 12%); top:var(--bp-y, 54%);
+  width:var(--bp-w, 74px);
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  padding:0; margin:0; border:0; background:none;
+  color:var(--campus-text, var(--ink-dim));
+  cursor:pointer;
+  transition:transform .16s ease, filter .16s ease;
+}
+.arc-boardprop:hover, .arc-boardprop:focus-visible { transform:translateY(-2px) scale(1.04); }
+.arc-boardprop:focus-visible { outline:2px solid var(--pink); outline-offset:4px; }
+
+.arc-boardprop-cork {
+  position:relative; display:block; width:100%; aspect-ratio:4 / 3;
+  border-radius:3px;
+  border:3px solid var(--cork-frame);
+  background:
+    radial-gradient(closest-side, color-mix(in srgb, var(--cork-lo), transparent 55%) 96%, transparent 100%) 0 0 / 5px 5px,
+    linear-gradient(168deg, color-mix(in srgb, var(--cork), var(--ink) 12%), var(--cork-lo));
+  box-shadow:0 6px 14px rgba(0,0,0,.55), 0 6px 10px -8px rgba(0,0,0,.8) inset;
+}
+.arc-boardprop-slip {
+  position:absolute; left:var(--l, 10%); top:var(--tp, 12%);
+  width:26%; height:44%;
+  background:var(--paper);
+  transform:rotate(var(--r, 0deg));
+  box-shadow:0 2px 3px rgba(0,0,0,.5);
+}
+.arc-boardprop-label {
+  font-family:var(--pix, var(--mono)); font-size:7px; letter-spacing:.14em;
+  color:var(--campus-text-dim, var(--ink-faint));
+  text-align:center; line-height:1.4;
+}
+
+/* THE ONE MARKER, and it is quiet on purpose: a dot on the corner of the frame
+   while tonight's wall holds a sheet this player has never had up. */
+.arc-boardprop-new {
+  position:absolute; right:-4px; top:-4px;
+  width:9px; height:9px; border-radius:50%;
+  background:var(--pink);
+  box-shadow:0 0 10px color-mix(in srgb, var(--pink), transparent 30%);
+  opacity:0; transform:scale(.4);
+  transition:opacity .2s ease, transform .2s cubic-bezier(.2,1.4,.4,1);
+}
+.arc-boardprop.has-new .arc-boardprop-new { opacity:1; transform:scale(1); }
+
+/* ============================ SMALL WINDOWS ============================== */
+@media (max-width: 620px) {
+  .arc-corkstage { padding:10px; }
+  .arc-corkboard { transform:none; width:100%; }
+  .arc-cork-wall { grid-template-columns:1fr; gap:22px; }
+  .arc-cork-slot { transform:rotate(calc(var(--rot, 0deg) * .5)); }
+}
+
+/* ============================ REDUCED MOTION ============================= */
+/* The hang, the pin-in and the dusk are all decoration; the tilt is not (it is
+   the picture), so it stays. Same shape as styles.css's own reduced blocks:
+   the app-side class AND the media query, because they come from two places. */
+html.arc-reduced .arc-corkstage,
+html.arc-reduced .arc-corkboard,
+html.arc-reduced .arc-cork-slot { animation:none; }
+html.arc-reduced .arc-boardprop,
+html.arc-reduced .arc-boardprop-new { transition:none; }
+@media (prefers-reduced-motion: reduce) {
+  .arc-corkstage, .arc-corkboard, .arc-cork-slot { animation:none; }
+  .arc-boardprop, .arc-boardprop-new { transition:none; }
+}

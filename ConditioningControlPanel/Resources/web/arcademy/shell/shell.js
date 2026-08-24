@@ -56,6 +56,13 @@ import { createEnrollmentIntro, createPunchCeremony } from './enrollment.js';
 import { createFirstBell } from '../vn/index.js';
 import { createRecords } from './records.js';
 import { createAnnexReveal } from './annexreveal.js';
+/* THE PHANTOM POST: the mail engine and its three paper overlays. The engines
+ * hold NO storage of their own (their STATE-NEEDS law) - the shell hands each
+ * an injected blob below and banks it through the store like any page key. */
+import { initMail } from './mail.js';
+import { openMailbox, closeMailbox, isMailboxOpen } from './mailbox.js';
+import { initCorkboard, openCorkboard, currentCorkboard } from './corkboard.js';
+import { initBugle, openBugle, currentBugle } from './bugle.js';
 import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
 /* EMI, the mascot. Two of B's own modules: `mountEmi` builds the floating widget
  * (which dynamic-imports agent A's renderer optionally, so a broken face costs
@@ -450,6 +457,67 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
 
   const store = createStore({ bridge, initialMeta: src.meta, log: say });
   const keybinds = createKeybinds({ init: src, bridge, log: say });
+
+  /* ------------------------- THE PHANTOM POST ------------------------------
+   * The school's paper: mail, the noticeboard, the Bugle. Three PAGE-OWNED
+   * store keys (`mail`, `board`, `bugle`), each an injected blob the modules
+   * mutate in place and this shell banks - the modules never import the store.
+   * Chrome mounts on the campus through the `post` bag (createCampus below);
+   * the overlays open over the board and close on the Esc ladder like every
+   * other modal. Reads and visits live inside the blobs themselves
+   * (deliveredAt/readAt, visits, opens) - there is no separate counter key. */
+  const postState = {
+    mail: store.get('mail') || {},
+    board: store.get('board') || {},
+    bugle: store.get('bugle') || {},
+  };
+  /** What the postman may ask about tonight (mail.js CONTEXT contract).
+   *  `days` keeps a 30-day window (store DAY_HISTORY_MAX), so `day` saturates
+   *  there - a letter gating deeper than a month asks punches or streak. */
+  function postCtx() {
+    const cards = store.get('punchCards') || {};
+    let punches = 0;
+    for (const k of Object.keys(cards)) punches += Number(cards[k] && cards[k].punches) || 0;
+    const d = new Date();
+    const mm = String(d.getMonth() + 1);
+    const dd = String(d.getDate());
+    return {
+      day: Object.keys(store.get('days') || {}).length,
+      punches,
+      streak: Number(store.get('streak')) || 0,
+      dateIs: (mm.length < 2 ? '0' + mm : mm) + '-' + (dd.length < 2 ? '0' + dd : dd),
+      seenFlags: { annex: !!store.get('annexRevealSeen') },
+    };
+  }
+  const mail = initMail({
+    ctx: postCtx,
+    state: postState.mail,
+    save: (s) => store.set('mail', s),
+    log: say,
+  });
+  initCorkboard({ state: postState.board, save: (s) => store.set('board', s), daySeed: utcDateSeed, log: say });
+  initBugle({ state: postState.bugle, save: (s) => store.set('bugle', s), log: say });
+  /** Repaint the campus post furniture after an overlay closes (fresh dots,
+   *  unread pip) - a no-op anywhere but the board. */
+  function refreshCampusPost() {
+    if (screen === 'board' && campus) {
+      try { campus.update(buildCampusState(), campusStats()); } catch (e) { /* noop */ }
+    }
+  }
+  function openMailboxOverlay() {
+    if (isMailboxOpen()) return;
+    openMailbox({ mail, ownEscape: false, onClose: refreshCampusPost, log: say });
+  }
+  function openCorkboardOverlay() {
+    const up = currentCorkboard();
+    if (up && !up.closed) return;
+    openCorkboard({ daySeed: utcDateSeed, onClose: refreshCampusPost, log: say });
+  }
+  function openBugleOverlay() {
+    const up = currentBugle();
+    if (up && !up.closed) return;
+    openBugle(null, { onClose: refreshCampusPost, log: say });
+  }
 
   /** gameKey -> {grade, zen, composite, capped, tier, xp, levelUp} for TODAY. */
   const results = Object.create(null);
@@ -1071,6 +1139,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       greeted = true;
       fireMoment('greet');
       if (firstArrival) noteStreakTurn();
+      /* THE POSTMAN CALLS ON ARRIVAL, and only then: at most one letter lands
+       * (mail.js law 2), the campus built below paints the chip already
+       * knowing about it, and a silent repaint is not an arrival - walking in
+       * and out of the settings page cannot stack the box. */
+      try { mail.deliver(); } catch (e) { say('mail deliver threw: ' + ((e && e.message) || e)); }
     }
     /* THE MORNING-AFTER CATCH-UP: a save that sealed its last card before this
      * wave shipped (or whose final-seal ceremony was torn down by a host-forced
@@ -1195,6 +1268,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // (or was never built) says false and attract arms exactly as before.
         holdAttract: () => {
           try { return !!(orientation && orientation.active()); } catch (e) { return false; }
+        },
+        /* THE PHANTOM POST furniture. Campus mounts the chip and the two props;
+         * the shell keeps the engines, the overlays and every byte of state. */
+        post: {
+          openMail: openMailboxOverlay,
+          mailUnread: () => mail.unreadCount(),
+          mailTotal: () => mail.all().length,
+          openBoard: openCorkboardOverlay,
+          openBugle: openBugleOverlay,
+          boardState: postState.board,
+          bugleState: postState.bugle,
+          daySeed: utcDateSeed,
         },
         on: {
           /* THE STUDENT BODY STARTS HERE AND NOWHERE ELSE (PRESENCE §4): after
@@ -3235,6 +3320,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       if (annexStage) {
         try { annexStage.skip(); } catch (e) { dismissAnnexStage(); }
         return true;
+      }
+      /* THE POST OVERLAYS (mailbox / noticeboard / Bugle, z 38): modals the
+       * player opened one press ago, over the board only, so they close before
+       * anything beneath them (trap 48). They can never be up alongside a
+       * class modal - opening them is a campus-chrome click - so these rungs
+       * cost the rest of the ladder nothing. */
+      if (isMailboxOpen()) { closeMailbox(); return true; }
+      {
+        const up = currentCorkboard();
+        if (up && !up.closed) { try { up.close(); } catch (e) { /* noop */ } return true; }
+      }
+      {
+        const up = currentBugle();
+        if (up && !up.closed) { try { up.close(); } catch (e) { /* noop */ } return true; }
       }
       if (active && active.confirmEl) { dismissConfirm(); return true; }
       /* THE CARD CEREMONY IS A TERMINAL OVERLAY over the report card, and it

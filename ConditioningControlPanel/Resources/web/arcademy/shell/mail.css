@@ -1,0 +1,392 @@
+/* ============================================================================
+ * shell/mail.css - THE PHANTOM POST: the envelope chip and the mail box.
+ *
+ * styles.css is SHELL CHROME ONLY, so the post office ships its own sheet the
+ * way emi/ ships two of its own. shell/mailbox.js injects the <link> once
+ * (id `arc-mail-css`) unless index.html already carries it.
+ *
+ * FOUR RULES THIS SHEET KEEPS
+ *
+ *  - NOT ONE HEX. Every colour is a var() off a styles.css :root token, so a
+ *    mod's `init.palette` reskins the whole postbox exactly the way it reskins
+ *    the campus. color-mix is safe here (the host is the evergreen WebView2
+ *    runtime, Chromium 111+) and is used the same way the campus uses it.
+ *  - NO COMPETING `[hidden]` RULE, and no bare `display:` on a node the JS
+ *    toggles with the hidden attribute (trap 27). The chip is hidden with
+ *    `hidden`, and the reset at the top of styles.css is what makes that work.
+ *  - THE PAPER IS TABLE-DRIVEN. `data-accent` / `data-rule` / `data-mark` /
+ *    `data-paper` come straight off mail.js's LETTERHEADS table, so a new
+ *    sender is a row and a selector, never a new layout.
+ *  - MOTION IS ONE KEYFRAME PER BEAT and every one of them is answered in the
+ *    reduced-motion block at the bottom, both paths (html.arc-reduced and the
+ *    media query), the way the campus answers its own.
+ * ==========================================================================*/
+
+/* ============================ THE ENVELOPE CHIP ==========================
+   It seats in the campus top-right cluster beside the bell and the gear, so it
+   borrows their proportions exactly: a 36px round plate, a hairline, the same
+   smoked backdrop. What it carries is drawn, not typed - an envelope in two
+   boxes and a triangle, which costs no font and no image and tints with the
+   palette for free. */
+.arc-mailchip {
+  position:relative;
+  width:36px; height:36px; border-radius:50%; cursor:pointer;
+  background:color-mix(in srgb, var(--navy), transparent 13%);
+  border:var(--hairline);
+  display:flex; align-items:center; justify-content:center;
+  backdrop-filter:blur(4px);
+  transition:transform .18s, border-color .15s, box-shadow .15s;
+  padding:0;
+}
+.arc-mailchip:hover { border-color:var(--pink-deep); transform:translateY(-1px); }
+.arc-mailchip:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+.arc-mailchip:active { transform:translateY(1px); }
+
+/* the paper itself */
+.arc-mailchip-env {
+  position:relative; display:block;
+  width:19px; height:13px; border-radius:2px;
+  border:1.4px solid var(--ink-faint);
+  background:linear-gradient(170deg,
+    color-mix(in srgb, var(--ink), transparent 78%),
+    color-mix(in srgb, var(--panel2), transparent 20%));
+  transition:border-color .15s, background .15s;
+}
+/* the flap, closed: a triangle sitting in the top of the sheet */
+.arc-mailchip-flap {
+  position:absolute; left:50%; top:0; transform:translateX(-50%);
+  width:0; height:0;
+  border-left:9.5px solid transparent;
+  border-right:9.5px solid transparent;
+  border-top:6.5px solid var(--ink-faint);
+  opacity:.9;
+}
+.arc-mailchip:hover .arc-mailchip-env { border-color:var(--pink); }
+.arc-mailchip:hover .arc-mailchip-flap { border-top-color:var(--pink); }
+
+/* SOMETHING IS UNREAD. The plate warms, and the pip keeps the house bulb
+   cadence (1.04s, steps(1, end), the same duty cycle as .arc-sign-arrow and the
+   campus marquee chase) so the whole school blinks on one clock. */
+.arc-mailchip[data-state="new"] {
+  border-color:var(--pink-deep);
+  box-shadow:0 0 14px color-mix(in srgb, var(--pink), transparent 66%);
+}
+.arc-mailchip[data-state="new"] .arc-mailchip-env { border-color:var(--pink); }
+.arc-mailchip[data-state="new"] .arc-mailchip-flap { border-top-color:var(--pink); }
+
+.arc-mailchip-pip {
+  position:absolute; top:-3px; right:-3px;
+  min-width:16px; height:16px; padding:0 4px;
+  border-radius:999px;
+  background:var(--pink); color:var(--ground);
+  font-family:var(--pix); font-size:8.5px; line-height:16px; text-align:center;
+  box-shadow:0 0 10px color-mix(in srgb, var(--pink), transparent 55%);
+}
+.arc-mailchip-pip[data-on="no"] { opacity:0; transform:scale(.4); }
+.arc-mailchip[data-state="new"] .arc-mailchip-pip {
+  animation:arc-mail-blink 1.04s steps(1, end) infinite;
+}
+@keyframes arc-mail-blink {
+  0%, 55% { opacity:1; }
+  56%, 100% { opacity:.38; }
+}
+
+/* ================================ THE BOX ================================
+   z 44: over the effects layer (40) and the punch-card stage (42), UNDER the
+   ceremony layer (45), EMI (50) and the toast (60) - so a stamp beat, her
+   bubble and the shell's own chatter all still win over a letter. */
+.arc-mailstage {
+  position:fixed; inset:0; z-index:44;
+  display:flex; align-items:center; justify-content:center;
+  padding:clamp(12px, 4vh, 40px);
+  background:radial-gradient(ellipse at 50% 34%,
+    color-mix(in srgb, var(--ground), transparent 8%),
+    color-mix(in srgb, black, transparent 8%) 76%);
+  animation:arc-mail-in .18s ease-out both;
+  overscroll-behavior:contain;
+}
+@keyframes arc-mail-in { from { opacity:0; } to { opacity:1; } }
+
+.arc-mailbox {
+  width:min(980px, 96vw); max-height:min(84vh, 760px);
+  display:flex; flex-direction:column;
+  padding:20px 22px 0;
+  background:linear-gradient(168deg, var(--panel), var(--navy) 78%);
+  border:var(--hairline); border-radius:var(--radius);
+  box-shadow:0 34px 90px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.06);
+  animation:arc-mail-rise .26s cubic-bezier(.2,1.2,.4,1) both;
+  overflow:hidden;
+}
+@keyframes arc-mail-rise {
+  from { opacity:0; transform:translateY(14px) scale(.985); }
+  to { opacity:1; transform:none; }
+}
+
+.arc-mailbox-head {
+  display:flex; align-items:baseline; flex-wrap:wrap; gap:10px;
+  padding-bottom:12px; margin-bottom:12px;
+  border-bottom:var(--hairline);
+}
+.arc-mailbox-head .arc-kicker, .arc-mailbox-head .arc-h2 { margin:0; }
+.arc-mailbox-head .arc-h2 { flex:1 1 auto; }
+.arc-mailbox-tally[data-state="new"] { border-color:var(--pink-deep); color:var(--pink); }
+
+/* the wall of envelopes and the open letter, side by side */
+.arc-mailbox-body {
+  flex:1 1 auto; min-height:0;
+  display:grid; grid-template-columns:minmax(196px, 282px) 1fr; gap:16px;
+}
+.arc-mail-list {
+  min-height:0; overflow:auto;
+  display:flex; flex-direction:column; gap:8px;
+  padding-right:4px;
+}
+.arc-mail-paper { min-height:0; overflow:auto; padding-right:4px; }
+.arc-mail-hint, .arc-mail-empty { margin:14px 2px; }
+
+/* ---- one envelope on the wall ----------------------------------------- */
+.arc-mail-item {
+  position:relative; cursor:pointer; text-align:left;
+  display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px;
+  padding:10px 12px 10px 10px;
+  border:1px solid color-mix(in srgb, var(--line), var(--mail-accent, var(--lav)) 22%);
+  border-left:3px solid color-mix(in srgb, var(--mail-accent, var(--lav)), transparent 30%);
+  border-radius:8px;
+  background:linear-gradient(150deg,
+    color-mix(in srgb, var(--panel2), transparent 12%),
+    color-mix(in srgb, var(--navy), transparent 4%));
+  color:var(--ink-dim); font-family:var(--body); font-size:12px;
+  transition:transform .16s, border-color .15s, box-shadow .15s, color .15s;
+}
+.arc-mail-item:hover {
+  transform:translateX(2px);
+  color:var(--ink);
+  box-shadow:0 8px 22px rgba(0,0,0,.4);
+}
+.arc-mail-item:focus-visible { outline:2px solid var(--mail-accent, var(--pink)); outline-offset:2px; }
+.arc-mail-item[aria-current="true"] {
+  color:var(--ink);
+  border-color:color-mix(in srgb, var(--mail-accent, var(--lav)), transparent 20%);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--mail-accent, var(--lav)), transparent 66%);
+}
+.arc-mail-item-lines { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.arc-mail-item-from {
+  font-family:var(--mono); font-size:9px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--ink-faint);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.arc-mail-item-line {
+  font-family:var(--body); font-size:12.5px; line-height:1.3;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+.arc-mail-item-meta { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+.arc-mail-item-new {
+  font-family:var(--pix); font-size:7.5px; letter-spacing:.1em;
+  color:var(--ground); background:var(--mail-accent, var(--pink));
+  border-radius:3px; padding:2px 4px;
+}
+.arc-mail-item-when { font-family:var(--mono); font-size:9px; color:var(--ink-faint); }
+
+/* the unread pip: one lit dot in the margin, steady (the CHIP is what blinks) */
+.arc-mail-pip {
+  width:8px; height:8px; border-radius:50%;
+  background:color-mix(in srgb, var(--line), transparent 30%);
+  box-shadow:none; flex:none;
+}
+.arc-mail-item[data-unread="yes"] .arc-mail-pip {
+  background:var(--mail-accent, var(--pink));
+  box-shadow:0 0 10px color-mix(in srgb, var(--mail-accent, var(--pink)), transparent 45%);
+}
+.arc-mail-item[data-unread="yes"] .arc-mail-item-line { color:var(--ink); font-weight:600; }
+
+/* ============================== THE LETTER ===============================
+   Paper first: a sheet with a fold shadow across it, dressed by its own
+   letterhead. The unfold is one keyframe and the node is minted fresh on every
+   pick, which is what makes the beat fire without a class dance. */
+.arc-letter {
+  position:relative;
+  padding:22px 24px 20px;
+  border-radius:4px;
+  border:1px solid color-mix(in srgb, var(--line), var(--mail-accent, var(--lav)) 18%);
+  box-shadow:0 18px 46px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05);
+  color:var(--ink);
+  transform-origin:top center;
+  animation:arc-mail-unfold .3s cubic-bezier(.2,1.1,.4,1) both;
+  overflow:hidden;
+}
+/* THE TILT RIDES THE KEYFRAME. The unfold fills `both`, so a tilt written as a
+   plain rule on the sheet would be overwritten by the animation's own transform
+   and never appear. `--mail-tilt` is the seam: a letterhead sets it, the
+   keyframe carries it, and the reduced-motion block zeroes it. */
+@keyframes arc-mail-unfold {
+  from { opacity:0; transform:translateY(-8px) scaleY(.93) rotate(var(--mail-tilt, 0deg)); }
+  to { opacity:1; transform:rotate(var(--mail-tilt, 0deg)); }
+}
+/* THE FOLD. One faint band across the top third: paper that has been in an
+   envelope has been folded, and this is the cheapest honest way to say so. */
+.arc-letter::after {
+  content:""; position:absolute; left:0; right:0; top:38%; height:14px;
+  pointer-events:none;
+  background:linear-gradient(180deg,
+    transparent,
+    color-mix(in srgb, black, transparent 92%) 48%,
+    color-mix(in srgb, var(--ink), transparent 96%) 52%,
+    transparent);
+}
+
+.arc-letter-head { position:relative; padding-right:56px; }
+.arc-letter-from {
+  margin:0 0 6px;
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.26em;
+  text-transform:uppercase; color:var(--mail-accent, var(--lav));
+}
+.arc-letter-line {
+  margin:0 0 10px;
+  font-family:var(--disp); font-size:clamp(15px, 2vw, 19px); letter-spacing:.06em;
+  color:var(--ink);
+}
+.arc-letter-rule { display:block; height:3px; margin:0 0 14px; }
+.arc-letter-body { font-family:var(--body); font-size:13.5px; line-height:1.62; }
+.arc-letter-body p { margin:0 0 12px; color:color-mix(in srgb, var(--ink), var(--ink-dim) 40%); }
+.arc-letter-body p:last-child { margin-bottom:0; }
+.arc-letter-foot {
+  margin-top:16px; padding-top:10px;
+  border-top:1px dashed color-mix(in srgb, var(--line), transparent 30%);
+}
+.arc-letter-when { font-family:var(--mono); font-size:9.5px; letter-spacing:.16em; color:var(--ink-faint); }
+
+/* ---- the accent, off mail.js LETTERHEADS.accent ------------------------
+   Scoped to the two nodes that wear a letterhead. A bare [data-accent] rule
+   would reach into every other agent's markup for a token that is ours. */
+.arc-mail-item[data-accent="pink"], .arc-letter[data-accent="pink"] { --mail-accent:var(--pink); }
+.arc-mail-item[data-accent="lav"], .arc-letter[data-accent="lav"] { --mail-accent:var(--lav); }
+.arc-mail-item[data-accent="gold"], .arc-letter[data-accent="gold"] { --mail-accent:var(--gold); }
+.arc-mail-item[data-accent="slate"], .arc-letter[data-accent="slate"] { --mail-accent:var(--slate); }
+.arc-mail-item[data-accent="ink"], .arc-letter[data-accent="ink"] { --mail-accent:var(--ink-dim); }
+
+/* ---- the sheet, off LETTERHEADS.paper ---------------------------------- */
+.arc-letter[data-paper="cream"] {
+  background:linear-gradient(168deg,
+    color-mix(in srgb, var(--panel), var(--gold) 7%),
+    color-mix(in srgb, var(--navy), var(--gold) 3%) 82%);
+}
+.arc-letter[data-paper="plain"] {
+  background:linear-gradient(168deg, var(--panel), var(--navy) 82%);
+}
+/* pulp has a fibre in it: a hairline weave over the sheet, 3px pitch */
+.arc-letter[data-paper="pulp"] {
+  background:
+    repeating-linear-gradient(112deg,
+      color-mix(in srgb, var(--ink), transparent 97%) 0 1px,
+      transparent 1px 3px),
+    linear-gradient(168deg,
+      color-mix(in srgb, var(--panel), var(--ink-faint) 9%),
+      color-mix(in srgb, var(--navy), var(--ink-faint) 4%) 82%);
+}
+/* a note, not a letter: narrower, warmer, and it sits slightly askew */
+.arc-letter[data-paper="note"] {
+  max-width:min(560px, 100%);
+  --mail-tilt:-.5deg;
+  background:linear-gradient(168deg,
+    color-mix(in srgb, var(--panel2), var(--ink) 6%),
+    color-mix(in srgb, var(--panel), transparent 6%) 84%);
+}
+.arc-letter[data-paper="grey"] {
+  background:linear-gradient(168deg,
+    color-mix(in srgb, var(--navy), var(--slate) 12%),
+    color-mix(in srgb, var(--ground), var(--slate) 6%) 84%);
+  color:var(--ink-dim);
+}
+
+/* ---- the rule under the head, off LETTERHEADS.rule --------------------- */
+.arc-letter[data-rule="single"] .arc-letter-rule {
+  height:1px;
+  background:linear-gradient(90deg, var(--mail-accent, var(--lav)), transparent 92%);
+}
+.arc-letter[data-rule="double"] .arc-letter-rule {
+  height:4px;
+  background:linear-gradient(180deg,
+    var(--mail-accent, var(--pink)) 0 1px,
+    transparent 1px 3px,
+    color-mix(in srgb, var(--mail-accent, var(--pink)), transparent 45%) 3px 4px);
+}
+.arc-letter[data-rule="dotted"] .arc-letter-rule {
+  height:2px;
+  background:repeating-linear-gradient(90deg,
+    var(--mail-accent, var(--gold)) 0 2px,
+    transparent 2px 6px);
+}
+/* torn: an uneven dash, the edge of something that was pulled apart */
+.arc-letter[data-rule="torn"] .arc-letter-rule {
+  height:2px;
+  background:repeating-linear-gradient(90deg,
+    color-mix(in srgb, var(--mail-accent, var(--slate)), transparent 20%) 0 9px,
+    transparent 9px 13px,
+    color-mix(in srgb, var(--mail-accent, var(--slate)), transparent 45%) 13px 17px,
+    transparent 17px 24px);
+}
+.arc-letter[data-rule="none"] .arc-letter-rule { height:0; margin-bottom:6px; }
+
+/* ---- the mark pressed into the corner, off LETTERHEADS.mark ------------ */
+.arc-letter-mark {
+  position:absolute; top:0; right:0;
+  width:44px; height:44px;
+  opacity:0; transition:opacity .2s;
+}
+.arc-letter[data-mark="seal"] .arc-letter-mark {
+  opacity:.9; border-radius:50%;
+  border:2px solid color-mix(in srgb, var(--mail-accent, var(--pink)), transparent 40%);
+  background:radial-gradient(circle at 50% 50%,
+    color-mix(in srgb, var(--mail-accent, var(--pink)), transparent 55%) 0 34%,
+    color-mix(in srgb, var(--mail-accent, var(--pink)), transparent 88%) 36% 100%);
+  box-shadow:0 0 18px color-mix(in srgb, var(--mail-accent, var(--pink)), transparent 74%);
+}
+.arc-letter[data-mark="crest"] .arc-letter-mark {
+  opacity:.75;
+  clip-path:polygon(50% 0, 100% 16%, 100% 66%, 50% 100%, 0 66%, 0 16%);
+  background:linear-gradient(160deg,
+    color-mix(in srgb, var(--mail-accent, var(--lav)), transparent 52%),
+    color-mix(in srgb, var(--mail-accent, var(--lav)), transparent 88%));
+}
+/* a stamp: a square with a perforated edge, drawn as a dashed border so the
+   teeth are on the OUTSIDE where a stamp's are, and not a screen of holes
+   across the middle of it */
+.arc-letter[data-mark="stamp"] .arc-letter-mark {
+  opacity:.85;
+  width:38px; height:44px; margin:3px 3px 0 0;
+  border:2.5px dashed color-mix(in srgb, var(--mail-accent, var(--gold)), transparent 30%);
+  border-radius:2px;
+  background:linear-gradient(150deg,
+    color-mix(in srgb, var(--mail-accent, var(--gold)), transparent 52%),
+    color-mix(in srgb, var(--mail-accent, var(--gold)), transparent 86%));
+}
+.arc-letter[data-mark="none"] .arc-letter-mark { opacity:0; }
+
+/* ============================ NARROW WINDOWS =============================
+   The wall goes on top of the paper rather than beside it, and it keeps a
+   third of the height so both halves stay legible. */
+@media (max-width: 760px) {
+  .arc-mailbox { width:100%; max-height:92vh; padding:16px 14px 0; }
+  .arc-mailbox-body { grid-template-columns:1fr; grid-template-rows:minmax(0, 34%) 1fr; }
+  .arc-mail-list { padding-right:0; }
+  .arc-letter { padding:18px 16px 16px; }
+  .arc-letter-head { padding-right:44px; }
+  .arc-letter-mark { width:34px; height:34px; }
+}
+html.arc-mobile .arc-mail-item { padding:12px; min-height:44px; }
+html.arc-mobile .arc-mailchip { width:40px; height:40px; }
+
+/* =========================== REDUCED MOTION ==============================
+   The global freeze runs every animation once at .001s, which is the right
+   answer for the three ENTRANCES here (they land composed). The blink is a
+   STATE, not an entrance, so it says what still means for itself: the pip stays
+   LIT, because a dark pip would read as an empty box. Both paths, exactly the
+   way the campus marquee answers its own. */
+html.arc-reduced .arc-mailchip[data-state="new"] .arc-mailchip-pip { animation:none; opacity:1; }
+html.arc-reduced .arc-letter[data-paper="note"] { --mail-tilt:0deg; }
+html.arc-reduced .arc-mail-item:hover { transform:none; }
+@media (prefers-reduced-motion: reduce) {
+  .arc-mailchip[data-state="new"] .arc-mailchip-pip { animation:none; opacity:1; }
+  .arc-letter[data-paper="note"] { --mail-tilt:0deg; }
+  .arc-mail-item:hover { transform:none; }
+}

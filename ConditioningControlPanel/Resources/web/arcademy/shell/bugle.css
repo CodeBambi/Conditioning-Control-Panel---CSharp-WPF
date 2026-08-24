@@ -1,0 +1,368 @@
+/* ============================================================================
+ * shell/bugle.css - the skin for shell/bugle.js.
+ *
+ * A real stylesheet file rather than a template literal in the module, which
+ * means traps 37 and 84 (a backtick in a CSS comment kills the sheet, and node
+ * --check cannot see it) cannot happen here at all. shell/bugle.js links it
+ * once, lazily, resolved against the module.
+ *
+ * HOUSE LAWS OBEYED
+ *   trap 2   no font is fetched. The masthead is 'Arcademy Display' through
+ *            var(--disp) - the bundled Graduate woff2 styles.css already
+ *            declares - and the fallback chain under it ends in `serif`, so a
+ *            missing file still sets the name in a serif, which is the whole
+ *            point of a masthead.
+ *   trap 27  no bare `display:` on a node the shell toggles with the hidden
+ *            attribute, and no competing [hidden] rule. The stage is REMOVED.
+ *   trap 36  the page turn is transform and opacity only; nothing animates
+ *            background-position, and no filter lands over live content.
+ *   trap 46  the paper scrolls inside the stage and Back rides the sticky exit
+ *            bar, so a short window can never bury the way out.
+ *
+ * COLOUR: every value is a color-mix off the shell's own tokens, so
+ * init.palette reskins the paper for free. Newsprint is the chalk-cream ink
+ * token pulled toward slate and set in a dark room; the type on it is the page
+ * ground pushed back up. Light paper on a dark stage is deliberate - a
+ * newspaper is the one object in this school that has to read as PRINT.
+ *
+ * LAYER: z-index 38, the same rung the corkboard takes - the two overlays are
+ * siblings and never up at once. Over the campus and its chrome (up to 36),
+ * under fx (40), the ceremony (42/45), the annex reveal (48), EMI (50), toast.
+ * ==========================================================================*/
+
+.arc-buglestage {
+  /* --- the paper's own tokens, all derived --- */
+  --news:       color-mix(in srgb, var(--ink) 88%, var(--slate));
+  --news-lo:    color-mix(in srgb, var(--news), var(--slate) 16%);
+  --news-ink:   color-mix(in srgb, var(--ground) 82%, var(--panel));
+  --news-dim:   color-mix(in srgb, var(--news-ink), var(--news) 40%);
+  --news-rule:  color-mix(in srgb, var(--news-ink), transparent 62%);
+  --news-hair:  color-mix(in srgb, var(--news-ink), transparent 84%);
+
+  /* THE BODY FACE. A SYSTEM stack, exactly like --body / --mono in styles.css,
+     so nothing is fetched and trap 2 is untouched. It exists because column
+     copy set in the shell's UI sans reads as a settings page in three columns,
+     and one serif body is the cheapest thing that makes a page read as PRINT.
+     The chain ends in `serif`, so a machine with none of the named faces still
+     lands somewhere with brackets on its letters. */
+  --news-face:  Georgia, 'Times New Roman', 'Nimbus Roman', 'Liberation Serif', serif;
+
+  position:fixed; inset:0; z-index:38;
+  display:flex; align-items:flex-start; justify-content:center;
+  padding:clamp(12px, 4vh, 44px);
+  overflow:auto;                 /* the paper scrolls, Back never clips (trap 46) */
+  background:
+    radial-gradient(900px 620px at 50% 20%, color-mix(in srgb, var(--ink), transparent 92%), transparent 66%),
+    radial-gradient(140% 120% at 50% 50%, var(--ground) 40%,
+                                          color-mix(in srgb, var(--ground), black 56%) 100%);
+  animation:arc-bugle-dusk .22s ease-out both;
+}
+@keyframes arc-bugle-dusk { from { opacity:0; } to { opacity:1; } }
+
+/* ---------------------------------------------------------------- the paper */
+.arc-bugle {
+  position:relative;
+  width:min(1000px, 94vw); margin:auto;
+  padding:clamp(18px, 2.8vw, 34px) clamp(16px, 2.8vw, 36px) clamp(8px, 1.4vw, 16px);
+  color:var(--news-ink);
+  /* THE STOCK. A fine horizontal grain over a flat sheet, rasterised once and
+     never moved (trap 36), plus a warm falloff at the head so the top of the
+     page reads as the part under the lamp. */
+  background:
+    radial-gradient(700px 240px at 50% 0%, color-mix(in srgb, var(--gold), transparent 90%), transparent 70%),
+    repeating-linear-gradient(180deg, transparent 0 3px, color-mix(in srgb, var(--news-ink), transparent 96%) 3px 4px),
+    linear-gradient(178deg, var(--news), var(--news-lo));
+  box-shadow:0 30px 80px rgba(0,0,0,.72), 0 1px 0 rgba(255,255,255,.5) inset;
+  transform:rotate(-.25deg);
+  animation:arc-bugle-lay .38s cubic-bezier(.2,1.16,.4,1) both;
+}
+@keyframes arc-bugle-lay {
+  from { transform:translateY(16px) rotate(.7deg); opacity:0; }
+  to   { transform:translateY(0) rotate(-.25deg); opacity:1; }
+}
+
+/* THE FOLD. Every paper this size has been folded once across the middle, and
+   the crease is the cheapest possible tell that this is an OBJECT. Painted, not
+   interactive, and it never scrolls out of alignment because it is pinned to
+   the sheet rather than to the stage. */
+.arc-bugle::after {
+  content:""; position:absolute; left:0; right:0; top:52%; height:18px;
+  pointer-events:none;
+  background:linear-gradient(180deg,
+    transparent,
+    color-mix(in srgb, var(--news-ink), transparent 86%) 44%,
+    color-mix(in srgb, var(--news-ink), transparent 72%) 50%,
+    color-mix(in srgb, var(--ink), transparent 58%) 53%,
+    transparent);
+}
+
+/* ------------------------------------------------------------- the masthead */
+.arc-bugle-masthead {
+  text-align:center;
+  padding:0 0 10px;
+  border-bottom:3px double var(--news-rule);
+  margin:0 0 4px;
+}
+.arc-bugle-name {
+  font-family:var(--disp);        /* bundled Graduate, then the serif fallback */
+  font-size:clamp(28px, 6.2vw, 62px);
+  line-height:1.02;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  margin:0;
+  color:var(--news-ink);
+  /* The press never lays ink perfectly flat: a hair of spread under the name. */
+  text-shadow:0 1px 0 color-mix(in srgb, var(--news-ink), transparent 76%);
+}
+.arc-bugle-strap {
+  font-family:var(--body); font-style:italic;
+  font-size:clamp(11px, 1.4vw, 14px);
+  letter-spacing:.06em;
+  margin:6px 0 10px;
+  color:var(--news-dim);
+}
+.arc-bugle-flag {
+  display:flex; justify-content:space-between; align-items:baseline;
+  gap:10px; flex-wrap:wrap;
+  padding:5px 0 0;
+  border-top:1px solid var(--news-rule);
+  font-family:var(--mono); font-size:10px; letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--news-dim);
+}
+.arc-bugle-flagbit { white-space:nowrap; }
+
+/* ----------------------------------------------------------------- the tabs */
+.arc-bugle-tabs {
+  display:flex; flex-wrap:wrap; gap:0;
+  margin:10px 0 0;
+  border-bottom:1px solid var(--news-rule);
+}
+.arc-bugle-tab {
+  appearance:none; border:0; background:none;
+  padding:7px 13px 6px;
+  font-family:var(--mono); font-size:10px; letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--news-dim);
+  cursor:pointer;
+  border-bottom:3px solid transparent;
+  transition:color .14s ease, border-color .14s ease;
+}
+.arc-bugle-tab:hover { color:var(--news-ink); }
+.arc-bugle-tab:focus-visible { outline:2px solid var(--pink); outline-offset:-2px; }
+.arc-bugle-tab.is-on {
+  color:var(--news-ink);
+  border-bottom-color:color-mix(in srgb, var(--pink-deep), var(--news-ink) 30%);
+}
+
+/* ---------------------------------------------------------------- the page */
+.arc-bugle-sheet { position:relative; padding:16px 0 0; }
+.arc-bugle-sheet.is-turning { animation:arc-bugle-turn .26s cubic-bezier(.2,.9,.3,1) both; }
+@keyframes arc-bugle-turn {
+  from { opacity:0; transform:translateX(10px); }
+  to   { opacity:1; transform:none; }
+}
+
+.arc-bugle-lede { text-align:center; margin:0 0 16px; }
+.arc-bugle-kicker {
+  font-family:var(--mono); font-size:10px; letter-spacing:.26em;
+  color:color-mix(in srgb, var(--pink-deep), var(--news-ink) 24%);
+  margin:0 0 6px;
+}
+.arc-bugle-headline {
+  font-family:var(--disp);
+  font-size:clamp(19px, 3.1vw, 30px); line-height:1.14;
+  letter-spacing:.01em;
+  margin:0 auto; max-width:24ch;
+  color:var(--news-ink);
+}
+.arc-bugle-rule {
+  width:min(190px, 46%); height:0;
+  margin:12px auto 0;
+  border-top:1px solid var(--news-rule);
+  border-bottom:1px solid var(--news-hair);
+}
+
+/* THE COLUMNS. Two by default, three once there is width for them - a paper
+   whose measure runs to 90 characters is a memo, not a paper. */
+.arc-bugle-cols {
+  columns:2; column-gap:clamp(18px, 2.4vw, 30px);
+  column-rule:1px solid var(--news-hair);
+  text-align:justify; hyphens:auto;
+}
+@media (min-width: 880px) { .arc-bugle-cols { columns:3; } }
+
+.arc-bugle-para {
+  margin:0 0 .72em;
+  font-family:var(--news-face);
+  font-size:14px; line-height:1.52;
+  color:color-mix(in srgb, var(--news-ink), var(--news) 8%);
+  text-indent:1.1em;
+}
+.arc-bugle-para.is-open { text-indent:0; }
+/* The drop cap. It is set in the masthead face so the page has ONE serif idea
+   in it, and it is the only oversized glyph on the sheet. */
+.arc-bugle-para.is-open::first-letter {
+  font-family:var(--disp);
+  float:left;
+  font-size:3.05em; line-height:.82;
+  padding:.06em .1em 0 0;
+  color:var(--news-ink);
+}
+
+/* --------------------------------------------------------- the comics box */
+.arc-bugle-comics {
+  margin:20px 0 6px; padding:10px 12px 12px;
+  border:1px solid var(--news-rule);
+  background:color-mix(in srgb, var(--news), var(--news-ink) 4%);
+}
+.arc-bugle-comics-cap {
+  font-family:var(--mono); font-size:10px; letter-spacing:.24em;
+  color:var(--news-dim);
+  padding:0 0 8px;
+  border-bottom:1px solid var(--news-hair);
+  margin:0 0 10px;
+}
+/* Capped: three empty frames at the full measure of the page swallow it. */
+.arc-bugle-strip {
+  display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;
+  max-width:660px; margin:0 auto;
+}
+.arc-bugle-panel {
+  position:relative;
+  aspect-ratio:4 / 3;
+  border:1px solid var(--news-rule);
+  background:
+    repeating-linear-gradient(135deg,
+      transparent 0 7px,
+      color-mix(in srgb, var(--news-ink), transparent 94%) 7px 8px),
+    color-mix(in srgb, var(--news), var(--news-ink) 6%);
+}
+.arc-bugle-panelnum {
+  position:absolute; left:5px; top:3px;
+  font-family:var(--mono); font-size:9px;
+  color:color-mix(in srgb, var(--news-dim), transparent 30%);
+}
+.arc-bugle-comics-note { color:var(--news-dim); margin:9px 0 0; text-align:center; }
+
+/* ----------------------------------------------------------------- the foot */
+.arc-bugle-foot {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:12px; flex-wrap:wrap;
+  margin:18px 0 0; padding:10px 0 0;
+  border-top:1px solid var(--news-rule);
+}
+.arc-bugle-folio {
+  font-family:var(--mono); font-size:10px; letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--news-dim);
+}
+/* The turn buttons wear the paper's ink, not the shell's neon: this is the one
+   surface in the school that is pretending not to be a screen. */
+.arc-bugle .btn.arc-bugle-turn {
+  background:color-mix(in srgb, var(--news-ink), transparent 96%);
+  border:1px solid var(--news-rule);
+  color:var(--news-ink);
+  opacity:1;
+  font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.arc-bugle .btn.arc-bugle-turn:hover:not(:disabled) {
+  background:color-mix(in srgb, var(--news-ink), transparent 92%);
+}
+.arc-bugle .btn.arc-bugle-turn:disabled { opacity:.34; cursor:default; }
+
+.arc-bugle-empty { text-align:center; color:var(--news-dim); padding:24px 0; }
+
+/* The exit bar sits on the paper, so it wears newsprint rather than the dark
+   chrome the shell's own screens use. */
+.arc-bugle .arc-exitbar {
+  background:linear-gradient(180deg, transparent, color-mix(in srgb, var(--news-lo), transparent 6%) 44%);
+  border-top:1px solid var(--news-rule);
+}
+
+/* ============================== THE PROP ================================= */
+/* A folded paper the driver scatters on the campus. Nobody puts a newspaper
+   down straight, so it lies at an angle by default; --np-r overrides it. */
+.arc-bugleprop {
+  --news:      color-mix(in srgb, var(--ink) 88%, var(--slate));
+  --news-lo:   color-mix(in srgb, var(--news), var(--slate) 22%);
+  --news-ink:  color-mix(in srgb, var(--ground) 82%, var(--panel));
+
+  position:absolute; left:var(--np-x, 68%); top:var(--np-y, 72%);
+  width:var(--np-w, 58px);
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  padding:0; margin:0; border:0; background:none;
+  color:var(--campus-text, var(--ink-dim));
+  cursor:pointer;
+  transition:transform .16s ease;
+}
+.arc-bugleprop:hover, .arc-bugleprop:focus-visible {
+  transform:translateY(-2px) scale(1.06);
+}
+.arc-bugleprop:focus-visible { outline:2px solid var(--pink); outline-offset:4px; }
+
+.arc-bugleprop-fold {
+  position:relative; display:block; width:100%; aspect-ratio:5 / 4;
+  background:linear-gradient(178deg, var(--news), var(--news-lo));
+  transform:rotate(var(--np-r, -7deg));
+  box-shadow:0 5px 12px rgba(0,0,0,.6), 0 1px 0 rgba(255,255,255,.4) inset;
+  overflow:hidden;
+}
+/* the masthead sliver above the fold */
+.arc-bugleprop-name {
+  position:absolute; left:12%; right:12%; top:14%; height:12%;
+  background:var(--news-ink); opacity:.82; border-radius:1px;
+}
+/* three ruled lines of column under it */
+.arc-bugleprop-lines {
+  position:absolute; left:12%; right:12%; top:34%; height:22%;
+  background:repeating-linear-gradient(180deg,
+    color-mix(in srgb, var(--news-ink), transparent 45%) 0 1px,
+    transparent 1px 4px);
+}
+/* the crease across the middle, and the shadow it throws */
+.arc-bugleprop-crease {
+  position:absolute; left:0; right:0; top:58%; height:6px;
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--news-ink), transparent 78%),
+    color-mix(in srgb, var(--news), transparent 30%));
+}
+.arc-bugleprop-label {
+  font-family:var(--pix, var(--mono)); font-size:7px; letter-spacing:.14em;
+  color:var(--campus-text-dim, var(--ink-faint));
+  text-align:center; line-height:1.4;
+}
+.arc-bugleprop-new {
+  position:absolute; right:-4px; top:-4px;
+  width:9px; height:9px; border-radius:50%;
+  background:var(--pink);
+  box-shadow:0 0 10px color-mix(in srgb, var(--pink), transparent 30%);
+  opacity:0; transform:scale(.4);
+  transition:opacity .2s ease, transform .2s cubic-bezier(.2,1.4,.4,1);
+}
+.arc-bugleprop.has-new .arc-bugleprop-new { opacity:1; transform:scale(1); }
+
+/* ============================ SMALL WINDOWS ============================== */
+@media (max-width: 620px) {
+  .arc-buglestage { padding:8px; }
+  .arc-bugle { width:100%; transform:none; padding-left:14px; padding-right:14px; }
+  .arc-bugle-cols { columns:1; column-rule:none; text-align:left; }
+  .arc-bugle-strip { grid-template-columns:1fr; }
+  .arc-bugle-foot { justify-content:center; }
+}
+
+/* ============================ REDUCED MOTION ============================= */
+/* The lay-down, the dusk and the page turn are decoration; the tilt of the
+   sheet is the picture and stays. The app-side class AND the media query,
+   because the two signals come from two places (styles.css's own pattern). */
+html.arc-reduced .arc-buglestage,
+html.arc-reduced .arc-bugle,
+html.arc-reduced .arc-bugle-sheet.is-turning { animation:none; }
+html.arc-reduced .arc-bugle-tab,
+html.arc-reduced .arc-bugleprop,
+html.arc-reduced .arc-bugleprop-new { transition:none; }
+@media (prefers-reduced-motion: reduce) {
+  .arc-buglestage, .arc-bugle, .arc-bugle-sheet.is-turning { animation:none; }
+  .arc-bugle-tab, .arc-bugleprop, .arc-bugleprop-new { transition:none; }
+}
