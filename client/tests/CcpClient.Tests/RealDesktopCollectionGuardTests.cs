@@ -119,6 +119,14 @@ public class RealDesktopCollectionGuardTests
         // and it adds one of its own: its central reading is a walk of the WHOLE z-order filtered to
         // this process, so a second run's windows would be counted as this run's survivors.
         "SurfaceTeardownObservations",
+
+        // The process-exit run reaches the desktop through a CHILD PROCESS rather than through this
+        // one, and that is a reason to name it here rather than an exemption from doing so: the two
+        // dangerous surfaces are on the one machine-global screen either way, it takes the
+        // foreground, and its central readings are a z-order walk plus hit tests at fixed points. A
+        // peer run's windows would be counted, or would win those points, exactly as they would for
+        // every helper above.
+        "SurfaceExitObservations",
     ];
 
     /// <summary>

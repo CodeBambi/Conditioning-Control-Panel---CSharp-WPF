@@ -127,6 +127,15 @@ public sealed class ApplicationHost
     /// recorded in registry state, and one participant's stop failure is logged while
     /// teardown continues to the rest. The settings flush occupies the head slot the lifecycle
     /// contract reserved (persistence contract §11). There is no second teardown path for async work.
+    ///
+    /// <para><b>Every wait in here is bounded, and the last one to become so was the participant
+    /// stop.</b> This method runs on the UI thread with that thread BLOCKED (<c>App.axaml.cs:95</c>
+    /// calls it from the lifetime's Exit handler through <c>GetAwaiter().GetResult()</c>), so a
+    /// teardown that never returns is an application that never exits — and on the ordinary path
+    /// the native surfaces are destroyed by the OPERATING SYSTEM at process exit and by nothing
+    /// else (<c>Session/SessionParticipant.cs:889-900</c>). A process that cannot end therefore
+    /// leaves a topmost, input-blocking window on the user's desktop with nothing to close it.
+    /// See the loop below for the bound, its backstop, and the wedge shape it cannot cover.</para>
     /// </summary>
     public async Task ShutdownAsync()
     {
@@ -159,7 +168,42 @@ public sealed class ApplicationHost
         {
             try
             {
-                await _participants[i].StopAsync().ConfigureAwait(false);
+                var stop = _participants[i].StopAsync();
+
+                // THE BOUND, AND WHY IT IS A SAFETY FIX RATHER THAN TIDINESS. Every native surface
+                // this app puts on the desktop is destroyed by the OPERATING SYSTEM at process exit
+                // and by nothing else on the ordinary path: the disposals go through the UI dispatch
+                // boundary (Session/SessionParticipant.cs:889-900, :1040-1057) and the UI thread is
+                // blocked inside this very call for the whole of teardown (App.axaml.cs:95), so no
+                // post is ever delivered. That makes a surface's lifetime the PROCESS's — and this
+                // loop was the one place left that could stop the process from ending. A stop that
+                // never completes parks the UI thread inside the lifetime's Exit handler forever, so
+                // the app never exits, and two of the six surfaces are deliberately NOT
+                // click-through (Pointer/Win32PointerSurface.cs:850-852,
+                // Input/Win32InputPresence.cs:1097-1099): the user is left with a topmost window
+                // eating their clicks or their keyboard and nothing on screen to close it.
+                //
+                // So the observation is bounded with the SAME backstop the registry drain already
+                // uses two lines above, for the same reason and with no new knob. The stop is not
+                // cancelled or interfered with — it keeps running on its own thread and lands if it
+                // ever can; only this teardown's WAIT on it ends. That is the shape
+                // Audio/SoundArbitration.cs:1262-1270 already chose at the one native wedge this
+                // port has measured ("a wedged native call never blocks process exit").
+                //
+                // NAMED LIMIT: this bounds an ASYNCHRONOUS wedge only. A StopAsync that blocks its
+                // caller before returning a task (a hung native call on this very thread) never
+                // reaches this line, and no bound taken on the blocked thread could help it. The
+                // remedy there is termination, not patience.
+                if (await Task.WhenAny(stop, Task.Delay(_drainTimeout)).ConfigureAwait(false) != stop)
+                {
+                    _log.Log($"teardown: participant '{_participants[i].Name}' stop exceeded " +
+                        $"{_drainTimeout.TotalSeconds:0.#}s and was abandoned — teardown continues so the process " +
+                        "can exit and the OS can reclaim any surface still up");
+                    RecordItIfItEverFails(_participants[i].Name, stop);
+                    continue;
+                }
+
+                await stop.ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -167,4 +211,24 @@ public sealed class ApplicationHost
             }
         }
     }
+
+    /// <summary>
+    /// An abandoned stop is no longer awaited, so a failure it reaches later would reach nobody:
+    /// unobserved by any caller (measured — <c>Task.WhenAny</c> does NOT observe the exception of
+    /// the task that lost its race), and invisible in the log, which is the worse half. A
+    /// participant that eventually failed to shut its device or its file down would leave no trace
+    /// of it anywhere. So the abandonment is followed to its end and RECORDED, in the same log that
+    /// already carries the abandonment itself — the shape
+    /// <see cref="OperationRegistry.CancelAndDrainAsync"/> uses for the operations it gives up on.
+    /// Reading the exception is also what retires it, so it can never resurface as an
+    /// unobserved-task exception on the finalizer thread.
+    /// </summary>
+    private void RecordItIfItEverFails(string participant, Task abandoned) =>
+        _ = abandoned.ContinueWith(
+            failed => _log.Log(
+                $"teardown: the abandoned stop of participant '{participant}' failed after teardown had moved on: "
+                + failed.Exception!.GetBaseException().Message),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 }

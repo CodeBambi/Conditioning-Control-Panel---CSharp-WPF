@@ -105,6 +105,14 @@ public class UnboundedWaitGuardTests
         // block inherits it. Bare in the source only because the bound is one frame further out.
         ("CcpClient.Tests/AudioObservations.cs", ".GetAwaiter().GetResult();", 1),
         ("CcpClient.Tests/SchedulerModuleTests.cs", ".GetAwaiter().GetResult();", 1),
+        // Shape (a), blocking form, population 4: the block is IN A CHILD PROCESS and IS the
+        // subject. This line is the shipping app's own teardown bridge reproduced verbatim
+        // (App.axaml.cs:95 calls ShutdownAsync().GetAwaiter().GetResult() from the lifetime's Exit
+        // handler), and the fact asks whether it returns at all — bounding it here would delete the
+        // measurement. It cannot hang THIS run: the child is a separate process, every wait the
+        // parent takes on it goes through TestWait, and the run's finally terminates any child still
+        // alive.
+        ("CcpClient.Tests/SurfaceExitObservations.cs", "host.ShutdownAsync().GetAwaiter().GetResult();", 1),
         // Shape (b): the budget's elapsing IS the subject (TestWait population 2).
         ("CcpClient.Tests/DtrhLoopbackContractTests.cs", "longPollTimeout: TimeSpan.FromMilliseconds(200));", 1),
         ("CcpClient.Tests/SoundArbitrationTests.cs", "private static readonly TimeSpan GiveUpBudget = TimeSpan.FromMilliseconds(200);", 1),

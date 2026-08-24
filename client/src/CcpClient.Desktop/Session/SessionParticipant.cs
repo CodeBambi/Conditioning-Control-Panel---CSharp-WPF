@@ -924,13 +924,31 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// <c>Win32OverlayPresence</c>, <c>DestroyWindow</c> would fail, and the honest diagnostic it
     /// records would be read by nobody.</para>
     ///
-    /// <para><b>And the bound on it, stated rather than assumed.</b> A post is delivered only while
-    /// the dispatcher is still running. On the ordinary teardown path it is not, so the posted
-    /// teardown does not run and the surfaces are reclaimed by the OPERATING SYSTEM at process exit.
-    /// That is acceptable here and only here, because what the user can see has already been dealt
-    /// with one line above: <c>Engine.Stop()</c> disarms every module, and disarm posts
-    /// <c>HideAll</c> from the UI thread the user pressed STOP on. The visible-stop guarantee rests
-    /// on that, never on process death.</para>
+    /// <para><b>And the bound on it, stated rather than assumed — and now MEASURED rather than
+    /// stated.</b> On the ordinary teardown path the posted teardown does not run, and the surfaces
+    /// are reclaimed by the OPERATING SYSTEM at process exit. The reason is sharper than "the
+    /// dispatcher has gone down", which is what this remark used to say: the lifetime's Exit
+    /// handler calls <c>ShutdownAsync().GetAwaiter().GetResult()</c> ON the UI thread
+    /// (<c>App.axaml.cs:95</c>), so that thread is BLOCKED inside this very teardown for its whole
+    /// duration and cannot deliver anything posted to it — the dispatcher is still nominally
+    /// running and the post is still never delivered. A native window may be destroyed only by the
+    /// thread that created it, so there is no other thread that could do it either.</para>
+    ///
+    /// <para>That is acceptable here and only here, and for two reasons rather than one. First,
+    /// what the user can SEE has already been dealt with one line above: <c>Engine.Stop()</c>
+    /// disarms every module, and disarm posts <c>HideAll</c> from the UI thread the user pressed
+    /// STOP on. The visible-stop guarantee rests on that, never on process death. Second, the
+    /// reclamation itself is no longer an assertion: a real process of this build's own surface
+    /// types is brought up on a real desktop, torn down through the real
+    /// <c>ApplicationHost.ShutdownAsync</c> with the disposals posted and never delivered, and the
+    /// window manager is then asked what survived — normal exit AND abnormal termination
+    /// (<c>client/tests/CcpClient.Tests/SurfaceExitObservations.cs</c>).</para>
+    ///
+    /// <para><b>The precondition, which is where the real hazard lived.</b> Reclamation at process
+    /// exit is only as good as the process's ability to exit, and teardown runs with the UI thread
+    /// blocked — so a teardown that never returned would leave a topmost, input-blocking surface up
+    /// with nothing on screen to close it. <c>ApplicationHost.ShutdownAsync</c> now bounds its wait
+    /// on every participant's stop for exactly that reason.</para>
     /// </remarks>
     public Task StopAsync()
     {
