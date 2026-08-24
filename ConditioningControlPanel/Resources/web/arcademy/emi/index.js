@@ -20,9 +20,9 @@
  * worse than one that missed it.
  * ==========================================================================*/
 
-import { createWidget, DIALS, HINT_LINE, STORE_KEY } from './widget.js';
+import { createWidget, DIALS, HINT_LINE, STORE_KEY, sayHoldMs, SAY_LEAD_MS } from './widget.js';
 
-export { DIALS, HINT_LINE, STORE_KEY };
+export { DIALS, HINT_LINE, STORE_KEY, sayHoldMs, SAY_LEAD_MS };
 
 let singleton = null;
 let voice = null;
@@ -152,6 +152,10 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
      * THE TALK RULE (locked): EMI never mouths words. The face holds `0_0` while
      * the bubble types `.` `..` `...`, then the reaction face lands with the
      * line. A say is PROTECTED - a pet or a drag cannot cut it mid-sentence.
+     * THE HOLD IS A FLOOR, NOT A CONSTANT (owner, 2026-08-24): a landed line
+     * stays up DIALS.SAY_HOLD_MIN_MS at the very least and longer the longer it
+     * is. `opts.hold` still wins when it asks for MORE; it can never ask for
+     * less. The typing cadence is untouched.
      * @param {string} line
      * @param {{face?:string, hold?:number, nod?:boolean}=} opts
      */
@@ -162,7 +166,7 @@ export function mountEmi({ layer, store, toast, enabled = true, log } = {}) {
       const make = widget.makeSayFn();
       if (!make) return false;
       let chain = null;
-      try { chain = make(line, o.face || '^_^', typeof o.hold === 'number' ? o.hold : 1800); }
+      try { chain = make(line, o.face || '^_^', sayHoldMs(line, o.hold)); }
       catch (e) { say('emi: makeSay threw - ' + ((e && e.message) || e)); return false; }
       if (o.nod) chain = Object.assign({}, chain, { body: 'nod' });
       return widget.play(chain, { protect: true, force: true });

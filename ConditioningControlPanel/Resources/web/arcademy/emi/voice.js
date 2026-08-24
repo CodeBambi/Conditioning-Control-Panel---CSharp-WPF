@@ -61,6 +61,11 @@
  * oncePerGamePerDay. Anything else on a pool is ignored, silently.
  * ==========================================================================*/
 
+/* THE SAY CADENCE IS THE WIDGET'S. One import, no decision logic: the ladder
+ * needs to know how long a spoken line actually takes so a `tail` chain does not
+ * land on a bubble that is still up. */
+import { sayHoldMs, SAY_LEAD_MS } from './widget.js';
+
 /* ---------------------- dials (designer-tunable) -------------------------
  * Every number the voice has, in one frozen object, so the owner can retune the
  * rarity without reading the machinery around it. */
@@ -74,7 +79,10 @@ export const VOICE_DIALS = Object.freeze({
   /* --- performing ------------------------------------------------------- */
   CHAIN_LEAD_MS: 1200,       // a lead chain of unknown length gets this much room
   HELD_MS: 1400,             // an event string ("4/10", "GG") after the reveal
-  SAY_MS: 3400,              // the locked SAY cadence, end to end (for a `tail`)
+  // SAY_MS was a constant 3400 until the hold became length-driven (widget.js
+  // sayHoldMs, owner 2026-08-24). The ladder measures the real line instead, or a
+  // `tail` scheduled at the old number lands on a bubble that is still up - and a
+  // SAY is protected, so the tail would simply be refused and lost.
 
   /* --- the exit flinch (owner rec 1) ----------------------------------- */
   FLINCH_ODDS: 1 / 3,        // ...of the exits that are armed at all
@@ -689,7 +697,7 @@ export function createVoice(o) {
     }
     if (line) {
       steps.push({ at: t, run: () => sayIt(line, entry.face, entry.nod) });
-      t += D.SAY_MS;
+      t += SAY_LEAD_MS + sayHoldMs(line);
     }
     if (entry.tail) steps.push({ at: t, run: () => emoteIt({ chain: entry.tail }) });
     if (!steps.length) return emoteIt(entry.emote);
