@@ -172,8 +172,13 @@ public class ToastPresentationTests
     {
         var script = CaptureScript();
         Assert.Contains("'toast' = @('saved', 'refused')", script, StringComparison.Ordinal);
-        Assert.Contains("'companion-permissions', 'toast')] [string]$Surface", script, StringComparison.Ordinal);
-        Assert.Contains("'admitted', 'saved', 'refused')] [string]$State", script, StringComparison.Ordinal);
+        // The toast is the LAST entry in both ValidateSets, so the needles quote only its own tail.
+        // Anchoring on the entry before it would red this fact every time an unrelated surface is
+        // added between them, which is exactly what happened when companion-privacy and
+        // companion-transcript landed - a guard that fails on somebody else's addition teaches
+        // people to widen it.
+        Assert.Contains("'toast')] [string]$Surface", script, StringComparison.Ordinal);
+        Assert.Contains("'saved', 'refused')] [string]$State", script, StringComparison.Ordinal);
 
         // And the UIA gate that runs BEFORE any pixel is read. A capture whose only assertion is a
         // colour cannot tell one message from another, and these two states differ by their words

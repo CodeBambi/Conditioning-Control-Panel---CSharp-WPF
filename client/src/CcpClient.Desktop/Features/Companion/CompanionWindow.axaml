@@ -4,7 +4,7 @@
         x:Class="CcpClient.Desktop.Features.Companion.CompanionWindow"
         x:DataType="companion:CompanionViewModel"
         Title="Companion — CCP Client"
-        Width="480" Height="620" MinWidth="380" MinHeight="420"
+        Width="480" Height="860" MinWidth="380" MinHeight="420"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="#FF141018">
@@ -80,6 +80,22 @@
       <Setter Property="FontSize" Value="11" />
       <Setter Property="Foreground" Value="#FF9A8FA3" />
     </Style>
+    <!-- THE DIAL SEAT. A Border around each segment, because a RadioButton's own Background does
+         not fill a segment under the Fluent template - and because the seat's PADDING is what the
+         headed `companion-privacy` pair reads: 3 DIP above the RadioButton's own UIA rect is flat
+         seat fill, and the two fills are 44/20/51 apart so neither state's check can accept the
+         other's capture. -->
+    <Style Selector="Border.dial-seat">
+      <Setter Property="Background" Value="#FF1E1822" />
+      <Setter Property="BorderBrush" Value="#FF3A2F3E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="6,5" />
+    </Style>
+    <Style Selector="Border.dial-seat.selected">
+      <Setter Property="Background" Value="#FF4A2C55" />
+      <Setter Property="BorderBrush" Value="#FFE066FF" />
+    </Style>
     <Style Selector="TextBlock.status.available">
       <Setter Property="Foreground" Value="#FFB8F0B8" />
     </Style>
@@ -129,27 +145,153 @@
          memory-clear control. All states are session-scoped typed placeholders (owner-pending). -->
     <Border Grid.Row="2" BorderBrush="#FF3A2F3E" BorderThickness="0,1,0,0" Padding="14,8">
       <StackPanel Spacing="6">
-        <Grid ColumnDefinitions="Auto,Auto,Auto,*">
-          <CheckBox x:Name="AwarenessConsentToggle"
-                    Content="Awareness consent"
-                    IsChecked="{Binding AwarenessConsentGiven}"
-                    Foreground="#FFE8E0EE" FontSize="12" VerticalAlignment="Center"
-                    AutomationProperties.Name="awareness consent toggle" />
-          <CheckBox Grid.Column="1" x:Name="MemoryConsentToggle" Margin="14,0,0,0"
+        <!-- WHAT LEAVES YOUR PC (audit row A3). Three stops over the two states the port has:
+             the awareness consent, and the F4 per-app title allow-list. Never a stored level -
+             it is DERIVED, exactly as upstream derives it
+             (Views/Controls/Companion/Runtime/AwarenessPrivacyRuntimeVm.cs:332-336), so the strip
+             and the filter cannot disagree. Copy is upstream's own
+             (Localization/Languages/en.json:4432-4437, :4450). -->
+        <TextBlock x:Name="PrivacyDialHead" Text="what leaves your PC"
+                   FontSize="12" Foreground="#FFE8E0EE"
+                   AutomationProperties.AutomationId="PrivacyDialHead"
+                   AutomationProperties.Name="what leaves your PC" />
+        <Border x:Name="PrivacyDialStrip"
+                Background="#FF1E1822" BorderBrush="#FF3A2F3E" BorderThickness="1"
+                CornerRadius="4" Padding="6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Border Classes="dial-seat" Classes.selected="{Binding StopOffSelected}">
+              <RadioButton x:Name="DialOff" GroupName="privacy-dial" Content="─ Off"
+                           IsChecked="{Binding StopOffSelected}"
+                           Foreground="#FFE8E0EE" FontSize="12"
+                           AutomationProperties.AutomationId="DialOff"
+                           AutomationProperties.Name="privacy dial off" />
+            </Border>
+            <Border Classes="dial-seat" Classes.selected="{Binding StopAppNamesSelected}">
+              <RadioButton x:Name="DialBroad" GroupName="privacy-dial" Content="◔ App names only"
+                           IsChecked="{Binding StopAppNamesSelected}"
+                           Foreground="#FFE8E0EE" FontSize="12"
+                           AutomationProperties.AutomationId="DialBroad"
+                           AutomationProperties.Name="privacy dial app names only" />
+            </Border>
+            <Border x:Name="DialTitlesSeat" Classes="dial-seat" Classes.selected="{Binding StopPageTitlesSelected}">
+              <RadioButton x:Name="DialTitles" GroupName="privacy-dial" Content="◉ + Page titles"
+                           IsChecked="{Binding StopPageTitlesSelected}"
+                           Foreground="#FFE8E0EE" FontSize="12"
+                           AutomationProperties.AutomationId="DialTitles"
+                           AutomationProperties.Name="privacy dial plus page titles" />
+            </Border>
+          </StackPanel>
+        </Border>
+        <TextBlock x:Name="PrivacyDialHint" Text="{Binding PrivacyHint}"
+                   FontSize="11" Foreground="#FF9A8FA3" TextWrapping="Wrap"
+                   AutomationProperties.AutomationId="PrivacyDialHint" />
+
+        <!-- THE PER-APP EDITOR (audit row A4). Opened by ASKING for the third stop; asking never
+             widens anything on its own, and the dial goes on reading "App names only" until an app
+             is actually named (AwarenessPrivacyRuntimeVm.cs:106-113 and :24-27). The list ships
+             EMPTY, which is NARROWER than what this port did before: a granted consent used to let
+             every app's title through. -->
+        <Border x:Name="TitleAllowEditor"
+                IsVisible="{Binding TitleEditorVisible}"
+                BorderBrush="#FF3A2F3E" BorderThickness="1" CornerRadius="4"
+                Background="#FF1E1822" Padding="8,6"
+                AutomationProperties.AutomationId="TitleAllowEditor">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Apps whose page titles she may carry. Empty means none, for anyone."
+                       FontSize="11" Foreground="#FF9A8FA3" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox x:Name="TitleAllowInput"
+                       Text="{Binding TitleAllowInput}"
+                       PlaceholderText="app name"
+                       Background="#FF141018" Foreground="#FFE8E0EE"
+                       BorderBrush="#FF3A2F3E" CornerRadius="4" Padding="6,4"
+                       AutomationProperties.AutomationId="TitleAllowInput"
+                       AutomationProperties.Name="app name to allow" />
+              <Button Grid.Column="1" x:Name="TitleAllowAdd" Margin="6,0,0,0"
+                      Classes="companion" Content="Name it"
+                      Command="{Binding AddNamedAppCommand}"
+                      AutomationProperties.AutomationId="TitleAllowAdd"
+                      AutomationProperties.Name="name this app" />
+            </Grid>
+            <TextBlock x:Name="TitleAllowNotice"
+                       IsVisible="{Binding TitleAllowNoticeVisible}"
+                       Text="{Binding TitleAllowNotice}"
+                       FontSize="10" Foreground="#FFFFC107" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="TitleAllowNotice" />
+            <ItemsControl x:Name="NamedAppList" ItemsSource="{Binding NamedApps}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <Border Background="#FF2A2130" BorderBrush="#FF6B5B73" BorderThickness="1"
+                          CornerRadius="3" Padding="6,2" Margin="0,2,4,0">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <TextBlock Text="{Binding}" FontSize="11" Foreground="#FFE8E0EE" VerticalAlignment="Center" />
+                      <Button Content="×" Padding="4,0" FontSize="11"
+                              Background="Transparent" BorderThickness="0" Foreground="#FF9A8FA3"
+                              Command="{Binding $parent[ItemsControl].((companion:CompanionViewModel)DataContext).RemoveNamedAppCommand}"
+                              CommandParameter="{Binding}"
+                              AutomationProperties.Name="stop carrying titles for this app" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Grid ColumnDefinitions="Auto,Auto,*">
+          <CheckBox x:Name="MemoryConsentToggle"
                     Content="Memory consent"
                     IsChecked="{Binding MemoryConsentGranted}"
                     Foreground="#FFE8E0EE" FontSize="12" VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="MemoryConsentToggle"
                     AutomationProperties.Name="memory consent toggle" />
-          <Button Grid.Column="2" x:Name="ClearMemoryButton" Margin="14,0,0,0"
-                  Classes="companion" Content="Reset companion memory"
-                  Command="{Binding RequestClearCommand}"
-                  AutomationProperties.Name="memory clear button"
-                  ToolTip.Tip="Deletes the saved companion memory. Asks first; can't be undone." />
-          <TextBlock Grid.Column="3" Margin="12,0,0,0" VerticalAlignment="Center"
+          <Button Grid.Column="1" x:Name="TranscriptButton" Margin="14,0,0,0"
+                  Classes="companion" Content="Everything you two have said"
+                  Command="{Binding ShowTranscriptCommand}"
+                  AutomationProperties.AutomationId="TranscriptButton"
+                  AutomationProperties.Name="open transcript"
+                  ToolTip.Tip="A read-only view of what is actually saved. Nothing else is shown, because nothing else is kept." />
+          <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
                      IsVisible="{Binding ClearOutcomeVisible}"
                      Text="{Binding ClearOutcomeText}"
-                     FontSize="11" Foreground="#FFB8B0C0" TextWrapping="Wrap" />
+                     FontSize="11" Foreground="#FFB8B0C0" TextWrapping="Wrap"
+                     AutomationProperties.AutomationId="ClearOutcomeText" />
         </Grid>
+
+        <!-- THE THREE FORGET SCOPES (audit row C10). Upstream has three buttons because the three
+             scopes delete different things: ForgetThread (CompanionBrain.cs:550-558) keeps
+             everything she knows about you, ForgetConversation (:571-585) takes what was derived
+             from the chat too, and Forget (:606-612) over MemoryStore.Wipe (:592-631) takes every
+             copy. Each confirms with copy that names what SURVIVES, which is the only thing that
+             makes them distinguishable to a user. -->
+        <!-- A WrapPanel, not a row: three captions this long overflow a 480 DIP window on one
+             line, and a button whose centre is off the window edge is a button the user cannot
+             press (measured headless, CompanionPrivacyHeadlessTests). -->
+        <WrapPanel Orientation="Horizontal">
+          <Button x:Name="ForgetThreadButton" Margin="0,0,6,4"
+                  Classes="companion" Content="Clear conversation"
+                  Command="{Binding ForgetThreadCommand}"
+                  AutomationProperties.AutomationId="ForgetThreadButton"
+                  AutomationProperties.Name="clear conversation"
+                  ToolTip.Tip="Drops the thread only. The saved document is kept." />
+          <Button x:Name="ClearMemoryButton" Margin="0,0,6,4"
+                  Classes="companion" Content="Reset memory"
+                  Command="{Binding RequestClearCommand}"
+                  AutomationProperties.AutomationId="ClearMemoryButton"
+                  AutomationProperties.Name="memory clear button"
+                  ToolTip.Tip="Deletes the saved companion memory. Asks first; can't be undone." />
+          <Button x:Name="ForgetEverythingButton" Margin="0,0,6,4"
+                  Classes="companion" Content="Forget everything"
+                  Command="{Binding ForgetEverythingCommand}"
+                  AutomationProperties.AutomationId="ForgetEverythingButton"
+                  AutomationProperties.Name="forget everything"
+                  ToolTip.Tip="The saved memory and every quarantined copy of it, so nothing can bring it back." />
+        </WrapPanel>
         <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
           <TextBlock Text="Cooldowns (s):" FontSize="11" Foreground="#FF9A8FA3" VerticalAlignment="Center" Margin="0,0,8,0" />
           <NumericUpDown x:Name="ReactionCooldownBox" Grid.Column="1" Width="72"
@@ -282,9 +424,12 @@
               Background="#FF1E1822" BorderBrush="#FFE066FF" BorderThickness="1"
               HorizontalAlignment="Center" VerticalAlignment="Center">
         <StackPanel Spacing="12">
-          <TextBlock Text="Reset Companion Memory" FontWeight="SemiBold" FontSize="14" Foreground="#FFE066FF" />
-          <TextBlock Text="Delete the saved companion memory? This can't be undone."
-                     TextWrapping="Wrap" Foreground="#FFE8E0EE" />
+          <TextBlock x:Name="ConfirmTitleText" Text="{Binding ConfirmTitle}"
+                     FontWeight="SemiBold" FontSize="14" Foreground="#FFE066FF"
+                     AutomationProperties.AutomationId="ConfirmTitleText" />
+          <TextBlock x:Name="ConfirmBodyText" Text="{Binding ConfirmBody}"
+                     TextWrapping="Wrap" Foreground="#FFE8E0EE"
+                     AutomationProperties.AutomationId="ConfirmBodyText" />
           <Grid ColumnDefinitions="*,Auto,Auto">
             <Button Grid.Column="1" x:Name="ConfirmYesButton" Margin="0,0,8,0"
                     Classes="companion" Content="Yes"

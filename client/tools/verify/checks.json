@@ -1,4 +1,4 @@
-{
+﻿{
   "version": 1,
   "checks": [
     {
@@ -414,6 +414,78 @@
       "expectedColor": "#141018",
       "tolerance": 4,
       "minPixelFraction": 0.90
+    },
+
+    // THE PRIVACY DIAL'S THIRD SEAT (audit row A3 over row A4). Both checks read the SAME band -
+    // the 3 DIP of seat padding directly above the "+ Page titles" segment's own UIA rect - in the
+    // two states ONE TYPED APP NAME apart. In `broad` the user has asked for page titles and named
+    // nobody, so the seat is unselected fill (#FF1E1822); in `titles` one app has been named and it
+    // is the selected fill (#FF4A2C55).
+    //
+    // WHY THE PIXEL IS WORTH ANYTHING HERE. capture.ps1 has already proved through UIA that the
+    // dial refuses to move on the press alone and moves on the name - what it cannot say is that
+    // the strip a user LOOKS at shows which stop is live. The seat fill is the only thing in the
+    // band that carries that, and the two fills are 44/20/51 apart, so at tolerance 4 neither check
+    // can accept the other's capture.
+    {
+      "name": "companion-privacy-broad-seat",
+      "surface": "companion-privacy",
+      "state": "broad",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.05, "y": 0.0, "w": 0.90, "h": 1.0 } },
+      "expectedColor": "#1E1822",
+      "tolerance": 4,
+      "minPixelFraction": 0.95
+    },
+    {
+      "name": "companion-privacy-titles-seat",
+      "surface": "companion-privacy",
+      "state": "titles",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.05, "y": 0.0, "w": 0.90, "h": 1.0 } },
+      "expectedColor": "#4A2C55",
+      "tolerance": 4,
+      "minPixelFraction": 0.95
+    },
+
+    // THE TRANSCRIPT (audit row D11). Both checks read the SAME screen band - 3 DIP of the settings
+    // panel's own top padding, above the privacy card's heading - in the two states one press
+    // apart. In `closed` those pixels are the companion window's ground (#FF141018); in `open` the
+    // read-only transcript is over them and they are its ground (#FF1E1822).
+    //
+    // A UIA READ CANNOT DISCHARGE THIS ONE. The transcript is an OWNED window, and an owned window
+    // is in its owner's UIA tree whether or not the compositor ever put it in front of anything -
+    // "the window exists" and "the window is on top of the surface it was opened from" are
+    // different claims, and only the second is what a user experiences. capture.ps1 asserts the
+    // band is inside the transcript's REAL rect before reading, so a transcript that opened
+    // somewhere else fails by name rather than passing on the companion's own ground.
+    //
+    // The two grounds are 10/8/10 apart - the companion permissions pair's separation exactly, and
+    // pinned at the same tolerance 4 for the same reason: at 8 either check would accept the
+    // other's capture and the pair would prove nothing.
+    {
+      "name": "companion-transcript-closed-ground",
+      "surface": "companion-transcript",
+      "state": "closed",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.0, "w": 0.96, "h": 1.0 } },
+      "expectedColor": "#141018",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "companion-transcript-open-ground",
+      "surface": "companion-transcript",
+      "state": "open",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.02, "y": 0.0, "w": 0.96, "h": 1.0 } },
+      "expectedColor": "#1E1822",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
     },
 
     // THE IN-APP TOAST. Both captures are 18 DIP wide from the toast's own left edge, taken across

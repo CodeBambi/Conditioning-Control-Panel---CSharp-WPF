@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using CcpClient.Desktop.Ai;
 using CcpClient.Desktop.Capabilities;
 using CcpClient.Desktop.Lifecycle;
@@ -122,7 +122,7 @@ public class AiModerationCoverageTests
                     // transmittable exists. The Wired flip landed in c6.
                     var blocked = AiAwarenessContextPackaging.TryPackage(
                         new AiAwarenessContext("cat", Forbidden, "title", "5s"),
-                        h.Boundary, out var blockedRequest, out var refusal);
+                        h.Boundary, new AiTitleAllowList(), out var blockedRequest, out var refusal);
                     Assert.False(blocked);
                     Assert.Null(blockedRequest);
                     Assert.NotNull(refusal);
@@ -130,7 +130,7 @@ public class AiModerationCoverageTests
 
                     var clean = AiAwarenessContextPackaging.TryPackage(
                         new AiAwarenessContext("cat", "app", "title", "5s"),
-                        h.Boundary, out var cleanRequest, out _);
+                        h.Boundary, new AiTitleAllowList(), out var cleanRequest, out _);
                     Assert.True(clean);
                     Assert.NotNull(cleanRequest);
                     break;

@@ -102,8 +102,8 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'toast')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'saved', 'refused')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'companion-privacy', 'companion-transcript', 'toast')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'broad', 'titles', 'open', 'saved', 'refused')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -156,6 +156,7 @@ $stateFiles = @(
 # would put a row on the `not-kept` capture and make it photograph the wrong claim - the exact
 # leak the session_preset.json note above records for the rack.
 $sessionLogsDir = Join-Path $env:APPDATA 'CcpClient\session_logs'
+$companionMemoryFile = Join-Path $env:APPDATA 'CcpClient\ai_memory.json'
 $goonProfileDir = Join-Path $env:APPDATA 'CcpClient\dtrh\wv2-profile-goon'
 $outFile = Join-Path $shots "windows-$Surface-$State.png"
 
@@ -193,6 +194,14 @@ $statesFor = @{
     # `admitted` is what she gets after pressing the master switch once. A check that passed on both
     # would be saying the default is not a default.
     'companion-permissions' = @('closed', 'admitted')
+    # THE PRIVACY DIAL'S TWO STOPS ARE ONE NAMED APP APART, and that is the claim: `broad` is what
+    # the user gets after asking for page titles WITHOUT naming anyone (the dial refuses to move,
+    # because nothing widened), `titles` is the same window after one app has been named. A check
+    # that passed on both would be saying the third stop means nothing.
+    'companion-privacy' = @('broad', 'titles')
+    # THE TRANSCRIPT: `closed` is the companion window with no transcript in the UIA tree at all,
+    # `open` is the same window with the read-only viewer over it. One press between them.
+    'companion-transcript' = @('closed', 'open')
     # THE IN-APP TOAST, AND ITS TWO STATES ARE TWO REAL OUTCOMES OF TWO REAL FILE DIALOGS: `saved`
     # is a phrase export that really wrote a file the user chose, `refused` is an import handed a
     # file that is not a backup. Same control, same derived band; the only thing that differs is the
@@ -230,6 +239,10 @@ public class VerifyNative {
     // is nothing to Invoke, while ENTER on the focused file-name edit commits BOTH variants.
     [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
     public const byte VK_RETURN = 0x0D;
+    // The same call types an app name into the privacy card's own box. Real keystrokes rather than
+    // a ValuePattern SetValue, because typing IS what a user does there and a SetValue would not
+    // exercise the binding a regression would break. Only a-z is needed and VK_A..VK_Z are the
+    // uppercase ASCII codes, which with no shift held produce lowercase.
     public const uint KEYUP = 0x0002;
     public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004;
     public const uint RIGHTDOWN = 0x0008, RIGHTUP = 0x0010;
@@ -612,6 +625,103 @@ function Get-Toggle($element) {
     return $pattern.Current.ToggleState
 }
 
+# A window that is owned by an owned window. Get-NamedWindow above walks ONE level of ownership,
+# which is every owned window this harness had until the transcript: it is owned by the COMPANION
+# window, which is itself owned by the shell, so it is a GRANDCHILD in the UIA tree and the
+# one-level walk never sees it. Measured, not reasoned: the first run of the `open` state failed
+# with the transcript plainly on screen and the diagnostic listing only 'CCP Client' and
+# 'Companion - CCP Client' (owned).
+#
+# Matched on control type AND name together, so a Text element that happens to carry the same
+# caption (the button's own label, the window's own heading) can never be mistaken for the window.
+function Get-DeepWindow([int]$processId, [string]$title) {
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $byProcess = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $processId)
+    $named = New-Object System.Windows.Automation.AndCondition(
+        (New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::Window)),
+        (New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::NameProperty, $title)))
+    foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $byProcess)) {
+        if ($w.Current.Name -eq $title) { return $w }
+        $hit = $w.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $named)
+        if ($null -ne $hit) { return $hit }
+    }
+    return $null
+}
+
+# The same search, bounded, failing BY NAME with what this process really has on screen.
+function Wait-DeepWindow([int]$processId, [string]$title, [int]$seconds = 10) {
+    $deadline = [Diagnostics.Stopwatch]::StartNew()
+    while ($deadline.Elapsed.TotalSeconds -lt $seconds) {
+        $w = Get-DeepWindow $processId $title
+        if ($null -ne $w) { return $w }
+        Start-Sleep -Milliseconds 200
+    }
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $isWindow = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Window)
+    $seen = @()
+    foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children,
+        (New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $processId)))) {
+        $seen += "'$($w.Current.Name)'"
+        foreach ($o in $w.FindAll([System.Windows.Automation.TreeScope]::Descendants, $isWindow)) {
+            $seen += "'$($o.Current.Name)' (owned, any depth)"
+        }
+    }
+    Fail "no '$title' window appeared within ${seconds}s (this process has: $($seen -join ', '))"
+}
+
+# Type a lowercase word into a product text box with REAL keystrokes. VK_A..VK_Z are the uppercase
+# ASCII codes and produce lowercase with no shift held, which is the whole alphabet this harness
+# needs: the one box it fills is an app name, and the product lowercases every entry anyway
+# (AiTitleAllowList.SanitizeEntry). The typed text is READ BACK through UIA before anything is
+# pressed, so a keystroke the window never received is a named failure rather than a mystery.
+function Type-Lowercase($element, [string]$text) {
+    Click-Rect (Get-Rect $element)
+    Start-Sleep -Milliseconds 150
+    foreach ($ch in $text.ToCharArray()) {
+        if ($ch -lt 'a' -or $ch -gt 'z') { Fail "Type-Lowercase can only type a-z; '$ch' is not" }
+        $vk = [byte][char]([string]$ch).ToUpperInvariant()
+        [VerifyNative]::keybd_event($vk, 0, 0, [IntPtr]::Zero)
+        [VerifyNative]::keybd_event($vk, 0, [VerifyNative]::KEYUP, [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 25
+    }
+    Start-Sleep -Milliseconds 150
+    $typed = $element.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
+    if ($typed -ne $text) { Fail "the box reads '$typed' after typing '$text'; the keystrokes did not reach it" }
+    Write-Output "typed '$text' into '$($element.Current.AutomationId)' (read back through UIA)"
+}
+
+# The companion window, reached the way a user reaches it: the Companion rail door, then the
+# door's own button. Raised topmost before anything is pressed - the shell is HWND_TOPMOST, so a
+# press at an owned window's own UIA coordinates otherwise lands on the SHELL (the finding the
+# recap and permissions paths already record).
+function Open-CompanionWindow($window) {
+    $door = Get-DoorRect $window 'companion'
+    Click-Rect $door
+    Assert-Route $window 'companion'
+    Write-Output "state drive: left-click on the Companion door -> route: companion (probe: $($door.Raw))"
+
+    Click-Rect (Get-Rect (Get-Element $window 'CompanionButton'))
+    $companion = Wait-WindowLike $script:proc.Id 'Companion'
+    $script:extraWindow = $companion
+    $script:extraHwnd = [IntPtr]$companion.Current.NativeWindowHandle
+    if ($script:extraHwnd -eq [IntPtr]::Zero) { Fail 'the companion window has no native handle; it cannot be raised or captured' }
+    [VerifyNative]::SetWindowPos($script:extraHwnd, [VerifyNative]::HWND_TOPMOST, 0, 0, 0, 0,
+        [VerifyNative]::SWP_NOMOVE -bor [VerifyNative]::SWP_NOSIZE -bor [VerifyNative]::SWP_SHOWWINDOW) | Out-Null
+    Start-Sleep -Milliseconds 400
+    # The window is handed back on $script:extraWindow rather than RETURNED. A PowerShell function
+    # returns everything written to its output stream, so returning it would hand the caller an
+    # array of this function's own transcript lines with the element last - and member access on
+    # that array enumerates, so `$companion.FindFirst(...)` reads as a call on a STRING. Measured:
+    # the first run of this surface died with exactly that message before any state was driven.
+}
+
 # ---------------------------------------------------------------------------------------------
 # THE OS FILE DIALOG. The only control in this harness that the PRODUCT did not build: it is the
 # Windows common item dialog, opened by Avalonia's Win32StorageProvider through IFileDialog.
@@ -694,6 +804,20 @@ foreach ($stateFile in $stateFiles) {
 if ($Surface -eq 'session-history' -and (Test-Path $sessionLogsDir)) {
     Remove-Item $sessionLogsDir -Recurse -Force
     Write-Output "deterministic start: retained session logs cleared ($sessionLogsDir)"
+}
+# AND THE COMPANION'S PERSISTED RECORD, for the transcript surface only - which is the same
+# argument as the session logs above, applied to the one surface whose SUBJECT is a stored
+# document. The transcript shows exactly what is persisted, so a conversation left behind by a
+# previous run changes what the `open` capture photographs and the pair would differ for a reason
+# that has nothing to do with the window opening. Measured, not reasoned: the first run of this
+# surface found six turns from an earlier provider-lab session still on disk and refused at the
+# empty-state gate.
+#
+# Scoped to this surface deliberately. Every other capture here is indifferent to it, and a memory
+# document is USER CHAT - the deterministic-start set above is unconditional, and this must not be.
+if ($Surface -eq 'companion-transcript' -and (Test-Path $companionMemoryFile)) {
+    Remove-Item $companionMemoryFile -Force
+    Write-Output "deterministic start: the companion's persisted record cleared ($companionMemoryFile)"
 }
 if ($Surface -eq 'goon-page' -and (Test-Path $goonProfileDir)) {
     # Only for this surface: blowing away a WebView2 profile is not free (the next launch rebuilds
@@ -1896,6 +2020,170 @@ elseif ($Surface -eq 'companion-permissions') {
 
     Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $companionRect 'the permissions sample band' 'the companion window'
     $windowRect = $companionRect   # the cursor is parked relative to the window being captured
+}
+elseif ($Surface -eq 'companion-privacy') {
+    # =============================================================================================
+    # WHAT LEAVES YOUR PC. The privacy dial (audit row A3) over the per-app title allow-list
+    # (row A4), and the two states are ONE NAMED APP apart.
+    #
+    # THE CLAIM IS THE INVERSION, so it is gated on the UIA tree before any pixel is read. Pressing
+    # "+ Page titles" with nobody named opens the per-app editor and MOVES NOTHING ELSE: the strip
+    # snaps back to "App names only", because the dial reports the state rather than the press.
+    # Upstream names that exact failure - "a stop that silently meant nothing would be the privacy
+    # failure that looks like a working feature"
+    # (Views/Controls/Companion/Runtime/AwarenessPrivacyRuntimeVm.cs:24-27). Naming one app is the
+    # single thing that moves it, and `titles` is that same window after one real typed name.
+    # =============================================================================================
+    Open-CompanionWindow $window
+    $companion = $script:extraWindow
+    $scale = (Get-DoorRect $window 'companion').Scale
+    $companionRect = Get-Rect $companion
+    if ($companionRect.W -le 0 -or $companionRect.H -le 0) { Fail 'the companion window has no rect on this desktop' }
+
+    $head = (Get-Element $companion 'PrivacyDialHead').Current.Name
+    if ($head -ne 'what leaves your PC') { Fail "the privacy card is not headed by upstream's line: '$head'" }
+
+    $off = Get-Element $companion 'DialOff'
+    $broad = Get-Element $companion 'DialBroad'
+    $titles = Get-Element $companion 'DialTitles'
+    if (-not (Get-Selected $off)) { Fail 'the dial is not at Off in a fresh process; the default is not closed' }
+    $hint = (Get-Element $companion 'PrivacyDialHint').Current.Name
+    if ($hint -ne 'her eyes are closed. nothing is watched, nothing is counted.') {
+        Fail "the Off stop does not carry upstream's sentence: '$hint'"
+    }
+    if ($null -ne (Find-Element $companion 'TitleAllowInput')) {
+        Fail 'the per-app editor is on screen before anyone asked for it'
+    }
+    Write-Output "closed gate: dial at Off, editor absent, hint '$hint'"
+
+    # ONE PRESS ON THE THIRD STOP. This is the state both captures share.
+    Click-Rect (Get-Rect $titles)
+    Start-Sleep -Milliseconds 250
+    $box = Find-Element $companion 'TitleAllowInput'
+    if ($null -eq $box) { Fail 'asking for page titles did not open the per-app editor' }
+    if (Get-Selected (Get-Element $companion 'DialTitles')) {
+        Fail ('the dial moved to "+ Page titles" with NO app named. Nothing widened, so the stop is ' +
+    'reporting a breadth the filter does not have - the privacy failure that looks like a working feature')
+    }
+    if (-not (Get-Selected (Get-Element $companion 'DialBroad'))) {
+        Fail 'the dial is at neither of the two reachable stops after asking for page titles'
+    }
+    $hint = (Get-Element $companion 'PrivacyDialHint').Current.Name
+    if ($hint -ne 'the category, the app name and a rounded time. never a page title.') {
+        Fail "the middle stop does not carry upstream's sentence: '$hint'"
+    }
+    Write-Output "broad gate: the editor opened, the dial stayed at 'App names only', hint '$hint'"
+
+    if ($State -eq 'titles') {
+        Type-Lowercase $box 'browser'
+        Click-Rect (Get-Rect (Get-Element $companion 'TitleAllowAdd'))
+        Start-Sleep -Milliseconds 250
+        if (-not (Get-Selected (Get-Element $companion 'DialTitles'))) {
+            Fail 'naming an app did not move the dial to "+ Page titles"; the third stop is unreachable'
+        }
+        if (Get-Selected (Get-Element $companion 'DialBroad')) { Fail 'two stops read as selected at once' }
+        $hint = (Get-Element $companion 'PrivacyDialHint').Current.Name
+        if ($hint -ne 'app names, plus page titles for the apps you name yourself.') {
+            Fail "the third stop does not carry upstream's sentence: '$hint'"
+        }
+        Write-Output "titles gate: one typed app name moved the dial, hint '$hint'"
+    }
+
+    # THE BAND, derived from the third segment's OWN rect. Each segment sits in a Border seat with
+    # 6,5 padding (CompanionWindow.axaml, Border.dial-seat), and Avalonia gives Border no automation
+    # peer (harness surprise #1) - but the RadioButton inside it has one, and the 5 DIP above its
+    # rect is the seat's own fill. That fill is the only thing the two states differ by here:
+    # #FF1E1822 unselected, #FF4A2C55 selected.
+    $titlesRect = Get-Rect (Get-Element $companion 'DialTitles')
+    $capX = $titlesRect.X
+    $capY = $titlesRect.Y - [int][math]::Round(4 * $scale)
+    $capW = $titlesRect.W
+    $capH = [int][math]::Round(3 * $scale)
+    if (($capY + $capH) -gt $titlesRect.Y) {
+        Fail "the seat band ends at $($capY + $capH) and the segment starts at $($titlesRect.Y); it is sampling the segment's own glyphs"
+    }
+    if ($capY -lt ($titlesRect.Y - [int][math]::Round(5 * $scale))) {
+        Fail "the seat band starts at $capY, above the seat's 5 DIP of top padding; it is outside the seat"
+    }
+    Write-Output ("band $capX,$capY ${capW}x${capH} @ scale $scale - inside the '+ Page titles' seat's top padding, " +
+    "above the segment at $($titlesRect.Y)")
+
+    Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $companionRect 'the dial seat band' 'the companion window'
+    $windowRect = $companionRect
+}
+elseif ($Surface -eq 'companion-transcript') {
+    # =============================================================================================
+    # EVERYTHING YOU TWO HAVE SAID (audit row D11). `closed` is the companion window with no
+    # transcript in the UIA tree AT ALL; `open` is the same window with the read-only viewer over
+    # it, one press apart.
+    #
+    # GATED ON THE TREE FIRST, and on this surface that matters more than usual: the transcript is
+    # an OWNED window, and an owned Avalonia window is a UIA DESCENDANT of its owner rather than a
+    # sibling (the finding the recap path records) - so "it opened" has to be read where it really
+    # is, and "it did not" has to be an absence rather than a lookup that quietly found the wrong
+    # window.
+    # =============================================================================================
+    Open-CompanionWindow $window
+    $companion = $script:extraWindow
+    $scale = (Get-DoorRect $window 'companion').Scale
+    $companionRect = Get-Rect $companion
+    if ($companionRect.W -le 0 -or $companionRect.H -le 0) { Fail 'the companion window has no rect on this desktop' }
+
+    if ($null -ne (Get-DeepWindow $script:proc.Id 'Everything you two have said')) {
+        Fail 'the transcript window is already open before anything was pressed'
+    }
+    $button = Get-Element $companion 'TranscriptButton'
+    Write-Output "closed gate: no transcript window in this process; the button reads '$($button.Current.Name)'"
+
+    $transcriptRect = $null
+    if ($State -eq 'open') {
+        Click-Rect (Get-Rect $button)
+        $transcript = Wait-DeepWindow $script:proc.Id 'Everything you two have said'
+        $transcriptHwnd = [IntPtr]$transcript.Current.NativeWindowHandle
+        if ($transcriptHwnd -eq [IntPtr]::Zero) { Fail 'the transcript window has no native handle; it cannot be raised or captured' }
+        [VerifyNative]::SetWindowPos($transcriptHwnd, [VerifyNative]::HWND_TOPMOST, 0, 0, 0, 0,
+            [VerifyNative]::SWP_NOMOVE -bor [VerifyNative]::SWP_NOSIZE -bor [VerifyNative]::SWP_SHOWWINDOW) | Out-Null
+        Start-Sleep -Milliseconds 400
+
+        $heading = (Get-Element $transcript 'TranscriptHeading').Current.Name
+        if ($heading -ne 'Everything you two have said') { Fail "the transcript is not headed by upstream's line: '$heading'" }
+        $empty = (Get-Element $transcript 'TranscriptEmpty').Current.Name
+        if ($empty -ne 'nothing yet. the first thing you say is the first thing she keeps.') {
+            Fail "the transcript's empty state is not upstream's line: '$empty'"
+        }
+        $note = (Get-Element $transcript 'TranscriptNote').Current.Name
+        if ($note -ne 'her memory lives on this machine only') { Fail "the transcript's storage note is not upstream's line: '$note'" }
+        Write-Output "open gate: transcript window present, heading '$heading', empty state '$empty', note '$note'"
+
+        $transcriptRect = Get-Rect $transcript
+        if ($transcriptRect.W -le 0 -or $transcriptRect.H -le 0) { Fail 'the transcript window has no rect on this desktop' }
+        Write-Output "transcript rect $($transcriptRect.X),$($transcriptRect.Y) $($transcriptRect.W)x$($transcriptRect.H)"
+    }
+
+    # THE BAND, at the SAME screen coordinates in both states, derived from a control that exists
+    # in both: the privacy card's heading, whose settings panel sits under the transcript when the
+    # transcript is up. 4 DIP above it is the settings Border's own top padding (14,8), which the
+    # Border does not paint - so in `closed` those pixels are the window's ground #FF141018, and in
+    # `open` they are the transcript's ground #FF1E1822.
+    $headRect = Get-Rect (Get-Element $companion 'PrivacyDialHead')
+    $capX = $headRect.X + [int][math]::Round(20 * $scale)
+    $capY = $headRect.Y - [int][math]::Round(4 * $scale)
+    $capW = [int][math]::Round(300 * $scale)
+    $capH = [int][math]::Round(3 * $scale)
+    if (($capY + $capH) -gt $headRect.Y) {
+        Fail "the band ends at $($capY + $capH) and the card heading starts at $($headRect.Y); it is sampling the heading's glyphs"
+    }
+    Write-Output "band $capX,$capY ${capW}x${capH} @ scale $scale - in the settings panel's top padding, above the card heading at $($headRect.Y)"
+
+    Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $companionRect 'the transcript sample band' 'the companion window'
+    if ($State -eq 'open') {
+        # The `open` capture is only evidence if the transcript really covers those pixels. It is
+        # centred on its owner, so this holds by construction - and it is ASSERTED rather than
+        # assumed, because a resize on either window would otherwise photograph the companion's own
+        # ground and the check would pass for the wrong reason.
+        Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $transcriptRect 'the transcript sample band' 'the transcript window'
+    }
+    $windowRect = $companionRect
 }
 else {
     # The startup trace and the typed capability states live on the System page now, so

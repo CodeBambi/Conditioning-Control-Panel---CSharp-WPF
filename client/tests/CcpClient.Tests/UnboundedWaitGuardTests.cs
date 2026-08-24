@@ -89,6 +89,7 @@ public class UnboundedWaitGuardTests
         ("CcpClient.Tests/AiReplyHygienePipelineTests.cs", "Memory.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
         ("CcpClient.Tests/AssetActivePoolTests.cs", "store.StartAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();", 1),
         ("CcpClient.Tests/BarkPipelineTests.cs", "store.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
+        ("CcpClient.Tests/CompanionPrivacySurfaceTests.cs", "Participant.StopAsync().GetAwaiter().GetResult();", 1),
         ("CcpClient.Tests/CompanionViewModelTests.cs", "Participant.StopAsync().GetAwaiter().GetResult();", 1),
         ("CcpClient.Tests/DtrhBarkCompositionTests.cs", "store.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),
         ("CcpClient.Tests/DtrhMetaTests.cs", "Slots.StartAsync(CancellationToken.None).GetAwaiter().GetResult();", 1),

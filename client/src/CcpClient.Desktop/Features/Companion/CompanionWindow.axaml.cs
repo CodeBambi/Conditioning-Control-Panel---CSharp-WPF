@@ -15,6 +15,7 @@ namespace CcpClient.Desktop.Features.Companion;
 public partial class CompanionWindow : Window
 {
     private readonly CompanionViewModel _vm;
+    private CompanionTranscriptWindow? _transcript;
 
     public CompanionWindow(ApplicationHost host)
     {
@@ -24,6 +25,25 @@ public partial class CompanionWindow : Window
         DataContext = _vm;
 
         _vm.CloseRequested += (_, _) => Close();
+        // D11: the read-only transcript, owned by this window and shown modelessly over it (the
+        // W-04 owned-window shape this window already is). Modeless rather than upstream's
+        // ShowDialog (ConditioningControlPanel/Views/Controls/Companion/Runtime/CompanionTranscriptWindow.cs:135)
+        // because a reader should be able to keep
+        // reading while she answers; one at a time, so the button cannot stack copies.
+        _vm.TranscriptRequested += (_, _) =>
+        {
+            if (_transcript is { } open)
+            {
+                open.Activate();
+                return;
+            }
+
+            var transcript = new CompanionTranscriptWindow(_vm.ReadTranscript());
+            _transcript = transcript;
+            transcript.Closed += (_, _) => _transcript = null;
+            transcript.Show(this);
+        };
+        Closed += (_, _) => _transcript?.Close();
         // Default NO (WPF MessageBoxDefaultButton.Button2 parity): the destructive answer
         // is never the focused default. Focus fires when the overlay is VISIBLE AND
         // LAID OUT (focusing a not-yet-visible control is a no-op).
