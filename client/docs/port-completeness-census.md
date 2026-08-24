@@ -118,6 +118,8 @@ ways this pass did not size further.
 
 ### Phrase backup export and import (.ccpphrases.json)
 
+> **LANDED 2026-08-24 AND REACHABLE. `Session/PhraseBackup*.cs` over the new `Storage/**` picker seam, with Export and Import on the System door. Keeps upstream's schema and pool names ON PURPOSE so a backup moves in BOTH directions between the shipping WPF product and this client - the machine move this port itself creates is the migration this entry existed to survive. The data-loss risk this entry named is GONE.**
+
 - **What the user loses:** Two buttons in Settings → Data export every phrase pool the user has written (lock-card phrases, subliminals, bouncing text, attention words, mantras, custom triggers, custom companion phrases, including per-mod and per-mode variants and the add/remove tracking sets) to a small standalone file, and import one back after a confirmation that says plainly it replaces the current pools. This is the product's stated safety net against a bad update or a machine move costing the user text they wrote.
 - **WPF evidence:** `ConditioningControlPanel/Services/PhraseBackupService.cs:10-48 (purpose + the 17 captured property names); Views/Controls/AppSettings/DataSettingsSection.xaml:101 (BtnExportPhrases), :106 (BtnImportPhrases) — the only call sites; MainWindow/MainWindow.PresetIO.cs:62 (export), :93 (import, with Validate + replace confirmation)`
 - **Client state:** absent - `grep -rniE "ccpphrases\|PhraseBackup\|ExportPhrases\|ImportPhrases" client/src --exclude-dir=bin --exclude-dir=obj` → 0 hits. Plus the 0-hit StorageProvider/DragDrop grep: no save or open dialog exists in the client.
@@ -242,6 +244,8 @@ ways this pass did not size further.
 
 ### Media history recap window
 
+> **SUPERSEDED 2026-08-24 by the scripted session's own media log, recap and history (`Session/ScriptedSessionLog.cs`, `Views/SessionRecapWindow`, `Views/SessionHistoryWindow`). Read that entry's note rather than this one: the retention rule is an OR (media > 0 OR duration >= 30s), the cap writes the 21st and evicts the oldest, and the media entry carries a KIND and an OFFSET and deliberately no path or file name.**
+
 - **What the user loses:** A window opened from the Assets tab listing every flash image displayed and every video played, app-lifetime, with thumbnails, live updates while it is open, a rolling 500-entry cap and a Clear action. It survives restarts (persisted to disk) and works whether or not a session is running. The Assets tab shows an entry count from it.
 - **WPF evidence:** `ConditioningControlPanel/Services/Media/MediaHistoryService.cs:11-26 ("App-lifetime media recap log... regardless of whether a session is active", MaxEntries = 500); Windows/MediaHistoryWindow.xaml + .xaml.cs:52-79; Views/Tabs/AssetsTabView.xaml.cs:82 (the opener); MainWindow/MainWindow.AssetsFx.cs:184 (the count badge)`
 - **Client state:** absent - `grep -rni "MediaHistory" client/src client/tests` returns ZERO hits. The client's persistence tree (client/src/CcpClient.Desktop/Persistence/) has no history document; `grep -rni "history" client/src` returns 27 hits, none of which is a media log (they are AI conversation history and undo-style prose).
@@ -257,6 +261,8 @@ ways this pass did not size further.
 - **WPF surface size:** ~30 lines of trigger logic plus one persisted path setting and one picker — trivial as code, but it depends on the mandatory-video surface being able to play a NAMED clip on demand, which the client's MandatoryVideoEffect cannot do (it only plays its own random pick on its own schedule)
 
 ### Animated GIF and animated WebP assets actually animate
+
+> **GIF LANDED 2026-08-24, WEBP DELIBERATELY NOT. A `.gif` flash now opens as a clip on the injected clock through the SAME GDI+ frame walk the spiral already had - and the timing law is why it was not a copy-paste: the flash takes the MEAN of declared delays (100ms fallback, 20-2000 clamp) where the spiral takes the FIRST frame's (50ms fallback, 20-500), so a GIF declaring 60 hundredths is a 600ms slideshow under one law and a 50ms STROBE under the other. WebP still does not animate and a fact asserts it: GDI+ has no WebP codec and upstream reaches it through SkiaSharp, which would be a new dependency. Windows only.**
 
 - **What the user loses:** An animated .gif or animated .webp dropped into the user's flash/asset folders plays as an animation on screen rather than freezing on frame one. WPF decodes up to 60 frames with a memory budget and runs the loop; the same decoder serves the Chaos GIF cascade, the Chaos flash overlay and the Blink Trainer overlay.
 - **WPF evidence:** `ConditioningControlPanel/Services/Media/AnimatedWebp.cs (366 lines: IsAnimated, DecodeFrames, AttachAnimation, Detach, RunGatedDecode); Services/Flash/FlashService.cs:755-760 (.gif via XamlAnimatedGif, .webp via TryLoadAnimatedWebpFrames), :909-914 and :942 (maxFrames 60, maxMemoryMb 30); Chaos/ChaosGifCascadeOverlay.cs:318-340; Chaos/ChaosFlashOverlay.cs:169-177`
@@ -365,6 +371,8 @@ ways this pass did not size further.
 
 ### Pop Quiz — reinforcement question popups during a session
 
+> **LANDED AND REACHABLE 2026-08-24. Racked between Brain Drain and the ramp, with a Studio row, upstream's two dials and a live-repacing frequency handler. Watched on a real desktop: card up after 39.4s inside its own 25.2-46.8s window, holding the foreground and keyboard focus, down to a real Escape. TWO PIECES REFUSED WITH REASONS: the 25 XP, because a session-lifetime ledger would be a second WRITER whose stale level could overwrite another surface's, so the module is racked with `xp: null`; and the Test button, which needs a public fire-now. The 25 questions are byte-identical to upstream, verified by diffing all 225 extracted string literals.**
+
 - **What the user loses:** With the Pop Quiz checkbox on the Graded Intake door ticked, a small window pops up at intervals during a running session asking a reinforcement question ('Who is in control?', 'What do good girls do?') with four answers; every answer is treated as correct and returns an affirming line. 25 questions in the pool, one popup at a time.
 - **WPF evidence:** `ConditioningControlPanel/Services/Quiz/PopQuizService.cs:9-13 ("All answers are 'correct' — pure positive reinforcement"), :243 new PopQuizWindow(question, isTest); Services/Session/SessionEngine.cs:490 started when Settings.PopQuizEnabled; MainWindow/MainWindow.Lab.cs:632 ChkPopQuizEnabled_Changed; MainWindow/MainWindow.StartStop.cs:255`
 - **Client state:** absent - `grep -rniE "PopQuiz\|pop quiz" client/src --include=*.cs --include=*.axaml` → 0 hits.
@@ -380,6 +388,8 @@ ways this pass did not size further.
 - **WPF surface size:** 15,734 lines / 15 files measured (Services/Program/ 8 files 9,331, Models/Program/ 2 files 1,036, MainWindow.ProgramsTab.cs 2311, Views/Tabs/ProgramsTabView.xaml(.cs) 1506+73, ProgramsTabItems.cs 267), plus Dialogs/ProgramEnrollDialog. SCOPE FLAG for the coordinator: Services/Program/ is not literally in this cluster's directory list, but it is progression/economy and it is the largest consumer of Services/Session/SessionEngine, so it is reported here rather than dropped. It is blocked behind the scripted-session gap above.
 
 ### The tier-refusal upgrade route — the 'See tiers' toast and the App Info & Data page
+
+> **STILL OPEN 2026-08-24, AND THE OBVIOUS FIX WAS BUILT, MEASURED AND TAKEN BACK OUT. The toast surface now exists, so the announcement half was wired at upstream's own severity - and in the shell's 1100x760 window the toast CONTAINS the FALL IN button whole: a real press returns pressed=0 and resolves to the toast. That would have taken away the one thing the card guarantees in every branch, that a gated press must ARRIVE. Reverted. Close condition: an App Info page, OR a toast placement clear of this card's buttons.**
 
 - **What the user loses:** When a click is refused for tier reasons, WPF raises an 8-second warning toast naming the feature and the tier it needs, with a 'See tiers' action button that opens the App Info & Data popup — the one place that tells the user what the tiers are and how to get in. Every gated door in the app (Programs, Blink Trainer, For You feed, DTRH, haptics) sends people to the same place.
 - **WPF evidence:** `ConditioningControlPanel/Services/TierGate.cs:128-135 ShowDenied → App.Notifications.Show(..., Loc.Get("tiergate_see_tiers"), () => App.MainWindowRef?.ShowAppInfoPopup())`
@@ -487,6 +497,8 @@ ways this pass did not size further.
 
 ### In-app toast / banner notification surface
 
+> **LANDED 2026-08-24. `Views/ToastHost` with upstream's four kinds and exact accents, click-through empty space, and auto-dismiss on an INJECTED schedule. Its first consumer is phrase backup. THE TIER REFUSAL IS STILL NOT ROUTED THROUGH IT, and that was measured rather than deferred - see this census's tier-route entry.**
+
 - **What the user loses:** Non-blocking toasts at the top-right of the main window in four types (Info, Success, Warning, Error), each dismissible, with sticky toasts persisting their dismissed state so they never reappear. Empty space around them is click-through. This is how the app tells the user anything without a modal — including every gate refusal.
 - **WPF evidence:** `ConditioningControlPanel/Services/Notifications/NotificationService.cs:3 (enum NotificationType { Info, Success, Warning, Error }), :6-14 ("Non-blocking in-app toast/banner surface... attached at the top-right of MainWindow's RootGrid")`
 - **Client state:** absent - grep -rlE 'Toast' client/src/CcpClient.Desktop (excluding bin/obj) returns 7 files and every hit is a COMMENT about WPF's toast that the port does not have — e.g. Features/Dtrh/DtrhGate.cs and Features/Intake/IntakeDraftSink.cs. The client's Tray/TrayNotification.cs is the OS shell balloon, not an in-app surface. The deleted register recorded this as D17: 'The port has no toast system'.
@@ -570,6 +582,8 @@ ways this pass did not size further.
 - **WPF surface size:** 6 files / 999 lines
 
 ### AI permissions grid — the master switch and per-effect toggles the user can actually see
+
+> **LANDED 2026-08-24, DEFAULTING CLOSED. Master switch plus upstream's ten rows in upstream's order and labels, hidden while master is off, ticks remembered across a master off/on. Diverges from upstream's pre-ticked bubbles/subliminal/bounce ON PURPOSE: which effects a companion may drive is a consent question, and the grid is what makes it the user's. A mutation that pre-admits everything reds four unit and three headless facts.**
 
 - **What the user loses:** A grid of a master 'let her control effects' switch plus ten per-effect toggles, and the memory toggle with a forget control beside it. WPF ships master OFF with bubbles/subliminal/bounce ON, so the user can see and change exactly what she is allowed to do to their screen.
 - **WPF evidence:** `Views/Controls/Companion/AiPermissionsGrid.xaml (258) + .xaml.cs (136); enforcement map Services/Commands/AiCommandService.cs (226 lines total)`
@@ -742,6 +756,8 @@ ways this pass did not size further.
 - **WPF surface size:** 56 files / 26,624 lines measured (Services/Deeper 26 files 8,183; Views/Deeper 17 files 14,156 incl. DeeperEditorWindow.*, EnhancementPlayerWindow.*, NewEnhancementDialog, UrlPromptDialog; Models/Deeper 7 files 1,064; MainWindow.Deeper{Tab,Hub,Fx,Submissions}.cs 4 files 2,155; DeeperTabView.xaml+.cs 2 files 1,066). Largest unrepresented surface found in this cluster.
 
 ### AI effect commands never reach an effect
+
+> **HALF LANDED 2026-08-24, AND THE OTHER HALF IS NOW A P0 OWNER ROW. The bridge is built and the executor's map is wired in the composition root, so a PLAN reaching the executor moves the real modules. But an AI REPLY still cannot: `Ai/AiOperationPipeline.cs:340-346` refuses envelope-shaped replies as `MalformedOutput` and `Ai/AiTextHygiene.cs:24-30` records that as a DELIBERATE DECISION. So the bridge is unreachable BY DESIGN, and `CompanionWindow`'s `EffectDispatchNotice` says so unconditionally. Closing it means putting model text on the execution path - a consent decision `client/port.txt` reserves to the owner.**
 
 - **What the user loses:** In WPF, when the companion's reply carries a command the user has consented to, the effect actually happens: spiral or pink overlay switches on, flash images fire, subliminals appear, bubbles start, bouncing text turns on, a mantra lock screen shows, a video/audio asset plays, a haptic pulse runs, and "get back to me" schedules a later message. In the client the same reply produces nothing at all.
 - **WPF evidence:** `ConditioningControlPanel/Services/Commands/AiCommandService.cs:30 (ExecuteCommand; master gate :42, per-effect gate :182-200) plus the 11 command classes in Services/Commands/`
