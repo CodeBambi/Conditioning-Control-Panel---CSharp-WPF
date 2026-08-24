@@ -541,6 +541,26 @@ public partial class IntakeHostWindow : Window
         // 1. XP — computed AND GRANTED (:443-446 formula, :446 grant). Wrapped exactly as upstream
         // wraps its own AddXP (:441/:455 — "XP grant failed" is a debug line and the run carries on):
         // the spend, the draft and the punch all follow, and they are what the run was for.
+        //
+        // THE LEVEL-UP CEREMONY IS REFUSED HERE, WHERE UPSTREAM FIRES IT, and each piece has its own
+        // reason rather than one blanket "not ported". Upstream's grant raises ProgressionService's
+        // LevelUp event per level gained (Services/Progression/ProgressionService.cs:227), and
+        // MainWindow/MainWindow.xaml.cs:763-777 answers it with: a bloom/chip-pop/particle burst
+        // (MainWindow.EventFx.cs:232-246 — no particle system, no FX layer and no named transforms
+        // in this build); a tray balloon reading "You reached Level N!" (:771 — the port's tray
+        // presence is Windows-only, so a level-up a Linux user could not be told about is worse than
+        // one nobody is told about); lvup.mp3 (:773, resolved at :779-800 — the file exists at
+        // ConditioningControlPanel/Resources/sounds/lvup.mp3 and is LEGACY-OWNED, not linked into
+        // client/, so playing it is a payload decision this row does not get to take); and an avatar
+        // swap at 20/50/100 (:775 — there is no avatar). ProgressionService adds haptics (:229),
+        // level achievements (:231), skill points (:235), Discord presence (:241), a milestone
+        // webhook (:247) and a leaderboard sync (:251) — five subsystems this build does not have
+        // and one, the webhook, that is outbound traffic nobody approved.
+        //
+        // WHAT THE USER GETS INSTEAD, and it is not nothing: grant.LeveledUp is real and the new
+        // level is on the Trainer Card the next time the Graded Intake page is mounted
+        // (Features/Progression/TrainerCardLevel, Views/Pages/IntakePage.axaml). The moment is
+        // unmarked; the outcome is visible.
         var xp = IntakeDraft.ComputeCompletionXp(run);
         try
         {

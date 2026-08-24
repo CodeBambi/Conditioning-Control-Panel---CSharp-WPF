@@ -333,7 +333,7 @@
       "state": "no-runs-yet",
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
-      "region": { "rect": { "x": 0.02, "y": 0.053, "w": 0.10, "h": 0.026 } },
+      "region": { "rect": { "x": 0.02, "y": 0.042, "w": 0.10, "h": 0.026 } },
       "expectedColor": "#E8E0EE",
       "tolerance": 24,
       "minPixelFraction": 0.05
@@ -612,6 +612,63 @@
       "expectedColor": "#FF69B4",
       "tolerance": 24,
       "minPixelFraction": 0.002
+    },
+
+    // THE TRAINER CARD'S LEVEL BAR. Two checks, ONE region, two states — and the claim is a
+    // FRACTION rather than a colour, which is a first on this manifest.
+    //
+    // Both captures are the same 420x8 DIP bar on the same card on the same page, painted in the
+    // same two colours: a #2A2130 track with a #D05CE8 fill in front of part of it. The only thing
+    // that differs is HOW MUCH of the track the fill covers, and that comes from progression.json
+    // and nowhere else. `fresh` is the ledger REMOVED — TrainerCardLevel.Read's missing-file arm
+    // answers upstream's level 1 with nothing banked (Models/AppSettings.cs:237), so the bar is all
+    // track. `earned` is a seeded level 42 with 1000.5 into it, so the fill reaches
+    // 1000.5 / Math.Round(800 + 41 x 1700/79) = 1000.5/1682 = 0.5949 of the bar.
+    //
+    // THE BAND IS AT x 0.10..0.30, AND THE MARGIN IS THE RULE RATHER THAN THE NUMBER. Its right
+    // edge sits at 0.30 against a fill reaching 0.5949 — a factor of two — because a band placed
+    // near the fill's edge would red a perfectly good capture the first time the curve, the seed or
+    // the bar's width moved. capture.ps1 refuses if that ratio ever drops below 0.75, so the margin
+    // cannot be quietly eaten, and TrainerCardLevelPresentationTests reads both files together so
+    // widening the band in one without the other reddens the floor.
+    //
+    // y 0.20..0.80 CLEARS THE CORNER RADIUS. The bar is 8 DIP tall with CornerRadius 4, so its top
+    // and bottom rows are antialiased curve; the middle 60% is flat fill with no AA in it at all,
+    // which is why both fractions are 0.98 rather than the pop quiz card's 0.002. That difference
+    // is deliberate and it is the pop quiz lesson applied, not ignored: THAT surface draws a
+    // randomly chosen question whose inked fraction the product varies, and this one draws a flat
+    // rectangle whose colour the product does not.
+    //
+    // TOLERANCE 4, with 166/59/184 between the two colours. It is the session rack's number for the
+    // same reason: #2A2130 is only 6/3/6 from the notice ground #241E2A, so at 8 the `fresh` check
+    // would pass on a photograph of a notice panel. TrainerCardLevelPresentationTests asserts that
+    // separation mechanically against every colour this shell declares.
+    //
+    // WHAT THESE TWO DO NOT COVER. They prove a fill's colour at a named offset of a derived rect.
+    // They do NOT prove the number beside the bar, the rank, or that the bar is the Trainer Card's
+    // rather than some other 420x8 pink bar — what proves those is the capture path, which reads
+    // the level line, the rank line and the XP line off UIA and refuses by name before any pixel.
+    {
+      "name": "trainer-card-level-earned-fill",
+      "surface": "trainer-card-level",
+      "state": "earned",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.10, "y": 0.20, "w": 0.20, "h": 0.60 } },
+      "expectedColor": "#D05CE8",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
+    },
+    {
+      "name": "trainer-card-level-fresh-track",
+      "surface": "trainer-card-level",
+      "state": "fresh",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.10, "y": 0.20, "w": 0.20, "h": 0.60 } },
+      "expectedColor": "#2A2130",
+      "tolerance": 4,
+      "minPixelFraction": 0.98
     }
   ]
 }

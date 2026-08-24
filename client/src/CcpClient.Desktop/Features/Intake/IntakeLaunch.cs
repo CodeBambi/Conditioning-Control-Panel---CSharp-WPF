@@ -110,6 +110,26 @@ public sealed class IntakeLaunch
             IntakeParticipant.ResolveDataDirectory(DataDirectory),
             Progression.GradedRunAwardsDocument.FileName));
 
+    /// <summary>
+    /// The Trainer Card's PASSIVE read of the LEVEL (<see cref="Progression.TrainerCardLevel"/>).
+    ///
+    /// <para>Same directory, same argument, second file. <c>progression.json</c> is written into the
+    /// SHARED &lt;dataDir&gt; beside <c>graded_run_awards.json</c> — the intake host opens both from
+    /// the one <c>dataDir</c> (<c>IntakeHostContext.cs:175-179</c> and <c>:190</c>) — so the level
+    /// resolves through <see cref="IntakeParticipant.ResolveDataDirectory"/> exactly as the award
+    /// record does, rather than carrying a second copy of the fallback.</para>
+    ///
+    /// <para>A SEPARATE call rather than a second field on the card: the two files fail
+    /// independently, and a card that could not read the award record must still be able to show a
+    /// level (and the reverse). Nothing is cached, for the reason
+    /// <see cref="ReadTrainerCard"/> gives — a run banks XP while this page is unmounted, and a
+    /// snapshot taken at startup would show a stale level for the rest of the session.</para>
+    /// </summary>
+    public Progression.TrainerCardLevel ReadTrainerCardLevel() =>
+        Progression.TrainerCardLevel.Read(Path.Combine(
+            IntakeParticipant.ResolveDataDirectory(DataDirectory),
+            Progression.ProgressionDocument.FileName));
+
     /// <summary>How many times the launch gesture arrived (presses, not runs). The refused page
     /// takes the click, so this rises on refusals too — that is the point, and the same reason
     /// <c>DtrhLaunch.GateArrivals</c> counts them.</summary>

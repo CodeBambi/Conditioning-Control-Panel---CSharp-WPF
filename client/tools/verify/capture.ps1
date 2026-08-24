@@ -102,8 +102,8 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'companion-privacy', 'companion-transcript', 'toast', 'popquiz-card')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'broad', 'titles', 'open', 'saved', 'refused', 'asking')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'trainer-card-level', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'companion-privacy', 'companion-transcript', 'toast', 'popquiz-card')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'broad', 'titles', 'open', 'saved', 'refused', 'asking', 'fresh', 'earned')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -136,8 +136,17 @@ $stateFiles = @(
     # question ever comes up and how long the capture has to wait for it, and both are driven here
     # through the real controls - so a document left behind by a previous run would mean the drive
     # was confirming a state it did not set (PopQuizPresetDocument.FileName).
-    (Join-Path $env:APPDATA 'CcpClient\session_popquiz.json')
+    (Join-Path $env:APPDATA 'CcpClient\session_popquiz.json'),
+    # The SIXTH, and the Trainer Card level block's whole subject: the XP ledger
+    # (ProgressionDocument.FileName, read at IntakeLaunch.ReadTrainerCardLevel out of the SAME data
+    # directory as settings.json). Its absence is a STATE rather than a failure — the card's `fresh`
+    # answer, LVL 1 with an empty bar (TrainerCardLevel.Read's missing-file arm) — and the `earned`
+    # state re-seeds it below. Unconditional here for the same reason session_preset.json is: a
+    # ledger left behind by a previous run would put a level on the `fresh` capture and the pair
+    # would differ for a reason that has nothing to do with what was seeded.
+    (Join-Path $env:APPDATA 'CcpClient\progression.json')
 )
+$progressionFile = Join-Path $env:APPDATA 'CcpClient\progression.json'
 # AND THE PAGE'S OWN PREFS. Hygiene, and NOT what makes this deterministic.
 #
 # The goon PAGE keeps preferences in WebView2 localStorage, and one of them decides what is on
@@ -175,6 +184,14 @@ $statesFor = @{
     'rack-row-dot' = @('off', 'armed')
     'goon-page'    = @('first-run')
     'trainer-card' = @('no-runs-yet')
+    # THE LEVEL BLOCK'S TWO STATES ARE THE SAME REGION OF THE SAME BAR, and the only difference
+    # between the two captures is what is in progression.json — which is the session-row precedent
+    # (two rows, one .session.json field between them) applied to a fraction instead of a colour.
+    # `fresh` is the ledger REMOVED: TrainerCardLevel.Read's missing-file arm answers LVL 1 with
+    # nothing banked, so the bar is all track. `earned` is a seeded level 42 with 1000.5 into it, so
+    # the sampled band is fill. Each check must fail on the other capture; if it does not, the bar
+    # is not reading the ledger at all.
+    'trainer-card-level' = @('fresh', 'earned')
     # The two session-rack states are two different ROWS (a 30-minute Easy one and a 60-minute
     # Hard one), because the thing being photographed is a per-session colour: a stripe check that
     # cannot fail on another row is a check that is not reading the session's own data.
@@ -818,6 +835,23 @@ Take-Lease
 foreach ($stateFile in $stateFiles) {
     if (Test-Path $stateFile) { Remove-Item $stateFile -Force }
 }
+# THE LEVEL BLOCK'S `earned` STATE IS SEEDED DATA, and that is the session-row precedent rather
+# than a shortcut. The only way to move this ledger through the product is to complete a whole
+# graded intake, which needs an AI-drafted run this harness cannot drive; the thing being
+# photographed is not the granting, it is whether the number on disk reaches a GEOMETRY on screen.
+# So the file is written the way the product writes it — schemaVersion + camelCase members,
+# PersistenceStore.cs:86,92-94 — and the card's own passive reader binds it.
+#
+# 42 and 1000.5 are chosen to be checkable rather than convenient: 42 is in upstream's second rank
+# band (MainWindow/MainWindow.UiUpdates.cs:72, `< 50`) so the rank line is a DIFFERENT string from
+# the `fresh` capture's, and 1000.5 into a level costing Math.Round(800 + 41 x 1700/79) = 1682 is
+# 0.5949 of the bar — comfortably past the sampled band's right edge and comfortably short of the
+# track's, so neither "all fill" nor "all track" could be mistaken for it.
+if ($Surface -eq 'trainer-card-level' -and $State -eq 'earned') {
+    New-Item -ItemType Directory -Force -Path (Split-Path $progressionFile) | Out-Null
+    Set-Content -Path $progressionFile -Encoding utf8 -Value '{"schemaVersion":1,"level":42,"xp":1000.5,"highestLevelEver":42}'
+    Write-Output "state drive: seeded $progressionFile with level 42, 1000.5 XP into it"
+}
 if ($Surface -eq 'session-history' -and (Test-Path $sessionLogsDir)) {
     Remove-Item $sessionLogsDir -Recurse -Force
     Write-Output "deterministic start: retained session logs cleared ($sessionLogsDir)"
@@ -1187,7 +1221,14 @@ elseif ($Surface -eq 'trainer-card') {
     # 38 px tall at scale 1.75 and the glyphs' cap band is the middle two thirds of it, so a band
     # measured to the line's own edges would refuse on a pixel of layout jitter while sampling more
     # leading than ink.
-    $inkBand = @(0.050, 0.082)    # trainer-card-ink: y, and it must land ON the title's own line
+    # RE-MEASURED 2026-08-24, when the level block landed above the card's notes and took the card
+    # from 830 px to 928 px at scale 1.75. The title's line did not move in ABSOLUTE terms — it is
+    # still the first line, 39 px tall, 30 px below the card's top edge — but the band is a FRACTION
+    # of a taller card, so 0.050..0.082 walked off the bottom of it and this gate REFUSED BY NAME
+    # rather than photographing leading and calling it ink. That refusal is the gate working; the
+    # numbers below are the new measurement (title line at 30..69 of 928 = 0.0323..0.0744) with
+    # roughly a third of the line left as margin at each end.
+    $inkBand = @(0.042, 0.068)    # trainer-card-ink: y, and it must land ON the title's own line
     $groundBand = @(0.80, 0.98)   # trainer-card-ground: x, and it must be blank card ground
     $inkTop = $card.Y + [int]($card.H * $inkBand[0])
     $inkBottom = $card.Y + [int]($card.H * $inkBand[1])
@@ -1211,6 +1252,141 @@ elseif ($Surface -eq 'trainer-card') {
     "640 DIP text column ending at $textRight")
 
     $capX = $card.X; $capY = $card.Y; $capW = $card.W; $capH = $card.H
+}
+elseif ($Surface -eq 'trainer-card-level') {
+    # =============================================================================================
+    # THE TRAINER CARD'S LEVEL BLOCK. The port has banked a level from three call sites since the XP
+    # spine landed and nothing rendered it; this photographs the bar that ended that.
+    #
+    # THE CLAIM IS A GEOMETRY, NOT A COLOUR. Both states paint the same two colours in the same
+    # place: a #2A2130 track with a #D05CE8 fill in front of part of it. What separates them is HOW
+    # MUCH of the track the fill covers, and the sampled band is positioned so that the answer flips
+    # between the two — fill in `earned`, bare track in `fresh`. A bar that ignored the ledger would
+    # paint identically in both and neither check could fail.
+    #
+    # GATED ON UIA TEXT BEFORE ANY PIXEL, and the gate is the level's own reading rather than the
+    # route: a Border has no automation peer (harness surprise #1), so the bar's rect is DERIVED,
+    # and a derived rect aimed at a page that rendered a different level would photograph perfectly
+    # plausible pixels of the wrong claim.
+    # =============================================================================================
+    $intakeDoor = Get-DoorRect $window 'intake'
+    $scale = $intakeDoor.Scale
+    Click-Rect $intakeDoor
+    Assert-Route $window 'intake'
+    Write-Output "state drive: left-click on the Graded Intake door -> route: intake (probe: $($intakeDoor.Raw))"
+
+    # (1) THE LEVEL THE CARD ACTUALLY READ, by its own words. The page mounts on navigation but the
+    # level renders on AttachedToVisualTree (IntakePage.axaml.cs), so "the route is intake" does not
+    # imply "the ledger was read" — and an unrendered block photographs as a plausible rectangle.
+    $expected = if ($State -eq 'earned') {
+        @{ Level = 'LVL 42'; Rank = 'DUMB AIRHEAD'; Xp = '1000 / 1682 XP' }
+    }
+    else {
+        # TrainerCardLevel.Read's missing-file arm: upstream's fresh account (AppSettings.cs:237,
+        # `private int _playerLevel = 1;`) at the first band's 800 (ProgressionService.cs:301-305).
+        @{ Level = 'LVL 1'; Rank = 'BASIC BIMBO'; Xp = '0 / 800 XP' }
+    }
+    $levelLine = (Get-Element $window 'TrainerCardLevelLine').Current.Name
+    $rankLine = (Get-Element $window 'TrainerCardRankLine').Current.Name
+    $xpLine = (Get-Element $window 'TrainerCardXpLine').Current.Name
+    if ($levelLine -ne $expected.Level) {
+        Fail ("the Trainer Card's level line reads '$levelLine', not '$($expected.Level)'. This capture is " +
+    "named '$State', and the ledger that state seeds is not the ledger the card read")
+    }
+    if ($rankLine -ne $expected.Rank) {
+        Fail ("the rank line reads '$rankLine', not '$($expected.Rank)' (MainWindow/MainWindow.UiUpdates.cs:70-76)")
+    }
+    if ($xpLine -ne $expected.Xp) {
+        Fail ("the XP line reads '$xpLine', not '$($expected.Xp)'. The readout is the numerator of the very " +
+    'fraction the bar below is about, so a capture taken over a wrong one is not evidence about the bar')
+    }
+
+    # THE UNKNOWN NOTE MUST BE ABSENT, and its absence is read as an absence. Both of these states
+    # are readable ledgers; a card showing its cannot-read sentence has COLLAPSED the bar
+    # (IntakePage.axaml.cs RenderLevel hides the track on a null fill), and this capture would then
+    # photograph the gap where the bar used to be. Find-Element rather than Get-Element: an Avalonia
+    # control with IsVisible=False has no automation peer at all.
+    $unknownNote = Find-Element $window 'TrainerCardLevelUnknownNote'
+    if ($null -ne $unknownNote) {
+        Fail ("the card is showing its unreadable-ledger note ('$($unknownNote.Current.Name)'), so the bar is " +
+    'collapsed and there is nothing at the derived rect to photograph')
+    }
+    Write-Output "level gate: '$levelLine', '$rankLine', '$xpLine'; no unreadable-ledger note on the page"
+
+    # (2) THE RECT. TrainerCardXpTrack is a Border and has no peer, so it is derived from the two
+    # TextBlocks that bracket it — the level line above and the XP line below — using the block's
+    # own declared layout (IntakePage.axaml: StackPanel Spacing 6, track Height 8, Width 420, all
+    # DIP). The derivation is then CROSS-CHECKED against the measured gap, which is what makes it an
+    # observation rather than an assumption: change the spacing or the height in the markup and this
+    # refuses by name instead of aiming at pixels that merely look right.
+    $viewport = Get-Rect (Get-Element $window 'IntakeScroll')
+    $spacing = [int][math]::Round(6 * $scale)
+    $barHeight = [int][math]::Round(8 * $scale)
+    $barWidth = [int][math]::Round(420 * $scale)
+    $track = $null
+    $notches = 0
+    while ($true) {
+        $levelRect = Get-Rect (Get-Element $window 'TrainerCardLevelLine')
+        $xpRect = Get-Rect (Get-Element $window 'TrainerCardXpLine')
+        $gap = $xpRect.Y - ($levelRect.Y + $levelRect.H)
+        $declaredGap = $spacing + $barHeight + $spacing
+        if ([math]::Abs($gap - $declaredGap) -gt 2) {
+            Fail ("the gap between the level line and the XP line measures $gap px, and the block declares " +
+    "$declaredGap (6 + 8 + 6 DIP at scale $scale). The bar's rect cannot be derived from a layout that " +
+    'has changed under it, so this refuses rather than photographing whatever is at those coordinates')
+        }
+        if ([math]::Abs($xpRect.X - $levelRect.X) -gt 1) {
+            Fail ("the level line and the XP line do not share a left edge (level x=$($levelRect.X), " +
+    "xp x=$($xpRect.X)); the bar's left edge cannot be derived from them")
+        }
+
+        $track = @{ X = $levelRect.X; Y = $levelRect.Y + $levelRect.H + $spacing; W = $barWidth; H = $barHeight }
+        if (Test-Inside $track $viewport) { break }
+
+        if ($notches -ge 24) {
+            Fail ("the level bar never came fully inside the page viewport after $notches wheel notches: " +
+    "bar $($track.X),$($track.Y) $($track.W)x$($track.H) vs viewport $($viewport.X),$($viewport.Y) " +
+    "$($viewport.W)x$($viewport.H)")
+        }
+        Wheel-Down $viewport
+        $notches++
+    }
+
+    Write-Output ("bar rect $($track.X),$($track.Y) $($track.W)x$($track.H) @ scale $scale " +
+    "(derived: level line bottom + $spacing px, 8 DIP tall, 420 DIP wide); $notches wheel notch(es) to " +
+    "bring it inside the viewport $($viewport.X),$($viewport.Y) $($viewport.W)x$($viewport.H)")
+
+    Assert-Inside $track $viewport 'the Trainer Card level bar' 'the Graded Intake viewport (IntakeScroll)'
+    Assert-Inside $track $windowRect 'the Trainer Card level bar' 'the shell window'
+
+    # (3) THE BAND checks.json SAMPLES, PROVED AGAINST THE FRACTION THE MODEL COMPUTED. Both checks
+    # read the same band, and the whole pair is evidence only if that band lies strictly inside the
+    # `earned` fill and strictly inside the corner-radius-free middle of the bar. 1000.5/1682 =
+    # 0.5949, so the band's right edge at 0.30 has nearly a 2x margin — and THE MARGIN IS THE RULE
+    # here, not the number: a band placed near the fill's edge would red a perfectly good capture
+    # the first time a curve band or a seeded value moved. TrainerCardLevelPresentationTests reads
+    # this file and checks.json together, so widening the band there without moving it here reddens.
+    $fillBand = @(0.10, 0.30)     # x, and it must be well inside the earned fill
+    $inkBandY = @(0.20, 0.80)     # y, and it must clear the 4 DIP corner radius top and bottom
+    $earnedFraction = 1000.5 / 1682
+    if ($fillBand[1] -ge ($earnedFraction * 0.75)) {
+        Fail ("the sampled band's right edge is at $($fillBand[1]) of the bar and the earned fill reaches " +
+    "$([math]::Round($earnedFraction, 4)). The band must sit well inside the fill, not near its edge — a floor " +
+    'set near a boundary the product moves reds a good capture')
+    }
+    $radius = [int][math]::Round(4 * $scale)
+    $bandTop = $track.Y + [int]($track.H * $inkBandY[0])
+    $bandBottom = $track.Y + [int]($track.H * $inkBandY[1])
+    $bandLeft = $track.X + [int]($track.W * $fillBand[0])
+    if ($bandLeft -lt ($track.X + $radius)) {
+        Fail ("the sampled band starts at $bandLeft, which is inside the bar's $radius px corner radius at " +
+    "$($track.X)..$($track.X + $radius); those pixels are antialiased and neither check would be flat")
+    }
+    Write-Output ("regions proved: band x $($fillBand[0])..$($fillBand[1]) = $bandLeft..$($track.X + [int]($track.W * $fillBand[1])) " +
+    "px, inside the earned fill reaching $($track.X + [int]($track.W * $earnedFraction)) px and clear of the " +
+    "$radius px corner radius; band y $bandTop..$bandBottom inside the $($track.H) px bar")
+
+    $capX = $track.X; $capY = $track.Y; $capW = $track.W; $capH = $track.H
 }
 elseif ($Surface -eq 'toast') {
     # =============================================================================================

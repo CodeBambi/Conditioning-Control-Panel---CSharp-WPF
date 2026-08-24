@@ -117,7 +117,7 @@ public class TrainerCardHeadlessTests : HeadlessTest
         Assert.False(Descendant<TextBlock>(window, "TrainerCardRecordNote").IsVisible);
 
         // And the three sentences that keep the card honest about what it is NOT are.
-        Assert.Equal(TrainerCard.NoLevelNote, Descendant<TextBlock>(window, "TrainerCardLevelNote").Text);
+        Assert.Equal(TrainerCard.LevelNote, Descendant<TextBlock>(window, "TrainerCardLevelNote").Text);
         Assert.Equal(TrainerCard.NoTierNote, Descendant<TextBlock>(window, "TrainerCardTierNote").Text);
         Assert.Equal(TrainerCard.LocalOnlyNote, Descendant<TextBlock>(window, "TrainerCardLocalOnlyNote").Text);
 

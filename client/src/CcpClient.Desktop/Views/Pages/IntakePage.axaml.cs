@@ -52,7 +52,7 @@ public partial class IntakePage : UserControl
         // written once and never re-rendered — and they live as constants on TrainerCard so the
         // unit suite can hold them to what the build actually is.
         TrainerCardTitle.Text = TrainerCard.Title;
-        TrainerCardLevelNote.Text = TrainerCard.NoLevelNote;
+        TrainerCardLevelNote.Text = TrainerCard.LevelNote;
         TrainerCardPortraitNote.Text = TrainerCard.NoPortraitNote;
         TrainerCardTierNote.Text = TrainerCard.NoTierNote;
         TrainerCardLocalOnlyNote.Text = TrainerCard.LocalOnlyNote;
@@ -68,8 +68,57 @@ public partial class IntakePage : UserControl
         // second run's end raises nothing at all and subscribing to it would refresh the card
         // exactly once per process — worse than a rule a user can predict. Navigating away and
         // back, or starting another run, shows the current record.
-        AttachedToVisualTree += (_, _) => RenderTrainerCard(intake.ReadTrainerCard());
-        intake.Decided += _ => RenderTrainerCard(intake.ReadTrainerCard());
+        //
+        // THE LEVEL RIDES THE SAME TWO TRIGGERS, and it must: a run banks XP into progression.json
+        // (Features/Progression/ProgressionLedger.Grant) from inside the modal intake window, with
+        // this page unmounted behind it, so the level a user sees is only ever as fresh as the last
+        // time this page was attached. That is the same bound the award record already carries and
+        // it is stated once here rather than twice.
+        AttachedToVisualTree += (_, _) =>
+        {
+            RenderTrainerCard(intake.ReadTrainerCard());
+            RenderLevel(intake.ReadTrainerCardLevel());
+        };
+        intake.Decided += _ =>
+        {
+            RenderTrainerCard(intake.ReadTrainerCard());
+            RenderLevel(intake.ReadTrainerCardLevel());
+        };
+    }
+
+    /// <summary>
+    /// Render the level. Every string is the model's — this page formats nothing, which is what
+    /// keeps "the ledger could not be read" from being rendered as "level 1" by a later edit here.
+    ///
+    /// <para>Each of the four visual pieces is switched by the presence of its own value rather than
+    /// by the state enum, so an Unknown level cannot leave a stale bar or a stale rank behind it from
+    /// the previous render. The bar in particular: <see cref="TrainerCardLevel.Fill"/> is null
+    /// exactly when there is no level, and the track is hidden on that null rather than drawn
+    /// empty — an empty bar under a number would say "you are at the very start of this level",
+    /// which is a claim, not an absence.</para>
+    /// </summary>
+    private void RenderLevel(TrainerCardLevel level)
+    {
+        TrainerCardLevelLine.Text = level.LevelLine;
+
+        TrainerCardRankLine.Text = level.RankLine;
+        TrainerCardRankLine.IsVisible = level.RankLine.Length > 0;
+
+        TrainerCardXpLine.Text = level.XpLine;
+        TrainerCardXpLine.IsVisible = level.XpLine.Length > 0;
+
+        TrainerCardLevelUnknownNote.Text = level.Note;
+        TrainerCardLevelUnknownNote.IsVisible = level.Note.Length > 0;
+
+        TrainerCardXpTrack.IsVisible = level.Fill is not null;
+        if (level.Fill is { } fill)
+        {
+            // Upstream assigns a measured pixel width (MainWindow.ChromeFx.cs:826-829); star
+            // weights reach the same fraction without needing the track's ActualWidth, so this is
+            // correct on the first layout pass and stays correct across a resize with no handler.
+            TrainerCardXpBar.ColumnDefinitions[0].Width = new GridLength(fill, GridUnitType.Star);
+            TrainerCardXpBar.ColumnDefinitions[1].Width = new GridLength(1 - fill, GridUnitType.Star);
+        }
     }
 
     /// <summary>

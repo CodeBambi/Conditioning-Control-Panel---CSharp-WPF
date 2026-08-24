@@ -169,16 +169,87 @@
                    Classes="module-title"
                    AutomationProperties.AutomationId="TrainerCardTitle" />
 
-        <!-- The two absences a user would otherwise read as a broken card. Said in words, never
+        <!--
+          THE LEVEL. Ported from WPF's UpdateLevelDisplay (MainWindow/MainWindow.UiUpdates.cs:51-87),
+          which writes four things and is the only place in the shipping app that writes any of them:
+          the level number (:59, "LVL {level}"), the rank title (:70-76, four bands), the XP readout
+          (MainWindow.ChromeFx.cs:814, "{(int)xp} / {(int)xpNeeded} XP") and the bar's fill fraction
+          (:826, Math.Min(1.0, xpNeeded > 0 ? xp / xpNeeded : 0)). The projection is
+          Features/Progression/TrainerCardLevel; this page chooses no wording and computes no number.
+
+          WHY IT IS HERE AND NOT IN THE CHROME. Upstream's level lives in permanent window chrome -
+          an always-visible header strip (MainWindow.xaml:2136-2222) plus a second copy in the
+          profile bubble (:1544-1553). This port has no top bar to hang a strip from, and inventing
+          one is a separate and much larger piece of work (census #50, deferred). The Trainer Card
+          is upstream's OTHER home for the same number and it is a surface that already exists.
+
+          THE BAR IS A TRACK AND A FILL, WHICH IS UPSTREAM'S OWN SHAPE (MainWindow.xaml:2168-2170:
+          XPBarTrack at Height 8 with XPBar inside it, PinkBrush on PanelAccentBrush). The fill's
+          width is two STAR columns rather than a measured pixel width: upstream computes
+          progress * container.ActualWidth and assigns XPBar.Width (ChromeFx.cs:826-829), which
+          needs a layout pass to have happened and a resize handler to stay correct. Star columns
+          are the same outcome with neither. None of upstream's motion is here - no tween
+          (MotionFx.BarFill), no sheen (:844-855), no meniscus (:2205-2215), no level-up bloom - and
+          the type remarks on TrainerCardLevel name the whole ceremony and refuse it piece by piece.
+
+          UNKNOWN IS RENDERED AS WORDS. A ledger that could not be read collapses the bar and the
+          XP line and puts the reason on screen; it never draws an empty bar under a "LVL 1", which
+          is a claim about the user rather than an absence of one.
+        -->
+        <StackPanel x:Name="TrainerCardLevelBlock" Spacing="6" Margin="0,6,0,4">
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <TextBlock x:Name="TrainerCardLevelLine"
+                       Classes="module-title"
+                       VerticalAlignment="Center"
+                       AutomationProperties.AutomationId="TrainerCardLevelLine" />
+            <!-- WPF paints the rank title in PinkBrush (MainWindow.xaml:1544); #FFD05CE8 is this
+                 shell's existing pink for the same brush. -->
+            <TextBlock x:Name="TrainerCardRankLine"
+                       Classes="module-title"
+                       FontSize="13"
+                       Foreground="#FFD05CE8"
+                       VerticalAlignment="Center"
+                       IsVisible="False"
+                       AutomationProperties.AutomationId="TrainerCardRankLine" />
+          </StackPanel>
+
+          <Border x:Name="TrainerCardXpTrack"
+                  Background="#FF2A2130"
+                  CornerRadius="4"
+                  Height="8"
+                  Width="420"
+                  HorizontalAlignment="Left"
+                  IsVisible="False">
+            <Grid x:Name="TrainerCardXpBar" ColumnDefinitions="0*,1*">
+              <Border x:Name="TrainerCardXpFill" Background="#FFD05CE8" CornerRadius="4" />
+            </Grid>
+          </Border>
+
+          <TextBlock x:Name="TrainerCardXpLine"
+                     Classes="diagnostic"
+                     IsVisible="False"
+                     AutomationProperties.AutomationId="TrainerCardXpLine" />
+
+          <!-- Only visible when the ledger could not be read. Separate from TrainerCardRecordNote
+               below: the two files fail independently, and a card that cannot read the award record
+               can still show a level. -->
+          <TextBlock x:Name="TrainerCardLevelUnknownNote"
+                     Classes="page-blurb"
+                     MaxWidth="640" HorizontalAlignment="Left"
+                     IsVisible="False"
+                     AutomationProperties.AutomationId="TrainerCardLevelUnknownNote" />
+        </StackPanel>
+
+        <!-- The absences a user would otherwise read as a broken card. Said in words, never
              rendered as an empty stat or a zero.
 
-             CORRECTED 2026-08-24: this comment used to say "no XP, level, streak or rank exists
-             anywhere in client/src", and the XP spine falsified that -
-             Features/Progression/ProgressionLedger.cs and XpCurve.cs are landed and three award
-             sites are wired. The NOTE ON SCREEN is still right, for a narrower reason: nothing
-             RENDERS a level anywhere in this build, so a "Level 0" here would still be a number
-             the user could not check against anything. What is owed is the render model, not the
-             ledger. -->
+             CORRECTED 2026-08-24 (second correction). This comment first claimed "no XP, level,
+             streak or rank exists anywhere in client/src", which ProgressionLedger.cs falsified;
+             it was then narrowed to "nothing RENDERS a level anywhere in this build", which was
+             true until the block above. Both are now gone: the level, the rank and the XP are on
+             screen. What the note still says, and is still true, is that the level unlocks NOTHING
+             (Models/AppSettings.cs:5439 is `return true;`), that nothing here celebrates a
+             level-up, and that this build keeps no streak. -->
         <TextBlock x:Name="TrainerCardLevelNote"
                    Classes="page-blurb"
                    MaxWidth="640" HorizontalAlignment="Left"
