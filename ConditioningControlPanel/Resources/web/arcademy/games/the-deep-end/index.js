@@ -526,7 +526,7 @@ export default {
       const at = Date.now();
       if (at - lastRefuseAt < REFUSE_BUMP_MS) return;
       lastRefuseAt = at;
-      tick('bump', 0.3);
+      tick('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
     }
 
     /* ---- the decks, null-safe ------------------------------------------- */
@@ -1506,7 +1506,7 @@ export default {
       deck('pressure', 'resurface');
       try { ctx.ceremonies.stamp({ text: t('de_stamp_resurface', DE_LEX.de_stamp_resurface), tone: 'pink', target: bench }); } catch (e) { /* noop */ }
       msg('de_resurface_line', DE_LEX.de_resurface_line);
-      tick('stamp_bad', 0.3);                      // the loss: a muted thud, never silence
+      tick('stamp_bad', 0.15);                      // the loss: a muted thud, never silence
       tick('wash', 0.4);
       stopDrift();
       for (const node of liveTiles()) node.classList.add('is-gone');

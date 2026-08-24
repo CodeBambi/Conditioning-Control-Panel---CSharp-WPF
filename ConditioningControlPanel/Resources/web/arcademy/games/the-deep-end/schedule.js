@@ -73,7 +73,7 @@ export const PLAYTEST = Object.freeze({
   SLIDE_PITCH_DROP: 0.45,
   /** Pass 2 - THE WALL: the board shake (class held for BUMP_MS) + the cue. */
   BUMP_MS: 240,
-  BUMP_LEVEL: 0.32,
+  BUMP_LEVEL: 0.16,   /* owner 2026-08-24: error cues -50% */
   /** Pass 2 - STUCK: after this stall (board not locked) the cells of every
    *  direction that would move pulse once, for HINT_MS. */
   STUCK_MS: 6000,

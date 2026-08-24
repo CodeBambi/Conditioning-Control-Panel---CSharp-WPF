@@ -247,7 +247,7 @@ export default {
       const now = Date.now();
       if (now - lastBumpAt < BUMP_MIN_MS) return;
       lastBumpAt = now;
-      tick('bump', 0.3);
+      tick('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
     }
     /**
      * blocked() bundles four very different states and only ONE of them is a
@@ -508,7 +508,7 @@ export default {
         : t('dt_not_enough', 'Not enough letters');
       msg(line, true);
       shake();
-      tick('stamp_bad', 0.3);
+      tick('stamp_bad', 0.15);
     }
 
     function commit() {
@@ -524,7 +524,7 @@ export default {
             ? t('dt_hard_hit', 'Hard mode: keep the revealed letters in place')
             : t('dt_hard_near', 'Hard mode: use every revealed letter'), true);
           shake();
-          tick('stamp_bad', 0.3);
+          tick('stamp_bad', 0.15);
           return;
         }
       }
@@ -656,7 +656,7 @@ export default {
       fx('sub_flash', { text: word, variant: 'stamp' });
       later(reduced ? 0 : 520, () => fx('sub_flash', { text: word, variant: 'centre' }));
       later(reduced ? 0 : 1100, () => fx('sub_flash', { text: word, variant: 'scatter' }));
-      tick('stamp_bad', 0.5);
+      tick('stamp_bad', 0.25);
       mintStudyHint();
 
       ceremony({

@@ -900,7 +900,7 @@ export default {
       const now = Date.now();
       if (now - lastBumpAt < REFUSE_GAP_MS) return;
       lastBumpAt = now;
-      tick('bump', 0.3);
+      tick('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
     }
 
     /** A press that slides nothing: the board bumps, a muted thud, never silence. */

@@ -332,7 +332,7 @@ export default {
       const at = now();
       if (at - lastRefuseAt < REFUSE_BUMP_MS) return;
       lastRefuseAt = at;
-      deckEngine.audio('bump', 0.3);
+      deckEngine.audio('bump', 0.15);   /* owner 2026-08-24: error cues -50% */
     }
 
     /** The decks' registry: this class's own timers, dead while frozen. */
@@ -401,7 +401,7 @@ export default {
          * engine-less class - the X-hit must never be the beat that goes silent. */
         sting: (clipUrl) => deckEngine.fire('audio_trigger', {
           name: 'stamp_bad',
-          level: Math.min(audioCeil(), 0.9),
+          level: Math.min(audioCeil(), 0.45),
           url: clipUrl, key: 'ic-denied', maxMs: 1500,
         }),
       });

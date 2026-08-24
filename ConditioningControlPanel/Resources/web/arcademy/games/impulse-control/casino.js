@@ -119,7 +119,7 @@ export const IC_CASINO = Object.freeze({
   /* ---- the sound ladder ---------------------------------------------- */
   SEMITONE_CAP: 7,
   POP_LEVEL: Object.freeze([0.3, 0.5]),        // by min(streak,10)/10
-  DRIFT_LEVEL: 0.22,
+  DRIFT_LEVEL: 0.11,   /* owner 2026-08-24: error cues -50% */
   PASS_LEVEL: 0.3,
   MILESTONE_LEVEL: 0.45,
   JACKPOT_LEVEL: 0.55,

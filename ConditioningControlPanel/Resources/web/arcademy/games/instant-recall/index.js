@@ -1703,7 +1703,7 @@ export default {
         : how.voided ? t('ir_voided', IR_LEX.ir_voided)
           : how.correct ? t('ir_correct', IR_LEX.ir_correct) : t('ir_wrong', IR_LEX.ir_wrong);
       try { ctx.ceremonies.stamp({ text: label, tone, target: stopEl }); } catch (e) { /* noop */ }
-      tick(how.correct ? 'stamp' : 'stamp_bad', 0.4);
+      tick(how.correct ? 'stamp' : 'stamp_bad', how.correct ? 0.4 : 0.2);   /* owner 2026-08-24: error cues -50% */
 
       truthEl.textContent = '';
       truthEl.hidden = false;
@@ -1931,7 +1931,7 @@ export default {
       const now = Date.now();
       if (now - lastBumpAt < CHROME_BUMP_MS) return;
       lastBumpAt = now;
-      tick('bump', 0.3, { pitch: 1 });
+      tick('bump', 0.15, { pitch: 1 });
     }
     /** Did this press land inside one of the live option buttons? */
     function onOptionNode(node) {

@@ -300,7 +300,7 @@ export default {
       const now = Date.now();
       if (now - lastBumpAt < BUMP_THROTTLE_MS) return;
       lastBumpAt = now;
-      cue('bump', level == null ? 0.3 : level);
+      cue('bump', level == null ? 0.15 : level);   /* owner 2026-08-24: error cues -50% */
     }
 
     /**
@@ -1191,7 +1191,7 @@ export default {
       // `stamp_bad` are near-identical sawtooth thunks in shell/audio.js, so
       // this is the House Book's own loss recipe at the House Book's own level;
       // it REPLACES the raw stamp_bad fire, so one press stays ONE cue.)
-      bump(0.3);
+      bump(0.15);
 
       if (misclickStreak >= PLAYTEST.MISCLICK_STREAK_FOR_WASH) {
         misclickStreak = 0;
@@ -1218,7 +1218,7 @@ export default {
       // THE ALMOST: the near-tease, landing with casino.almost()'s ghost and
       // the shimmer on the real target. `blip` used to sit here - a BRIGHT TICK
       // on a wrong press, the one thing the House Book forbids on a loss.
-      cue('near', 0.35);
+      cue('near', 0.175);
       if (board) {
         const target = board.targetTile();
         board.mark(target, 'g-lf-warm', true);
@@ -1259,7 +1259,7 @@ export default {
         // Deck II: a loss is acknowledged, never silent - a muted stamp and a
         // low thud while the marquee sighs out. Scaled down, still a ceremony.
         try { ctx.ceremonies.stamp({ text: t('lf_timeout', 'Time'), tone: 'pink', target: hud && hud.stampAnchor }); } catch (e) { /* optional */ }
-        cue('stamp_bad', 0.3);
+        cue('stamp_bad', 0.15);
       }
 
       say('class over: ' + finds + '/' + findsTarget + ' finds, median '

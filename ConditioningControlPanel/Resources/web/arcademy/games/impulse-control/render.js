@@ -137,7 +137,7 @@ export function createRender(o = {}) {
     }
     try {
       if (typeof Audio !== 'function') return;
-      if (!deniedAudio) { deniedAudio = new Audio(url(DENIED_SFX)); deniedAudio.volume = 0.45; }
+      if (!deniedAudio) { deniedAudio = new Audio(url(DENIED_SFX)); deniedAudio.volume = 0.225; }   /* owner 2026-08-24: error cues -50% */
       deniedAudio.currentTime = 0;
       const p = deniedAudio.play();
       if (p && typeof p.catch === 'function') p.catch(() => {});

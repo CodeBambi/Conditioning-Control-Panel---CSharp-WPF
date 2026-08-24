@@ -1054,17 +1054,17 @@ export default {
       setBeat(timedOut ? 'timeout' : adjacent ? 'almost' : 'miss');
       if (timedOut) {
         msg('md_timeout_line', MD_LEX.md_timeout_line);
-        tick('miss', 0.24);
+        tick('miss', 0.12);   /* owner 2026-08-24: error cues -50% */
       } else if (adjacent) {
         /* COSMETIC staging only - the chain was never rigged to land next
          * door, so `almost` reports what happened and never arranges it. */
         deck('casino', 'almost', slot, trueSlot);
         try { ctx.ceremonies.reward('near_miss', { target: table, text: t('md_almost', MD_LEX.md_almost) }); } catch (e) { /* noop */ }
         msg('md_almost_line', MD_LEX.md_almost_line);
-        tick('miss', 0.3);
+        tick('miss', 0.15);
       } else {
         msg('md_miss_line', MD_LEX.md_miss_line);
-        tick('miss', 0.3);
+        tick('miss', 0.15);
       }
       if (pot.live > 0) {
         pot = potAfter(pot, 'bust');
