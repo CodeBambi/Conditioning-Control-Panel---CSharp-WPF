@@ -210,6 +210,15 @@ const DECODER_CEILING = 2;
  *  supply figure - six rows in front of a cursor is six rows whether the deck
  *  is 60 long or 120. Stays 6. */
 const PREWARM = 6;
+/** Cards the WARM RAIL pulls bytes for, standing BEHIND the three-deep stack.
+ *  Not a supply figure either: PREWARM buys rows (urls), this buys the bytes
+ *  behind them. Four is the fast-swipe window - a player on the shortest ring
+ *  clears the stack in about two seconds, and four cards is the slack that
+ *  buys a phone on a slow link. */
+const WARM_AHEAD = 4;
+/** Warms in flight at once. This is a background TRICKLE and it is competing
+ *  with the top card's own download, which always wins - two is plenty. */
+const WARM_INFLIGHT = 2;
 /** The claim, when the door never resolved one for us (QUICK SORT floor).
  *  Moved 48/32 -> 72/48 with the deck (see claimOpts): a 120-card tier-4 deck
  *  fed by an 80-row claim would be repeats before the bell. */
@@ -840,6 +849,135 @@ export default {
     }
 
     /* ==================================================================== *
+     * THE WARM RAIL - bytes ahead of the deal, and nothing else.
+     *
+     * A card asks the network for its media only when it is MINTED into the
+     * three-deep stack, and a VIDEO card does not even do that: since the
+     * blank-card fix a video url never rides an <img>, so the card stands as a
+     * drawn back until reseat() grows the real <video> at the moment it
+     * SURFACES. On a phone against a remote CDN that is a guaranteed blank-back
+     * window - the download starts on the card the player is already being
+     * timed on. PREWARM above does not help: it is the provider's ROW
+     * look-ahead, and a row is a url, not a byte.
+     *
+     * So the rail peeks the cards that hold a url and no bytes - the faceless
+     * ones still in the stack, then the few standing behind it - and asks the
+     * browser to put their bytes in the HTTP cache, so that the element minted
+     * later finds them already there. Two rules keep it honest:
+     *
+     *   - a still or a gif is warmed by a DETACHED `new Image()`. It is never
+     *     attached to the document, so nothing composites and nothing is on
+     *     screen; the strong ref in `held` exists only so GC cannot collect the
+     *     request out from under itself mid-flight, and it is dropped the
+     *     moment the card surfaces or the window walks past it.
+     *   - a video url is warmed by `fetch(url, {mode:'no-cors'})` and the
+     *     opaque reply is thrown away unread. It is deliberately NOT a detached
+     *     <video>: trap 36 says the DECODER COUNT is the only lever that
+     *     matters, DECODER_CEILING is 2, and a warm <video> would start a demux
+     *     the instant it had bytes - a third decoder, off screen, that the
+     *     ceiling never counted. A cache entry costs no decoder at all.
+     *
+     * And it is a trickle, not a race: WARM_INFLIGHT at a time, every url at
+     * most once a class, nothing local or blob-backed (already instant), and
+     * under Data Saver the rail is never built in the first place.
+     * ==================================================================== */
+    /** Data Saver is the player's word that we do not spend bytes on a guess. */
+    const saveData = (() => {
+      try { return !!(navigator.connection && navigator.connection.saveData === true); }
+      catch (e) { return false; }
+    })();
+
+    function createWarmRail() {
+      const warmed = new Set();     // every url this class has already asked for
+      const held = new Map();       // url -> the detached Image holding it open
+      const queue = [];
+      let flight = 0;
+      let dead = false;
+
+      /** Only bytes that actually travel. A blob:/data:/file: url has no
+       *  network behind it, and same-origin media is the host serving the
+       *  player's own disk - both are instant and warming them is waste. */
+      function warmable(url) {
+        const s = String(url || '');
+        if (!s || warmed.has(s)) return false;
+        try {
+          const u = new URL(s, (typeof location !== 'undefined' && location.href) || undefined);
+          if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+          if (typeof location !== 'undefined' && u.origin === location.origin) return false;
+        } catch (e) { return false; }
+        return true;
+      }
+      function done() { flight = Math.max(0, flight - 1); if (!dead) pump(); }
+      function pump() {
+        while (!dead && flight < WARM_INFLIGHT && queue.length) {
+          const job = queue.shift();
+          flight += 1;
+          if (job.video) {
+            /* fire and forget, and swallow everything: a rejected warm is a
+             * card that will simply load the ordinary way. */
+            try {
+              const pr = fetch(job.url, { mode: 'no-cors', credentials: 'omit' });
+              if (pr && pr.then) pr.then(done, done); else done();
+            } catch (e) { done(); }
+          } else {
+            let img = null;
+            try { img = new Image(); } catch (e) { img = null; }
+            if (!img) { done(); continue; }
+            held.set(job.url, img);
+            try {
+              img.decoding = 'async';
+              img.onload = done;
+              img.onerror = () => { held.delete(job.url); done(); };
+              img.src = job.url;
+            } catch (e) { held.delete(job.url); done(); }
+          }
+        }
+      }
+      return {
+        /** THE WINDOW IS EVERY CARD WITH NO BYTES YET, and it starts INSIDE the
+         *  stack. A minted card is not a loaded one: the third card is a back
+         *  by law, and since the blank-card fix a video card is a back at depth
+         *  1 too - both hold a url and no request. So the faceless live cards
+         *  come first (they surface soonest), then the cards the cursor has not
+         *  dealt. The tail can be short near the end of the deck, which is
+         *  fine: what follows a spent deck is the passes and a reshuffle, urls
+         *  this class has already met and the cache already holds. */
+        refresh() {
+          if (dead || !S || !S.cards || !S.cards.length) return;
+          const ahead = [];
+          for (const live of (S.live || [])) {
+            if (live && !live.face && live.card && live.card.url) ahead.push(live.card);
+          }
+          for (let k = 0; k < WARM_AHEAD; k++) {
+            const card = S.cards[S.cursor + k];
+            if (card && card.url) ahead.push(card);
+          }
+          const window_ = new Set(ahead.map((c) => String(c.url)));
+          for (const url of Array.from(held.keys())) if (!window_.has(url)) held.delete(url);
+          for (const card of ahead) {
+            const url = String(card.url);
+            if (!warmable(url)) continue;
+            warmed.add(url);
+            queue.push({ url, video: isVideoUrl(url, card.mime) });
+          }
+          pump();
+        },
+        destroy() {
+          dead = true;
+          queue.length = 0;
+          for (const img of held.values()) {
+            try { img.onload = null; img.onerror = null; } catch (e) { /* noop */ }
+          }
+          held.clear();
+          warmed.clear();
+          flight = 0;
+        },
+        diagnostics() { return { warmed: warmed.size, held: held.size, queued: queue.length, flight }; },
+      };
+    }
+    const warmRail = saveData ? null : createWarmRail();
+
+    /* ==================================================================== *
      * THE DEAL
      * ==================================================================== */
     /** The next card off the deck; a spent deck is re-shuffled, never empty. */
@@ -906,6 +1044,12 @@ export default {
           if (live.ring && live.ring.el) { try { live.node.appendChild(live.ring.el); } catch (e) { /* noop */ } }
         }
       }
+      /* THE WARM RAIL RIDES THE RESEAT, because this is the ONE function every
+       * advance already goes through: fillStack() ends here after the deal, and
+       * both shifts - a commit and a pass - call it the instant the stack moves,
+       * which is a beat EARLIER than the fill that follows them. One seam, no
+       * new lifecycle. */
+      if (warmRail) warmRail.refresh();
     }
 
     /* ==================================================================== *
@@ -1719,6 +1863,7 @@ export default {
         try { if (pending.pool && pending.pool !== (S && S.pool) && typeof pending.pool.dispose === 'function') pending.pool.dispose(); }
         catch (e) { /* noop */ }
         pending = { pool: null, quick: false, hot: false, thin: false, sources: null };
+        if (warmRail) warmRail.destroy();
         videoCount = 0;
         S = null;
       },
@@ -1732,6 +1877,7 @@ export default {
         if (!S) {
           return {
             live: false, timers: timers.size, videoCount,
+            warm: warmRail ? warmRail.diagnostics() : null,
             decks: { casino: dg(decks.casino), pressure: dg(decks.pressure), trickster: dg(decks.trickster) },
           };
         }
@@ -1756,6 +1902,7 @@ export default {
           },
           heat: S.heat, over: S.over, submitted: S.submitted,
           videoCount, timers: timers.size,
+          warm: warmRail ? warmRail.diagnostics() : null,
           wall: S.wall ? S.wall.diagnostics() : null,
           swipe: S.swipe ? S.swipe.diagnostics() : null,
           decks: { casino: dg(decks.casino), pressure: dg(decks.pressure), trickster: dg(decks.trickster) },
