@@ -34,24 +34,34 @@ public class IntegrationProofTests
 
         // MainWindow's dependencies are (host, host.Trace) — both resolve from the root's product.
         Assert.Same(trace, host!.Trace);
-        Assert.Equal(12, host.Participants.Count);
+        Assert.Equal(13, host.Participants.Count);
         var store = Assert.IsType<PersistenceStore<DemoSettings>>(host.Participants[0]);
         // The motion preference's store: phase-3 loaded, and Full on a fresh data root — the
         // default that makes the app's own setting govern a hosted page from first run.
         var motion = Assert.IsType<PersistenceStore<CcpClient.Desktop.Motion.MotionSettingsDocument>>(host.Participants[1]);
         Assert.True(motion.Running);
         Assert.Equal(CcpClient.Desktop.Motion.MotionLevel.Full, motion.Current.Level);
-        var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[2]);
-        var ticker = Assert.IsType<CcpClient.Desktop.Features.StatusTickerParticipant>(host.Participants[3]);
-        Assert.IsType<CcpClient.Desktop.Features.AvatarTube.AvatarTubeParticipant>(host.Participants[4]);
-        Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhSaveSlots>(host.Participants[5]);
-        Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhParticipant>(host.Participants[6]);
+        // The APP-WIDE audio owner's phase-3 start LOADS ITS DOCUMENT AND TAKES NO RENDER DEVICE,
+        // over the real SoundFlow backend and through the real phase runner. A launch that seized an
+        // endpoint for a user who plays nothing would be an unrequested claim on a shared resource,
+        // and it is the kind that is inaudible from inside the process: the device comes up on the
+        // first consumer that needs sound (Audio/AudioParticipant.EnsureDevice).
+        var audio = Assert.IsType<CcpClient.Desktop.Audio.AudioParticipant>(host.Participants[2]);
+        Assert.True(audio.Running);
+        Assert.Equal(32, audio.MasterVolume);
+        Assert.Equal(0, audio.DeviceInitAttempts);
+        Assert.Null(audio.DeviceOutcome);
+        var heartbeat = Assert.IsType<HeartbeatParticipant>(host.Participants[3]);
+        var ticker = Assert.IsType<CcpClient.Desktop.Features.StatusTickerParticipant>(host.Participants[4]);
+        Assert.IsType<CcpClient.Desktop.Features.AvatarTube.AvatarTubeParticipant>(host.Participants[5]);
+        Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhSaveSlots>(host.Participants[6]);
+        Assert.IsType<CcpClient.Desktop.Features.Dtrh.DtrhParticipant>(host.Participants[7]);
         // The companion AI chain composes last (memory store started in phase-3 order).
-        Assert.IsType<CcpClient.Desktop.Features.Companion.CompanionParticipant>(host.Participants[7]);
+        Assert.IsType<CcpClient.Desktop.Features.Companion.CompanionParticipant>(host.Participants[8]);
         // The conditioning session's phase-3 start loads the preset WITHOUT starting a
         // session — WPF's engine runs only when the user presses START
         // (MainWindow/MainWindow.StartStop.cs:34,105).
-        var session = Assert.IsType<CcpClient.Desktop.Session.SessionParticipant>(host.Participants[8]);
+        var session = Assert.IsType<CcpClient.Desktop.Session.SessionParticipant>(host.Participants[9]);
         Assert.True(session.Running);
         Assert.False(session.Engine.Running);
         // The SCHEDULER registers last and its phase-3 start ALSO starts no session. It
@@ -59,7 +69,7 @@ public class IntegrationProofTests
         // even when the grace elapses the first thing the tick does is return
         // (MainWindow/MainWindow.StartStop.cs:604). The one participant in this list that CAN
         // begin a conditioning session by itself is asserted not to have.
-        var scheduler = Assert.IsType<CcpClient.Desktop.Scheduling.SchedulerParticipant>(host.Participants[9]);
+        var scheduler = Assert.IsType<CcpClient.Desktop.Scheduling.SchedulerParticipant>(host.Participants[10]);
         Assert.True(scheduler.Running);
         Assert.False(scheduler.GracePassed);
         Assert.False(scheduler.Scheduler.Polling);
@@ -75,8 +85,8 @@ public class IntegrationProofTests
         // authority is unconfigured.
         // The camera capability sits between the scheduler and the sink; it asked nothing of any
         // camera on the way through phase 3, which its own facts assert in full.
-        Assert.IsType<CcpClient.Desktop.Camera.CameraParticipant>(host.Participants[10]);
-        var haptics = Assert.IsType<CcpClient.Desktop.Haptics.HapticParticipant>(host.Participants[11]);
+        Assert.IsType<CcpClient.Desktop.Camera.CameraParticipant>(host.Participants[11]);
+        var haptics = Assert.IsType<CcpClient.Desktop.Haptics.HapticParticipant>(host.Participants[12]);
         Assert.True(haptics.Running);
         Assert.Equal(0, haptics.ConnectAttempts);
         Assert.Null(haptics.LastConnectOutcome);
