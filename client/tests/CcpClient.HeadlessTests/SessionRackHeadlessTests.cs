@@ -745,7 +745,15 @@ public class SessionRackHeadlessTests : HeadlessTest
     {
         var boot = await BootAsync();
         var window = boot.Window;
-        OpenTheSessionsRow(window);
+
+        // THE DOOR, from the wrong side first: on the Studio page with another module open, none of
+        // these controls is on screen. A toolbar that lived outside the Scripted Sessions panel
+        // would be found by the walk below either way, so this is the half that proves WHERE it is.
+        Click(window, window.FindControl<RadioButton>("DoorStudio")!);
+        Assert.False(Descendant<TextBox>(window, "ScriptedSessionSearchBox").IsEffectivelyVisible);
+        Assert.False(Descendant<ComboBox>(window, "ScriptedSessionSortBox").IsEffectivelyVisible);
+
+        Click(window, Descendant<RadioButton>(window, "RowScriptedSession"));
 
         var bands = Bands(window);
         Assert.Equal(
@@ -766,6 +774,18 @@ public class SessionRackHeadlessTests : HeadlessTest
         var search = Descendant<TextBox>(window, "ScriptedSessionSearchBox");
         Assert.True(string.IsNullOrEmpty(search.Text));
         Assert.Equal("Search…", search.PlaceholderText);
+
+        // ON SCREEN, not merely in the tree: an invisible control is still a visual descendant, so
+        // every assertion above would hold over a toolbar the user cannot see. These are the ones
+        // that would not.
+        Assert.All<Control>(
+            [search, sort, .. bands, Descendant<TextBlock>(window, "ScriptedSessionRackCount")],
+            control =>
+            {
+                Assert.True(control.IsEffectivelyVisible);
+                Assert.True(control.Bounds.Width > 0);
+                Assert.True(control.Bounds.Height > 0);
+            });
 
         // Nothing is filtered, so the count is the whole rack rather than "4 of 4".
         Assert.Equal("4 sessions", TextOf(window, "ScriptedSessionRackCount"));

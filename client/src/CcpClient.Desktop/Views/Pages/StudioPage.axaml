@@ -2210,44 +2210,56 @@
                see the cause of, restored a week later, reads as 'my sessions are gone'" (:802-803) -
                and the sort follows them here rather than opening a twelfth persisted document on a
                page that already holds eleven for a running session. -->
-          <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,2,0,0">
-            <StackPanel Grid.Column="0"
+          <!-- TWO LINES WHERE UPSTREAM HAS ONE, and the reason is measured rather than aesthetic.
+               Upstream's toolbar is a single 28px strip (Views/Tabs/PresetsTabView.xaml:805) across
+               a rack that owns most of a 1280px tab; this rack lives in the Studio door's module
+               column, which is roughly 690 DIP. On one line the four bands, the order, the search
+               and the count come to more than that, and the count is what loses: a headless fact
+               asserting the strip's controls have a non-zero width caught it arranged at 0 DIP
+               wide — present, correct, and invisible. Splitting the strip is what keeps every
+               control on it at its own size instead of silently starving one. -->
+          <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,2,0,0">
+            <StackPanel Grid.Row="0" Grid.Column="0"
                         x:Name="ScriptedSessionFilterPanel"
                         Orientation="Horizontal"
                         Spacing="10"
                         VerticalAlignment="Center" />
 
             <!-- Upstream's TxtRackCount, in upstream's place: at the right of the strip above the
-                 rows (MainWindow/MainWindow.SessionIO.cs:744-746, Views/Tabs/PresetsTabView.xaml:782-783). -->
-            <TextBlock Grid.Column="1"
+                 rows (MainWindow/MainWindow.SessionIO.cs:744-746, Views/Tabs/PresetsTabView.xaml:782-783).
+                 In the AUTO column, so it takes its own width first and the bands take what is
+                 left — the opposite of the arrangement that starved it. -->
+            <TextBlock Grid.Row="0" Grid.Column="1"
                        x:Name="ScriptedSessionRackCount"
                        AutomationProperties.AutomationId="ScriptedSessionRackCount"
                        Foreground="#FFE8E0EE"
                        Opacity="0.7"
                        FontSize="11"
-                       Margin="10,0"
+                       Margin="10,0,0,0"
                        HorizontalAlignment="Right"
                        VerticalAlignment="Center"
                        Text="" />
 
-            <ComboBox Grid.Column="2"
-                      x:Name="ScriptedSessionSortBox"
-                      Width="150"
-                      VerticalAlignment="Center"
-                      AutomationProperties.AutomationId="ScriptedSessionSortBox"
-                      AutomationProperties.Name="Session order"
-                      ToolTip.Tip="Change the order of the session list" />
+            <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        Margin="0,6,0,0">
+              <ComboBox x:Name="ScriptedSessionSortBox"
+                        Width="150"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="ScriptedSessionSortBox"
+                        AutomationProperties.Name="Session order"
+                        ToolTip.Tip="Change the order of the session list" />
 
-            <!-- The watermark is the TextBox's own PlaceholderText, where upstream needs a sibling
-                 TextBlock and a handler to hide it because WPF has none
-                 (Views/Tabs/PresetsTabView.xaml:836-848). -->
-            <TextBox Grid.Column="3"
-                     x:Name="ScriptedSessionSearchBox"
-                     Width="150"
-                     Margin="8,0,0,0"
-                     VerticalAlignment="Center"
-                     AutomationProperties.AutomationId="ScriptedSessionSearchBox"
-                     AutomationProperties.Name="Search sessions" />
+              <!-- The watermark is the TextBox's own PlaceholderText, where upstream needs a sibling
+                   TextBlock and a handler to hide it because WPF has none
+                   (Views/Tabs/PresetsTabView.xaml:836-848). -->
+              <TextBox x:Name="ScriptedSessionSearchBox"
+                       Width="150"
+                       VerticalAlignment="Center"
+                       AutomationProperties.AutomationId="ScriptedSessionSearchBox"
+                       AutomationProperties.Name="Search sessions" />
+            </StackPanel>
           </Grid>
 
           <!-- ONE panel, and nothing else may add a child to it — upstream's rule for its own rack
