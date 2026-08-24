@@ -3194,6 +3194,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         if (active) showClassScreen(); else showBoard();
         return true;
       }
+      // THE RECORDS SPOTLIGHT is a modal the player opened one press ago (a
+      // card lifted off the wall) - Esc puts the card back first and the
+      // office stays put. Trap 48's shape: one rung, above the screen's own.
+      if (screen === 'records' && recordsPage
+        && typeof recordsPage.dismissSpotlight === 'function') {
+        try { if (recordsPage.dismissSpotlight()) return true; } catch (e) { /* noop */ }
+      }
       // The Records Office is a screen like settings: Esc walks back to campus.
       if (screen === 'records') { showBoard(); return true; }
       // A host suspend owns the screen. The panic ladder's second press (host

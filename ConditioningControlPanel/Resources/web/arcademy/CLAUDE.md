@@ -85,7 +85,16 @@ shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
                    the tenth = the unlock beat)
 shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-card
                    stamp docket, and a link to the report card (never a second
-                   share pipeline - trap 13)
+                   share pipeline - trap 13). + THE SPOTLIGHT (owner playtest
+                   2026-08-24): picking a wall card ALSO lifts that cardFace to
+                   centre screen under a key light and plays one choreographed
+                   entrance (badge glint -> per-class name idiom -> star wave ->
+                   ken burns on the text strip; styles.css THE SPOTLIGHT block).
+                   Presentation only - no data moves, the docket still paints.
+                   Esc closes it FIRST via a rung in shell.js escapeStep
+                   (recordsPage.dismissSpotlight(), trap 48's shape); reduced
+                   motion (html.arc-reduced / the media query) = one plain fade,
+                   no cues
 shell/peek.js      the shared hold-to-reveal verb (caps the class at A)
 shell/keybinds.js  manifest-declared verb slots, one blob, PanicKey conflict check
 shell/audio.js     THE consumer of engine 'arcademy-sfx' (WebAudio, procedural)

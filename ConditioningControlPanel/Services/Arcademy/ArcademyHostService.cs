@@ -1321,6 +1321,7 @@ internal static class ArcademyHostService
         ["records_enroll_hint"] = "The first graded finish opens the card and earns three stamps.",
         ["records_house_note"] = "Day one is three stamps: finishing, on the house, signing on.",
         ["records_flip_hint"] = "Pick a card to read its stamps.",
+        ["records_spot_close"] = "Close",
         ["records_empty_wall"] = "Nothing on the wall yet. Attend a class and the first card gets pinned.",
         // ---- enrollment flavour, per class (PUNCHCARD.md §4) ----------------------------
         // Mirrors shell/enrollment.js's ENROLL_LEX verbatim - copy the values, do not

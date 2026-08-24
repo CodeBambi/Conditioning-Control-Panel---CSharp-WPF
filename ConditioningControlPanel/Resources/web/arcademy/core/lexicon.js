@@ -275,6 +275,7 @@ export const DEFAULT_LEXICON = Object.freeze({
   records_house_note: 'Day one is three stamps: finishing, on the house, signing on.',
   records_flip_hint: 'Pick a card to read its stamps.',
   records_empty_wall: 'Nothing on the wall yet. Attend a class and the first card gets pinned.',
+  records_spot_close: 'Close',
 
   /* Semester II ghost labels behind the tape (unregistered games get their
    * game_<key> row here, same convention the registry uses once they ship). */
