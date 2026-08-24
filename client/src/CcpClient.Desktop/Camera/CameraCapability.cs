@@ -131,8 +131,9 @@ public static class CameraCapability
             + "consent to use one",
             new CapabilityReason(
                 CameraReasonCodes.CameraNotOpened,
-                "NO CAMERA WAS OPENED, no frame was decoded and no gaze sample exists: this build enumerates and "
-                + "consents, and the capture and engine slices are unported. A device roster is not a working "
-                + "feature"));
+                "NO CAMERA WAS OPENED BY THIS PROBE, no frame was decoded and no gaze sample exists. The probe "
+                + "enumerates and checks consent and stops there — opening a camera takes an explicit user start "
+                + "(Camera/CameraParticipant.StartCaptureAsync), and even then this build has no gaze engine to "
+                + "look through one. A device roster is not a working feature"));
     }
 }

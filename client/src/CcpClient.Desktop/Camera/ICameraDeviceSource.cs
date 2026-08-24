@@ -74,18 +74,19 @@ public sealed record CameraInventory(
 /// <summary>
 /// This process's ability to ask the operating system WHICH cameras exist — and nothing else.
 ///
-/// <para><b>The seam has one verb and it cannot open anything.</b> There is no <c>Open</c>, no
-/// <c>Start</c>, no <c>ReadFrame</c> and no stream: the capture and engine slices are unported, and
-/// a seam with a capture verb behind a build that cannot capture is the fake-available shape the
-/// truthful-capability contract bans. It is also what makes the consent contract enforceable —
+/// <para><b>THIS seam has one verb and it still cannot open anything.</b> There is no <c>Open</c>,
+/// no <c>Start</c>, no <c>ReadFrame</c> and no stream on it, and the capture slice did NOT add one
+/// here — it added a separate <see cref="ICameraCaptureSource"/>, deliberately, so that the type
+/// every launch-time probe touches stays one through which no camera can be opened at all. That is
+/// what keeps the consent contract enforceable —
 /// <c>client/docs/capability-inventory.md</c> requires that opening the dashboard, restoring
-/// settings, or finding a calibration NEVER starts the camera, and the strongest form of that
-/// guarantee is a seam through which no camera can be started at all.</para>
+/// settings, or finding a calibration NEVER start the camera, and the strongest form of that
+/// guarantee is that the code those paths reach has no way to.</para>
 ///
 /// <para><b>AUDIO IS NEVER OPENED, and here that is a property of the type rather than a promise.</b>
 /// Upstream states the rule as a comment over a video-only API — <i>"Open audio capture
 /// (VideoCapture is video-only by API contract)"</i>
-/// (<c>Services/Webcam/WebcamTrackingService.cs:805-806</c>) — and enumerates the VIDEO device
+/// (<c>Services/Webcam/WebcamTrackingService.cs:30</c>, the file-header privacy contract at <c>:22-39</c>) — and enumerates the VIDEO device
 /// category only (<c>Services/Webcam/WebcamDeviceEnumerator.cs:28</c>,
 /// <c>CLSID_VideoInputDeviceCategory</c>; <c>Services/Webcam/WebcamWinRtEnumerator.cs:36</c>,
 /// <c>DeviceClass.VideoCapture</c>). This interface has no audio member to call, no audio device

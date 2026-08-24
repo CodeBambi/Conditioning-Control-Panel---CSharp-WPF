@@ -88,11 +88,75 @@ public static class CameraReasonCodes
 
     /// <summary>
     /// <b>Every rung below the capture itself passed, and NO CAMERA WAS OPENED.</b> The ceiling of
-    /// this slice, said out loud rather than rounded up: a device roster and a current consent are
-    /// not a frame, an engine, or a gaze sample, so the capability is
+    /// the CAPABILITY PROBE, said out loud rather than rounded up: a device roster and a current
+    /// consent are not a frame, an engine, or a gaze sample, so the capability is
     /// <see cref="Capabilities.CapabilityState.Degraded"/> and never
     /// <see cref="Capabilities.CapabilityState.Available"/>
     /// (<see cref="CameraCapability.Classify"/> cannot return Available for any input at all).
+    ///
+    /// <para>Still true after the capture slice, and it has to be: the probe that produces this code
+    /// runs at launch and never opens anything (<see cref="CameraParticipant.ProbeAsync"/>). Opening
+    /// a camera is a separate, explicitly-started operation
+    /// (<see cref="CameraParticipant.StartCaptureAsync"/>) and reports
+    /// <see cref="CameraOpen"/> instead.</para>
     /// </summary>
     public const string CameraNotOpened = "camera-not-opened";
+
+    /// <summary>
+    /// <b>A camera IS open and delivering frames.</b> Reported by an explicit user start and by
+    /// nothing else.
+    ///
+    /// <para>It is carried on a <see cref="Capabilities.CapabilityState.Degraded"/> rather than an
+    /// <see cref="Capabilities.CapabilityState.Available"/>, and that is not modesty. The feature a
+    /// user asked for is GAZE, and this build has no gaze engine
+    /// (<see cref="CameraCapability.AdmittedEngines"/> is empty): an open camera with nothing looking
+    /// through it delivers none of it. Saying Available here would be the fake-available shape the
+    /// truthful-capability contract exists to prevent, one rung higher up than
+    /// <see cref="CameraNotOpened"/> sits.</para>
+    /// </summary>
+    public const string CameraOpen = "camera-open";
+
+    /// <summary>
+    /// <b>This build has no capture route on this platform</b>, so nothing was opened and nothing may
+    /// be said about whether a camera would have worked. Names what is missing — the V4L2 streaming
+    /// path, the sandbox portal, or the platform itself — for the reason
+    /// <see cref="CameraEnumerationUnsupported"/> does: a silent failure here is indistinguishable
+    /// from a broken camera.
+    /// </summary>
+    public const string CameraCaptureUnsupported = "camera-capture-unsupported";
+
+    /// <summary>
+    /// <b>The device would not open on any format.</b> Upstream reaches the same conclusion when
+    /// <c>VideoCapture.Open</c> returns false on every backend and reports
+    /// <c>WebcamTrackingState.CameraDenied</c>
+    /// (<c>Services/Webcam/WebcamTrackingService.cs:1315-1321</c>). It is never
+    /// <see cref="CameraNoDevice"/>: a device that was enumerated and then refused to open is a
+    /// different problem from no device at all, with a different repair.
+    /// </summary>
+    public const string CameraOpenFailed = "camera-open-failed";
+
+    /// <summary>
+    /// <b>The device opened and never delivered a frame anything could be seen in.</b> Upstream's
+    /// <c>CameraInUse</c> (<c>Services/Webcam/WebcamTrackingService.cs:1305-1314</c>): most often
+    /// another application or antivirus webcam shielding holds the feed, and sometimes it is the
+    /// genuinely degenerate feed <see cref="CameraFrameProbe"/> exists to reject.
+    ///
+    /// <para>Kept apart from <see cref="CameraOpenFailed"/> because upstream keeps them apart, using
+    /// an <c>anyOpened</c> flag for the purpose (<c>:1273-1321</c>) — the repairs are "close the
+    /// other app" and "check the device", and neither helps with the other.</para>
+    /// </summary>
+    public const string CameraNoUsableFrame = "camera-no-usable-frame";
+
+    /// <summary>
+    /// <b>The enumerated camera has no counterpart in the capture backend's device list.</b> Almost
+    /// always a camera unplugged between the roster and the start. It is NOT
+    /// <see cref="CameraNoDevice"/> — a device WAS named — and this product refuses rather than
+    /// opening whatever else it found, because "the wrong camera" and "a camera chosen at random"
+    /// look identical to the person in front of it (<see cref="CameraHardwareKey"/>).
+    /// </summary>
+    public const string CameraDeviceNotMatched = "camera-device-not-matched";
+
+    /// <summary>The capture route itself failed. Carries the exception class only — never a message,
+    /// which on this path can carry a device symbolic link.</summary>
+    public const string CameraCaptureFailed = "camera-capture-failed";
 }
