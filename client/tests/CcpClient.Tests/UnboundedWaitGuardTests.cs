@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Xunit;
 
 namespace CcpClient.Tests;
@@ -39,13 +39,15 @@ namespace CcpClient.Tests;
 /// reader assuming they were: <c>Thread.Join()</c>, a bare <c>.Result</c> and a bare
 /// <c>lock</c>/<c>Monitor</c> contention. The first two are indistinguishable by name from
 /// ordinary property reads and short-lived thread joins in this tree; the third has no textual
-/// form at all. The known unbounded join in PRODUCT code —
+/// form at all. The unbounded join in PRODUCT code this paragraph used to name —
 /// <c>ApplicationHost.ShutdownAsync</c> awaiting each participant's <c>StopAsync()</c> with no
 /// budget of its own, beside an <c>OperationRegistry.CancelAndDrainAsync</c> that DOES bound its
-/// drain — is outside this scan, and would not be caught by these shapes even if the scan were
-/// widened: a bare <c>await x.StopAsync()</c> is textually indistinguishable from every ordinary
-/// await. That one is a lifecycle fix, not a lint finding, and this guard does not claim
-/// it.</para>
+/// drain — HAS SINCE BEEN FIXED, in the lifecycle rather than here, and its fact is
+/// <see cref="TeardownBoundTests"/>. The observation this guard made about it still stands and is
+/// the reason the sentence is kept rather than deleted: a bare <c>await x.StopAsync()</c> is
+/// textually indistinguishable from every ordinary await, so widening this scan would not have
+/// caught it and will not catch the next one. That class of defect is a lifecycle fix, not a lint
+/// finding, and this guard does not claim it.</para>
 /// </summary>
 public class UnboundedWaitGuardTests
 {

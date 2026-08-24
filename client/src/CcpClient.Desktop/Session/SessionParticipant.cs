@@ -930,9 +930,10 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// dispatcher has gone down", which is what this remark used to say: the lifetime's Exit
     /// handler calls <c>ShutdownAsync().GetAwaiter().GetResult()</c> ON the UI thread
     /// (<c>App.axaml.cs:95</c>), so that thread is BLOCKED inside this very teardown for its whole
-    /// duration and cannot deliver anything posted to it — the dispatcher is still nominally
-    /// running and the post is still never delivered. A native window may be destroyed only by the
-    /// thread that created it, so there is no other thread that could do it either.</para>
+    /// duration. Whether the dispatcher has been shut down by then is a detail this remark no
+    /// longer rests on and does not need: a delegate posted to a thread that is parked inside
+    /// <c>GetResult()</c> cannot run on it either way. A native window may be destroyed only by the
+    /// thread that created it, so no other thread could take it instead.</para>
     ///
     /// <para>That is acceptable here and only here, and for two reasons rather than one. First,
     /// what the user can SEE has already been dealt with one line above: <c>Engine.Stop()</c>

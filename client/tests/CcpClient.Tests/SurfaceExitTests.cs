@@ -1,11 +1,11 @@
-using Xunit;
+﻿using Xunit;
 
 namespace CcpClient.Tests;
 
 /// <summary>
 /// <b>The half of the overlay safety invariant that the product asserts about ITSELF:</b>
 /// <i>"the posted teardown does not run and the surfaces are reclaimed by the OPERATING SYSTEM at
-/// process exit"</i> (<c>Session/SessionParticipant.cs:927-951</c>).
+/// process exit"</i> (<c>Session/SessionParticipant.cs:920-952</c>).
 ///
 /// <para><b>Why this and not the other half.</b> <see cref="SurfaceTeardownTests"/> proves the
 /// desktop is clean when the disposals DO reach the creating thread — it asserts that they did — so
@@ -35,6 +35,16 @@ namespace CcpClient.Tests;
 [Collection(nameof(RealDesktopCollection))]
 public class SurfaceExitTests : RealDesktopFacts
 {
+    /// <summary>The other reading a routing assertion can fail on, named so a failure sends nobody
+    /// after the wrong cause: <c>RoutesAwayFrom</c> is false both when the point still resolves to
+    /// the dead child AND when it resolves to no window at all, which on a live desktop means the
+    /// point was off-screen. Fact 1 rules the second out — it read the same point winning while the
+    /// child held it — but only if fact 1 also passed.</summary>
+    private const string OrToNothing =
+        " — or to no window at all, which would mean the point was read off-screen rather than "
+        + "handed back to the desktop (the fact above rules that out by winning the same point while "
+        + "the child held it)";
+
     /// <summary>
     /// <b>The vacuous case, closed first and for both deaths.</b> Every "nothing survived" reading
     /// below would be trivially true of two processes that never put anything on the screen, so each
@@ -118,8 +128,9 @@ public class SurfaceExitTests : RealDesktopFacts
             + "(Input/Win32InputPresence.cs:1097-1099)");
 
         Assert.True(run.OrdinaryAfter.PointerPointRoutesAway,
-            "the pointer target's old centre still routes to the dead process");
-        Assert.True(run.OrdinaryAfter.CardPointRoutesAway, "the card's old centre still routes to the dead process");
+            "the pointer target's old centre still routes to the dead process" + OrToNothing);
+        Assert.True(run.OrdinaryAfter.CardPointRoutesAway,
+            "the card's old centre still routes to the dead process" + OrToNothing);
         Assert.True(run.OrdinaryAfter.ForegroundLeft,
             "the dead process still holds the foreground, so the keyboard never came back");
     }
@@ -158,8 +169,9 @@ public class SurfaceExitTests : RealDesktopFacts
         Assert.True(run.KilledAfter.PointerHandleGone, "the pointer target's window survived the kill");
         Assert.True(run.KilledAfter.CardHandleGone, "the card's window survived the kill");
         Assert.True(run.KilledAfter.PointerPointRoutesAway,
-            "the killed process's pointer target still owns its old centre");
-        Assert.True(run.KilledAfter.CardPointRoutesAway, "the killed process's card still owns its old centre");
+            "the killed process's pointer target still owns its old centre" + OrToNothing);
+        Assert.True(run.KilledAfter.CardPointRoutesAway,
+            "the killed process's card still owns its old centre" + OrToNothing);
         Assert.True(run.KilledAfter.ForegroundLeft,
             "the killed process still holds the foreground, so its card kept the keyboard past its own death");
     }
@@ -171,7 +183,7 @@ public class SurfaceExitTests : RealDesktopFacts
     /// the shell closed, with the surfaces still up, and no bound inside teardown could reach it.
     ///
     /// <para>The port creates exactly one managed thread outside the pool, and it is
-    /// <c>IsBackground</c> on purpose: <c>Audio/SoundArbitration.cs:1262-1270</c> — <i>"named +
+    /// <c>IsBackground</c> on purpose: <c>Audio/SoundArbitration.cs:1332-1341</c> — <i>"named +
     /// IsBackground so a wedged native call never blocks process exit"</i>. That is the same
     /// judgement this row reached from the other end, already made at the one native wedge this port
     /// has measured.</para>
@@ -187,12 +199,9 @@ public class SurfaceExitTests : RealDesktopFacts
     [Fact]
     public void TheProductStartsNoForegroundThread_SoNothingItCreatesCanHoldTheProcessPastMain()
     {
-        var source = Path.Combine(FindRepoRoot(), "client", "src");
-        Assert.True(Directory.Exists(source), $"client/src not found at {source} — this walk refuses to skip");
-
         var unmarked = new List<string>();
         var found = 0;
-        foreach (var file in Directory.EnumerateFiles(source, "*.cs", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(ProductSourceRoot(), "*.cs", SearchOption.AllDirectories))
         {
             if (file.Replace('\\', '/').Contains("/obj/", StringComparison.Ordinal))
             {
@@ -222,8 +231,20 @@ public class SurfaceExitTests : RealDesktopFacts
         Assert.True(unmarked.Count == 0,
             "a managed FOREGROUND thread in the product would keep the process alive after Main returns, with every "
             + "native surface still on the user's desktop and nothing on screen to close it — the surfaces are "
-            + "reclaimed by the OS at process exit and by nothing else (Session/SessionParticipant.cs:927-951). "
+            + "reclaimed by the OS at process exit and by nothing else (Session/SessionParticipant.cs:920-952). "
             + "Unmarked thread construction(s): " + string.Join("; ", unmarked));
+    }
+
+    /// <summary>The tree this walk reads, with its refusal. Kept OUT of the [Fact] body with the
+    /// rest of the tree-existence plumbing, so no <c>fs-predicate</c> shape lands in a fact — the
+    /// convention <c>ProcessEnvCollectionGuardTests.cs</c> and <c>ArcademyServingTests.cs:70</c>
+    /// already follow. It refuses rather than skipping: a walk over a tree that is not there proves
+    /// nothing and must say so.</summary>
+    private static string ProductSourceRoot()
+    {
+        var source = Path.Combine(FindRepoRoot(), "client", "src");
+        Assert.True(Directory.Exists(source), $"client/src not found at {source} — this walk refuses to skip");
+        return source;
     }
 
     private static string FindRepoRoot()

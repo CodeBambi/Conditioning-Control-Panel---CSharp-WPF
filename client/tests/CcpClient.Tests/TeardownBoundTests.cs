@@ -1,4 +1,4 @@
-using CcpClient.Desktop.Lifecycle;
+﻿using CcpClient.Desktop.Lifecycle;
 using Xunit;
 
 namespace CcpClient.Tests;
@@ -9,7 +9,7 @@ namespace CcpClient.Tests;
 /// <para><b>Why this is a safety fact and not a tidiness one.</b> On the ordinary path the
 /// application's native surfaces are destroyed by the operating system at process exit and by
 /// nothing else — the disposals are posted to a UI thread that is blocked inside teardown for the
-/// whole of it (<c>Session/SessionParticipant.cs:927-951</c>; <c>App.axaml.cs:95</c> calls
+/// whole of it (<c>Session/SessionParticipant.cs:920-952</c>; <c>App.axaml.cs:95</c> calls
 /// <c>ShutdownAsync().GetAwaiter().GetResult()</c> from the lifetime's Exit handler). That makes a
 /// surface's lifetime the PROCESS's. So a teardown that never returns is an application that never
 /// exits, and two of the six surfaces are deliberately not click-through
@@ -83,27 +83,55 @@ public class TeardownBoundTests
     }
 
     /// <summary>
-    /// <b>The bound is a backstop, not a policy.</b> A well-behaved stop is still awaited to
-    /// completion and is never cut short, and teardown still runs in reverse start order — the
-    /// shape <c>TeardownTests</c> pins. Without this, the fix above could have been "stop waiting
-    /// for anybody", which would silently truncate every real teardown.
+    /// <b>The bound is a backstop, not a policy.</b> A stop that has not finished yet is still
+    /// WAITED FOR, and teardown still runs in reverse start order — the shape <c>TeardownTests</c>
+    /// pins. Without this, the fix above could have been "stop waiting for anybody", which would
+    /// silently truncate every real teardown; and truncation is the one way a bound on teardown
+    /// could cost the user something, so it is proved rather than argued.
+    ///
+    /// <para><b>The waiting is observed, not inferred, and with no wall clock anywhere.</b> The
+    /// participant stopped FIRST returns a task nothing has completed, so teardown is caught
+    /// mid-loop: the participant behind it must NOT have been stopped yet. Then the pending stop is
+    /// completed by hand and teardown finishes the loop. A budget generous enough that it is not
+    /// the subject here (the bound elapsing is the fact above), so a slow machine cannot turn this
+    /// into the other fact.</para>
+    ///
+    /// <para><b>Mutation that reds it:</b> make the participant loop abandon unconditionally
+    /// (<c>... is not null</c> in place of <c>!= stop</c>). Teardown then returns without waiting,
+    /// <c>behind</c> is stopped before the pending stop is completed, and the mid-loop assertion
+    /// and the abandonment-log assertion both fail.</para>
     /// </summary>
     [Fact]
-    public async Task AWellBehavedStop_IsStillAwaitedToCompletion_InReverseStartOrder()
+    public async Task AStopThatHasNotFinishedYet_IsStillWaitedFor_AndTeardownRunsInReverseStartOrder()
     {
         var log = new ListLog();
         var order = new List<string>();
-        var first = new RecordsItsStop("first", order);
-        var second = new RecordsItsStop("second", order);
+        var behind = new RecordsItsStop("behind", order);
+        var pending = new StopCompletesOnDemand("pending", order);
 
+        // Reverse start order stops `pending` first, so `behind` is reached only after the loop has
+        // finished waiting on it.
         var host = new ApplicationHost(
-            log, [first, second], new StartupTrace(), new OperationRegistry(), new UiDispatchBoundary(), ShortBound);
+            log, [behind, pending], new StartupTrace(), new OperationRegistry(), new UiDispatchBoundary(),
+            TestWait.InjectedBudget);
 
-        await host.ShutdownAsync();
+        var teardown = host.ShutdownAsync();
+        await TestWait.Until(
+            () => pending.WasAsked,
+            "the teardown loop to reach the participant whose stop has not completed",
+            () => $"teardown finished: {teardown.IsCompleted}",
+            cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(["second", "first"], order);
-        Assert.True(first.Stopped);
-        Assert.True(second.Stopped);
+        Assert.False(behind.Stopped,
+            "teardown ran on to the next participant while the previous one's stop was still pending, so a "
+            + "well-behaved stop IS being cut short and every real teardown is silently truncated");
+        Assert.False(teardown.IsCompleted, "teardown returned while a participant's stop was still pending");
+
+        pending.CompleteItNow();
+        await TestWait.Until(teardown, "ApplicationHost.ShutdownAsync to finish once the pending stop completed");
+
+        Assert.Equal(["pending", "behind"], order);
+        Assert.True(behind.Stopped);
         Assert.DoesNotContain(log.Lines, l => l.Contains("was abandoned", StringComparison.Ordinal));
     }
 
@@ -173,6 +201,36 @@ public class TeardownBoundTests
         }
 
         internal void FailItNow(Exception failure) => _never.TrySetException(failure);
+    }
+
+    /// <summary>A stop that is genuinely outstanding when teardown reaches the next participant:
+    /// it records that it was asked, and completes only when the fact says so. Nothing here waits
+    /// on time.</summary>
+    private sealed class StopCompletesOnDemand(string name, List<string> order) : IBackgroundParticipant
+    {
+        private readonly TaskCompletionSource _finish = new();
+
+        public string Name => name;
+
+        public bool Running { get; private set; }
+
+        internal bool WasAsked { get; private set; }
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            Running = true;
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync()
+        {
+            WasAsked = true;
+            Running = false;
+            order.Add(name);
+            return _finish.Task;
+        }
+
+        internal void CompleteItNow() => _finish.TrySetResult();
     }
 
     private sealed class RecordsItsStop(string name = "behind", List<string>? order = null) : IBackgroundParticipant

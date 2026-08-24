@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 
 namespace CcpClient.Tests;
 
@@ -49,11 +49,19 @@ public class RealDesktopCollectionGuardTests
     /// <summary>The base whose constructor arms this thread's window floor. See RealDesktopFacts.</summary>
     private const string FloorBaseClause = ": RealDesktopFacts";
 
-    /// <summary>This guard, and the collection's own declaration, hold the tokens as text.</summary>
+    /// <summary>This guard, and the collection's own declaration, hold the tokens as text.
+    ///
+    /// <para><c>UnboundedWaitGuardTests.cs</c> is here for the SAME reason and for no other: its
+    /// pin table quotes a repo-relative path per pinned site, so the moment a real-desktop helper
+    /// holds a pinned wait, that helper's NAME is a string literal in the guard's own table. It
+    /// declares one class, that class is a source walk over <c>client/tests/**</c>, and it reaches
+    /// no window manager — blind spot (3) of this file's own honesty paragraph, in the one other
+    /// file in the project shaped like this one.</para></summary>
     private static readonly string[] ExemptFileNames =
     [
         "RealDesktopCollectionGuardTests.cs",
         "RealDesktopCollection.cs",
+        "UnboundedWaitGuardTests.cs",
     ];
 
     /// <summary>

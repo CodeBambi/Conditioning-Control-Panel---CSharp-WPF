@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -13,7 +13,7 @@ namespace CcpClient.Tests;
 /// <b>The product's OWN stated teardown path, measured from outside the process that takes it.</b>
 ///
 /// <para><b>What the product says about itself, and why saying it was not enough.</b>
-/// <c>Session/SessionParticipant.cs:927-951</c> records that the dispatched surface teardown DOES
+/// <c>Session/SessionParticipant.cs:920-952</c> records that the dispatched surface teardown DOES
 /// NOT RUN on the ordinary path and that the surfaces are instead <i>"reclaimed by the OPERATING
 /// SYSTEM at process exit"</i>. <see cref="SurfaceTeardownObservations"/> proved the desktop is
 /// clean for the case where the disposals DO reach the creating thread — it asserts that they did
@@ -499,7 +499,7 @@ internal static class SurfaceExitObservations
 /// <para><b>What it builds is the product's own teardown, not a model of it.</b> The host is a real
 /// <see cref="ApplicationHost"/>; the boundary is a real <see cref="UiDispatchBoundary"/>; the
 /// participant disposes its surfaces through that boundary in exactly the two-branch shape
-/// <c>Session/SessionParticipant.cs:1040-1057</c> uses. The one thing supplied by this file is the
+/// <c>Session/SessionParticipant.cs:1059-1076</c> uses. The one thing supplied by this file is the
 /// <see cref="IUiDispatch"/> behind the boundary, and it is supplied because the product's own is
 /// unreachable here: in the shipping app the boundary is bound to the Avalonia UI thread and that
 /// thread is BLOCKED inside teardown for its whole duration (<c>App.axaml.cs:95</c> calls
@@ -652,10 +652,10 @@ internal static class SurfaceExitChild
     }
 
     /// <summary>
-    /// The surface-disposal half of <c>Session/SessionParticipant.cs:935-1000</c>, in its shape and
+    /// The surface-disposal half of <c>Session/SessionParticipant.cs:954-999</c>, in its shape and
     /// with its reason: a native window belongs to the thread that created it, so the disposal is
     /// POSTED when the boundary is bound and taken inline when it is not
-    /// (<c>SessionParticipant.cs:1040-1057</c>). Here the boundary is bound, exactly as it is in the
+    /// (<c>SessionParticipant.cs:1059-1076</c>). Here the boundary is bound, exactly as it is in the
     /// shipping app, so nothing runs.
     /// </summary>
     private sealed class SurfaceParticipant(UiDispatchBoundary dispatch, IDisposable[] surfaces)

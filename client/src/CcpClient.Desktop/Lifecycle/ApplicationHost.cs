@@ -1,4 +1,4 @@
-namespace CcpClient.Desktop.Lifecycle;
+﻿namespace CcpClient.Desktop.Lifecycle;
 
 using CcpClient.Desktop.Capabilities;
 
@@ -133,7 +133,7 @@ public sealed class ApplicationHost
     /// calls it from the lifetime's Exit handler through <c>GetAwaiter().GetResult()</c>), so a
     /// teardown that never returns is an application that never exits — and on the ordinary path
     /// the native surfaces are destroyed by the OPERATING SYSTEM at process exit and by nothing
-    /// else (<c>Session/SessionParticipant.cs:889-900</c>). A process that cannot end therefore
+    /// else (<c>Session/SessionParticipant.cs:920-952</c>). A process that cannot end therefore
     /// leaves a topmost, input-blocking window on the user's desktop with nothing to close it.
     /// See the loop below for the bound, its backstop, and the wedge shape it cannot cover.</para>
     /// </summary>
@@ -173,7 +173,7 @@ public sealed class ApplicationHost
                 // THE BOUND, AND WHY IT IS A SAFETY FIX RATHER THAN TIDINESS. Every native surface
                 // this app puts on the desktop is destroyed by the OPERATING SYSTEM at process exit
                 // and by nothing else on the ordinary path: the disposals go through the UI dispatch
-                // boundary (Session/SessionParticipant.cs:889-900, :1040-1057) and the UI thread is
+                // boundary (Session/SessionParticipant.cs:920-952, :1059-1076) and the UI thread is
                 // blocked inside this very call for the whole of teardown (App.axaml.cs:95), so no
                 // post is ever delivered. That makes a surface's lifetime the PROCESS's — and this
                 // loop was the one place left that could stop the process from ending. A stop that
@@ -187,8 +187,23 @@ public sealed class ApplicationHost
                 // uses two lines above, for the same reason and with no new knob. The stop is not
                 // cancelled or interfered with — it keeps running on its own thread and lands if it
                 // ever can; only this teardown's WAIT on it ends. That is the shape
-                // Audio/SoundArbitration.cs:1262-1270 already chose at the one native wedge this
+                // Audio/SoundArbitration.cs:1332-1341 already chose at the one native wedge this
                 // port has measured ("a wedged native call never blocks process exit").
+                //
+                // WHY IT CANNOT TRUNCATE ANYTHING THE USER OWNS, which is the question a bound on
+                // teardown has to answer. Every DOCUMENT this app writes is flushed in the reserved
+                // pre-drain head slot above (persistence contract §11; CompositionRoot.cs:555-563
+                // awaits each store's FlushAsync on its own DefaultFlushTimeout), not here. What a
+                // participant's StopAsync does is cancel and release — PersistenceStore.StopAsync is
+                // Cancel + Task.CompletedTask (PersistenceStore.cs:210-220), AudioParticipant's
+                // disposes the arbitration, the haptic all-stop is latched and has normally already
+                // run in that same head slot (HapticParticipant.cs:541-557). So this bound can cost
+                // a release, never a write.
+                //
+                // THE BOUND IS PER PARTICIPANT rather than one deadline across the loop, so a
+                // well-behaved participant registered before a wedged one still gets its full stop
+                // instead of inheriting a budget the wedge already spent. Worst case is therefore
+                // participants x this timeout, which is finite where the previous shape was not.
                 //
                 // NAMED LIMIT: this bounds an ASYNCHRONOUS wedge only. A StopAsync that blocks its
                 // caller before returning a task (a hung native call on this very thread) never
