@@ -308,6 +308,14 @@
     // Button.history-row's own 8 DIP top padding, so a band that had drifted onto the row's glyphs
     // refuses at capture time rather than failing later like a product regression.
     //
+    // THE REGION IS THE BOTTOM FIFTH OF THE CAPTURE, and that is not a narrowing of the claim: the
+    // CAPTURE now starts 16 DIP higher, above the plate's own top border, so the picture carries a
+    // boundary that exists in BOTH states. Cropped to the sampled cell alone `not-kept` was 350x9
+    // pixels of one colour - refused by the capture step's non-vacuity gate, and rightly, because a
+    // flat plate and a photograph of nothing are the same image. y 0.79..0.98 of the 23 DIP crop is
+    // the same 2..7 DIP cell it always was (at scale 1.75, rows 32..38 of 40; at 1.0, 18..22 of 23),
+    // inset so no border pixel is ever sampled.
+    //
     // TOLERANCE 4 IS THE WHOLE POINT HERE and it is the rack's number for the rack's reason: the
     // row card #FF2A2130 and the plate #FF241E2A are only 6/3/6 apart, which is the same distance
     // the rack's selected fill sits from its hovered row. At 8 either check would pass on the other
@@ -320,7 +328,7 @@
       "state": "kept",
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
-      "region": { "rect": { "x": 0.02, "y": 0.15, "w": 0.96, "h": 0.7 } },
+      "region": { "rect": { "x": 0.02, "y": 0.79, "w": 0.96, "h": 0.19 } },
       "expectedColor": "#2A2130",
       "tolerance": 4,
       "minPixelFraction": 0.98
@@ -331,7 +339,7 @@
       "state": "not-kept",
       "evidenceClass": "presentation-verified",
       "kind": "region-color",
-      "region": { "rect": { "x": 0.02, "y": 0.15, "w": 0.96, "h": 0.7 } },
+      "region": { "rect": { "x": 0.02, "y": 0.79, "w": 0.96, "h": 0.19 } },
       "expectedColor": "#241E2A",
       "tolerance": 4,
       "minPixelFraction": 0.98

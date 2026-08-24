@@ -2644,18 +2644,27 @@ elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start' -or $Surface
         # THE CELL, DERIVED FROM TWO MEASURED RECTS AND THE WINDOW'S OWN CONSTANTS - the stripe
         # cell's rule, and it has to be a derivation here because the `not-kept` state has no row to
         # measure. The list plate's inner top is the header's bottom plus the header grid's 12 DIP
-        # margin, the plate's 1 DIP border and its 12 DIP padding; the band sits 2..7 DIP below that,
-        # which is inside Button.history-row's own 8 DIP top padding and therefore flat fill in the
-        # kept state and flat plate in the other.
+        # margin, the plate's 1 DIP border and its 12 DIP padding; the sampled cell sits 2..7 DIP
+        # below that, which is inside Button.history-row's own 8 DIP top padding and therefore flat
+        # fill in the kept state and flat plate in the other.
+        #
+        # AND THE CAPTURE CARRIES THE PLATE'S OWN TOP EDGE ABOVE IT, for the reason the session-row
+        # cell carries its gutters: cropped to the sampled cell alone, `not-kept` was 350x9 pixels
+        # of ONE colour and the capture step's non-vacuity gate refused it, correctly - a picture of
+        # a flat plate cannot be told from a picture of nothing. So the cell is captured 16 DIP
+        # lower down a 23 DIP crop that starts 3 DIP ABOVE the plate: window ground, the plate's own
+        # 1 DIP #FF3A2F3E border, its 12 DIP padding, then the cell. That boundary is present in
+        # BOTH states - it is the plate's, not the row's - and it is what makes the picture say the
+        # cell is where the plate's arithmetic puts it rather than only what colour it is.
         $headerRect = Get-Rect (Get-Element $history 'SessionHistoryHeader')
         $closeRect = Get-Rect (Get-Element $history 'SessionHistoryCloseButton')
         $rowTop = $headerRect.Y + $headerRect.H + [int][math]::Round((12 + 1 + 12) * $scale)
         $bandRight = $closeRect.X + $closeRect.W - [int][math]::Round((12 + 1) * $scale)
         $bandLeft = $bandRight - [int][math]::Round(200 * $scale)
         $capX = $bandLeft
-        $capY = $rowTop + [int][math]::Round(2 * $scale)
+        $capY = $rowTop - [int][math]::Round(16 * $scale)
         $capW = $bandRight - $bandLeft
-        $capH = [int][math]::Round(5 * $scale)
+        $capH = [int][math]::Round(23 * $scale)
 
         if ($State -eq 'kept') {
             # THE CROSS-CHECK, and it is the whole reason the derivation is trustworthy: in the one
@@ -2678,11 +2687,13 @@ elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start' -or $Surface
                 Fail ("the sample band ends at $($capY + $capH), past the row's own 8 DIP top padding ending at " +
     "$padBottom - those pixels would contain the row's glyphs")
             }
-            Write-Output ("row cell: $capX,$capY ${capW}x${capH} - row $($rowRect.X),$($rowRect.Y) " +
-    "$($rowRect.W)x$($rowRect.H), derived top $rowTop, padding ends $padBottom (scale $scale)")
+            Write-Output ("row cell: $capX,$capY ${capW}x${capH}, sampled band ${rowTop}+2..+7 DIP - row " +
+    "$($rowRect.X),$($rowRect.Y) $($rowRect.W)x$($rowRect.H), derived top $rowTop, padding ends $padBottom " +
+    "(scale $scale)")
         }
         else {
-            Write-Output "plate cell: $capX,$capY ${capW}x${capH} - derived first-row top $rowTop, no row there (scale $scale)"
+            Write-Output ("plate cell: $capX,$capY ${capW}x${capH}, sampled band ${rowTop}+2..+7 DIP - derived " +
+    "first-row top $rowTop, no row there (scale $scale)")
         }
 
         Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $historyRect 'the history sample band' 'the history window'
