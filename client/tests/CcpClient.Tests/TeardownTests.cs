@@ -8,6 +8,13 @@ namespace CcpClient.Tests;
 /// reverse start order, never throws, and leaves no orphaned participant on any of the
 /// three trigger paths. The Avalonia Exit-event wiring (window-close) and the Main
 /// try/catch (panic) are thin shells around the same guarded entry point tested here.
+///
+/// <para>Everything below counts participants that own nothing, so it proves the SHAPE of teardown
+/// and says nothing about the desktop it leaves behind. The outcome —
+/// <c>overlay-clickthrough</c>'s "no failure leaves an invisible input-blocking or permanently
+/// topmost surface" — is measured against the real window manager in
+/// <see cref="SurfaceTeardownTests"/>, which runs this same <c>ShutdownAsync</c> over a participant
+/// holding five live native surfaces.</para>
 /// </summary>
 public class TeardownTests
 {
