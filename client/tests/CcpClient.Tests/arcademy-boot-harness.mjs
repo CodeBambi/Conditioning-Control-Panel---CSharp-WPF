@@ -140,14 +140,14 @@ const moduleUrl = (file) => pathToFileURL(path.join(payloadRoot, file)).href;
  * -------------------------------------------------------------------------- */
 let bridge;
 try {
-  // 1. bridge.js alone: it registers the host→page listener at import (bridge.js:68-72)
+  // 1. bridge.js alone: it registers the host→page listener at import (arcademy/bridge.js:68-72)
   //    and posts nothing. Importing it here yields the SAME module instance boot.js
   //    gets — ESM caches on resolved URL — so the queue below is the page's own queue.
   bridge = await import(moduleUrl('bridge.js'));
 
   // 2. THE PRE-INIT PROBE. A gameplay-shaped frame, posted before `ready` exists.
   //    bridge.js holds everything outside its boot allowlist until init lands
-  //    (bridge.js:47 BOOT_LANE, :114-118 send). If that discipline were absent this
+  //    (arcademy/bridge.js:47 BOOT_LANE, :114-118 send). If that discipline were absent this
   //    frame would leave NOW and appear on stdout ahead of `ready`.
   bridge.send({ type: 'meta-command', op: 'get', key: 'ccp-boot-harness-probe' });
 

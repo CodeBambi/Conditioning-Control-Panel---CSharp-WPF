@@ -99,7 +99,7 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
         Assert.Empty(run.HarnessErrors);
 
         // 1. The page announced itself, on the boot lane, at the protocol C# speaks. This is the
-        //    number that has never been checked from the page's side before: bridge.js:29 says
+        //    number that has never been checked from the page's side before: arcademy/bridge.js:29 says
         //    1 and ArcademyProtocol.Version says 1, and until now nothing made them agree.
         Assert.Equal(1, run.Frame("ready").GetProperty("protocol").GetInt32());
 
