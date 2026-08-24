@@ -73,8 +73,10 @@ internal static class OverlayDesktopInputObservations
 
     private const int DragSteps = 8;
 
-    /// <summary>How many wheel notches one pass sends.</summary>
-    private const int WheelNotches = 1;
+    /// <summary>How many wheel notches one pass sends. Never asserted against — every wheel
+    /// expectation compares one pass's cumulative count with the previous pass's, so no constant
+    /// both drives the input and stands as the expectation.</summary>
+    private const int WheelNotchesPerPass = 1;
 
     // -------------------------------------------------------------------------------------------
     //  (a) + (b): the four passive channels, and the handled click that must not leak
@@ -486,7 +488,7 @@ internal static class OverlayDesktopInputObservations
                 underneath, centreX, centreY, DragDeltaX, DragDeltaY, DragSteps);
         PointerWindowProbe.PumpUntil(() => (underneath?.DragMoves ?? 0) > dragBefore);
 
-        var wheel = pointIsOurs && PointerWindowProbe.InjectWheelAt(centreX, centreY, WheelNotches);
+        var wheel = pointIsOurs && PointerWindowProbe.InjectWheelAt(centreX, centreY, WheelNotchesPerPass);
         PointerWindowProbe.PumpUntil(() => (underneath?.WheelNotches ?? 0) > wheelBefore);
 
         var key = pointIsOurs && PointerWindowProbe.InjectKey(PointerWindowProbe.VkF13);

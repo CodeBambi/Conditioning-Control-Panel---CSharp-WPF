@@ -202,6 +202,13 @@ public class OverlayDesktopInputTests : RealDesktopFacts
             + $"{PointerWindowProbe.DescribeWindow(run.OverlayWindow)}, so the click below never landed on a handled "
             + "overlay at all");
 
+        // Read immediately before the click as well as after it, so "it did not move" cannot be
+        // satisfied by a foreground that moved away during the style flip and happened to come back.
+        Assert.True((run.ForegroundBeforeHandledClick == run.KeeperWindow) == expected,
+            $"the foreground had already left the keeper before the handled click, for "
+            + $"{PointerWindowProbe.DescribeWindow(run.ForegroundBeforeHandledClick)}, so the reading after the "
+            + $"click cannot be attributed to the click. {run.Trace}");
+
         Assert.True(run.HandledClickAccepted == expected,
             "the handled click was not injected, so 'nothing leaked through' is a statement about a click that never "
             + $"happened. {run.Trace}");
