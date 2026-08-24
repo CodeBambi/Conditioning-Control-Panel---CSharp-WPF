@@ -1598,6 +1598,20 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     funnel).
 
 
+90. **`ctx.mood` IS THE TENSION MIRROR, AND IT IS FACE-ONLY BY LAW (EMI COLOR,
+    2026-08-24).** A game may tell the mascot how the room feels - `ctx.mood.tense()`
+    latches until `.calm()`, `.clutch()` is the one big moment, `.stumble()` is a small
+    >_<, `.runLost()` the once-per-class K.O. - and every one of them is throttled in
+    shell.js (15s shared spacing, 3 stumbles a class, tense latch), so a game cannot
+    flood her and must never build its own rate limit on top. Three laws: (1) NO BARK
+    POOL may ever sit on `tense` or `clutch` - mid-class speech is barred and the only
+    words a stumble can buy are the `miss` pool's own (maxPerClass:1); (2) call sites
+    are opt-in and null-safe (`if (ctx.mood) ...` inside try/catch) because rigs stub
+    ctx without it; (3) ride the game's EXISTING beat (L&F calls it inside its own
+    `clutch()` ease) rather than inventing a parallel one. The `classStart` payload
+    also carries `family` now - moments.js varies the arrival face by room kind and an
+    absent family falls back to the locked glance.
+
 ## 5. The game module contract (short version)
 
 ```js

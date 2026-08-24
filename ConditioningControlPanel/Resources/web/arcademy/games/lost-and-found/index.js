@@ -1035,6 +1035,8 @@ export default {
       if (board) board.setDriftMult(PLAYTEST.CLUTCH_DRIFT_EASE);
       setHeat();
       announce(t('lf_clutch', 'The board relents'), 1800);
+      /* EMI COLOR: the board's own clutch beat is the mascot's too. */
+      try { if (ctx.mood) ctx.mood.clutch(); } catch (e) { /* noop */ }
       say('clutch ease engaged');
     }
 
@@ -1068,6 +1070,11 @@ export default {
       const took = Math.max(0.05, (Date.now() - findStartedAt - (pausedMs - findPausedBase)) / 1000);
       findTimes.push(took);
       finds += 1;
+      /* EMI COLOR: the home stretch (final fifth of the hunt) leans her in. */
+      try {
+        if (ctx.mood && findsTarget > 1 && finds >= Math.ceil(findsTarget * 0.8)
+          && finds < findsTarget) ctx.mood.tense();
+      } catch (e) { /* noop */ }
       /* THE CONFIRM: the press that lands her, on the beat of the press. The
          pitch climbs across the WHOLE class - first find at 1.0, last find at
          1.5, however many finds this tier deals. It used to be a flat +0.06 a
@@ -1166,6 +1173,8 @@ export default {
     function countWrong() {
       misclicks += 1;
       misclickStreak += 1;
+      /* EMI COLOR: a small >_< on the mascot, shell-rationed to 3 a class. */
+      try { if (ctx.mood) ctx.mood.stumble(); } catch (e) { /* noop */ }
       cleanThisFind = false;
       cleanStreak = 0;
       if (!zen) penaltySec += PLAYTEST.MISCLICK_TIME_PENALTY_SEC;

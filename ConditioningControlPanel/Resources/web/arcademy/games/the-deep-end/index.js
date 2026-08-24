@@ -1403,6 +1403,12 @@ export default {
     function onNewDeepest(d, node) {
       deck('casino', 'newDeepest', d, node);
       deck('pressure', 'newDeepest', d, node);
+      /* EMI COLOR: the mascot leans in as the dive gets real (tier 6) and
+       * shivers at the truly deep water (tier 9). Face only; shell-throttled. */
+      try {
+        if (ctx.mood && d >= 9) ctx.mood.clutch();
+        else if (ctx.mood && d >= 6) ctx.mood.tense();
+      } catch (e) { /* noop */ }
       if (d >= TIER_MAX) return;             // the ceiling has its own ceremony
       if (d >= 3) {
         try { ctx.ceremonies.stamp({ text: tierName(d), target: bench }); } catch (e) { /* noop */ }
@@ -1504,6 +1510,8 @@ export default {
       bestDeepest = Math.max(bestDeepest, diveDeepest);
       deck('casino', 'resurface');
       deck('pressure', 'resurface');
+      /* EMI COLOR: the dive ended - K.O. once a class, then the slate is calm. */
+      try { if (ctx.mood) { ctx.mood.runLost(); ctx.mood.calm(); } } catch (e) { /* noop */ }
       try { ctx.ceremonies.stamp({ text: t('de_stamp_resurface', DE_LEX.de_stamp_resurface), tone: 'pink', target: bench }); } catch (e) { /* noop */ }
       msg('de_resurface_line', DE_LEX.de_resurface_line);
       tick('stamp_bad', 0.15);                      // the loss: a muted thud, never silence

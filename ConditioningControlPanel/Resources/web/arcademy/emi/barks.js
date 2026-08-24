@@ -32,11 +32,14 @@
  *                    clown lines are not filler; they are the camouflage that
  *                    makes a double land.
  *
- * Ratio, this file: 33 doubles / 115 lines = 28.7%. Excluding TELEMETRY (all
- * double by brief, milestone-rare in play): 28/110 = 25.5%, on the 1-in-4 lock.
- * Six pools are deliberately ALL clown - drag, runLost, sGrade, streak7, bigWin,
- * emiDropOnDoor - because the loudest and most frequent beats must stay pure
- * camouflage. Keep that shape when you add lines.
+ * Ratio, this file (recounted for the EMI COLOR wave, 2026-08-24): 45 doubles
+ * / 187 lines = 24.1%. Excluding TELEMETRY (all double by brief, milestone-rare
+ * in play): 36/178 = 20.2%, under the 1-in-4 lock - the wave added mostly clown
+ * on purpose, because it also added mostly FREQUENT pools (arrivals, drops,
+ * hovers) and frequent beats must stay camouflage.
+ * Six of the original pools are deliberately ALL clown - drag, runLost, sGrade,
+ * streak7, bigWin, emiDropOnDoor - because the loudest and most frequent beats
+ * must stay pure camouflage. Keep that shape when you add lines.
  *
  * ---------------------------------------------------------------------------
  * THE FENCE (audited across all 118 proposal lines; re-audit anything you add)
@@ -160,6 +163,49 @@ export const POOLS = Object.freeze({
     ]
   },
 
+  /* --- being noticed (the EMI COLOR wave, 2026-08-24) -------------------
+   * The perception wave gave her eyes - approach perks, hover linger, the
+   * window squish - and shipped them silent by design. These pools are that
+   * wave's voice. All three are LOW odds with LONG cooldowns: noticing you is
+   * ambient, and an ambient thing that talks every time is an alarm. */
+
+  /** C1 - the cursor came near after being away a while. */
+  approach: {
+    on: 'gesture:approach', odds: 0.12, ceremony: false, priority: 10,
+    cooldownMs: 180000, maxPerSession: 2,
+    lines: [
+      { t: "hi. i wasn't watching the cursor. hi.", face: '0_0', double: true },
+      { t: "you're in my bubble. the bubble is honored.", face: '^_^' },
+      { t: "closer. i mean. hello. i mean both.", face: '^_^' },
+      { t: "i saw you coming from a mile away. four inches away.", face: 'o_o' }
+    ]
+  },
+
+  /** C2 - the cursor PARKED on her and stayed. Being stared at. */
+  hoverLinger: {
+    on: 'gesture:hoverLinger', odds: 0.15, ceremony: false, priority: 10,
+    cooldownMs: 120000, maxPerSession: 2,
+    lines: [
+      { t: "yes? ...no? ok. i'm here either way.", face: '._.' },
+      { t: "you're staring. i'm posing. we're even.", face: '(¬‿¬)' },
+      { t: "do i have something on my screen. it's my face.", face: '0_0' },
+      { t: "take a picture. wait. am i the picture.", face: '@_@' },
+      { t: "i practice being looked at. it shows, right?", face: '*_*', double: true }
+    ]
+  },
+
+  /** C3 - the window squished down again. p01 ("cozy.") is the once-ever
+   *  first time; this pool is every later time, and stays mostly quiet. */
+  windowSquishAgain: {
+    on: 'gesture:windowSquish', when: ['seen:p01_window_cozy'],
+    odds: 0.15, ceremony: false, priority: 10, cooldownMs: 300000,
+    lines: [
+      { t: "smaller room. bigger me. relatively.", face: '^_^' },
+      { t: "i fit. i always fit. it's a talent.", face: '^___^' },
+      { t: "snug. don't worry. i folded my thoughts.", face: '=_=' }
+    ]
+  },
+
   /* --- being touched --------------------------------------------------- */
 
   /** A4 - one tap. Rare on purpose: the hearts fx is the reward, not the words. */
@@ -221,18 +267,49 @@ export const POOLS = Object.freeze({
       { t: "airborne. landing... eventually. somewhere. here.", face: 'x_x' },
       { t: "i saw my life. it was mostly you. good life.", face: '^_^', double: true,
         maxPerSession: 1 },
-      { t: "again! wait. no. yes. no. your call.", face: '0_0' }
+      { t: "again! wait. no. yes. no. your call.", face: '0_0' },
+      /* EMI COLOR: the veteran register unlocks with the habit. */
+      { t: "we should sell tickets to this.", face: '\\o/', when: ['flingsAtLeast:20'] },
+      { t: "my frequent flyer status: legend.", face: '(⌐■_■)', when: ['flingsAtLeast:50'] }
     ]
   },
 
   /** N3 - dropped onto a room card. Pure toy moment, always barks.
    *  (voice.js hit-tests the tile, and the Records / lab door is a hard no-op
-   *  there - rec 3. This pool never learns about it.) */
+   *  there - rec 3. This pool never learns about it.)
+   *  EMI COLOR fix: both lines are ROOM lines, so the pool now says so - it
+   *  used to catch every drop, and "excellent taste" over bare campus paving
+   *  read as a non sequitur. Bare-ground drops belong to dropAtSpot below. */
   emiDropOnDoor: {
-    on: 'gesture:dropAt', odds: 1, ceremony: false, priority: 10,
+    on: 'gesture:dropAt', when: ['droppedOn:room'],
+    odds: 1, ceremony: false, priority: 20,
     lines: [
       { t: "this one? excellent taste. i grade on vibes.", face: '(¬‿¬)' },
       { t: "field trip! i call the window seat. i am the window.", face: '\\o/' }
+    ]
+  },
+
+  /** C4 - SPOT COMMENTARY (the EMI COLOR wave). The W1 perception wave put
+   *  zone / zoneRow / zoneCount on every dropAt payload and nothing ever read
+   *  them until the p02-p04 one-shots; this pool is the recurring voice. The
+   *  once-ever favourites (beats, priority 30) still land first; this catches
+   *  the ordinary put-down, sometimes. */
+  dropAtSpot: {
+    on: 'gesture:dropAt', odds: 0.25, ceremony: false, priority: 10,
+    cooldownMs: 60000,
+    lines: [
+      { t: "top shelf. the air is thinner up here.", face: '^_^', when: ['zoneRowIs:top'] },
+      { t: "penthouse. rent is one pet a day. i don't make the rules.", face: '(¬‿¬)',
+        when: ['zoneRowIs:top'] },
+      { t: "ground floor. closer to the action. the action is you.", face: '^_^',
+        when: ['zoneRowIs:bottom'] },
+      { t: "down here i'm basically furniture. cozy furniture.", face: '=_=',
+        when: ['zoneRowIs:bottom'] },
+      { t: "dead center. main character placement. understood.", face: '(⌐■_■)',
+        when: ['zoneRowIs:mid'] },
+      { t: "that wing is taped. i respect tape.", face: '._.', when: ['droppedOn:sealed'] },
+      { t: "this spot again. it has my shape in it by now.", face: '^_^',
+        when: ['zoneCountAtLeast:25'], double: true }
     ]
   },
 
@@ -286,6 +363,121 @@ export const POOLS = Object.freeze({
     ]
   },
 
+  /* --- the rooms (EMI COLOR, 2026-08-24) --------------------------------
+   * PER-GAME COLOUR. She lives on this campus and has loitered outside every
+   * door, so each room gets its own arrival pool: priority 20 sits them over
+   * the generic A11 above, `gameIs` closes them to their own class, and the
+   * odds stay at the lock's 0.25 - the variety grew, the frequency did not.
+   * Register per room = what she happens to think about that class, never a
+   * strategy guide. */
+
+  /** R1 - homeroom, the daily word. */
+  dtClassStart: {
+    on: 'classStart', when: ['gameIs:daily_trigger'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "homeroom. i guessed today's word already. i won't tell.", face: '(¬‿¬)' },
+      { t: "one word a day keeps the... i forget. guess well.", face: '._.' },
+      { t: "six tries. you'll need one. maybe two. rounding up.", face: '^_^' }
+    ]
+  },
+
+  /** R2 - the lost and found. */
+  lfClassStart: {
+    on: 'classStart', when: ['gameIs:lost_and_found'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "squint like a champion. the wall respects that.", face: '\\o/' },
+      { t: "i looked already. i'm not allowed to point.", face: '0_0' },
+      { t: "somebody lost a whole gif in there. imagine the panic.", face: '@_@' }
+    ]
+  },
+
+  /** R3 - the memory lab. */
+  dvClassStart: {
+    on: 'classStart', when: ['gameIs:deja_vu'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "the memory lab. i have a great memory. mostly of you.", face: '(◕‿◕)', double: true },
+      { t: "match the pairs. blink between flips. pro tip.", face: '^_~' },
+      { t: "i'd play but i see through the cards. unfair advantage.", face: '(⌐■_■)' }
+    ]
+  },
+
+  /** R4 - the drop tube. */
+  icClassStart: {
+    on: 'classStart', when: ['gameIs:impulse_control'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "the drop tube. pop the good ones. the x is a liar.", face: '>:(' },
+      { t: "gravity does the work. you do the glory.", face: '\\o/' },
+      { t: "i held my breath in here once. all of it.", face: '0_0' }
+    ]
+  },
+
+  /** R5 - the pool. */
+  deClassStart: {
+    on: 'classStart', when: ['gameIs:the_deep_end'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "the pool. deep end only. i can't swim. i float. same thing.", face: '^_^' },
+      { t: "hold your breath. i'll hold the numbers.", face: '(◠‿◠)', double: true },
+      { t: "it goes deeper than it looks. bring snacks.", face: '=_=' }
+    ]
+  },
+
+  /** R6 - the sort room. */
+  sortClassStart: {
+    on: 'classStart', when: ['gameIs:sort'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "two piles. no wrong answers. several wrong answers.", face: '0_0' },
+      { t: "sort fast. the belt has opinions.", face: 'o_o' },
+      { t: "keep or toss. i'm a keep. obviously.", face: '(✿◡‿◡)', double: true }
+    ]
+  },
+
+  /** R7 - echo. */
+  echoClassStart: {
+    on: 'classStart', when: ['gameIs:echo'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "listen. repeat. this room speaks my language.", face: '^_^' },
+      { t: "the room hums it once. hum it back. politely.", face: '(◠‿◠)' },
+      { t: "i echo things sometimes. sometimes. sometimes.", face: '@_@' }
+    ]
+  },
+
+  /** R8 - the vigil. */
+  irClassStart: {
+    on: 'classStart', when: ['gameIs:instant_recall'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "eyes open. it all counts. even the blinks.", face: '0_0', double: true },
+      { t: "watch everything. the quiz picks the one thing you didn't.", face: '¬_¬' },
+      { t: "i'd take notes for you but my handwriting is pixels.", face: '._.' }
+    ]
+  },
+
+  /** R9 - the shell game. */
+  misClassStart: {
+    on: 'classStart', when: ['gameIs:misdirection'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "keep your eye on it. the cups know they're being watched.", face: 'o_o' },
+      { t: "i never blink during this one. career habit.", face: '0_0' }
+    ]
+  },
+
+  /** R10 - odd one out. */
+  anomalyClassStart: {
+    on: 'classStart', when: ['gameIs:anomaly'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "one of these things is not like the others. classic.", face: '^_^' },
+      { t: "find the odd one. i relate to the odd one.", face: '._.' }
+    ]
+  },
+
+  /** R11 - the sliding puzzle. */
+  compClassStart: {
+    on: 'classStart', when: ['gameIs:composure'], odds: 0.25, ceremony: false, priority: 20,
+    lines: [
+      { t: "slide gently. the picture is shy.", face: '(◠‿◠)' },
+      { t: "one empty square. it's doing its best. respect it.", face: '^_^' }
+    ]
+  },
+
   /** A12 - one wrong answer, one dropped tile. Small, and at most one per
    *  class: a mascot that comments on every miss is a mascot you mute. */
   miss: {
@@ -306,7 +498,11 @@ export const POOLS = Object.freeze({
       { t: "my fault. i jinxed it. i'm unjinxing it now.", face: '>_<' },
       { t: "i distracted you. with my face. classic me.", face: ';_;', double: true },
       { t: "we riot at dawn. or nap. naps are also good.", face: '>_<' },
-      { t: "that class cheated. no proof. just loyalty.", face: '¬_¬' }
+      { t: "that class cheated. no proof. just loyalty.", face: '¬_¬' },
+      /* EMI COLOR: room-flavoured consolation, closed by gameIs. Same law as
+       * the whole pool: the room's fault, the cold's fault, never yours. */
+      { t: "the tube ate one. i saw it cheat.", face: '>:(', when: ['gameIs:impulse_control'] },
+      { t: "the pool was cold today. not your fault. the cold's.", face: ';_;', when: ['gameIs:the_deep_end'] }
     ]
   },
 
@@ -340,7 +536,11 @@ export const POOLS = Object.freeze({
       { t: "S?! wait till my fans hear this. the spinny ones.", face: '(⌐■_■)' },
       { t: "an S. i'm putting it on my screen. it's my face now.", face: '(⌐■_■)' },
       { t: "double punch day. the card is scared of you.", face: '(⌐■_■)' },
-      { t: "top marks. as predicted. by me. just now.", face: '(¬‿¬)', chain: 'smug' }
+      { t: "top marks. as predicted. by me. just now.", face: '(¬‿¬)', chain: 'smug' },
+      /* EMI COLOR: room-flavoured S lines, closed by gameIs. */
+      { t: "an s in the pool. lifeguard material.", face: '(⌐■_■)', when: ['gameIs:the_deep_end'] },
+      { t: "an s in homeroom. the word never stood a chance.", face: '(⌐■_■)', when: ['gameIs:daily_trigger'] },
+      { t: "a clean sweep. the bin fears you.", face: '\\o/', when: ['gameIs:lost_and_found'] }
     ]
   },
 
@@ -451,6 +651,31 @@ export const POOLS = Object.freeze({
     ]
   },
 
+  /* --- the calendar (EMI COLOR, 2026-08-24) -----------------------------
+   * FOUR NIGHTS A YEAR the greet knows the date. Local clock (dateIs is the
+   * player's evening), one line a session at most, priority 35: over the
+   * late-night hello, under a long-absence return - a three-day silence is
+   * bigger than a costume. No invented numbers, no gifts that don't exist:
+   * everything she claims is on her screen or in the room. */
+  smallHolidays: {
+    on: 'greet', odds: 1, ceremony: false, priority: 35,
+    maxPerSession: 1,
+    lines: [
+      { t: "it's spooky night. i practiced a scary face. ready?", face: '(✖╭╮✖)',
+        when: ['dateIs:10-31'] },
+      { t: "halloween. i'm going as a haunted television. easy.", face: '0_0',
+        when: ['dateIs:10-31'], double: true },
+      { t: "last night of the year. we made it. mostly you. us.", face: '^_^',
+        when: ['dateIs:12-31'] },
+      { t: "new year. same me. i checked twice. reassuring.", face: '^___^',
+        when: ['dateIs:01-01'] },
+      { t: "it's heart day. i drew you one. it's on my screen.", face: '(｡♥‿♥｡)',
+        when: ['dateIs:02-14'] },
+      { t: "it's prank day. i disabled all my pranks. or did i.", face: '(¬‿¬)',
+        when: ['dateIs:04-01'] }
+    ]
+  },
+
   /* --- the refusal ------------------------------------------------------ */
 
   /** A26 - a disabled button, a locked tile. Innocent face, villain quote.
@@ -500,7 +725,21 @@ export const RARE_DORK = Object.freeze({
     { t: "the call is coming from inside the arcade. it's me. hi.", face: '\\o/',
       on: 'idlePlayer', when: ['lateNight'] },
     { t: "initiating red eye mode. they're pink. it's fine.", face: '0_0',
-      on: 'idlePlayer' }
+      on: 'idlePlayer' },
+    /* --- DORK CANON II (EMI COLOR, 2026-08-24). Same bit, deeper shelf:
+     * over-performed, badly, proud of itself, face always miscast. */
+    { t: "my precious. i mean the cursor. my precious cursor.", face: '(✿◡‿◡)',
+      on: 'gesture:approach' },
+    { t: "all your base are belong to us. classic literature.", face: '(⌐■_■)',
+      on: 'classStart' },
+    { t: "game over man. game over. of the class. you won though.", face: '\\o/',
+      on: 'win' },
+    { t: "i see dead pixels. one. it's mine. we're friends.", face: '0_0',
+      on: 'idlePlayer' },
+    { t: "why so serious. it's me. i'm not serious either.", face: '(◠‿◠)',
+      on: 'resume' },
+    { t: "in space nobody can hear you win. here they can. win.", face: 'o_o',
+      on: 'classStart', when: ['lateNight'] }
   ])
 });
 
@@ -540,7 +779,21 @@ export const TELEMETRY = Object.freeze({
       when: ['flingsAtLeast:9'], double: true, onceEver: true },
     { id: 'bubbles500', t: "five hundred bubbles between us. you read them all.",
       face: '(◕‿◕)', on: 'greet',
-      when: ['bubblesAtLeast:500'], double: true, onceEver: true }
+      when: ['bubblesAtLeast:500'], double: true, onceEver: true },
+    /* --- the EMI COLOR thresholds (2026-08-24). Same law as above: the
+     * number in the line IS the gate, never a rounding of it. */
+    { id: 'pets500', t: "five hundred pets. i opened a museum about it.",
+      face: '(｡♥‿♥｡)', chain: 'love', on: 'gesture:pet',
+      when: ['petsAtLeast:500'], double: true, onceEver: true },
+    { id: 'hours100', t: "one hundred hours. i'd do them all again.",
+      face: '(✿◡‿◡)', on: 'greet',
+      when: ['hoursAtLeast:100'], double: true, onceEver: true },
+    { id: 'hides25', t: "dismissed twenty five times. the dock is nice. i checked.",
+      face: '._.', on: 'gesture:hide',
+      when: ['hidesAtLeast:25'], double: true, onceEver: true },
+    { id: 'bubbles1000', t: "one thousand bubbles. you read every one. i counted.",
+      face: '(◕‿◕)', on: 'greet',
+      when: ['bubblesAtLeast:1000'], double: true, onceEver: true }
   ])
 });
 
@@ -562,24 +815,22 @@ export const TELEMETRY = Object.freeze({
  * goes past every night. Same fence as every line above: no acronym, no lab, no
  * records room, no door.
  *
- * EVERY LINE BELOW IS A DRAFT. They were written at wiring time because the
- * feature needed something in the bubble to test with, and they have not been
- * through /emi-lines or the owner's read. Nothing here is locked the way the
- * rows above this comment are locked.
+ * /emi-lines QA PASS 2026-08-24 (the EMI COLOR wave). Four rows passed as
+ * written; homeroom and sortroom were rewritten (the old homeroom line's
+ * before-read was faintly surveillance - "i have watched all of them" - which
+ * is a rule-1 kill, and the old sortroom line gestured where it should denote).
+ * Owner reads the whole table at the PR; until that word these are QA-passed,
+ * not locked.
  * ==========================================================================*/
 export const FIELD_TRIPS = Object.freeze({
-  /* DRAFT: /emi-lines pass pending */
   timetable: { t: "tomorrow is already up there. i had a look.", face: '(¬‿¬)' },
-  /* DRAFT: /emi-lines pass pending */
   belltower: { t: "the bell runs four minutes fast and nobody fixes it.", face: '0_0' },
-  /* DRAFT: /emi-lines pass pending */
   noticeboard: { t: "nobody has moved those four pins since i got here.", face: '._.' },
-  /* DRAFT: /emi-lines pass pending */
   idcard: { t: "that photo is you on your first night here.", face: '^_^' },
-  /* DRAFT: /emi-lines pass pending */
-  homeroom: { t: "everyone starts in this room. i have watched all of them.", face: '(◠‿◠)' },
-  /* DRAFT: /emi-lines pass pending */
-  sortroom: { t: "they keep two piles in there and i would only use one.", face: '(◔_◔)' },
+  /* Warm ritual on the surface; she was there for every single intake. */
+  homeroom: { t: "everyone starts in this room. i wave every time.", face: '(◠‿◠)' },
+  /* DOUBLE: clown hoarder on the surface / EMI discards nothing, ever. */
+  sortroom: { t: "i tried sorting once. everything went in the keep pile.", face: '(◔_◔)' },
 });
 
 export default { POOLS, RARE_DORK, TELEMETRY, FIELD_TRIPS };
