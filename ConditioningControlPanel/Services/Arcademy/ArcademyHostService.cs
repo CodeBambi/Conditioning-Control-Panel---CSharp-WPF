@@ -1268,6 +1268,7 @@ internal static class ArcademyHostService
         ["campus_xp_first"] = "First pass of the day pays XP.",
         ["campus_xp_retake"] = "Retakes pay no XP - pride only.",
         ["campus_hint"] = "Hover a room - click to step inside.",
+        ["campus_hint_touch"] = "Tap a room to step inside.",
         ["campus_night_sessions"] = "Night Sessions",
         ["campus_rm"] = "RM",
         // ---- punch cards: the campus door (PUNCHCARD.md §2.3) --------------------------

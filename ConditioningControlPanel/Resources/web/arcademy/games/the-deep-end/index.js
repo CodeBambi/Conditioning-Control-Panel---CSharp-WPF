@@ -907,7 +907,23 @@ export default {
         if (!capLogged) { capLogged = true; say('faces: ' + faceCap() + ' animated tiers live - new tiers wear stills'); }
       }
       let url = null;
-      try { const got = pool.next(kind); url = got && got.url ? String(got.url) : null; } catch (e) { url = null; }
+      try {
+        /* NEVER DEAL A WORN URL while the pool can offer a different one. An
+         * online-only class opens on a remote pool of one or two clips (the
+         * host streams batches late), and a uniform draw handed that same clip
+         * to tier after tier - the complaint is a whole board wearing one
+         * video. Bounded: six draws, and the FIRST stands if every one comes
+         * back worn (a genuinely tiny pool may only have the one clip). */
+        const worn = new Set();
+        for (const f of faceUrls.values()) if (f && f.url) worn.add(f.url);
+        for (let i = 0; i < 6; i += 1) {
+          const got = pool.next(kind);
+          const u = got && got.url ? String(got.url) : null;
+          if (!u) break;
+          if (url == null) url = u;
+          if (!worn.has(u)) { url = u; break; }
+        }
+      } catch (e) { url = null; }
       if (!url) return null;
       const face = { url, kind };
       faceUrls.set(tier, face);
@@ -963,6 +979,48 @@ export default {
     function dressAllFaces() {
       if (!board) return;
       for (const tile of board.tiles) { const node = tileEls.get(tile.id); if (node) dressFace(node, tile); }
+    }
+    /** THE COLD-START CURE. Tiers dealt while the remote pool was one clip deep
+     *  froze onto the SAME url (one url per tier is the law, but one url per
+     *  BOARD was never the intent). When the pool grows (pool.onUpdate), a
+     *  shared clip stays with the DEEPEST tier wearing it and every other
+     *  wearer re-deals against the fresh pool - so the eye's anchor never
+     *  flickers, and a re-deal that only draws worn urls simply waits for the
+     *  next batch. Same kind as the original deal: the decoder budget already
+     *  paid for a loop stays a loop, a still stays a still. */
+    function healDupFaces() {
+      if (!pool || typeof pool.next !== 'function') return;
+      const deepestFor = new Map();               // url -> deepest tier wearing it
+      for (const [tier, f] of faceUrls) {
+        if (!f || f.broken || !f.url) continue;
+        const d = deepestFor.get(f.url);
+        if (d == null || tier > d) deepestFor.set(f.url, tier);
+      }
+      const worn = new Set(deepestFor.keys());
+      let healed = false;
+      for (const [tier, f] of [...faceUrls]) {
+        if (!f || f.broken || !f.url || deepestFor.get(f.url) === tier) continue;
+        let fresh = null;
+        for (let i = 0; i < 6; i += 1) {
+          let u = null;
+          try { const got = pool.next(f.kind); u = got && got.url ? String(got.url) : null; } catch (e) { u = null; }
+          if (!u) break;
+          if (!worn.has(u)) { fresh = u; break; }
+        }
+        if (!fresh) continue;
+        worn.add(fresh);
+        faceUrls.set(tier, { url: fresh, kind: f.kind });
+        healed = true;
+        for (const tile of board ? board.tiles : []) {
+          if (tile.silt || tile.tier !== tier) continue;
+          const node = tileEls.get(tile.id);
+          if (!node) continue;
+          node.setAttribute('data-face', '');
+          node.classList.remove('is-loaded');
+          dressFace(node, tile);
+        }
+      }
+      if (healed) say('faces: duplicate tier clips re-dealt (the pool grew)');
     }
     function motionLevelOf() {
       try { const v = ctx.motion && ctx.motion.motionLevel; return Number.isFinite(Number(v)) ? Number(v) : 2; } catch (e) { return 2; }
@@ -1836,6 +1894,8 @@ export default {
           if (dead || !p || typeof p.next !== 'function') return;
           pool = p;
           run(dressAllFaces);                     // the tiles already on the board get their faces now
+          /* a remote batch landing is the one moment a starved deal can be bettered */
+          if (typeof p.onUpdate === 'function') p.onUpdate(() => { if (!dead && pool === p) run(healDupFaces); });
         })
         .catch((e) => say('asset claim failed - plain faces, currents fall back to the engine pool: ' + ((e && e.message) || e)));
     }

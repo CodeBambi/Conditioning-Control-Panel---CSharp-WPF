@@ -519,6 +519,19 @@ if (win) {
     showEscHint();
   });
 
+  /* A HOLD THAT LOSES THE WINDOW IS NOT A HOLD. The exit timer is only ever
+   * cancelled by keyup - but if focus leaves mid-press (alt-tab, a popup
+   * stealing the foreground, the host suspending us), the keyup lands in some
+   * other window, the timer completes on its own, and the player watches the
+   * Arcademy dismiss itself. Losing the window cancels the hold outright and
+   * never counts as a tap: the ladder must only ever move on a real keyup. */
+  const cancelEscHold = () => {
+    if (escIntentTimer) { clearTimeout(escIntentTimer); escIntentTimer = 0; }
+    if (escTimer) { clearTimeout(escTimer); escTimer = 0; }
+  };
+  win.addEventListener('blur', cancelEscHold);
+  if (doc) doc.addEventListener('visibilitychange', () => { if (doc.hidden) cancelEscHold(); });
+
   win.addEventListener('keydown', (e) => {
     // F11 is the app-wide fullscreen convention; the host owns the actual window.
     if (e.key !== 'F11' || e.repeat) return;

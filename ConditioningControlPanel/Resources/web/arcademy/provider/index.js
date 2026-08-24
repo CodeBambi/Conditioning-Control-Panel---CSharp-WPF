@@ -321,6 +321,12 @@ export function createAssets(options = {}) {
     };
     const niches = Array.isArray(spec.niches) ? spec.niches.slice() : defaultNiches;
     const cursors = { loop: 0, still: 0, target: 0 };
+    /* The remote pools walk a cursor exactly like the local ones. A uniform
+     * random pick WITH replacement (the old shape) re-served the same url draw
+     * after draw whenever the pool was young - and under an online-only source
+     * the local side is the placeholder floor, so EVERY draw is a remote draw
+     * and a whole board could dress itself in one clip. */
+    const remoteCursors = { loop: 0, still: 0 };
     let released = false;
     let reqIds = [];
 
@@ -407,7 +413,10 @@ export function createAssets(options = {}) {
         const bareLocal = !(remoteKind === 'loop' ? localPools.loop.length : localPools.still.length);
         if (wantRemote(bareLocal ? 1 : remoteRatio, rng(), (remotePools[remoteKind] || []).length > 0, canvasSafe)) {
           const list = remotePools[remoteKind];
-          const url = list[Math.floor(rng() * list.length)];
+          const i = remoteCursors[remoteKind] % list.length;
+          remoteCursors[remoteKind] += 1;
+          const jump = list.length > 2 ? Math.floor(rng() * (list.length - 1)) : 0;
+          const url = list[(i + jump) % list.length];
           if (url && (!canvasSafe || isLocalUrl(url))) return { url, remote: true };
         }
         return { url: drawLocal(k), remote: false };
