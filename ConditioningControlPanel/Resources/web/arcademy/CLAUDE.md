@@ -291,14 +291,33 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                call site in shell.js is one unguarded line.
   widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
                x affordance, the edge dock, and the bubble's `.bubble-left` /
-               `.bubble-low` flips (right margin / top edge).
+               `.bubble-low` flips (right margin / top edge). Plus THE CRT
+               POWER-OFF (`emi-crt-off` / `emi-crt-on`, 200ms each, and the
+               `.crt-blank` frame between them) - the field trip's transition.
+  fieldtrips.js THE ONE AUTONOMOUS VERB (W2a, 2026-08-24): the POI registry and
+               the scheduler that decides she may use it. `widget.apparate()` is
+               HOW a trip happens; this is WHEN, and it is FIVE gates - never
+               before session 3, at most one a sitting, one visit per fixture
+               for ever (voice.js's own `seen` ledger via `hasSeen`/`markSeen`),
+               the right screen with the fixture actually measurable, and truly
+               idle. It owns NO timer and NO observer: it is a passive
+               `offer(name, payload)` that `index.js` calls when the voice has
+               declined a moment, and the only moment it answers to is
+               `idlePlayer` - which campus.js already fires on its attract
+               loop's own idle edge ("a mascot does not get a second idle
+               timer"). At rest the file measures nothing and costs nothing.
+               Six POIs, all campus scenery that `campus.update()` never
+               rebuilds; the Records door and every other `.facility` is OUT,
+               the same geofence voice.js keeps. The LINES are barks.js's
+               `FIELD_TRIPS` table, keyed by `lineKey`; a key with no row is a
+               POI that never travels.
 vn/          FIRST BELL: the once-ever opening, and the ONLY thing in this bundle
              that is allowed to sit between the splash and the campus. Four
              scenes, all first-run: s01 the gates (2 captions), s02 the
              admissions desk (paper #1) ending in THE BOARD HANDOFF, s03 the
              walk to Homeroom, m01 the second slip after the first-ever stamp.
              Spec: `<Screenshots>/arcademy-vn-proposals/FIRST-BELL.md`. See
-             trap 71 - the safety laws are the feature.
+             trap 76 - the safety laws are the feature.
   index.js     createFirstBell({store, rows, firstNight, canInterrupt, onMoment,
                reducedMotion, base, log}) -> {armed, splashDone, gateClass,
                afterCeremony, seenState, bankAll, destroy}. Mints its OWN fixed
@@ -492,6 +511,27 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
   a hide/show/destroy flushes immediately, and `pagehide` banks the last stretch of
   `msVisible`). A drag that wrote per frame would post sixty meta-commands a second across
   the bridge.
+- **`widget.apparate(getRect, {line, face, onDone})` IS THE WHOLE FIELD TRIP, and it
+  takes a GETTER** (W2a, 2026-08-24). Power-off where she stands -> reappear beside the
+  fixture -> land the line through the ordinary say path -> power off -> home. It returns
+  a cancel function, or **null** when she refused, and she refuses over every live verb
+  she has: mid-say, mid-chain, mid-press, mid-drag, dismissed, disabled, or already
+  travelling. So a caller needs no guard of its own - `emi/fieldtrips.js` deliberately
+  tests none of them twice.
+  - **The saved spot is never written.** A trip moves `el.style.left/top` and never
+    `fx0`/`fy0`, so "come home" is just `place()`. The ONE exception is the touch cancel
+    (`{stay:true}`), which commits the spot she was actually standing on - from the trip's
+    own bookkeeping, never from `getBoundingClientRect` (trap 74).
+  - **`widget.setPoiRects(fn)`** is the other half: a function answering the live rects of
+    every registered fixture. The widget calls it ONCE per drag - never per pointermove -
+    and uses it for exactly one thing, the carried `*_*`.
+  - **The return is a MOMENT, not a callback into the script.** A completed trip fires
+    `fieldTripHome {id, lineKey}` through the ordinary `voiceMoment` path, which is what
+    lets story.js own beat `b28_first_trip` and its once-ever flag. A CANCELLED trip fires
+    nothing - she did not get home, so there is nothing to be pleased about.
+  - **`voice.hasSeen(id)` / `voice.markSeen(id)` / `voice.sessions`** are the three members
+    the scheduler borrows, and they exist so there is ONE ledger. A POI id is in the same
+    namespace as a beat id; the `trip_` prefix is what keeps them apart.
 - **The shell's EMI seams are six one-liners and every one of them is `fireMoment(...)`.**
   `shell.js` mounts once (before the first `showBoard()`, so the opening `greet` has a face to
   wear) and fires at: the board being ARRIVED at (not repainted), `startClass`, the graded
@@ -1165,7 +1205,61 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     for retro-play - a mascot who talks over a beat that already passed is worse than
     one who missed it.
 
-71. **THE OPENING IS FURNITURE, NOT A GATE, AND THAT IS AN INVARIANT WITH FIVE
+71. **THE `.emi` ROOT'S INLINE TRANSFORM BELONGS TO THE DANGLE.** While EMI is carried,
+    widget.js writes `rotate(...)` straight onto the root's style (the carry tilt); the
+    body-move keyframes (`bounce`/`thud`/`shiver`...) still win whenever they run because
+    CSS animations out-rank inline styles - which is the whole reason the dangle is legal.
+    Do NOT position EMI with a transform, and do NOT convert a body move to a transition:
+    a transition on `transform` would composite WITH the inline rotate instead of
+    replacing it, and the release spring (`clearDangle`) already owns the only transition
+    the root ever wears. The face's gaze lean is the same trick one level down: a CSS
+    translate on `.emi-screen` (the canvas ELEMENT), never a canvas repaint - a glyph
+    repaint per pointermove is the exact cost the drag-face dedupe exists to avoid.
+
+72. **A SCRIPTED SAY BEHIND A `lead` LANDS ON A TIMER, NOT ON THE CALL.** voice.js
+    schedules the bubble `chainMs(lead)` after the moment (~1200ms per unknown chain, and
+    a `lead: [a,b,c]` array is the SUM), so a synchronous suite that fires a beat and
+    reads `emi.say`'s log immediately sees NOTHING and reports a phantom regression. The
+    moment call still returns `true` the instant the beat is consumed - assert on that,
+    then await the lead before asserting the line. The perception suite
+    (`test-perception.mjs`, session scratchpad) does exactly this for p06/b25.
+
+73. **A FIXTURE RECT CAPTURED AT SCHEDULE TIME IS A RECT THAT HAS MOVED, SO
+    `apparate` TAKES A GETTER AND NOT A RECT.** A field trip is offered on an idle
+    edge and lands two power-offs later, and in between the window can resize, the
+    campus can repaint, and the SVG plan re-solves everything on it (`campus.plan`
+    is `preserveAspectRatio="xMidYMid slice"`, so viewBox units do not map linearly
+    to the viewport and a 40px window change moves every fixture). `apparate`
+    therefore resolves the rect INSIDE the dark, one frame before she lands, and the
+    registry's `anchor` is a function returning a function for exactly that reason.
+    Two things fall out and both are deliberate: a fixture that has GONE by fire time
+    sends her straight home instead of parking her at (0,0), and a resize mid-trip
+    cancels it outright (the anchor she is standing at was solved against a viewport
+    that no longer exists). Passing a bare rect still works and is the bug this trap
+    is named for.
+74. **THE CRT KEYFRAME FILLS `forwards`, SO TAKING THE CLASS OFF IS NOT OPTIONAL -
+    AND A RECT READ MID-SQUISH IS A 1PX LINE.** `emi-crt-off`/`emi-crt-on` animate
+    `transform` on the `.emi` root, which is legal precisely because a CSS animation
+    out-ranks the dangle's inline `rotate` while it runs (trap 71). But `forwards`
+    means a class nobody removes WELDS `scaleY(1)` onto the root and the dangle
+    silently stops working for ever after - the same lesson `droop` taught `BODY_MS`.
+    Every exit from a trip goes through `crtClear()` for that reason. The twin half:
+    `getBoundingClientRect` reports the TRANSFORMED box, so a position read while the
+    squish is running is a 1px-tall line at the wrong top. The trip therefore keeps
+    its own `{left, top}` and commits THAT, and nothing in the ladder ever measures
+    her.
+75. **TOUCH ALWAYS WINS, AND "WINS" MEANS SHE STAYS WHERE SHE IS.** A pointerdown on
+    EMI at any point of a trip ends it on the spot - `onDown` cancels before it does
+    anything else, so the press carries straight on into an ordinary drag with no
+    stranded animation class, no protected say still holding the glass, and no
+    teleport. The cancel COMMITS the spot she was standing on, which is the half that
+    is easy to miss: leaving the trip's pixel position on the element without writing
+    the fractions means the next resize (or the next launch) snaps her back to where
+    the trip started, several seconds after the player put her somewhere else. The
+    other cancels - a dismiss, a disable, a destroy, a resize, the caller's own -
+    bring her HOME instead, because none of them is the player choosing a spot.
+
+76. **THE OPENING IS FURNITURE, NOT A GATE, AND THAT IS AN INVARIANT WITH FIVE
     CONSEQUENCES (FIRST BELL, 2026-08-24).** `vn/` is the first thing this bundle has
     ever put between the splash and a live campus, so every one of its four seams is
     built to be a NO-OP by default rather than a step that has to succeed.
