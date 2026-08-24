@@ -1105,7 +1105,29 @@ public sealed class SoundArbitrationTests
     // The budget whose ELAPSING is the subject (TestWait population 2 — same pinned-literal
     // discipline as the GiveUpBudget). Every rendezvous below is a deterministic signal
     // (gates + the recorded event stream), never timing.
-    private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200); // wallclock-allow: the budget's elapsing IS the subject — every rendezvous is a gate, so the abandonment always fires with the construction still wedged
+    //
+    // THE CLASS-WIDE RULE, and the separation three facts here were caught by (P2, 2026-08-24).
+    // OrphanSafePlayerFactory.Create QUEUES the construction on the thread pool and then waits
+    // this wall-clock budget for it (AudioSeams.cs: Task.Run, then task.Wait(_budget)), so the
+    // budget covers POOL DISPATCH LATENCY + the native call, not the native call alone. On a
+    // starved pool the dispatch alone can exceed it. Two consequences, and both are properties of
+    // the FACTS rather than of the product — the arbitration is correct in every starved run
+    // measured (see the fixed facts for the numbers):
+    //
+    //   1. "The construction is parked" is NOT implied by "the caller abandoned it": the work item
+    //      may still be QUEUED. So every fact that READS or CLAIMS construction state holds first
+    //      on the fake's own entry record (ConstructCount) via the shared bounded helper. Waiting
+    //      for the entry can never mask a product defect: the caller's abandonment already
+    //      happened, and a construction that is never entered fails the wait LOUDLY.
+    //   2. A fact that needs the caller's task.Wait to RETURN TRUE cannot be fixed by waiting at
+    //      all — the caller has already decided. Such a fact (there is exactly one:
+    //      Construction_LockUnavailableAtCompletion_...) must not put its construction budget on
+    //      this literal; it takes the shared 60 s injection and moves the short literal onto the
+    //      LIFECYCLE-LOCK budget, whose elapsing is what that fact is actually about.
+    //
+    // Hence this literal has two roles, both class-3: the construction give-up (facts whose
+    // construction is gated shut) and the lifecycle-lock give-up (the fact above).
+    private static readonly TimeSpan ConstructionBudget = TimeSpan.FromMilliseconds(200); // wallclock-allow: the budget's elapsing IS the subject — either the wedged construction's give-up (the gate is shut, so abandonment always fires with the construction still wedged) or the lifecycle-lock give-up (the lock is held for the whole fact)
 
     private sealed class OrphanPlayer(string path, float volume)
     {
@@ -1147,10 +1169,20 @@ public sealed class SoundArbitrationTests
         // holding _lifecycle — the window that separates "the pool thread was released" from
         // "the player was disposed".
         public volatile ManualResetEventSlim? DisposeGate;
+        // Parks the CALLER inside the attach delegate, which the product also runs while holding
+        // _lifecycle. That is the only way to hold that lock with the factory still LIVE: Teardown
+        // sets _tornDown before running its delegate, so a lock held that way refuses every later
+        // Create at the top of the method, and an orphan disposer can only be manufactured by an
+        // abandonment (which is what the holder is needed to cause in the first place).
+        public volatile ManualResetEventSlim? AttachGate;
         // The faulted-construction leg: a native call that returns by THROWING still returns.
         public volatile Exception? ConstructThrows;
 
-        public OrphanHarness(TimeSpan budget, Action<string>? logHook = null, int? maxOutstandingAbandoned = null)
+        public OrphanHarness(
+            TimeSpan budget,
+            Action<string>? logHook = null,
+            int? maxOutstandingAbandoned = null,
+            TimeSpan? lifecycleLockBudget = null)
         {
             Factory = new OrphanSafePlayerFactory<OrphanPlayer>(
                 construct: (path, volume) =>
@@ -1169,7 +1201,17 @@ public sealed class SoundArbitrationTests
                     LastPlayer = p;
                     return p;
                 },
-                attach: p => { Interlocked.Increment(ref AttachCount); Events.Enqueue("attached"); },
+                attach: p =>
+                {
+                    Interlocked.Increment(ref AttachCount);
+                    Events.Enqueue("attached"); // enqueued BEFORE parking: the signal that the lock is held
+                    if (AttachGate is { } gate)
+                    {
+                        // The approved bounded helper rather than a raw park: this one runs on the
+                        // CALLER's thread, so an unreleased gate would hang the run instead of failing it.
+                        TestWait.UntilSync(() => gate.IsSet, "the test released the parked attach", State);
+                    }
+                },
                 dispose: p =>
                 {
                     Events.Enqueue("dispose-entered"); // inside the product's _lifecycle lock
@@ -1181,7 +1223,8 @@ public sealed class SoundArbitrationTests
                 log: line => { lock (Log) Log.Add(line); logHook?.Invoke(line); },
                 tag: "test",
                 budget: budget,
-                maxOutstandingAbandoned: maxOutstandingAbandoned);
+                maxOutstandingAbandoned: maxOutstandingAbandoned,
+                lifecycleLockBudget: lifecycleLockBudget);
         }
 
         public int AbandonmentLines
@@ -1472,6 +1515,11 @@ public sealed class SoundArbitrationTests
         {
             var (thread, done, _) = StartCreate(h.Factory); // sequential, as above
             thread.Start();
+            // Rule 1 (see ConstructionBudget): "parked" below is a claim about the POOL, and only
+            // the fake's own entry record can make it true — an abandoned construction may still
+            // be QUEUED on a starved pool.
+            TestWait.UntilSync(() => Volatile.Read(ref h.ConstructCount) == i + 1,
+                $"caller {i}'s construction entered the fake", () => h.State());
             TestWait.UntilSync(() => done.IsSet, $"caller {i} abandoned its construction", () => h.State());
             thread.Join();
         }
@@ -1537,6 +1585,12 @@ public sealed class SoundArbitrationTests
         };
         var (thread, done, thrown) = StartCreate(h.Factory);
         thread.Start();
+        // Rule 1 (see ConstructionBudget): this fact's whole subject is WHERE the count is
+        // released — at the parked thread's native return — so "parked" has to be true, not
+        // assumed. A queued-but-undispatched construction is counted too (correctly: it will take
+        // a thread), and the release below would then be observed at the wrong event.
+        TestWait.UntilSync(() => Volatile.Read(ref h.ConstructCount) == 1,
+            "the construction entered the fake", () => h.State());
         TestWait.UntilSync(() => done.IsSet, "the caller abandoned its construction", () => h.State());
         thread.Join();
 
@@ -1572,6 +1626,15 @@ public sealed class SoundArbitrationTests
         };
         var (thread, done, thrown) = StartCreate(h.Factory);
         thread.Start();
+        // Rule 1 (see ConstructionBudget). Without this hold the ConstructCount assertion below
+        // measures thread-pool DISPATCH latency against the caller's 200 ms budget: with the pool
+        // deliberately starved (24 parked workers on 16 cores) this fact failed 20/20 with exactly
+        // the reported "Expected: 1, Actual: 0" — the construction had not entered the fake yet —
+        // while the arbitration in the same run was perfect (outstanding=1, the typed cap refusal
+        // in hand, capRefusalLines=1). The construction is held here until it has DEMONSTRABLY
+        // entered the fake and parked on the shut gate, which is what "parked" below then means.
+        TestWait.UntilSync(() => Volatile.Read(ref h.ConstructCount) == 1,
+            "the construction entered the fake", () => h.State());
         TestWait.UntilSync(() => done.IsSet, "the caller abandoned its construction", () => h.State());
         thread.Join();
         Assert.IsType<PlayerConstructionTimeoutException>(thrown());
@@ -1603,65 +1666,98 @@ public sealed class SoundArbitrationTests
         // THE SECOND ROUTE TO ABANDONMENT, and the only one on which the accounting CAS does any
         // work. Create reaches `slot.Abandoned = true; CountAbandoned(slot);` two ways: (a) the
         // caller's task.Wait expired, so the construction IS parked — the route every other fact
-        // here takes; or (b) task.Wait returned TRUE and Monitor.TryEnter(_lifecycle, budget)
-        // timed out because a wedged native teardown holds the lifecycle lock (the give-up class
-        // that bounded TryEnter exists for). On route (b) the construction has already RETURNED,
-        // so no pool thread is parked and the count must NOT rise. If it did, this slot's
-        // settling finally has already run and can never run again, so the increment would leak
-        // permanently: after `cap` such events the factory refuses every later cue for the rest
-        // of its life — the refuse-forever failure the count exists to prevent.
+        // here takes; or (b) task.Wait returned TRUE and Monitor.TryEnter(_lifecycle, …) timed out
+        // because something holds the lifecycle lock (the give-up class that bounded TryEnter
+        // exists for). On route (b) the construction has already RETURNED, so no pool thread is
+        // parked and the count must NOT rise. If it did, this slot's settling finally has already
+        // run and can never run again, so the increment would leak permanently: after `cap` such
+        // events the factory refuses every later cue for the rest of its life — the refuse-forever
+        // failure the count exists to prevent.
+        //
+        // WHY THIS FACT NOW HAS TWO FACTORIES — the P2 separation, 2026-08-24. The two legs need
+        // OPPOSITE things from the construction budget: leg (a) needs it to ELAPSE, leg (b) needs
+        // it never to decide anything (task.Wait must return TRUE). One factory carrying one
+        // 200 ms budget for both made leg (b) a race against thread-pool DISPATCH latency, and it
+        // lost: with the pool deliberately starved (24 parked workers on 16 cores) this fact
+        // failed 20/20 with "Expected: 0, Actual: 1" — the construction had not been dispatched
+        // inside 200 ms, so the caller took route (a) and counted 1, WHICH IS CORRECT. The product
+        // was never wrong here; the fact silently stopped reaching its own subject. No added wait
+        // can fix that, because the caller has already decided by the time anything is observable.
+        // So the budgets are separated instead: leg (b) puts the CONSTRUCTION on the shared 60 s
+        // injection (it can no longer decide anything) and keeps the short literal on the
+        // LIFECYCLE-LOCK give-up, whose elapsing is what leg (b) is actually about.
         var outstandingAtAbandonment = new ConcurrentQueue<int>();
-        OrphanHarness? h = null;
-        h = new OrphanHarness(
+
+        // ---- LEG (a): parked, therefore counted.
+        OrphanHarness? parked = null;
+        parked = new OrphanHarness(
             ConstructionBudget,
-            logHook: line => { if (line.Contains("construction abandoned")) { outstandingAtAbandonment.Enqueue(h!.Outstanding); } },
-            maxOutstandingAbandoned: 2)
+            logHook: line => { if (line.Contains("construction abandoned")) { outstandingAtAbandonment.Enqueue(parked!.Outstanding); } })
         {
             ConstructGate = new ManualResetEventSlim(false),
-            DisposeGate = new ManualResetEventSlim(false),
         };
+        var (first, firstDone, firstThrew) = StartCreate(parked.Factory);
+        first.Start();
+        TestWait.UntilSync(() => Volatile.Read(ref parked.ConstructCount) == 1,
+            "the first construction entered the fake", () => parked.State()); // rule 1: "parked" is proved
+        TestWait.UntilSync(() => firstDone.IsSet, "the first caller abandoned its construction", () => parked.State());
+        first.Join();
+        Assert.IsType<PlayerConstructionTimeoutException>(firstThrew());
+        Assert.Equal(1, parked.Outstanding); // genuinely parked, so genuinely counted
 
-        // Route (a) first, purely to manufacture the lock holder: one abandonment by budget
-        // expiry, then release the wedge so that orphan's disposer takes _lifecycle and parks
-        // INSIDE the dispose delegate — which the product runs while holding that lock.
-        var (thread, done, thrown) = StartCreate(h.Factory);
-        thread.Start();
-        TestWait.UntilSync(() => done.IsSet, "the first caller abandoned its construction", () => h.State());
-        thread.Join();
-        Assert.IsType<PlayerConstructionTimeoutException>(thrown());
-        Assert.Equal(1, h.Outstanding); // genuinely parked, so genuinely counted
+        // ---- LEG (b): completed, therefore NOT counted. The lifecycle lock is held by a parked
+        // ATTACH — the product runs that delegate while holding it — which is the only way to hold
+        // it with the factory still LIVE: Teardown sets _tornDown before running its delegate, so
+        // a lock held that way refuses every later Create at the top of the method.
+        OrphanHarness? h = null;
+        h = new OrphanHarness(
+            TestWait.InjectedBudget,
+            logHook: line => { if (line.Contains("construction abandoned")) { outstandingAtAbandonment.Enqueue(h!.Outstanding); } },
+            maxOutstandingAbandoned: 1,
+            lifecycleLockBudget: ConstructionBudget)
+        {
+            AttachGate = new ManualResetEventSlim(false),
+        };
+        var (holder, holderDone, holderThrew) = StartCreate(h.Factory);
+        holder.Start();
+        TestWait.UntilSync(() => h.Events.Contains("attached"), "the holder parked inside the lifecycle lock", () => h.State());
+        Assert.Equal(0, h.Outstanding); // an ordinary in-flight construction never consumes the bound
 
-        h.ConstructGate!.Set();
-        TestWait.UntilSync(() => h.Events.Contains("dispose-entered"), "the orphan disposer holds the lifecycle lock", () => h.State());
-        Assert.Equal(0, h.Outstanding); // the first pool thread is back — the LOCK is not
-
-        // Route (b). The construct gate is already open, so this construction completes and
-        // task.Wait returns true; TryEnter then cannot get _lifecycle inside the budget and the
-        // completed player is abandoned. Outstanding is 0, so C1 admits this create. The one
-        // scheduling assumption is that a trivial already-ungated construction returns inside the
-        // 200 ms budget; if a starved pool ever broke that, this fact REDS (it would take route
-        // (a) and count 1) — it can never pass vacuously.
+        // The construct gate is unarmed, so this construction completes and task.Wait returns TRUE
+        // — deterministically, because its budget is the 60 s injection and no dispatch is that
+        // slow. TryEnter then cannot take _lifecycle inside the 200 ms lock budget, and the
+        // completed player is abandoned. (The product's log line quotes the CONSTRUCTION budget,
+        // so it reads "after 60000ms" here; the caller in fact spent 200 ms, on the lock.)
         var abandoned = Assert.Throws<PlayerConstructionTimeoutException>(() => h.Factory.Create("second.mp3", 1f));
 
         Assert.Contains("abandoned", abandoned.Message);
         Assert.DoesNotContain("cap", abandoned.Message); // the abandonment path, not the C1 refusal
         Assert.Equal(0, h.Outstanding); // THE FACT: abandoned, and nothing counted — nothing is parked
         // Read on the CALLER thread at the abandonment decision itself (the product logs
-        // immediately after CountAbandoned), with the lock holder still parked: the SAME call
-        // site counts on route (a) and must not on route (b).
+        // immediately after CountAbandoned), with the lock holder still parked: the SAME call site
+        // counts on route (a) and must not on route (b). Two factories, one call site — and the
+        // contrast is what keeps either half from passing vacuously.
         Assert.Equal([1, 0], outstandingAtAbandonment.ToArray());
-        Assert.Equal(2, h.AbandonmentLines);
-        Assert.Equal(0, h.CapRefusalLines); // never refused: the cap read 0, correctly
+        // THE ROUTE IS PROVED, NOT ASSUMED: both constructions RETURNED, so the abandoned one was
+        // abandoned by the LOCK and not by its own budget. Read from the fake's own record.
+        Assert.Equal(2, h.Events.Count(e => e == "construct-returned"));
         Assert.Equal(2, Volatile.Read(ref h.ConstructCount));
-        Assert.Equal(0, h.AttachCount);  // a player the waiter could not attach never reaches the mixer
-        Assert.Equal(0, h.DisposeCount); // disposer 1 parked inside dispose, disposer 2 blocked on the lock
+        Assert.Equal(1, h.AbandonmentLines);
+        Assert.Equal(0, h.CapRefusalLines); // never refused: with cap 1, the count read 0, correctly
+        Assert.Equal(1, h.AttachCount);  // only the holder — a player the waiter could not attach never reaches the mixer
+        Assert.Equal(0, h.DisposeCount); // its disposer is blocked on the lock the holder still owns
 
-        h.DisposeGate!.Set();
-        // Both orphans dispose once the lock frees — the second one re-enters the now-open
-        // dispose gate, so the drain is on TWO disposals, not one.
-        TestWait.UntilSync(() => h.DisposeCount == 2, "both orphans are disposed after the lifecycle lock is released", () => h.State());
+        h.AttachGate!.Set(); // the holder's attach returns and _lifecycle frees
+        TestWait.UntilSync(() => holderDone.IsSet, "the holder's create returned", () => h.State());
+        holder.Join();
+        Assert.Null(holderThrew()); // the holder attached and returned normally, as an ordinary create does
+        TestWait.UntilSync(() => h.DisposeCount == 1, "the orphan is disposed once the lifecycle lock is free", () => h.State());
         Assert.Equal(0, h.Outstanding); // disposal never releases a count it never took
-        Assert.Equal(0, h.AttachCount);
+        Assert.Equal(1, h.AttachCount); // and the abandoned player still never reached the mixer
+
+        // Retire leg (a)'s parked stand-in rather than leaking it past the test.
+        parked.ConstructGate!.Set();
+        TestWait.UntilSync(() => parked.Outstanding == 0, "the parked construction returned", () => parked.State());
     }
 
     [Fact]

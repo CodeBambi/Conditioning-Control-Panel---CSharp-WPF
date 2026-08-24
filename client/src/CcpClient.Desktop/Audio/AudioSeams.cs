@@ -279,10 +279,22 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
     private readonly Action<string> _log;
     private readonly string _tag;
     private readonly TimeSpan _budget;
+    private readonly TimeSpan _lifecycleLockBudget;
     private readonly int _maxOutstandingAbandoned;
     private volatile bool _tornDown;
     private int _outstandingAbandoned;
 
+    /// <param name="budget">How long a caller may block on the CONSTRUCTION itself.</param>
+    /// <param name="lifecycleLockBudget">
+    /// How long a caller may block on <see cref="_lifecycle"/> after a construction completed —
+    /// the wedged-native-teardown give-up. Defaults to <paramref name="budget"/>, which is the
+    /// shipped behaviour and what every production call site gets; nothing about the product
+    /// changes by naming it. It is SEPARATE because the two bound different resources (a native
+    /// ctor vs a native teardown holding the lock) and are therefore separately observable: a
+    /// fact about the lock give-up needs that budget to ELAPSE while the construction budget must
+    /// NOT decide anything, and one knob cannot be both. Worth knowing at a call site: a caller's
+    /// worst case is the SUM of the two, so the advertised bound is 2× a single budget.
+    /// </param>
     public OrphanSafePlayerFactory(
         Func<string, float, TPlayer> construct,
         Action<TPlayer> attach,
@@ -290,7 +302,8 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         Action<string> log,
         string tag,
         TimeSpan? budget = null,
-        int? maxOutstandingAbandoned = null)
+        int? maxOutstandingAbandoned = null,
+        TimeSpan? lifecycleLockBudget = null)
     {
         _construct = construct;
         _attach = attach;
@@ -298,6 +311,7 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
         _log = log;
         _tag = tag;
         _budget = budget ?? DefaultBudget;
+        _lifecycleLockBudget = lifecycleLockBudget ?? _budget;
         // Clamped: 0 would mean "refuse all audio forever" the first time anything is abandoned.
         _maxOutstandingAbandoned = Math.Max(1, maxOutstandingAbandoned ?? DefaultMaxOutstandingAbandoned);
     }
@@ -375,8 +389,10 @@ public sealed class OrphanSafePlayerFactory<TPlayer> where TPlayer : class
             var player = task.GetAwaiter().GetResult();
             // BOUNDED: a wedged native device teardown (the backgrounded
             // _backend.Dispose → Teardown) can hold _lifecycle — a caller must never wait on
-            // it unbounded (pre-approach consult finding).
-            if (Monitor.TryEnter(_lifecycle, _budget))
+            // it unbounded (pre-approach consult finding). Its own budget, equal to _budget
+            // unless a caller separated them (see the ctor): this bound is about the TEARDOWN,
+            // not about the construction that already finished.
+            if (Monitor.TryEnter(_lifecycle, _lifecycleLockBudget))
             {
                 try
                 {
