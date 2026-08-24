@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Quarantined camera-capture HARDWARE HARNESS. NOT referenced by client/CcpClient.sln, so it is
+    outside the test floor and outside the warning gate's build — the same quarantine
+    client/spikes/CcpSpike.Audio and CcpSpike.VideoHandoff sit in, for the same reason.
+
+    WHY IT EXISTS. The capture slice's central claim is that a REAL camera opens, delivers frames
+    and is RELEASED. None of that can be established by a unit test: the suite must never open a
+    camera (opening one during a floor run would light a user's camera indicator without their
+    consent, which is the exact thing this capability exists to prevent), and a headless assertion
+    about an injected double proves the gate, never the driver. So the hardware evidence is an
+    opt-in console run a human starts, watches, and reports.
+
+    It references CcpClient.Desktop so it drives the PRODUCT code — the real CameraParticipant, the
+    real consent gate, the real Media Foundation route — rather than a copy of it that could drift.
+    It grants consent into a THROWAWAY data directory it creates and deletes; it never touches the
+    owner's real data root, and it never sets CCP_DATA_ROOT.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12.0</LangVersion>
+    <RootNamespace>CcpSpike.Camera</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- CcpClient.Desktop is a WinExe; referencing it here would otherwise inherit that. -->
+    <UseWindowsForms>false</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CcpClient.Desktop\CcpClient.Desktop.csproj" />
+  </ItemGroup>
+
+</Project>

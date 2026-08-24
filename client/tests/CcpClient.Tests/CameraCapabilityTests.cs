@@ -485,25 +485,61 @@ public sealed class CameraCapabilityTests
     // =====================================================================================
 
     /// <summary>
-    /// <b>NOTHING IN THE CAMERA SEAM CAN CARRY A FRAME</b>, so no frame, crop, tensor, landmark or
-    /// gaze sample can be written to disk, put in a log line, attached to a crash report or handed to
-    /// an AI prompt — not because the code is careful, but because there is no such value to hand
-    /// over.
+    /// <b>NO FRAME CAN BE RETAINED ANYWHERE IN THE CAMERA SEAM, AND NO FRAME CAN ESCAPE IT</b> — so
+    /// no frame, crop, tensor, landmark or gaze sample can be written to disk, put in a log line,
+    /// attached to a crash report or handed to an AI prompt, because there is nothing holding one
+    /// when any of that happens and nothing to hand over.
     ///
-    /// <para><c>client/docs/capability-inventory.md</c>'s "Webcam, face, and gaze tracking" section
-    /// requires all of that to be memory-only. This fact enforces it MECHANICALLY: every public and
-    /// internal member of every type in the namespace is scanned, and a numeric-array, span, memory,
-    /// stream or raw-pointer member fails it. Add a <c>byte[] Frame</c>, a <c>float[] Landmarks</c>,
-    /// a <c>Stream Preview</c> or an <c>IntPtr Buffer</c> anywhere under <c>Camera/</c> and this
-    /// fails immediately, which is the point: the seam has to keep arguing for itself.</para>
+    /// <para><b>This fact was WEAKENED ON ITS FACE by the capture slice, and strengthened underneath,
+    /// so read the change before trusting it.</b> Until a camera could be opened, the rule was
+    /// simply "no member anywhere under <c>Camera/</c> may carry pixels", and that was exactly right
+    /// for a build that decoded nothing. A build that really opens a camera has to touch pixels
+    /// somewhere, so a rule forbidding it everywhere would either be deleted or evaded — the usual
+    /// evasion being a sub-namespace the scan does not reach. Rather than that, the rule now has
+    /// three parts, and TWO OF THEM ARE NEW OBLIGATIONS THAT DID NOT EXIST BEFORE:</para>
+    ///
+    /// <list type="number">
+    /// <item><b>RETENTION IS BANNED OUTRIGHT.</b> No type in the namespace — including the pixel
+    /// boundary, including the interop declarations — may declare a FIELD or a PROPERTY that can
+    /// carry pixels. Nothing in this product can hold the last frame a camera saw, so there is no
+    /// object for a serializer, a logger or a crash dumper to find one in. This is stricter than the
+    /// old rule, which only happened to be satisfied because nothing decoded.</item>
+    /// <item><b>ESCAPE IS BANNED except at ONE NAMED TYPE.</b> Pixel-carrying parameters and returns
+    /// are allowed only on <c>CameraFrameProbe</c> and only on PRIVATE members elsewhere. The
+    /// boundary type is checked to be <c>static</c> and <c>abstract sealed</c> with NO fields at all,
+    /// and its pixel parameters are <c>ReadOnlySpan&lt;byte&gt;</c>, which the C# compiler itself
+    /// forbids storing in a field, capturing in a closure or boxing. A frame handed to it cannot
+    /// outlive the call by construction rather than by care.</item>
+    /// <item><b>NATIVE HANDLES stay confined to the operating system's own signatures</b> —
+    /// <c>[ComImport]</c> declarations and <c>[DllImport]</c> methods. Those are the OS's shapes, not
+    /// this port's design. An <c>IntPtr</c> anywhere else still fails immediately.</item>
+    /// </list>
+    ///
+    /// <para>So: add a <c>byte[] Frame</c> field, a <c>float[] Landmarks</c> property, a
+    /// <c>Stream Preview</c>, a public method returning pixels, or an <c>IntPtr</c> on a hand-written
+    /// type anywhere under <c>Camera/</c>, and this fails. The seam still has to keep arguing for
+    /// itself; it now has to argue for one more thing than it used to.</para>
     /// </summary>
     [Fact]
-    public void NothingInTheCameraSeamCanCarryAFrame_ACropATensorALandmarkOrAGazeSample()
+    public void NoFrameCanBeRETAINEDAnywhereInTheCameraSeam_AndNoneCanESCAPEItExceptAtTheOnePixelBoundary()
     {
         var types = typeof(CameraCapability).Assembly.GetTypes()
             .Where(type => type.Namespace == typeof(CameraCapability).Namespace)
             .ToList();
         Assert.NotEmpty(types); // the scan below is not vacuous
+
+        // The ONE type allowed to take pixels, named here so that adding a second is an edit to this
+        // fact rather than a quiet addition under Camera/.
+        var boundary = typeof(CameraFrameProbe);
+        Assert.Contains(boundary, types);
+
+        // It cannot RETAIN a frame, and that is checked rather than asserted in prose: a static class
+        // with no fields has nowhere to put one, and every pixel parameter below is a ref struct the
+        // compiler will not let anybody store.
+        Assert.True(boundary.IsAbstract && boundary.IsSealed, "the pixel boundary must be a static class");
+        Assert.Empty(boundary.GetFields(
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static
+            | BindingFlags.DeclaredOnly));
 
         var offenders = new List<string>();
         var scanned = 0;
@@ -514,17 +550,19 @@ public sealed class CameraCapabilityTests
 
             // A [ComImport] declaration is the OPERATING SYSTEM's signature rather than this port's
             // design: it holds no state, and its IntPtr parameters are COM out-parameters and error
-            // logs (IPropertyBag.Read's pErrorLog is one). Native handles are therefore allowed on
-            // those declarations and banned everywhere else — a real pointer, an array, a span, a
-            // memory or a stream is still banned on every type including these.
+            // logs (IPropertyBag.Read's pErrorLog and IMFMediaBuffer::Lock's ppbBuffer are two).
+            // Native handles are allowed there and on P/Invoke declarations, which are the same
+            // thing — a signature Windows wrote — and banned everywhere else.
             var comImport = type.IsDefined(typeof(System.Runtime.InteropServices.ComImportAttribute), false);
 
+            // RETENTION: fields and properties may NEVER carry pixels, on any type at all, native
+            // handles included nowhere except a COM declaration's own members.
             foreach (var property in type.GetProperties(flags))
             {
                 scanned++;
                 if (CarriesPixels(property.PropertyType, comImport))
                 {
-                    offenders.Add($"{type.Name}.{property.Name} : {property.PropertyType.Name}");
+                    offenders.Add($"RETAINS {type.Name}.{property.Name} : {property.PropertyType.Name}");
                 }
             }
 
@@ -533,29 +571,41 @@ public sealed class CameraCapabilityTests
                 scanned++;
                 if (CarriesPixels(field.FieldType, comImport))
                 {
-                    offenders.Add($"{type.Name}.{field.Name} : {field.FieldType.Name}");
+                    offenders.Add($"RETAINS {type.Name}.{field.Name} : {field.FieldType.Name}");
                 }
             }
 
+            // ESCAPE: a member that can hand pixels across a boundary. Private members of the
+            // implementation may (the capture path has to copy a locked native buffer somewhere);
+            // anything callable from outside the type may not, except on the named boundary.
             foreach (var method in type.GetMethods(flags))
             {
                 scanned++;
-                if (CarriesPixels(method.ReturnType, comImport)
-                    || method.GetParameters().Any(parameter => CarriesPixels(parameter.ParameterType, comImport)))
+                var nativeAllowed = comImport || method.Attributes.HasFlag(MethodAttributes.PinvokeImpl);
+                if (!CarriesPixels(method.ReturnType, nativeAllowed)
+                    && !method.GetParameters().Any(parameter => CarriesPixels(parameter.ParameterType, nativeAllowed)))
                 {
-                    offenders.Add($"{type.Name}.{method.Name}(...) : {method.ReturnType.Name}");
+                    continue;
                 }
+
+                if (type == boundary || method.IsPrivate)
+                {
+                    continue;
+                }
+
+                offenders.Add($"ESCAPES {type.Name}.{method.Name}(...) : {method.ReturnType.Name}");
             }
         }
 
         Assert.True(scanned > 50, $"only {scanned} members scanned — the seam scan has lost its subject");
         Assert.True(
             offenders.Count == 0,
-            "the camera seam gained a member that can carry image or per-frame biometric data, which "
-            + "client/docs/capability-inventory.md requires to be memory-only:\n  " + string.Join("\n  ", offenders));
+            "the camera seam gained a member that can RETAIN image or per-frame biometric data, or that can let "
+            + "it ESCAPE, which client/docs/capability-inventory.md requires to be memory-only:\n  "
+            + string.Join("\n  ", offenders));
 
         // And there is no audio anywhere in it either: upstream's rule is that audio capture is never
-        // opened (Services/Webcam/WebcamTrackingService.cs:805-806), and here there is no member to
+        // opened (Services/Webcam/WebcamTrackingService.cs:30), and here there is no member to
         // open one with.
         Assert.DoesNotContain(types, type => type.Name.Contains("Audio", StringComparison.OrdinalIgnoreCase));
     }
