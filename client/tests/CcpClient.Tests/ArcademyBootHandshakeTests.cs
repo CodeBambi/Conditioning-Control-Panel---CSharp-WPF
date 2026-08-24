@@ -31,6 +31,14 @@ namespace CcpClient.Tests;
 /// pair <c>GoonHostWindow.axaml.cs:270</c> and <c>:629</c> already use against a real WebView2.
 /// </para>
 ///
+/// <para><b>The third fact is slice 5's, and it is here rather than beside the rest of slice 5
+/// for one reason: upstream posts the native-state seed INSIDE the handshake</b>
+/// (<c>SeedNativeState</c> is called from <c>OnPageReady</c>, <c>ArcademyHostService.cs:402</c>),
+/// and the page's own buffer-and-replay for it (<c>arcademy/boot.js:195-205</c>,
+/// <c>:148-153</c>) only exists because the frame lands mid-boot. It is the same live loop, one
+/// boot, and it needs the page to keep talking after <c>shell live</c> — which is the only reason
+/// <see cref="BootAsync"/> grew its two optional parameters.</para>
+///
 /// <para><b>WHAT THIS DOES NOT PROVE, stated first-class because the gap is the point of the
 /// file.</b> The DOM is a double (see the harness header): there is no layout, no paint, no
 /// compositor, no window and no user input. So a shell that reports itself LIVE here is a shell
@@ -44,6 +52,10 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
 {
     private static readonly string[] RepoAnchorParts = ["client", "CcpClient.sln"];
     private static readonly string[] HarnessParts = ["client", "tests", "CcpClient.Tests", "arcademy-boot-harness.mjs"];
+
+    /// <summary>What <c>boot.js</c> appends to a suspend it could not apply yet because the shell
+    /// did not exist (<c>arcademy/boot.js:204-205</c>).</summary>
+    private const string BufferedMarker = " [buffered until the shell exists]";
 
     /// <summary>bridge.js's boot allowlist verbatim (<c>arcademy/bridge.js:47</c>) — the only
     /// frame types permitted to leave the page before <c>init</c> has landed.</summary>
@@ -153,6 +165,83 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
         Assert.DoesNotContain(run.HostLog, line => line.Contains("unhandled message 'meta-command'", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// <b>SLICE 5, PAGE-SIDE: a covering native video really does freeze the real shell, and the
+    /// class really does come back when the video ends.</b> Every other suspension fact in this
+    /// suite pins the FRAME the host emits; this one runs the payload's own freeze path
+    /// (<c>arcademy/shell/shell.js:1250-1272</c> <c>applySuspend</c>, reached through
+    /// <c>:1344</c> <c>onSuspend</c>) on the real bytes and reads what the page says about it.
+    ///
+    /// <para><b>Why the page's own words are evidence rather than narration.</b> Each of the three
+    /// lines asserted below is written by <c>boot.js</c> AFTER the shell's suspend path returned,
+    /// and never if it threw: the replay line is inside the try whose catch writes "buffered
+    /// suspend replay threw" instead (<c>:148-153</c>), and the live-shell line sits after
+    /// <c>shell.onSuspend(m)</c> inside a <c>guard()</c> whose catch writes "suspend handler
+    /// threw" and skips it (<c>:190-205</c>). So their presence means the real
+    /// <c>applySuspend</c> ran end to end — it set the global freeze, re-rendered the topbar with
+    /// the <c>class_suspended</c> chip and re-rendered the board with every class button disabled
+    /// (<c>shell.js:343</c>, <c>:383</c>).</para>
+    ///
+    /// <para><b>WHICH of the page's two seed paths runs is a RACE, and this fact refuses to pin
+    /// it.</b> The seed is posted at the tail of the handshake, and the shell is built behind two
+    /// dynamic imports (<c>boot.js:129-135</c>), so the frame may find the shell already there or
+    /// still missing — measured BOTH ways on this machine. The page handles each: it applies the
+    /// suspend directly, or BUFFERS it and replays it once the shell exists (<c>:198-203</c>,
+    /// <c>:148-153</c>). So the assertion is the invariant that holds under either — <b>every
+    /// buffered suspend is replayed</b> — and never the ordering that happened to occur.</para>
+    ///
+    /// <para><b>What it still does not prove:</b> nothing was DRAWN. The DOM is a double, so a
+    /// class that reports itself frozen is one whose freeze LOGIC ran — never one a user could
+    /// see was frozen. No pixel, no layout, no input, no audio, no window. Windows only.</para>
+    /// </summary>
+    [Fact]
+    public async Task ACoveringNativeVideo_FreezesTheRealShell_AndItsEndLiftsTheFreeze()
+    {
+        var run = await BootAsync(
+            // A mandatory video is ALREADY covering the screen when the page opens — upstream's
+            // own reason for seeding at all (ArcademyHostService.cs:410-413).
+            configure: session => session.NativeStateOwnsScreen = () => true,
+            afterShellLive: async driver =>
+            {
+                // The video ends. This is the exact call ArcademyNativeSuspension makes when the
+                // port's mandatory video takes its picture down.
+                driver.Session.NativeVideoChanged(playing: false);
+                await driver.PageSaid("suspend off (video)");
+            });
+
+        Assert.Empty(run.HarnessErrors);
+        Assert.DoesNotContain("boot-error", run.PageTypes);
+
+        // The host's side: the handshake, then the seed, then the lift. Nothing else.
+        Assert.Equal(new[] { "init", "fullscreen", "suspend", "suspend" }, run.HostTypes);
+        Assert.True(run.HostFrame(2).GetProperty("on").GetBoolean());
+        Assert.Equal("video", run.HostFrame(2).GetProperty("reason").GetString());
+        Assert.False(run.HostFrame(3).GetProperty("on").GetBoolean());
+
+        // The page's side, in the payload's own voice. The buffered marker is normalized away
+        // because which path the seed took is a race (see the remarks); the invariant that a
+        // buffered suspend is REPLAYED rather than dropped is asserted on its own below.
+        var logs = run.PageLogs;
+        var narration = logs.Select(l => l.Replace(BufferedMarker, "", StringComparison.Ordinal)).ToList();
+        var froze = narration.IndexOf("suspend ON (video)");
+        var live = narration.IndexOf("shell live");
+        var lifted = narration.IndexOf("suspend off (video)");
+        Assert.True(
+            froze >= 0 && live >= 0 && lifted > froze,
+            "the page did not narrate the seed and then the lift: " + string.Join(" | ", logs));
+
+        // Nothing was dropped on the way: every suspend that arrived before the shell existed was
+        // replayed into it. Zero and zero on a run where the shell won the race, one and one on a
+        // run where it did not — and 1/0 is the state that would leave a class frozen for good.
+        Assert.Equal(
+            logs.Count(l => l.Contains(BufferedMarker, StringComparison.Ordinal)),
+            logs.Count(l => l == "replayed buffered suspend (video)"));
+
+        // And the shell never fell over on either edge — the two lines that would replace them.
+        Assert.DoesNotContain(logs, l => l.Contains("suspend handler threw", StringComparison.Ordinal));
+        Assert.DoesNotContain(logs, l => l.Contains("buffered suspend replay threw", StringComparison.Ordinal));
+    }
+
     // ==================================================================================
     // The live loop. Kept out of the [Fact] bodies: filesystem and process plumbing in a
     // fact body is a silencing shape (VacuousShapeDetector), and the facts above are meant
@@ -165,7 +254,16 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
     /// The wait is the approved bounded helper and the terminal condition is a deterministic
     /// signal — the page's own `shell live` or `boot-error` — never an elapsed guess.
     /// </summary>
-    private async Task<BootRun> BootAsync()
+    /// <param name="configure">Applied to the live session BEFORE the page can say anything, which
+    /// is the only place a native state that is already true at boot can be set: upstream hooks
+    /// its own producers before the window is shown for exactly this reason
+    /// (<c>ArcademyHostService.cs:205-212</c>).</param>
+    /// <param name="afterShellLive">Runs once the page has settled its boot and BEFORE stdin is
+    /// closed, so a fact can keep the conversation going. Its waits are the page's own words
+    /// (<see cref="BootDriver.PageSaid"/>) — never an elapsed guess, and never a poll.</param>
+    private async Task<BootRun> BootAsync(
+        Action<ArcademySession>? configure = null,
+        Func<BootDriver, Task>? afterShellLive = null)
     {
         var harness = Path.Combine([FindRepoRoot(), .. HarnessParts]);
         Assert.True(File.Exists(harness), $"the arcademy boot harness is missing at {harness}");
@@ -206,6 +304,8 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
             var pageFrames = new List<string>();
             var hostFrames = new List<string>();
             var harnessErrors = new List<string>();
+            var pageLogs = new List<string>();
+            var waiters = new List<(string Message, TaskCompletionSource Landed)>();
             var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
             var session = new ArcademySession(
@@ -231,6 +331,10 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
                 },
                 new SinkAdapter(_log));
 
+            // Before a single byte can arrive: the native state a page opening RIGHT NOW would
+            // meet is not something a fact can set once the handshake is under way.
+            configure?.Invoke(session);
+
             var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
             var reader = Task.Run(async () =>
             {
@@ -254,9 +358,22 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
                     }
 
                     var json = line[2..];
+                    List<TaskCompletionSource> landed = [];
                     lock (gate)
                     {
                         pageFrames.Add(json);
+                        if (PageLogOf(json) is { } said)
+                        {
+                            pageLogs.Add(said);
+                            // Wake anything waiting on this exact sentence, and stop waiting on it.
+                            landed = [.. waiters.Where(w => w.Message == said).Select(w => w.Landed)];
+                            waiters.RemoveAll(w => w.Message == said);
+                        }
+                    }
+
+                    foreach (var wake in landed)
+                    {
+                        wake.TrySetResult();
                     }
 
                     // THE LIVE HALF: the page's frame goes straight into the real router, and
@@ -271,6 +388,36 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
                 }
             }, TestContext.Current.CancellationToken);
 
+            // A DETERMINISTIC wait on the page's own voice. The sentence has either already
+            // arrived or a waiter is armed for it before this returns, so there is no window in
+            // which it can be missed — and no poll, no sleep and no elapsed guess anywhere in it.
+            Task PageSaid(string message)
+            {
+                var landed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                lock (gate)
+                {
+                    if (pageLogs.Contains(message))
+                    {
+                        landed.TrySetResult();
+                    }
+                    else
+                    {
+                        waiters.Add((message, landed));
+                    }
+                }
+
+                return TestWait.Until(
+                    landed.Task,
+                    $"the Arcademy page to say `{message}`",
+                    () =>
+                    {
+                        lock (gate)
+                        {
+                            return $"page said: {string.Join(" | ", pageLogs)}";
+                        }
+                    });
+            }
+
             try
             {
                 await TestWait.Until(
@@ -283,6 +430,13 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
                             return $"page frames={pageFrames.Count}, host frames={hostFrames.Count}";
                         }
                     });
+
+                if (afterShellLive is not null)
+                {
+                    // The page is up and still listening. Whatever this posts crosses the same
+                    // bridge, and every wait inside it is the page's own answer coming back.
+                    await afterShellLive(new BootDriver(session, PageSaid));
+                }
 
                 // Closing stdin is how the harness is asked to leave (it has no timer of its own).
                 process.StandardInput.Close();
@@ -316,6 +470,32 @@ public sealed class ArcademyBootHandshakeTests : IDisposable
                     session.BootFailed, standardError);
             }
         }
+    }
+
+    /// <summary>The message of a page <c>log</c> frame, or null for any other frame. The payload's
+    /// diagnostics channel is the only voice it has without devtools
+    /// (<c>arcademy/boot.js:57-59</c>).</summary>
+    private static string? PageLogOf(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("type", out var type) || type.GetString() != "log")
+        {
+            return null;
+        }
+
+        return root.TryGetProperty("msg", out var msg) ? msg.GetString() : null;
+    }
+
+    /// <summary>Everything a fact is allowed to do to a page that is already up: post through the
+    /// REAL host, and wait on the page's own answer.</summary>
+    /// <param name="Session">The live host. Nothing here decides what the page will say.</param>
+    /// <param name="Await">Waits for one exact sentence from the payload's diagnostics channel.</param>
+    private sealed record BootDriver(ArcademySession Session, Func<string, Task> Await)
+    {
+        /// <summary>Wait until the page has said exactly this. A deterministic signal from the
+        /// payload itself — never an elapsed guess.</summary>
+        public Task PageSaid(string message) => Await(message);
     }
 
     /// <summary>The page's own end-of-boot signals — the only two ways boot.js settles
