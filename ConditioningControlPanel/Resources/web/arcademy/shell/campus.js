@@ -1501,10 +1501,14 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       if (!d) return;
       /* The pointer has landed on something the plan can name. Throttled, and
        * deliberately under everything else on the stage - this is the felt of
-       * the table, not an announcement. */
+       * the table, not an announcement.
+       * 0.06, not 0.15: owner verdict 2026-08-24 took every HOVER cue down 60%
+       * because they trigger often - a pointer crossing the plan lands this
+       * dozens of times a minute, and the throttle only bounds the RATE, not
+       * the fatigue. The gap window is unchanged; only the level moved. */
       try {
         const now = Date.now();
-        if (now - lastHoverCue >= HOVER_GAP_MS) { lastHoverCue = now; sfx('pad', 0.15); }
+        if (now - lastHoverCue >= HOVER_GAP_MS) { lastHoverCue = now; sfx('pad', 0.06); }
       } catch (e) { /* noop */ }
       tipName.textContent = d.name || '';
       tipStatus.textContent = d.status || '';

@@ -16,13 +16,20 @@
  * `.is-reduced`, which zeroes the transforms and the fades).
  *
  * THE RESERVED WALL ZONE (SET-NOTES, owner order: the board is NEVER baked into
- * art) is percentages OF THE 16:9 FRAME, not of the window: x 25-60%, y 18-48%
- * of `art/vn/vn-02-entrance-hall.png`. index.js positions the real
- * `shell/splitflap.js` board there and scales it to fit.
+ * art) is percentages OF THE 16:9 FRAME, not of the window: x 37.5-62.5%,
+ * y 21.6-45.2% of `art/vn/vn-02-entrance-hall.png`. index.js positions the
+ * real `shell/splitflap.js` board there and scales it to fit.
+ *
+ * THE NUMBERS FOLLOW THE PAINT, NOT THE OTHER WAY AROUND. The 2026-08-24 art
+ * re-gen (text-hygiene pass - the first plates grew gibberish on every notice
+ * and cabinet) landed the bare warm panel at x 516-860, y 166-347 of the
+ * 1376x768 plate: narrower and further right than the first plate's
+ * x 25-60% / y 18-48%, which now straddles the left doorway. These fractions
+ * were measured off the new panel. Re-measure if set-02 is ever re-generated.
  * ==========================================================================*/
 
 /** The reserved mount zone on set-02, as fractions of the letterboxed frame. */
-export const BOARD_ZONE = Object.freeze({ x: 0.25, y: 0.18, w: 0.35, h: 0.30 });
+export const BOARD_ZONE = Object.freeze({ x: 0.375, y: 0.216, w: 0.250, h: 0.236 });
 
 /** Backgrounds, relative to the arcademy web root. */
 export const ART = Object.freeze({

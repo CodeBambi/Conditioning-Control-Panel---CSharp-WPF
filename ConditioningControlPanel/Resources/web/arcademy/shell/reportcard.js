@@ -18,7 +18,7 @@
  * ==========================================================================*/
 
 import { t, gradeLabel, tierLabel } from '../core/lexicon.js';
-import { exitBar, sign as signExit } from './exits.js';
+import { exitBar, sign as signExit, campusPillRow } from './exits.js';
 
 /** Mod-anonymous, name-only, no URL. Do not "improve" this. */
 export const SHARE_HEADER = 'The Arcademy';
@@ -175,6 +175,14 @@ export function createReportCard({ ceremonies, toast, log } = {}) {
     const paper = el('div', 'arc-report-paper');
     root.appendChild(paper);
     const put = (n) => paper.appendChild(n);
+
+    /* THE CREST, PINNED TO THE TOP OF THE PAPER. Done is still the lit sign at
+     * the bottom of the stage; this is the same journey with the school's name
+     * on it, and it sticks so a day with four classes, a share block and a
+     * stamp can never scroll the way home off the top. Same verb as Done. */
+    put(campusPillRow({
+      onActivate: () => { try { if (s.onDone) s.onDone(); } catch (e) { /* noop */ } },
+    }));
 
     put(el('p', 'arc-kicker', s.title || t('report_card', 'Report Card')));
     put(el('h2', 'arc-h2', s.dateLabel || (s.timetable && s.timetable.dateSeed) || ''));

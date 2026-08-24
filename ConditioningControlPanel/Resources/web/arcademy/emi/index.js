@@ -39,13 +39,54 @@ let voiceGate = null;
  * 2.5s replay grace, and losing the race cost the day-1 introduction. */
 const VOICE_PENDING_MS = 6000;
 
-/** Replay the one buffered moment - but only once EMI could actually say it. */
+/**
+ * THE INTRO OWNS THE SCREEN, AND SHE WAITS IT OUT (owner playtest, 2026-08-24:
+ * "the mascot is speaking underneath the intro and first few bits"). Exactly two
+ * things are ever laid over the whole page during an opening - boot.js's
+ * `#arc-loader` splash, whose entire contract is `hidden`, and a FIRST BELL
+ * scene, whose `#arc-vn` layer exists only while a scene is playing - and she
+ * may speak under neither.
+ *
+ * This reads the DOM rather than a flag the shell hands down, and that is the
+ * choice: both ids are already the page's contract (shell.js keeps its own
+ * `splashUp()` read of the loader, vn/index.js mounts and drops the layer as one
+ * verb), and a boolean would have to be told about the WALK and the MAIL scenes
+ * too - they mount that same layer minutes after any "the boot is over" latch
+ * would have flipped. Reading the screen every time is honest for every scene
+ * there will ever be. A page with no document (the node DOM double) answers
+ * false, so every suite runs exactly as it did.
+ */
+function introHolding() {
+  try {
+    if (typeof document === 'undefined' || !document.getElementById) return false;
+    const loader = document.getElementById('arc-loader');
+    if (loader && !loader.hidden) return true;
+    return !!document.getElementById('arc-vn');
+  } catch (e) { return false; }
+}
+
+/** Replay the one buffered moment - but only once EMI could actually say it.
+ *  A shut gate returns WITHOUT spending the slot, which is what makes the wait
+ *  a deferral: the held moment sits there until `noteIntroDone` comes for it. */
 function flushVoice() {
   const q = voicePending;
   if (!q || !voice || !voice.ready || (voiceGate && !voiceGate())) return false;
   voicePending = null;
   if (Date.now() - q.when >= VOICE_PENDING_MS) return false;
   try { return !!voice.onMoment(q.name, q.payload); } catch (e) { return false; }
+}
+
+/**
+ * THE INTRO IS OVER (shell.js's first-bell edge is the one caller). Nothing that
+ * waited on it is stale - the moment was never allowed to happen, it was held -
+ * so the slot is RE-STAMPED before the flush. A splash plus a cold open runs far
+ * longer than VOICE_PENDING_MS, and the day-1 introduction is the exact line
+ * that window was written to protect: expiring it here would lose the beat the
+ * gate was added to save.
+ */
+function noteIntroDone() {
+  if (voicePending) voicePending.when = Date.now();
+  return flushVoice();
 }
 
 /** The shell's accessor - `moments.js` and any later caller read EMI here. */
@@ -193,6 +234,21 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     say(line, opts) {
       const o = opts || {};
       if (typeof line !== 'string' || !line.trim()) return false;
+      /* NOT UNDER THE INTRO. `voiceGate` already stops the decision engine from
+       * spending a beat while the splash or a scene is up, but the bubble is a
+       * door of its own - the wordless table, the off channels and the Annex
+       * reveal all reach it without passing the voice - so the law is enforced
+       * where the line actually lands. Deliberately NOT `remember`ed: the ONE
+       * held moment is the voice's slot and it replays through `introDone`, and
+       * a say buffered here as well would land the same line twice.
+       * AND THE BLIPS. If a babble slipped in on the frame before the layer went
+       * up, this is where it is cut: `idle()` runs setBubble(null), which is the
+       * one path in widget.js that stops the blip ladder (trap 70). Nothing else
+       * reaches emi/vox.js's setTimeouts. */
+      if (introHolding()) {
+        try { if (widget.saying()) widget.idle(); } catch (e) { /* noop */ }
+        return false;
+      }
       if (!widget.hasFace()) { remember(() => api.say(line, o)); return false; }
       const make = widget.makeSayFn();
       if (!make) return false;
@@ -258,6 +314,18 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
     /** Debug: the one moment waiting on the voice + the face, by name. */
     get pendingMoment() { return voicePending ? voicePending.name : null; },
 
+    /**
+     * THE INTRO HAS FINISHED - the splash is down and the opening has closed.
+     * `shell.js maybeFirstBell` is the one caller, because that is the single
+     * place on the page that knows both latches are set. It is a FLUSH, not a
+     * latch: the gate keeps reading the screen afterwards, so a later FIRST BELL
+     * scene still gets its silence. Held moments land on this call.
+     */
+    introDone() { return noteIntroDone(); },
+
+    /** Debug: is a splash or a scene holding her tongue right now? */
+    get introHeld() { return introHolding(); },
+
     /** Her babble (emi/vox.js), once it has loaded. Test/debug handle only. */
     get vox() { return vox; },
 
@@ -282,7 +350,10 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
    * engine costs EMI her lines and nothing else - she keeps her face, her
    * verbs and the whole wordless table. It loads AFTER the controller exists
    * because it speaks through it. */
-  voiceGate = () => widget.hasFace();
+  /* THE GATE IS NOW TWO QUESTIONS: can she draw a bubble, and is the screen
+   * hers to speak on. Both are cheap and both are read at the instant a moment
+   * arrives, so a beat that finds either shut is HELD rather than spent. */
+  voiceGate = () => widget.hasFace() && !introHolding();
   import('./voice.js').then((m) => {
     if (singleton !== api || !m || typeof m.createVoice !== 'function') return;
     voice = m.createVoice({
@@ -290,9 +361,11 @@ export function mountEmi({ layer, store, toast, enabled = true, log, assets, set
       emi: api,
       stats: () => api.stats(),
       onGesture: widget.onGesture,
-      // The two halves of the boot race, handed to the engine so it can never
-      // spend a one-shot beat on a face that cannot draw it yet.
-      canPerform: () => widget.hasFace(),
+      // The boot race, handed to the engine so it can never spend a one-shot
+      // beat on a face that cannot draw it yet - or on a screen the intro still
+      // owns, which is the same waste for the same reason. voice.js banks the
+      // refusal in its own one slot and answers honestly either way.
+      canPerform: () => widget.hasFace() && !introHolding(),
       onReady: () => { flushVoice(); },
       log: say,
     });

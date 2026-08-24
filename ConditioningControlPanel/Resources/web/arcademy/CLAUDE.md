@@ -1553,6 +1553,41 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     change echoes the WHOLE `audioLevels` object and neither audio.js nor settings.js
     consumes that shape - live levels move on relaunch, not mid-session.
 
+89. **A BEAT CHANGE IS A TRANSITION NOW, SO A SEAM IS LONG ENOUGH TO REACH THE DOOR
+    INSIDE IT (AV CLUB, owner playtest 2026-08-24).** The owner's order was "slow down the
+    intro beats... about half a second of black screen with a sliding fading transition
+    when we change a beat", and `vn/index.js applyPlate` is where it landed: out, black,
+    in, settle, all of it on the `BEAT_*` dials and nowhere else. Four things follow, and
+    three of them are the ways it can bite.
+    - **No beat may start before its plate has landed.** `applyPlate(url, motion, done)`
+      pays `done` when the arrival has settled, and EVERY caller hands it the next beat.
+      Painting a caption without going through that callback puts the lower third over a
+      black rectangle, which is the exact thing this wave was written to stop.
+    - **The plate cannot slide itself.** `data-motion` fills a camera keyframe and a
+      filling animation out-ranks an inline transform (trap 71), so the slide lives on
+      `.arc-vn-bgwrap`, the carriage AROUND the plate. Its default state is "parked off
+      the entry side, invisible" - that is what lets the swap happen mid-hold with no
+      `transition:none` dance. The neon wash rides in the carriage too, or the arch would
+      still be glowing through a hold that is supposed to be black.
+    - **A SEAM WITH NO SCENE IN IT STILL NEEDS `skipTo`.** A transition runs over a second
+      and no `runScene` owns the pill while one plays, so the cold open parks `toBoard`
+      (LATCHED - two landings must be free or the wall gets two boards) and the walk parks
+      its settle, both immediately after `mountLayer`. Leave `skipTo` null across a seam
+      and the hold-to-skip pill is dead for the length of it, silently.
+    - **A skip that lands mid-transition JOINS it, it does not restart it.** A repeat
+      request for the plate already on its way in queues behind the arrival; a genuinely
+      new plate bumps `plateToken` and the beats queued behind the abandoned one are
+      DROPPED, never replayed (`dropPlateWaiters` is the skip path saying so out loud).
+      Teardown cancels those debts rather than paying them - `unmountLayer` clears the
+      queue and bumps the token, and the one continuation that must always run is the
+      settler's, which is `closeLayer`'s business. Verified: a hold landing inside the
+      black settles the layer and hands the night back, with nothing left in `body`.
+    boot.js is UNTOUCHED by all of this. `scheduleIntroCues`'s beats end at 2650ms and the
+    splash is up until at least 3270ms, the seam delay starts strictly AFTER `hidden` lands,
+    and every cue timer re-checks `splashIsUp()` - so no cue can fire into the new black
+    (traps 66 and 76 both still hold: `failBoot` still snaps, `settler` is still the one
+    funnel).
+
 
 ## 5. The game module contract (short version)
 

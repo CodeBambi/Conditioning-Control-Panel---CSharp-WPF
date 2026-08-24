@@ -61,7 +61,16 @@ export const VOX_DIALS = Object.freeze({
   BURST_MAX_MS: 1400,        // ...and on its length. Always ends inside the 3s hold.
 
   /* --- prosody, in semitones -------------------------------------------- */
-  BASE_PITCH: 1.0,
+  /* THE TRANSPOSE (owner verdict, 2026-08-24: "too acute - transposed down").
+   * She sat right on the recipe's own 760Hz and read as shrill over a long
+   * night, so the whole voice drops 18% - about three and a half semitones. It
+   * is a MULTIPLIER and nothing below it moved, so every mood travels with her:
+   * celebration is still the brightest, sad still the lowest, and the distance
+   * between any two is what it always was. A transpose, not a re-voicing.
+   * Measured over 200k blips per mood afterwards, the lowest `sad` blip lands
+   * at 0.566 and the highest `celebration` one at 1.27, so neither end of the
+   * clamp window below is ever reached and no mood is flattened against it. */
+  BASE_PITCH: 0.82,
   JITTER_SEMI: 1.2,          // +/- per blip (scaled by the mood's own jitter)
   DECLINE_SEMI: 2.0,         // a sentence starts +1 and drifts down this far
   QUESTION_RISE: 3.0,        // '?' lifts the last blips +1..+RISE, stepped and CLEAN
@@ -88,7 +97,11 @@ export const VOX_DIALS = Object.freeze({
   }),
 });
 
-/** audio.js clamps a cue's pitch to this window; we never send one outside it. */
+/** audio.js clamps a cue's pitch to this window; we never send one outside it.
+ *  The floor stayed at 0.5 through the 2026-08-24 transpose on purpose:
+ *  `shell/audio.js clampPitch` holds the same two numbers and re-clamps every
+ *  cue, so widening ours would move where a clip happened rather than whether
+ *  it did - and nothing clips. The sad and smug sags keep their full depth. */
 const PITCH_MIN = 0.5;
 const PITCH_MAX = 2;
 

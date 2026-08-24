@@ -507,6 +507,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let bellRung = false;
   let bellSplashCleared = false;
   let bellBoardRevealed = false;
+  /* ...and the same two latches are what EMI has been waiting on. She is told
+   * once, on the edge; see maybeFirstBell. */
+  let introToldEmi = false;
   let active = null;               // the running class (see startClass)
   let suspendedGlobally = false;
   let destroyed = false;
@@ -722,6 +725,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function maybeFirstBell() {
     if (bellRung || destroyed) return;
     if (!bellSplashCleared || !bellBoardRevealed) return;
+    /* THE INTRO IS OVER, AND EMI IS THE ONE WHO NEEDS TELLING (owner playtest,
+     * 2026-08-24: "the mascot is speaking underneath the intro"). Both latches
+     * are set here and nowhere else, so this is the page's one honest edge for
+     * it: the splash has landed AND the opening has closed. Her gate has been
+     * holding the day-1 introduction all this time; this is the call it lands
+     * on. Deliberately ABOVE the screen test - her introduction is owed to her
+     * whatever screen the player wandered to while a scene played, and the bell
+     * is not. Once only, and a mascot may never hold up the bell. */
+    if (!introToldEmi) {
+      introToldEmi = true;
+      try { const mascot = getEmi(); if (mascot && mascot.introDone) mascot.introDone(); }
+      catch (e) { say('EMI intro flush threw (ignored): ' + ((e && e.message) || e)); }
+    }
     if (screen !== 'board' || active) return;
     bellRung = true;
     sfx('bell', 0.5);
@@ -770,6 +786,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (dom && dom.topbar) dom.topbar.hidden = !!mode;
   }
 
+  /* ---------------------- the way home ----------------------------------
+   * ONE VERB, and it routes rather than tearing anything down. A live class
+   * walks its own leave-confirm (askLeaveClass, which ends in the ordinary
+   * showBoard()); everything else is already one showBoard() from the gates.
+   * Nothing here is a second teardown path, and nothing here touches the Esc
+   * ladder - trap 29's corollary still owns every rung of that walk.
+   * -------------------------------------------------------------------- */
+  function backToCampus() {
+    if (!active) { showBoard(); return; }
+    /* The confirm mounts on the CLASS's own root, so the class has to be the
+     * thing on screen before it can be asked about. The settings page is the
+     * one way to be standing here with a live class parked off-screen, and
+     * showClassScreen is the same re-seat its own Back button uses. */
+    if (screen !== 'class') showClassScreen();
+    askLeaveClass();
+  }
+
   /* ---------------------- top bar --------------------------------------- */
   function renderTopbar() {
     if (!dom || !dom.topbar) return;
@@ -781,7 +814,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // the hanging timetable plaque under it (owner screenshot, 0824).
     bar.hidden = !!campus;
     bar.textContent = '';
-    bar.appendChild(el('span', 'arc-title', t('arcademy', 'The Arcademy')));
+    /* THE WORDMARK IS THE DOOR (owner ruling 2026-08-24). On the campus the
+     * name is just the name - a back button pointing at the room you are
+     * standing in is noise, and the hub wears its own crest in the scene. On
+     * every other screen this bar is up for (the settings page, and the plain
+     * board fallback's siblings) the same slot carries the campus pill, so the
+     * school's name is the thing you press to get back to the school. It is
+     * shell/exits.js's node, not a lookalike: one mint, one behaviour. */
+    if (screen === 'board') {
+      bar.appendChild(el('span', 'arc-title', t('arcademy', 'The Arcademy')));
+    } else {
+      bar.appendChild(campusPill({ onActivate: () => backToCampus() }));
+    }
     bar.appendChild(el('span', 'chip year', tierLabel(maxTier())));
 
     const streak = store.streak();
@@ -2700,9 +2744,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           ? 'An audio-only session started. Your attendance is safe.'
           : reason === 'panic' ? 'Stopped. Press the panic key again to leave.' : 'Paused for a video.',
           { resumable: reason === 'panic' });
-      } else if (active.suspendEl) {
-        active.suspendEl.remove();
-        active.suspendEl = null;
+      } else {
+        if (active.suspendEl) {
+          active.suspendEl.remove();
+          active.suspendEl = null;
+        }
+        /* THE PILL IS A LEVEL, SO BOTH EDGES ARE WRITTEN (trap 28). The
+         * re-enable used to hang off the overlay still being up, so a suspend
+         * that had already lost its card (a screen change, a teardown race, a
+         * second suspend:false frame) left the way home greyed out for the rest
+         * of the class with nothing on screen to explain why. */
         if (active.pill) active.pill.disabled = false;
       }
     }

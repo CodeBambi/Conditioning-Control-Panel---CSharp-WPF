@@ -38,6 +38,16 @@
  * grammar; holding it ends the CURRENT scene and fast-lands its handoff edge -
  * the board for the cold open, the class for the walk, EMI's line for the mail.
  * It can never skip a shipped ceremony, only VN tissue.
+ *
+ * THE PACE (owner playtest, 2026-08-24: "everything happens pretty fast").
+ * A beat change is not a cut. The plate on the wall slides and fades away, the
+ * screen holds half a second of pure black, and the new plate slides in from
+ * the other side - see applyPlate and the BEAT_* dials, which are the only
+ * place the opening's tempo is written down. Two consequences worth carrying
+ * in your head while reading the rest: no beat may start before its plate has
+ * landed (that is what applyPlate's `done` is for), and no plate transition may
+ * leave the hold-to-skip pill pointing at nothing, because a seam between two
+ * scenes is now long enough for a player to reach the door inside it.
  * ==========================================================================*/
 
 import { t } from '../core/lexicon.js';
@@ -62,6 +72,22 @@ export const VN_DIALS = Object.freeze({
   PAPER_OUT_MS: 300,      // the slip tucking back into the tray
   MAIL_DELAY_MS: 700,     // let the screen under the ceremony settle first
   HOLD_TICK_MS: 250,      // the clock under a held skip (AV CLUB)
+  /* THE BEAT TRANSITION (owner playtest order, 2026-08-24: "we should slow down
+   * the intro beats, right now everything happens pretty fast. We need to space
+   * those out properly, and have about half a second of black screen with a
+   * sliding fading transition when we change a beat"). ONE plate change is: the
+   * old frame slides and fades away, the screen sits in pure black, the new
+   * frame slides and fades in from the other side, and then it gets a moment to
+   * be looked at before anyone talks over it. Retuning the opening's pace is a
+   * number edit in this block and nowhere else - vn/style.js holds no copy. */
+  BEAT_OUT_MS: 300,        // the outgoing plate leaving, with the whoosh on it
+  BEAT_BLACK_MS: 500,      // the half second of black, and the swap is inside it
+  BEAT_IN_MS: 300,         // the new plate arriving
+  BEAT_SETTLE_MS: 400,     // look at the new frame before the lower third talks
+  BEAT_LEAD_BLACK_MS: 700, // the black before the FIRST plate of the night; the
+                           // layer's own FADE_MS fade to black runs underneath
+  BEAT_CAPTION_OUT_MS: 300,// a dismissed card is gone before the next beat opens
+  SPLASH_SETTLE_MS: 500,   // the splash has cleared; the opening does not pounce
   /* WATCHDOGS. If any of these fire the VN has a bug, and a bug may not cost
    * the player their night: the continuation runs and the layer comes down. */
   COLD_OPEN_CAP_MS: 150000,
@@ -207,6 +233,7 @@ export function createFirstBell(o) {
   let destroyed = false;
   let layer = null;             // the fixed full-viewport element, or null
   let frame = null;
+  let bgWrap = null;            // the carriage: it slides, the plate rides it
   let bg = null;
   let neon = null;
   let capNode = null;
@@ -216,7 +243,16 @@ export function createFirstBell(o) {
   let glowNode = null;
   let skipBtn = null;
   let skipRelease = null;       // the pill's own "let go" verb, for a teardown
-  let lastPlate = null;         // the plate on the wall, so a repaint is silent
+  /* THE PLATE LEDGER. `lastPlate` is the plate REQUESTED - up, or still riding
+   * the carriage in - so a repaint of the frame we are already standing on is
+   * silent and free. `plateWaiters` are the beats owed the moment it lands,
+   * which is how the lower third learned not to caption a black screen, and
+   * `plateToken` is what a superseding change invalidates so a cancelled
+   * transition cannot finish over the top of the one that replaced it. */
+  let lastPlate = null;
+  let plateBusy = false;
+  let plateWaiters = [];
+  let plateToken = 0;
   let boardApi = null;
   let advance = null;           // the live "next step" verb, or null
   let skipTo = null;            // the live "end this scene now" verb, or null
@@ -276,12 +312,19 @@ export function createFirstBell(o) {
     attr(layer, 'role', 'group');
 
     frame = el('div', 'arc-vn-frame');
+    /* THE CARRIAGE HOLDS BOTH. The plate cannot slide itself (its camera
+     * keyframe fills and out-ranks a transform), and the neon is the arch light
+     * on one particular set - a wash left pinned to the frame would still be
+     * glowing through a hold that is meant to be black. */
+    bgWrap = el('div', 'arc-vn-bgwrap');
+    attr(bgWrap, 'aria-hidden', 'true');
     bg = el('div', 'arc-vn-bg');
     attr(bg, 'aria-hidden', 'true');
     neon = el('div', 'arc-vn-neon');
     attr(neon, 'aria-hidden', 'true');
-    frame.appendChild(bg);
-    frame.appendChild(neon);
+    bgWrap.appendChild(bg);
+    bgWrap.appendChild(neon);
+    frame.appendChild(bgWrap);
 
     /* THE CAPTION IS THE ONLY THING A SCREEN READER SHOULD MEET HERE: the plate
      * is decoration and the board copy is duplicated live on the campus under
@@ -317,10 +360,19 @@ export function createFirstBell(o) {
     if (win && win.removeEventListener) { try { win.removeEventListener('keydown', onKey); } catch (e) { /* noop */ } }
     if (boardApi) { try { boardApi.destroy(); } catch (e) { /* noop */ } boardApi = null; }
     if (layer) { try { layer.remove(); } catch (e) { /* noop */ } }
-    layer = null; frame = null; bg = null; neon = null;
+    layer = null; frame = null; bgWrap = null; bg = null; neon = null;
     capNode = null; tapNode = null; paperNode = null;
     zoneNode = null; glowNode = null; skipBtn = null;
+    /* THE CARRIAGE COMES DOWN WITH THE LAYER AND ITS DEBTS ARE CANCELLED, NOT
+     * PAID. A beat owed to a plate that no longer exists would run into a scene
+     * that has already been torn down - and the one continuation that must
+     * ALWAYS run is the settler's, which is closeLayer's business and never
+     * this list's. Bumping the token retires any transition step that outlived
+     * killTimers. */
     lastPlate = null;
+    plateBusy = false;
+    plateWaiters = [];
+    plateToken++;
   }
 
   /** Fade the layer out, then drop it. Reduced motion cuts straight to the drop. */
@@ -430,21 +482,93 @@ export function createFirstBell(o) {
     cls(tapNode, 'is-up', true);
   }
 
-  /** Paint an ALREADY-DECODED plate. Never awaits: ensurePlate is the gate. */
-  function applyPlate(url, motion) {
-    if (!bg || !url) return;
-    /* THE CUT HAS AIR IN IT. A new plate is a camera move, so it gets one soft
-     * sweep - but only when the plate actually CHANGES (the skip path repaints
-     * the desk it is already standing on) and only when there is motion to
-     * hear, because reduced motion renders every plate as a static frame. */
-    if (!reduced && url !== lastPlate) sfx('whoosh', 0.3);
+  /** Pay everything owed to the plate that just landed. */
+  function plateLanded(token) {
+    if (plateToken !== token) return;
+    plateBusy = false;
+    const owed = plateWaiters;
+    plateWaiters = [];
+    for (const fn of owed) {
+      try { fn(); } catch (e) { say('vn plate continuation threw: ' + ((e && e.message) || e)); }
+    }
+  }
+
+  /** Forget what is queued behind the live plate. The skip path owns this: a
+   *  beat waiting on an arrival the player just asked to get past is a beat
+   *  that must not run when it lands. */
+  function dropPlateWaiters() { plateWaiters = []; }
+
+  /**
+   * CHANGE THE PLATE - the intro's one real transition (owner order,
+   * 2026-08-24). Out, black, in: the frame on the wall slides and fades away,
+   * the screen holds on pure black for half a second with the swap hidden
+   * inside it, and the new frame slides in from the other side. `done` runs
+   * once the arrival has SETTLED, and every caller hands it the next beat -
+   * that callback is the whole reason the lower third no longer opens over a
+   * black rectangle.
+   *
+   * Never awaits a decode: ensurePlate is the gate, this only paints.
+   */
+  function applyPlate(url, motion, done) {
+    const settle = typeof done === 'function' ? done : null;
+    if (!bg || !bgWrap || !url) { if (settle) settle(); return; }
+
+    /* THE FRAME WE ARE ALREADY STANDING ON. The skip path repaints the desk it
+     * is on, so a repeat request is ANSWERED rather than re-staged: join the
+     * queue if the carriage is still moving, otherwise land now. */
+    if (url === lastPlate) {
+      if (plateBusy && settle) plateWaiters.push(settle);
+      else if (settle) settle();
+      return;
+    }
+
+    /* A NEW PLATE OUTRANKS ONE IN FLIGHT and the token retires the old steps.
+     * Whatever was queued behind the abandoned arrival goes with it - the only
+     * thing that supersedes a plate in this file is a skip, and a skip always
+     * arrives carrying its own continuation. */
+    const token = ++plateToken;
+    const hadOne = !!lastPlate;
     lastPlate = url;
-    cls(bg, 'is-lit', false);
-    bg.style.backgroundImage = 'url("' + base + url + '")';
-    attr(bg, 'data-motion', reduced ? 'still' : (motion || 'still'));
-    // Reflow so a re-armed animation actually re-runs (trap 4's law).
-    try { void bg.offsetWidth; } catch (e) { /* the DOM double has no layout */ }
-    cls(bg, 'is-lit', true);
+    plateBusy = true;
+    plateWaiters = settle ? [settle] : [];
+
+    const outMs = (reduced || !hadOne) ? 0 : VN_DIALS.BEAT_OUT_MS;
+    const blackMs = hadOne ? VN_DIALS.BEAT_BLACK_MS : VN_DIALS.BEAT_LEAD_BLACK_MS;
+    const inMs = reduced ? 0 : VN_DIALS.BEAT_IN_MS;
+
+    /* THE WHOOSH IS THE CAMERA MOVE, so it leaves WITH the plate that is
+     * leaving rather than landing somewhere in the black. The first plate of
+     * the night has nothing to take off the wall, so its cue rides the arrival
+     * instead - and reduced motion, which renders every plate as a static
+     * frame, still hears no sweep at all. */
+    if (hadOne) {
+      if (!reduced) sfx('whoosh', 0.3);
+      bgWrap.style.transitionDuration = outMs + 'ms';
+      cls(bgWrap, 'is-in', false);
+      cls(bgWrap, 'is-out', true);
+    }
+
+    later(() => {
+      if (plateToken !== token || !bgWrap || !bg) return;
+      /* THE SWAP IS INSIDE THE BLACK. Dropping BOTH classes parks the carriage
+       * back on the entry side while it is invisible, so the walk across costs
+       * nothing and the new plate can never flash at the wrong offset. */
+      cls(bgWrap, 'is-out', false);
+      cls(bgWrap, 'is-in', false);
+      bg.style.backgroundImage = 'url("' + base + url + '")';
+      attr(bg, 'data-motion', reduced ? 'still' : (motion || 'still'));
+      // Reflow so a re-armed animation actually re-runs (trap 4's law).
+      try { void bg.offsetWidth; } catch (e) { /* the DOM double has no layout */ }
+
+      later(() => {
+        if (plateToken !== token || !bgWrap) return;
+        if (!hadOne && !reduced) sfx('whoosh', 0.3);
+        bgWrap.style.transitionDuration = inMs + 'ms';
+        cls(bgWrap, 'is-in', true);
+        // The new frame is looked at before anything is said over it.
+        later(() => plateLanded(token), inMs + (reduced ? 0 : VN_DIALS.BEAT_SETTLE_MS));
+      }, blackMs);
+    }, outMs);
   }
 
   /** Drop a live paper immediately (a skip, a teardown). */
@@ -612,8 +736,10 @@ export function createFirstBell(o) {
       if (st.swap) {
         ensurePlate(st.swap).then((ok) => {
           if (destroyed || over) return;
-          if (ok) applyPlate(st.swap, st.motion || 'still');
-          step();
+          if (!ok) { step(); return; }
+          // THE NEXT BEAT WAITS FOR THE PLATE. Handing `step` to applyPlate is
+          // what keeps a caption from opening while the screen is still black.
+          applyPlate(st.swap, st.motion || 'still', step);
         });
         return;
       }
@@ -627,7 +753,16 @@ export function createFirstBell(o) {
       if (st.paper) { showPaper(st.paper, step); return; }
       if (st.caption) {
         setCaption(tx(st.caption));
-        const mine = () => { if (advance !== mine) return; advance = null; setCaption(''); step(); };
+        const mine = () => {
+          if (advance !== mine) return;
+          advance = null;
+          setCaption('');
+          /* THE CARD IS GONE BEFORE THE NEXT BEAT OPENS (owner order: space
+           * them out). This is the lower third's OWN exit, not padding laid on
+           * the player's tap - two cards crossing in the same corner is a good
+           * part of what read as hurried. */
+          later(step, reduced ? 0 : VN_DIALS.BEAT_CAPTION_OUT_MS);
+        };
         advance = mine;
         // A caption with an autoMs advances itself if the player just watches.
         if (st.autoMs) later(mine, reduced ? Math.min(1200, st.autoMs) : st.autoMs);
@@ -692,30 +827,56 @@ export function createFirstBell(o) {
       if (!a || !b) { say('vn: a plate is missing - the cold open stands down'); go(); return; }
 
       const settle = settler(go, VN_DIALS.COLD_OPEN_CAP_MS, 'cold open');
-      try {
-        mountLayer({});
-        /* THE SKIP'S HANDOFF EDGE IS B4, never a shipped seam: both scenes are
-         * spent, the desk plate goes up and the board deals. */
-        const toBoard = () => {
-          skipTo = null;          // one deal per night, whatever the player holds
-          spend('s01'); spend('s02');
-          clearPaper();
-          applyPlate(desk.image, desk.motion);
-          dealBoard(() => settle('skipped to the board'));
-        };
-        const runDesk = () => {
-          if (seen('s02')) { settle('desk already spent'); return; }
-          applyPlate(desk.image, desk.motion);
-          runScene(desk, () => { spend('s02'); settle('done'); }, toBoard);
-        };
 
-        applyPlate(gates.image, gates.motion);
-        if (seen('s01')) { runDesk(); return; }
-        runScene(gates, () => { spend('s01'); runDesk(); }, toBoard);
-      } catch (e) {
-        say('vn cold open threw: ' + ((e && e.message) || e));
-        settle('threw');
-      }
+      /* THE SKIP'S HANDOFF EDGE IS B4, never a shipped seam: both scenes are
+       * spent, the desk plate goes up and the board deals. LATCHED, because it
+       * is now reachable from two places - a scene's own hold, and the seams
+       * between scenes where no scene owns the pill (see below). A second
+       * landing must be free, or the wall gets two boards on it. */
+      let dealt = false;
+      const toBoard = () => {
+        if (dealt) return;
+        dealt = true;
+        skipTo = null;
+        spend('s01'); spend('s02');
+        clearPaper();
+        setCaption('');
+        // Whatever was queued behind the plate is a beat the player just asked
+        // to get past; the deal is the only thing that rides this arrival now.
+        dropPlateWaiters();
+        applyPlate(desk.image, desk.motion,
+          () => dealBoard(() => settle('skipped to the board')));
+      };
+      const runDesk = () => {
+        if (seen('s02')) { settle('desk already spent'); return; }
+        skipTo = toBoard;
+        applyPlate(desk.image, desk.motion,
+          () => runScene(desk, () => { spend('s02'); settle('done'); }, toBoard));
+      };
+
+      /* THE OPENING DOES NOT POUNCE ON THE SPLASH (owner order, 2026-08-24).
+       * The loader's `hidden` has just landed and the campus is painted
+       * underneath: give the player that frame before the layer arrives over
+       * it. The watchdog above is already armed, so this beat of nothing is
+       * covered exactly like every other beat in this file. */
+      later(() => {
+        try {
+          mountLayer({});
+          /* THE PILL IS LIVE ACROSS THE SEAMS, NOT ONLY INSIDE A SCENE. A beat
+           * transition now runs over a second, and while one plays no scene
+           * owns `skipTo` - so the cold open parks its handoff edge here for
+           * the gaps. runScene overwrites it the moment a scene starts, and
+           * the latch above makes the overlap free. */
+          skipTo = toBoard;
+          applyPlate(gates.image, gates.motion, () => {
+            if (seen('s01')) { runDesk(); return; }
+            runScene(gates, () => { spend('s01'); skipTo = toBoard; runDesk(); }, toBoard);
+          });
+        } catch (e) {
+          say('vn cold open threw: ' + ((e && e.message) || e));
+          settle('threw');
+        }
+      }, VN_DIALS.SPLASH_SETTLE_MS);
     });
   }
 
@@ -744,8 +905,12 @@ export function createFirstBell(o) {
     const settle = settler(go, VN_DIALS.WALK_CAP_MS, 'walk');
     try {
       mountLayer({});
-      applyPlate(WALK.image, WALK.motion);
-      runScene(WALK, () => settle('done'));
+      /* SAME SEAM RULE AS THE COLD OPEN: the walk's opening transition is over
+       * a second of black and slide before runScene arms the pill, so the door
+       * out is parked here first. Skipping the walk lands where the walk was
+       * going anyway - the shipped class takeover, one settle away. */
+      skipTo = () => settle('skipped the walk');
+      applyPlate(WALK.image, WALK.motion, () => runScene(WALK, () => settle('done')));
     } catch (e) {
       say('vn walk threw: ' + ((e && e.message) || e));
       settle('threw');

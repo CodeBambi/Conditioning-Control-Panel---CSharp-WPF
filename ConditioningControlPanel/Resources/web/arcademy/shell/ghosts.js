@@ -1020,12 +1020,16 @@ export function createGhosts(o) {
     }
     /* SOMEBODY WENT PAST. Fired only once the scene has actually committed
      * (every refusal above returns before this), and only when there is walking
-     * to hear it over. */
+     * to hear it over.
+     * 0.05, not 0.12: this is a PROXIMITY cue, i.e. hover-adjacent ambient -
+     * nobody asked for it, it just happens while you stand on the plan. Owner
+     * verdict 2026-08-24 took hover cues down 60% for triggering often, and
+     * this one rides along with them. NEAR_GAP_MS is untouched. */
     if (!still && !paused) {
       const nowWall = clock.now();
       if (nowWall - lastNearCue >= NEAR_GAP_MS) {
         lastNearCue = nowWall;
-        sfx('near', 0.12);
+        sfx('near', 0.05);
       }
     }
     return true;

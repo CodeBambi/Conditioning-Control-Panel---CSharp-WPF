@@ -25,7 +25,7 @@
  * ==========================================================================*/
 
 import { t } from '../core/lexicon.js';
-import { exitBar, sign as signExit } from './exits.js';
+import { exitBar, sign as signExit, campusPillRow } from './exits.js';
 import { cardFace, HOLES, holesLine } from './punchcard.js';
 
 /* ----------------------------------------------------------------------------
@@ -93,6 +93,17 @@ export function createRecords({ gameName, punchCard, log } = {}) {
     /* ---------------------------- the desk ------------------------------ */
     const desk = el('div', 'arc-records-desk');
     root.appendChild(desk);
+
+    /* THE WAY HOME, FIRST AND STICKY. Back still rides the bar at the bottom of
+     * the scroller; the crest rides the top of it, so the office answers "how
+     * do I get out of here" without the player having to scroll to find out.
+     * It is the SAME verb the bar's Back runs - one door, two handles. */
+    desk.appendChild(campusPillRow({
+      onActivate: () => {
+        try { if (s.onBack) s.onBack(); }
+        catch (e) { say('records pill: ' + ((e && e.message) || e)); }
+      },
+    }));
 
     desk.appendChild(el('p', 'arc-kicker', t('records_kicker', 'Records Office')));
     desk.appendChild(el('h1', 'arc-h1', t('campus_records', 'Records')));
