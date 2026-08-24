@@ -620,7 +620,15 @@ function svgNode(tag, attrs, cls) {
 
 function rect(x, y, w, h, cls) { return svgNode('rect', { x, y, width: w, height: h }, cls); }
 
-/** Build the pixel student. 10 units wide, ~16 tall, feet on the origin. */
+/**
+ * Build the pixel student. 10 units wide, ~16 tall, feet on the origin.
+ *
+ * PUBLIC UNDER `buildStudentSprite` (ORIENTATION.md §2.1). The Walk's player
+ * miniature is THE SAME BODY as a ghost - one sprite builder, so a mod that
+ * reskins the student body reskins you with it and the two can never drift.
+ * The internal name stays `buildSprite` because every call site in this file
+ * is one; the alias export below is the whole seam.
+ */
 function buildSprite(id) {
   const tr = spriteTraitsFor(id);
   const g = svgNode('g', null, 'gh-sprite');
@@ -651,6 +659,9 @@ function buildSprite(id) {
   put(rect(1, top + 13, 2, tr.tall ? 3 : 1, 'gh-leg'));
   return g;
 }
+
+/** THE SEAM shell/walk.js imports. Same function, a name a stranger can read. */
+export { buildSprite as buildStudentSprite };
 
 /** The discord tier's avatar chip. Falls back to the sprite on any load error. */
 function buildChip(id, url, onFail) {

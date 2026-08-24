@@ -37,6 +37,7 @@ import {
 import { createBoard } from './splitflap.js';
 import { createCampus, campusState } from './campus.js';
 import { createGhosts, presenceOptions } from './ghosts.js';
+import { createWalker, roomStop } from './walk.js';
 import { createReportCard } from './reportcard.js';
 import { createSettingsPage, boardSizeKey, SETTING_KEYS, isGlobalSettingKey } from './settings.js';
 import { createCeremonies } from './ceremonies.js';
@@ -440,6 +441,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   // it hangs off the campus's own ghost layer, so it lives and dies with it and
   // no other screen has ever heard of it.
   let ghosts = null;
+  /* THE WALK (ORIENTATION.md §2). The player miniature. Optional in exactly the
+   * way the campus and the ghosts are - it hangs off the campus's own walker
+   * layer, lives and dies with it, and no other screen has ever heard of it. */
+  let walker = null;
+  /* WHERE YOU ARE STANDING, and it is SESSION-ONLY. null = the Main Gate, i.e.
+   * you have just arrived at school; otherwise the room key you last walked
+   * into, so coming back out of a class puts you at its door instead of
+   * teleporting you to the gate. Nothing persisted, nothing posted - a reload
+   * puts you back at the gate, which is diegetically correct (§2.2). */
+  let lastRoomKey = null;
+  /* TONIGHT'S RESIDUE: the finished traces, as DATA, so they survive a screen
+   * change and are re-rendered on the next campus mount. FIFO-capped inside
+   * walk.js (RESIDUE_MAX). Cleared at end-run with the rest of the shell. */
+  let residueTrail = [];
   let extrasBox = null;            // replay/report bar + yesterday strip container
   let settingsPage = null;
   let reportCard = null;
@@ -644,6 +659,18 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     // The campus owns a 1s bell interval; a screen wipe must not orphan it.
     if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
     if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
+    /* THE WALKER GOES LAST AND ITS RESIDUE IS BANKED FIRST. `campus` is already
+     * null by the time destroy() runs, which is what makes a pending onDone
+     * safe: walk.js pays it (a launch is never silently swallowed), the funnel
+     * below sees the campus gone and declines to deal a class into a screen
+     * that has already moved on. Nulling `walker` before destroying it is the
+     * other half - a re-entrant clearScreen finds nothing left to tear down. */
+    if (walker) {
+      const w = walker;
+      walker = null;
+      try { residueTrail = w.residue(); } catch (e) { /* noop */ }
+      try { w.destroy(); } catch (e) { /* noop */ }
+    }
     extrasBox = null;
     // Every screen switch funnels through here, so no throw path can strand
     // the immersive stage lock (the campus's arc-campus-on unwinds in its own
@@ -886,6 +913,43 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       onSelect: onSelectRow,
     });
 
+    /* ========================= THE ONE WALK FUNNEL =======================
+     * Every diegetic way into a room goes through here: `begin`, `freeSwim`,
+     * the Records door and the Front Office DOOR. You walk there, and the
+     * thing you were going to do happens when you arrive.
+     *
+     * Three laws, and the third is the one that matters:
+     *   - the topbar gear is NOT in here. It is the shortcut; the Front Office
+     *     room is the diegetic door (ORIENTATION §2.3, and campus.js routes the
+     *     two apart through `registrarRoom`).
+     *   - `lastRoomKey` is written HERE and only here, so "where you are
+     *     standing" is exactly "the last door you actually walked through".
+     *   - THE WALK IS DECORATION AND THE LAUNCH IS NOT. No walker, a walker
+     *     that throws, an unknown room, a zero-length path - every one of them
+     *     runs the action anyway. The single case that does NOT launch is a
+     *     campus that was torn down mid-walk (a suspend, an end-run): the
+     *     screen has moved on and dealing a class into it would be the bug.
+     * ==================================================================== */
+    const walkThen = (targetKey, action) => {
+      const fire = () => { try { action(); } catch (e) { say('room action threw: ' + ((e && e.message) || e)); } };
+      if (!walker) { lastRoomKey = targetKey; fire(); return; }
+      let spent = false;
+      const owner = campus;
+      const go = () => {
+        if (spent) return;
+        spent = true;
+        try { if (walker) residueTrail = walker.residue(); } catch (e) { /* noop */ }
+        if (!campus || campus !== owner) {
+          say('walk: the campus went away mid-walk - ' + targetKey + ' dropped');
+          return;
+        }
+        lastRoomKey = targetKey;
+        fire();
+      };
+      try { walker.walkTo(targetKey, { onDone: go }); }
+      catch (e) { say('walk refused (' + ((e && e.message) || e) + ') - straight in'); go(); }
+    };
+
     /* THE CAMPUS IS OPTIONAL. A hub that throws costs the scenery, never the
      * school: the catch below renders the plain panel the shell shipped with
      * (full chip rows, same buttons), which is also what the headless suites
@@ -920,7 +984,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
             } catch (e) { say('boardOpenedDate write failed: ' + ((e && e.message) || e)); }
             if (board) board.replay();
           },
-          begin: (gameKey) => {
+          begin: (gameKey) => walkThen(gameKey, () => {
             const cls = timetable.classes.find((c) => c.gameKey === gameKey);
             if (cls) { startClass(cls); return; }
             // THE DEV DOOR: a room off tonight's board still opens when the host
@@ -940,9 +1004,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
               say('dev pass: ' + gameKey + ' is off the board - graded run anyway');
               startClass(freeSwimClass(gameKey));
             }
-          },
-          freeSwim: (gameKey) => startFreeSwim(gameKey),
-          records: () => showRecords(),
+          }),
+          freeSwim: (gameKey) => walkThen(gameKey, () => startFreeSwim(gameKey)),
+          records: () => walkThen('records', () => showRecords()),
+          /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
+           * for the Front Office room and falls back to `registrar` for the
+           * topbar gear, so these two lines are the whole split. */
+          registrarRoom: () => walkThen('registrar', () => showSettings()),
           registrar: () => showSettings(),
         },
         log: say,
@@ -971,6 +1039,28 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       } catch (e) {
         say('presence layer unavailable (' + ((e && e.message) || e) + ')');
         ghosts = null;
+      }
+      /* THE WALK. Its own try/catch for the ghost layer's reason: a walker that
+       * fails to build costs the player a walk, never the school - `walkThen`
+       * above sees `walker === null` and launches the class directly. Built
+       * after the stage is in the document so the miniature has a plan to stand
+       * on, and seeded with where the session says you are standing: the door
+       * you last walked into, or the Main Gate on a fresh campus. */
+      try {
+        walker = createWalker({
+          mount: campus.walkMount,
+          reducedMotion,
+          // There is no unified player hash on `init` today, so the body is
+          // dealt from a stable constant. The day presence projects a self id,
+          // this is the one line that changes.
+          spriteId: 'self',
+          log: say,
+        });
+        walker.setResidue(residueTrail);
+        walker.mountAt(lastRoomKey ? roomStop(lastRoomKey) : null);
+      } catch (e) {
+        say('the walk is unavailable (' + ((e && e.message) || e) + ')');
+        walker = null;
       }
       // The window IS the campus: the topbar's content is diegetic in-scene
       // (crest, student ID, Front Office/gear), so the bar itself steps aside.
@@ -2712,6 +2802,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       setStage(null);
       if (ghosts) { try { ghosts.destroy(); } catch (e) { /* noop */ } ghosts = null; }
       if (campus) { try { campus.destroy(); } catch (e) { /* noop */ } campus = null; }
+      if (walker) { const w = walker; walker = null; try { w.destroy(); } catch (e) { /* noop */ } }
+      // END OF RUN: the residue is tonight's, and tonight is over (§2.4).
+      residueTrail = [];
+      lastRoomKey = null;
       if (vn) { try { vn.destroy(); } catch (e) { /* noop */ } vn = null; }
       try { ceremonies.destroy(); } catch (e) { /* noop */ }
       if (settingsPage) { try { settingsPage.destroy(); } catch (e) { /* noop */ } }
