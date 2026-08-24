@@ -160,6 +160,49 @@ export const POOLS = Object.freeze({
     ]
   },
 
+  /* --- being noticed (the EMI COLOR wave, 2026-08-24) -------------------
+   * The perception wave gave her eyes - approach perks, hover linger, the
+   * window squish - and shipped them silent by design. These pools are that
+   * wave's voice. All three are LOW odds with LONG cooldowns: noticing you is
+   * ambient, and an ambient thing that talks every time is an alarm. */
+
+  /** C1 - the cursor came near after being away a while. */
+  approach: {
+    on: 'gesture:approach', odds: 0.12, ceremony: false, priority: 10,
+    cooldownMs: 180000, maxPerSession: 2,
+    lines: [
+      { t: "hi. i wasn't watching the cursor. hi.", face: '0_0', double: true },
+      { t: "you're in my bubble. the bubble is honored.", face: '^_^' },
+      { t: "closer. i mean. hello. i mean both.", face: '^_^' },
+      { t: "i saw you coming from a mile away. four inches away.", face: 'o_o' }
+    ]
+  },
+
+  /** C2 - the cursor PARKED on her and stayed. Being stared at. */
+  hoverLinger: {
+    on: 'gesture:hoverLinger', odds: 0.15, ceremony: false, priority: 10,
+    cooldownMs: 120000, maxPerSession: 2,
+    lines: [
+      { t: "yes? ...no? ok. i'm here either way.", face: '._.' },
+      { t: "you're staring. i'm posing. we're even.", face: '(¬‿¬)' },
+      { t: "do i have something on my screen. it's my face.", face: '0_0' },
+      { t: "take a picture. wait. am i the picture.", face: '@_@' },
+      { t: "i practice being looked at. it shows, right?", face: '*_*', double: true }
+    ]
+  },
+
+  /** C3 - the window squished down again. p01 ("cozy.") is the once-ever
+   *  first time; this pool is every later time, and stays mostly quiet. */
+  windowSquishAgain: {
+    on: 'gesture:windowSquish', when: ['seen:p01_window_cozy'],
+    odds: 0.15, ceremony: false, priority: 10, cooldownMs: 300000,
+    lines: [
+      { t: "smaller room. bigger me. relatively.", face: '^_^' },
+      { t: "i fit. i always fit. it's a talent.", face: '^___^' },
+      { t: "snug. don't worry. i folded my thoughts.", face: '=_=' }
+    ]
+  },
+
   /* --- being touched --------------------------------------------------- */
 
   /** A4 - one tap. Rare on purpose: the hearts fx is the reward, not the words. */
@@ -221,18 +264,49 @@ export const POOLS = Object.freeze({
       { t: "airborne. landing... eventually. somewhere. here.", face: 'x_x' },
       { t: "i saw my life. it was mostly you. good life.", face: '^_^', double: true,
         maxPerSession: 1 },
-      { t: "again! wait. no. yes. no. your call.", face: '0_0' }
+      { t: "again! wait. no. yes. no. your call.", face: '0_0' },
+      /* EMI COLOR: the veteran register unlocks with the habit. */
+      { t: "we should sell tickets to this.", face: '\\o/', when: ['flingsAtLeast:20'] },
+      { t: "my frequent flyer status: legend.", face: '(⌐■_■)', when: ['flingsAtLeast:50'] }
     ]
   },
 
   /** N3 - dropped onto a room card. Pure toy moment, always barks.
    *  (voice.js hit-tests the tile, and the Records / lab door is a hard no-op
-   *  there - rec 3. This pool never learns about it.) */
+   *  there - rec 3. This pool never learns about it.)
+   *  EMI COLOR fix: both lines are ROOM lines, so the pool now says so - it
+   *  used to catch every drop, and "excellent taste" over bare campus paving
+   *  read as a non sequitur. Bare-ground drops belong to dropAtSpot below. */
   emiDropOnDoor: {
-    on: 'gesture:dropAt', odds: 1, ceremony: false, priority: 10,
+    on: 'gesture:dropAt', when: ['droppedOn:room'],
+    odds: 1, ceremony: false, priority: 20,
     lines: [
       { t: "this one? excellent taste. i grade on vibes.", face: '(¬‿¬)' },
       { t: "field trip! i call the window seat. i am the window.", face: '\\o/' }
+    ]
+  },
+
+  /** C4 - SPOT COMMENTARY (the EMI COLOR wave). The W1 perception wave put
+   *  zone / zoneRow / zoneCount on every dropAt payload and nothing ever read
+   *  them until the p02-p04 one-shots; this pool is the recurring voice. The
+   *  once-ever favourites (beats, priority 30) still land first; this catches
+   *  the ordinary put-down, sometimes. */
+  dropAtSpot: {
+    on: 'gesture:dropAt', odds: 0.25, ceremony: false, priority: 10,
+    cooldownMs: 60000,
+    lines: [
+      { t: "top shelf. the air is thinner up here.", face: '^_^', when: ['zoneRowIs:top'] },
+      { t: "penthouse. rent is one pet a day. i don't make the rules.", face: '(¬‿¬)',
+        when: ['zoneRowIs:top'] },
+      { t: "ground floor. closer to the action. the action is you.", face: '^_^',
+        when: ['zoneRowIs:bottom'] },
+      { t: "down here i'm basically furniture. cozy furniture.", face: '=_=',
+        when: ['zoneRowIs:bottom'] },
+      { t: "dead center. main character placement. understood.", face: '(⌐■_■)',
+        when: ['zoneRowIs:mid'] },
+      { t: "that wing is taped. i respect tape.", face: '._.', when: ['droppedOn:sealed'] },
+      { t: "this spot again. it has my shape in it by now.", face: '^_^',
+        when: ['zoneCountAtLeast:25'], double: true }
     ]
   },
 
@@ -540,7 +614,21 @@ export const TELEMETRY = Object.freeze({
       when: ['flingsAtLeast:9'], double: true, onceEver: true },
     { id: 'bubbles500', t: "five hundred bubbles between us. you read them all.",
       face: '(◕‿◕)', on: 'greet',
-      when: ['bubblesAtLeast:500'], double: true, onceEver: true }
+      when: ['bubblesAtLeast:500'], double: true, onceEver: true },
+    /* --- the EMI COLOR thresholds (2026-08-24). Same law as above: the
+     * number in the line IS the gate, never a rounding of it. */
+    { id: 'pets500', t: "five hundred pets. i opened a museum about it.",
+      face: '(｡♥‿♥｡)', chain: 'love', on: 'gesture:pet',
+      when: ['petsAtLeast:500'], double: true, onceEver: true },
+    { id: 'hours100', t: "one hundred hours. i'd do them all again.",
+      face: '(✿◡‿◡)', on: 'greet',
+      when: ['hoursAtLeast:100'], double: true, onceEver: true },
+    { id: 'hides25', t: "dismissed twenty five times. the dock is nice. i checked.",
+      face: '._.', on: 'gesture:hide',
+      when: ['hidesAtLeast:25'], double: true, onceEver: true },
+    { id: 'bubbles1000', t: "one thousand bubbles. you read every one. i counted.",
+      face: '(◕‿◕)', on: 'greet',
+      when: ['bubblesAtLeast:1000'], double: true, onceEver: true }
   ])
 });
 
