@@ -131,7 +131,7 @@ html.arc-reduced .g-ic-dusk{transition:none}
    place from overlap alone, and this one covers the viewport. Pinned into the
    wrap's context it can never be hoisted over the shell's fx layer. The same
    line, for the same reason, is on dtrh's #sf-canvas. */
-.g-ic-tube-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0}
+.g-ic-tube-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0;image-rendering:pixelated}
 /* the last-resort static tube (no canvas at all). NEGATIVE inset on purpose:
    the same composition law as tube3d/tube2d - the spiral has to leave the frame
    rather than stop inside it. */
