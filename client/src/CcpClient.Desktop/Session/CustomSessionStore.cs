@@ -1,10 +1,12 @@
+using CcpClient.Desktop.Lifecycle;
+
 namespace CcpClient.Desktop.Session;
 
 /// <summary>
 /// The user's OWN scripted sessions on disk — upstream's <c>CustomSessions</c> folder
-/// (<c>Services/Session/SessionFileService.cs:27-35</c>) and the three things it does to it: read
-/// the folder (<c>:180-200</c>), write a session into it (<c>:226-247</c>), and delete one
-/// (<c>:279-300</c>).
+/// (<c>Services/Session/SessionFileService.cs:27-34</c>) and the three things it does to it: read
+/// the folder (<c>:180-197</c>), write a session into it (<c>:226-247</c>), and delete one
+/// (<c>:279-297</c>).
 ///
 /// <para><b>This is the persistence decision the editor forced, made deliberately.</b> Until this
 /// file, nothing in the port wrote a <c>.session.json</c> at all: the four built-ins are content
@@ -16,26 +18,28 @@ namespace CcpClient.Desktop.Session;
 /// <list type="number">
 /// <item><b>Under the data root, never beside the binary.</b> Upstream puts custom sessions in
 /// <c>%APPDATA%</c> and built-ins in <c>BaseDirectory/assets/sessions</c>
-/// (<c>Services/Session/SessionFileService.cs:27-49</c>), and the split is not decoration: the
+/// (<c>Services/Session/SessionFileService.cs:27-46</c>), and the split is not decoration: the
 /// program directory can be read-only, is wiped by a reinstall, and is shared between users. The
-/// port's data root is the one the whole product already funnels through
-/// (<c>Lifecycle/CompositionRoot.cs:175</c>), so a harness that isolates the root isolates this
-/// folder too, and no test can write into a developer's real profile by forgetting to.</item>
+/// port's data root is the one the whole product already funnels through, so a harness that
+/// isolates the root isolates this folder too, and no test can write into a developer's real
+/// profile by forgetting to.</item>
 /// <item><b>Beside the session logs, not among the settings documents.</b>
 /// <see cref="ScriptedSessionLogStore"/> already owns a folder in exactly this position
 /// (<c>&lt;data root&gt;/session_logs</c>), and it is the right precedent rather than the eleven
 /// preset documents: those are ONE known file each, loaded at boot and flushed at teardown by the
 /// persistence store. These are an open-ended set of user documents, written on an explicit save
-/// gesture and never on a flush.</item>
+/// gesture and never on a flush. Nothing here is registered with the persistence store, so nothing
+/// here is written by the teardown flush (persistence contract §11) — a session file exists
+/// because the user pressed Save and for no other reason.</item>
 /// <item><b>Editing a built-in makes a COPY and never touches the original.</b> Upstream's own
 /// rule, stated in its own words at the call site — "Editing a built-in session creates a new
-/// custom session" (<c>MainWindow/MainWindow.SessionIO.cs:1834-1836</c>) — with a fresh id, so
+/// custom session" (<c>MainWindow/MainWindow.SessionIO.cs:1835-1838</c>) — with a fresh id, so
 /// the shipped file the user started from is still there, unmodified, in the rack beside it. See
 /// <see cref="SessionEditorRules.Apply"/>.</item>
 /// <item><b>The folder appears the day a session is really saved.</b> Upstream creates it eagerly
-/// (<c>Services/Session/SessionFileService.cs:51-58</c>, called from load); this store creates it
-/// inside <see cref="Save"/> only — the same call <see cref="ScriptedSessionLogStore.Folder"/>
-/// makes, and the same user outcome with one less boot-time write.</item>
+/// (<c>Services/Session/SessionFileService.cs:51-57</c>, called from load); this store creates it
+/// inside <see cref="Save"/> only — the same call <see cref="ScriptedSessionLogStore"/> makes for
+/// its own folder, and the same user outcome with one less boot-time write.</item>
 /// </list>
 ///
 /// <para><b>What this changes about a claim the rack made yesterday.</b>
@@ -46,17 +50,23 @@ namespace CcpClient.Desktop.Session;
 public sealed class CustomSessionStore
 {
     /// <summary>The folder's name under the data root. Upstream's is <c>CustomSessions</c>
-    /// (<c>Services/Session/SessionFileService.cs:33</c>); this one follows the lower-cased,
+    /// (<c>Services/Session/SessionFileService.cs:32</c>); this one follows the lower-cased,
     /// underscore-separated shape the port's own data root already uses for
     /// <see cref="ScriptedSessionLogStore.FolderName"/> and its preset documents.</summary>
     public const string FolderName = "custom_sessions";
 
+    private readonly ILogSink _log;
+
     /// <param name="dataDirectory">The user's data directory — the one the session's eleven
     /// documents and its media logs already live in, so a saved session lands beside them and
     /// inside whatever root the composition root resolved.</param>
-    public CustomSessionStore(string dataDirectory)
+    /// <param name="log">Diagnostics. Content-free: outcomes and counts, never a session's name or
+    /// its description.</param>
+    public CustomSessionStore(string dataDirectory, ILogSink log)
     {
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
+        ArgumentNullException.ThrowIfNull(log);
+        _log = log;
         Folder = Path.GetFullPath(Path.Combine(dataDirectory, FolderName));
     }
 
@@ -66,29 +76,35 @@ public sealed class CustomSessionStore
 
     /// <summary>The user's own sessions, in file-name order and stamped
     /// <see cref="ScriptedSessionOrigin.Custom"/> — upstream's <c>LoadCustomSessions</c>
-    /// (<c>Services/Session/SessionFileService.cs:180-200</c>). An absent folder is an empty list,
+    /// (<c>Services/Session/SessionFileService.cs:180-197</c>). An absent folder is an empty list,
     /// which is every install that has never saved one.</summary>
     public IReadOnlyList<ScriptedSession> Read() =>
         ScriptedSession.ReadFolder(Folder, ScriptedSessionOrigin.Custom);
 
     /// <summary>
     /// Everything the rack draws: the shipped sessions, then the user's — upstream's registry,
-    /// which loads built-ins and customs into one list (<c>Services/Session/SessionManager.cs</c>,
-    /// via both <c>Load</c> calls on the file service).
+    /// which loads built-ins and customs into one list in that order
+    /// (<c>Services/Session/SessionManager.cs:55-96</c>: built-ins at <c>:61-66</c>, customs at
+    /// <c>:80-87</c>).
     ///
     /// <para>Built-ins FIRST, and both halves in file-name order, so this is a total order that
     /// does not depend on a clock or a filesystem's enumeration — which is what
     /// <see cref="ScriptedSessionSort.Installed"/> promises and what every other order in
-    /// <see cref="ScriptedSessionRack.Arrange"/> falls back to as its tie-break.</para>
+    /// <see cref="ScriptedSessionRack.Arrange"/> falls back to as its tie-break. A custom
+    /// session's file is named for its GUID id (<see cref="SessionEditorRules.Apply"/>), so the
+    /// user's half is in an arbitrary but STABLE order rather than a meaningful one; the order that
+    /// would be meaningful for it is the one <see cref="ScriptedSessionSort"/> records as newly
+    /// portable and deliberately not taken in this slice.</para>
     /// </summary>
     public IReadOnlyList<ScriptedSession> Catalogue() => [.. ScriptedSession.ReadBuiltIns(), .. Read()];
 
     /// <summary>
-    /// Write one session into the folder and return the path it landed on — upstream's
-    /// <c>SaveCustomSession</c> (<c>Services/Session/SessionFileService.cs:226-247</c>), including
-    /// its rule for WHICH file: the session's own file when it already has one, and a fresh name
-    /// off its id when it does not (<c>:232-241</c>). That is what makes a second edit of the same
-    /// custom session an overwrite rather than a third row in the rack.
+    /// Write one session into the folder and return the path it landed on, or <c>null</c> when the
+    /// write could not happen — upstream's <c>SaveCustomSession</c>
+    /// (<c>Services/Session/SessionFileService.cs:226-247</c>), including its rule for WHICH file:
+    /// the session's own file when it already has one, and a fresh name off its id when it does not
+    /// (<c>:231-242</c>). That is what makes a second edit of the same custom session an overwrite
+    /// rather than a third row in the rack.
     ///
     /// <para><b>The path is re-checked, not trusted.</b> Upstream reuses
     /// <c>session.SourceFilePath</c> on nothing but <c>File.Exists</c>; this one also requires the
@@ -97,19 +113,41 @@ public sealed class CustomSessionStore
     /// it (<see cref="SessionEditorRules.Apply"/>); this is the guard that does not depend on the
     /// editor being right.</para>
     ///
-    /// <para>The session is stamped with where it now lives, so the caller's instance and the file
-    /// agree without a re-read.</para>
+    /// <para><b>A failed write is an answer, not an exception.</b> Upstream lets an
+    /// <c>IOException</c> out of <c>ExportSession</c> (<c>:62-66</c>) and up through the click
+    /// handler; the port follows <see cref="ScriptedSessionLogStore"/>'s own persist instead, which
+    /// catches the two file-system failures a user can really cause — a full or read-only volume, a
+    /// locked file — logs them and returns a value. The editor turns the <c>null</c> into a line on
+    /// screen, because a Save button that kills the app is worse than one that says it could not.
+    /// </para>
+    ///
+    /// <para>On success the session is stamped with where it now lives, so the caller's instance
+    /// and the file agree without a re-read.</para>
     /// </summary>
-    public string Save(ScriptedSession session)
+    public string? Save(ScriptedSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        Directory.CreateDirectory(Folder);
 
         var path = Owns(session.SourceFilePath) && File.Exists(session.SourceFilePath)
             ? session.SourceFilePath
             : Path.Combine(Folder, SanitizeId(session.Id) + ScriptedSession.FileExtension);
 
-        File.WriteAllText(path, session.ToJson());
+        try
+        {
+            Directory.CreateDirectory(Folder);
+            File.WriteAllText(path, session.ToJson());
+        }
+        catch (IOException ex)
+        {
+            _log.Log($"custom session: could not be saved ({ex.GetType().Name})");
+            return null;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _log.Log($"custom session: could not be saved ({ex.GetType().Name})");
+            return null;
+        }
+
         session.Origin = ScriptedSessionOrigin.Custom;
         session.SourceFilePath = path;
         return path;
@@ -117,8 +155,8 @@ public sealed class CustomSessionStore
 
     /// <summary>
     /// Delete one of the user's sessions — upstream's two guards and no more
-    /// (<c>Services/Session/SessionManager.cs:201-218</c> and
-    /// <c>Services/Session/SessionFileService.cs:279-300</c>): a built-in is refused outright, and
+    /// (<c>Services/Session/SessionManager.cs:201-219</c> and
+    /// <c>Services/Session/SessionFileService.cs:279-297</c>): a built-in is refused outright, and
     /// so is any path outside this folder.
     ///
     /// <para><b>The containment guard is stronger than upstream's and the outcome is the same
@@ -127,7 +165,13 @@ public sealed class CustomSessionStore
     /// <c>…/CustomSessions.bak/x.session.json</c> passes it. This compares the file's own resolved
     /// parent directory to this folder, which admits exactly the set upstream meant to admit.</para>
     ///
-    /// <para>False for every refusal and for every failure, as upstream's is (<c>:281-299</c>): a
+    /// <para><b>The persistence contract permits this and says so.</b> §5 rule 5: "preserved, never
+    /// deleted" binds the STORE, not the USER — the rule exists so a store cannot destroy
+    /// unreadable data and run on defaults, not to make a document the user asked to remove
+    /// undeletable. This is an explicit, user-initiated erasure of the user's own file, and the
+    /// shipped built-in it was copied from is untouched by construction.</para>
+    ///
+    /// <para>False for every refusal and for every failure, as upstream's is (<c>:281-296</c>): a
     /// delete that cannot happen must not take the page with it.</para>
     /// </summary>
     public bool Delete(ScriptedSession session)
@@ -148,12 +192,14 @@ public sealed class CustomSessionStore
             File.Delete(session.SourceFilePath);
             return true;
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            _log.Log($"custom session: could not be deleted ({ex.GetType().Name})");
             return false;
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            _log.Log($"custom session: could not be deleted ({ex.GetType().Name})");
             return false;
         }
     }
@@ -184,8 +230,8 @@ public sealed class CustomSessionStore
     /// A session id as a file name — upstream's <c>SanitizeFileName(session.Id)</c>
     /// (<c>Services/Session/SessionFileService.cs:239</c>, <c>:311-315</c>), over the port's
     /// cross-platform invalid set rather than the running OS's, so a folder synced between a
-    /// Windows and a Linux install keeps working (<c>PortablePath.cs:27-35</c> — the same reason
-    /// <see cref="ScriptedSessionLogStore"/> sanitises the same way).
+    /// Windows and a Linux install keeps working (<see cref="PortablePath.InvalidFileNameChars"/> —
+    /// the same reason <see cref="ScriptedSessionLogStore"/> sanitises the same way).
     ///
     /// <para>Every id this really sees is a GUID (<see cref="SessionEditorRules.Apply"/>), so the
     /// name cannot collide with another session's; upstream's duplicate-name counter

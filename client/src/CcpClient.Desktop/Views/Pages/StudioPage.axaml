@@ -2348,6 +2348,27 @@
                     AutomationProperties.Name="Pause"
                     Content="Pause" />
 
+            <!-- EDIT SESSION — upstream's rack row action (MainWindow/MainWindow.SessionIO.cs:538
+                 builds it as a ✎ on every row, :1819-1868 handles it). It is a strip button acting
+                 on the SELECTION rather than a per-row hover action, because this rack's rows are
+                 RadioButtons whose whole job is to carry a selection: a button inside a RadioButton
+                 is a click target that would have to swallow the gesture that selects the row it is
+                 in, and the port already routes Start, Stop and Pause through the same selection.
+
+                 IT IS OFFERED FOR A BUILT-IN TOO, which is upstream's rule (:538 is outside the
+                 non-built-in branch at :540) and is the ONLY way the copy rule is reachable: a user
+                 with four shipped sessions and no editable ones would never be able to make a first
+                 custom session. Saving one makes a copy and never touches the shipped file
+                 (Session/SessionEditorRules.cs, Session/CustomSessionStore.cs). -->
+            <Button x:Name="ScriptedSessionEditButton"
+                    Classes="module-action"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ScriptedSessionEditButton"
+                    AutomationProperties.Name="Edit session"
+                    ToolTip.Tip="Change the selected session's name, length and description"
+                    Content="Edit session" />
+
             <!-- RECENT SESSIONS — upstream's own door button, on this door because the rack is
                  (MainWindow/MainWindow.Presets.cs:1440 -> SessionLogHistoryWindow;
                  Views/Tabs/PresetsTabView.xaml:646-651, where it sits in the same header strip as

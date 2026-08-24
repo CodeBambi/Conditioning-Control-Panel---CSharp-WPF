@@ -521,6 +521,7 @@ public partial class StudioPage : UserControl
         // the raise is outside it).
         session.MediaLog.LogReady += log => _recap.ShowRecap(log);
         ScriptedSessionHistoryButton.Click += (_, _) => _recap.ShowHistory();
+        ScriptedSessionEditButton.Click += (_, _) => OnScriptedEditClicked();
 
         LoadDialsFromPreset();
         Refresh();
@@ -1251,9 +1252,40 @@ public partial class StudioPage : UserControl
     /// </summary>
     private void BuildScriptedSessionRack()
     {
-        _scriptedCatalogue = ScriptedSession.ReadBuiltIns();
+        ReloadScriptedCatalogue();
         BuildScriptedSessionToolbar();
         RepaintScriptedSessionRack();
+    }
+
+    /// <summary>
+    /// Re-read every session on disk — upstream's <c>LoadAllSessions</c>
+    /// (<c>Services/Session/SessionManager.cs:55-96</c>: built-ins first, then the user's), which
+    /// its own rack re-runs whenever a session file has been written behind its back
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:1907-1944</c>).
+    ///
+    /// <para><b>The selection is re-pointed at the fresh instance, and upstream says why in its own
+    /// words:</b> "Reload drops and rebuilds every Session instance, so re-point the selection at
+    /// the fresh object or Start Session would run a detached copy" (<c>:1926-1934</c>). The port
+    /// has the same hazard for the same reason — <see cref="RepaintScriptedSessionRack"/> finds the
+    /// armed row by <c>ReferenceEquals</c>, and <see cref="OnScriptedConfirmClicked"/> starts the
+    /// object the field holds. Matched on the file path first because that is what a save makes
+    /// unique, and on the id second for a built-in, which has a path but no way to change one.</para>
+    /// </summary>
+    private void ReloadScriptedCatalogue()
+    {
+        _scriptedCatalogue = _session.CustomSessions.Catalogue();
+
+        if (_scriptedSelection is not { } armed)
+        {
+            return;
+        }
+
+        _scriptedSelection = _scriptedCatalogue.FirstOrDefault(candidate =>
+                candidate.SourceFilePath.Length > 0
+                && string.Equals(
+                    candidate.SourceFilePath, armed.SourceFilePath, StringComparison.Ordinal))
+            ?? _scriptedCatalogue.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, armed.Id, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -1491,6 +1523,24 @@ public partial class StudioPage : UserControl
                 "SessionMeta" + PascalId(session.Id),
         };
 
+        // THE PROVENANCE BADGE — upstream's pill (MainWindow/MainWindow.SessionIO.cs:508-517,
+        // :588-597). Refused at slice 3 on the ground that every row was built-in and a badge on
+        // all four would carry no information; that premise died with the editor, because saving an
+        // edited built-in puts a session of the SAME NAME on the row below it and this badge is the
+        // only cell that tells them apart. See SessionRackNotices.RowProvenance.
+        var badge = new TextBlock
+        {
+            Name = "SessionBadge" + PascalId(session.Id),
+            Text = SessionRackNotices.RowProvenance(session.Origin),
+            FontSize = 9,
+            FontWeight = FontWeight.Bold,
+            Foreground = new SolidColorBrush(
+                Color.Parse(SessionRackNotices.RowProvenanceColour(session.Origin))),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            [Avalonia.Automation.AutomationProperties.AutomationIdProperty] =
+                "SessionBadge" + PascalId(session.Id),
+        };
+
         // THE DIFFICULTY STRIPE, in upstream's own colours (Resources/Theme/Colors.xaml:191-197)
         // and for upstream's own stated reason: it is "the one part of the row you can read at a
         // glance while scrolling" (MainWindow.SessionIO.cs:421-422). It sits at the row's TRAILING
@@ -1512,15 +1562,24 @@ public partial class StudioPage : UserControl
                 Color.Parse(SessionRackNotices.DifficultyStripe(session.Difficulty))),
         };
 
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto,Auto") };
+        // THE BADGE GOES BEFORE THE META CELL, NOT AFTER IT, and the reason is a live gate rather
+        // than taste: the headed `session-row` capture derives the stripe's cell from the meta
+        // cell's right edge plus one RowGutter and REFUSES the capture when the two do not close
+        // (client/tools/verify/capture.ps1:2712-2727). A column inserted between meta and stripe
+        // would put a badge's width into that gap and fail a check that is doing its job. Between
+        // the blurb and the meta the derivation is untouched — the meta cell's own left margin is
+        // the gap, and nothing between meta and the trailing edge has moved.
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto,Auto,Auto") };
         Grid.SetColumn(icon, 0);
         Grid.SetColumn(name, 1);
         Grid.SetColumn(blurb, 2);
-        Grid.SetColumn(meta, 3);
-        Grid.SetColumn(stripe, 4);
+        Grid.SetColumn(badge, 3);
+        Grid.SetColumn(meta, 4);
+        Grid.SetColumn(stripe, 5);
         grid.Children.Add(icon);
         grid.Children.Add(name);
         grid.Children.Add(blurb);
+        grid.Children.Add(badge);
         grid.Children.Add(meta);
         grid.Children.Add(stripe);
 
@@ -1709,6 +1768,121 @@ public partial class StudioPage : UserControl
     {
         _scriptedConfirm = ScriptedConfirmIntent.None;
         RenderScriptedSession();
+    }
+
+    // =====================================================================================
+    //  THE SESSION EDITOR
+    // =====================================================================================
+
+    /// <summary>The editor on screen, or null. Public so a fact reads the window the page really
+    /// built rather than a second one it made for itself.</summary>
+    public SessionEditorWindow? CurrentEditor { get; private set; }
+
+    /// <summary>
+    /// EDIT — upstream's <c>SessionBtn_Edit</c> (<c>MainWindow/MainWindow.SessionIO.cs:1819-1868</c>):
+    /// find the session the gesture names, open the editor on it, and do nothing at all when there
+    /// is no such session (<c>:1824</c>).
+    ///
+    /// <para>Upstream cannot be pressed with nothing selected — its action button carries its own
+    /// row's id — so the refusal here is the port's, for the port's one-button-per-selection shape,
+    /// and it is worded as the START button's twin rather than left silent.</para>
+    ///
+    /// <para>ONE editor at a time, refocusing rather than stacking — the rule
+    /// <see cref="SessionRecapLaunch.ShowHistory"/> already keeps, and upstream gets for free from
+    /// <c>ShowDialog()</c> (<c>:1828</c>).</para>
+    /// </summary>
+    private void OnScriptedEditClicked()
+    {
+        if (CurrentEditor is { } open)
+        {
+            open.Activate();
+            return;
+        }
+
+        if (_scriptedSelection is not { } pick)
+        {
+            _scriptedRefusal = SessionRackNotices.NothingToEdit;
+            RenderScriptedSession();
+            return;
+        }
+
+        _scriptedRefusal = null;
+        var editor = new SessionEditorWindow(pick, CommitEditedSession, DeleteCustomSession);
+        CurrentEditor = editor;
+        editor.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(CurrentEditor, editor))
+            {
+                CurrentEditor = null;
+            }
+        };
+
+        // Owned by the shell window this page is mounted in, as every other window in this shell is
+        // (Navigation/SessionRecapLaunch.cs). Read off the tree rather than injected, because the
+        // page is already inside it by the time a button on it can be pressed.
+        if (TopLevel.GetTopLevel(this) is Window owner)
+        {
+            editor.Show(owner);
+        }
+        else
+        {
+            editor.Show();
+        }
+        RenderScriptedSession();
+    }
+
+    /// <summary>
+    /// Persist what the editor built and put the rack back in step with the disk — upstream's
+    /// <c>AddNewSession</c> / <c>UpdateCustomSession</c> pair
+    /// (<c>Services/Session/SessionManager.cs:174-196</c>, <c>:152-169</c>), both of which write the
+    /// file and then rebuild the list.
+    ///
+    /// <para>False when nothing was written, and the editor stays open holding the user's typing.
+    /// Nothing in the rack moves on a false: the catalogue is re-read only after a write that
+    /// really landed.</para>
+    /// </summary>
+    private bool CommitEditedSession(ScriptedSession edited)
+    {
+        ArgumentNullException.ThrowIfNull(edited);
+        if (_session.CustomSessions.Save(edited) is null)
+        {
+            return false;
+        }
+
+        // Re-read rather than splice the instance in: the file on disk is now the authority, and a
+        // rack built from anything else could disagree with it after a save that normalised
+        // something (an out-of-range duration, a name with trailing space). Upstream reloads for the
+        // same reason (MainWindow/MainWindow.SessionIO.cs:1929).
+        _scriptedSelection = edited;
+        ReloadScriptedCatalogue();
+        RepaintScriptedSessionRack();
+        _scriptedRefusal = SessionRackNotices.EditorSaved(edited);
+        RenderScriptedSession();
+        return true;
+    }
+
+    /// <summary>
+    /// Remove one of the user's own sessions — upstream's <c>SessionBtn_Delete</c>
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:1946-1968</c>) into <c>DeleteSession</c>
+    /// (<c>Services/Session/SessionManager.cs:201-219</c>), which refuses a built-in outright.
+    ///
+    /// <para>The armed selection goes with it: a pick that names a file that is no longer there is
+    /// a Start button aimed at nothing.</para>
+    /// </summary>
+    private bool DeleteCustomSession(ScriptedSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!_session.CustomSessions.Delete(session))
+        {
+            return false;
+        }
+
+        _scriptedSelection = null;
+        ReloadScriptedCatalogue();
+        RepaintScriptedSessionRack();
+        _scriptedRefusal = SessionRackNotices.EditorDeleted(session);
+        RenderScriptedSession();
+        return true;
     }
 
     /// <summary>

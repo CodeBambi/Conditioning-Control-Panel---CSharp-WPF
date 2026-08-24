@@ -121,7 +121,7 @@ public sealed class ScriptedSession
     /// <summary>
     /// Where this session came from. <b>Not in the file and never written to one</b> — upstream
     /// marks both its provenance members <c>[JsonIgnore]</c> under the comment "Source Tracking (not
-    /// serialized to file)" (<c>Models/SessionDefinition.cs:62-68</c>), and the reason is the whole
+    /// serialized to file)" (<c>Models/SessionDefinition.cs:64-69</c>), and the reason is the whole
     /// import story: a file that carried its own provenance would go on claiming to be built-in
     /// wherever it was copied. Provenance is a property of WHERE the file was read, so
     /// <see cref="ReadFolder"/> stamps it and nothing else does.
@@ -130,10 +130,10 @@ public sealed class ScriptedSession
     public ScriptedSessionOrigin Origin { get; set; }
 
     /// <summary>The file this session was read from, or empty for one that has never been written
-    /// (upstream's <c>SourceFilePath</c>, <c>Models/SessionDefinition.cs:67-68</c>, and
+    /// (upstream's <c>SourceFilePath</c>, <c>Models/SessionDefinition.cs:68-69</c>, and
     /// <c>[JsonIgnore]</c> for the reason <see cref="Origin"/> gives). It is what lets a second edit
     /// of the same custom session overwrite its own file instead of laying a new one beside it
-    /// (<c>Services/Session/SessionFileService.cs:232-241</c>).</summary>
+    /// (<c>Services/Session/SessionFileService.cs:231-242</c>).</summary>
     [JsonIgnore]
     public string SourceFilePath { get; set; } = "";
 
@@ -259,7 +259,7 @@ public sealed class ScriptedSession
 
 /// <summary>
 /// Where a session came from — upstream's <c>SessionSource</c>
-/// (<c>Models/SessionDefinition.cs:7-15</c>) minus its third member.
+/// (<c>Models/SessionDefinition.cs:10-15</c>) minus its third member.
 ///
 /// <para><b>Upstream's <c>Imported</c> is not here</b>, and leaving it out is the same call the rack
 /// made about upstream's source chips: this build has no gesture that imports a session file from
@@ -272,7 +272,7 @@ public enum ScriptedSessionOrigin
 {
     /// <summary>Shipped beside the binary (<see cref="ScriptedSession.BuiltInFolder"/>). Upstream
     /// <c>BuiltIn</c>, and it means there what it means here: never overwritten, never deleted
-    /// (<c>Services/Session/SessionManager.cs:204-206</c>).</summary>
+    /// (<c>Services/Session/SessionManager.cs:203-205</c>).</summary>
     BuiltIn,
 
     /// <summary>The user's own, under <see cref="CustomSessionStore.FolderName"/> in the data root.

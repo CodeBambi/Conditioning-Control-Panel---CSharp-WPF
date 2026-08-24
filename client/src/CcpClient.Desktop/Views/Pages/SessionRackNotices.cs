@@ -75,10 +75,123 @@ public static class SessionRackNotices
     public const string NotAvailable = "That session is not available.";
 
     /// <summary>What this surface does NOT do, said where the user is
-    /// (§9 D7's rule: absent rather than greyed, and named rather than silently missing).</summary>
+    /// (§9 D7's rule: absent rather than greyed, and named rather than silently missing).
+    ///
+    /// <para>The session EDITOR and CUSTOM sessions left this list because they stopped being
+    /// absent (<see cref="SessionEditorRules"/>, <see cref="CustomSessionStore"/>). IMPORTING a
+    /// session file is still not here — upstream's is drag-and-drop onto the rack plus a
+    /// validate-and-copy path (<c>Services/Session/SessionManager.cs:101-142</c>), and this build
+    /// has no file-drop surface to hang it on — and neither is AUTHORING A TIMELINE, which is the
+    /// half of upstream's editor this port models nothing for
+    /// (<see cref="SessionEditorRules"/>).</para></summary>
     public const string Absences =
-        "Not here yet: the session editor, custom and imported sessions, and the XP award — so a "
-        + "pause is counted and its penalty recorded, but nothing is charged for it.";
+        "Not here yet: importing a session file, authoring a session's timeline, and the XP award "
+        + "— so a pause is counted and its penalty recorded, but nothing is charged for it.";
+
+    /// <summary>The rack's edit action (<c>MainWindow/MainWindow.SessionIO.cs:538</c>,
+    /// <c>tooltip_edit_session</c>). Upstream offers it on EVERY row including a built-in, which is
+    /// what makes the copy rule reachable at all.</summary>
+    public const string EditButton = "Edit session";
+
+    /// <summary>What the rack says when Edit is pressed with nothing picked. Upstream cannot reach
+    /// this state — its action lives ON a row and carries that row's id
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:1821-1824</c>) — so this is the port's own refusal for
+    /// its own one-button-per-selection shape, worded as the start button's twin
+    /// (<see cref="NothingSelected"/>).</summary>
+    public const string NothingToEdit = "Pick a session first, then press Edit session.";
+
+    /// <summary>The line the rack shows after a save that really landed. It names the FOLDER and
+    /// never the file, because the folder is the actionable half and a full path in a panel is a
+    /// line nobody can read.</summary>
+    public static string EditorSaved(ScriptedSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return $"Saved “{session.Name}” to your sessions folder ({CustomSessionStore.FolderName}).";
+    }
+
+    /// <summary>The line the rack shows after a delete that really happened.</summary>
+    public static string EditorDeleted(ScriptedSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return $"Deleted “{session.Name}”. The built-in sessions are untouched.";
+    }
+
+    /// <summary>The editor window's title — upstream's <c>label_session_editor</c>
+    /// (<c>Windows/SessionEditorWindow.xaml:6</c>).</summary>
+    public const string EditorTitle = "Session Editor";
+
+    /// <summary>
+    /// Which of the two things this edit is, said before the user types anything.
+    ///
+    /// <para>Upstream never says it in the editor and it does not have to: its built-in branch puts
+    /// a Save-As dialog on screen at the end (<c>MainWindow/MainWindow.SessionIO.cs:1840-1850</c>),
+    /// which announces the copy by asking where to put it. This port saves without asking — the
+    /// folder is the port's decision, not the user's — so the sentence the dialog used to carry has
+    /// to be somewhere, and the top of the window is where the decision is being made.</para>
+    /// </summary>
+    public static string EditorProvenance(ScriptedSessionOrigin origin) =>
+        origin == ScriptedSessionOrigin.BuiltIn
+            ? "Built-in — saving makes your own copy and leaves this one alone."
+            : "Yours — saving overwrites it.";
+
+    /// <summary>What the editor does NOT edit. Three of upstream's fields and the whole of its
+    /// timeline (<see cref="SessionEditorRules"/> for the derivation this port cannot
+    /// run).</summary>
+    public const string EditorAbsences =
+        "Name, duration and description only. Difficulty and XP stay as authored — upstream works "
+        + "them out from a timeline this build does not model — and the session's effects, phases "
+        + "and icon are unchanged.";
+
+    /// <summary>Upstream's delete action (<c>MainWindow/MainWindow.SessionIO.cs:543</c>,
+    /// <c>tooltip_delete_session</c>).</summary>
+    public const string EditorDelete = "Delete";
+
+    /// <summary>The same button once it is holding the question — upstream puts this on a styled
+    /// dialog instead (<c>:1953-1957</c>, <c>btn_delete</c>).</summary>
+    public const string EditorDeleteConfirm = "Really delete";
+
+    /// <summary>Upstream's confirmation body (<c>msg_delete_session_confirm_0</c>,
+    /// <c>:1956</c>).</summary>
+    public const string EditorDeleteQuestion =
+        "Press Really delete to remove this session. Cancel leaves it alone.";
+
+    /// <summary>Said when the store refused or could not write
+    /// (<see cref="CustomSessionStore.Save"/> returned null). It names the two causes a user can
+    /// act on rather than an exception type.</summary>
+    public const string EditorSaveFailed =
+        "That could not be saved — the sessions folder may be read-only or the disk full. Nothing "
+        + "was changed.";
+
+    /// <summary>Said when the delete could not happen
+    /// (<see cref="CustomSessionStore.Delete"/> returned false).</summary>
+    public const string EditorDeleteFailed =
+        "That could not be deleted — the file may be gone already or in use. Nothing was changed.";
+
+    /// <summary>
+    /// The rack row's provenance badge — upstream's, in upstream's own words
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:588-597</c>: <c>rack_src_yours</c> "YOURS" and
+    /// <c>rack_src_builtin</c> "BUILT-IN", drawn as a pill at <c>:508-517</c>).
+    ///
+    /// <para><b>It was refused at slice 3 and the refusal's premise is now false.</b> The reason
+    /// then was that "every row here is built-in, so a badge saying so on all four would carry no
+    /// information". With an editor, editing a built-in produces a session with the SAME NAME
+    /// beside it, so the badge is the only thing on the row that tells the two apart — it went from
+    /// carrying no information to carrying the row's most important bit.</para>
+    ///
+    /// <para>Upstream's third source, <c>CAT</c> for an imported session (<c>:593-594</c>), has no
+    /// member here for the reason <see cref="ScriptedSessionOrigin"/> gives: nothing in this build
+    /// imports one.</para>
+    /// </summary>
+    public static string RowProvenance(ScriptedSessionOrigin origin) =>
+        origin == ScriptedSessionOrigin.BuiltIn ? "BUILT-IN" : "YOURS";
+
+    /// <summary>The badge's colour, upstream's own (<c>Resources/Theme/Colors.xaml:200</c>
+    /// <c>SessionSrcBuiltIn</c> and <c>:202</c> <c>SessionSrcCustom</c>, resolved through the two
+    /// brushes at <c>Resources/Theme/Brushes.xaml:211</c> and <c>:213</c>). Two hues rather than
+    /// two words, for the same reason the difficulty stripe is a colour: it is the channel a user
+    /// reads while scrolling (<c>MainWindow/MainWindow.SessionIO.cs:421-422</c>).</summary>
+    public static string RowProvenanceColour(ScriptedSessionOrigin origin) =>
+        origin == ScriptedSessionOrigin.BuiltIn ? "#FF5CC8FF" : "#FFFF69B4";
 
     /// <summary>
     /// The icon cell — upstream's, including its fallback for a session that carries none

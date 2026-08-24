@@ -645,6 +645,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // stamps its offsets from an unguarded `DateTime.Now` (:183-184, :218-219) and a clock jump
         // moves them.
         MediaLog = new ScriptedSessionLogStore(dataDirectory, infra.Log);
+
+        // THE USER'S OWN SESSIONS, from the same data root as the logs above and the eleven preset
+        // documents. Built here rather than in the composition root for the reason MediaLog is: the
+        // rack that reads it and the editor that writes it must be looking at ONE folder, and the
+        // only object both of them already have is this participant.
+        CustomSessions = new CustomSessionStore(dataDirectory, infra.Log);
         Flash.Fired += flash =>
         {
             if (Scripted.Running)
@@ -691,6 +697,21 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// writes into, never a second reader of the same folder.
     /// </summary>
     public ScriptedSessionLogStore MediaLog { get; }
+
+    /// <summary>
+    /// The user's own scripted sessions on disk — upstream's <c>CustomSessions</c> folder
+    /// (<c>Services/Session/SessionFileService.cs:27-34</c>). Public for the same reason
+    /// <see cref="MediaLog"/> is: the Studio rack builds its catalogue out of it and the session
+    /// editor writes into it, and a second store over the same folder is how a rack and a disk stop
+    /// agreeing.
+    ///
+    /// <para><b>It is deliberately NOT a persistence-store document.</b> The eleven preset
+    /// documents are one known file each, loaded at boot and written by the teardown flush
+    /// (persistence contract §11); these are an open-ended set of user files that exist only
+    /// because a Save button was pressed. Nothing flushes this at shutdown and nothing should.
+    /// </para>
+    /// </summary>
+    public CustomSessionStore CustomSessions { get; }
 
     /// <summary>
     /// The three sounding modules' clips, or null in a host built with no app-wide audio owner
