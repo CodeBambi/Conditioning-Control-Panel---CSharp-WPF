@@ -110,6 +110,15 @@ public class SessionFeatureLockHeadlessTests : HeadlessTest
     /// master (<c>Views/Tabs/HapticsTabView.xaml:587</c>) to back a premium-rail refusal that
     /// refuses the same flip mid-session; this port has no such refusal to make decorative, so
     /// locking it would take a control away for nothing.</item>
+    /// <item><b>The whole AUDIO row</b> — both volumes, the endpoint picker and the Test button.
+    /// It fails BOTH halves of the rule, which is why it is the cleanest entry on this list.
+    /// <c>audio.json</c> is not one of the eleven documents a run borrows
+    /// (<see cref="ScriptedSessionDials"/>'s constructor), so nothing snapshots it, nothing writes
+    /// it back, and a change made mid-session is the user's afterwards; and upstream classes
+    /// volumes as COMFORT rather than dosage, naming audio volume in the never-lock list outright
+    /// (<c>MainWindow/MainWindow.SessionFeatureLock.cs:39-42</c>,
+    /// <c>Features/SessionLock.cs:21-38</c>). A scripted session does not get to move the user's
+    /// master volume or re-route their headphones.</item>
     /// </list>
     /// </summary>
     private static readonly string[] LiveThroughout =
@@ -124,6 +133,7 @@ public class SessionFeatureLockHeadlessTests : HeadlessTest
         "RampLinkSpiralToggle", "RampLinkPinkFilterToggle", "RampLinkFlashToggle",
         "SchedulerEnableToggle", "SchedulerStartTimeBox", "SchedulerDayMon",
         "HapticsEnableToggle", "LoomButton",
+        "AudioMasterSlider", "AudioVideoSlider", "AudioDevicePicker", "AudioTestButton",
     ];
 
     private sealed record Boot(ApplicationHost Host, MainWindow Window, ManualScriptedClock Clock)
