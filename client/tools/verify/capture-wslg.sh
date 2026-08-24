@@ -76,6 +76,56 @@ mkdir -p "$ART"
 [ -f "$DLL" ] || { echo "FAIL: app not built: $DLL"; exit 1; }
 [ -f "$VERIFY_DLL" ] || { echo "FAIL: the capture-vacuity gate is not built: $VERIFY_DLL"; exit 1; }
 
+# ------------------------------------------------------------------------------------------------
+# THE MACHINE-WIDE REAL-DESKTOP LEASE, and until 2026-08-25 this script took none at all.
+#
+# This script raises a window on the interactive desktop, reads that desktop back with XGetImage
+# and (with --click) drives REAL input into it through XTEST. That is the same machine-wide
+# singleton every CcpClient.Tests real-desktop fact contends for, and CcpClient.Tests serialises
+# itself against its own peers through this exact file. A harness run that takes no lease is
+# invisible to the whole mechanism. What that costs was measured on the Windows side of the same
+# harness and is recorded in HarnessLeaseGuardTests.cs: 10 of 10 filtered floor runs red with a
+# stand-in harness driving the desktop beside them, 0 of 10 with the same harness leased.
+#
+# THE CONTRACT IS RealDesktopLease'S. The exclusion is an exclusive lock on
+# "$(temp)/ccp-real-desktop.lease"; the identity is "pid=<n>", raw, in the '.holder' sidecar beside
+# it (RealDesktopCollection.cs:206,224). ${TMPDIR:-/tmp} is Path.GetTempPath()'s own rule, so a
+# Linux floor run and this script name the same file.
+#
+# WHY flock(1) AND NOT A LOCK FILE. .NET maps FileShare.None to flock(LOCK_EX) on Unix, so
+# flock(1) is the SAME primitive and not a parallel scheme. All four directions were measured on
+# this machine's WSL2 kernel rather than assumed: flock(1) holding refuses .NET's FileShare.None;
+# .NET's FileShare.None holding refuses flock(1); two flock(1) holders refuse each other; and a
+# holder killed with SIGKILL leaves the lock FREE, because the kernel drops it when the fd closes.
+# That last one is why this is a lock and not a lock FILE: with-slot.mjs's existence-based scheme
+# needs a reaper for exactly the killed-harness case and this needs none.
+#
+# THE FD IS HELD BY THE SHELL, not by a subprocess, so it lives exactly as long as this script and
+# is released by the kernel however the script ends - normally, on `set -e`, or on SIGKILL. There is
+# deliberately no trap: a trap would be a second mechanism that a SIGKILL defeats anyway.
+#
+# NAMED BLIND SPOT, and it is a real one: WSL's /tmp and Windows' %TEMP% are different filesystems,
+# so this lease excludes a LINUX floor run and does NOT exclude a Windows one. A WSLg RAIL window
+# is composited onto the Windows desktop, so a capture here can still disturb a Windows-side
+# real-desktop fact. Closing that needs a lease on a filesystem both sides share, and DrvFs over
+# /mnt/c is the one filesystem RealDesktopLease already names as unable to carry an advisory flock.
+# ------------------------------------------------------------------------------------------------
+LEASE="${TMPDIR:-/tmp}/ccp-real-desktop.lease"
+exec 9>"$LEASE"
+if ! flock -w 300 -x 9; then
+  HOLDER=$(head -c 64 "$LEASE.holder" 2>/dev/null || true)
+  case "$HOLDER" in
+    pid=*) WHO="the lease file names process ${HOLDER#pid=} as the holder" ;;
+    *)     WHO="the lease file names no readable holder, so WHO has the desktop is unknown" ;;
+  esac
+  echo "FAIL: could not take the real-desktop lease at $LEASE within 300s. This process is $$; $WHO."
+  echo "A contended desktop is not a flake and must NOT be captured around: the desktop is a"
+  echo "singleton and this capture would photograph another run's windows."
+  exit 1
+fi
+printf 'pid=%s' "$$" > "$LEASE.holder" 2>/dev/null || true
+echo "real-desktop lease held by pid=$$ ($LEASE)"
+
 case "$SURFACE" in
   dashboard|rail-door) ;;
   *) echo "FAIL: surface must be dashboard|rail-door (got '$SURFACE')"; exit 1 ;;

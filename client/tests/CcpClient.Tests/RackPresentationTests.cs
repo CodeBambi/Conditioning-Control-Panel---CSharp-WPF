@@ -285,8 +285,8 @@ public class RackPresentationTests
     /// interactive desktop and reads that desktop back, exactly as <c>RealDesktopCollection</c>'s
     /// fixtures do, and it ran OUTSIDE their lease until this packet. Every element of the contract is
     /// asserted because dropping any one of them silently breaks a different half of it: the wrong
-    /// path contends with nobody, <c>FileShare.None</c> makes the holder unnameable, and a
-    /// <c>StreamWriter</c>'s BOM makes <c>HolderProcessId</c> read "no readable holder".
+    /// path contends with nobody, the wrong share mode excludes nobody, and a <c>StreamWriter</c>'s BOM
+    /// makes <c>HolderProcessId</c> read "no readable holder".
     ///
     /// <para><b>THE CALL SITE IS MATCHED LINE-EXACTLY, and the first version of this guard was
     /// INERT for want of that.</b> It searched for <c>"Take-Lease"</c> starting one character past
@@ -295,13 +295,32 @@ public class RackPresentationTests
     /// every one of the six assertions stayed green: the script could run entirely unleased with
     /// this test passing. A definition is not an invocation, and a guard over this packet's #1
     /// correctness requirement has to know the difference.</para>
+    ///
+    /// <para><b>AND THE SHARE-MODE PIN WENT INERT A SECOND TIME, THE SAME WAY, MEASURED 2026-08-25.</b>
+    /// This paragraph used to say <c>FileShare.None</c> "makes the holder unnameable", and on the day it
+    /// was written that was TRUE: the holder's pid went into the lease file itself, which an exclusive
+    /// lock makes unreadable. <see cref="RealDesktopLease"/> has since split the two — the lock on the
+    /// lease file, the identity in a <c>.holder</c> sidecar nothing holds open — so <c>FileShare.None</c>
+    /// is now both the only mode that excludes on Unix AND fully nameable, and this script has been
+    /// corrected to it. The pin did not notice EITHER WAY, because the needle it used
+    /// (<c>...::FileShare]::Read</c>) is a PREFIX of the sidecar open's <c>...::ReadWrite</c> and matched
+    /// that line instead. Measured: with the drift deliberately put back on the lease open, this test
+    /// stayed GREEN; it only reddened when the sidecar open was changed too. The needles below are
+    /// therefore anchored to the variable AND the closing parenthesis, so each one can match exactly one
+    /// open. The broader contract — that the harness leases at all, on RealDesktopLease's values — is
+    /// <see cref="HarnessLeaseGuardTests"/>, which covers <c>capture-wslg.sh</c> as well.</para>
     /// </summary>
     [Fact]
     public void TheCaptureScriptTakesTheMachineWideRealDesktopLease()
     {
         var script = CaptureScriptCode();
         Assert.Contains("ccp-real-desktop.lease", script, StringComparison.Ordinal);
-        Assert.Contains("[IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::Read", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "$script:leasePath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)",
+            script, StringComparison.Ordinal);
+        Assert.Contains(
+            "$script:holderPath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)",
+            script, StringComparison.Ordinal);
         Assert.Contains("[Text.Encoding]::UTF8.GetBytes(\"pid=$PID\")", script, StringComparison.Ordinal);
         Assert.DoesNotContain("StreamWriter", script, StringComparison.Ordinal);
 

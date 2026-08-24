@@ -348,25 +348,48 @@ Add-Type -TypeDefinition $native
 # ---------------------------------------------------------------------------------------------
 # The machine-wide real-desktop lease.
 #
-# Byte-for-byte the contract CcpClient.Tests' RealDesktopLease.TryTake uses
-# (RealDesktopCollection.cs:110-118): FileMode.Create / FileAccess.Write / FileShare.Read, with
-# "pid=<n>" written RAW into the stream. Raw matters — RealDesktopLease.HolderProcessId requires
-# the file to start literally "pid=" (RealDesktopCollection.cs:148), so a StreamWriter's BOM or a
-# trailing newline would make a contending floor run report "no readable holder" instead of naming
-# this capture. Share mode Read, not None, for the same reason in the other direction: a contender
-# can read WHO holds the desktop while it is held.
+# WHAT IT IS FOR. This script raises a top-most window over the interactive desktop and drives REAL
+# input into it, which is the same machine-wide singleton every CcpClient.Tests real-desktop fact
+# contends for. What a harness run that takes NO lease costs was measured on this machine, and the
+# run is recorded in HarnessLeaseGuardTests.cs: a stand-in harness raised over the display and
+# clicking on a cadence, started 5 s into a filtered floor run of eight real-desktop input classes,
+# reddened 10 of 10 runs with 1-8 named failures each - including `the drag did not hold its path`,
+# the exact family the board diagnosed three times before it found the cause. The same harness
+# taking this lease reddened 0 of 10.
 #
-# A file handle rather than a Mutex because the OS closes it when the process dies, so a crashed
-# capture cannot wedge the machine for the next run.
+# THE CONTRACT, and both halves of it are RealDesktopLease's rather than this script's.
+#   EXCLUSION  the lease file, opened FileMode.Create / FileAccess.Write / FileShare.None
+#              (RealDesktopCollection.cs:183). None is the whole mechanism: on Windows it denies a
+#              second write-open, and on Unix .NET maps it to flock(LOCK_EX) while EVERY other
+#              share mode takes LOCK_SH and excludes nothing at all.
+#   IDENTITY   a SIDECAR beside it, '<lease>.holder' (RealDesktopCollection.cs:206), holding
+#              "pid=<n>" written RAW. Raw matters - RealDesktopLease.HolderProcessId requires the
+#              file to start literally "pid=" (RealDesktopCollection.cs:224), so a StreamWriter's
+#              BOM or a trailing newline would make a contending floor run report "no readable
+#              holder" instead of naming this capture.
+#
+# THE TWO FILES ARE SEPARATE BECAUSE ON LINUX THEY CANNOT BE ONE, and this script had it wrong
+# until 2026-08-25: it opened FileShare.Read and wrote its pid INTO the lease body, which was the
+# contract on the day it was written. RealDesktopLease has since moved the identity to the sidecar,
+# because an exclusively locked file is unreadable to a contender. The exclusion still held - a
+# Windows write-open is refused either way, probed in both orders - but the identity half was broken
+# in BOTH directions: a floor run refused by this capture read a sidecar this capture never wrote
+# and named a stale pid, and Get-LeaseHolder here read the file a floor run holds SHUT and reported
+# "no readable holder". A drift that silent is what HarnessLeaseGuardTests now binds.
+#
+# A file handle rather than a Mutex because the OS closes it when the process dies, so a crashed or
+# killed capture cannot wedge the machine for the next run. The sidecar is NOT cleaned up on a kill
+# and does not need to be: it carries identity only, so the worst a stale one can do is degrade a
+# message, never the exclusion.
 # ---------------------------------------------------------------------------------------------
 $script:leasePath = Join-Path ([IO.Path]::GetTempPath()) 'ccp-real-desktop.lease'
+$script:holderPath = $script:leasePath + '.holder'
 $script:lease = $null
 
 function Get-LeaseHolder([string]$path) {
     try {
-        # FileShare.ReadWrite, exactly as RealDesktopCollection.cs:144 opens it. A reader that
-        # granted only Read would itself be refused while the WRITER holds the file, and the whole
-        # point of this read is to work while somebody else has the desktop.
+        # FileShare.ReadWrite on BOTH sides, exactly as RealDesktopCollection.cs:219-220 opens it, so
+        # a read landing in the same instant as a holder's write is answered rather than refused.
         $reader = [IO.FileStream]::new($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
         try {
             $buffer = New-Object byte[] 64
@@ -394,10 +417,21 @@ function Take-Lease {
     while ($deadline.Elapsed.TotalSeconds -lt 300) {
         try {
             $script:lease = [IO.FileStream]::new(
-                $script:leasePath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::Read)
-            $identity = [Text.Encoding]::UTF8.GetBytes("pid=$PID")
-            $script:lease.Write($identity, 0, $identity.Length)
-            $script:lease.Flush()
+                $script:leasePath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            # The identity goes to the SIDECAR, never into the locked file, and only once the lock is
+            # held - the same order and the same best-effort posture as RealDesktopLease.WriteHolder
+            # (RealDesktopCollection.cs:243-258). A sidecar that cannot be written costs a failure
+            # message its name, never the exclusion.
+            try {
+                $identity = [IO.FileStream]::new(
+                    $script:holderPath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+                try {
+                    $bytes = [Text.Encoding]::UTF8.GetBytes("pid=$PID")
+                    $identity.Write($bytes, 0, $bytes.Length)
+                }
+                finally { $identity.Dispose() }
+            }
+            catch { }
             Write-Output "real-desktop lease held by pid=$PID (waited $([math]::Round($deadline.Elapsed.TotalSeconds, 1))s)"
             return
         }
@@ -414,7 +448,7 @@ function Take-Lease {
         }
     }
 
-    $holder = Get-LeaseHolder $script:leasePath
+    $holder = Get-LeaseHolder $script:holderPath
     $who = if ($null -ne $holder) { "the lease file names process $holder as the holder" }
            else { 'the lease file names no readable holder, so WHO has the desktop is unknown' }
     Write-Output ("FAIL: could not take the real-desktop lease within $([int]$deadline.Elapsed.TotalSeconds)s. " +
