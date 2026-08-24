@@ -1703,6 +1703,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       actionLabel = t('begin_class', 'Begin');
       xpLine = t('campus_dev_pass_hint', "Dev pass: off tonight's board, graded anyway.");
     }
+    const swim = suspendedGlobally ? null : endlessFor(gameKey);
     roomPage = createRoomScene({
       gameKey,
       t,
@@ -1716,6 +1717,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       xpLine,
       onEnter: () => launchGraded(gameKey),
       onBack: () => showBoard(),
+      /* THE OFFER THE CARD USED TO CARRY. The room REPLACES the door card, and
+       * the card was where a game with `manifest.endless` showed its second,
+       * subordinate Free Swim button - so the room owes the same offer or the
+       * fan-out quietly takes it away. room.js paints it twice (the ladder in
+       * the art, the side slab on the apron) and spends one latch for both;
+       * startFreeSwim re-checks endlessFor itself, so this is a hint, not an
+       * authority. A game with nothing declared gets undefined = neither. */
+      onFreeSwim: swim ? () => startFreeSwim(gameKey) : undefined,
+      freeSwimLabel: swim ? t(swim.labelKey || 'free_swim', 'Free Swim') : '',
       /* THE RAIL'S THIRD ERRAND. The knobs are asked for from the doorway more
        * than anywhere else, so the room lends them its own way back: settings
        * opened from here folds into the room it left, never past it. */

@@ -85,27 +85,58 @@ shell/enrollment.js the once-ever intro (ENROLL_LEX: 3 flavour cards per class)
                    the tenth = the unlock beat)
 shell/room.js      THE ROOM SCENE (VN antechamber): the painted set between the
                    campus door and a class, REPLACING the door card for rooms
-                   listed in its SCENES table (pilot: daily_trigger / Homeroom,
-                   art/vn/vn-04). campus.js OFFERS every enterable door via
-                   handlers.roomScene(key, {plate}) before popping the card;
-                   shell.js takes keys the table has (walkThen first - door,
-                   THEN room), declines the rest with false = the card pops
-                   unchanged. Dark rooms / suspended school never offered, so
-                   the lockedClick EMI seam stays the card's. A screen like
-                   records: SCREEN_DEPTH room:1, one Esc rung (showBoard), torn
-                   down in clearScreen. Fixed 1376x768 stage, hotspot rects in
-                   stage px (lab.js promoted; transform-origin 50% 50%). Enter
-                   = begin (hotspot button holds focus). Free Swim rooms need a
-                   second furniture hotspot before joining SCENES (the card
-                   carried the button; DT has none, so the pilot ducks it).
+                   listed in its SCENES table. FIVE ROOMS LIVE: daily_trigger
+                   (Homeroom 101, vn-04, chalkboard + painted corridor door),
+                   deja_vu (Memory Lab 102, vn-05, the card racks),
+                   impulse_control (Discipline Hall 103, vn-06, THE red button
+                   under glass + the panelled door), lost_and_found (L&F 104,
+                   vn-07, the central shelf bay - NOT the whole 850px wall, a
+                   highlight that big reads as a bug) and the_deep_end (The
+                   Pool 105, vn-08, open lane water + the ladder). campus.js
+                   OFFERS every enterable door via handlers.roomScene(key,
+                   {plate}) before popping the card; shell.js takes keys the
+                   table has (walkThen first - door, THEN room), declines the
+                   rest with false = the card pops unchanged. Dark rooms /
+                   suspended school never offered, so the lockedClick EMI seam
+                   stays the card's. A screen like records: SCREEN_DEPTH
+                   room:1, one Esc rung (showBoard), torn down in clearScreen.
+                   Fixed 1376x768 stage, hotspot rects in stage px (lab.js
+                   promoted; transform-origin 50% 50%). Enter = begin (hotspot
+                   button holds focus). Rects must keep their business ABOVE
+                   y=APRON_STAGE_TOP (640) - the apron owns the floor.
+                   THE FREE SWIM RULE: the door card is where a game that
+                   declares `manifest.endless` shows its second, subordinate
+                   Free Swim button, and the room REPLACES that card - so such
+                   a game may join SCENES only WITH a `freeSwim` rect, or the
+                   offer is silently lost. Only the_deep_end has one (the pool
+                   ladder); shell.js hands down onFreeSwim + freeSwimLabel from
+                   endlessFor(), and room.js paints both the rect and the
+                   apron's side slab from it (no callback = neither renders,
+                   whatever the row says). All four start-surfaces spend ONE
+                   `entered` latch via spend(), so a room deals one class.
                    TRAP: the first fit() races the lazy rooms.css link - an
                    unstyled root measures as the 1080px .arc-screen column and
                    the room ships as a postcard; room.js refits on link load +
                    art load + one rAF, and .arm-root is position:fixed like
                    .arc-records for the same arc-report-on reason.
 shell/rooms.css    room.js's skin, lazy-linked on first visit (corkboard
-                   pattern). Pink breath on the one lit hotspot; .arc-reduced /
-                   .arm-lite hold it still (decoration law).
+                   pattern). Pink breath on the one lit hotspot (.arm-main -
+                   keyed on that class, NOT on :not(.arm-exit), because a pool
+                   has a third rect); .arc-reduced / .arm-lite hold it still
+                   (decoration law). The exit is quiet purple, the freeSwim
+                   rect (.arm-swim) quiet cyan and never breathing - neither
+                   may out-shout the verb that pays.
+                   THE MIDWAY APRON (.arm-bar): the bottom action band, mounted
+                   on <body> rather than inside .arm-root - root is its own
+                   stacking context at z10, so nothing inside it can ever rise
+                   above EMI (#arc-emi z50). As a body-level sibling at z55 the
+                   band is the front edge of the stage: EMI wanders BEHIND it
+                   and the slabs can never be squatted on (toasts z60 still
+                   win). fit() anchors its top to the painting's floor line and
+                   publishes --arm-band-h on BOTH root and bar (a body-level
+                   sibling cannot inherit a var set on root alone); everything
+                   in the band sizes off that one number. destroy() owns its
+                   removal like root's.
 shell/records.js   THE RECORDS OFFICE screen: the wall of ten cards, the per-card
                    stamp docket, and a link to the report card (never a second
                    share pipeline - trap 13). + THE SPOTLIGHT (owner playtest
