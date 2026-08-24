@@ -25,6 +25,16 @@ namespace CcpClient.Tests;
 /// reddened by an upstream edit. A needle that has genuinely gone stale is a
 /// <c>NEEDLE-GONE</c>/<c>NEEDLE-AMBIGUOUS</c> ROW in the report, not a failure here.</para>
 ///
+/// <para><b>And the SHA those two comparisons stand on is itself checked.</b> Every fact here that
+/// reads real bytes derives them from <c>baseline.merge</c> or <c>baseline.previous.merge</c>, so an
+/// endpoint that is not a state of the read-only WPF tree quietly poisons all of them —
+/// <see cref="BothBaselineEndpoints_NameAnUpstreamStateOfTheReadOnlyTree"/> is why that cannot
+/// happen silently. It is not a theoretical guard: the value this file carried until 2026-08-25
+/// (the v6.8.0 SYNC MERGE, on the port branch) fails it, because that merge's
+/// <c>ConditioningControlPanel/</c> still held the abandoned first-attempt refactor. Regenerating
+/// the inventory's deltas from there contaminated 21 of 297 entries and invented a tier-1 review
+/// row for a file upstream never touched.</para>
+///
 /// <para><b>What is NOT on the floor, stated rather than implied.</b> The needle mode's MECHANISM
 /// — moved/gone/ambiguous/out-of-range classification and the coverage arithmetic — is fixtured in
 /// <c>client/tools/citations/self-test.mjs</c> (F15-F24), and <b>no standing gate in this
@@ -37,6 +47,10 @@ public sealed class CitationNeedleTests
     private static readonly string[] RepoAnchorParts = ["client", "CcpClient.sln"];
     private static readonly string[] InventoryParts = ["client", "docs", "upstream-citation-inventory.json"];
     private static readonly string[] DetectorParts = ["client", "tools", "citations", "detect.mjs"];
+
+    /// <summary>The read-only zone, as a repo-relative git path — the same constant and the same
+    /// spelling <c>ReadOnlyWpfTreeGuardTests</c> uses.</summary>
+    private const string ReadOnlyTree = "ConditioningControlPanel";
 
     /// <summary>The only two keys a needle record may carry. `id` names the subject for the report;
     /// `needle` is the literal. Anything else — and <c>line</c> above all — is rejected by name.</summary>
@@ -241,6 +255,94 @@ public sealed class CitationNeedleTests
         Assert.True(wrong.Count == 0,
             "a needle does not anchor exactly one line in the recorded baseline snapshot — it was wrong when it "
             + "was written, or it was mangled since:" + Environment.NewLine + string.Join(Environment.NewLine, wrong));
+    }
+
+    /// <summary>
+    /// BOTH ends of the inventory's window must name a state the READ-ONLY WPF TREE actually had.
+    ///
+    /// <para><b>The rule, and why a port-branch merge is not automatically one.</b> The inventory
+    /// measures what UPSTREAM changed, so both endpoints have to be upstream trees. A merge commit
+    /// on the port branch usually is one — its <c>ConditioningControlPanel/</c> is whatever it just
+    /// merged — but it is one only by convention, and the convention was broken for real: at the
+    /// v6.8.0 sync merge that tree still carried the first-attempt <c>CCP.Core/</c> extraction, so a
+    /// window starting there measures the port's own later restore as though upstream had done it.
+    /// Four entries were unmeasurable, seventeen mixed the restore into their add/del, and one
+    /// tier-1 file regenerated to <c>M +121/-1</c> having not been touched upstream at all.</para>
+    ///
+    /// <para><b>The check is subtree identity against the merge base, not an ancestry test.</b>
+    /// A commit ON main passes trivially (it is its own merge base). A port merge passes when its
+    /// WPF subtree equals that of the main commit it merged. A port commit carrying local edits to
+    /// that tree fails, which is the whole point. Every resolvable main ref is tried and ANY match
+    /// passes, so a stale <c>origin/main</c> mirror cannot manufacture a red — the same
+    /// authority-first candidate list <c>ReadOnlyWpfTreeGuardTests</c> uses, for the same reason.</para>
+    ///
+    /// <para><b>This is a red test, unlike the detector it protects.</b> The review list is
+    /// deliberately never a failure (<c>detect.mjs:13-14</c>); a broken BASELINE is different in
+    /// kind, because it makes every row of that list — and both needle comparisons above — describe
+    /// a tree nobody shipped. There is nothing to cry wolf about: the value is written by hand, once
+    /// per sync, and it is either an upstream tree or it is not.</para>
+    /// </summary>
+    [Fact]
+    public async Task BothBaselineEndpoints_NameAnUpstreamStateOfTheReadOnlyTree()
+    {
+        using var inventory = ReadInventory();
+        var baseline = inventory.RootElement.GetProperty("baseline");
+        var endpoints = new[]
+        {
+            ("baseline.merge", baseline.GetProperty("merge").GetString()),
+            ("baseline.previous.merge", baseline.GetProperty("previous").GetProperty("merge").GetString()),
+        };
+
+        var mainRefs = new List<string>();
+        foreach (var candidate in new[] { "origin/main", "main" })
+        {
+            var probe = await RunAsync("git", ["rev-parse", "--verify", "--quiet", $"{candidate}^{{commit}}"]);
+            if (probe.ExitCode == 0) mainRefs.Add(candidate);
+        }
+
+        Assert.True(mainRefs.Count > 0,
+            "neither origin/main nor main resolves in this clone, so the inventory's endpoints cannot be checked "
+            + "against the upstream tree. This guard refuses to skip. Fix with: git fetch origin main:main");
+
+        var wrong = new List<string>();
+        foreach (var (field, sha) in endpoints)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(sha), $"the inventory must record {field}");
+
+            var subtree = await RunAsync("git", ["rev-parse", $"{sha}:{ReadOnlyTree}"]);
+            Assert.True(subtree.ExitCode == 0,
+                $"{field} = {sha} does not resolve to a {ReadOnlyTree}/ tree in this checkout, so the inventory "
+                + $"describes a repository that is not here: {subtree.StdErr}");
+            var atEndpoint = subtree.StdOut.Trim();
+
+            var seen = new List<string>();
+            var matched = false;
+            foreach (var reference in mainRefs)
+            {
+                var mergeBase = await RunAsync("git", ["merge-base", sha!, reference]);
+                if (mergeBase.ExitCode != 0) continue;
+
+                var baseCommit = mergeBase.StdOut.Trim();
+                var baseTree = await RunAsync("git", ["rev-parse", $"{baseCommit}:{ReadOnlyTree}"]);
+                if (baseTree.ExitCode != 0) continue;
+
+                seen.Add($"{reference} (merge base {baseCommit[..9]}) -> {baseTree.StdOut.Trim()}");
+                if (string.Equals(atEndpoint, baseTree.StdOut.Trim(), StringComparison.Ordinal)) matched = true;
+            }
+
+            _output.WriteLine($"{field} = {sha}: {ReadOnlyTree}/ = {atEndpoint} — {(matched ? "upstream state" : "NOT an upstream state")}");
+            if (!matched)
+            {
+                wrong.Add($"{field} = {sha}: its {ReadOnlyTree}/ is {atEndpoint}, which no main merge base has "
+                    + $"[{string.Join("; ", seen)}] — the tree at that commit carries port-local edits, so a window "
+                    + "starting or ending there attributes them to upstream");
+            }
+        }
+
+        Assert.True(wrong.Count == 0,
+            "an inventory baseline endpoint does not name a state of the read-only WPF tree, so every delta measured "
+            + "over that window mixes the port's own edits into upstream's:" + Environment.NewLine
+            + string.Join(Environment.NewLine, wrong));
     }
 
     // ======================================================================================
