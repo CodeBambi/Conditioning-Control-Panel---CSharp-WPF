@@ -1,0 +1,246 @@
+/* ============================================================================
+ * THE RECORDS ANNEX. Skin for lab.js: the point-and-click lab room. Loaded
+ * lazily by lab.js AFTER styles.css (campus tokens) and beside cams.css (the
+ * two lab greens). The room is the one cold place on campus: nothing here
+ * touches --pink, and the only warm pixel is the sticky note on the login.
+ *
+ * The stage is a fixed 1376x768 plane scaled by transform to fit the screen
+ * (the cams demo's fitStage, promoted). Hotspot rects are authored in stage
+ * pixels so they ride the same scale for free. Scanlines and every other
+ * decorative move live in cams.css and obey trap 36 there; this sheet adds
+ * no animation beyond opacity fades, and the lite rung kills those.
+ * ==========================================================================*/
+
+.al-root {
+  position: absolute;
+  inset: 0;
+  background: var(--annex-void, #070710);
+  overflow: hidden;
+}
+
+.al-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1376px;
+  height: 768px;
+  transform-origin: 0 0;
+  /* lab.js sets transform: translate(-50%,-50%) scale(s) in px, not here */
+}
+
+.al-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* live feeds layer, over the art, punched through the screenmask */
+.al-feeds {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.al-feeds.is-waiting { visibility: hidden; } /* nothing shows until the mask lands */
+.al-feeds .cam-tile {
+  position: absolute;
+  border: none;
+  border-radius: 0;
+  aspect-ratio: auto;
+}
+
+/* ------------------------------ hotspots -------------------------------- */
+
+.al-hot {
+  position: absolute;
+  z-index: 3;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.al-hot:hover, .al-hot:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(143, 224, 206, 0.35);
+  background: rgba(143, 224, 206, 0.06);
+}
+.arc-reduced .al-hot:hover, .al-lite .al-hot:hover { background: none; }
+.al-hot .al-hot-tag {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  background: rgba(5, 10, 9, 0.82);
+  color: var(--annex-cold, #8FE0CE);
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 140ms linear;
+  pointer-events: none;
+}
+.al-hot:hover .al-hot-tag, .al-hot:focus-visible .al-hot-tag { opacity: 1; }
+
+/* ------------------------------ back pill ------------------------------- */
+
+.al-back {
+  position: absolute;
+  z-index: 4;
+  left: 16px;
+  bottom: 14px;
+  padding: 6px 14px;
+  background: rgba(5, 10, 9, 0.82);
+  color: #C8D6D2;
+  border: 1px solid rgba(143, 224, 206, 0.3);
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  cursor: pointer;
+}
+.al-back:hover, .al-back:focus-visible {
+  outline: none;
+  border-color: var(--annex-cold, #8FE0CE);
+  color: #E4EEEA;
+}
+
+/* ------------------------------ descent --------------------------------- */
+
+.al-descent {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  background: var(--annex-void, #070710);
+  opacity: 1;
+  transition: opacity 420ms ease;
+}
+.al-descent.is-out { opacity: 0; pointer-events: none; }
+.arc-reduced .al-descent, .al-lite .al-descent { transition: none; }
+
+/* ------------------------------ papers ---------------------------------- */
+
+.al-paperlayer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 7, 8, 0.72);
+}
+.al-paper {
+  position: relative;
+  width: min(560px, 86%);
+  max-height: 86%;
+  overflow: auto;
+  background: #D9D6C4;
+  color: #34342A;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 26px 30px 30px;
+  box-shadow: 0 14px 50px rgba(0, 0, 0, 0.65);
+}
+.al-paper-head {
+  border-bottom: 1px solid #B4B09A;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+  letter-spacing: 0.04em;
+  color: #4A4A3C;
+}
+.al-paper-body { white-space: pre-wrap; }
+.al-paper-x {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #6E6C58;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.al-paper-x:hover, .al-paper-x:focus-visible { color: #34342A; outline: none; }
+
+/* intake sheet form furniture */
+.al-sheet-row { display: flex; gap: 12px; padding: 3px 0; }
+.al-sheet-row dt { flex: none; width: 150px; color: #6E6C58; }
+.al-sheet-row dd { margin: 0; }
+.al-sheet-stamp {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 3px 12px;
+  border: 3px solid #A0522D;
+  color: #A0522D;
+  font-weight: bold;
+  font-size: 15px;
+  letter-spacing: 0.24em;
+  transform: rotate(-3deg);
+  opacity: 0.85;
+}
+.al-slip {
+  margin-top: 18px;
+  padding: 10px 12px;
+  background: #EDEBDC;
+  border-top: 1px dashed #B4B09A;
+  font-family: 'Comic Sans MS', 'Segoe Print', cursive;
+  color: #4A4430;
+  white-space: pre-line;
+  transform: rotate(1deg);
+}
+
+/* dossier pager */
+.al-pager {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  border-top: 1px solid #B4B09A;
+  padding-top: 10px;
+}
+.al-page-btn {
+  background: none;
+  border: 1px solid #B4B09A;
+  color: #4A4A3C;
+  font: inherit;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+.al-page-btn:disabled { opacity: 0.35; cursor: default; }
+.al-page-btn:not(:disabled):hover { border-color: #34342A; }
+
+/* the silhouettes: black shapes, white redaction-circle eyes, name = a bar */
+.al-sil { display: block; margin: 4px auto 10px; }
+.al-sil-shape { fill: #141410; }
+.al-sil-eye { fill: #D9D6C4; }
+.al-namebar {
+  display: block;
+  width: 150px;
+  height: 14px;
+  margin: 0 auto 12px;
+  background: #141410;
+}
+
+/* ------------------------------ the OS ---------------------------------- */
+
+.al-oslayer {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  background: rgba(4, 7, 8, 0.6);
+}
+.al-osframe {
+  position: absolute;
+  inset: 4% 7%;
+  border: 10px solid #1B2422;
+  border-radius: 6px;
+  background: #000;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.8);
+  transition: transform 420ms ease, opacity 300ms ease;
+}
+.al-osframe.is-zooming { opacity: 0.4; }
+.arc-reduced .al-osframe, .al-lite .al-osframe { transition: none; }

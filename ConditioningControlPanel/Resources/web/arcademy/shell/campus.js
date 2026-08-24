@@ -500,6 +500,13 @@ export const FACILITIES = Object.freeze({
   registrar: Object.freeze({
     rect: [1260, 476, 108, 84], side: 'w', door: 518, stop: [1250, 518], rm: '002',
   }),
+  /* THE ANNEX HATCH (ANNEX-OS.md §1). Above the office because the room is
+   * below it: the plate marks the stairs, not the floor. Its stop is Records'
+   * proven stop - the walk IS the walk to the office door, and the descent
+   * starts there. Drawn only when the shell hands the bag (gated build). */
+  annex: Object.freeze({
+    rect: [1260, 300, 108, 72], side: 'w', door: 336, stop: [1250, 422], rm: '000',
+  }),
 });
 
 /** ROOMS first, the two counters second. Pure; undefined for anything else. */
@@ -698,7 +705,7 @@ function el(tag, cls, text) {
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
-  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post } = {}) {
+  dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, annex } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   const name = typeof gameName === 'function' ? gameName : (k) => String(k);
@@ -1342,6 +1349,29 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
   regG.appendChild(svg('rect', { x: 1338, y: 540, width: 10, height: 7 }, 'campus-furnf'));
   stag(recordsG, 700);
   stag(regG, 780);
+
+  /* THE ANNEX HATCH. The post-bag contract, again: campus mounts the node
+   * only when the shell hands the bag, and the shell keeps the gate (reveal
+   * seen + a first visit made), the store, and every byte of state. A player
+   * who has never been downstairs never sees this group exist. */
+  let annexG = null;
+  if (annex && typeof annex.open === 'function') {
+    annexG = facility({
+      rect: FACILITIES.annex.rect, door: FACILITIES.annex.door,
+      side: FACILITIES.annex.side, compact: true,
+      nameY: 340,
+      name: t('campus_annex', 'Records Annex'),
+      rm: FACILITIES.annex.rm,
+      onClick: () => annex.open(),
+      tip: () => ({
+        name: t('campus_annex', 'Records Annex'),
+        status: t('campus_annex_status', 'Stairs down'),
+        desc: t('campus_desc_annex', 'Under the office. The lights are off down there. The screens are not.'),
+      }),
+    });
+    annexG.setAttribute('class', 'campus-room facility annex');
+    stag(annexG, 820);
+  }
 
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');
@@ -2196,6 +2226,7 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     facilityNode(key) {
       if (key === 'records') return recordsG;
       if (key === 'registrar') return regG;
+      if (key === 'annex') return annexG;
       return null;
     },
     /**
