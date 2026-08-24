@@ -18,7 +18,9 @@ namespace ConditioningControlPanel.Services.Arcademy;
 /// <list type="number">
 /// <item><description>THE EMITTER pushes four state transitions - <c>campus_enter</c>,
 /// <c>room_enter</c>, <c>class_end</c>, <c>campus_leave</c> - and runs ONLY while
-/// <see cref="Models.AppSettings.ArcademyPresenceShare"/> is something other than <c>off</c>. A
+/// <see cref="Models.AppSettings.ArcademyPresenceShare"/> is something other than <c>off</c>,
+/// with exactly one exception: the REVOCATION (see <see cref="OnSettingChanged"/>), which is the
+/// one payload that has to leave BECAUSE the player turned sharing off. A
 /// transition is a room key and a letter grade; there is no coordinate in this file, no field for
 /// one, and none is ever computed here. Where a ghost walks is <c>shell/ghosts.js</c>'s invention
 /// from the event list.</description></item>
@@ -94,6 +96,10 @@ internal static class ArcademyPresenceService
     /// <summary>The four letters the wire knows. A zen finish reports <c>pass</c>, which is not a
     /// grade and rides as null - "was here, no grade" is a fact the renderer draws.</summary>
     private static readonly HashSet<string> Grades = new(StringComparer.Ordinal) { "S", "A", "B", "C" };
+
+    /// <summary>The absence of a rung. Not consent, and on the wire it is legal on exactly one
+    /// event kind - a <c>campus_leave</c>, the revocation. Spelled once, here.</summary>
+    private const string PresenceOff = "off";
 
     /// <summary>Rung ordering, the server's <c>SHARE_RANK</c> verbatim. Used for ONE decision: did
     /// this change reduce what the account shows, which is the change that owes a POST.</summary>
@@ -260,12 +266,20 @@ internal static class ArcademyPresenceService
     /// yet: the next real event carries the new rung and that is soon enough. Sending on the way up
     /// would spend one of the twelve hourly writes to say nothing.</para>
     ///
-    /// <para>AND <c>off</c> CANNOT BE SENT. <c>share</c> is validated against
-    /// <c>anon|username|discord</c>; there is no <c>off</c> on the wire and no revoke route on the
-    /// server (the doc's own words: "revoking is deleting"). Posting the nearest rung instead would
-    /// be this client asserting a consent the player just withdrew, which is the one thing it must
-    /// never do - so the honest move is to send nothing and say so once in the log. The account's
-    /// prior window ages out on its own inside 24 hours.</para>
+    /// <para>AND <c>off</c> IS A POST OF ITS OWN. It is the case the obligation exists for: a
+    /// player who turns sharing off is asking for their name to come off the map NOW, not in
+    /// twenty-four hours' time, and the current rung only ever moves on a POST. So the move to
+    /// <c>off</c> sends one <c>campus_leave</c> carrying <c>share: "off"</c> - the server's
+    /// revocation shape, accepted on that event kind and on no other (api doc, "Revoking - the
+    /// shape"). It upserts the consent row to <c>off</c>, deletes the avatar reverse index and
+    /// stores a row with no name and no picture, and the next snapshot reduces the account's whole
+    /// prior window to a head count. What is NOT sent is the nearest consenting rung: that would be
+    /// this client asserting a consent the player just withdrew, which is the one thing it must
+    /// never do.</para>
+    ///
+    /// <para>Best-effort like everything else here: if it does not land - offline, no identity, a
+    /// 429 - the account's prior window ages out on its own inside 24 hours, and the next real
+    /// event (which cannot happen at <c>off</c>) is not needed to close it.</para>
     /// </summary>
     private static void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -280,8 +294,11 @@ internal static class ArcademyPresenceService
             if (Rank(now) == 0)
             {
                 App.Logger?.Information(
-                    "[ArcademyPresence] presence turned off - the wire has no 'off' rung, so the account's"
-                    + " prior 24h ages out rather than being withdrawn now");
+                    "[ArcademyPresence] presence turned OFF - posting the revocation, which takes the"
+                    + " account's prior 24h off the map at once");
+                // The one payload that leaves at the off rung, and it says so explicitly rather
+                // than reading the setting: Emit's own gate would (rightly) drop anything else.
+                Emit("campus_leave", null, null, -1, PresenceOff);
                 return;
             }
 
@@ -308,12 +325,21 @@ internal static class ArcademyPresenceService
     /// exactly one place that can decide to put something on the wire: no consent, no identity,
     /// offline - nothing leaves, silently.
     /// </summary>
-    private static void Emit(string kind, string? room, string? grade, int generation)
+    /// <param name="shareOverride">THE ONE WAY PAST THE CONSENT GATE, and it has exactly one
+    /// caller: <see cref="OnSettingChanged"/> sending <see cref="PresenceOff"/> to WITHDRAW. The
+    /// rung named here is asserted on the wire, so nothing but <c>off</c> may ever be passed - an
+    /// override that RAISED the rung would be this client consenting on the player's behalf, and
+    /// the server would believe it. Null everywhere else, which is the ordinary gated path.</param>
+    private static void Emit(string kind, string? room, string? grade, int generation,
+        string? shareOverride = null)
     {
-        var share = Share();
-        if (Rank(share) == 0) return;                       // off: the whole feature is absent
+        var revoking = shareOverride == PresenceOff;
+        var share = revoking ? PresenceOff : Share();
+        if (!revoking && Rank(share) == 0) return;          // off: the whole feature is absent
         if (!Identity(out var unifiedId, out var token)) return;
-        lock (Gate) { _emitted = true; }
+        // A revocation is not an announcement: it must not arm Detach's own campus_leave, which
+        // exists to walk a ghost out that this session walked in.
+        if (!revoking) lock (Gate) { _emitted = true; }
         Run(() => PostEventAsync(kind, room, grade, share, unifiedId, token, generation), kind);
     }
 
