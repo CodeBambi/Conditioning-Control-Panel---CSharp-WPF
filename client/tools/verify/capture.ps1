@@ -209,7 +209,7 @@ $statesFor = @{
     # to take. GradedRunAwards.RecordGradedRun awards top_of_the_class FIRST and UNCONDITIONALLY on a
     # top-marks run, before the category is even looked at (GradedRunAwards.cs:245-248, upstream's
     # GamificationBridge.cs:600), and the file is written ONLY when something was awarded or a
-    # category was new (:261-264). So the first bytes that record ever holds already carry an earned
+    # category was new (:260-263). So the first bytes that record ever holds already carry an earned
     # row. `read` is therefore ONE top-marks run - top_of_the_class earned, one category cleared -
     # and `earned` is three distinct categories, which is the only way honor_roll is ever added.
     'trainer-card-record' = @('read', 'unreadable', 'earned')

@@ -782,7 +782,7 @@
     // GradedRunAwards.RecordGradedRun awards top_of_the_class FIRST and UNCONDITIONALLY on a
     // top-marks run, before the category is even looked at (GradedRunAwards.cs:245-248, upstream's
     // GamificationBridge.cs:600), and the file is written ONLY when something was awarded or a
-    // category was new (:261-264). So the first bytes that record ever holds already carry an
+    // category was new (:260-263). So the first bytes that record ever holds already carry an
     // earned row. `read` is therefore ONE top-marks run and `earned` is three distinct categories,
     // which is the only path that ever adds honor_roll.
     //

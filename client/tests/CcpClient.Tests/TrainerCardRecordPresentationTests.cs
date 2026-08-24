@@ -289,7 +289,7 @@ public sealed class TrainerCardRecordPresentationTests : IDisposable
         // state this build can be in: RecordGradedRun awards top_of_the_class FIRST and
         // UNCONDITIONALLY on a top-marks run, before the category is even looked at
         // (GradedRunAwards.cs:245-248, upstream's GamificationBridge.cs:600), and the file is
-        // written ONLY when something was awarded or a category was new (:261-264).
+        // written ONLY when something was awarded or a category was new (:260-263).
         //
         // So this drives the two paths that could produce an empty record and shows neither does:
         // a below-bar run writes no file at all, and the first run that writes one has already
