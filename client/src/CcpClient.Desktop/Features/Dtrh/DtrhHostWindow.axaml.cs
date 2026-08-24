@@ -284,6 +284,13 @@ public partial class DtrhHostWindow : Window
     /// Dispose did on its way through (SoundArbitration.Dispose calls PanicReset first). What is no
     /// longer done is tearing down the application's audio device because one window closed. The
     /// arbitration is owned by <see cref="Audio.AudioParticipant"/> and is disposed with the app.</para>
+    ///
+    /// <para><b>The ceiling on that, named rather than discovered later.</b> A panic reset stops
+    /// EVERY channel, so once a second consumer plays through the same arbitration — the flash and
+    /// bubble sounds are the next ones queued — closing this window would silence that consumer too.
+    /// It is exactly today's outcome while DTRH is the only consumer, and the day a second one lands
+    /// this call has to become a stop of the channels this window used rather than of all of
+    /// them.</para>
     /// </summary>
     private void TeardownBarkPipeline()
     {

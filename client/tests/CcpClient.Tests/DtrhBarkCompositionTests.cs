@@ -85,6 +85,39 @@ public sealed class DtrhBarkCompositionTests
     }
 
     [Fact]
+    public void TheAppsMasterVolumeReachesTheBarkPATH_AndZeroMakesItTextOnly()
+    {
+        // The other half of the app-wide audio lift: BarkPipeline.MasterVolume
+        // (Companion/BarkPipeline.cs:262) had been landed and unset since it shipped, because there
+        // was no app-wide document to set it from. Now the window passes the audio owner's reading
+        // (DtrhHostWindow.InitBarkPipeline), and this drives that same expression.
+        //
+        // Zero is asserted through BEHAVIOUR rather than by reading the property back: a user whose
+        // master volume is 0 has muted the app, and upstream's every voice path early-returns while
+        // the text still shows (AvatarTube/AvatarTubeWindow.Speech.cs:2188-2189). The asset is
+        // really on disk, so the text-only outcome cannot be the missing-asset one wearing the same
+        // shape — the reason has to be VolumeZero.
+        using var muted = Harness.New(masterVolume: 0);
+        muted.WriteVoiceAsset("attention_check_fail_1.mp3");
+
+        var silent = Assert.IsType<BarkOutcome.SurfacedTextOnly>(muted.Pipeline.Raise("AttentionCheckFail"));
+
+        Assert.Equal(BarkSuppression.VolumeZero, silent.Reason);
+        Assert.Null(silent.Payload.AudioPath);
+        Assert.Equal(0, muted.Pipeline.MasterVolume);
+
+        // A volume the user can hear leaves the same bark with its voice, so the fact above is
+        // about the VOLUME and not about this harness being unable to speak at all.
+        using var audible = Harness.New(masterVolume: 41);
+        var expected = audible.WriteVoiceAsset("attention_check_fail_1.mp3");
+
+        var spoken = Assert.IsType<BarkOutcome.Surfaced>(audible.Pipeline.Raise("AttentionCheckFail"));
+
+        Assert.Equal(expected, spoken.Payload.AudioPath);
+        Assert.Equal(41, audible.Pipeline.MasterVolume);
+    }
+
+    [Fact]
     public void AnUnknownTrigger_IsTypedNoRule_NeverSilence()
     {
         using var h = Harness.New();
@@ -133,7 +166,9 @@ public sealed class DtrhBarkCompositionTests
 
         public BarkPipeline Pipeline { get; }
 
-        public static Harness New()
+        /// <param name="masterVolume">The app's master volume as the audio owner holds it. Null
+        /// leaves the document's own default, which is what a fresh install has.</param>
+        public static Harness New(int? masterVolume = null)
         {
             var dataDirectory = Path.Combine(
                 Path.GetTempPath(), "ccp-dtrh-bark-" + Guid.NewGuid().ToString("N"));
@@ -147,6 +182,11 @@ public sealed class DtrhBarkCompositionTests
                 new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), new SilentLogSink()),
                 dataDirectory,
                 backend: new FakeBackend());
+            if (masterVolume is { } master)
+            {
+                audio.Settings.Mutate(d => d.MasterVolume = master);
+            }
+
             var arbitration = audio.Arbitration;
             audio.EnsureDevice();
 
@@ -160,7 +200,9 @@ public sealed class DtrhBarkCompositionTests
                 CompanionStateDocument.CurrentSchemaVersion);
             store.StartAsync(CancellationToken.None).GetAwaiter().GetResult(); // wallclock-allow: PersistenceStore.StartAsync loads on the calling thread and hands back an already-complete task (pinned by PersistenceStoreTests) — this bridge waits on nothing
 
-            var pipeline = DtrhBarkRouting.CreatePipeline(arbitration, store, dataDirectory, _ => { });
+            // `audio.MasterVolume` is the window's own expression (DtrhHostWindow.InitBarkPipeline).
+            var pipeline = DtrhBarkRouting.CreatePipeline(
+                arbitration, store, dataDirectory, _ => { }, masterVolume: audio.MasterVolume);
             return new Harness(dataDirectory, arbitration, store, pipeline);
         }
 
