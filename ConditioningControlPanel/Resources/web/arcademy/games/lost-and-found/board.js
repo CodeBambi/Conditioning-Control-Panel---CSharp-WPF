@@ -245,6 +245,10 @@ export function signaturePool(rng) {
  * @param {boolean} o.lite          coarse pointer / low quality tier
  * @param {boolean} o.reduced       reduced motion
  * @param {Function} o.onTileClick  (tile, event) => void
+ * @param {Function=} o.onTileHover (tile, event) => void - THE HOVER TELL. The
+ *        board only reports the crossing; the GAME owns the throttle and the
+ *        phase gate (index.js onTileHover), so this file never decides when a
+ *        sound is allowed.
  * @param {Function=} o.log
  */
 export function createBoard(o) {
@@ -374,6 +378,14 @@ export function createBoard(o) {
     node.addEventListener('click', (e) => {
       if (destroyed) return;
       try { if (opts.onTileClick) opts.onTileClick(tile, e); } catch (err) { say('tile click: ' + ((err && err.message) || err)); }
+    });
+    // THE HOVER TELL rides the same per-element wiring as the click, and for
+    // the same two reasons: the DOM double has no closest(), and a wrap clone
+    // is a real seat the pointer really crosses. pointerenter (not pointerover)
+    // so moving WITHIN a tile is silent - one tick per seat entered.
+    node.addEventListener('pointerenter', (e) => {
+      if (destroyed) return;
+      try { if (opts.onTileHover) opts.onTileHover(tile, e); } catch (err) { /* a tell never breaks a hunt */ }
     });
     tile.els.push(node);
     node._lfRep = rep;

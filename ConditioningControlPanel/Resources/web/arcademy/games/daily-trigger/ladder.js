@@ -31,6 +31,26 @@
 /** The top rung. Six rows of misses cannot climb past it. */
 export const RUNG_MAX = 5;
 
+/**
+ * THE RUNG CUE (W2). Every rung is a notch of the storm, and until now only
+ * the two that happened to ship with an engine sound of their own (rung 4's
+ * glitch_swap, rung 5's decoy whisper) were audible - four of six climbed in
+ * silence. Now EVERY rung entry rings the same bell, pitched by the rung, so
+ * the ladder is one instrument climbing rather than two random noises.
+ *
+ * The level and the pitch are both requests: the GAME's helper clamps the
+ * level to the grade tier's audio ceiling, exactly like every other cue here.
+ * A jump of several rungs at once (Year 4 opens at rung 5) is STAGGERED into a
+ * rising run instead of landing as one chord.
+ */
+export const RUNG_CUE = Object.freeze({
+  NAME: 'chime',
+  LEVEL_BASE: 0.26,
+  LEVEL_STEP: 0.03,          // rung 0 -> .26, rung 5 -> .41 (before the clamp)
+  PITCH_STEP: 0.09,          // rung 0 -> 1.00, rung 5 -> 1.45
+  GAP_MS: 90,                // the stagger for a multi-rung climb
+});
+
 /** Where the ladder STARTS per grade tier (Year 1..4). Dossier's tierStart. */
 export function tierStartFor(tier) {
   const t = Math.max(1, Math.min(4, Math.round(Number(tier) || 1)));
@@ -77,14 +97,18 @@ export const STORM_BADGES = Object.freeze({
  * @param {Object=} o.targets      {keyRows(), keycaps(), onGlitchSwap(els, variant), exempt()}
  * @param {string[]=} o.pollution  other bank words to whisper (candidate pollution)
  * @param {Function=} o.roll       tagged roll (seeded); defaults to a fixed 0.5
+ * @param {Function=} o.cue        the GAME's clamped audio helper, cue(name, level, extra).
+ *                                 The ladder never holds an audio node and never picks its
+ *                                 own level ceiling - this is the road home.
  */
-export function createLadder({ engine, tier, log, reduced, targets, pollution, roll } = {}) {
+export function createLadder({ engine, tier, log, reduced, targets, pollution, roll, cue } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const eng = engine || null;
   const T = Math.max(1, Math.min(4, Math.round(Number(tier) || 1)));
   const tgt = targets || {};
   const words = Array.isArray(pollution) ? pollution.slice() : [];
   const rollFn = typeof roll === 'function' ? roll : () => 0.5;
+  const cueFn = typeof cue === 'function' ? cue : () => {};
   const soft = !!reduced;
 
   const timers = new Set();
@@ -227,13 +251,29 @@ export function createLadder({ engine, tier, log, reduced, targets, pollution, r
     return fire('sub_flash', { text: w.toUpperCase(), variant: 'scatter' });
   }
 
+  /** One bell per rung ENTERED, pitched by the rung. `step` is this rung's
+   *  place in the current climb, which is what turns a multi-rung jump into a
+   *  rising run rather than a chord. */
+  function rungCue(r, step) {
+    if (stopped) return;
+    const level = RUNG_CUE.LEVEL_BASE + RUNG_CUE.LEVEL_STEP * r;
+    const extra = { pitch: 1 + RUNG_CUE.PITCH_STEP * r };
+    if (!step) { try { cueFn(RUNG_CUE.NAME, level, extra); } catch (e) { /* a cue never kills a rung */ } return; }
+    after(step * RUNG_CUE.GAP_MS, () => {
+      try { cueFn(RUNG_CUE.NAME, level, extra); } catch (e) { /* ignore */ }
+    });
+  }
+
   /* ---------------------- the public surface ----------------------------- */
   function applyTo(next) {
     const to = Math.min(rungCapFor(T), Math.max(0, next));
     heat(heatFor(T, to));
+    let step = 0;
     for (let r = 0; r <= to; r++) {
       if (started.has(r)) continue;
       started.add(r);
+      rungCue(r, step);
+      step += 1;
       try { RUNGS[r](); } catch (e) { say('rung ' + r + ' failed: ' + ((e && e.message) || e)); }
     }
     rung = to;

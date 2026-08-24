@@ -62,6 +62,9 @@ export const DEFAULT_LEXICON = Object.freeze({
   peek: 'Peek',
   peek_hint: 'Hold to peek. Using it caps this class at A.',
   settings: 'Settings',
+  /* The scoped (mid-class) settings page's one line of honesty: class knobs
+     are snapshotted at startClass, so a change lands on the NEXT run. */
+  applies_next_class: 'Class option changes take effect next class.',
   back: 'Back',
   begin_class: 'Begin',
   /* The shell's own name for endless play. A game that declares

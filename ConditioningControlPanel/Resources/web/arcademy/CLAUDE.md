@@ -57,10 +57,16 @@ provider/tagged.js THE TAGGED POOL: two piles, per-tag cursors, a seeded dry
                    re-serve, thin frozen at resolve / empty live (§3)
 shell/shell.js     screen router + THE class runner (ctx per §11) + THE SETUP
                    DOOR hook (§5: create -> setup() -> beginPlay)
-shell/splitflap.js departure-board reveal
+shell/splitflap.js departure-board reveal. The campus hangs it COLLAPSED behind a
+                   plaque (campus.js's .campus-boardtab - clock pulses until the
+                   first open of the day, store key boardOpenedDate); expanding
+                   rolls the flaps, which is why there is no "flip the board
+                   again" button any more
 shell/reportcard.js day summary + THE one share pipeline
-shell/settings.js  THE settings page (3 tiers) + SETTING_KEYS
-shell/ceremonies.js stamp / 10-segment meter / reward beats (engine-delegated)
+shell/settings.js  THE settings page (3 tiers) + SETTING_KEYS; `gameKey` scopes it to ONE
+                   game group (the pause card's door) - argless = the full sheet
+shell/ceremonies.js stamp / 10-segment meter / reward beats (engine-delegated; the
+                   CSS floor REQUESTS its own cues on `document` since W0 - see trap 66)
 shell/exits.js     THE WAY OUT: the campus pill + its confirm, the sticky exit
                    bar, and the casino arrow SIGN. Every back/leave/done in the
                    school is minted here (games borrow it through ctx.exits)
@@ -268,7 +274,8 @@ emi/         EMI, the mascot: a living pixel CRT that FLOATS over the whole page
                EMI and a dismissed EMI are all silent no-ops, which is why every
                call site in shell.js is one unguarded line.
   widget.css   the layer (.arc-emi, fixed, z 50), the grab/grabbing cursors, the
-               x affordance, the edge dock, and the bubble's `.bubble-left` flip.
+               x affordance, the edge dock, and the bubble's `.bubble-left` /
+               `.bubble-low` flips (right margin / top edge).
 ```
 
 Each game owns its own lexicon rows; **`ArcademyHostService.NeutralLexicon` mirrors every
@@ -1001,14 +1008,20 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     identical with and without EMI. If you ever make the renderer a STATIC import of
     `shell.js`, one browser-only line in the renderer becomes a boot failure for the whole
     school.
-61. **THE BUBBLE HANGS OFF HER RIGHT EAR AND THE VIEWPORT IS NOT INFINITE.** `emi.css` puts
-    `.emi-bubble` at `right:-5%` with `max-width:104px`, i.e. a fixed pixel box whose right
-    edge hangs past hers - and the natural resting place for a dragged mascot is the bottom-right
-    corner, where the line would be cut off by the window. `widget.js` adds `.bubble-left`
-    to the root when `left + w * 1.55 > viewportWidth` (and there is room on the other
-    side) and `widget.css` mirrors the box and its tail. Clamping her further from the edge
-    instead was the wrong fix: it would have made the corner - the place players actually
-    park her - unreachable.
+61. **THE BUBBLE HANGS UP OFF HER RIGHT EAR AND THE VIEWPORT IS NOT INFINITE.** `emi.css`
+    anchors `.emi-bubble` at `left:58%; bottom:96%` with `width:max-content; max-width:104px`:
+    off the ear and RISING, so a long line grows into the sky instead of down across the
+    glass. Two half-bugs live in that one line of geometry: an earlier `right:-5%` anchor
+    laid the whole box straight over her face, and a left-edge anchor WITHOUT
+    `width:max-content` shrink-wraps an abs-pos box against the ~42% of containing block
+    that remains right of the anchor, wrapping every bark three characters per row.
+    The viewport flips: the natural resting place for a dragged mascot is the bottom-right
+    corner, where the line would be cut off by the window - `widget.js` adds `.bubble-left`
+    when `left + w * 1.55 > viewportWidth` (and there is room on the other side), and
+    `.bubble-low` when she is parked within 96px of the TOP edge (a rising bubble has no
+    sky there - it drops below the chin, tail up). `widget.css` mirrors box + tail for all
+    four corners. Clamping her further from the edges instead was the wrong fix: it would
+    have made the corners - the places players actually park her - unreachable.
 
 62. **THE BUBBLE'S FONT IS A PIXEL GRID, SO ITS BOX CANNOT BE A PERCENTAGE.** Press
     Start 2P is an 8x8 cell face: set it at a whole pixel size or the cells land
@@ -1045,6 +1058,51 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     rotating pool is four meaty and four quick, so each quick class deals 3 nights in 4 (60/360)
     and each meaty 1 night in 4 (30/360), with a duplicate family on 30/120 nights. Demoting ONE
     class back to quick flattens it to 40-50 and 18-20 - an owner call, not a code fix.
+
+66. **THE LOADER IS THE INTRO SPLASH, AND ONLY THE HAPPY PATH GETS THE BEAT.** `#arc-loader`
+    plays a ~3s fixed CSS timeline from t0 (no init needed) and boot.js's `dismissLoader()`
+    WAITS OUT `INTRO_MIN_MS` before adding `.is-done` (the fade + zoom-through exit), so an
+    early boot never cuts the beat. `failBoot()` must keep snapping `hidden = true` directly -
+    an error card delayed by a celebration, or a splash replaying its exit over the nope
+    screen, are both wrong. The contract between boot.js and the div is ONLY `hidden` +
+    `.is-done`; the decoration inside is free to change. The first screen underneath is the
+    ambient campus built with `animate:false`, which is what makes the extended cover safe -
+    if a future first screen gains a one-shot entry reveal, it must not fire until the
+    loader's `hidden` lands (or the splash will eat it).
+
+67. **shell/ceremonies.js streakMeter must NEVER delegate `streak_meter`, and the CSS
+    floor is no longer silent (W0, 2026-08-24).** The engine's ceremony reads `{streak}`
+    (this module used to send `{filled, total}`, which parsed as streak 0 - the chime
+    ladder NEVER played) and it mounts its OWN meter node in the fx layer, so a "fixed"
+    delegate would double-render the meter. The shell draws the one meter and requests
+    the chime itself (level + a semitone per lit segment, capped +7, hidden under 2).
+    Same wave: every floor beat (stamp / gradeObject / payoff jackpot / near-miss) now
+    dispatches `arcademy-sfx` directly when the engine cannot take it - punchcard
+    thud()'s precedent; a REQUEST on `document` is not an audio node. gradeObject is
+    rank-pitched on the punch-card ladder (C .78 / B .92 / A 1 / S 1.18). If you re-add
+    a delegate or "simplify" the quiet flag, the end card goes mute or double-cues.
+68. **The pause card is the ONE in-class door to settings, and the scoped page's knobs
+    land NEXT run.** The topbar gear is hidden while a class is up, so
+    `showSettings(active.cls.gameKey)` from the pause card is the only class-stage
+    entry; it renders tiers 1+2 plus that game's group only (an unknown key falls back
+    to the FULL page - too many knobs is the lesser bug than hidden ones). ctx.settings
+    is a startClass snapshot, so the scoped page prints `applies_next_class` instead of
+    pretending to live-apply. The campus gear / Registrar stay argless = full sheet.
+
+69. **Deck gates split two ways since W2 (2026-08-24): `armed()` = visuals and keeps
+    capsOk; `sounds()` = cues and NEVER tests capsOk.** bgIntensity 0 is the player's
+    VISUAL exit (Law VI), not a mute switch - a game-called beat (the bell, a dim-out,
+    a rung climb, a stat correction) still sounds with the lights off, while a deck's
+    self-dealt visual cards stay dark AND silent (nothing drawn = nothing to hear; that
+    stub staying dead is deliberate, not a gap). Every deck takes the game's own clamped
+    helper as `opts.cue` (a closure, NEVER the engine), and every game clamps to
+    AUDIO_CEIL [.45,.6,.75,.9] (IR deliberately lower). THE CHROME VOCABULARY is
+    uniform across all nine classes: start press = `lift` .5, rules-sheet turn =
+    `slide` .35 (a one-page sheet's GO is the START press, never both cues), debrief =
+    ONE `slide` unless the rows REALLY stagger (then a `blip` ladder on the same
+    timers), refused input = `bump` .3 throttled 250ms. Hover sound exists in exactly
+    ONE place in the school - the Lost & Found board (`tell` .12, 150ms throttle,
+    hunt-phase only) - and that is an owner ruling, not an oversight to fix elsewhere.
 
 ## 5. The game module contract (short version)
 

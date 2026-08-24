@@ -69,7 +69,9 @@
  *   III never still   - the tremor and the pin breathe with the rung.
  *   V   seeded        - per-tag mulberry32 off seed+'|de-pressure|' (append-only
  *       tags); the engine's own rng is separate and fine.
- *   VI  exits sacred  - capsOk() false disarms everything (no nodes, no fires);
+ *   VI  exits sacred  - capsOk() false disarms every VISUAL (no nodes, no
+ *       fires); the rung CUE is decoupled from it on purpose (W2) - a visual
+ *       dial must not mute the school, and the cue is still clamped;
  *       reduced motion / motionLevel 0 = tremor 0, punches become a brief ring
  *       bloom, the pin does not spin, the glitch does not shudder; every timer
  *       lives in the game's pause-aware registry AND a local set; the rAF loop
@@ -344,9 +346,22 @@ export function createDePressure(o) {
     if (typeof eng.stop !== 'function') return;
     try { eng.stop(kind); } catch (e) { /* ignore */ }
   }
+  /**
+   * W2 - THE DECOUPLE (spec 3). The rung cue used to ride `fire()`, which
+   * gates on `armed()` - and `armed()` folds in capsOk. bgIntensity 0 is the
+   * player's VISUAL exit (Law VI), never a request for a silent school, so a
+   * capped-background class went both dark AND mute and the ladder lost its
+   * only announcement. Sound now rides the rest of the gate - armedBase,
+   * destroyed, stopped - and the level is still clamped to this tier's audio
+   * ceiling. Every VISUAL fire above is untouched and still capsOk-gated.
+   * The counter stays on the same key so diagnostics read as they always did.
+   */
   function cue(name, rung) {
-    if (!name) return;
-    fire('audio_trigger', { name, level: Math.min(audioCeil, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * rung) });
+    if (!name || !armedBase || destroyed || stopped) return;
+    count('audio_trigger');
+    if (typeof eng.fire !== 'function') return;
+    const level = Math.min(audioCeil, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * rung);
+    try { eng.fire('audio_trigger', { name, level }); } catch (e) { /* a cue never throws upward */ }
   }
 
   /* ---- state ------------------------------------------------------------ */
@@ -459,7 +474,9 @@ export function createDePressure(o) {
     return false;
   }
   function jitterAmp() {
-    if (still || stopped || outOn || rung < P.JITTER_RUNG || !chips.score.el) return 0;
+    // W2: the ladder may now climb with capsOk false (see start()), so this
+    // VISUAL - the score chip's nervous jitter - has to say so itself.
+    if (still || stopped || outOn || !armed() || rung < P.JITTER_RUNG || !chips.score.el) return 0;
     return lerp(P.JITTER_PX, heat);
   }
   function armLoop() {
@@ -768,11 +785,21 @@ export function createDePressure(o) {
 
   /* ---------------------------------------------------------------- api */
   const api = {
-    /** Mount the layers. Called right after casino.start(). */
+    /**
+     * Mount the layers. Called right after casino.start().
+     * W2 - THE DECOUPLE, HALF TWO. This used to bail on `armed()`, which folds
+     * capsOk in - so bgIntensity 0 stopped the LADDER ITSELF and the rung cue
+     * had nothing left to announce. The ladder now runs either way (it is a
+     * state machine over the deepest tile, not a picture); with the dial at 0
+     * NOTHING is mounted and every fire/sustain below still no-ops on
+     * `armed()`, so the room stays dark and only the rung cue is heard. IC's
+     * pressure deck has always started this way - the two now match.
+     */
     start() {
-      if (!armed()) { say('pressure: disarmed'); return; }
+      if (!armedBase || destroyed) { say('pressure: disarmed'); return; }
       if (started) return;
       started = true;
+      if (!armed()) { say('pressure: caps 0 - the ladder climbs for SOUND only'); return; }
       mount();
       retune();
       say('pressure: mounted ' + [pin, ring, glitch].filter(Boolean).length + ' layers, wheel ' + spiral.file);

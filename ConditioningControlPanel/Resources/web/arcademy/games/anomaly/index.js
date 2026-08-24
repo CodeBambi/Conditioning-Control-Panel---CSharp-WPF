@@ -361,6 +361,18 @@ export default {
       const lv = Math.min(ceil, level == null ? 0.4 : level);
       fireSafe('audio_trigger', Object.assign({ name, level: lv }, extra || {}));
     }
+    /** THE REFUSED PRESS (the school's chrome vocabulary, W2). A tap that
+     *  moves nothing - a dead phase, a frame this round already ate - is a
+     *  muted bump, never silence and never a bright tick. THROTTLED: a mashed
+     *  grid must not machine-gun one bump per frame. */
+    const REFUSE_GAP_MS = 250;
+    let lastBumpAt = 0;
+    function refused() {
+      const now = Date.now();
+      if (now - lastBumpAt < REFUSE_GAP_MS) return;
+      lastBumpAt = now;
+      cue('bump', 0.3);
+    }
 
     /* ---- the decks, null-safe ------------------------------------------- */
     function deck(which, method, ...args) {
@@ -653,6 +665,10 @@ export default {
       kindsSeen.set(kind, kseen);
 
       setPhase('round');
+      /* THE ROUND FLIP IS AUDIBLE (W2). setPhase writes a CSS attribute and
+       * nothing else, so a fresh sheet used to be dealt in silence - an eye
+       * that looked away missed the deal entirely. One soft carriage tell. */
+      cue('tell', 0.3);
       paintHud();
       busy = false;
       stallMs = 0;
@@ -702,8 +718,11 @@ export default {
     }
 
     function onTap(i) {
-      if (dead || paused || ended || busy || !cur || cur.done) return;
-      if (cur.eliminated.has(i)) return;
+      if (dead) return;
+      /* the briefing, a pause, the verdict hold, the end card: the press is
+       * REFUSED, and a refusal is audible (W2) */
+      if (paused || ended || busy || !cur || cur.done) { refused(); return; }
+      if (cur.eliminated.has(i)) { refused(); return; }
       const latency = Math.max(1, Math.round(spentNow()));
       if (i === cur.oddIndex) found(i, latency);
       else wrong(i, latency);
@@ -1070,6 +1089,10 @@ export default {
       row('', t('an_end_kind', AN_LEX.an_end_kind),
         hardest ? t('an_kind_' + hardest, AN_LEX['an_kind_' + hardest] || hardest) : t('an_end_none', AN_LEX.an_end_none));
       endEl.appendChild(el('p', 'g-an-end-line', t('an_end_line', AN_LEX.an_end_line)));
+      /* THE DEBRIEF (W2): .g-an-end animates in as ONE card (g-an-endin) and
+       * the rows carry no stagger of their own, so the ladder collapses to a
+       * single sheet cue rather than a blip per row nobody could hear apart. */
+      cue('slide', 0.35);
     }
 
     /** The kind with the worst clear rate this class (>=2 offered). */
@@ -1146,6 +1169,9 @@ export default {
       const onGo = () => {
         if (done || dead) return;
         done = true;
+        /* THE PRESS THAT STARTS PLAY (W2). The sheet is one page and GO is its
+         * only dismissal, so this is the school's start beat, not a page turn. */
+        cue('lift', 0.5);
         rememberHowtoTier();
         hideHowto();
         onDone();
@@ -1232,7 +1258,7 @@ export default {
         if (typeof AN_TRICKSTER.createAnTrickster === 'function') {
           try {
             trickster = createDeckSafely(() => AN_TRICKSTER.createAnTrickster({
-              seed, tier, timers: deckTimers, reduced, capsOk, coarse,
+              seed, tier, timers: deckTimers, reduced, capsOk, coarse, cue,
               stage, grid: gridEl, budgetSec: Math.round(budgetMs / 1000),
               isHalted: () => dead || paused || ended || busy,
               stats: () => ({

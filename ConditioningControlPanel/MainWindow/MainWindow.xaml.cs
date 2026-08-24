@@ -366,7 +366,13 @@ namespace ConditioningControlPanel
             // Initialize lockdown mode event handlers
             InitializeLockdown();
 
-            // Subscribe to progression events for real-time XP updates
+            // Subscribe to progression events for real-time XP updates.
+            //
+            // THE BANK subscribes FIRST and that is load-bearing (MainWindow.BankFx.cs): multicast
+            // handlers run in subscription order, and BankFx has to arm its hold on XPChanged
+            // BEFORE OnXPChanged tweens the counter it means to withhold. It also takes XPAwarded,
+            // the delta-and-provenance event that XPChanged deliberately is not.
+            InitializeBankFx();
             App.Progression.XPChanged += OnXPChanged;
             App.Progression.LevelUp += OnLevelUp;
 

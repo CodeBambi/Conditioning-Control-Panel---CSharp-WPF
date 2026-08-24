@@ -157,6 +157,9 @@ function clamp01(v) {
 
 const GAME_KEY = 'impulse_control';
 const PRESS_DEDUPE_MS = 120;      // one press = one response (pointerdown + click)
+/** W2: the floor between two REFUSED-press bumps. A mashed key must not
+ *  machine-gun the room, so a refusal inside this window is swallowed. */
+const REFUSE_BUMP_MS = 250;
 const INTRO_MS = 2200;
 const TRAVEL_TICK_MS = 40;        // glow position refresh during the slide
 const AUTO_SUBMIT_MS = 45000;     // the debrief files itself if nobody clicks
@@ -315,6 +318,21 @@ export default {
       },
     };
 
+    /**
+     * W2 CHROME - THE REFUSED PRESS. The pop key or a tap that lands on
+     * nothing: the chute is still loading, the bubble is already resolved,
+     * the ticket is up. The school's answer is one muted `bump`, THROTTLED so
+     * a mashed key cannot machine-gun the room. It rides deckEngine.audio, so
+     * it is clamped to this tier's audio ceiling like every other cue here.
+     */
+    let lastRefuseAt = -1e9;
+    function refused() {
+      const at = now();
+      if (at - lastRefuseAt < REFUSE_BUMP_MS) return;
+      lastRefuseAt = at;
+      deckEngine.audio('bump', 0.3);
+    }
+
     /** The decks' registry: this class's own timers, dead while frozen. */
     const deckTimers = {
       after(ms, fn) { return timers.after(ms, () => { if (halted()) return; fn(); }); },
@@ -374,6 +392,16 @@ export default {
         showRt: settingOf('ic_show_rt', true) !== false,
         seed,                    // the tube grows its skin from the class seed
         log: say,
+        /* W0 (2026-08-24): denied.mp3 finally obeys the mixer. The clip rides
+         * the engine's audio_trigger clip path (mute / master / bus level /
+         * ducking all apply; `stamp_bad` is the recipe FALLBACK if the browser
+         * refuses the decode). render.js keeps its raw-element path only for an
+         * engine-less class - the X-hit must never be the beat that goes silent. */
+        sting: (clipUrl) => deckEngine.fire('audio_trigger', {
+          name: 'stamp_bad',
+          level: Math.min(audioCeil(), 0.9),
+          url: clipUrl, key: 'ic-denied', maxMs: 1500,
+        }),
       });
 
       S = {
@@ -481,6 +509,10 @@ export default {
         engine: deckEngine,
         timers: deckTimers,
         capsOk,
+        /* W2 - THE DECK'S CUE ROAD: the game's own clamped helper, handed
+           down as cue(name, level, extra). A deck asks for sound; it never
+           holds a node and can never raise this tier's audio ceiling. */
+        cue: (name, level, extra) => deckEngine.audio(name, level, extra),
         log: say,
       };
       try {
@@ -541,6 +573,10 @@ export default {
           onGo: () => {
             if (done || !S || destroyed) return;
             done = true;
+            /* W2 CHROME - THE START PRESS. The sheet has no pages and this
+               button is the only way past it, so the press that opens the
+               tube takes the school's `lift`, not a page-turn `slide`. */
+            deckEngine.audio('lift', 0.5);
             try {
               const list = howtoSeenTiers();
               if (list.indexOf(S.gradeTier) < 0) {
@@ -724,7 +760,8 @@ export default {
       const at = now();
       if (at - S.lastPressAt < PRESS_DEDUPE_MS) return;
       S.lastPressAt = at;
-      if (S.stagePhase !== 'reveal' || !S.bubble) return;   // nothing to pop
+      // W2: nothing to pop - a dead press, and a dead press is never silent
+      if (S.stagePhase !== 'reveal' || !S.bubble) { refused(); return; }
       const b = S.bubble;
       timers.cancel(S.windowTimer);
       S.stagePhase = 'gap';
@@ -859,6 +896,11 @@ export default {
       deck('trickster', 'end', endInfo);
       const royal = !!(casinoEnd && casinoEnd.royal);
 
+      /* W2 CHROME - THE TICKET. style.js prints the whole receipt in one
+         pass (no per-row stagger anywhere in .g-ic-paper-grid), so the ladder
+         rule's other half applies: ONE `slide`, never six blips against a
+         stagger that does not exist. */
+      deckEngine.audio('slide', 0.35);
       S.render.debrief({
         subject: S.subject,
         score: led.score,

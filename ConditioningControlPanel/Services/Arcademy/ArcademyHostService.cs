@@ -1096,6 +1096,8 @@ internal static class ArcademyHostService
         ["peek"] = "Peek",
         ["peek_hint"] = "Hold to peek. Using it caps this class at A.",
         ["settings"] = "Settings",
+        // The scoped (mid-class) settings page: knobs are a startClass snapshot.
+        ["applies_next_class"] = "Class option changes take effect next class.",
         ["back"] = "Back",
         ["begin_class"] = "Begin",
         ["leave_class"] = "Leave class",

@@ -413,6 +413,17 @@ export function createMontage(o = {}) {
   const lite = !!o.lite;
   const plainSwap = reduced || lite;
   const say = typeof o.log === 'function' ? o.log : () => {};
+  /* THE CUE ROAD (W2 sec 2). This module holds no audio node and gets no engine:
+   * CORE hands down its OWN clamped helper (index.js `tick`), the way
+   * impulse-control hands render.js its `sting`. It is used for exactly one
+   * beat - THE FREEZE - and never on the swap path, so the wall's two
+   * inherited laws still hold: a tile swap writes no ledger entry, and no
+   * POOL primitive is ever fired from here. */
+  const cueFn = typeof o.cue === 'function' ? o.cue : null;
+  function cue(name, level, extra) {
+    if (!cueFn) return;
+    try { cueFn(name, level, extra); } catch (e) { /* a refused cue is not an error */ }
+  }
   const roll = makeTaggedRoll(seed + '|ir-montage');
   const timeScale = Number(o.timeScale) > 0 ? Number(o.timeScale) : 1;
 
@@ -1031,12 +1042,28 @@ export function createMontage(o = {}) {
       }
     }
   }
-  /** THE FREEZE: the wall stops dead, MID-SWAP. The class clock does not (Law I). */
-  function freeze(on) {
+  /**
+   * THE FREEZE: the wall stops dead, MID-SWAP. The class clock does not (Law I).
+   *
+   * THE SHUTTER (W2, the class's signature beat). The freeze was the loudest
+   * thing on the screen and the quietest thing in the room - a whole wall of
+   * moving faces stopping in one frame, in silence. `shutter` is the darkroom's
+   * camera click, written into shell/audio.js's SOUNDS for exactly this and
+   * never once used. It fires ON the transition into the freeze, before the
+   * quench and long before the card, and it is a ONE-SHOT: nothing here holds
+   * or loops, so THE QUENCH (trap 44) has nothing of ours to cut, and the
+   * `stop_clips` the quench sends a beat later stops CLIP elements only, never
+   * a synthesised recipe.
+   * @param {boolean} on
+   * @param {{silent?: boolean}=} o2 `silent` for a freeze that is housekeeping
+   *        (the bell's teardown), not a stop.
+   */
+  function freeze(on, o2) {
     const want = !!on;
     if (want === frozen) return frozen;
     frozen = want;
     applyFreeze();
+    if (want && !(o2 && o2.silent === true)) cue('shutter', 0.46, { pitch: 1 });
     return frozen;
   }
 

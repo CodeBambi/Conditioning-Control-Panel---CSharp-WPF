@@ -51,6 +51,18 @@ import { makeTaggedRoll } from '../../core/rng.js';
  *  under the poster-frame-only floor). Deliberately font-safe, no emoji. */
 const GLYPHS = ['◆', '●', '▲', '■', '✦', '◇', '○', '△', '□', '✥', '✲', '✹'];
 
+/** THE TIER AUDIO CEILING (House Book): every cue this class requests is
+ *  clamped to its grade tier's ceiling, indexed by gradeTier-1. The clamp
+ *  lives inside tick() so no call site - this file's, casino.js's or
+ *  trickster.js's - can route around it. Same discipline as
+ *  games/anomaly/index.js cue() against plan.audioCeil. */
+const AUDIO_CEIL = Object.freeze([0.45, 0.6, 0.75, 0.9]);
+
+/** Refused input (a tap on a locked slide, a third tap while two are up)
+ *  answers with ONE muted bump, throttled: a mashed board is a knock, never
+ *  a burst. */
+const BUMP_MIN_MS = 250;
+
 /** Diagnostics seam (the engine has one too): the live class, for the scratch
  *  harness and any future "what is the board doing" debug overlay. The shell
  *  never reads this. */
@@ -246,9 +258,21 @@ export default {
       try { ctx.engine.setHeat(h); } catch (e) { /* noop */ }
       if (casino) casino.setHeat(h);           // the marquee rides the same scalar
     }
-    /** A cue that must be heard even when every visual is degraded. */
+    /** A cue that must be heard even when every visual is degraded. THE ONE
+     *  ROAD: every request lands here and is clamped to the grade tier's
+     *  audio ceiling, so a level is never louder than the year allows. */
     function tick(name, level, extra) {
-      fireSafe('audio_trigger', Object.assign({ name, level: level == null ? 0.45 : level }, extra || {}));
+      const ceil = AUDIO_CEIL[(dials ? dials.tier : 1) - 1] || AUDIO_CEIL[0];
+      const lv = Math.min(ceil, level == null ? 0.45 : level);
+      fireSafe('audio_trigger', Object.assign({ name, level: lv }, extra || {}));
+    }
+    /** The refused-input bump, throttled (BUMP_MIN_MS). */
+    let lastBumpAt = 0;
+    function refused() {
+      const now = Date.now();
+      if (now - lastBumpAt < BUMP_MIN_MS) return;
+      lastBumpAt = now;
+      tick('bump', 0.3);
     }
     function progress() {
       if (!dials) return 0;
@@ -503,11 +527,13 @@ export default {
      * PHASE 1 - the attempt loop
      * ==================================================================== */
     function onTap(i) {
-      if (dead || paused || ended) return;
+      if (dead || paused || ended) return;                // shell states, not a refusal
       const cell = cells[i];
-      if (!cell || cell.state !== 'down') return;
-      if (busy || (faceUp.length + flipping) >= 2) return;
-      if (cell.pairId < 0) return;                       // a filler cell, never dealt a pair
+      // Everything below IS a refused press - a locked or already-turned
+      // slide, a third tap while two are up, or a filler seat. One knock.
+      if (!cell || cell.state !== 'down') { refused(); return; }
+      if (busy || (faceUp.length + flipping) >= 2) { refused(); return; }
+      if (cell.pairId < 0) { refused(); return; }         // a filler cell, never dealt a pair
 
       flipping += 1;
       cell.card.classList.add('flipping');
@@ -1268,7 +1294,13 @@ export default {
 
       const go = el('button', 'g-dv-hw-go', t('dv_howto_go', 'Deal the board'));
       go.type = 'button';
-      go.addEventListener('click', () => { try { onGo(); } catch (e) { say('howto go: ' + ((e && e.message) || e)); } });
+      go.addEventListener('click', () => {
+        // THE START PRESS. This one button dismisses the sheet AND deals the
+        // board, so it wears the school's start cue, not a page-turn slide -
+        // the sheet is a single page and has no turns.
+        tick('lift', 0.5);
+        try { onGo(); } catch (e) { say('howto go: ' + ((e && e.message) || e)); }
+      });
       sheet.appendChild(go);
       try { if (typeof go.focus === 'function') go.focus(); } catch (e) { /* noop */ }
       return sheet;
@@ -1355,12 +1387,14 @@ export default {
           seed, stage, bench, grid,
           timers: deckTimers,
           reduced, capsOk,
+          cue: tick,                     // THE CUE ROAD - clamped, never capsOk-gated
           log: say,
         });
         trickster = createDvTrickster({
           seed, tier,
           timers: deckTimers,
           reduced, capsOk,
+          cue: tick,                     // THE CUE ROAD - clamped, never capsOk-gated
           isHalted: () => dead || paused || ended,
           stats: () => ({
             swaps: swapsFired,

@@ -79,6 +79,9 @@ export const CASINO = Object.freeze({
  * @param {boolean}  o.reduced    reduced motion
  * @param {boolean}  o.lite       coarse pointer / low-quality tier
  * @param {boolean}  o.capsOk     false when bgIntensity is capped to 0
+ * @param {Function=} o.cue       the GAME's clamped cue helper (name, level,
+ *        extra). A closure, never the engine: this deck cannot reach past the
+ *        tier's audio ceiling because it has nothing to reach with.
  * @param {Function=} o.log
  */
 export function createCasino(o) {
@@ -91,6 +94,7 @@ export function createCasino(o) {
   const reduced = !!opts.reduced;
   const armed = !!opts.capsOk && !!board && !!hud && !!timers
     && typeof document !== 'undefined';
+  const cue = typeof opts.cue === 'function' ? opts.cue : () => {};
 
   /* Per-tag seeded streams - the trickster.js discipline (see its header for
      why core makeTaggedRoll is not used). Append-only: new tags never shift
@@ -102,6 +106,15 @@ export function createCasino(o) {
     if (!s) { s = makeRng(seedBase + tag); streams.set(tag, s); }
     return s();
   };
+
+  /* THE bgIntensity DECOUPLE (owner ruling: a visual dial must not mute the
+     school). `armed` keeps its exact old meaning and still gates every visual,
+     capsOk included - bgIntensity 0 is the player's VISUAL exit (Law VI), and
+     nothing drawn here survives it. The CUE road is separate and gates only on
+     the deck being alive: a player who capped the lights to zero still hears
+     the frame ring and sigh, because those are the class's beats, not its
+     decoration. */
+  const sounds = () => !destroyed;
 
   let destroyed = false;
   let mq = null;                // the marquee frame element
@@ -191,6 +204,9 @@ export function createCasino(o) {
 
     /** The final bell: gold frame, frantic chase, until stop()/dimOut(). */
     bell(on) {
+      // THE FLOURISH: the final bell is a beat the GAME calls in, so it rings
+      // on the decoupled road - even in a room whose frame was never lit.
+      if (on && !bellOn && sounds()) cue('chime', 0.3, { pitch: 1.12 });
       if (!mq || !mq.classList) return;
       bellOn = !!on;
       if (bellOn) mq.classList.add('g-lf-mq-bell'); else mq.classList.remove('g-lf-mq-bell');
@@ -241,6 +257,11 @@ export function createCasino(o) {
 
     /** A loss is never silence: the frame sighs out instead of cutting. */
     dimOut() {
+      // THE SIGH, and the comment above it is true now: "a loss is never
+      // silence". A `slide` pitched DOWN is the frame breathing out - the same
+      // whoosh the marquee would make if you could hear a bulb ring dying.
+      // Decoupled, so the end of a class is audible at bgIntensity 0 too.
+      if (sounds()) cue('slide', 0.3, { pitch: 0.8 });
       bellOn = false;
       if (mq && mq.classList) {
         mq.classList.remove('g-lf-mq-bell', 'g-lf-mq-flash');

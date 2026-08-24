@@ -636,7 +636,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   function renderTopbar() {
     if (!dom || !dom.topbar) return;
     const bar = dom.topbar;
-    bar.hidden = false;
+    // Stay retired while the night campus is up: the scene carries the bar's
+    // job diegetically (crest, ID card, bell, gear), and any store write mid-scene
+    // (attendance tick, EMI's voice ledger) lands here via store.onChange - the
+    // old unconditional unhide resurrected the bar OVER the campus and buried
+    // the hanging timetable plaque under it (owner screenshot, 0824).
+    bar.hidden = !!campus;
     bar.textContent = '';
     bar.appendChild(el('span', 'arc-title', t('arcademy', 'The Arcademy')));
     bar.appendChild(el('span', 'chip year', tierLabel(maxTier())));
@@ -747,18 +752,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     }
     extrasBox.textContent = '';
 
-    const bar = el('div', 'arc-classbar');
-    const replay = el('button', 'btn ghost', t('replay_board', 'Flip the board again'));
-    replay.type = 'button';
-    replay.addEventListener('click', () => board && board.replay());
-    bar.appendChild(replay);
+    /* No "flip the board again" button any more: the flaps roll every time the
+     * hanging board is EXPANDED (the plaque is the flip - see boardToggle
+     * below), and the plain fallback screen still rolls them on entry. */
     if (allDone()) {
+      const bar = el('div', 'arc-classbar');
       const rc = el('button', 'btn', t('report_card', 'Report Card'));
       rc.type = 'button';
       rc.addEventListener('click', () => showReport());
       bar.appendChild(rc);
+      extrasBox.appendChild(bar);
     }
-    extrasBox.appendChild(bar);
 
     /* yesterday's strip (the mockup's report-card row) */
     const y = store.day(dayAdd(localDate, -1));
@@ -828,10 +832,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       const cls = timetable.classes.find((c) => c.gameKey === gameKey);
       if (cls) startClass(cls);
     };
+    /* Built composed, never flipping: the board is BEHIND the collapsed plaque
+     * when the campus stands up, and the reveal cascade belongs to the moment
+     * the player opens it (boardToggle below). The plain fallback screen keeps
+     * its entry roll - it has no plaque. */
     board = createBoard({
       rows: buildRows(true),
       reducedMotion,
-      animate: !silent,
+      animate: false,
       onSelect: onSelectRow,
     });
 
@@ -851,7 +859,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         // different fraction than the end card would be the one lie the rake
         // cannot afford. Optional on the campus side: an older hub ignores it.
         progressFor,
+        // The collapsed plaque's clock pulses until the timetable has been
+        // opened once TODAY (local date - it is attendance furniture, not
+        // content; regression #978's rule).
+        boardPulse: store.get('boardOpenedDate') !== localDate,
         on: {
+          boardToggle: (expanded) => {
+            if (!expanded) return;
+            // Opening IS the flip: roll the flaps through, and remember the
+            // open so tomorrow is the next time the clock nags.
+            try {
+              if (store.get('boardOpenedDate') !== localDate) store.set('boardOpenedDate', localDate);
+            } catch (e) { say('boardOpenedDate write failed: ' + ((e && e.message) || e)); }
+            if (board) board.replay();
+          },
           begin: (gameKey) => {
             const cls = timetable.classes.find((c) => c.gameKey === gameKey);
             if (cls) { startClass(cls); return; }
@@ -911,7 +932,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /* ============================ SCREEN: SETTINGS ======================== */
-  function showSettings() {
+  /**
+   * THE SPLIT (owner ruling 2026-08-24). `gameKey` scopes the page to one
+   * class: the pause card passes the running class's key so a player mid-class
+   * sees the globals plus THEIR room's knobs, never the other eight. The
+   * campus gear and the Registrar keep calling with no argument and get the
+   * full sheet - the between-classes page is the right home for "everything".
+   */
+  function showSettings(gameKey) {
     if (active) pauseClass(true);
     dismissEndCard();
     dismissPunchStage();
@@ -924,6 +952,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       games: games.list,
       keybinds,
       log: say,
+      gameKey: gameKey || null,
       onClose: () => (active ? showClassScreen() : showBoard()),
     });
     dom.screen.appendChild(settingsPage.root);
@@ -2217,10 +2246,19 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         const resume = el('button', 'btn primary', 'Resume');
         resume.type = 'button';
         resume.addEventListener('click', () => pauseClass(false));
+        /* THE MISSING DOOR (owner ruling 2026-08-24). The topbar gear is hidden
+         * while a class is up, so until now NO path on the class stage reached
+         * settings at all. The pause card is the natural place: it is already
+         * the freeze state showSettings() induces, and onClose walks straight
+         * back here. The running class's key scopes the page to this room. */
+        const options = el('button', 'btn ghost', t('settings', 'Settings'));
+        options.type = 'button';
+        options.addEventListener('click', () =>
+          showSettings(active && active.cls ? active.cls.gameKey : null));
         const leave = el('button', 'btn ghost', t('leave_class', 'Leave class'));
         leave.type = 'button';
         leave.addEventListener('click', () => showBoard());
-        bar.appendChild(resume); bar.appendChild(leave);
+        bar.appendChild(resume); bar.appendChild(options); bar.appendChild(leave);
         overlay.appendChild(bar);
         /* DECK V - STREAK JEOPARDY. What "Leave class" actually costs, in the
          * HOST's own attendance numbers. It is a LINE, not a gate: the button

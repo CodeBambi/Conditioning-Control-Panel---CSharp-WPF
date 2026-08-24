@@ -63,6 +63,22 @@ const FALLBACK_SCHEDULE = {
   roll: () => ({ fire: true, intensity: 0.5, jackpot: false, nearMiss: false, kind: 'chime' }),
 };
 
+/* ----------------------------------------------------------------------------
+ * THE TIER AUDIO CEILING (House Book, canonical - the same four numbers every
+ * room of this school uses, indexed by gradeTier-1). No cue this class fires
+ * may exceed it, which is why cue() below is the ONE road: index.js keeps the
+ * engine handle and every other module gets the CLOSURE. A deck holding the
+ * engine could slip the ceiling; a deck holding cue() cannot.
+ * -------------------------------------------------------------------------- */
+const AUDIO_CEIL = Object.freeze([0.45, 0.6, 0.75, 0.9]);
+
+/** A refused / wrong press is answered once per this window - a mashed wall
+ *  must not machine-gun (House Book: the chrome bump is THROTTLED). */
+const BUMP_THROTTLE_MS = 250;
+/** The hover tell's floor: one tick per window, however fast the pointer
+ *  crosses a 200-tile mosaic. */
+const HOVER_THROTTLE_MS = 150;
+
 function loadSchedule(seed, log) {
   return import('../../engine/schedule.js')
     .then((m) => {
@@ -234,6 +250,53 @@ export default {
       if (!hud) return;
       hud.taunt(text);
       timers.after(ms || 1600, () => { if (hud) hud.clearTaunt(); });
+    }
+
+    /* ------------------------------------------------------------- THE CUE */
+    /**
+     * THE ONE ROAD every sound in this class takes. The level is clamped to the
+     * grade tier's audio ceiling before it ever reaches the engine, so no
+     * caller - game, hud or deck - can shout past the tier. `extra` carries
+     * pitch / duck / bus; bus defaults to fx and a caller may override it.
+     */
+    function cue(name, level, extra) {
+      const ceil = AUDIO_CEIL[clamp(tier, 1, 4) - 1] || AUDIO_CEIL[0];
+      const lv = Math.min(ceil, level == null ? 0.4 : level);
+      try {
+        ctx.engine.fire('audio_trigger', Object.assign({ name, level: lv, bus: 'fx' }, extra || {}));
+      } catch (e) { /* the engine is optional - a cue never throws */ }
+    }
+
+    /**
+     * REFUSED / WRONG INPUT: a muted thud, never a bright tick and never
+     * silence - and never more than one per BUMP_THROTTLE_MS, so mashing the
+     * wall costs one bump instead of thirty.
+     */
+    let lastBumpAt = 0;
+    function bump(level) {
+      const now = Date.now();
+      if (now - lastBumpAt < BUMP_THROTTLE_MS) return;
+      lastBumpAt = now;
+      cue('bump', level == null ? 0.3 : level);
+    }
+
+    /**
+     * THE HOVER TELL - the ONE hover sound in the school (owner-approved), and
+     * it is here because on a 200-tile wall "the pointer is over a seat" is
+     * gameplay information, not decoration. Three things keep it from being
+     * spectacle: it sits at the very bottom of the level band (0.12), it is
+     * BOUNDED to one tick per HOVER_THROTTLE_MS however fast the pointer
+     * crosses the mosaic, and it is silent unless the class is actually live -
+     * never during the briefing, the found ceremony, a pause, a suspend, or
+     * after the bell.
+     */
+    let lastHoverAt = 0;
+    function onTileHover() {
+      if (ended || halted || phase !== 'hunt') return;
+      const now = Date.now();
+      if (now - lastHoverAt < HOVER_THROTTLE_MS) return;
+      lastHoverAt = now;
+      cue('tell', 0.12);
     }
 
     /* --------------------------------------------------------------- assets */
@@ -954,7 +1017,10 @@ export default {
 
     /* --------------------------------------------------------------- clicks */
     function onTileClick(tile, e) {
-      if (phase !== 'hunt' || halted) return;
+      // REFUSED INPUT: a press that arrives while the class is not taking any
+      // (the briefing, the found ceremony, a pause, a suspend) is ANSWERED -
+      // one throttled bump. After the bell the room is simply over: silent.
+      if (phase !== 'hunt' || halted) { if (!ended) bump(); return; }
       if (tile.target) onFind(tile);
       else if (tile.warm) onWarm(tile, e);
       else onMiss(tile, e);
@@ -969,6 +1035,10 @@ export default {
       const took = Math.max(0.05, (Date.now() - findStartedAt - (pausedMs - findPausedBase)) / 1000);
       findTimes.push(took);
       finds += 1;
+      /* THE CONFIRM: the press that lands her, on the beat of the press. The
+         pitch climbs one step per find, so the class audibly ladders up its own
+         arc (five finds = five rungs; the cap is there for a longer budget). */
+      cue('pop', 0.45, { pitch: Math.min(1.5, 1 + 0.06 * (finds - 1)) });
       if (cleanThisFind) {
         cleanStreak += 1;
         if (cleanStreak > bestCleanStreak) bestCleanStreak = cleanStreak;
@@ -986,21 +1056,14 @@ export default {
         hud.showSpot(targetLook(), t('lf_found', 'Found her'));
       }
       if (board) { board.freeze(true); board.mark(tile, 'g-lf-found', true); }
-      try {
-        ctx.engine.fire('audio_trigger', {
-          name: 'sting', level: clamp01(0.45 + 0.05 * cleanStreak), bus: 'fx', duck: 'spotlight',
-        });
-      } catch (e) { /* optional */ }
+      // THE SPOTLIGHT: the ceremony's own sting, ducking everything under it.
+      cue('sting', clamp01(0.45 + 0.05 * cleanStreak), { duck: 'spotlight' });
       // THE CHIME LADDER (Deck II): each find stacks one more rising layer on
       // the sting, so the class gets audibly richer as it climbs. Capped at 4
       // layers; the fifth find pays its own way (the royal jackpot below).
       for (let L = 0; L < Math.min(finds, 4); L++) {
         timers.after(110 * (L + 1), () => {
-          try {
-            ctx.engine.fire('audio_trigger', {
-              name: 'streak', level: clamp01(0.2 + 0.07 * L + 0.03 * finds), bus: 'fx',
-            });
-          } catch (e) { /* optional */ }
+          cue('streak', clamp01(0.2 + 0.07 * L + 0.03 * finds));
         });
       }
       if (casino) casino.payout(finds);   // one pulse of the frame, brighter up the ladder
@@ -1076,7 +1139,12 @@ export default {
         ctx.engine.sustain('bubble_field', { clickSafe: true, max: 4, cadenceMs: 220 });
         timers.after(700, () => { if (!dials.bubbles) { try { ctx.engine.stop('bubble_field'); } catch (e2) { /* ignore */ } } });
       } catch (err) { /* optional */ }
-      try { ctx.engine.fire('audio_trigger', { name: 'stamp_bad', level: 0.45, bus: 'fx' }); } catch (err) { /* optional */ }
+      // THE WRONG TILE: a muted loss on the beat of the stamp card, throttled
+      // so a mashed wall is one thud and not a machine gun. (`bump` and
+      // `stamp_bad` are near-identical sawtooth thunks in shell/audio.js, so
+      // this is the House Book's own loss recipe at the House Book's own level;
+      // it REPLACES the raw stamp_bad fire, so one press stays ONE cue.)
+      bump(0.3);
 
       if (misclickStreak >= PLAYTEST.MISCLICK_STREAK_FOR_WASH) {
         misclickStreak = 0;
@@ -1100,7 +1168,10 @@ export default {
       // only - countWrong() has already done the honest accounting above.
       if (casino) casino.almost(tile, targetLook(), paintLook);
       try { ctx.ceremonies.reward('near_miss', { target: hud && hud.stampAnchor, text: t('lf_warm', 'Warm') }); } catch (err) { /* optional */ }
-      try { ctx.engine.fire('audio_trigger', { name: 'blip', level: 0.3, bus: 'fx' }); } catch (err) { /* optional */ }
+      // THE ALMOST: the near-tease, landing with casino.almost()'s ghost and
+      // the shimmer on the real target. `blip` used to sit here - a BRIGHT TICK
+      // on a wrong press, the one thing the House Book forbids on a loss.
+      cue('near', 0.35);
       if (board) {
         const target = board.targetTile();
         board.mark(target, 'g-lf-warm', true);
@@ -1137,7 +1208,7 @@ export default {
         // Deck II: a loss is acknowledged, never silent - a muted stamp and a
         // low thud while the marquee sighs out. Scaled down, still a ceremony.
         try { ctx.ceremonies.stamp({ text: t('lf_timeout', 'Time'), tone: 'pink', target: hud && hud.stampAnchor }); } catch (e) { /* optional */ }
-        try { ctx.engine.fire('audio_trigger', { name: 'stamp_bad', level: 0.3, bus: 'fx' }); } catch (e) { /* optional */ }
+        cue('stamp_bad', 0.3);
       }
 
       say('class over: ' + finds + '/' + FINDS_PER_CLASS + ' finds, median '
@@ -1204,10 +1275,12 @@ export default {
         injectStyles();
         hud = createHud({
           root: ctx.root, t, keys: ctx.keys, coarse, lite: coarse, zen,
+          // the chrome vocabulary rides the game's clamped helper, never the engine
+          cue,
         });
         board = createBoard({
           mount: hud.view, density, rng, drift: dials.drift,
-          lite: coarse, reduced, log: say, onTileClick,
+          lite: coarse, reduced, log: say, onTileClick, onTileHover,
         });
         // Somebody has to be the target before any media exists, so the class is
         // playable even if the provider never answers.
@@ -1236,6 +1309,8 @@ export default {
             } catch (e) { return null; }
           },
           announce, t, log: say,
+          // Deck III speaks through the game's clamped helper, never the engine
+          cue,
         });
 
         // Deck II (House Rules): the lighting rig. Same disarm rule as the
@@ -1246,6 +1321,8 @@ export default {
           board, hud, timers, reduced, lite: coarse,
           capsOk: !(ctx.caps && Number(ctx.caps.bgIntensity) === 0),
           log: say,
+          // Deck II speaks through the game's clamped helper, never the engine
+          cue,
         });
 
         say('class start: tier ' + tier + ', density ' + density + '/' + dials.density

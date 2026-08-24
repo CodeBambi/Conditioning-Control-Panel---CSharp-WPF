@@ -216,6 +216,12 @@ export function createAnPressure(o) {
   }
   let destroyed = false;
   const armed = () => armedBase && !destroyed && capsOk();
+  /* THE bgIntensity DECOUPLE (W2). capsOk false is the player's VISUAL exit
+   * (Law VI): zero fires, zero tremor, exactly as before. It is not an audio
+   * exit - the SURGE still announces its rungs, or a visual dial silences the
+   * school. Only the cue road gates on sounds(); every fire/sustain/tremor
+   * still gates on armed(). */
+  const sounds = () => armedBase && !destroyed;
 
   /* ---- timers ------------------------------------------------------------- */
   const live = new Set();
@@ -263,7 +269,7 @@ export function createAnPressure(o) {
     try { if (typeof eng.stop === 'function') eng.stop(kind); } catch (e) { /* noop */ }
   }
   function cue(name, rung) {
-    if (!armed() || !name) return;
+    if (!sounds() || !name) return;
     const level = Math.min(audioCeil, P.CUE_LEVEL_BASE + rung * P.CUE_LEVEL_STEP);
     count('cue');
     try {
@@ -447,7 +453,10 @@ export function createAnPressure(o) {
   function setStreak(s) {
     streak = Math.max(0, Math.floor(Number(s) || 0));
     wantRung = rungFor(streak);
-    if (!started || stopped || !armed()) return;
+    /* the rung LADDER is allowed to walk with the lights off: applyAdd's every
+     * fire/sustain self-gates on armed() and retune() zeroes the tremor, so
+     * what survives a capped bgIntensity is exactly the rung CUE (W2) */
+    if (!started || stopped || !sounds()) return;
     if (wantRung > rung) { cancel(downTimer); downTimer = 0; setRung(wantRung); }
     else if (wantRung < rung && !downTimer) {
       downTimer = after(P.HYST_MS, () => { downTimer = 0; if (wantRung < rung) setRung(wantRung); });
@@ -546,7 +555,7 @@ export function createAnPressure(o) {
     },
     diagnostics() {
       return {
-        armed: armed(), started, stopped, paused, heat: +heat.toFixed(3), streak, rung, wantRung,
+        armed: armed(), sounds: sounds(), started, stopped, paused, heat: +heat.toFixed(3), streak, rung, wantRung,
         on: Array.from(on), tremorPx: +amp.toFixed(3), punchPx: +punch.px.toFixed(2), loopOn,
         chrome: chrome.length, chromeRefused: refused, translateWrites,
         fires: Object.assign({}, fires), liveTimers: live.size, nodes: 0, spiralUrl,

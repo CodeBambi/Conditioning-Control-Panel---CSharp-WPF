@@ -283,9 +283,18 @@ export function createEcPressure(o) {
     if (typeof eng.stop !== 'function') return;
     try { eng.stop(kind); } catch (e) { /* ignore */ }
   }
+  /* THE DECOUPLE (W2 sec 3, owner ruling). The rung ladder IS the class's own
+   * streak, so its cue is not decoration: bgIntensity 0 takes the EFFECTS away
+   * (fire()/sustain() stay behind armed()) and never the school's voice. The
+   * count is kept identical to fire()'s so diagnostics do not move. */
+  const sounds = () => armedBase && !destroyed && !stopped;
   function cue(name, r) {
-    if (!name) return;
-    fire('audio_trigger', { name, level: Math.min(audioCeil, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * r) });
+    if (!name || !sounds()) return;
+    count('audio_trigger');
+    if (typeof eng.fire !== 'function') return;
+    try {
+      eng.fire('audio_trigger', { name, level: Math.min(audioCeil, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * r) });
+    } catch (e) { /* a refused cue is not an error */ }
   }
 
   /* ---- state ------------------------------------------------------------ */

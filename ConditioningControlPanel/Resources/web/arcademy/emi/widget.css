@@ -76,25 +76,26 @@
 .arc-emi .emi-x:focus-visible { outline: 2px solid #FFD700; outline-offset: 2px; }
 
 /* ---- the bubble, on the other ear --------------------------------------
- * emi.css hangs `.emi-bubble` off EMI's RIGHT side (right:-5%, max-width:46%),
+ * emi.css hangs `.emi-bubble` up off EMI's RIGHT ear (left:58%, bottom:96%),
  * which runs off the window once she is dragged into the right margin. widget.js
  * adds `.bubble-left` to the root when that is about to happen; this mirrors the
- * box and its tail. Nothing else about the bubble is touched — the skin stays
- * agent A's.
+ * box and its tail. `.bubble-low` is the vertical twin: parked at the very top
+ * there is no sky for the bubble to rise into, so it drops below the chin.
+ * Nothing else about the bubble is touched — the skin stays agent A's.
  *
  * THE SHIFT (owner, 2026-08-24): the line sits `--emi-bubble-dx` further off her
- * ear than the skin puts it. widget.js writes that property from
+ * ear than the skin's 58% puts it. widget.js writes that property from
  * DIALS.BUBBLE_SHIFT_X so there is one number, and the 15px here is only the
  * fallback for a bubble drawn before the widget has touched the node. It is
  * MIRRORED by the flip — further LEFT on `.bubble-left` — and `faceBubble()`
  * counts it on both sides of its reach test, so the extra 15px can never push
  * the mirrored line back off the edge the flip exists to stay clear of. */
 .arc-emi .emi .emi-bubble {
-  right: calc(-5% - var(--emi-bubble-dx, 15px));
+  left: calc(58% + var(--emi-bubble-dx, 15px));
 }
 .arc-emi .emi.bubble-left .emi-bubble {
-  right: auto;
-  left: calc(-5% - var(--emi-bubble-dx, 15px));
+  left: auto;
+  right: calc(58% + var(--emi-bubble-dx, 15px));
   text-align: right;
   transform-origin: 100% 100%;
 }
@@ -104,6 +105,29 @@
   border-left: 0;
   border-right: 3px solid #1A1A2E;
   transform: translate(6px, 6px) skewX(-30deg);
+}
+/* Parked against the top edge: the bubble hangs UNDER her instead, tail up. */
+.arc-emi .emi.bubble-low .emi-bubble {
+  bottom: auto;
+  top: 96%;
+  transform-origin: 0 0;
+}
+.arc-emi .emi.bubble-low .emi-bubble::after {
+  bottom: auto;
+  top: -3px;
+  border-bottom: 0;
+  border-top: 3px solid #1A1A2E;
+  transform: translate(-6px, -6px) skewX(-30deg);
+}
+.arc-emi .emi.bubble-low.bubble-left .emi-bubble { transform-origin: 100% 0; }
+.arc-emi .emi.bubble-low.bubble-left .emi-bubble::after {
+  left: auto;
+  right: -3px;
+  border-left: 0;
+  border-right: 3px solid #1A1A2E;
+  border-bottom: 0;
+  border-top: 3px solid #1A1A2E;
+  transform: translate(6px, -6px) skewX(30deg);
 }
 
 /* ---- the dock -----------------------------------------------------------

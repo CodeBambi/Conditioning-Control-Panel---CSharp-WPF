@@ -473,17 +473,23 @@ function el(tag, cls, text) {
  * @param {Object} o.stats        {streak, perfectDays, tier}
  * @param {boolean=} o.reducedMotion
  * @param {Object} o.on           {begin(gameKey), freeSwim(gameKey), records(),
- *   registrar()} - freeSwim is only ever called for a room whose state carries
- *   an `endless` declaration (the shell reads the manifest, never the campus).
+ *   registrar(), boardToggle(expanded)} - freeSwim is only ever called for a
+ *   room whose state carries an `endless` declaration (the shell reads the
+ *   manifest, never the campus). boardToggle fires AFTER the hanging board has
+ *   been shown/hidden - the shell rolls the flaps (and stamps the store) on
+ *   `true`; the campus itself never touches a flap.
  * @param {string=} o.dateSeed  init.utcDateSeed - the idle attract is seeded off
  *   it so every player gets the SAME show tonight (trap 8: UTC seeds content).
  *   Omitted, it falls back to today's UTC date.
  * @param {number=} o.attractIdleMs  test seam; defaults to ATTRACT_IDLE_MS.
+ * @param {boolean=} o.boardPulse  the timetable has NOT been opened yet today:
+ *   the collapsed plaque's clock pulses until the first expand. The shell
+ *   decides (it owns the local date + the store); the campus only wears it.
  * @param {Function=} o.log
  * @returns {{root, boardMount, footMount, update, closeCard, destroy}}
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
-  dateSeed, attractIdleMs } = {}) {
+  dateSeed, attractIdleMs, boardPulse } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   const name = typeof gameName === 'function' ? gameName : (k) => String(k);
@@ -1175,15 +1181,40 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     });
 
   /* ------------------------------ hanging board -------------------------- */
-  const boardwrap = el('div', 'campus-boardwrap');
+  /* COLLAPSED BY DEFAULT: what hangs from the chains at first is the small
+   * plaque below - clock, "TIMETABLE", chevron. Clicking it drops the board
+   * out beneath (and the shell rolls the flaps through on.boardToggle, which
+   * is why there is no "flip the board again" button anywhere any more - the
+   * plaque IS the flip). The clock pulses until the first open of the day. */
+  const boardwrap = el('div', 'campus-boardwrap collapsed');
   const chains = el('div', 'campus-chains');
   chains.appendChild(el('div', 'campus-chain'));
   chains.appendChild(el('div', 'campus-chain'));
   boardwrap.appendChild(chains);
+  /* Everything below the chains hangs as ONE object (the sway lives on this
+   * wrapper, not per-piece - a plaque and a board rotating around different
+   * origins would shear at the seam). */
+  const boardSway = el('div', 'campus-boardsway');
+  const boardTab = el('button', 'campus-boardtab' + (boardPulse ? ' pulse' : ''));
+  boardTab.type = 'button';
+  boardTab.appendChild(el('span', 'tclock', '🕘'));
+  boardTab.appendChild(el('span', 'tlabel', t('timetable', 'Timetable').toUpperCase()));
+  boardTab.appendChild(el('span', 'tchev', '▾'));
+  boardTab.setAttribute('aria-expanded', 'false');
+  boardTab.addEventListener('click', () => {
+    const expand = boardwrap.classList.contains('collapsed');
+    boardwrap.classList.toggle('collapsed', !expand);
+    boardTab.setAttribute('aria-expanded', expand ? 'true' : 'false');
+    if (expand) boardTab.classList.remove('pulse');   // opened = the clock's job is done
+    try { if (handlers.boardToggle) handlers.boardToggle(expand); }
+    catch (e) { say('boardToggle handler threw: ' + ((e && e.message) || e)); }
+  });
+  boardSway.appendChild(boardTab);
   const boardMount = el('div', 'campus-board');
-  boardwrap.appendChild(boardMount);
+  boardSway.appendChild(boardMount);
   const footMount = el('div', 'campus-boardfoot');
-  boardwrap.appendChild(footMount);
+  boardSway.appendChild(footMount);
+  boardwrap.appendChild(boardSway);
   root.appendChild(boardwrap);
 
   /* ------------------------------ crest / bell / hint -------------------- */
