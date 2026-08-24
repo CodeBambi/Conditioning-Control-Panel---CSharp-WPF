@@ -338,7 +338,7 @@ public sealed class BubblePopField
     /// <summary>
     /// Start one bubble's pop. Idempotent: a second hit on a bubble already popping does nothing,
     /// which is upstream's own first line (<c>if (!_isAlive || _isPopping) return;</c>,
-    /// <c>Services/BubbleService.cs:3990</c>) and the reason a double click cannot score twice.
+    /// <c>Services/BubbleService.cs:3994</c>) and the reason a double click cannot score twice.
     /// </summary>
     /// <returns>True when this call is what started the pop.</returns>
     public bool Hit(int id)

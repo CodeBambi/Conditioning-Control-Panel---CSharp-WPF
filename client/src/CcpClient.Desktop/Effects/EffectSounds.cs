@@ -22,10 +22,12 @@ namespace CcpClient.Desktop.Effects;
 /// <item><b>Both pops go to <see cref="SoundArbitration.PlaySfx"/>.</b> Upstream's pops are
 /// <c>App.Audio.PlayOneShot</c> (<c>Services/BubbleService.cs:2027</c>,
 /// <c>Windows/BubbleCountWindow.xaml.cs:1343</c>), which OVERLAPS up to ten concurrent clips and
-/// DROPS the eleventh (<c>Services/Audio/AudioService.Playback.cs:111</c>, <c>:212-217</c>). The SFX
-/// pool is that shape: bounded, drop-on-overflow typed, slots reclaimed on the backend's own
-/// <c>PlaybackEnded</c>. A pop must never take the whisper door — a burst of pops on a
-/// stop-replace slot would cut each other off, which is a defect a user hears immediately.</item>
+/// DROPS the eleventh (<c>Services/Audio/AudioService.Playback.cs:111</c>, <c>:212-218</c>). The SFX
+/// pool is that SHAPE — bounded, drop-on-overflow typed, slots reclaimed on the backend's own
+/// <c>PlaybackEnded</c> — at the port's own bound of eight rather than upstream's ten, which is an
+/// owner-ratified number (<c>Audio/SoundArbitration.cs:90-92</c>) and not this row's to move. A pop
+/// must never take the whisper door — a burst of pops on a stop-replace slot would cut each other
+/// off, which is a defect a user hears immediately.</item>
 /// </list>
 ///
 /// <para><b>THE CLIPS DO NOT SHIP, and that is refused rather than invented.</b> Upstream's flash

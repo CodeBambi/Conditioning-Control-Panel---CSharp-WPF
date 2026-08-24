@@ -156,7 +156,7 @@ public sealed class AudioCuePool : IAudioCuePool
     /// <summary>Drops the cached enumeration; the next draw re-reads the folder. WPF's
     /// <c>ReloadAudioFiles</c> (<c>MindWipeService.cs:189-192</c>), and - for the shuffled draw -
     /// its <c>ClearFileCache</c>, which throws the half-dealt queue away with the file list
-    /// (<c>Services/Flash/FlashService.cs:3490</c>).</summary>
+    /// (<c>Services/Flash/FlashService.cs:3489</c>).</summary>
     public void Invalidate()
     {
         lock (_gate)
