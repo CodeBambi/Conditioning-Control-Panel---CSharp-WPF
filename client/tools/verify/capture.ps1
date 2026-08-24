@@ -102,8 +102,8 @@
 # and is wheeled in one notch at a time, testing after each — the trainer-card rule, and never a
 # fixed count.
 param(
-    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'trainer-card-level', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'companion-privacy', 'companion-transcript', 'toast', 'popquiz-card')] [string]$Surface,
-    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'broad', 'titles', 'open', 'saved', 'refused', 'asking', 'fresh', 'earned')] [string]$State
+    [Parameter(Mandatory)][ValidateSet('dashboard', 'rail-door', 'rack-row', 'rack-row-dot', 'goon-page', 'trainer-card', 'trainer-card-level', 'session-row', 'session-start', 'session-history', 'studio-dial', 'companion-permissions', 'companion-privacy', 'companion-transcript', 'toast', 'popquiz-card', 'mantra-window')] [string]$Surface,
+    [Parameter(Mandatory)][ValidateSet('unselected', 'selected', 'off', 'armed', 'first-run', 'no-runs-yet', 'easy', 'hard', 'idle', 'running', 'kept', 'not-kept', 'live', 'locked', 'closed', 'admitted', 'broad', 'titles', 'open', 'saved', 'refused', 'asking', 'fresh', 'earned', 'typed')] [string]$State
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing
@@ -221,6 +221,12 @@ $statesFor = @{
     # because nothing widened), `titles` is the same window after one app has been named. A check
     # that passed on both would be saying the third stop means nothing.
     'companion-privacy' = @('broad', 'titles')
+    # THE TYPED MANTRA GAME. Both states are the SAME window playing the SAME repetition of the
+    # SAME mantra, and the only thing between them is that somebody typed. `fresh` is the line as
+    # the game hands it over - every character dim - and `typed` is the same line after all but its
+    # last two characters have arrived on a real keyboard, so the same pixels are lit. A check that
+    # passed on both would be saying the per-character feedback, which is the whole game, is paint.
+    'mantra-window' = @('fresh', 'typed')
     # THE TRANSCRIPT: `closed` is the companion window with no transcript in the UIA tree at all,
     # `open` is the same window with the read-only viewer over it. One press between them.
     'companion-transcript' = @('closed', 'open')
@@ -250,6 +256,15 @@ using System.Runtime.InteropServices;
 public class VerifyNative {
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
+    // THE WORK AREA, and it is here because a measurement corrected an assumption. A maximized
+    // Avalonia window with WindowDecorations=None was expected to take the whole primary display
+    // and does NOT: it takes the work area, measured at 2880x1716 against a 2880x1800 screen on
+    // the first run of the mantra surface. That is the same rule WPF's WindowState=Maximized
+    // obeys, so the port is not diverging - but a harness that demanded the screen would have
+    // called a correct window broken.
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint action, uint param, ref RECT data, uint winIni);
+    public const uint SPI_GETWORKAREA = 0x0030;
     [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, IntPtr extra);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     // The compositor fence. Identical to the one CcpClient.Tests' FlashPixelProbe.CaptureDesktop
@@ -277,6 +292,9 @@ public class VerifyNative {
     // here so the capture ends by proving the card really takes keyboard input from a real
     // keyboard, rather than by killing a process that still holds the user's foreground.
     public const byte VK_ESCAPE = 0x1B;
+    // And the one key VK_A..VK_Z cannot produce. The mantra game's lines are words with spaces in
+    // them, and a mantra typed without its spaces stops matching at the first gap.
+    public const byte VK_SPACE = 0x20;
     public const uint KEYUP = 0x0002;
     public const uint LEFTDOWN = 0x0002, LEFTUP = 0x0004;
     public const uint RIGHTDOWN = 0x0008, RIGHTUP = 0x0010;
@@ -735,6 +753,55 @@ function Type-Lowercase($element, [string]$text) {
 # door's own button. Raised topmost before anything is pressed - the shell is HWND_TOPMOST, so a
 # press at an owned window's own UIA coordinates otherwise lands on the SHELL (the finding the
 # recap and permissions paths already record).
+# The typed mantra window, found by a SUBSTRING of its title rather than a prefix: the shell is
+# called 'CCP Client' and the game 'CCP - Mantra Lab' (with an em dash the product owns and this
+# script has no reason to depend on the encoding of), so StartsWith('CCP') would return the SHELL.
+# Owned windows are UIA DESCENDANTS of their owner, which is the finding the recap path recorded.
+function Wait-MantraWindow([int]$processId, [int]$seconds = 15) {
+    $deadline = [Diagnostics.Stopwatch]::StartNew()
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $byProcess = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $processId)
+    $isWindow = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Window)
+    $seen = @()
+    while ($deadline.Elapsed.TotalSeconds -lt $seconds) {
+        $seen = @()
+        foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $byProcess)) {
+            $seen += "'$($w.Current.Name)'"
+            if ($w.Current.Name -like '*Mantra Lab*') { return $w }
+            foreach ($o in $w.FindAll([System.Windows.Automation.TreeScope]::Descendants, $isWindow)) {
+                $seen += "'$($o.Current.Name)' (owned, any depth)"
+                if ($o.Current.Name -like '*Mantra Lab*') { return $o }
+            }
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    Fail "no mantra window appeared within ${seconds}s (this process has: $($seen -join ', '))"
+}
+
+# Type a mantra with REAL keystrokes into whatever holds the keyboard - deliberately NOT clicking
+# first, because acquiring focus without a click is the claim. VK_A..VK_Z with no shift produce
+# lowercase, and MantraSession.Match compares case-insensitively (MantraSession.cs:257-275, WPF
+# Windows/MantraWindow.xaml.cs:121-130), so a lowercase 'i' matches the mantra's 'I' and lights it.
+function Type-Mantra([string]$text) {
+    foreach ($ch in $text.ToCharArray()) {
+        if ($ch -eq ' ') {
+            [VerifyNative]::keybd_event([VerifyNative]::VK_SPACE, 0, 0, [IntPtr]::Zero)
+            [VerifyNative]::keybd_event([VerifyNative]::VK_SPACE, 0, [VerifyNative]::KEYUP, [IntPtr]::Zero)
+        }
+        elseif (($ch -ge 'a' -and $ch -le 'z') -or ($ch -ge 'A' -and $ch -le 'Z')) {
+            $vk = [byte][char]([string]$ch).ToUpperInvariant()
+            [VerifyNative]::keybd_event($vk, 0, 0, [IntPtr]::Zero)
+            [VerifyNative]::keybd_event($vk, 0, [VerifyNative]::KEYUP, [IntPtr]::Zero)
+        }
+        else { Fail "Type-Mantra can only type letters and spaces; '$ch' is not one" }
+        Start-Sleep -Milliseconds 25
+    }
+    Start-Sleep -Milliseconds 250
+}
+
 function Open-CompanionWindow($window) {
     $door = Get-DoorRect $window 'companion'
     Click-Rect $door
@@ -965,6 +1032,9 @@ $script:extraHwnd = [IntPtr]::Zero
 # user's keyboard, so it is taken down by the key the PRODUCT reads rather than by a WM_CLOSE from
 # here - see the teardown after the capture.
 $script:popQuizCard = $null
+# The typed mantra window, when one is up at capture time. It is closed by the key the PRODUCT
+# reads (Escape, MantraWindow.OnKeyDown) rather than by a WM_CLOSE from here - see the teardown.
+$script:mantraWindow = $null
 
 if ($Surface -eq 'goon-page') {
     # =========================================================================================
@@ -2248,6 +2318,174 @@ elseif ($Surface -eq 'session-row' -or $Surface -eq 'session-start' -or $Surface
         $capX = $buttonRect.X; $capY = $buttonRect.Y; $capW = $buttonRect.W; $capH = $buttonRect.H
     }
 }
+elseif ($Surface -eq 'mantra-window') {
+    # =============================================================================================
+    # THE TYPED MANTRA GAME, THROUGH A DOOR THAT EXISTS AGAIN.
+    #
+    # Upstream's Mantras card was the only caller of its typed mantra window and came off the Play
+    # page in the 2026-08-12 relayout, whose own commit records "MantraWindow entry point orphaned -
+    # re-home pending owner call" (a9859e7b6; MainWindow/MainWindow.PlayTab.cs:262). Nothing had
+    # ever driven this window on a real desktop, upstream or here, because for the whole of that
+    # time there was nothing to press.
+    #
+    # THREE THINGS THIS RUN ESTABLISHES AND A HEADLESS FRAME CANNOT.
+    #   1. A MAXIMIZED, CHROMELESS WINDOW AGAINST A REAL WINDOW MANAGER. The window declares
+    #      WindowState=Maximized, WindowDecorations=None and Topmost (MantraWindow.axaml:5-7); this
+    #      reads its rect back off the desktop and requires it to be the whole primary display.
+    #   2. IT TAKES THE SCREEN OFF THE SHELL. The shell has been raised HWND_TOPMOST by this script
+    #      before anything was pressed, and the band captured below lies INSIDE the shell's own
+    #      rect - so the pixels checked are provably at coordinates the shell was occupying.
+    #      NOTE THE LIMIT: the game's window is OWNED by the shell, so this proves occlusion and
+    #      does NOT isolate Topmost from owner ordering. A foreign topmost window would be needed
+    #      for that, and this harness has none.
+    #   3. IT ACQUIRES THE KEYBOARD WITHOUT BEING CLICKED. Nothing clicks into the game. The
+    #      characters below are pressed into whatever holds the focus, and the game's own echo line
+    #      is read back through UIA before any pixel - so a window that opened without taking focus
+    #      is a named failure rather than a photograph of an empty box.
+    #
+    # THE MANTRA IS DRAWN AT RANDOM from the built-in pool of five (MantraSession.DefaultPool,
+    # upstream's Models/AppSettings.cs:6318-6322), so this run READS the line before typing it back
+    # rather than assuming one - and it stops TWO characters short of the end, which is what keeps
+    # the run deterministic: a completed repetition would bank XP, move the streak, warm every
+    # colour on the ramp (MantraIntensity) and draw a different mantra underneath the capture.
+    # =============================================================================================
+    $playDoor = Get-DoorRect $window 'play'
+    $scale = $playDoor.Scale
+    Click-Rect $playDoor
+    Assert-Route $window 'play'
+    Write-Output "state drive: left-click on the Play door -> route: play (probe: $($playDoor.Raw))"
+
+    # (1) THE CARD IS THE THIRD ON THE WALL and its button sits below the shell's fold, so it is
+    # wheeled into the page's own viewport one notch at a time, testing after each - the rack's
+    # rule, never a fixed count.
+    $viewport = Get-Rect (Get-Element $window 'PlayScroll')
+    $notches = 0
+    $beginRect = Get-Rect (Get-Element $window 'MantraBeginButton')
+    while (-not (Test-Inside $beginRect $viewport)) {
+        if ($notches -ge 24) {
+            Fail ("the Begin button never came fully inside the Play page viewport after $notches wheel " +
+    "notches: button $($beginRect.X),$($beginRect.Y) $($beginRect.W)x$($beginRect.H) vs viewport " +
+    "$($viewport.X),$($viewport.Y) $($viewport.W)x$($viewport.H)")
+        }
+        Wheel-Down $viewport
+        $notches++
+        $beginRect = Get-Rect (Get-Element $window 'MantraBeginButton')
+    }
+    Write-Output "Begin button inside the Play viewport after $notches wheel notch(es)"
+
+    # (2) THE CARD'S OWN WORDS, BEFORE IT IS PRESSED. A card that rendered another feature's blurb
+    # is a perfectly plausible rectangle.
+    $mantraTitle = (Get-Element $window 'MantraTitle').Current.Name
+    if ($mantraTitle -ne 'MANTRAS') { Fail "the Play wall's third card is not the Mantras card: '$mantraTitle'" }
+    $scopeLine = (Get-Element $window 'MantraScopeLine').Current.Name
+    if ($scopeLine -notlike '*silent*') {
+        Fail "the Mantras card does not admit that this build's game is silent: '$scopeLine'"
+    }
+    if ($null -ne (Find-Element $window 'MantraFaultText')) {
+        Fail 'the Mantras card is already showing a launch fault before anything was pressed'
+    }
+    Write-Output "card gate: '$mantraTitle' / the card admits the missing audio / no fault line on screen"
+
+    # (3) PRESS IT.
+    Click-Rect $beginRect
+    $game = Wait-MantraWindow $script:proc.Id
+    $script:mantraWindow = $game
+    $gameRect = Get-Rect $game
+    Write-Output "mantra window up: '$($game.Current.Name)' at $($gameRect.X),$($gameRect.Y) $($gameRect.W)x$($gameRect.H)"
+
+    # (4) MAXIMIZED AND CHROMELESS, MEASURED AGAINST THE REAL DESKTOP - and the measurement
+    # CORRECTED this line rather than confirming it. A maximized chromeless window takes the WORK
+    # AREA, not the screen: the first run of this surface read 2880x1716 against a 2880x1800
+    # display, which is the taskbar, and demanding the screen would have called a correct window
+    # broken. WPF's WindowState=Maximized obeys the same rule, so this is parity and not a
+    # divergence. What is asserted is therefore exact: the work area, to the pixel.
+    $screenW = [int][VerifyNative]::GetSystemMetrics(0)
+    $screenH = [int][VerifyNative]::GetSystemMetrics(1)
+    $work = New-Object VerifyNative+RECT
+    if (-not [VerifyNative]::SystemParametersInfo([VerifyNative]::SPI_GETWORKAREA, 0, [ref]$work, 0)) {
+        Fail 'the work area is unreadable; the maximized claim cannot be measured on this desktop'
+    }
+    $workW = $work.Right - $work.Left
+    $workH = $work.Bottom - $work.Top
+    if ($gameRect.X -ne $work.Left -or $gameRect.Y -ne $work.Top -or $gameRect.W -ne $workW -or $gameRect.H -ne $workH) {
+        Fail ("the mantra window is $($gameRect.X),$($gameRect.Y) $($gameRect.W)x$($gameRect.H) and the work " +
+    "area is $($work.Left),$($work.Top) ${workW}x${workH} (primary display ${screenW}x${screenH}): " +
+    'WindowState=Maximized with WindowDecorations=None did not take the desktop')
+    }
+    Write-Output ("maximized: $($gameRect.W)x$($gameRect.H) at $($gameRect.X),$($gameRect.Y) IS the work area " +
+    "exactly, on a ${screenW}x${screenH} primary display (the taskbar keeps the difference)")
+
+    # (5) IT IS OVER THE SHELL, and the shell is HWND_TOPMOST.
+    Assert-Inside $windowRect $gameRect 'the shell window' 'the mantra window'
+    Write-Output ("occlusion: the shell at $($windowRect.X),$($windowRect.Y) " +
+    "$($windowRect.W)x$($windowRect.H) is inside the game's rect (the shell is HWND_TOPMOST; the " +
+    'game is owned by it, so this is occlusion rather than an isolated Topmost claim)')
+
+    # (6) THE UIA GATE, READ BEFORE ANY PIXEL. The run is real, it is the count the CARD asked for,
+    # and nothing has been typed yet.
+    $mantra = (Get-Element $game 'MantraText').Current.Name
+    if ([string]::IsNullOrWhiteSpace($mantra)) {
+        Fail 'the mantra line publishes no text; there is nothing on this screen to read or to type back'
+    }
+    $target = (Get-Element $game 'MantraTargetText').Current.Name
+    if ($target -ne '/25') {
+        Fail ("the run asks for '$target' repetitions; the card's picker opens on 25 " +
+    "(PlayPage.DefaultCardReps, upstream's SelectedIndex=1), so the picked count did not reach the run")
+    }
+    foreach ($pair in @(@('MantraCompletionsText', '0'), @('MantraStreakText', '0'), @('MantraBestStreakText', '0'))) {
+        $read = (Get-Element $game $pair[0]).Current.Name
+        if ($read -ne $pair[1]) { Fail "$($pair[0]) reads '$read' on a fresh run; expected '$($pair[1])'" }
+    }
+    $answer = (Get-Element $game 'MantraAnswerText').Current.Name
+    if (-not [string]::IsNullOrEmpty($answer)) { Fail "the echo line already reads '$answer' before anything was typed" }
+    Write-Output "run gate: mantra '$mantra' | 0$target reps | streak 0 | best 0 | echo line empty"
+
+    # (7) THE GESTURE, and it is the whole difference between the two states.
+    if ($State -eq 'typed') {
+        if ($mantra.Length -lt 6) { Fail "the drawn mantra '$mantra' is too short to type all but its last two characters" }
+        $prefix = $mantra.Substring(0, $mantra.Length - 2)
+        Type-Mantra $prefix
+
+        # FOCUS ACQUISITION, READ BACK OFF THE PRODUCT. Nothing clicked into this window.
+        $echo = (Get-Element $game 'MantraAnswerText').Current.Name
+        if ($echo -ne $prefix) {
+            Fail ("the echo line reads '$echo' after typing '$prefix' on the real keyboard: the window " +
+    'did not take the keyboard focus when it opened, or the keystrokes went somewhere else')
+        }
+        # And NOTHING completed: two characters short is short, so no XP was banked, no streak
+        # moved, and the mantra under the capture is still the one that was read above.
+        $after = (Get-Element $game 'MantraCompletionsText').Current.Name
+        $streak = (Get-Element $game 'MantraStreakText').Current.Name
+        if ($after -ne '0' -or $streak -ne '0') {
+            Fail "typing a PREFIX completed a repetition (reps '$after', streak '$streak'); the capture's colours would be off the warmed ramp"
+        }
+        if ((Get-Element $game 'MantraText').Current.Name -ne $mantra) {
+            Fail 'the mantra changed under the capture; the run advanced when it should not have'
+        }
+        Write-Output "state drive: '$prefix' typed on the REAL keyboard with no click into the window -> the game echoes it back"
+    }
+
+    # (8) THE BAND, derived from the mantra line's OWN rect and identical in both states: the left
+    # 60% of it, clear of the last two characters that stay dim in `typed`, and clear of the top
+    # and bottom edges where the glyphs' antialiasing and the drop shadow live.
+    $lineRect = Get-Rect (Get-Element $game 'MantraText')
+    if ($lineRect.W -le 0 -or $lineRect.H -le 0) { Fail 'the mantra line has no rect on this desktop' }
+    Assert-Inside $lineRect $gameRect 'the mantra line' 'the mantra window'
+    Write-Output ("mantra line $($lineRect.X),$($lineRect.Y) $($lineRect.W)x$($lineRect.H) - " +
+    "declared FontSize 72 inside a Viewbox capped at 1400x300 DIP @ scale $scale")
+
+    $capX = $lineRect.X + [int][math]::Round($lineRect.W * 0.05)
+    $capY = $lineRect.Y + [int][math]::Round($lineRect.H * 0.25)
+    $capW = [int][math]::Round($lineRect.W * 0.60)
+    $capH = [int][math]::Round($lineRect.H * 0.50)
+    Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $lineRect 'the mantra sample band' 'the mantra line'
+    # THE OCCLUSION CLAIM IS THE BAND'S OWN, not a statement about the window: these exact pixels
+    # are inside the shell's rect, and the shell is the topmost window on this desktop.
+    Assert-Inside @{ X = $capX; Y = $capY; W = $capW; H = $capH } $windowRect 'the mantra sample band' "the shell's own rect"
+    Write-Output "band $capX,$capY ${capW}x${capH} - inside the mantra line AND inside the shell's rect"
+
+    $windowRect = $gameRect
+}
 elseif ($Surface -eq 'companion-permissions') {
     # =============================================================================================
     # WHAT SHE IS ALLOWED TO DO. Two hops of real input to the companion surface - the Companion
@@ -2614,6 +2852,36 @@ if ($null -ne $script:popQuizCard) {
     # the state every other capture closes it in.
     Click-Rect (Get-Rect (Get-Element $window 'SessionStartButton'))
     Write-Output "session stopped: the button reads '$((Get-Element $window 'SessionStartButton').Current.Name)'"
+}
+
+# THE GAME IS CLOSED THE WAY A PLAYER CLOSES IT. Escape leaves (MantraWindow.OnKeyDown, upstream's
+# Windows/MantraWindow.xaml.cs:442-447, and the window says 'Esc to exit' beside its own box), and
+# pressing it here proves one more thing no picture can: the window is still taking keystrokes from
+# a real keyboard at the end of the run. A WM_CLOSE from this script would take it down without any
+# of that being true.
+if ($null -ne $script:mantraWindow) {
+    [VerifyNative]::keybd_event([VerifyNative]::VK_ESCAPE, 0, 0, [IntPtr]::Zero)
+    [VerifyNative]::keybd_event([VerifyNative]::VK_ESCAPE, 0, [VerifyNative]::KEYUP, [IntPtr]::Zero)
+    $escDeadline = [Diagnostics.Stopwatch]::StartNew()
+    while ($escDeadline.Elapsed.TotalSeconds -lt 15) {
+        $root = [System.Windows.Automation.AutomationElement]::RootElement
+        $still = $false
+        foreach ($w in $root.FindAll([System.Windows.Automation.TreeScope]::Children,
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $script:proc.Id)))) {
+            if ($w.Current.Name -like '*Mantra Lab*') { $still = $true }
+            foreach ($o in $w.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+                (New-Object System.Windows.Automation.PropertyCondition(
+                    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                    [System.Windows.Automation.ControlType]::Window)))) {
+                if ($o.Current.Name -like '*Mantra Lab*') { $still = $true }
+            }
+        }
+        if (-not $still) { break }
+        Start-Sleep -Milliseconds 200
+    }
+    Write-Output "mantra window closed by a real Escape after $([math]::Round($escDeadline.Elapsed.TotalSeconds, 1))s"
+    $script:proc.Refresh()
 }
 
 # CLOSE THE GOON WINDOW FIRST, BY ITS OWN HANDLE.

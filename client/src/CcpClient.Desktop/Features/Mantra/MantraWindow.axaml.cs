@@ -1,4 +1,5 @@
-using Avalonia;
+﻿using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Input;
@@ -227,6 +228,16 @@ public partial class MantraWindow : Window
         var matched = new SolidColorBrush(ToColor(intensity.Highlight));
         var dim = new SolidColorBrush(ToColor(MantraIntensity.Dim));
         var wrong = new SolidColorBrush(ToColor(MantraIntensity.Wrong));
+
+        // THE MANTRA IS PUBLISHED TO THE ACCESSIBILITY TREE HERE, and it has to be: this
+        // TextBlock carries no Text, only Runs, so its automation peer would otherwise announce an
+        // empty element. Setting the Name is what lets a screen reader say the line the game is
+        // asking for - and it is also the only way the headed harness can read the mantra it must
+        // then type back (client/tools/verify/capture.ps1's mantra-window surface). The a11y tree
+        // is not the diagnostic log: the log rule this feature keeps ("the mantras never reach the
+        // log", MantraLaunch) is about a file on disk, and a line a user is being asked to READ
+        // ALOUD OFF THE SCREEN is exactly what assistive technology exists to convey.
+        AutomationProperties.SetName(MantraText, mantra);
 
         var inlines = new InlineCollection();
         for (var i = 0; i < mantra.Length; i++)

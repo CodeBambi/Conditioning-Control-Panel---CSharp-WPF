@@ -669,6 +669,55 @@
       "expectedColor": "#2A2130",
       "tolerance": 4,
       "minPixelFraction": 0.98
+    },
+
+    // THE TYPED MANTRA GAME'S OWN LINE. Two checks, ONE region, two states - and the claim is the
+    // PER-CHARACTER FEEDBACK that is the whole game: a character the user has typed correctly is
+    // painted #9988DD and one she has not is painted #353550 (MantraIntensity.ColdHighlight and
+    // .Dim, upstream's Windows/MantraWindow.xaml.cs:28-29, chosen by MantraSession.StateOf from
+    // upstream's :133-144). Both captures are the same window, the same repetition and the same
+    // mantra; the only thing between them is that all but the last two characters have been typed
+    // on a real keyboard. A check that passed on both would be saying the feedback is decoration.
+    //
+    // THE REGION IS DERIVED, NEVER FIXED. The mantra is DRAWN AT RANDOM from a pool of five, so
+    // its width and its inked fraction move with the draw - the pop quiz card's lesson, and the
+    // reason capture.ps1 cuts the band out of the line's OWN UIA rect (the left 60%, the middle
+    // half of its height) rather than out of the window. The band is also asserted to lie inside
+    // the SHELL's rect, which is what makes these pixels an occlusion claim as well as an ink one.
+    //
+    // FLOORS ARE ORDERS OF MAGNITUDE BELOW THE MEASUREMENTS, deliberately, and the MARGIN is the
+    // rule rather than the number. Glyph coverage inside a text band is a fraction the product
+    // varies with every draw - a different mantra is a different number of letters at a different
+    // Viewbox scale - so a floor placed near a measurement would red a perfectly good capture on
+    // its second run. That is the pop quiz lesson applied rather than re-learned.
+    //
+    // TOLERANCE 12, AND IT IS SIZED AGAINST TWO NEIGHBOURS. The nearest declared colour to #353550
+    // in this manifest is rail-door-unselected-border's #3A2F3E at 18 per channel, so 12 cannot
+    // accept it. The nearer hazard is in the window itself: the mantra carries a DropShadow glow
+    // of #9966CC (MantraIntensity.GlowColour at streak 0), which is 34 per channel from #9988DD -
+    // a tolerance anywhere near that would let the halo around DIM text pass the LIT check and the
+    // inversion would be fake. MantraPresentationTests asserts both separations mechanically.
+    {
+      "name": "mantra-window-fresh-dim",
+      "surface": "mantra-window",
+      "state": "fresh",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 } },
+      "expectedColor": "#353550",
+      "tolerance": 12,
+      "minPixelFraction": 0.01
+    },
+    {
+      "name": "mantra-window-typed-lit",
+      "surface": "mantra-window",
+      "state": "typed",
+      "evidenceClass": "presentation-verified",
+      "kind": "region-color",
+      "region": { "rect": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 } },
+      "expectedColor": "#9988DD",
+      "tolerance": 12,
+      "minPixelFraction": 0.01
     }
   ]
 }

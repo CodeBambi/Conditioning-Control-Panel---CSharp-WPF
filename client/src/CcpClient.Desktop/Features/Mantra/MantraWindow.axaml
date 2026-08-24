@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="CcpClient.Desktop.Features.Mantra.MantraWindow"
         Title="CCP — Mantra Lab"
@@ -60,8 +60,10 @@
                      HorizontalAlignment="Center"/>
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
             <TextBlock x:Name="CompletionsText" Text="0" Foreground="White" FontSize="36"
+                       AutomationProperties.AutomationId="MantraCompletionsText"
                        FontWeight="Bold"/>
             <TextBlock x:Name="TargetText" Text="/10" Foreground="#606080" FontSize="24"
+                       AutomationProperties.AutomationId="MantraTargetText"
                        VerticalAlignment="Bottom" Margin="2,0,0,4"/>
           </StackPanel>
         </StackPanel>
@@ -69,12 +71,14 @@
           <TextBlock Text="STREAK" Foreground="#606080" FontSize="11" FontWeight="Bold"
                      HorizontalAlignment="Center"/>
           <TextBlock x:Name="StreakText" Text="0" Foreground="#FF69B4" FontSize="36"
+                     AutomationProperties.AutomationId="MantraStreakText"
                      FontWeight="Bold" HorizontalAlignment="Center"/>
         </StackPanel>
         <StackPanel>
           <TextBlock Text="BEST" Foreground="#606080" FontSize="11" FontWeight="Bold"
                      HorizontalAlignment="Center"/>
           <TextBlock x:Name="BestStreakText" Text="0" Foreground="#AAB8B8D0" FontSize="36"
+                     AutomationProperties.AutomationId="MantraBestStreakText"
                      FontWeight="Bold" HorizontalAlignment="Center"/>
         </StackPanel>
       </StackPanel>
@@ -82,7 +86,13 @@
       <!-- Centre: the mantra, one Run per character (WPF markup :131-148, WPF :95-111). -->
       <Viewbox Grid.Row="1" MaxWidth="1400" MaxHeight="300" Stretch="Uniform"
                VerticalAlignment="Center" HorizontalAlignment="Center">
+        <!-- ITS NAME IS SET IN CODE, not here: this TextBlock has no Text at all - it is
+             built from one Run per character (BuildMantraRuns), and an automation peer reading
+             TextBlock.Text would announce an empty element to a screen reader and publish no
+             mantra to the verification harness that has to type it back. Repaint assigns
+             AutomationProperties.Name the mantra itself, every repaint. -->
         <TextBlock x:Name="MantraText" FontSize="72" FontWeight="Bold" TextAlignment="Center"
+                   AutomationProperties.AutomationId="MantraText"
                    TextWrapping="Wrap" MaxWidth="1400" Padding="20"/>
       </Viewbox>
 
@@ -93,6 +103,7 @@
               HorizontalAlignment="Center" MaxWidth="800" MinWidth="500" Margin="0,0,0,40">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock x:Name="AnswerText" Grid.Column="0" Foreground="White" FontSize="22"
+                     AutomationProperties.AutomationId="MantraAnswerText"
                      VerticalAlignment="Center" TextWrapping="NoWrap"/>
           <TextBlock Grid.Column="1" Text="Esc to exit" Foreground="#88A0A0C0" FontSize="11"
                      VerticalAlignment="Center" Margin="10,0,0,0"/>
