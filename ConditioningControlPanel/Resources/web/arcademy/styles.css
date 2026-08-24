@@ -761,6 +761,78 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 }
 .arc-keycap.arc-glyphcap:focus-visible { outline:2px solid var(--pink); outline-offset:3px; }
 
+/* ---- the media counter (shell/settings.js, WEB ONLY) --------------------
+   Nothing here is ever on screen in the app: the group is built only where the
+   browser shim declares init.settings.mediaControls === true. The rows are
+   ordinary .arc-row flex rows that wrap, plus four small pieces of their own.
+   Everything below is sized for a thumb from the start rather than being
+   rescued in the mobile block at the bottom of this sheet, because the web
+   build is the one that gets held in a hand. */
+.arc-media-row { align-items:flex-start; }
+.arc-media-row > .arc-rowlabel { flex:1 1 100%; }
+/* THE TRAP-1 MARKER. The row wears `pending` from the post until the echo
+   lands, and this is what says so - the same job .arc-val does for a slider. */
+.arc-media-wait { display:none; font-family:var(--mono); font-size:11px; color:var(--gold); }
+.arc-row.pending .arc-media-wait { display:block; margin-top:2px; }
+.arc-media-say { margin:2px 0 0; flex:1 1 100%; min-height:14px; }
+
+/* a ticked thing: niche, or a sub on the list */
+.arc-media-chips { display:flex; flex-wrap:wrap; gap:8px; flex:1 1 100%; }
+.arc-check {
+  display:inline-flex; align-items:center; gap:8px; min-height:44px;
+  padding:6px 12px; border:var(--hairline); border-radius:999px;
+  background:var(--panel); color:var(--ink); font-size:12.5px; cursor:pointer;
+  max-width:100%; min-width:0;
+}
+.arc-check > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.arc-check input { accent-color:var(--pink); width:17px; height:17px; margin:0; flex:0 0 auto; cursor:pointer; }
+.arc-check.on { border-color:var(--pink-deep); background:rgba(255,105,180,.12); }
+.arc-check input:disabled { cursor:not-allowed; }
+.arc-check:has(input:disabled) { opacity:.5; cursor:not-allowed; }
+.arc-check:focus-within { outline:2px solid var(--pink); outline-offset:2px; }
+
+/* the library list: one line per sub, the X on the end */
+.arc-media-lib { display:grid; gap:6px; flex:1 1 100%; min-width:0; }
+.arc-media-libline { display:flex; align-items:center; gap:8px; min-width:0; }
+.arc-media-libline > .arc-check { flex:0 1 auto; min-width:0; max-width:60%; }
+/* The count and the X ride the right edge, so a short name does not become a
+   pill the width of the sheet. */
+.arc-media-meta {
+  font-family:var(--mono); font-size:11px; color:var(--ink-faint);
+  white-space:nowrap; flex:0 0 auto; margin-left:auto;
+}
+/* ...and with no count to push it, the X takes the job itself. */
+.arc-media-libline > .arc-check + .arc-media-x { margin-left:auto; }
+.arc-media-x {
+  flex:0 0 auto; width:44px; height:44px; line-height:1;
+  border:var(--hairline); border-radius:10px; background:var(--panel);
+  color:var(--ink-dim); font:inherit; font-size:13px; cursor:pointer;
+}
+.arc-media-x:hover { color:var(--pink); border-color:var(--pink-deep); }
+.arc-media-x:focus-visible { outline:2px solid var(--pink); outline-offset:2px; }
+
+/* the add box */
+.arc-media-add { display:flex; gap:8px; flex:1 1 100%; margin-top:4px; min-width:0; }
+.arc-media-add input[type=text] {
+  flex:1 1 140px; min-width:0; min-height:44px;
+  background:var(--panel); color:var(--ink); border:var(--hairline);
+  border-radius:8px; padding:5px 10px; font:inherit; font-size:13px;
+}
+.arc-media-add .btn { min-height:44px; flex:0 0 auto; }
+
+/* your own pile */
+.arc-media-btns { display:flex; flex-wrap:wrap; gap:8px; flex:1 1 100%; }
+.arc-media-btns .btn { min-height:44px; }
+.arc-media-counts { flex:1 1 100%; margin:4px 0 0; }
+.arc-media-bar {
+  flex:1 1 100%; height:6px; margin-top:6px; border-radius:999px;
+  background:var(--panel2); overflow:hidden;
+}
+.arc-media-bar > i { display:block; height:100%; width:0; background:var(--pink); transition:width .2s linear; }
+.arc-media-phase {
+  flex:1 1 100%; font-family:var(--mono); font-size:11px; color:var(--ink-faint);
+}
+
 /* ============================ PEEK ======================================= */
 .arc-peekbtn {
   font-family:var(--disp); font-size:11px; letter-spacing:.1em;
@@ -2912,6 +2984,17 @@ html.arc-mobile .arc-campuspill-chev { font-size:22px; }
    lane, and it already reads the home-indicator inset. */
 html.arc-mobile .arc-exitbar { gap:9px; padding-top:11px; }
 html.arc-mobile .arc-exitbar .btn { min-height:44px; }
+
+/* ---- the front office at phone width -------------------------------------
+   The settings sheet is a column of wrapping rows, so it reflows on its own;
+   what it wants on a phone is a little less air per group and a label that
+   never shares a line with a control it would squeeze down to nothing. The
+   media group's own controls are already thumb-sized in the settings block
+   above, since the web build is the one that gets held in a hand. */
+html.arc-mobile .arc-settings { gap:11px; }
+html.arc-mobile .arc-group { padding:12px; }
+html.arc-mobile .arc-row select { min-height:44px; }
+html.arc-mobile .arc-row input[type=range] { min-height:32px; }
 
 /* ---- the campus, whole (owner bugs A and B) ------------------------------
    The plan is `xMidYMid slice` on a desktop and that is right there: the window
