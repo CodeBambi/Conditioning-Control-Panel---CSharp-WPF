@@ -1,8 +1,8 @@
 /* ============================================================================
  * shell/corkboard.js - THE NOTICEBOARD (PHANTOM POST, agent M2).
  *
- * A cork panel in the hall with paper pinned to it. Five or six notices exist;
- * only a handful are up on any given night, and which ones is a function of the
+ * A cork panel in the hall with paper pinned to it. A term's worth of notices
+ * exists; only a handful are up on any given night, and which ones is a function of the
  * DAY, not of a roll - so the board changes on a slow clock and two players on
  * the same night are looking at the same wall.
  *
@@ -12,10 +12,9 @@
  * stage, one dismiss funnel, every timer owned - with the reading furniture of
  * shell/records.js (kicker / h1 / lede / exit bar).
  *
- * EVERY STRING IN THE TABLE BELOW IS A PLACEHOLDER. The real notices arrive in
- * a separate writing pass; nothing here invents a voice, a name or a joke. What
- * IS finished is the shape: six rows, three kinds, two of them permanently
- * pinned, four rotating through the remaining slots.
+ * THE TABLE BELOW IS THE WALL'S OWN PAPER: the term's notices as they were
+ * written, three kinds of them, two permanently pinned and the rest going up
+ * as their moment comes or rotating through the remaining slots.
  *
  * ---------------------------------------------------------------------------
  * STATE-NEEDS  (the driver's Wave 4 - this file persists NOTHING itself)
@@ -100,64 +99,216 @@ export function ensureStyles(doc) {
 
 /* ----------------------------------------------------------------------------
  * THE TABLE
- * `kind` drives the paper treatment and the pin colour, nothing mechanical.
- * `pinned` is "this one is always up" - a permanent fixture of the wall, which
- * is what stops the rotation from ever handing the player a blank board.
+ * The term's notices, in the order they hang. `kind` drives the paper treatment
+ * and the pin colour, nothing mechanical. `pinned` is "this one is always up" -
+ * a permanent fixture of the wall, which is what stops the rotation from ever
+ * handing the player a blank board. `look` is one treatment token or two
+ * ('pencil', 'pencil askew'). `pair` keeps two sheets travelling together
+ * through the rotation. `when` is the gate the shell answers before a notice is
+ * eligible at all; a sheet without one is always eligible.
  * -------------------------------------------------------------------------- */
 
 export const NOTICE_KINDS = Object.freeze(['notice', 'flyer', 'minutes']);
 
 export const NOTICES = Object.freeze([
   Object.freeze({
-    id: 'n_house_rules',
+    id: 'n01',
     kind: 'notice',
-    pinned: true,
-    title: 'PLACEHOLDER: the standing notice',
-    body: 'PLACEHOLDER: the one sheet that is always up, so the wall is never'
-      + ' empty. Two or three lines of plain hall copy go here, pinned flat and'
-      + ' read a hundred times without ever being read once.',
+    pinned: false,
+    title: 'NOTICE',
+    body: Object.freeze([
+      'The hedge has taken the bench, and I want it understood by all concerned that I gave that bench every warning, on the record and in fair weather, which is more than the hedge ever gave me, and that the bench went without a sound, which I take hard, because we had our differences but it was a good bench.',
+    ]),
+    when: Object.freeze({ beforeDelivered: 'm03' }),
+    look: 'pencil',
   }),
   Object.freeze({
-    id: 'n_lost_property',
+    id: 'n02',
     kind: 'notice',
-    pinned: true,
-    title: 'PLACEHOLDER: the second standing notice',
-    body: 'PLACEHOLDER: the other permanent sheet. Short, dull on purpose, and'
-      + ' curling at one corner from having been up the longest.',
+    pinned: false,
+    title: 'FROM THE TOWER LOG',
+    body: Object.freeze([
+      'Tuesday the second, clear, wind light from the west, bells rang six exactly as they always do, and the front desk clock is keeping the other time again this term, which is its right, and which I record here without heat, the way a man records that the neighbouring field grows a different crop.',
+      'Kept, T. Pendle.',
+    ]),
+    when: Object.freeze({ beforeDelivered: 'm03' }),
   }),
   Object.freeze({
-    id: 'f_club_night',
+    id: 'n03',
     kind: 'flyer',
     pinned: false,
-    title: 'PLACEHOLDER: a flyer with tear-off tabs',
-    body: 'PLACEHOLDER: bright paper, too many exclamation marks in the real'
-      + ' copy, and a row of little tabs along the bottom that somebody has'
-      + ' already taken two of.',
+    title: 'MAIN HALL, EVENING OF THE TWENTY-NINTH: SIGN-UP SHEET',
+    body: Object.freeze([
+      'Further to my circular of Tuesday last, colleagues wishing to reserve the Main Hall for the evening of the twenty-ninth are invited to enter their names below in ink, in confidence that the first name entered shall enjoy priority, the fairness of which principle I trust no colleague will dispute in writing.',
+      'Yours in continuity,',
+      'A. Petch, Acting Deputy Head',
+      '1. Dr. F. Sharp, Music Room (entered first, whatever is claimed below)',
+      '2. P. Tartine, the kitchen (entered before the above, whichever line she wrote it on)',
+    ]),
+    when: Object.freeze({ beforeDelivered: 'm03' }),
   }),
   Object.freeze({
-    id: 'f_ride_share',
+    id: 'n04',
+    kind: 'minutes',
+    pinned: false,
+    title: 'MINUTES OF THE INQUIRY, FOURTH SITTING (ADJOURNED)',
+    body: Object.freeze([
+      'Further to the minutes of the third sitting, the fourth sitting of the inquiry convened at four o\'clock, or at four minutes past, present the Convenor, and present also the Convenor in his capacity as assistant, no apologies having been received, which the sitting agreed to interpret generously. The sitting reviewed the evidence gathered to date, being the pins, and had entered upon the question of the light in the Entrance Hall when correspondence of the highest character was received touching the autumn programme, whereupon the Convenor ruled, seconding himself, that the inquiry stand adjourned out of respect, the question of on whose authority it should resume being deferred until an authority can be found to defer it to.',
+      'Yours in continuity,',
+      'A. Petch, Acting Deputy Head and Convenor of the Inquiry (Adjourned)',
+    ]),
+    when: Object.freeze({ daysAfterRead: ['m07', 0], beforeDelivered: 'm08' }),
+  }),
+  Object.freeze({
+    id: 'n05',
+    kind: 'notice',
+    pinned: false,
+    title: 'NOTICE',
+    body: Object.freeze([
+      'The hedge has reached the Front Path, having crossed open lawn in under a fortnight, which I said it would do and have it in pencil that I said so, and I am now asking, formally and without prejudice, for either shears or reinforcements, whichever the school can spare first.',
+    ]),
+    when: Object.freeze({ daysAfterRead: ['m08', 0], beforeDelivered: 'm13' }),
+    look: 'pencil',
+  }),
+  Object.freeze({
+    id: 'n06',
+    kind: 'notice',
+    pinned: false,
+    title: 'NOTICE',
+    body: Object.freeze([
+      'Me and the hedge have come to an arrangement, and that is all I have to say about that.',
+    ]),
+    when: Object.freeze({ daysAfterRead: ['m15', 0] }),
+    look: 'pencil',
+  }),
+  Object.freeze({
+    id: 'n07',
+    kind: 'notice',
+    pinned: false,
+    title: 'FROM THE TOWER LOG',
+    body: Object.freeze([
+      'Friday\'s forecast is fair, turning colder at dusk, and the tower gives notice that true midnight will be observed on the night of the contested evening, rung on the usual three bells, so that whichever occasion goes forward in the Hall will begin at two different times depending on whose evening a person keeps, and those keeping the other midnight may keep whichever one they can live with.',
+      'Kept, T. Pendle.',
+    ]),
+    when: Object.freeze({ daysAfterRead: ['m15', 0] }),
+  }),
+  Object.freeze({
+    id: 'n08',
+    kind: 'notice',
+    pinned: false,
+    title: 'NOTICE',
+    body: Object.freeze([
+      'The bench is back, it is facing the wrong way, I did not move it, the hedge did not move it, and I will vouch for the visitor, so the matter of who moved it stays open, and the bench will stay facing the wrong way until it tells me itself, because I am done moving furniture for parties that will not communicate.',
+    ]),
+    when: Object.freeze({ issueRead: 'g5' }),
+    look: 'pencil',
+  }),
+  Object.freeze({
+    id: 'n09',
+    kind: 'notice',
+    pinned: false,
+    title: 'FROM THE TOWER LOG',
+    body: Object.freeze([
+      'Saturday, fair, a high moon and no wind to speak of, and I record that both midnights passed without incident, true midnight first and the other one four minutes after, that the Hall stood quiet through the pair of them, and that the Quad this morning had the settled look it gets when a thing everyone dreaded has finished not happening.',
+      'Kept, T. Pendle.',
+    ]),
+    when: Object.freeze({ issueRead: 'g5' }),
+  }),
+  Object.freeze({
+    id: 'n10',
+    kind: 'notice',
+    pinned: false,
+    title: 'NOTICE',
+    body: Object.freeze([
+      'Whoever keeps propping the number three rake against the north wall should know that the rakes are numbered for a reason, that the reason is a good one, that it has served this Quad since before the flagpole, and that I will not be explaining it, since a system explained is a system argued with.',
+    ]),
+    look: 'pencil',
+  }),
+  Object.freeze({
+    id: 'n11',
+    kind: 'notice',
+    pinned: false,
+    title: 'NOTICE',
+    body: Object.freeze([
+      'The bed by the south wall that certain parties attached to the kitchen have taken to calling a larder is and remains a load-bearing feature of the whole Quad, entered in my planting book before the flagpole went up, and the rosemary removed from it on Thursday was removed without prejudice to my position, which is on the record, in pencil, pressed hard.',
+    ]),
+    look: 'pencil',
+    pair: 'herb',
+  }),
+  Object.freeze({
+    id: 'n12',
+    kind: 'notice',
+    pinned: false,
+    title: 'A NOTICE CONCERNING THE HERB BED, ADDRESSED TO NOBODY IN PARTICULAR',
+    body: Object.freeze([
+      'The kitchen wishes it known that the herb bed by the south wall is a working larder and not, whatever certain notices in this vicinity may imply, an ornamental frontier, and that the rosemary taken up on Thursday was taken up by the person who planted it, fed it, and defended it through two frosts, which is a form of ownership no amount of pencil can amend. The bed will be cut as the menu requires, the menu being a matter of record and of art, five stars this week as it happens, and any party wishing to discuss the matter knows where the kitchen is, though I note that no such party has ever once come to it. Bon apettit.',
+      'From the kitchen, with what remains of my patience,',
+      'P. Tartine',
+    ]),
+    pair: 'herb',
+  }),
+  Object.freeze({
+    id: 'n13',
+    kind: 'notice',
+    pinned: false,
+    title: 'NOTICE',
+    body: Object.freeze([
+      'One of my two pins has been borrowed off this very notice, which means somebody stood here, read my words about respecting the fixtures of this board, and took the pin anyway, and I want that person to know the pin was part of a pair, in perpetuity, and that its fellow now holds this notice up alone, which you will observe it is doing, at an angle.',
+    ]),
+    look: 'pencil askew',
+  }),
+  Object.freeze({
+    id: 'n14',
+    kind: 'notice',
+    pinned: false,
+    title: 'NOTICE',
+    body: Object.freeze([
+      'Leaf season opens Monday, and the boy will be helping with the east side as usual, so if the barrow is missing from the shed between the hours of eight and eleven, that is where the barrow is, and there is no cause for another note about it.',
+    ]),
+    when: Object.freeze({ monthIn: [9, 10, 11] }),
+    look: 'pencil',
+  }),
+  Object.freeze({
+    id: 'n15',
     kind: 'flyer',
     pinned: false,
-    title: 'PLACEHOLDER: a second flyer, hand lettered',
-    body: 'PLACEHOLDER: pinned crooked over the corner of the one underneath it,'
-      + ' which is how a wall like this ends up three sheets deep.',
+    title: 'MENU SUPPLEMENT, WEEK BEGINNING MONDAY',
+    body: Object.freeze([
+      'Monday brings the barley broth, which my mother made the year the river froze and which I have never once altered, five stars; Tuesday brings the soup, of which enough has been printed elsewhere by cowards, five stars; Wednesday is the pie\'s day of rest, so Wednesday brings the other pie; Thursday brings the reduction, and what the reduction takes from me every week, only the pan knows; and Friday is governed by the standing arrangement, on which the kitchen will take no questions.',
+      'To the one who signs himself The Palate, if he is reading this board, and he is: the kitchen remembers 1994, monsieur, and the kitchen is patient. Bonn appetit.',
+      'From the kitchen, with what remains of my patience,',
+      'P. Tartine',
+    ]),
   }),
   Object.freeze({
-    id: 'm_committee_a',
-    kind: 'minutes',
-    pinned: false,
-    title: 'PLACEHOLDER: minutes of a meeting',
-    body: 'PLACEHOLDER: typed, stapled, numbered in the margin. Item one was'
-      + ' carried. Item two was held over. Item three is where the real copy'
-      + ' will do its quiet work.',
+    id: 'n16',
+    kind: 'notice',
+    pinned: true,
+    title: 'FROM THE TOWER LOG, A STANDING NOTE',
+    body: Object.freeze([
+      'September the first, mild, as it usually is when this goes up, and I post the standing note for the new intake, unchanged in the posting: the tower rings three bells, the fourth bell rests, as it has rested, and enquiries regarding the fourth bell may be left at the foot of the stairs, where they will receive my thanks and no answer, the stairs not being for visitors.',
+      'Kept, T. Pendle.',
+    ]),
   }),
   Object.freeze({
-    id: 'm_committee_b',
+    id: 'n17',
     kind: 'minutes',
     pinned: false,
-    title: 'PLACEHOLDER: minutes of a later meeting',
-    body: 'PLACEHOLDER: the same shape as the sheet above it and a fortnight'
-      + ' further on, so a player who reads both notices what moved.',
+    title: 'MINUTES OF THE STUDENT COUNCIL, MICHAELMAS SITTING',
+    body: Object.freeze([
+      'Further to the minutes of the summer sitting, which were taken as read at the summer sitting, they having also been taken as read at the sitting before that, and by the same procedure, the Michaelmas sitting of the Student Council was declared open at four o\'clock by the front desk and at four minutes past by the tower, the Chair, wishing to be even-handed, declaring it open at both. The sitting had been due to convene in the faculty lounge, which could not be found on the day, and removed itself to my office, where, no members being present, the agenda was carried entire and without dissent, a smoothness of business the Chair invited the minutes to record as stability. The meeting closed at a quarter past, or at eleven past, and the Chair remained a further quarter of an hour in case of latecomers, of whom, the minutes are asked to note without comment, there have never been any.',
+      'Yours in continuity,',
+      'A. Petch, Acting Deputy Head and Chair (Acting) of the Student Council',
+    ]),
+  }),
+  Object.freeze({
+    id: 'n18',
+    kind: 'notice',
+    pinned: true,
+    title: 'FIRE DRILL: NOTICE OF DATE (AMENDED)',
+    body: Object.freeze([
+      'The fire drill will be held on the fourteenth of May, corrected in ink to the second of October, corrected again in a different ink to the ninth, and further amended in pencil, in a hand nobody claims, to read simply the spring. Assembly is on the far lawn, weather and groundskeeping matters permitting, and everyone is kindly asked to leave this notice where it hangs, as it is the only copy, has served since before any current tenure, and is expected, at the present rate of amendment, to serve for some years yet.',
+    ]),
   }),
 ]);
 
@@ -459,8 +610,10 @@ export function openCorkboard(opts) {
     styleVar(slot, '--lift', geom.lift.toFixed(1) + 'px');
     styleVar(slot, '--pin-x', geom.pinX.toFixed(1) + '%');
 
-    const sheet = el('article', 'arc-corknote kind-' + notice.kind
-      + (notice.look ? ' look-' + String(notice.look) : '')
+    /* `look` is one token or several ('pencil askew') - each gets its class. */
+    const looks = String(notice.look || '').split(/\s+/).filter(Boolean)
+      .map((w) => ' look-' + w).join('');
+    const sheet = el('article', 'arc-corknote kind-' + notice.kind + looks
       + (geom.torn ? ' is-torn' : '')
       + (seenBefore ? ' is-read' : ' is-fresh'));
 

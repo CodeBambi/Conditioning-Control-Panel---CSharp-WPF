@@ -29,11 +29,11 @@
  *     arrives, never a letter that arrives to the wrong player on the wrong
  *     night.
  *
- *  4. THE COPY IN THIS FILE IS A PLACEHOLDER AND SAYS SO. Every visible string
- *     in the catalog is prefixed `PLACEHOLDER:` and is structure only - the
- *     real letters arrive from the writing pass. Chrome strings (buttons,
- *     labels) are NOT here at all: they are lexicon rows in mailbox.js, because
- *     a letter body is content and a button caption is chrome.
+ *  4. THE CATALOG HOLDS LETTERS AND NOTHING ELSE. Every visible string in the
+ *     table is the copy exactly as it goes on the paper. Chrome strings
+ *     (buttons, labels) are NOT here at all: they are lexicon rows in
+ *     mailbox.js, because a letter body is content and a button caption is
+ *     chrome.
  *
  * ----------------------------------------------------------------------------
  * STATE-NEEDS  (the Wave 4 driver owns every line of this; this file owns none)
@@ -121,11 +121,10 @@ export const DEFAULT_LETTERHEAD = LETTERHEADS.office;
 /* ----------------------------------------------------------------------------
  * THE CATALOG
  *
- * PLACEHOLDER COPY, STRUCTURE ONLY. Six letters across all five letterheads and
- * across every clause the engine answers, so the mailbox has something honest
- * to be judged on before a single real word is written. Lengths vary on
- * purpose: a one-paragraph note and a four-paragraph letter break the paper in
- * different places.
+ * The season's letters, in delivery-priority order: dated letters first, then
+ * the term's correspondence, then the standing circulars. Lengths vary: a
+ * one-paragraph note and a four-paragraph letter break the paper in different
+ * places, and the order here is the order the box hands them over.
  *
  * A row is:
  *   id          {string}   stable, never re-used, never renamed (it is the
@@ -142,76 +141,324 @@ export const DEFAULT_LETTERHEAD = LETTERHEADS.office;
  * -------------------------------------------------------------------------- */
 export const MAIL = Object.freeze([
   Object.freeze({
-    id: 'welcome',
-    from: 'PLACEHOLDER: sender one',
-    letterhead: 'office',
-    heading: 'PLACEHOLDER: the first head line',
+    id: 'm23',
+    from: 'Miss Pearl Tartine, Keeper of the Kitchens',
+    letterhead: 'faculty',
+    heading: 'The All Hallows Supper, a Menu and a Warning',
     body: Object.freeze([
-      'PLACEHOLDER: the opening paragraph of the first letter, long enough that the paper has to wrap it and short enough that nobody has to scroll for the end of it.',
-      'PLACEHOLDER: a second paragraph, which is where a real letter would say the one thing it came to say.',
+      'On the last evening of October the kitchen sets its long table for the All Hallows supper, as it has every year since what happened at the Ashby fair, which I mention only to say that I will not be mentioning it, and the menu is as follows: the dark soup, which is the Tuesday soup wearing a cape, and I will hear no complaints about it; the bone bread, which contains no bones and never has, whatever was said in 1994; and the toffee apples, five stars, awarded in advance because I have made them for thirty-two years and my hand does not tremble.',
+      'Ghosts are welcome at the long table, monsieur, they always have been, and I will say only this to any spirit thinking of leaving a review among the napkins: even the dead sign their work. Bon appettite.',
+      'From the kitchen, with what remains of my patience,',
+      'P. Tartine',
+    ]),
+    trigger: Object.freeze({ dateIs: '10-31' }),
+    once: false,
+  }),
+  Object.freeze({
+    id: 'm24',
+    from: 'Mr. Theodore Pendle, Keeper of the Bell Tower',
+    letterhead: 'faculty',
+    heading: 'Log Extract, the Turning of the Year',
+    body: Object.freeze([
+      'The first of January, frost, stars very clear above the tower, the kind of night the glass approves of. The year turned at true midnight, which I observed alone with a cup of tea, as the keeper before me did until the fog year, and it turned again four minutes later for those keeping the other one, and I remained at the rail out of courtesy until both parties were safely across.',
+      'The bells rang the new year in, three of them, the fourth resting through this year as it rested through the last, and if there is a better way to begin a January than hearing a cold bell ring true, I have not met it and do not expect to. To all keeping either time, a good year, fairly kept.',
+      'Kept, T. Pendle.',
+    ]),
+    trigger: Object.freeze({ dateIs: '01-01' }),
+    once: false,
+  }),
+  Object.freeze({
+    id: 'm01',
+    from: 'Mr. Aldous Petch, Acting Deputy Head',
+    letterhead: 'office',
+    heading: 'Circular to the Student Body: Resumption of Term',
+    body: Object.freeze([
+      'Further to my circular of Tuesday last, which a number of colleagues will not have had sight of, it having been issued during the vacation as a matter of prudence, I am pleased to confirm that the autumn term has commenced, and that it has done so on schedule, a phrase I use advisedly and in the tower\'s hearing. The Main Hall diary is now open for bookings of every kind and will be administered fairly, by me, as it has been these thirty-one years.',
+      'Colleagues wishing to consult the diary will find it in my office, in the tall cabinet by the window, second drawer, the one that wants lifting slightly as you pull, a knack I am happy to demonstrate by appointment. I look forward to a fulsome year for the school and for all who serve her.',
+      'Yours in continuity,',
+      'A. Petch, Acting Deputy Head',
     ]),
     trigger: Object.freeze({}),
     once: true,
   }),
   Object.freeze({
-    id: 'first_card',
-    from: 'PLACEHOLDER: sender two',
+    id: 'm02',
+    from: 'Miss Pearl Tartine, Keeper of the Kitchens',
     letterhead: 'faculty',
-    heading: 'PLACEHOLDER: the second head line',
+    heading: 'An Open Letter to the One Who Signs Himself The Palate',
     body: Object.freeze([
-      'PLACEHOLDER: one paragraph, because a short letter is a shape the paper has to survive too.',
+      'Thirty-two years I have kept this kitchen, monsieur, through the winter of the burst pipe and the year the ovens took against me, and in all that time I have asked for nothing but what any artist asks, which is to be judged to her face. Instead you return after decades of silence, unsigned as ever, and you award my Tuesday soup three stars and one half, as though the half were a kindness, as though I would not feel the missing half more keenly than the whole.',
+      'Let me say plainly that the soup this week achieved five stars, a rating I do not give lightly and have never once withheld, and that the kitchen keeps its receipts, monsieur, going back well past 1994. Name yourself, and the soup will be waiting, and so, with somewhat less warmth, will I. Bonne apetit.',
+      'From the kitchen, with what remains of my patience,',
+      'P. Tartine',
     ]),
-    trigger: Object.freeze({ punchesAtLeast: 1 }),
+    trigger: Object.freeze({ daysAfterIssueRead: ['g2', 1] }),
     once: true,
   }),
   Object.freeze({
-    id: 'streak_three',
-    from: 'PLACEHOLDER: sender three',
-    letterhead: 'notice',
-    heading: 'PLACEHOLDER: the third head line',
-    body: Object.freeze([
-      'PLACEHOLDER: the first of four paragraphs, and the longest letter in the box, so the paper is measured against the worst case it will ever be asked to hold.',
-      'PLACEHOLDER: the second paragraph carries on at the same width.',
-      'PLACEHOLDER: the third paragraph is where a real letter would turn.',
-      'PLACEHOLDER: and the last one signs off.',
-    ]),
-    trigger: Object.freeze({ streakAtLeast: 3, notSeen: 'mail_streak_shown' }),
-    once: true,
-  }),
-  Object.freeze({
-    id: 'week_one',
-    from: 'PLACEHOLDER: sender four',
-    letterhead: 'personal',
-    heading: 'PLACEHOLDER: the fourth head line',
-    body: Object.freeze([
-      'PLACEHOLDER: a letter that only makes sense after the first one has been read, which is what the afterRead clause is for.',
-      'PLACEHOLDER: a closing line.',
-    ]),
-    trigger: Object.freeze({ dayAtLeast: 5, afterRead: 'welcome' }),
-    once: true,
-  }),
-  Object.freeze({
-    id: 'flagged',
-    from: 'PLACEHOLDER: sender five',
-    letterhead: 'unsigned',
-    heading: 'PLACEHOLDER: the fifth head line',
-    body: Object.freeze([
-      'PLACEHOLDER: an unsigned sheet, held until the shell says the flag it asks about has been shown.',
-      'PLACEHOLDER: a second short paragraph, and no name at the end of it.',
-    ]),
-    trigger: Object.freeze({ seen: 'annex' }),
-    once: true,
-  }),
-  Object.freeze({
-    id: 'dated',
-    from: 'PLACEHOLDER: sender one',
+    id: 'm03',
+    from: 'Mr. Aldous Petch, Acting Deputy Head',
     letterhead: 'office',
-    heading: 'PLACEHOLDER: the sixth head line',
+    heading: 'Circular: Constitution of an Inquiry into the Whereabouts of the Main Hall Sign-Up Sheet',
     body: Object.freeze([
-      'PLACEHOLDER: the one letter in the box that may arrive more than once, on the same local date every year, and never twice in a day.',
+      'Further to my circular of Thursday last, pinned to the Notice Board at eleven minutes past three and no longer to be found upon it, I must inform colleagues that the Main Hall sign-up sheet has been removed by a person, or persons, or by some agency of weather or of nature, unknown. An inquiry is hereby constituted. It will be led by myself, assisted by myself, and I have accepted both appointments with a heavy sense of duty and no other candidates.',
+      'Colleagues with information are invited to bring it to my office in confidence, where it will be kept alphabetically in the drawer I reserve for matters of this kind, between the complaints of the kitchen and those of the Music Room, which I mention only to reassure both parties of my continued neutrality. The inquiry will leave no drawer unopened, beginning with the tall cabinet by the window.',
+      'Yours in continuity,',
+      'A. Petch, Acting Deputy Head and Convenor of the Inquiry',
     ]),
-    trigger: Object.freeze({ dateIs: '10-31' }),
-    once: false,
+    trigger: Object.freeze({ daysAfterRead: ['m02', 2] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm04',
+    from: 'Mr. Theodore Pendle, Keeper of the Bell Tower',
+    letterhead: 'faculty',
+    heading: 'Deposition to the Inquiry, Entered Voluntarily',
+    body: Object.freeze([
+      'Thursday the ninth, mist off the Quad until ten, then bright. I pinned nothing and I removed nothing, but I can give the inquiry the one fact it will get from anybody, which is that the sheet went up at eleven minutes past three by the front desk\'s reckoning, an instant which, by tower time, never occurred, the tower having already reached a quarter past.',
+      'Whether a thing pinned at a time that never happened can honestly be said to have hung there at all is a question for wiser heads than mine, and I decline to speculate further, except to note that the wind that afternoon was from the southwest, which it usually is when things go missing.',
+      'Kept, T. Pendle.',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m03', 1] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm05',
+    from: 'Dr. F. Sharp, Mistress of Music',
+    letterhead: 'faculty',
+    heading: 'A Statement I Make Freely, Naming No One',
+    body: Object.freeze([
+      'I will not say who took the sheet, because I was raised better than that, and because in Vienna we were taught that an accusation is a note held too long, souring everything around it. I will say only that the sheet hung at a perfectly reasonable height for any person of ordinary reach, that the kitchens keep long hours, and that certain arts on this campus involve the daily handling of paper, of pins, and of grudges, while mine involves only music.',
+      'The Recital, I should add, continues to mature, and revision forty four is now in second thoughts of the most promising kind, whatever certain luncheon interests may wish. I am perfectly andante about the whole affair, and anyone who says otherwise may consult my rebuttal, which is in preparation.',
+      'Dr. F. Sharp, Music Room',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m04', 1] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm06',
+    from: 'Miss Pearl Tartine, Keeper of the Kitchens',
+    letterhead: 'faculty',
+    heading: 'On the Matter of the Sheet, Which I Shall Not Stoop to Discuss',
+    body: Object.freeze([
+      'I have been asked whether the kitchen had sight of the sign-up sheet, and I answer as I answer all things, openly, and with the dignity of my station. The kitchen bakes, monsieur, it does not steal. If anyone wishes to know where I was on the afternoon in question, I was where I am every afternoon, coaxing a reduction that would have made my grandmother weep, five stars, a rating I did not give lightly then and do not regret now.',
+      'I note merely that some people rehearse with their hands empty and their evenings free, and that a woman who can carry a programme through forty four revisions could carry a single sheet of paper anywhere she pleased. I accuse no one, and the kitchen, as ever, keeps its receipts. Bon appettit.',
+      'From the kitchen, with what remains of my patience,',
+      'P. Tartine',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m05', 1] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm07',
+    from: 'the Headmistress',
+    letterhead: 'personal',
+    heading: 'On the Autumn Programme',
+    body: Object.freeze([
+      'I have read the autumn programme with great care and greater fondness, and I find that it does the school credit, whichever of the two evenings it turns out to be. The Main Hall has held every kind of triumph in its time, and we are confident it is about to hold another, for the school has never yet disappointed us in autumn. You will forgive me for not attending in person, as is my custom, but we shall be thinking of the evening with the particular pride we reserve for things we do not need to see to believe in.',
+      'E.',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m06', 2] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm08',
+    from: 'Dr. F. Sharp, Mistress of Music',
+    letterhead: 'faculty',
+    heading: 'To the Kitchens, in a Spirit of Harmony',
+    body: Object.freeze([
+      'In Vienna, when two great houses quarrelled, they did not write letters, they programmed together, and it is in that spirit that I extend to the kitchens an offer I make freely and against the advice of nobody, since I consulted nobody. Let the Luncheon and the Recital cease circling one another like two halves of the same unplayed chord.',
+      'I propose that the Recital programme carry, in type of a perfectly respectable size, a catering credit naming the kitchen, its keeper, and, if space allows, the soup. Revision forty five, which is already maturing into what I believe will be my finest, has room on its final page between the acknowledgements and the misprints, and I can think of no better company for either. I am feeling molto legato about our two arts, and I hope the kitchen will feel the same.',
+      'Dr. F. Sharp, Music Room',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m07', 2] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm09',
+    from: 'Miss Pearl Tartine, Keeper of the Kitchens',
+    letterhead: 'faculty',
+    heading: 'The Kitchen Answers, and Raises',
+    body: Object.freeze([
+      'I have received the Music Room\'s offer and I have read it twice, once with suspicion and once with something I am prepared, on reflection, to call emotion. The kitchen accepts, and the kitchen, which has never in its history been out-given, responds in kind: the Harvest Luncheon will close with a dessert course composed in honour of the Recital itself, a programme of seven movements in sugar, each one named for a revision that mattered.',
+      'What the caramel will take from me, only the pan knows, but great alliances are not built on shallow syrup. Five stars, I say in advance and without hesitation, for I know what I am capable of when moved. Bonne appetite, my new friend, bonne appetite to us all.',
+      'From the kitchen, with what remains of my patience,',
+      'P. Tartine',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m08', 1] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm10',
+    from: 'The Palate',
+    letterhead: 'unsigned',
+    heading: 'A Review of the Merger',
+    body: Object.freeze([
+      'One had hoped, when the two great institutions of this campus joined hands, that the result might rise like a good loaf, slowly and with structure. Instead the alliance has been rushed to table. The gesture is generous, the execution sentimental, and the whole, though warm, wants seasoning, for goodwill is not a flavour, whatever the posters say, and so one is obliged to award the affair two stars, for it needed salt.',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m09', 1] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm11',
+    from: 'Dr. F. Sharp, Mistress of Music',
+    letterhead: 'faculty',
+    heading: 'On the Poster, and the End of an Understanding',
+    body: Object.freeze([
+      'In Vienna the soloist\'s name goes above the orchestra\'s, not from vanity but from physics, since that is where the eye begins, and I had assumed, wrongly as it now proves, that my partner in the late alliance understood this as a law of nature rather than a point for negotiation. I came down to the Quad this morning to find the shared poster set in a type that gives the Luncheon top billing, the Recital second billing, and the soup, I must note, a line to itself. There is no third printing of a poster, whatever the kitchen believes, and so the alliance is concluded.',
+      'And since certain partisans are already whispering about a certain unsigned review, let me state it plainly and once: I have never in my life eaten the Tuesday soup, a sentence I am advised no innocent woman would need to write, and which I have written anyway, because innocence has nothing to fear from print. I bear no ill will, I am simply molto rubato about the entire morning, and revision forty five will now proceed alone, as perhaps, like all great work, it always had to.',
+      'Dr. F. Sharp, Music Room',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m10', 0] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm12',
+    from: 'Miss Pearl Tartine, Keeper of the Kitchens',
+    letterhead: 'faculty',
+    heading: 'A Word Regarding Vocabulary',
+    body: Object.freeze([
+      'I make no accusation, monsieur, I make an observation, and it is this: the review of our late alliance, unsigned as all cowardice is, remarks that the affair needed salt and speaks of things rising with structure, and the notice before it used, correctly, the word reduction. I have kept this kitchen for thirty-two years and I can count on one hand, with fingers to spare, the persons on this campus who know what a reduction is, and every one of them, monsieur, was until Tuesday my ally.',
+      'I note also that a woman has written to the whole campus to announce that she has never once eaten my soup, which nobody had asked her, and in my kitchen we have a saying about cooks who declare the pot unburnt before anyone has smelled smoke. The kitchen says nothing further at this time, except that it keeps its receipts, that it has always kept its receipts, and that receipts, unlike reviewers, sign themselves. Bon apetit.',
+      'From the kitchen, with what remains of my patience,',
+      'P. Tartine',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m11', 1] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm13',
+    from: 'Mr. Aldous Petch, Acting Deputy Head',
+    letterhead: 'office',
+    heading: 'Circular: Findings of the Inquiry (Extract, Pages One to Three of Sixty)',
+    body: Object.freeze([
+      'Further to my circular of Wednesday last, and conscious that colleagues will wish to digest the findings of the inquiry at a pace consistent with their other duties, I am releasing the document in a considerate extract, the whole being available in my office to any colleague with an afternoon. The inquiry examined the board, the pins, the light in the Entrance Hall at the material hour, the draught in the West Wing, which the findings attribute in passing to the decision of 1979, as all things must finally be, and the tall cabinet by the window, whose wobble I can now confirm to be structural rather than moral, a finding I regard as the inquiry\'s first fruit.',
+      'On the central question the findings are unanimous, myself concurring with myself in full: the sheet was at no point lost. It was, and remains, merely unlocated, a distinction the sixty pages develop at what I believe to be a fulsome and satisfying length.',
+      'Yours in continuity,',
+      'A. Petch, Acting Deputy Head and Convenor of the Inquiry (Concluded)',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m12', 2] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm14',
+    from: 'the Headmistress',
+    letterhead: 'personal',
+    heading: 'On the Findings',
+    body: Object.freeze([
+      'I have received the findings of the recent inquiry, all sixty of their pages, and while thoroughness is a virtue the school has always admired, we find ourselves hoping, with the greatest warmth, that whatever is found in future will consent to be found more briefly.',
+      'M.',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m13', 2] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm15',
+    from: 'Mr. Aldous Petch, Acting Deputy Head',
+    letterhead: 'office',
+    heading: 'Circular: Acknowledgement of Correspondence Received from the Highest Level',
+    body: Object.freeze([
+      'Further to my circular of Friday last, I am honoured to inform colleagues that the findings of the inquiry have been read at the very highest level, and that the school\'s response, which I have had framed pending filing, takes the form of editorial guidance of the most encouraging kind. Brevity, colleagues, I have long held among the first of the administrative virtues, and to receive her notes on the draft, for I think we may fairly call them that, has confirmed my intention, formed I would say independently and some time ago, to prepare a second edition of the findings, shorter in every respect except scope.',
+      'It will be ready by Thursday, or by the Thursday following, whichever proves the truer Thursday.',
+      'Yours in continuity,',
+      'A. Petch, Acting Deputy Head, Convenor of the Inquiry (Concluded), and Editor of its Findings',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m14', 1] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm16',
+    from: 'Miss Pearl Tartine, Keeper of the Kitchens',
+    letterhead: 'faculty',
+    heading: 'An Open Letter Concerning the Editor of This So-Called Newspaper',
+    body: Object.freeze([
+      'Thirty-two years, monsieur, I have hunted a ghost through your pages, and on Thursday your back page promised me his face in full, and I am told by those who set the type, for the printers eat lunch like anyone, that the promised page carries nothing upon it but half a star, sitting there like a crumb someone could not be troubled to wipe. I am done with ghosts, monsieur, and I have begun, at last, on arithmetic.',
+      'Consider who has printed every review, who has profited by every wound, whose circulation rises each time my soup is made to bleed, and who alone on this campus edits every voice until all of them sound the same, so that no style could ever be told from his own. I name you, Roy Baxter Junior, you are The Palate, or you have made him, and I no longer care to learn which, for the kitchen has reached its verdict: one star, the first I have ever awarded to anything, and it is for your nerve, which is considerable. Bonne appetit.',
+      'From the kitchen, with what remains of my patience,',
+      'P. Tartine',
+    ]),
+    trigger: Object.freeze({ daysAfterIssueRead: ['g4', 2] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm17',
+    from: 'Dr. F. Sharp, Mistress of Music',
+    letterhead: 'faculty',
+    heading: 'The Recital Moves to Spring, as Great Things Move',
+    body: Object.freeze([
+      'It will surprise nobody who understands the making of programmes that the Recital has elected to move to spring, a season with which it has always had a private understanding. I say elected, because that is the word: the vocabulary of delay has no place in the Music Room, and in Vienna we were taught that a premiere forced into the wrong autumn is simply a debt collected from the wrong spring.',
+      'Revision forty five is already breathing, and I will say only that it opens with the fanfare rather than closing with it, which changes everything, and that those who have heard revision forty four described will find they had heard nothing at all. The Main Hall may spend its autumn evening however it now sees fit, for the Recital and I have somewhere better to be, which is the future.',
+      'Dr. F. Sharp, Music Room',
+    ]),
+    trigger: Object.freeze({ daysAfterIssueRead: ['g5', 1] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm18',
+    from: 'the Headmistress',
+    letterhead: 'personal',
+    heading: 'On the Autumn Evening',
+    body: Object.freeze([
+      'I write to say what the whole school must already feel, that the autumn evening was a triumph, as I never doubted it would be, for doubt is a habit we have not found it necessary to acquire where the school is concerned. We are told the Hall has rarely stood so composed, that the occasion carried itself with the dignity we have come to expect of our autumns, and we are pleased, more than pleased, to let the evening rest in memory exactly as it occurred, which is where we intend to leave it.',
+      'A.',
+    ]),
+    trigger: Object.freeze({ daysAfterRead: ['m17', 2] }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm21',
+    from: 'Mr. Theodore Pendle, Keeper of the Bell Tower',
+    letterhead: 'faculty',
+    heading: 'Notice on the Keeping of Time This Term',
+    body: Object.freeze([
+      'Monday, mild, a low sky that never quite made rain. The term being new, I set out the position as I do each year for the benefit of anyone joining us and of several who have been here longer: the tower keeps true time, the front desk keeps the other one, and the difference between them, which is four minutes, is not a fault but a fact, like the difference between two honest men.',
+      'Lessons, meals, and meetings may be kept by either clock provided a person is consistent, for it is the changing of allegiance mid-week that has the Quad making heavy weather of its mornings. The bells will ring the hours as always, three of them, the fourth being at rest, on which matter I thank all enquirers in advance and refer them to my previous thanks.',
+      'Kept, T. Pendle.',
+    ]),
+    trigger: Object.freeze({ dayAtLeast: 2 }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm19',
+    from: 'Mr. Aldous Petch, Acting Deputy Head',
+    letterhead: 'notice',
+    heading: 'Circular: Lost Property, an Appeal and an Inventory',
+    body: Object.freeze([
+      'Further to my circular of last Michaelmas upon the same melancholy theme, the lost property drawer has again reached capacity, and I list its principal holdings in the hope of reunions: one green glove, much darned and clearly loved; a music stand of good quality, recovered from within the hedge, which surrendered it without conditions; an umbrella whose owner I believe I could identify from the manner of its folding alone, though discretion stays my hand; and a loose printed page bearing what appears to be a fragment of the school song\'s second verse, differing, I am obliged to record, from both fragments previously recovered, and retained by me pending the completion of that revision.',
+      'Claimants may call at my office on any afternoon, where the drawer, the kettle, and I keep more or less continuous hours.',
+      'Yours in continuity,',
+      'A. Petch, Acting Deputy Head',
+    ]),
+    trigger: Object.freeze({ dayAtLeast: 3 }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm22',
+    from: 'Miss Pearl Tartine, Keeper of the Kitchens',
+    letterhead: 'faculty',
+    heading: 'A Standing Notice Concerning Fridays',
+    body: Object.freeze([
+      'It has come to the kitchen\'s attention that persons new to the campus continue to expect fish on Fridays, and I take up my pen once more, patiently, to explain what the kitchen can and cannot say. There is no fish on Fridays, there has been no fish on Fridays since the year of the arrangement, and the terms of that arrangement, which were honourable on both sides, remain between the fish and me.',
+      'In its place the Friday table offers the pie, five stars, a rating that has not wavered in a decade because the pie has not wavered either, and what the pastry costs me every Thursday night, only the rolling pin knows. I ask for no thanks, only for an end to the questions. Bonne apetitte.',
+      'From the kitchen, with what remains of my patience,',
+      'P. Tartine',
+    ]),
+    trigger: Object.freeze({ dayAtLeast: 4 }),
+    once: true,
+  }),
+  Object.freeze({
+    id: 'm20',
+    from: 'Mr. Aldous Petch, Acting Deputy Head',
+    letterhead: 'notice',
+    heading: 'Circular: The Fire Drill, a New Date',
+    body: Object.freeze([
+      'Further to my circular of the spring, and to its predecessors, whose number I will not embarrass the record by totalling, the fire drill stands rescheduled once more, this time to the second Tuesday of next month, a date chosen after consultation with the tower, the kitchens, and the weather, none of whom could attend the previous date either. Assembly will be on the far lawn, not the pool terrace, the pool being down its inch again this term and the plumber\'s opinion still pending.',
+      'Colleagues will recall that the drill has now been rescheduled continuously since before any current tenure, my own included, and I regard this not as failure but as the highest form of readiness, for a school that is always about to practise its escape is a school that never stops thinking about it. The bell to listen for is the second bell, the fourth being at rest.',
+      'Yours in continuity,',
+      'A. Petch, Acting Deputy Head',
+    ]),
+    trigger: Object.freeze({ dayAtLeast: 5 }),
+    once: true,
   }),
 ]);
 

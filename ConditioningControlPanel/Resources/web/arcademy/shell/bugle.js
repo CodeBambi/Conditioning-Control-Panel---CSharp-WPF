@@ -8,10 +8,9 @@
  * on its own fixed stage, removed rather than hidden (trap 27), with the way
  * out on the sticky exit bar (trap 46).
  *
- * EVERY STRING IN THE TABLE BELOW IS A PLACEHOLDER, masthead included. The real
- * paper is written in a separate pass; what is finished here is the FURNITURE -
- * one issue, four pages, a kicker and a headline on each, and a comics slot
- * with nothing in it yet.
+ * THE TABLE BELOW IS THE PAPER ITSELF: the term's five issues, three pages to
+ * an issue, a kicker and a headline on each, and a comics slot on the pages
+ * that carry one. The masthead above it is still awaiting its own copy.
  *
  * THE MASTHEAD FACE is 'Arcademy Display' (styles.css --disp), which is the
  * bundled Graduate woff2 under art/fonts/ - a collegiate slab serif that
@@ -93,79 +92,211 @@ export function ensureStyles(doc) {
 
 /* ----------------------------------------------------------------------------
  * THE PAPER'S OWN NAME
- * Content, not chrome, so it lives in the table rather than behind t() - and it
- * is a placeholder like everything else until the writing pass lands. The
- * subtitle is the strap under the rule; the flag line is the small print
- * beside it (volume, issue, price, the usual furniture of a masthead).
+ * Content, not chrome, so it lives here rather than behind t(). The strap is
+ * the line under the rule; the flag bits are the small print beside the issue
+ * number - price, boast, the usual furniture of a masthead.
  * -------------------------------------------------------------------------- */
 export const MASTHEAD = Object.freeze({
-  title: 'PLACEHOLDER: the paper',
-  strap: 'PLACEHOLDER: the line under the name',
-  flagLeft: 'PLACEHOLDER: vol. i',
-  flagRight: 'PLACEHOLDER: free to take',
+  title: 'The Arcademy Bugle',
+  strap: "The campus paper of record, as was my father's before me.",
+  flagLeft: 'circulation: up',
+  flagRight: 'free to take, one per reader',
 });
 
 /* ----------------------------------------------------------------------------
  * THE TABLE
- * One issue. `pages[].body` accepts a string OR a list of paragraphs; a paper
- * wants paragraphs and one string is the degenerate case of a list, so the
- * renderer takes both and the shipped placeholder uses lists.
- * `comics: true` puts the comics box on that page (additive flag - a page
- * without it renders columns only).
+ * The term's issues, oldest first. `pages[].body` accepts a string OR a list of
+ * paragraphs; a paper wants paragraphs and one string is the degenerate case of
+ * a list, so the renderer takes both and every page here uses lists.
+ * `comics` puts the comics box on that page: a caption string draws the one
+ * framed panel it describes, and a page without the field renders columns only.
+ * `halfStar` prints the ornament and sets the sparse column treatment.
+ * `when` is the gate the shell answers before an issue exists to any reader.
  * -------------------------------------------------------------------------- */
 
 export const ISSUES = Object.freeze([
   Object.freeze({
-    id: 'issue_001',
-    number: 1,
-    headline: 'PLACEHOLDER: the front page headline',
+    id: 'g1',
+    number: 'Vol. XLIV, No. 1',
+    headline: 'THE BUGLE RETURNS: A YEAR OF CHANGE DECLARED FOR THE FOURTEENTH CONSECUTIVE YEAR',
     pages: Object.freeze([
       Object.freeze({
-        kicker: 'PLACEHOLDER: front page',
-        title: 'PLACEHOLDER: the front page headline',
+        kicker: 'THE EDITOR SPEAKS',
+        title: 'CHANGE, AGAIN, AT LAST',
         body: Object.freeze([
-          'PLACEHOLDER: the opening paragraph, set wide enough to carry a drop'
-          + ' cap and long enough that the first column has something to do'
-          + ' before it hands over to the second one.',
-          'PLACEHOLDER: the second paragraph, where a small paper repeats what'
-          + ' the first one already said and attributes it to somebody with a'
-          + ' title.',
-          'PLACEHOLDER: the third paragraph, shorter, because the story has run'
-          + ' out well before the column has.',
-          'PLACEHOLDER: and a last line that trails off into the fold the way'
-          + ' the front page of a four page paper always does.',
+          'After a summer silence this paper observed by choice, and not, as certain corridors have suggested, for want of news, the Bugle returns to the campus larger, bolder, and up eleven on the spring circulation figure, a number I print because it is true and because my father taught me that the truth sells itself, though it never hurts to give it capitals. This will be a YEAR OF CHANGE. I have declared one every autumn for fourteen years now, and I regard the run as proof of the policy rather than otherwise, since a school that can absorb fourteen consecutive years of change and still argue about its founding year, of which we possess three carved candidates and no appetite for fewer, is a school with change to spare.',
+          'My father, in his final editorial, wrote that a paper that rests is a paper that rusts, or words very close to that effect, and this paper does not rust. Inside this bumper number: the Recital, revision FORTY FOUR, previewed exclusively on page two; the Harvest Luncheon, announced in full on page three; and the motto over the Main Gate rendered, for balance, in two of its translations. Read on, for the year, as my father nearly said, will not change itself, allegedly.',
+          'R. Baxter Jr., Editor, as was my father before me.',
         ]),
       }),
       Object.freeze({
-        kicker: 'PLACEHOLDER: page two',
-        title: 'PLACEHOLDER: the second page piece',
+        kicker: 'THE ARTS',
+        title: 'REVISION FORTY FOUR: \'MY BOLDEST\', SAYS THE MUSIC ROOM',
         body: Object.freeze([
-          'PLACEHOLDER: a quieter piece, set in the same two columns, doing the'
-          + ' work of filling a page that nobody was going to read closely.',
-          'PLACEHOLDER: a paragraph with a number in it, which is how a paper'
-          + ' this size signals that somebody went and checked something.',
-          'PLACEHOLDER: a closing line that promises more next week.',
+          '[The following programme note reaches us from the Music Room and is printed in full, edited. Ed.]',
+          'The Recital enters the autumn in its forty fourth revision, and connoisseurs of the form will understand me when I say that forty four is not a number but a vintage. The programme has been maturing since the spring in exactly the conditions great programmes require, which are privacy, patience, and distance from the opinions of the tower, and it will be given in the Main Hall on the evening of the twenty-ninth of November, an evening I have held in my mind for years the way one holds a note, gently and without letting go. In Vienna we were taught that a concert begins long before anyone plays, and by that reckoning this one has been in glorious progress for four decades, interrupted only once, by the weather that year, of which I will say nothing further. Of the bells, their temperament, and the quarter tone that certain towers still decline to concede, I say only that the Recital will be in tune whatever the hour is when it begins. Dr. F. Sharp, Music Room.',
+          '[The Bugle has now previewed this Recital forty four times, a record for the school press and, we believe, for any press, allegedly. Ed.]',
         ]),
       }),
       Object.freeze({
-        kicker: 'PLACEHOLDER: page three',
-        title: 'PLACEHOLDER: the noticeboard column',
-        comics: true,
+        kicker: 'THE TABLE',
+        title: 'HARVEST LUNCHEON TO FILL THE MAIN HALL WITH \'A MENU THAT HAS FOUNDATIONS\'',
         body: Object.freeze([
-          'PLACEHOLDER: the short column that runs beside the funnies, made of'
-          + ' three or four items that were never big enough to be a story.',
-          'PLACEHOLDER: another item, one sentence long, in the same list.',
+          '[From the kitchen, a menu and, as our readers have come to expect, a memoir. Printed in full, edited. Ed.]',
+          'On the evening of the twenty-ninth of November the kitchen will lay the Harvest Luncheon in the Main Hall, and I use the word lay as a mason uses it, for this meal has foundations. The bird course alone has been three years in negotiation with my supplier, a man of the old school who will remain nameless because his name is my advantage, and the centrepiece reduction is the same reduction that carried the kitchen through the year of the burst pipe, refined since until the spoon stands upright in it out of respect. Five stars, I say now, calmly and in advance, because I have tasted the rehearsals. The campus is invited in its entirety, and the kitchen asks only that guests arrive hungry and leave their reviews at home. From the kitchen, with what remains of my patience, P. Tartine.',
+          'The Bugle notes with PRIDE that the Main Hall will thus stand at the centre of BOTH of the season\'s great occasions, a coincidence of scheduling that speaks, in this editor\'s view, to a campus firing on every cylinder at once.',
+        ]),
+        comics: 'A single panel: the Main Hall wearing two evening banners at once, one for the Recital and one for the Luncheon, a small bird reading both, caption \'Plenty of room.\'',
+      }),
+    ]),
+  }),
+  Object.freeze({
+    id: 'g2',
+    number: 'Vol. XLIV, No. 2',
+    headline: 'THE PALATE RETURNS: TUESDAY SOUP RATED FOR THE FIRST TIME SINCE 1994',
+    when: Object.freeze({ daysAfterIssueRead: ['g1', 1] }),
+    pages: Object.freeze([
+      Object.freeze({
+        kicker: 'EXCLUSIVE',
+        title: 'THREE STARS AND ONE HALF: THE REVIEW IN FULL',
+        body: Object.freeze([
+          'The Bugle publishes below, exactly as it reached this desk and by means this paper will defend to its last pica, the first notice from the critic signing himself The Palate since the four-star soup review of 1994, an event now older than some of our staplers.',
+          '\'One returns to a kitchen the way one returns to a childhood house, braced for what time has done to it, and one finds the Tuesday soup very much as one left it, which is the compliment and the complaint in a single spoon. The stock is honest, the carrot is present and accounted for, and the whole is warmed by a confidence that borders on autobiography. And yet the salt hangs back where it once stepped forward, and the finish, which in 1994 promised to become something, has instead become something else. Three stars and one half.\'',
+          'That is the review in its entirety, and the Bugle observes only that a half star, wherever it finally comes to rest, is the smallest object ever to strike this campus this hard, allegedly.',
+          'R. Baxter Jr., Editor, as was my father before me.',
         ]),
       }),
       Object.freeze({
-        kicker: 'PLACEHOLDER: the back page',
-        title: 'PLACEHOLDER: the back page',
+        kicker: 'FROM THE EDITOR\'S CHAIR',
+        title: 'THIS PAPER PROTECTS ITS SOURCES, AND IT PROTECTS THEM PROUDLY',
         body: Object.freeze([
-          'PLACEHOLDER: the back page, which in a paper like this is mostly'
-          + ' advertisements for things inside the same building.',
-          'PLACEHOLDER: the last paragraph of the issue, and then the rule, and'
-          + ' then the fold.',
+          'Demands have reached this desk, some of them in handwriting I recognise from the weekly menu, that the Bugle unmask its correspondent, and it will not. My father, in his final editorial, wrote shield the writer and print the weather, or words to that effect, and I have never been more his son than this week, for a newspaper that hands over its critics is a newsletter, and the Arcademy deserves a NEWSPAPER.',
+          'I will add, because the figures deserve the daylight, that circulation since the review has DOUBLED. Doubled from what is not a question a serious paper answers, but doubled it has, and the lesson for the doubters is the one my father spent his life setting in type: controversy, honestly reported, pays for its own ink, allegedly.',
         ]),
+        comics: 'A single panel: a soup bowl on a witness stand under a lamp, sweating, caption \'The soup declined to comment.\'',
+      }),
+      Object.freeze({
+        kicker: 'LETTERS TO THE EDITOR, EDITED FOR LENGTH AND FLAVOUR',
+        title: 'THE KITCHEN, THE TOWER, AND ONE LATE CORRECTION',
+        body: Object.freeze([
+          'From the Keeper of the Kitchens comes a letter of some eleven pages, printed here in the fair and generous excerpt our readers expect: \'Monsieur... coward... 1994... the kitchen keeps its receipts... five stars.\' [The ellipses are editorial, the sentiment intact. Ed.]',
+          'From the Music Room, on an unrelated matter, we are asked to state that the bells accompanying Tuesday\'s practice were one quarter of a tone flat, that this is a fact of physics and not of taste, and that the Recital, which matures nicely, will not be taking the bells\' opinion into account. [Printed as received, save the parts about the tower, which were longer. Ed.]',
+          'And from the Bell Tower, a correction to our last number: the Bugle gave the time of the Quad\'s first frost as ten minutes to seven, whereas the tower\'s log shows six minutes to, a difference our readers will recognise, the tower adding that it bears the front desk no ill will and that the front desk is welcome to its opinion. The Bugle stands by its original time and thanks both clocks for their service.',
+        ]),
+      }),
+    ]),
+  }),
+  Object.freeze({
+    id: 'g3',
+    number: 'Vol. XLIV, No. 3',
+    headline: 'PEACE IN OUR HALL: RECITAL AND LUNCHEON TO SHARE THE TWENTY-NINTH (DEVELOPMENTS, PAGE THREE)',
+    when: Object.freeze({ daysAfterRead: ['m12', 1] }),
+    pages: Object.freeze([
+      Object.freeze({
+        kicker: 'HISTORIC',
+        title: 'THE STORY OF THE DECADE, AND THIS PAPER HAS COVERED SOME DECADES',
+        body: Object.freeze([
+          'Let the record of this campus show that when peace came, the Bugle was FIRST. The Music Room and the kitchen, whose rivalry this paper has chronicled with a devotion some have called excessive and my father would have called Tuesday, have joined their two great occasions into one shared evening on the twenty-ninth: a Recital with a catering credit, a Luncheon with a dessert course in seven movements, each movement named for a revision that mattered. Persons wishing to understand what that last phrase means are directed to the Music Room, at their own risk.',
+          'My father, in his final editorial, wrote that the news is what happens while a man is setting the type, and those words have never rung truer than this week, for reasons the sharp-eyed reader may discover as this number proceeds. Circulation, meanwhile, is up again, comfortably, on a figure that was itself up. The Bugle congratulates the happy institutions and has already reserved its seat, front row, both events, which are now the same event, which is the story of the decade, allegedly.',
+          'R. Baxter Jr., Editor, as was my father before me.',
+        ]),
+        comics: 'A single panel: two hands shaking warmly while each hides a poster behind its back, caption \'After you.\'',
+      }),
+      Object.freeze({
+        kicker: 'THE GROUNDS',
+        title: 'HEDGE REACHES FRONT PATH: A NOTICE, REPRINTED AS VERSE',
+        body: Object.freeze([
+          'The Bugle reprints below, in the line breaks this editor felt it deserved, the latest frontier report from the grounds, whose author continues to decline our invitation to contribute a column, or to acknowledge, in any medium, that these reprints occur.',
+          'The hedge has reached the Front Path,',
+          'having crossed open lawn in under a fortnight,',
+          'which I said it would do',
+          'and have it in pencil that I said so,',
+          'and I am now asking, formally and without prejudice,',
+          'for either shears or reinforcements,',
+          'whichever the school can spare first.',
+          'The Bugle has followed this hedge for years and considers it the finest running story on the campus, a war of inches conducted between a man who documents and a plant that does not, and we say to our readers what we have always said: the hedge holds ground, but the paper holds the record. Donations of shears may be left at the Bugle office, which will report on them.',
+        ]),
+      }),
+      Object.freeze({
+        kicker: 'LATE NEWS, HELD FOR PRESS',
+        title: 'ALLIANCE ENDS OVER POSTER; UNSIGNED CRITIC AWARDS THE MERGER TWO STARS: \'NEEDED SALT\'',
+        body: Object.freeze([
+          'A newspaper prints the news in the order the news arrives, which is what my father would have wanted, and what page one, set in happier hours, must now be read as a monument to. The alliance of the year is over. It lasted, by the tower\'s reckoning, one afternoon and four minutes, and it died where great alliances have always died, on the poster, where the question of whose name stands above whose proved to contain, in the Music Room\'s phrase, physics, and in the kitchen\'s phrase, everything she needed to know.',
+          'Into this wound, unsigned as ever, came The Palate, whose review of the merger itself reached the campus by plain circular and is quoted here under the doctrine of fair thunder: two stars, the whole, though warm, wants seasoning, it needed salt. The kitchen\'s response named no one and implied a vocabulary. The Music Room\'s response, lodged in our letters drawer and summarised here with the care it deserves, volunteers that its occupant has never once eaten the Tuesday soup, a defence the campus received in silence, since somebody reviewing that soup down the decades has certainly been eating it, allegedly.',
+          'The Bugle takes no side, holds both coats, and reminds its readers that the twenty-ninth is still coming, that the Hall is still booked twice, and that this paper will be there FIRST, whichever evening it turns out to be.',
+        ]),
+      }),
+    ]),
+  }),
+  Object.freeze({
+    id: 'g4',
+    number: 'Vol. XLIV, No. 4',
+    headline: 'THE FINDINGS, SERIALISED: \'NEVER LOST, MERELY UNLOCATED\'',
+    when: Object.freeze({ daysAfterRead: ['m15', 1] }),
+    pages: Object.freeze([
+      Object.freeze({
+        kicker: 'SERIALISATION OF THE CENTURY',
+        title: 'SIXTY PAGES, ONE VERDICT, AND THE BUGLE HAS ALL OF THEM',
+        body: Object.freeze([
+          'Beginning this number and continuing for as many numbers as it takes, the Bugle serialises the findings of the inquiry into the vanished sign-up sheet, a document of sixty pages whose author has asked us, in a letter of protest we will print in full on request, not to serialise it. The Bugle honours the protest by recording it and proceeds anyway, for my father, in his final editorial, wrote that the length of the truth is not the reader\'s problem, or words to that effect, and sixty pages is not length, it is CIRCULATION, which stands this month at its strongest since the flood year.',
+          'Part one, comprising the findings\' opening movement, establishes the following: that the board was present; that the pins were present, numbering two; that the sheet, at the material hour, was in the state the inquiry terms attendant upon the board; and that at some hour thereafter, material or otherwise, it entered its present condition, which the findings describe in the sentence this campus will be quoting at weddings: the sheet was at no point lost, it was, and remains, merely unlocated. The remaining fifty-seven pages develop this position, and the Bugle will be with them every step.',
+          'R. Baxter Jr., Editor, as was my father before me.',
+        ]),
+      }),
+      Object.freeze({
+        kicker: 'CORRECTIONS',
+        title: 'A CORRECTION REGARDING LAST NUMBER\'S CORRECTION',
+        body: Object.freeze([
+          'In our last number this column corrected the time of the Quad\'s first frost from ten minutes to seven to six minutes to seven, on the authority of the tower. The tower now writes that the correction, while gratefully received, misquotes its log, which reads six minutes past, not to, a distinction the tower describes as the whole of the matter. This column accordingly corrects its correction, notes that the original error has now been corrected twice in opposite directions, and takes the only position consistent with this paper\'s traditions, which is that we stand by the original error. My father stood by his errors, his father stood by the errors before those, and a paper that will not stand by its errors will fall for anything.',
+          'Separately, the kitchen asks us to state that last number\'s phrase eleven pages was an undercount, the letter having run, we are assured, to fourteen, and the Bugle regrets the flattery.',
+        ]),
+        comics: 'A single panel: sixty numbered pages queuing at the Bugle\'s hatch, the first page wearing a rosette, caption \'Parts two to sixty await their turn.\'',
+      }),
+      Object.freeze({
+        kicker: 'REPRINTED WITHOUT PERMISSION, WHICH IS THE SINCEREST KIND',
+        title: 'THE LETTER FROM ABOVE, IN FULL, AND WHAT COMES NEXT',
+        body: Object.freeze([
+          'The Bugle has obtained, by means it will defend and cannot describe, the letter lately received from the highest level regarding the findings, and prints it entire, this being, we believe, the first appearance of that correspondence in any public print in the school\'s history, whichever history the reader keeps:',
+          '\'I have received the findings of the recent inquiry, all sixty of their pages, and while thoroughness is a virtue the school has always admired, we find ourselves hoping, with the greatest warmth, that whatever is found in future will consent to be found more briefly.\'',
+          'It is signed as it is signed, on the cream paper, and this paper\'s hands shook a little setting it, which the compositor may record as pride. The Bugle offers no commentary, commentary being unnecessary where perfection has gone before, and turns instead to the future: our next number will carry, IN FULL AND WITHOUT FAIL, the identity of the critic known as The Palate, an unmasking thirty-two years in the preparing, secured by this desk at a cost it will disclose to nobody, least of all the kitchen. The name will appear in our next number, in full, allegedly.',
+        ]),
+      }),
+    ]),
+  }),
+  Object.freeze({
+    id: 'g5',
+    number: 'Vol. XLIV, No. 5',
+    headline: '\'YOU ARE THE PALATE\': KITCHEN NAMES EDITOR IN THE LETTER OF THE SEASON (THE PROMISED UNMASKING APPEARS ON PAGE TWO, AS PRINTED)',
+    when: Object.freeze({ daysAfterRead: ['m16', 1] }),
+    pages: Object.freeze([
+      Object.freeze({
+        kicker: 'EXCLUSIVE OF THE CENTURY',
+        title: 'THIS EDITOR STANDS ACCUSED, AND THE COVERAGE WILL BE FEARLESS',
+        body: Object.freeze([
+          'The Bugle has in its history printed harvests, frosts, findings, and forty four previews of a single concert, but it has never until today enjoyed the honour of being its own front page. The Keeper of the Kitchens, in an open letter this paper reproduces in full and unedited, a courtesy she will find nowhere else, names the undersigned as The Palate, or as his maker, and awards him one star, the first she has ever given to anything, an accusation printed above the fold, under the banner, in the type reserved since my father\'s day for weather of national importance, because that is what a story of this magnitude deserves.',
+          'The undersigned denies the charge with his whole chest and covers it with his whole front page, and if the lady cannot understand how both of those things can be true at once, then she has never loved a newspaper. Circulation, since she asks so tenderly after our health, is up, and I will not be more specific, my father having taught me that modesty, like the truth, is best set in capitals: UP. As for the unmasking promised in our last number, the reader is directed to page two, which the Bugle presents exactly as it came off the stone, and stands behind, and will be standing behind for some time.',
+          'R. Baxter Jr., Editor, as was my father before me.',
+        ]),
+      }),
+      Object.freeze({
+        kicker: 'THE REVEAL',
+        title: 'THE PALATE: THE ANSWER IN FULL, CONTINUED FROM PAGE ONE',
+        body: Object.freeze([
+          '(continued from page one)',
+          'The remainder of this page reached the reader exactly as it went to press, and the Bugle stands by every word of it.',
+        ]),
+        halfStar: true,
+      }),
+      Object.freeze({
+        kicker: 'AND FINALLY',
+        title: 'BOTH MIDNIGHTS PASS, THE BENCH RETURNS, THE RECITAL SPRINGS, THE SEASON CLOSES',
+        body: Object.freeze([
+          'The twenty-ninth has come and gone, and the Bugle\'s verdict on the great contested evening is that it was, on the highest authority and the cream paper, a triumph, a judgement this paper is honoured to second and in no position to elaborate. The tower reports that both midnights passed without incident, four minutes apart, and that the Hall stood composed throughout, which those who know the Hall will recognise as its finest register. From the grounds comes word that the bench is back, facing the wrong way, moved by neither of the parties best placed to move it, a mystery this paper adds to its shelf with something like affection.',
+          'The Recital, meanwhile, moves to spring, where revision forty five, already described by the Music Room as her strongest, will find the acoustics it deserves, and the Harvest Luncheon rests on its laurels, of which the kitchen counts five, as always. The Palate has not written again, the kitchen watches this paper, this paper watches its post, and somewhere on the campus a half star is still owed a home.',
+          'And so the Bugle closes its season, up on every figure it has ever published and owing its thanks to a readership it has never needed to see to believe in. My father ended his final editorial, as I never tire of almost quoting, with the words leave them wanting the next number, and the Bugle obeys: the spring will bring the Recital, the second edition of the findings, and, it says here, answers, allegedly.',
+          'R. Baxter Jr., Editor, as was my father before me.',
+        ]),
+        comics: 'A single panel: a long dining table laid for a grand evening, every chair empty, one plate holding a single half star, caption \'Compliments to the chef.\'',
       }),
     ]),
   }),
@@ -359,7 +490,12 @@ export function openBugle(issueId, opts) {
   const flag = el('div', 'arc-bugle-flag');
   flag.appendChild(el('span', 'arc-bugle-flagbit', String(MASTHEAD.flagLeft || '')));
   flag.appendChild(el('span', 'arc-bugle-flagbit',
-    t('bugle_issue', 'Issue') + ' ' + String(issue.number == null ? '' : issue.number)));
+    /* The number string already reads as a full flag ('Vol. XLIV, No. 2');
+     * prefixing the Issue label would print furniture twice. The label stays
+     * for numbers that are bare numerals. */
+    (/[A-Za-z]/.test(String(issue.number == null ? '' : issue.number))
+      ? String(issue.number)
+      : t('bugle_issue', 'Issue') + ' ' + String(issue.number == null ? '' : issue.number))));
   flag.appendChild(el('span', 'arc-bugle-flagbit', String(MASTHEAD.flagRight || '')));
 
   head.appendChild(el('h1', 'arc-bugle-name', String(MASTHEAD.title || '')));
