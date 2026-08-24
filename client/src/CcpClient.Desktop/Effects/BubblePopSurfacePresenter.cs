@@ -106,6 +106,7 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
     private readonly Func<IPointerSurface> _surfaceFactory;
     private readonly Func<PointerBounds?> _playArea;
     private readonly Func<Random> _randomFactory;
+    private readonly Action? _onPop;
     private readonly object _gate = new();
 
     private IPointerSurface? _surface;
@@ -127,12 +128,17 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
     /// <param name="playArea">Where the field may run; null when the OS reports no display.</param>
     /// <param name="randomFactory">The spawn source for each run, injected so a field is
     /// reproducible.</param>
+    /// <param name="onPop">
+    /// Raised once for each bubble a click really pops - see <see cref="OnPress"/> for the "really"
+    /// and for the thread it is raised on. Null in a composition with no app audio.
+    /// </param>
     public BubblePopSurfacePresenter(
         ISessionClock clock,
         Action<Action> dispatch,
         Func<IPointerSurface> surfaceFactory,
         Func<PointerBounds?> playArea,
-        Func<Random>? randomFactory = null)
+        Func<Random>? randomFactory = null,
+        Action? onPop = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(dispatch);
@@ -143,12 +149,14 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
         _surfaceFactory = surfaceFactory;
         _playArea = playArea;
         _randomFactory = randomFactory ?? (() => new Random());
+        _onPop = onPop;
     }
 
     /// <summary>The product composition: the real pointer backend for this platform, and the OS's
     /// own primary display as the play area.</summary>
-    public static BubblePopSurfacePresenter ForProduct(ISessionClock clock, Action<Action> dispatch) =>
-        new(clock, dispatch, PointerSurfaceFactory.Create, PrimaryPlayArea);
+    public static BubblePopSurfacePresenter ForProduct(
+        ISessionClock clock, Action<Action> dispatch, Action? onPop = null) =>
+        new(clock, dispatch, PointerSurfaceFactory.Create, PrimaryPlayArea, onPop: onPop);
 
     /// <summary>The primary display, as a play area. Single-display, the same limit every other
     /// drawing module in this port carries (D66).</summary>
@@ -458,6 +466,20 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
     /// target is its own top-level window. Upstream's hosted path decides this in user space from a
     /// snapshot rebuilt once per UI tick (primer §4c/§4e), and that is the race predicted for
     /// this packet.</para>
+    ///
+    /// <para><b>The pop SOUND is raised here, and only on the click that really starts a pop.</b>
+    /// <see cref="BubblePopField.Hit"/> answers false for a bubble that is already popping, which is
+    /// upstream's own first line (<c>if (!_isAlive || _isPopping) return;</c>,
+    /// <c>Services/BubbleService.cs:3990</c>) — and upstream plays its pop only when that guard let
+    /// the pop through, because <c>AwardAmbientPop</c> is reached from the
+    /// <c>if (!wasPopping &amp;&amp; _isPopping)</c> branch (<c>:3980-3983</c>, <c>:961</c>). So a
+    /// double click on one bubble makes ONE sound, here as there. The drop path in
+    /// <c>SpawnOnceLocked</c> also calls <c>Hit</c> and deliberately does not sound: a bubble nobody
+    /// could click was never popped.</para>
+    ///
+    /// <para><b>Raised OUTSIDE <c>_gate</c>.</b> The callback ends up inside the app-wide sound
+    /// arbitration, which holds a lock of its own; calling into it under this one would be a lock
+    /// order this class cannot see the other end of.</para>
     /// </summary>
     private void OnPress(PointerPress press)
     {
@@ -469,12 +491,17 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
             return;
         }
 
+        bool popped;
         lock (_gate)
         {
-            if (_field is not null && _bubbleByTarget.TryGetValue(press.Target, out var bubbleId))
-            {
-                _field.Hit(bubbleId);
-            }
+            popped = _field is not null
+                && _bubbleByTarget.TryGetValue(press.Target, out var bubbleId)
+                && _field.Hit(bubbleId);
+        }
+
+        if (popped)
+        {
+            _onPop?.Invoke();
         }
     }
 

@@ -65,8 +65,11 @@ public sealed class FlashImagesEffect : PacedSessionEffect<FlashFiring>
     private readonly IFlashImagePool _pool;
     private readonly PersistenceStore<SessionPresetDocument> _preset;
     private readonly IFlashSurface? _surface;
+    private readonly EffectSounds? _sounds;
     private readonly Random _random;
 
+    /// <param name="sounds">Where this flash's clip is played, or null in a composition with no app
+    /// audio - which is every test host that wants no device. See <see cref="Deliver"/>.</param>
     public FlashImagesEffect(
         AsyncOperationOwner owner,
         EffectSignal signal,
@@ -74,7 +77,8 @@ public sealed class FlashImagesEffect : PacedSessionEffect<FlashFiring>
         IFlashImagePool pool,
         PersistenceStore<SessionPresetDocument> preset,
         Random? random = null,
-        IFlashSurface? surface = null)
+        IFlashSurface? surface = null,
+        EffectSounds? sounds = null)
         : base(owner, signal, clock, "flash-schedule")
     {
         ArgumentNullException.ThrowIfNull(pool);
@@ -83,6 +87,7 @@ public sealed class FlashImagesEffect : PacedSessionEffect<FlashFiring>
         _preset = preset;
         _random = random ?? new Random();
         _surface = surface;
+        _sounds = sounds;
     }
 
     /// <inheritdoc/>
@@ -105,6 +110,19 @@ public sealed class FlashImagesEffect : PacedSessionEffect<FlashFiring>
     /// due. The surface binds this; nothing else may.
     /// </summary>
     public event Action<FlashEvent>? Fired;
+
+    /// <summary>
+    /// What the last flash's clip answered, verbatim, or null when no flash has tried to make a
+    /// sound yet. An empty clip folder and a dead endpoint both look like a typed
+    /// <see cref="Audio.SoundOutcome.Unavailable"/> from here, and each names itself - neither is
+    /// rendered as silence with no reason.
+    /// </summary>
+    public Audio.SoundOutcome? LastSound => _sounds?.LastFlash;
+
+    /// <summary>Where the user's flash clips are read from, or null in a composition with no app
+    /// audio. A path, never a file name - the answer to "where do I put them", which matters here
+    /// because this build ships none.</summary>
+    public string? ClipFolder => _sounds?.FlashClipFolder;
 
     /// <inheritdoc/>
     public override void SetEnabled(bool enabled)
@@ -148,6 +166,34 @@ public sealed class FlashImagesEffect : PacedSessionEffect<FlashFiring>
     /// is a property a fact holds (<c>FlashSurfacePresenterTests</c>), not a comment — swapping these
     /// two lines reds the suite.
     ///
+    /// <para><b>THE CLIP IS PLAYED AFTER THE PICTURE, AND UPSTREAM PLAYS IT BEFORE.</b> Upstream's
+    /// <c>ShowImages</c> plays the sound at <c>Services/Flash/FlashService.cs:1042</c> and spawns its
+    /// windows from <c>:1073</c> onward, and it HAS to: the clip's own length is what it uses as the
+    /// flash's duration (<c>duration = PlaySound(...)</c> at <c>:1042</c>, then
+    /// <c>lifetimeMs = (int)(duration * 1000) + 1000</c> at <c>:1073</c>). This port does not have
+    /// that link (see below), so all upstream's order would buy here is putting an audio device in
+    /// front of a picture - and player construction on this port's backend blocks its caller for up
+    /// to two seconds against a wedged endpoint (<c>Audio/AudioSeams.cs:244-245</c>), on this very
+    /// thread. The rule above already says the visible half of a flash must not be hostage to
+    /// anything; an audio endpoint is exactly such a hostage-taker. <b>A divergence, recorded rather
+    /// than smoothed away.</b></para>
+    ///
+    /// <para><b>Four halves of upstream's flash audio are NOT here, each refused with its
+    /// reason.</b> (1) The <c>FlashAudioEnabled</c> switch (<c>Models/AppSettings.cs:925-926</c>,
+    /// default <c>true</c>) - this port's flash dials live in documents outside this module, so the
+    /// DEFAULT outcome matches and the switch is a later row; emptying the clip folder is what turns
+    /// it off today. (2) The duration link at <c>:1042</c>/<c>:1073</c> - the arbitration reports no
+    /// clip length at all (<c>SoundOutcome.Started</c> carries a channel and a generation and
+    /// nothing else), so linking would mean inventing a number. (3) The audio duck
+    /// (<c>:1050-1064</c>) - this port's duck sink is deliberately an <c>UnavailableDuckSink</c>
+    /// until cross-app ducking has an owner decision (<c>Audio/AudioParticipant.cs</c>'s own
+    /// composition). (4) <c>FlashAudioPlaying</c> (<c>:1047</c>), which puts the clip's text in the
+    /// companion's speech bubble - there is no avatar window in this build. What IS ported is the
+    /// gate that matters most: <b>once per flash EVENT</b>. Upstream's
+    /// <c>_soundPlayingForCurrentFlash</c> latch (<c>:1037</c>, <c>:1041</c>) exists to keep hydra
+    /// spawns silent, and this port has no hydra at all - one flash, one <see cref="Deliver"/>, one
+    /// clip.</para>
+    ///
     /// <para><b>Why the drawn paths ride on the firing and not on <see cref="FlashEvent"/>.</b> The
     /// event is content-free by construction — a COUNT, never a file name, which is the
     /// media-logging rule the whole port holds. The surface needs the paths themselves, so they are
@@ -157,6 +203,7 @@ public sealed class FlashImagesEffect : PacedSessionEffect<FlashFiring>
     protected override void Deliver(FlashFiring firing)
     {
         _surface?.Show(firing.Drawn);
+        _sounds?.Flash();
         Fired?.Invoke(firing.Event);
     }
 
