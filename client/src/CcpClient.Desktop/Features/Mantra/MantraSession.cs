@@ -299,7 +299,9 @@ public sealed class MantraSession
     /// <param name="isCharacter">Whether <paramref name="character"/> is one. A control character is
     /// not typing — the one piece of upstream's mechanical hardening that survives a surface with no
     /// edit control (<c>Effects/LockCardTyping.cs:36-40</c>).</param>
-    /// <param name="isBackspace">Upstream's box supports it, and it is not a completion route.</param>
+    /// <param name="isBackspace">Upstream's box supports it, and — because upstream has ONE handler
+    /// for every change to the box — a deletion is tested for completion exactly like an
+    /// insertion.</param>
     /// <param name="isCancel">The user pressed Escape (<c>:442</c>).</param>
     public MantraStep Apply(char character, bool isCharacter, bool isBackspace, bool isCancel)
     {
@@ -323,16 +325,21 @@ public sealed class MantraSession
             }
 
             Answer = Answer[..^1];
-            _lastInputAt = _clock();                                          // :213-214
-            return MantraStep.Typed;
         }
-
-        if (!isCharacter || char.IsControl(character))
+        else if (!isCharacter || char.IsControl(character))
         {
             return MantraStep.Ignored;
         }
+        else
+        {
+            Answer += character;
+        }
 
-        Answer += character;
+        // Everything below is upstream's ONE handler, and a DELETION reaches it too: upstream's
+        // TextChanged does not know or care which edit produced the box it is looking at. That
+        // matters after a refused completion, where the box is already full — taking a character
+        // back off and putting it on again is the only way the user can re-offer it, and the
+        // deletion is the half of that which can land on a full match.
         _lastInputAt = _clock();                                              // :213-214
 
         var match = Match(Answer, CurrentMantra);
