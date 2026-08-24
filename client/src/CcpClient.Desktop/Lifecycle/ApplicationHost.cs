@@ -129,8 +129,10 @@ public sealed class ApplicationHost
     /// contract reserved (persistence contract §11). There is no second teardown path for async work.
     ///
     /// <para><b>Every wait in here is bounded, and the last one to become so was the participant
-    /// stop.</b> This method runs on the UI thread with that thread BLOCKED (<c>App.axaml.cs:95</c>
-    /// calls it from the lifetime's Exit handler through <c>GetAwaiter().GetResult()</c>), so a
+    /// stop.</b> On the path the shipping app actually takes this method is entered FROM the UI
+    /// thread with that thread BLOCKED (<c>App.axaml.cs:95</c> calls it from the lifetime's Exit
+    /// handler through <c>GetAwaiter().GetResult()</c>) — a panic path or a test host may enter it
+    /// from anywhere, but the ordinary one is the one that decides the bound. So a
     /// teardown that never returns is an application that never exits — and on the ordinary path
     /// the native surfaces are destroyed by the OPERATING SYSTEM at process exit and by nothing
     /// else (<c>Session/SessionParticipant.cs:920-952</c>). A process that cannot end therefore
