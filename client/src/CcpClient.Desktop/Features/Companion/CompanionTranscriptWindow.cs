@@ -70,7 +70,6 @@ public sealed class CompanionTranscriptWindow : Window
         // The companion surface's own panel colour (CompanionWindow.axaml chat-bubble ground),
         // which is what the headed pair reads against the window's #FF141018 ground beneath it.
         Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x18, 0x22));
-        AutomationProperties.SetAutomationId(this, "TranscriptWindow");
 
         var body = new StackPanel { Spacing = 9 };
         if (turns.Count == 0)
