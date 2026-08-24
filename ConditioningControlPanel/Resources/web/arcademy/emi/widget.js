@@ -222,7 +222,7 @@ function readStats(raw) {
  * @param {Function=} o.toast         the SHELL's toast (boot.js -> createShell's `shout`)
  * @param {Function=} o.log
  */
-export function createWidget({ root, face, chains, fx, store, toast, log } = {}) {
+export function createWidget({ root, face, chains, fx, vox: vox0, store, toast, log } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   /* THE SHELL'S TOAST, NOT A SECOND ONE. `#arc-toast` already exists, already
    * stacks above EMI (z 60 vs 50) and already expires its own nodes; minting a
@@ -422,6 +422,11 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
   let playChain = null;
   let makeSay = null;
   let showFx = null;
+  /* HER VOICE (emi/vox.js), injected the same way and just as optional. It owns
+   * no audio node - it only asks shell/audio.js for blips - so from here it is
+   * three calls hanging off setBubble(), the one place that already knows the
+   * difference between typing, a landed line and a cleared bubble. */
+  let vox = null;
   /* CONSTRUCTION-TIME ATTACH IS NOT A REPAINT. `attach({face, chains, fx})` runs
    * once from inside createWidget - a caller may hand the renderer straight to
    * the constructor instead of injecting it a tick later - and at that point the
@@ -436,6 +441,8 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     const f = mods && mods.face;
     const c = mods && mods.chains;
     const x = mods && mods.fx;
+    const v = mods && mods.vox;
+    if (v && typeof v.speak === 'function') vox = v;
     if (!painter && f && canvas && typeof canvas.getContext === 'function') {
       const mk = typeof f === 'function' ? f : (f && typeof f.createFace === 'function' ? f.createFace : null);
       try {
@@ -459,7 +466,7 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       if (built) idle();
     }
   }
-  attach({ face, chains, fx });
+  attach({ face, chains, fx, vox: vox0 });
 
   /* ---------------------- motion preference ----------------------------- */
   function reducedMotion() {
@@ -589,11 +596,17 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     catch (e) { say('emi: draw threw - ' + ((e && e.message) || e)); }
   }
 
+  /* THE BUBBLE IS ALSO WHERE SHE IS AUDIBLE. This function already knows the
+   * only three states her voice cares about - typing, landed, gone - and EVERY
+   * cancel path in this file funnels through the `null` branch, so hanging the
+   * voice here (and nowhere else) is what makes "dismiss mid-babble cuts her
+   * instantly" true by construction instead of by discipline. See trap 70. */
   function setBubble(text) {
     if (text == null || text === '') {
       bubble.hidden = true;
       bubble.textContent = '';
       bubble.classList.remove('dots', 'pop');
+      if (vox) { try { vox.stop(); } catch (e) { /* a voice may never break a bubble */ } }
       return;
     }
     const s = String(text);
@@ -601,8 +614,20 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
     bubble.textContent = s;
     bubble.hidden = false;
     bubble.classList.remove('dots', 'pop');
-    if (dots) bubble.classList.add('dots');
-    else { bubble.classList.add('pop'); stats.bubblesSeen += 1; }
+    if (dots) {
+      bubble.classList.add('dots');
+      if (vox) { try { vox.tick(); } catch (e) { /* noop */ } }
+    } else {
+      bubble.classList.add('pop'); stats.bubblesSeen += 1;
+      /* THE MOOD IS DRAWN ONE LINE LATER. playChain hands us the bubble BEFORE
+       * it hands the frame to `draw`, which is what resolves `bodyFrame` for a
+       * makeSay line - so we ask on the microtask and read the pose she is
+       * actually wearing. Same tick, same frame, chains.js untouched. */
+      if (vox) {
+        const speak = () => { try { vox.speak(s, { face: bodyFrame }); } catch (e) { /* noop */ } };
+        if (typeof queueMicrotask === 'function') queueMicrotask(speak); else speak();
+      }
+    }
   }
 
   /* BODY MOVES GO ON THE ROOT. Agent A's keyframes animate `transform` on `.emi`
@@ -1143,6 +1168,8 @@ export function createWidget({ root, face, chains, fx, store, toast, log } = {})
       // clearBody() is the easy one to miss: `bodyTimer` outlives everything else
       // and its callback re-adds `.breath` to a node that is no longer in the page.
       cancelChain(); killTimers(); stopBlink(); stopSway(); disarmHold(); clearBody();
+      // Her voice is a setTimeout ladder of its own and nothing above clears it.
+      if (vox) { try { vox.stop(); } catch (e) { /* noop */ } }
       if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
       if (typeof window !== 'undefined' && window.removeEventListener) {
         window.removeEventListener('resize', onResize);

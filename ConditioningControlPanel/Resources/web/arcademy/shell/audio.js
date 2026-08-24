@@ -98,6 +98,24 @@ const SOUNDS = {
   near:      { type: 'sine',     f0: 740, f1: 620, ms: 110, gain: 0.55 },
   chime:     { type: 'sine',     f0: 1046.5, f1: 1046.5, ms: 160, gain: 0.5 },
   shutter:   { noise: true, hp: 1800, lp: 9000, ms: 40,  gain: 0.7 },
+  /* EMI's VOICE, "Blipese" (2026-08-24, emi/vox.js). Two recipes and no third:
+     the mascot babbles by firing `emi_blip` many times with a per-blip `pitch`,
+     so the TIMBRE lives here, once, and the melody lives over there.
+     TRIANGLE, not square. The owner's directive is "pleasant at low volume - she
+     has to be someone you get attached to", and a square up here is a beeper.
+     The chirp falls ~a whole tone across the blip so each one reads as a little
+     syllable rather than a tone; `attack` 0.3 of the duration (~17ms of the 56)
+     is what keeps it from clicking; and gain 0.35 is HALF a game pop. A mascot
+     murmurs - she is never the loudest thing on the screen.
+     TASTE ROUND (owner): the square variant is kept here rather than in a doc so
+     the comparison is a two-line swap.
+       emi_blip:  { type: 'square', f0: 760, f1: 680, ms: 52, gain: 0.26, attack: 0.34 },
+   */
+  emi_blip:  { type: 'triangle', f0: 760, f1: 680, ms: 56, gain: 0.35, attack: 0.3 },
+  /* ...and the tick under the `.` `..` `...` typing frames: low, short, a fifth
+     of the blip's gain. It is anticipation, not a sound in its own right - the
+     moment a player NOTICES it, it is wrong (vox.js DOT_TICKS turns it off). */
+  emi_tick:  { type: 'triangle', f0: 336, f1: 322, ms: 30, gain: 0.16, attack: 0.35 },
 };
 
 const clamp01 = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(1, +v)) : 0);
