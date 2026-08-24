@@ -350,6 +350,31 @@ public static class Program
                 intakeDemo, intakeDrive, intakeKillRenderers, intakeAutoCloseSeconds,
                 tunnelDemo, tunnelDrive, tunnelAutoCloseSeconds, goonDemo))
             .UsePlatformDetect();
+        // X11 SOFTWARE PRESENTATION, harness opt-in only (CCP_X11_SOFTWARE=1).
+        //
+        // WHY THIS EXISTS, measured 2026-08-24 rather than assumed. Every Linux capture this port
+        // had ever taken was a single colour, and it was NOT a rendering failure: the app draws
+        // correctly, and an in-process read-back of the same window returned 3,083 distinct
+        // colours across the same 836,000 pixels that XGetImage read as pure black. When Avalonia
+        // presents through GL, the window's contents live in a GPU surface the X server does not
+        // track, so XGetImage on that drawable returns the window background. A minimal
+        // three-Border Avalonia 12.1.1 app reproduces it away from this product: default
+        // (GLX/EGL) reads 1 colour, LIBGL_ALWAYS_SOFTWARE=1 also reads 1 colour, and Software
+        // rendering mode reads 3.
+        //
+        // NOTE THE TRAP IN THAT SECOND ROW: LIBGL_ALWAYS_SOFTWARE swaps Mesa's DRIVER for llvmpipe
+        // while Avalonia still presents through GL, so it answers a different question than it
+        // appears to. The knob that matters is Avalonia's rendering MODE, not Mesa's - which is why
+        // three display configurations and a software-GL run all agreed: they were one experiment.
+        //
+        // OPT-IN, NEVER A DEFAULT. The defect is in what a CAPTURE can see, not in what a user
+        // sees, so forcing software presentation on every Linux run would trade a real performance
+        // regression for a test-harness convenience.
+        if (OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("CCP_X11_SOFTWARE") == "1")
+        {
+            builder = builder.With(new X11PlatformOptions { RenderingMode = [X11RenderingMode.Software] });
+        }
+
         // Live-UI MCP seat (avalonia-live, Keincheck embedded server on http://127.0.0.1:3001).
         // Opt-in per run (CCP_MCP=1) so tests and normal runs never bind the port.
         if (Environment.GetEnvironmentVariable("CCP_MCP") == "1")
