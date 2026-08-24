@@ -1107,12 +1107,14 @@ public sealed class SoundArbitrationTests
     // (gates + the recorded event stream), never timing.
     //
     // THE CLASS-WIDE RULE, and the separation three facts here were caught by (P2, 2026-08-24).
-    // OrphanSafePlayerFactory.Create QUEUES the construction on the thread pool and then waits
-    // this wall-clock budget for it (AudioSeams.cs: Task.Run, then task.Wait(_budget)), so the
-    // budget covers POOL DISPATCH LATENCY + the native call, not the native call alone. On a
-    // starved pool the dispatch alone can exceed it. Two consequences, and both are properties of
-    // the FACTS rather than of the product — the arbitration is correct in every starved run
-    // measured (see the fixed facts for the numbers):
+    // OrphanSafePlayerFactory.Create DISPATCHES the construction to another thread and then waits
+    // this wall-clock budget for it (AudioSeams.cs: StartNew, then task.Wait(_budget)), so the
+    // budget covers DISPATCH LATENCY + the native call, not the native call alone. When that
+    // dispatch went through the thread pool (Task.Run, until the pool-thread-caller defect was
+    // fixed) a starved pool could blow the budget on dispatch alone; it is now a dedicated
+    // thread, which is why Construction_FromAPoolThreadCaller_... can assert the opposite. Two
+    // consequences, and both are properties of the FACTS rather than of the product — the
+    // arbitration is correct in every starved run measured (see the fixed facts for the numbers):
     //
     //   1. "The construction is parked" is NOT implied by "the caller abandoned it": the work item
     //      may still be QUEUED. So every fact that READS or CLAIMS construction state holds first
@@ -1439,9 +1441,9 @@ public sealed class SoundArbitrationTests
     [Fact]
     public void Construction_AtTheOutstandingCap_FurtherCreatesRefusedWithoutStartingAConstruction()
     {
-        // THE BOUND. With the cap's worth of abandoned constructions still parked — one pool
+        // THE BOUND. With the cap's worth of abandoned constructions still parked — one OS
         // thread each, none of them interruptible — the next create is refused typed BEFORE any
-        // Task.Run: the refusal must never take the very resource it exists to bound. Driven ONE
+        // dispatch: the refusal must never take the very resource it exists to bound. Driven ONE
         // PAST the cap (3 creates against cap 2), because a loop that stops at the cap cannot
         // distinguish "bounded" from "bounded by one".
         var h = new OrphanHarness(ConstructionBudget, maxOutstandingAbandoned: 2)
@@ -1462,7 +1464,7 @@ public sealed class SoundArbitrationTests
             // THE DETERMINISTIC SIGNAL, and the reason this fact used to flake under load with
             // "Expected 2, Actual 1" on the ConstructCount assertion below. Create queues its
             // construction on the THREAD POOL and then waits a WALL-CLOCK budget for it
-            // (AudioSeams.cs, OrphanSafePlayerFactory.Create: Task.Run, then task.Wait(_budget)).
+            // (AudioSeams.cs, OrphanSafePlayerFactory.Create: StartNew, then task.Wait(_budget)).
             // On a loaded machine the pool can take longer than the budget to dispatch that work
             // item, so the caller abandons a construction the fake has never been entered for and
             // ConstructCount reads short — measured, not theorised: with the pool deliberately
@@ -1568,6 +1570,95 @@ public sealed class SoundArbitrationTests
         Assert.Equal(1, Volatile.Read(ref h.ConstructCount));
         Assert.Equal(0, h.CapRefusalLines);
         Assert.Equal(0, h.LogLines); // invariant clause 5's "zero new log lines", asserted not assumed
+    }
+
+    [Fact]
+    public void Construction_FromAPoolThreadCaller_WithTheThreadPoolStarved_IsNeverAbandoned()
+    {
+        // THE DEFECT, in the only terms that matter: A HEALTHY CUE ABANDONED. Create blocks its
+        // caller on the construction it has just dispatched, and a real caller reaches it ON A
+        // THREAD-POOL THREAD — the queued-voice pacing fire is a System.Threading.Timer callback
+        // (SystemSoundClock.Schedule) and it constructs its player inside that callback
+        // (SoundArbitration.cs:950, in OnPacingFire). Dispatch the construction through the pool
+        // from there and the caller is blocking a worker while waiting on a work item that the
+        // pool cannot reach: the budget expires on DISPATCH LATENCY alone, a perfectly good player
+        // is thrown away, and it is counted against the outstanding cap — which is precisely what
+        // makes the NEXT cues likelier to be refused. Nothing about the endpoint was wrong, and no
+        // log line anywhere would say so.
+        //
+        // WHAT THE STARVATION IS FOR, said plainly so it is not mistaken for the subject: it
+        // exists to give the defect somewhere to happen. Every assertion below is about the
+        // construction's OUTCOME (returned, attached, never abandoned, never counted, no log
+        // line), and not one of them depends on the pool being starved — the product dispatches
+        // this construction on a thread of its own, so this is green whether the starvation lands
+        // or not. That asymmetry is the whole reason the fact is safe to keep: it can only red for
+        // the defect, never for a busy machine. Measured against the reverted dispatch (Task.Run)
+        // in exactly this shape: 17 of 25 healthy constructions abandoned, p50 dispatch 509 ms
+        // against a 200 ms budget.
+        var h = new OrphanHarness(ConstructionBudget); // NO gate — the construction is healthy
+        var parkGate = new ManualResetEventSlim(false);
+        var callerOnPool = new ManualResetEventSlim(false);
+        var go = new ManualResetEventSlim(false);
+        var callerDone = new ManualResetEventSlim(false);
+        Exception? thrown = null;
+        OrphanPlayer? returned = null;
+        var parked = 0;
+        var parkersDone = 0;
+
+        // (1) The caller takes a pool worker of its OWN, before the starvation lands — that is
+        // what makes it the blocked owner of the queue the construction would otherwise go to.
+        _ = Task.Run(() =>
+        {
+            callerOnPool.Set();
+            TestWait.UntilSync(() => go.IsSet, "the test released the pool-thread caller");
+            try { returned = h.Factory.Create("pooled.mp3", 0.5f); }
+            catch (Exception ex) { thrown = ex; }
+            finally { callerDone.Set(); }
+        }, TestContext.Current.CancellationToken);
+        TestWait.UntilSync(() => callerOnPool.IsSet, "the caller is running on a thread-pool thread", () => h.State());
+
+        // (2) The starvation: every worker parked, and a BACKLOG behind them, so a worker the
+        // pool injects to relieve the block is immediately eaten by the backlog instead of
+        // reaching the construction. Bounded parks (the approved helper), released below on
+        // every path.
+        var parkers = new List<Task>();
+        try
+        {
+            for (var i = 0; i < Environment.ProcessorCount * 4; i++)
+            {
+                parkers.Add(Task.Run(() =>
+                {
+                    Interlocked.Increment(ref parked);
+                    TestWait.UntilSync(() => parkGate.IsSet, "the test released a parked pool worker");
+                    Interlocked.Increment(ref parkersDone);
+                }, TestContext.Current.CancellationToken));
+            }
+
+            // DETERMINISTIC SIGNAL, never a sleep: at least a full core's worth of workers are
+            // DEMONSTRABLY inside the park (their own record), so the pool is busy before the
+            // measured dispatch begins.
+            TestWait.UntilSync(() => Volatile.Read(ref parked) >= Environment.ProcessorCount,
+                "the thread pool's workers are parked", () => $"parked={Volatile.Read(ref parked)}");
+
+            // (3) The dispatch under test.
+            go.Set();
+            TestWait.UntilSync(() => callerDone.IsSet, "the pool-thread caller reached its outcome", () => h.State());
+        }
+        finally
+        {
+            parkGate.Set();
+            TestWait.UntilSync(() => Volatile.Read(ref parkersDone) == parkers.Count,
+                "every parked pool worker was released",
+                () => $"parkersDone={Volatile.Read(ref parkersDone)} of {parkers.Count}");
+        }
+
+        Assert.Null(thrown);                 // never the typed no-player outcome — the cue was HEALTHY
+        Assert.Same(h.LastPlayer, returned); // the constructed player, handed back
+        Assert.Equal(1, h.AttachCount);      // it reached the mixer
+        Assert.Equal(0, h.AbandonmentLines); // nothing was abandoned
+        Assert.Equal(0, h.Outstanding);      // so nothing was charged to the cap that refuses later cues
+        Assert.Equal(0, h.LogLines);         // the ordinary path stays silent (invariant clause 5)
+        Assert.Equal(0, h.DisposeCount);     // the player was attached, not disposed as an orphan
     }
 
     [Fact]
