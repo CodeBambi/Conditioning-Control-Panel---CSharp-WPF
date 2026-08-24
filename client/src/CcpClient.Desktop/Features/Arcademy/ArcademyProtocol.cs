@@ -251,8 +251,11 @@ public static class ArcademyProtocol
     /// <summary>
     /// The suspend/resume push (<c>Suspend</c>, <c>:294-303</c>, posted at <c>:300</c>): the engine
     /// drops every effect NOW and the class pauses. <c>reason</c> is protocol vocabulary —
-    /// <c>"video"</c> | <c>"audio-only"</c> | <c>"panic"</c> (<c>:293</c>) — and only the panic one
-    /// is sent by this build, because the other two are native-state suspension (slice 5).
+    /// <c>"video"</c> | <c>"audio-only"</c> | <c>"panic"</c> (<c>:293</c>) — and this build sends
+    /// two of the three: <c>"panic"</c> from the ladder (slice 6) and <c>"video"</c> from
+    /// native-state suspension (slice 5, <see cref="ArcademySession.NativeVideoChanged"/>).
+    /// <c>"audio-only"</c> is never sent, because there is no audio-only session in this build to
+    /// send it about.
     ///
     /// <para><b>A panic suspend is the one suspend with no natural end</b> (<c>:342-345</c>): a
     /// video un-suspends when it ends, an audio-only session when it does, and this one only lifts
