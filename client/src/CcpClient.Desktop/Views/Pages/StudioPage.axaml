@@ -2185,6 +2185,71 @@
           <TextBlock Classes="page-blurb"
                      Text="A scripted session runs a timeline for you. It borrows your dials for its length, moves them through named phases, and gives them back when it ends." />
 
+          <!-- THE RACK TOOLBAR, and upstream's own rule for it: "every control here is a VIEW over
+               the same list - none of them mutate a session" (Views/Tabs/PresetsTabView.xaml:789-790).
+               Four difficulty filters, an order, and a search; every one of them re-runs the same
+               repaint and nothing else.
+
+               THE CHIPS AND THE SORT ENTRIES ARE FILLED IN CODE, for upstream's own reason and one
+               more of this port's: upstream builds its chips in BuildSessionRackToolbar because each
+               carries a live count and "a count in XAML is a binding to a view-model this page
+               deliberately does not have" (:793-798); here the captions and the order labels are
+               derived from ScriptedSessionRack.SortLabel and SessionRackNotices.Difficulty, so a band
+               or an order added to either enum cannot leave a stale word in markup behind it.
+
+               UPSTREAM'S SOURCE CHIPS ARE NOT HERE - All / Built-in / Yours / Catalogue
+               (Views/Tabs/PresetsTabView.xaml:814-816). They filter a provenance this build does not
+               have - every session in this rack is built-in, custom and imported sessions are
+               unported - so four chips of which three would always read 0 would be the
+               fake-available shape §9 D7 bans, on the surface whose own notice names those
+               absences a few lines below.
+
+               NOTHING HERE PERSISTS, and upstream persists two of them
+               (AppSettings.SessionRackSourceFilter / SessionRackSort, :800-801). Upstream keeps its
+               difficulty dots and its search box session-scoped on purpose - "a filter you cannot
+               see the cause of, restored a week later, reads as 'my sessions are gone'" (:802-803) -
+               and the sort follows them here rather than opening a twelfth persisted document on a
+               page that already holds eleven for a running session. -->
+          <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,2,0,0">
+            <StackPanel Grid.Column="0"
+                        x:Name="ScriptedSessionFilterPanel"
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center" />
+
+            <!-- Upstream's TxtRackCount, in upstream's place: at the right of the strip above the
+                 rows (MainWindow/MainWindow.SessionIO.cs:744-746, Views/Tabs/PresetsTabView.xaml:782-783). -->
+            <TextBlock Grid.Column="1"
+                       x:Name="ScriptedSessionRackCount"
+                       AutomationProperties.AutomationId="ScriptedSessionRackCount"
+                       Foreground="#FFE8E0EE"
+                       Opacity="0.7"
+                       FontSize="11"
+                       Margin="10,0"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Center"
+                       Text="" />
+
+            <ComboBox Grid.Column="2"
+                      x:Name="ScriptedSessionSortBox"
+                      Width="150"
+                      VerticalAlignment="Center"
+                      AutomationProperties.AutomationId="ScriptedSessionSortBox"
+                      AutomationProperties.Name="Session order"
+                      ToolTip.Tip="Change the order of the session list" />
+
+            <!-- The watermark is the TextBox's own PlaceholderText, where upstream needs a sibling
+                 TextBlock and a handler to hide it because WPF has none
+                 (Views/Tabs/PresetsTabView.xaml:836-848). -->
+            <TextBox Grid.Column="3"
+                     x:Name="ScriptedSessionSearchBox"
+                     Width="150"
+                     Margin="8,0,0,0"
+                     VerticalAlignment="Center"
+                     AutomationProperties.AutomationId="ScriptedSessionSearchBox"
+                     AutomationProperties.Name="Search sessions" />
+          </Grid>
+
           <!-- ONE panel, and nothing else may add a child to it — upstream's rule for its own rack
                (MainWindow.SessionIO.cs:854-857) and the reason the repaint can be idempotent. -->
           <StackPanel x:Name="ScriptedSessionRackPanel" Spacing="2" />

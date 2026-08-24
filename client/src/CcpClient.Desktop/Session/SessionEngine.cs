@@ -37,8 +37,9 @@ namespace CcpClient.Desktop.Session;
 /// composition root builds one (<c>Lifecycle/CompositionRoot.cs:275</c> →
 /// <c>Session/SessionParticipant.cs:620</c>), the shell resolves it off the host
 /// (<c>Views/MainWindow.axaml.cs:112</c>) and the Studio door's rack starts, pauses and stops it
-/// (<c>Views/Pages/StudioPage.axaml.cs</c>), so a user really can run one. Its editor, custom and
-/// imported sessions, the rack's filter/sort/search and the XP award remain unported.</para>
+/// (<c>Views/Pages/StudioPage.axaml.cs</c>), so a user really can run one — and the rack they pick
+/// from filters, orders and searches (<see cref="ScriptedSessionRack"/>). Its editor, custom and
+/// imported sessions and the XP award remain unported.</para>
 /// </summary>
 public sealed class SessionEngine
 {

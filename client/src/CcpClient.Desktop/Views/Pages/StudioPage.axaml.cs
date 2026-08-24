@@ -154,6 +154,30 @@ public partial class StudioPage : UserControl
     private ScriptedSession? _scriptedSelection;
     private ScriptedConfirmIntent _scriptedConfirm;
     private string? _scriptedRefusal;
+
+    /// <summary>
+    /// Every session on disk, read ONCE — upstream's registry, which its rack re-reads from memory
+    /// on every toolbar touch rather than from the filesystem
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:264-271</c>). Re-reading here would stat a folder per
+    /// keystroke in the search box.
+    /// </summary>
+    private IReadOnlyList<ScriptedSession> _scriptedCatalogue = [];
+
+    /// <summary>The difficulty bands still switched on — upstream's <c>_rackDifficulties</c>, all
+    /// four by default (<c>MainWindow/MainWindow.SessionIO.cs:189-195</c>).</summary>
+    private readonly HashSet<ScriptedSessionDifficulty> _scriptedBands =
+        [.. Enum.GetValues<ScriptedSessionDifficulty>()];
+
+    private ScriptedSessionSort _scriptedSort;
+    private string _scriptedSearch = string.Empty;
+
+    /// <summary>Set while the repaint is rebuilding rows, so the <c>IsChecked</c> it restores onto
+    /// the selected row does not come back through <see cref="OnScriptedRowChecked"/> as a fresh
+    /// pick — upstream's <c>_rackToolbarSyncing</c>, for its own stated reason: the toolbar's own
+    /// change events must not "read a half-applied state back out and repaint against it"
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:201-203</c>).</summary>
+    private bool _scriptedRepainting;
+
     private bool _syncing;
 
     /// <param name="loom">The one Loom launch path.</param>
@@ -1217,34 +1241,208 @@ public partial class StudioPage : UserControl
     /// <para>The empty case is upstream's too (<c>:238-260</c>): a line where the rows would be,
     /// never a blank panel. It is reachable — the four files are content beside the binary and a
     /// published tree missing them is a degraded install rather than a crash
-    /// (<see cref="ScriptedSession.ReadFolder"/>).</para>
+    /// (<see cref="ScriptedSession.ReadFolder"/>). There are TWO of those lines here where upstream
+    /// has one, and the difference is real rather than cosmetic: "nothing is installed" and "your
+    /// filter matched nothing" send a user to two different places.</para>
+    ///
+    /// <para>This runs ONCE, at construction. Everything after it goes through
+    /// <see cref="RepaintScriptedSessionRack"/>, which is the only thing that ever writes to the
+    /// rack panel.</para>
     /// </summary>
     private void BuildScriptedSessionRack()
     {
-        var sessions = ScriptedSession.ReadBuiltIns();
-        if (sessions.Count == 0)
+        _scriptedCatalogue = ScriptedSession.ReadBuiltIns();
+        BuildScriptedSessionToolbar();
+        RepaintScriptedSessionRack();
+    }
+
+    /// <summary>
+    /// The toolbar's own controls, filled once — upstream's <c>EnsureSessionRackToolbar</c>
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:627-702</c>), minus the source chips and the two
+    /// persisted preferences it restores (the markup beside this panel says why).
+    ///
+    /// <para>The four band filters are checkboxes rather than upstream's coloured dots
+    /// (<c>:663-681</c>), and they carry BOTH channels upstream splits between a glyph and a
+    /// tooltip: the band's word from <see cref="SessionRackNotices.Difficulty"/> and the band's
+    /// colour from <see cref="SessionRackNotices.DifficultyStripe"/> — the same colour the row's own
+    /// stripe is painted in, which is upstream's "one part of the row you can read at a glance while
+    /// scrolling" (<c>MainWindow/MainWindow.SessionIO.cs:421-422</c>).</para>
+    ///
+    /// <para>The sort entries carry the enum member itself on <c>Tag</c>, never a position. That is
+    /// upstream's rule for its own combo, in its own words: "Tag is the persisted token … never key
+    /// the sort off SelectedIndex - reordering this list would silently repoint every saved
+    /// preference" (<c>Views/Tabs/PresetsTabView.xaml:826-828</c>). Nothing is persisted here, so
+    /// what it buys this port is narrower and still worth having: a member inserted into
+    /// <see cref="ScriptedSessionSort"/> cannot silently re-point this list.</para>
+    /// </summary>
+    private void BuildScriptedSessionToolbar()
+    {
+        foreach (var band in Enum.GetValues<ScriptedSessionDifficulty>())
         {
-            ScriptedSessionRackPanel.Children.Add(new TextBlock
+            var chip = new CheckBox
             {
-                Name = "ScriptedSessionRackEmpty",
-                Text = "No sessions are installed. The four built-in sessions ship beside the "
-                    + "app, in its sessions folder.",
-                Foreground = new SolidColorBrush(Color.Parse("#FFE8E0EE")),
-                Opacity = 0.7,
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
+                Name = "SessionFilter" + band,
+                Content = SessionRackNotices.Difficulty(band),
+                IsChecked = true,
+                FontSize = 11,
+                Foreground = new SolidColorBrush(
+                    Color.Parse(SessionRackNotices.DifficultyStripe(band))),
                 [Avalonia.Automation.AutomationProperties.AutomationIdProperty] =
-                    "ScriptedSessionRackEmpty",
+                    "SessionFilter" + band,
+                [Avalonia.Automation.AutomationProperties.NameProperty] =
+                    SessionRackNotices.Difficulty(band) + " sessions",
+            };
+            chip.IsCheckedChanged += (_, _) => OnScriptedBandToggled(band, chip.IsChecked == true);
+            ScriptedSessionFilterPanel.Children.Add(chip);
+        }
+
+        foreach (var sort in Enum.GetValues<ScriptedSessionSort>())
+        {
+            ScriptedSessionSortBox.Items.Add(new ComboBoxItem
+            {
+                Tag = sort,
+                Content = ScriptedSessionRack.SortLabel(sort),
             });
+        }
+
+        ScriptedSessionSortBox.SelectedIndex = 0;
+        ScriptedSessionSortBox.SelectionChanged += (_, _) => OnScriptedSortChanged();
+
+        ScriptedSessionSearchBox.PlaceholderText = ScriptedSessionRack.SearchWatermark;
+        ScriptedSessionSearchBox.TextChanged += (_, _) => OnScriptedSearchChanged();
+    }
+
+    /// <summary>
+    /// The whole rack, rebuilt from the catalogue through the toolbar — upstream's
+    /// <c>RepaintSessionRack</c> (<c>MainWindow/MainWindow.SessionIO.cs:212-261</c>), which is one
+    /// path for every cause: a filter touched, an order chosen, a letter typed. Upstream's reason
+    /// for having exactly one is its own: "a single rebuild path is what stops the list and the
+    /// registry drifting apart" (<c>:174-176</c>).
+    ///
+    /// <para><b>The SELECTION survives a repaint, including one that hides it.</b> A row filtered
+    /// out of the rack does not disarm the pick behind it — upstream keeps its
+    /// <c>_selectedSessionId</c> across every repaint too — and the readout under the button goes
+    /// on naming the armed session (<see cref="SessionRackNotices.IdleLine"/>), so a session cannot
+    /// be started from an invisible row without the panel saying which one it is. Clearing the pick
+    /// instead would mean a search box silently disarming a user mid-gesture.</para>
+    /// </summary>
+    private void RepaintScriptedSessionRack()
+    {
+        _scriptedRepainting = true;
+        try
+        {
+            _scriptedRows.Clear();
+            ScriptedSessionRackPanel.Children.Clear();
+
+            if (_scriptedCatalogue.Count == 0)
+            {
+                // Upstream's rack cannot reach this: its registry falls back to a hard-coded set
+                // (:264-271). This port has no second copy of the four sessions, so a published
+                // tree missing its content folder is a real state and it says so, rather than
+                // showing the filter's line and sending the user to look for a filter.
+                ScriptedSessionRackPanel.Children.Add(RackLine(
+                    "ScriptedSessionRackEmpty",
+                    "No sessions are installed. The four built-in sessions ship beside the "
+                        + "app, in its sessions folder."));
+                ScriptedSessionRackCount.Text = ScriptedSessionRack.CountLine(0, 0);
+                return;
+            }
+
+            var shown = ScriptedSessionRack.Arrange(
+                _scriptedCatalogue, _scriptedBands, _scriptedSort, _scriptedSearch);
+
+            foreach (var session in shown)
+            {
+                var row = BuildScriptedSessionRow(session);
+                _scriptedRows.Add((row, session));
+                ScriptedSessionRackPanel.Children.Add(row);
+            }
+
+            // AFTER the rows are in the tree, never during: a RadioButton takes its group from the
+            // visual root it is attached to, so a check applied to a detached row is a check
+            // applied to a different group than the one the rack ends up in.
+            var selected = _scriptedRows.Find(entry => ReferenceEquals(entry.Session, _scriptedSelection));
+            if (selected.Row is { } selectedRow)
+            {
+                selectedRow.IsChecked = true;
+            }
+
+            if (shown.Count == 0)
+            {
+                ScriptedSessionRackPanel.Children.Add(
+                    RackLine("ScriptedSessionRackNoMatch", ScriptedSessionRack.NoMatches));
+            }
+
+            ScriptedSessionRackCount.Text =
+                ScriptedSessionRack.CountLine(shown.Count, _scriptedCatalogue.Count);
+        }
+        finally
+        {
+            _scriptedRepainting = false;
+        }
+    }
+
+    /// <summary>A line where the rows would be. A <see cref="TextBlock"/> and never a row-shaped
+    /// control, which is upstream's own care at the same place: its empty line is "a TextBlock, not
+    /// a Border … so the empty line cannot be staggered in as a row or mistaken for one"
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:245-248</c>).</summary>
+    private static TextBlock RackLine(string name, string text) => new()
+    {
+        Name = name,
+        Text = text,
+        Foreground = new SolidColorBrush(Color.Parse("#FFE8E0EE")),
+        Opacity = 0.7,
+        FontSize = 12,
+        TextWrapping = TextWrapping.Wrap,
+        [Avalonia.Automation.AutomationProperties.AutomationIdProperty] = name,
+    };
+
+    /// <summary>A band filter was switched — upstream's <c>RackDifficultyChip_Changed</c>
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:778-787</c>): add or drop the band, then repaint.
+    /// Nothing is persisted and nothing else moves.</summary>
+    private void OnScriptedBandToggled(ScriptedSessionDifficulty band, bool wanted)
+    {
+        if (wanted)
+        {
+            _scriptedBands.Add(band);
+        }
+        else
+        {
+            _scriptedBands.Remove(band);
+        }
+
+        RepaintScriptedSessionRack();
+    }
+
+    /// <summary>An order was chosen — upstream's <c>CmbRackSort_SelectionChanged</c>
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:789-802</c>), read off the item's <c>Tag</c> and
+    /// ignored when it has not changed.</summary>
+    private void OnScriptedSortChanged()
+    {
+        if (ScriptedSessionSortBox.SelectedItem is not ComboBoxItem { Tag: ScriptedSessionSort sort }
+            || sort == _scriptedSort)
+        {
             return;
         }
 
-        foreach (var session in sessions)
+        _scriptedSort = sort;
+        RepaintScriptedSessionRack();
+    }
+
+    /// <summary>The search box was typed in — upstream's <c>TxtRackSearch_TextChanged</c>
+    /// (<c>MainWindow/MainWindow.SessionIO.cs:804-819</c>), including the guard upstream comments
+    /// on the line itself: a trimmed text equal to the one already in force is not a new filter, so
+    /// typing spaces around a needle does not rebuild the rack (<c>:815-816</c>).</summary>
+    private void OnScriptedSearchChanged()
+    {
+        var trimmed = (ScriptedSessionSearchBox.Text ?? string.Empty).Trim();
+        if (trimmed == _scriptedSearch)
         {
-            var row = BuildScriptedSessionRow(session);
-            _scriptedRows.Add((row, session));
-            ScriptedSessionRackPanel.Children.Add(row);
+            return;
         }
+
+        _scriptedSearch = trimmed;
+        RepaintScriptedSessionRack();
     }
 
     /// <summary>
@@ -1372,6 +1570,14 @@ public partial class StudioPage : UserControl
     /// </summary>
     private void OnScriptedRowChecked()
     {
+        // A repaint re-checks the armed row after rebuilding the rack. That is the SAME pick coming
+        // back, not a new one, and treating it as new would tear down a confirmation the user is
+        // reading every time they typed a letter into the search box.
+        if (_scriptedRepainting)
+        {
+            return;
+        }
+
         var picked = _scriptedRows.Find(entry => entry.Row.IsChecked == true);
         _scriptedSelection = picked.Session;
         _scriptedRefusal = null;

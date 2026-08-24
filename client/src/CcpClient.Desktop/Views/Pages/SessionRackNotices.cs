@@ -77,9 +77,8 @@ public static class SessionRackNotices
     /// <summary>What this surface does NOT do, said where the user is
     /// (§9 D7's rule: absent rather than greyed, and named rather than silently missing).</summary>
     public const string Absences =
-        "Not here yet: the session editor, custom and imported sessions, the rack's filter, sort "
-        + "and search, and the XP award — so a pause is counted and its penalty recorded, but "
-        + "nothing is charged for it.";
+        "Not here yet: the session editor, custom and imported sessions, and the XP award — so a "
+        + "pause is counted and its penalty recorded, but nothing is charged for it.";
 
     /// <summary>
     /// The icon cell — upstream's, including its fallback for a session that carries none
