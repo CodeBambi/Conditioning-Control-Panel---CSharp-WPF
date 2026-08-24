@@ -813,6 +813,8 @@ export default {
       combo += 1;
       maxCombo = Math.max(maxCombo, combo);
       mismatchStreak = 0;
+      /* EMI COLOR: one pair left on the bench = the lean-in. */
+      try { if (ctx.mood && unmatchedPairs() === 1) ctx.mood.tense(); } catch (e) { /* noop */ }
       const pairId = cells[a].pairId;
 
       /* "tracked through the static": matched within 2 attempts of the pair
@@ -861,6 +863,8 @@ export default {
     function onMismatch(a, b) {
       combo = 0;
       mismatchStreak += 1;
+      /* EMI COLOR: the small >_<, shell-rationed. */
+      try { if (ctx.mood) ctx.mood.stumble(); } catch (e) { /* noop */ }
       paintMeter();
 
       /* the near-miss tease: 'you KNEW that one'. */

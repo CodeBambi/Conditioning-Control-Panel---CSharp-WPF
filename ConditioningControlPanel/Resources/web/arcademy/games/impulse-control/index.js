@@ -787,6 +787,12 @@ export default {
         hud();
         heat();
         decks('denyHit', { idx: S.idx, rt, penalty: X_PENALTY, streakBefore, score: S.score });
+        /* EMI COLOR: a big streak dying on the X is the class's one K.O.; a
+         * small slip is just a stumble. Face-side only, shell-throttled. */
+        try {
+          if (ctx.mood && streakBefore >= 6) { ctx.mood.runLost(); ctx.mood.calm(); }
+          else if (ctx.mood) { ctx.mood.stumble(); ctx.mood.calm(); }
+        } catch (e) { /* noop */ }
         say('X clicked (' + source + ') at +' + Math.round(rt) + 'ms: -' + X_PENALTY);
       } else {
         const rt = Math.max(0, at - S.revealAt);
@@ -794,6 +800,11 @@ export default {
         S.score += pts;
         S.streak += 1;
         S.bestStreak = Math.max(S.bestStreak, S.streak);
+        /* EMI COLOR: she leans in with the hot streak, wide-eyed past 14. */
+        try {
+          if (ctx.mood && S.streak >= 14) ctx.mood.clutch();
+          else if (ctx.mood && S.streak >= 8) ctx.mood.tense();
+        } catch (e) { /* noop */ }
         S.tally.popped++;
         S.tally.rts.push(rt);
         const isBest = S.sessionBestRt == null || rt < S.sessionBestRt;

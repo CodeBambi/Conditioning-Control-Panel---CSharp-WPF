@@ -31,8 +31,10 @@
  * THE GLASS IS 152 x 137 VIRTUAL PX, the same locked geometry face.js paints
  * (res 152, height = w x 0.903). Everything below is written at that scale.
  *
- * EVERY LINE IN THE `caught` TABLES IS A DRAFT. They are tagged at the call
- * site and go through /emi-lines before they are anything else.
+ * THE `caught` TABLES PASSED /emi-lines 2026-08-24 (the EMI COLOR wave): one
+ * line changed (CH3's declined "your loss." bit where EMI only ever teases -
+ * it is "fine. more for me." now), the rest stood as written. Owner reads the
+ * full table at the PR; until that word these are QA-passed, not locked.
  * ==========================================================================*/
 
 import { makeRng } from '../core/rng.js';
@@ -71,8 +73,9 @@ const DARK = '#1A1A2E';
 const CREAM = '#F5F0E1';
 const RAIN_GREEN = '#00FF41';
 
-/* THE WRONG CHANNEL's word list. Owner call 7; these are the doc's candidates
- * and they are DRAFT like every other string here. */
+/* THE WRONG CHANNEL's word list. Owner call 7; these are the doc's candidates.
+ * /emi-lines QA 2026-08-24: passed as written (single innocent words, never
+ * explained - the eeriness is the timing, not the vocabulary). */
 export const WRONG_WORDS = Object.freeze(['soon', 'hi', 'again']);
 
 /* ============================================================================
@@ -229,7 +232,6 @@ export const pong = {
   caught: {
     face: '^_^', hold: 900, bodyFrame: 'idle',
     lineOdds: 0.3,
-    /* DRAFT: /emi-lines pass pending */
     lines: ['left me was winning.', 'i play both sides.', 'best of eleven.'],
   },
 };
@@ -293,7 +295,6 @@ export const browsing = {
   caught: {
     face: '(◔_◔)', hold: 1100, bodyFrame: 'smug',
     lineOdds: 1,
-    /* DRAFT: /emi-lines pass pending */
     lines: ['just checking my mail.', 'i had tabs open.', 'i was reading the rules.'],
   },
 };
@@ -405,20 +406,17 @@ export const watching = {
     snap: { face: '0_0', hold: 200, bodyFrame: 'shock' },
     face: '>_<', hold: 900, body: 'shiver', bodyFrame: 'shock',
     lineOdds: 1,
-    /* DRAFT: /emi-lines pass pending */
     lines: ['you saw nothing.', 'that was research.', 'i was resting my eyes.'],
     offer: {
-      /* DRAFT: /emi-lines pass pending */
-      lines: ['wanna see?', 'i can show you.', 'want the good part?'],
+        lines: ['wanna see?', 'i can show you.', 'want the good part?'],
       accepted: {
         face: '(¬‿¬)', bodyFrame: 'smug',
-        /* DRAFT: /emi-lines pass pending */
-        lines: ['our secret.', 'rate it out of ten.'],
+            lines: ['our secret.', 'rate it out of ten.'],
       },
       declined: {
         face: '-_-', bodyFrame: 'idle',
-        /* DRAFT: /emi-lines pass pending */
-        lines: ['your loss.'],
+        /* Sulky-cute, never a bite: she keeps the good part for herself. */
+        lines: ['fine. more for me.'],
       },
     },
   },
@@ -488,7 +486,6 @@ export const reruns = {
   caught: {
     face: '(◠‿◠)', hold: 1300, bodyFrame: 'pet',
     lineOdds: 1,
-    /* DRAFT: /emi-lines pass pending */
     lines: ['this one is my favorite.', 'i keep the good ones.', 'watch this part.'],
   },
 };
@@ -551,7 +548,6 @@ export const shop = {
   caught: {
     face: '>_<', hold: 1000, bodyFrame: 'shock',
     lineOdds: 1,
-    /* DRAFT: /emi-lines pass pending */
     lines: ['window shopping.', 'not buying anything.', 'it was on sale.'],
   },
 };
@@ -703,7 +699,6 @@ export const saver = {
   caught: {
     face: '^_^', hold: 900, bodyFrame: 'idle',
     lineOdds: 0.25,
-    /* DRAFT: /emi-lines pass pending */
     lines: ['counting pixels.'],
   },
 };
