@@ -79,6 +79,8 @@ export const TRICKSTER = Object.freeze({
  * @param {boolean}  o.reduced     reduced motion (melts bare, ghost/chrome off)
  * @param {boolean}  o.coarse      coarse pointer (no ghost - nothing to echo)
  * @param {boolean}  o.capsOk      false when bgIntensity is capped to 0
+ * @param {Function=} o.cue        the GAME's clamped cue helper (name, level,
+ *        extra). A closure, never the engine.
  * @param {Function} o.getPhase    () => 'idle'|'briefing'|'hunt'|'ceremony'|'done'
  * @param {Function} o.isHalted    () => bool (pause / suspend)
  * @param {Function} o.isClutch    () => bool (the board relents - melts stand down)
@@ -99,6 +101,7 @@ export function createTrickster(o) {
   const coarse = !!opts.coarse;
   const armed = !!opts.capsOk && !!board && !!hud && !!timers
     && typeof document !== 'undefined';
+  const cue = typeof opts.cue === 'function' ? opts.cue : () => {};
 
   /**
    * Tag-namespaced seeded rolls, one mulberry32 STREAM per tag - the same
@@ -122,6 +125,15 @@ export function createTrickster(o) {
   let destroyed = false;
   let stopped = false;
   let meltAnnounced = false;
+
+  /* THE bgIntensity DECOUPLE. Same split as casino.js: `armed` still gates the
+     visuals (capsOk included), and the cue road gates only on the deck being
+     alive. Note what that means HERE, though: every card this deck deals is a
+     pure visual it schedules itself, and start() refuses to deal at all when
+     !armed - so at bgIntensity 0 there is correctly nothing to hear, because
+     there is nothing happening. The split is still written this way so a
+     future game-called beat inherits the right gate. */
+  const sounds = () => !destroyed && !stopped;
 
   /* --------------------------------------------------------------- the deal */
   /**
@@ -217,6 +229,11 @@ export function createTrickster(o) {
       node.appendChild(img);
     }
     wrap.appendChild(node);
+    // THE CORRECTION: a chip flickers into somebody else's memory and snaps
+    // back inside 130ms. A bit-crushed `decoy` on the same frame is what turns
+    // "did you see that?" into "did I hear that?" - it is the flicker's own
+    // voice, not a second event.
+    if (sounds()) cue('decoy', 0.35);
     timers.after(TRICKSTER.CHROME_MS, () => { try { node.remove(); } catch (e) { /* ignore */ } });
     say('trickster: chrome flicker');
     if (roll('seen') < TRICKSTER.SEEN_TAUNT_CHANCE) {

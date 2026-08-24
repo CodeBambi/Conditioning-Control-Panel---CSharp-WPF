@@ -154,6 +154,9 @@ const KEY_DIRS = Object.freeze({
   w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right',
 });
 const SWIPE_PX = 24;
+/** W2: the floor between two REFUSED-press bumps. A mashed key must not
+ *  machine-gun the room, so a refusal inside this window is swallowed. */
+const REFUSE_BUMP_MS = 250;
 
 /** Move direction -> unit vector (x right, y down) + axis class. */
 const DIRV = Object.freeze({
@@ -507,6 +510,22 @@ export default {
       const ceil = plan ? plan.audioCeil : 0.45;
       const lv = Math.min(ceil, level == null ? 0.4 : level);
       fireSafe('audio_trigger', Object.assign({ name, level: lv }, extra || {}));
+    }
+    /**
+     * W2 CHROME - THE REFUSED PRESS. A swipe or an arrow key that lands on
+     * nothing at all: the briefing (the water has not opened yet), a frozen
+     * class, the end card. The school's answer everywhere is one muted `bump`,
+     * and it is THROTTLED - a mashed key must not machine-gun the room, so a
+     * refusal inside REFUSE_BUMP_MS of the last one is swallowed. THE WALL is
+     * a different thing (a real move that slid nothing) and keeps its own,
+     * louder cue.
+     */
+    let lastRefuseAt = 0;
+    function refused() {
+      const at = Date.now();
+      if (at - lastRefuseAt < REFUSE_BUMP_MS) return;
+      lastRefuseAt = at;
+      tick('bump', 0.3);
     }
 
     /* ---- the decks, null-safe ------------------------------------------- */
@@ -1178,13 +1197,17 @@ export default {
      * THE MOVE PIPELINE
      * ==================================================================== */
     function input(dir) {
-      if (dead || paused || ended || !board) return false;
+      if (dead) return false;                 // destroyed: no room left to answer in
+      // W2: a press against a frozen, finished or unbuilt board is REFUSED,
+      // and a refusal is never silent.
+      if (paused || ended || !board) { refused(); return false; }
       /* THE QUEUE: the lock is up, so the press is REMEMBERED instead of
        * eaten (a wall-bump direction too - the bump plays when it drains).
        * The briefing is not a lock the player can play against, so a press
        * before the water opens is still simply refused. */
       if (busy) {
-        if (opened && DIRV[dir] && PLAYTEST.QUEUE_SLOTS > 0) queued = dir;
+        if (opened && DIRV[dir] && PLAYTEST.QUEUE_SLOTS > 0) { queued = dir; return false; }
+        refused();                            // the briefing: nothing to play against yet
         return false;
       }
       const result = boardMove(board, dir);
@@ -1518,6 +1541,12 @@ export default {
         ? devBoard(board, devDeepest, board.rng)
         : openingSpawn(board, plan.spawnTable);
       for (const tile of opening) tileEl(tile, true);
+      /* W2 - THE DEAL. A fresh board is dealt and the opening tiles land.
+       * `tell`, not `slide`: this game already spends `slide` on "the board
+       * moved, pitch = depth", so a whoosh here would read as a phantom move
+       * on a board nobody touched. `tell` is the unswept ping the house uses
+       * to SAY something - which is what dealing a hand is. */
+      tick('tell', 0.35);
       diveDeepest = boardDeepest(board);
       bestDeepest = Math.max(bestDeepest, diveDeepest);
       chain = 0;
@@ -1663,6 +1692,11 @@ export default {
       if (!endEl) return;
       endEl.textContent = '';
       endEl.hidden = false;
+      /* W2 CHROME - THE DEBRIEF. style.js fades the WHOLE card in as one
+       * element (g-de-endin, no per-row stagger), so the ladder rule's other
+       * half applies: ONE `slide`, never nine blips against a stagger that
+       * does not exist. */
+      tick('slide', 0.35);
       endEl.appendChild(el('h3', 'g-de-end-title', endless
         ? t('de_end_title_free', DE_LEX.de_end_title_free)
         : t('de_end_title', DE_LEX.de_end_title)));
@@ -1901,7 +1935,13 @@ export default {
       const go = el('button', 'g-de-hw-go', t('de_howto_go', DE_LEX.de_howto_go));
       go.setAttribute('type', 'button');
       try { go.type = 'button'; } catch (e) { /* the DOM double has no button semantics */ }
-      go.addEventListener('click', () => { try { onGo(); } catch (e) { say('howto go: ' + ((e && e.message) || e)); } });
+      go.addEventListener('click', () => {
+        /* W2 CHROME - THE START PRESS. The sheet has no pages, and its one
+         * button is the press that actually opens the water, so it takes the
+         * school's `lift` rather than a page-turn `slide`. */
+        tick('lift', 0.5);
+        try { onGo(); } catch (e) { say('howto go: ' + ((e && e.message) || e)); }
+      });
       sheet.appendChild(go);
       try { if (typeof go.focus === 'function') go.focus(); } catch (e) { /* noop */ }
       return sheet;
@@ -2026,11 +2066,15 @@ export default {
           casino = createDeCasino({
             seed, tier, stage, bench, board: boardEl, backdrop,
             timers: deckTimers, reduced, capsOk, log: say,
+            /* W2 - THE DECK'S CUE ROAD: the game's own clamped helper, so a
+               deck can never out-shout this tier's audio ceiling. */
+            cue: tick,
           });
         } catch (e) { casino = null; say('casino refused: ' + ((e && e.message) || e)); }
         try {
           trickster = createDeTrickster({
             seed, tier, timers: deckTimers, reduced, capsOk,
+            cue: tick,                       // W2 - the deck's cue road (clamped)
             isHalted: () => dead || paused || ended || busy,
             stats: () => ({ moves: swipes, depth: boardDeepest(board), secLeft: secLeft(), score, chain, resurfaces }),
             chipEl: (which) => (which === 'clock' ? clockChip : which === 'score' ? scoreChip : depthChip),

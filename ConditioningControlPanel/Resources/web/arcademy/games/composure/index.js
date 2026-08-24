@@ -808,11 +808,30 @@ export default {
 
     /** Every press funnels here. Returns true when a real slide happened. */
     function press(kind, v) {
-      if (dead || paused || ended || !state || !opened) return false;
-      if (busy) { if (PLAYTEST.QUEUE_SLOTS > 0) queued = { kind, v }; return false; }
+      if (dead) return false;
+      /* A press in a phase that cannot take one - the rules sheet, a pause, a
+       * suspend, the end card - is REFUSED, and a refusal is never silent (W2). */
+      if (paused || ended || !state || !opened) { bumpCue(); return false; }
+      if (busy) {
+        if (PLAYTEST.QUEUE_SLOTS > 0) { queued = { kind, v }; return false; }
+        bumpCue();                       // no queue slot to take it: simply refused
+        return false;
+      }
       const pos = kind === 'dir' ? slotForDir(state, v) : v;
       if (pos < 0 || !canSlide(state, pos)) { bump(); return false; }
       return applyMove(pos);
+    }
+
+    /** THE REFUSED PRESS (the school's chrome vocabulary, W2). The board's
+     *  shove is the VISUAL and it plays every time; the CUE is throttled, so a
+     *  held arrow key or a mashed tile cannot machine-gun one bump a frame. */
+    const REFUSE_GAP_MS = 250;
+    let lastBumpAt = 0;
+    function bumpCue() {
+      const now = Date.now();
+      if (now - lastBumpAt < REFUSE_GAP_MS) return;
+      lastBumpAt = now;
+      tick('bump', 0.3);
     }
 
     /** A press that slides nothing: the board bumps, a muted thud, never silence. */
@@ -825,7 +844,7 @@ export default {
         if (bumpTimer) clearTimer(bumpTimer);
         bumpTimer = after(240, () => { bumpTimer = 0; if (boardEl) boardEl.classList.remove('is-bump'); });
       }
-      tick('bump', 0.26);
+      bumpCue();
     }
 
     /* ==================================================================== *
@@ -1200,6 +1219,10 @@ export default {
         ? t('cp_end_best_line', CP_LEX.cp_end_best_line)
         : t('cp_end_best_first', CP_LEX.cp_end_best_first)));
       endEl.appendChild(dare);
+      /* THE DEBRIEF (W2): .g-cp-end animates in as ONE card (g-cp-endin) and
+       * its rows carry no stagger of their own, so the blip ladder collapses
+       * to a single sheet cue rather than eight blips inside one frame. */
+      tick('slide', 0.35);
     }
 
     /* ---- clock ----------------------------------------------------------- */
@@ -1301,6 +1324,9 @@ export default {
       go.addEventListener('click', () => {
         if (done || dead) return;
         done = true;
+        /* THE PRESS THAT STARTS PLAY (W2). The sheet is one page and GO is its
+         * only dismissal, so this is the school's start beat, not a page turn. */
+        tick('lift', 0.5);
         try {
           const list = howtoSeenTiers();
           if (list.indexOf(tier) < 0) {
@@ -1386,7 +1412,7 @@ export default {
         try {
           if (tricksterMod && typeof tricksterMod.createCpTrickster === 'function') {
             trickster = tricksterMod.createCpTrickster({
-              seed, tier, timers: deckTimers, reduced, capsOk,
+              seed, tier, timers: deckTimers, reduced, capsOk, cue: tick,
               mode: zen ? 'zen' : 'timed',
               budgetSec: zen ? 0 : Math.round(budgetMs / 1000),
               isHalted: () => dead || paused || ended || busy,

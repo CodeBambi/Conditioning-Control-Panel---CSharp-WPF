@@ -292,6 +292,12 @@ export function createAnCasino(o) {
   }
   let destroyed = false;
   const armed = () => armedBase && !destroyed && capsOk();
+  /* THE bgIntensity DECOUPLE (W2, owner ruling). capsOk false is the player's
+   * VISUAL exit (Law VI) and it stays exactly that: every light still gates on
+   * armed(). It is NOT an audio exit - a room with the lights off still has to
+   * SOUND like the room, or one visual dial mutes the whole school. Cue firing
+   * therefore gates on sounds(), which is armed() minus capsOk. */
+  const sounds = () => armedBase && !destroyed;
 
   /* ---- timers: the game's pause-aware registry + a local set ------------- */
   const live = new Set();
@@ -322,7 +328,7 @@ export function createAnCasino(o) {
   /* ---- the engine, counted ------------------------------------------------ */
   const counts = { cues: 0, jackpots: 0, nearMisses: 0, flashes: 0, words: 0, rings: 0, frosts: 0 };
   function cue(name, level, extra) {
-    if (!armed()) return;
+    if (!sounds()) return;
     counts.cues++;
     try {
       if (typeof eng.audio === 'function') eng.audio(name, level, extra || {});
@@ -658,7 +664,7 @@ export function createAnCasino(o) {
 
   /* ---- the ladder --------------------------------------------------------- */
   function jackpot(intensity, why) {
-    if (!armed()) return;
+    if (!sounds()) return;          // every light below self-gates on armed()
     counts.jackpots++;
     jackLog.push(why);
     ceremony('jackpot', { intensity });
@@ -667,7 +673,7 @@ export function createAnCasino(o) {
     flashRoom(intensity, C.FLASH_MS + 300);
   }
   function nearMiss(kind, intensity) {
-    if (!armed()) return;
+    if (!sounds()) return;          // ceremony() self-gates on armed()
     counts.nearMisses++;
     ceremony('near_miss', { intensity });
     cue('near_miss', C.NEAR_LEVEL, { pitch: kind === 'almost' ? 0.8 : 1.1 });
@@ -699,10 +705,10 @@ export function createAnCasino(o) {
     /** A new round is dealt: the sheet advances (a soft carriage tick) and
      *  the marquee re-measures the grid (its size may have changed). */
     roundStart(n, kind) {
-      if (!started || !armed()) return;
+      if (!started || !sounds()) return;
       rounds++;
       lastTapRect = null;
-      scheduleLayout();
+      if (armed()) scheduleLayout();
       cue('slide', C.ADVANCE_LEVEL, { pitch: 1.2 });
       const strips = layers.strips;
       if (strips && !still) restart(strips, 'advance');
@@ -710,7 +716,7 @@ export function createAnCasino(o) {
     },
     /** Every tap, AFTER CORE's accounting. The only index read is the tap's. */
     tap(ev) {
-      if (!started || !armed()) return;
+      if (!started || !sounds()) return;   // the lights below self-gate on armed()
       const e = ev || {};
       const streak = Math.max(0, Number(e.streak) || 0);
       const r = tileRect(e.i);
@@ -757,7 +763,7 @@ export function createAnCasino(o) {
     },
     /** The anomaly relocated (CORE says so AFTER the glitch): a whisper. */
     relocated() {
-      if (!started || !armed()) return;
+      if (!started || !sounds()) return;
       relocations++;
       cue('whisper', C.MOVED_LEVEL, { pitch: 0.9 });
       const lamp = layers.lamp;
@@ -768,7 +774,7 @@ export function createAnCasino(o) {
      *  that tap's frame, and falls back to the last tapped frame / the sheet
      *  centre when no tap follows. */
     almost() {
-      if (!started || !armed()) return;
+      if (!started || !sounds()) return;
       almostPending = true;
       cancel(almostTimer);
       almostTimer = after(40, () => {
@@ -790,10 +796,10 @@ export function createAnCasino(o) {
       const e = info || {};
       outOn = true;
       const royal = isRoyal(Object.assign({ wrongTaps, bestStreak, finds }, e));
-      if (royal && armed()) {
+      if (royal && sounds()) {
         royalOn = true;
         counts.royal = 1;
-        stageClass('g-an-royal', true);
+        if (armed()) stageClass('g-an-royal', true);
         showWord('an_royal', 'ROYAL', 'gold', gridCentre());
         ceremony('jackpot', { intensity: C.ROYAL_I });
         cue('jackpot', C.JACKPOT_LEVEL, { pitch: 1.2 });
@@ -801,14 +807,21 @@ export function createAnCasino(o) {
         after(520, () => cue('stamp', 0.5, { pitch: 1 }));
         flashMarquee(C.ROYAL_MS);
         cancel(royalTimer);
-        royalTimer = after(C.ROYAL_MS, () => { stageClass('g-an-royal', false); stageClass('g-an-out', true); setCls(mq, 'out', true); paintMarquee(true); });
-      } else if (armed()) {
+        royalTimer = after(C.ROYAL_MS, () => {
+          /* THE SIGH (W2). The header has promised since Semester II that the
+           * marquee "sighs out - never cuts - on a dim-out"; the DIM payout
+           * below always had its wash, but the ROYAL's own way out was mute.
+           * A slide dropped a whole tone is that sigh. */
+          cue('slide', 0.3, { pitch: 0.8 });
+          if (!armed()) return;
+          stageClass('g-an-royal', false); stageClass('g-an-out', true); setCls(mq, 'out', true); paintMarquee(true);
+        });
+      } else if (sounds()) {
         /* losses disguised: a dim payout, never silence */
         const q = clamp01(finds / 10);
         flashRoom(0.1 + 0.3 * q, C.END_DIM_MS);
         cue('wash', 0.25, { pitch: 0.9 });
-        stageClass('g-an-out', true);
-        setCls(mq, 'out', true);
+        if (armed()) { stageClass('g-an-out', true); setCls(mq, 'out', true); }
       }
       bellOn = false;
       paintMarquee(true);
@@ -840,7 +853,7 @@ export function createAnCasino(o) {
     },
     diagnostics() {
       return {
-        armed: armed(), started, heat: +heat.toFixed(3), hue: ID.hue, offArc: ID.offArc, bulbs: mq && mq.childNodes ? mq.childNodes.length : 0,
+        armed: armed(), sounds: sounds(), started, heat: +heat.toFixed(3), hue: ID.hue, offArc: ID.offArc, bulbs: mq && mq.childNodes ? mq.childNodes.length : 0,
         frameStart: ID.frameStart, journey: ID.journey.length, stop: stopIx,
         gold: goldOn, bell: bellOn, royal: royalOn, out: outOn,
         finds, wrongTaps, bestStreak, rounds, relocations, sparks, almostPending,

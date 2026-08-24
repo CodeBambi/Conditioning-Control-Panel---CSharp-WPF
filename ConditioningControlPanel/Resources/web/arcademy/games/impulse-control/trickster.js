@@ -37,7 +37,11 @@
  *                   casino's payout punch on the same chip is transform-only,
  *                   so the two never collide - and if a real hud() repaint
  *                   lands mid-lie, the restore stands down instead of
- *                   stomping the truth.
+ *                   stomping the truth. W2: the pop is AUDIBLE now - a `decoy`
+ *                   on the correction, through opts.cue (the game's clamped
+ *                   helper). It is this deck's ONLY cue: the tell, the crooked
+ *                   ring and the ghost are all lies you READ, and a lie that
+ *                   announces itself is not a lie.
  *
  * DEALING RULE: card slots are dealt at start() from the seeded plan against
  * stats().total - budget 2/4/6/8 by tier, at least 4 bubbles apart (this class
@@ -330,6 +334,17 @@ export function createIcTrickster(o) {
   const timers = opts.timers || null;
   const armed = capsOkNow() && !!nodes.stage && !!timers && typeof timers.after === 'function'
     && typeof document !== 'undefined';
+  /* W2 - THE CUE ROAD. index.js hands down its own clamped helper (the same
+     one the casino's chime ladder rides), so this deck asks for sound and
+     never holds a node or raises the tier's ceiling.
+     THE DECOUPLE (spec 3): sound gates on destroyed/stopped and NOT on capsOk
+     - bgIntensity 0 is the player's VISUAL exit (Law VI), never a request for
+     a silent school. The honest limit, written down rather than faked: this
+     deck's cards are dealt by its own timers and `armed` folds capsOk in at
+     CONSTRUCTION, so with the dial at 0 no card is dealt and there is no
+     correction to hear. Nothing is muted by the dial; nothing happens. */
+  const cue = typeof opts.cue === 'function' ? opts.cue : () => {};
+  const sounds = () => !destroyed && !stopped;
 
   /* timers: the game's registry (pause-aware, killed with the class) AND a
      local set, so destroy() can never leak one the registry outlived. */
@@ -605,13 +620,19 @@ export function createIcTrickster(o) {
     const chip = nodes.score;
     if (!chip) { flickPrev = null; flickLie = null; return; }
     setCls(chip, 'g-ic-tk-flick', false);
+    let corrected = false;
     try {
       if (flickLie != null && chip.textContent === flickLie && flickPrev != null) {
         chip.textContent = flickPrev;
+        corrected = true;
       }
     } catch (e) { /* noop */ }
     flickPrev = null;
     flickLie = null;
+    /* THE STATIC POP, made true. Only when the LIE was still standing: a real
+       hud() repaint that beat us here is the truth arriving on its own, and
+       the deck stands down rather than clicking at nothing. */
+    if (corrected && sounds()) cue('decoy', 0.35);
   }
 
   /* --------------------------------------------------------- GHOST CURSOR */
@@ -897,6 +918,7 @@ export function createIcTrickster(o) {
         ring: { on: ringOn },
         ghost: { armed: !!ghostEl, mode: ghostMode, trail: trail.length, lures: fired.lure },
         flicker: { live: flickLie != null },
+        cueRoad: typeof opts.cue === 'function',
         revealKind, paused, stopped, destroyed,
       };
     },

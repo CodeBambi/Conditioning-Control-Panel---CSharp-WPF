@@ -515,6 +515,20 @@ export default {
         extra || {},
       ));
     }
+    /* THE REFUSED PRESS (W2 chrome vocabulary). A press on the ring while the
+     * room is still playing is a DEAD INPUT - the LISTEN LOCK already says so
+     * with the desaturated ring and the not-allowed cursor, and the House Book
+     * says a dead input answers with a muted `bump`. THROTTLED, because a
+     * mashed pad must not machine-gun it. The faint pad tick that plays beside
+     * it is the pad tone system's and is deliberately untouched. */
+    const CHROME_BUMP_MS = 250;
+    let lastBumpAt = 0;
+    function bumpRefused() {
+      const now = Date.now();
+      if (now - lastBumpAt < CHROME_BUMP_MS) return;
+      lastBumpAt = now;
+      tone('bump', 0.3, 1);
+    }
     /** Deck IV's haptics hook: one call per rung, silent where there is no hardware. */
     function haptic(ms) {
       try {
@@ -1301,6 +1315,7 @@ export default {
       if (!inputOpen) {
         padState(i, 'pressed', reduced ? 90 : 130);
         tone(PAD_SFX, 0.16, pitchFor(i, 0));
+        bumpRefused();
         return;
       }
       commit(i, how);
@@ -1827,6 +1842,11 @@ export default {
       go.addEventListener('click', () => {
         if (done || dead) return;
         done = true;
+        /* THE START PRESS (W2 chrome). This one button both dismisses the rules
+         * sheet and starts the class, so it gets the school's start cue and NOT
+         * a second page-turn `slide` on top of it - the sheet is one page and
+         * there is no page to turn. */
+        tone('lift', 0.5, 1);
         rememberHowto();
         hideHowto();
         onDone();
@@ -1943,6 +1963,11 @@ export default {
       if (!endEl) return;
       endEl.textContent = '';
       endEl.hidden = false;
+      /* THE DEBRIEF (W2 chrome). Every row is appended in THIS frame and the
+       * card fades in as one object (.g-ec-end / g-ec-endin), so there is no
+       * visual stagger for a blip ladder to ride: the House Book's answer to an
+       * unstaggered debrief is ONE `slide`, on the same beat as the fade. */
+      tone('slide', 0.35, 1);
       endEl.appendChild(el('h3', 'g-ec-end-title', t('ec_end_title', EC_LEX.ec_end_title)));
       const row = (cls, k, v) => {
         const r = el('div', 'g-ec-end-row' + (cls ? ' ' + cls : ''));
@@ -2080,6 +2105,10 @@ export default {
             wordText: padWordText,
             restoreWords: paintWords,
             ring,
+            /* THE CUE ROAD (W2 sec 2). The deck never gets the engine - it gets
+             * this class's own clamped helper, so every cue it asks for lands
+             * under the tier's audio ceiling exactly like the pads' own tones. */
+            cue: (name, level, extra) => tone(name, level, null, extra),
             announce: (text, ms) => {
               if (!msgEl || !text) return;
               msgEl.textContent = String(text);

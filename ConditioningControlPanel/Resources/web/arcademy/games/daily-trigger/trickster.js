@@ -96,6 +96,10 @@ export function bendClock(elapsedSec, budgetSec, bend) {
  * @param {Object}   o.timers      {after(ms,fn)->id, cancel(id)}
  * @param {boolean}  o.reduced     reduced motion
  * @param {boolean}  o.capsOk      false when bgIntensity is capped to 0
+ * @param {Function=} o.cue        the GAME's clamped audio helper, cue(name, level, extra).
+ *                                 THE CUE ROAD (W2): deliberately NOT part of armed() -
+ *                                 bgIntensity 0 is a VISUAL exit (Law VI) and must not
+ *                                 mute the school. See sounds() below.
  * @param {Function} o.getRung     () => the ladder's current rung
  * @param {Function} o.isHalted    () => bool (pause/suspend/ceremony/reveal)
  * @param {Function} o.stats       () => {rung, cap, row, rows} - the TRUTH
@@ -124,6 +128,10 @@ export function createDtTrickster(o) {
   };
   const getRung = typeof opts.getRung === 'function' ? opts.getRung : () => 0;
   const isHalted = typeof opts.isHalted === 'function' ? opts.isHalted : () => false;
+  /* THE DECOUPLE (W2): the deck's audio gate is armed() minus capsOk. It still
+   * respects the two "this deck is finished" flags, and nothing else. */
+  const cue = typeof opts.cue === 'function' ? opts.cue : () => {};
+  const sounds = () => !destroyed && !stopped;
 
   let destroyed = false;
   let stopped = false;
@@ -193,6 +201,10 @@ export function createDtTrickster(o) {
     flickers += 1;
     timers.after(DT_TRICKSTER.FLICKER_MS, () => {
       if (destroyed) return;
+      // THE STATIC POP the header and FLICKER_MS have both promised since
+      // 0821: the chip does not quietly go honest, it CORRECTS ITSELF - a
+      // short bit-crushed burst on the frame the truth comes back.
+      if (sounds()) cue('decoy', 0.35);
       try { if (chip.classList) chip.classList.remove('g-dt-statlie'); } catch (e) { /* ignore */ }
       try { if (typeof opts.paintTruth === 'function') opts.paintTruth(); } catch (e) { /* ignore */ }
     });
@@ -217,6 +229,10 @@ export function createDtTrickster(o) {
       node.textContent = String(line);
       node.setAttribute('aria-hidden', 'true');      // a lie is not for screen readers
     } catch (e) { return; }
+    // The ghost hand gets a voice: a breath of filtered noise as the lie
+    // lands on the wall. Faint on purpose - the card waits politely for a
+    // clear message line, and the sound keeps the same manners.
+    if (sounds()) cue('whisper', 0.3);
     host.appendChild(node);
     whisperEl = node;
     whispers += 1;

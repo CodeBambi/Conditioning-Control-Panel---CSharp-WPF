@@ -1078,6 +1078,21 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     is a startClass snapshot, so the scoped page prints `applies_next_class` instead of
     pretending to live-apply. The campus gear / Registrar stay argless = full sheet.
 
+69. **Deck gates split two ways since W2 (2026-08-24): `armed()` = visuals and keeps
+    capsOk; `sounds()` = cues and NEVER tests capsOk.** bgIntensity 0 is the player's
+    VISUAL exit (Law VI), not a mute switch - a game-called beat (the bell, a dim-out,
+    a rung climb, a stat correction) still sounds with the lights off, while a deck's
+    self-dealt visual cards stay dark AND silent (nothing drawn = nothing to hear; that
+    stub staying dead is deliberate, not a gap). Every deck takes the game's own clamped
+    helper as `opts.cue` (a closure, NEVER the engine), and every game clamps to
+    AUDIO_CEIL [.45,.6,.75,.9] (IR deliberately lower). THE CHROME VOCABULARY is
+    uniform across all nine classes: start press = `lift` .5, rules-sheet turn =
+    `slide` .35 (a one-page sheet's GO is the START press, never both cues), debrief =
+    ONE `slide` unless the rows REALLY stagger (then a `blip` ladder on the same
+    timers), refused input = `bump` .3 throttled 250ms. Hover sound exists in exactly
+    ONE place in the school - the Lost & Found board (`tell` .12, 150ms throttle,
+    hunt-phase only) - and that is an owner ruling, not an oversight to fix elsewhere.
+
 ## 5. The game module contract (short version)
 
 ```js

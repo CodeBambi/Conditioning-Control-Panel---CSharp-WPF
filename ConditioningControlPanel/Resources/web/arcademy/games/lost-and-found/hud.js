@@ -32,11 +32,15 @@ function fmtClock(sec) {
  * @param {boolean} o.coarse        coarse pointer
  * @param {boolean} o.lite          smaller tiles / lower budgets
  * @param {boolean} o.zen           untimed class - no clock
+ * @param {Function=} o.cue         the GAME's clamped cue helper (name, level,
+ *        extra). A closure, never the engine - the chrome vocabulary has to
+ *        obey the tier ceiling exactly like every gameplay beat does.
  */
 export function createHud(o) {
   const opts = o || {};
   const t = typeof opts.t === 'function' ? opts.t : (k, f) => f || k;
   const coarse = !!opts.coarse;
+  const cue = typeof opts.cue === 'function' ? opts.cue : () => {};
 
   const wrap = el('div', 'g-lf');
 
@@ -186,7 +190,14 @@ export function createHud(o) {
     const go = el('button', 'g-lf-hw-go', t('lf_howto_go', 'Start the hunt'));
     if (go) {
       go.type = 'button';
-      go.addEventListener('click', () => { if (typeof onBegin === 'function') onBegin(); });
+      go.addEventListener('click', () => {
+        // THE START PRESS. This one button both dismisses the sheet and starts
+        // play, so it is ONE cue and it is the start cue (`lift`), not a page
+        // turn - the chrome vocabulary's "once, on the press that actually
+        // starts play".
+        cue('lift', 0.5);
+        if (typeof onBegin === 'function') onBegin();
+      });
       node.appendChild(go);
     }
     // refreshCards() repaints these when remote media lands late (expando
@@ -276,6 +287,9 @@ export function createHud(o) {
       api.hideHowto();
       howtoCard = buildHowto(look, onBegin);
       if (view && howtoCard) view.appendChild(howtoCard);
+      // THE SHEET ARRIVING. Its three rows paint in ONE frame with no stagger,
+      // so the House Book's answer is one `slide`, not a blip ladder.
+      if (howtoCard) cue('slide', 0.35);
       return howtoCard;
     },
     hideHowto() {
@@ -286,6 +300,11 @@ export function createHud(o) {
     showBriefing(look, note) {
       api.hideBriefing();
       briefingCard = card(null, look, t('lf_find_prompt', 'Find her'), note);
+      // The memorize card is the second sheet of the same tutorial breath - the
+      // same page-turn cue, a shade under the rules sheet. Its DISMISSAL needs
+      // nothing: collapseBriefing() glitch-collapses into a swapBurst, and that
+      // burst's `glitch_swap` already carries the engine's own glitch cue.
+      if (briefingCard) cue('slide', 0.3);
       return briefingCard;
     },
     /** The card glitch-collapses INTO the board - and ends up nowhere. */

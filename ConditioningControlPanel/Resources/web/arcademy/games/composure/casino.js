@@ -331,8 +331,17 @@ export function createCpCasino(o) {
   const say = typeof opts.log === 'function' ? opts.log : () => {};
   const t = typeof opts.t === 'function' ? opts.t : (k, f) => (f == null ? k : f);
   const reduced = !!opts.reduced;
-  const armed = !!opts.capsOk && !!opts.stage && !!opts.board && !!opts.backdrop
+  /* THE bgIntensity DECOUPLE (W2, owner ruling). This deck used to weld capsOk
+   * into its CONSTRUCTION arming, so bgIntensity 0 did not dim the floor - it
+   * DELETED it, cues and all: the slide whoosh, the lock chime, the thrash
+   * thud and the near-miss were every one of them gone. They are the class's
+   * own beats, not decoration. So the gate splits: armed is the VISUAL gate
+   * and keeps capsOk (Law VI - no light, no node, no timer-driven dressing);
+   * sounds() is the audio gate and does not. */
+  const armedBase = !!opts.stage && !!opts.board && !!opts.backdrop
     && !!opts.timers && typeof opts.timers.after === 'function' && typeof document !== 'undefined';
+  const armed = armedBase && !!opts.capsOk;
+  const sounds = () => armedBase && !destroyed;
   const eng = opts.engine || {};
   const hud = opts.hud || {};
   const frame = opts.frame || (opts.board && opts.board.parentNode) || opts.stage;
@@ -347,7 +356,7 @@ export function createCpCasino(o) {
   const live = new Set();
   const cancelFn = opts.timers && (opts.timers.clear || opts.timers.cancel);
   function after(ms, fn) {
-    if (!armed) return 0;
+    if (!armedBase || destroyed) return 0;   // the cue ladders ride these too (W2)
     let id = 0;
     id = opts.timers.after(ms, () => { live.delete(id); if (!destroyed) { try { fn(); } catch (e) { /* ignore */ } } });
     if (id) live.add(id);
@@ -371,7 +380,7 @@ export function createCpCasino(o) {
   const counts = { cues: 0, jackpots: 0, nearMisses: 0, flashes: 0, words: 0, glints: 0, slides: 0, locks: 0, thrashes: 0, assists: 0 };
   const jackLog = [];
   function cue(name, level, extra) {
-    if (!armed || destroyed) return;
+    if (!sounds()) return;
     counts.cues += 1;
     const lv = clamp01(level) * (zen ? C.ZEN_MUL : 1);
     try {
@@ -693,9 +702,11 @@ export function createCpCasino(o) {
   const api = {
     /** Dress the studio + light the frame. Call when play arms. */
     start() {
-      if (!armed || destroyed) { say('casino: disarmed'); return; }
       if (started) return;
       started = true;
+      /* DISARMED = DARK, NOT MUTE (W2): no style, no nodes, no dressing, but
+       * started stays true so every beat below still finds its cue road. */
+      if (!armed || destroyed) { say('casino: dark (bgIntensity 0) - cue road only'); return; }
       ensureStyle();
       drawIdentity();
       mountBackdrop();
@@ -718,7 +729,7 @@ export function createCpCasino(o) {
      * lean (from the tile's own travel, read off the snapshot) and the almost.
      */
     slide(ev) {
-      if (!armed || destroyed || !started) return;
+      if (!started || !sounds()) return;
       const e = ev || {};
       counts.slides += 1;
       const tile = e.id == null ? null : tileById(e.id);
@@ -732,7 +743,7 @@ export function createCpCasino(o) {
       if (before && now) {
         const dx = Math.sign(now.c - before.c);
         const dy = Math.sign(now.r - before.r);
-        if (dx || dy) leanFrame(dx * C.LEAN_MAG, dy * C.LEAN_MAG, C.LEAN_MS);
+        if ((dx || dy) && armed) leanFrame(dx * C.LEAN_MAG, dy * C.LEAN_MAG, C.LEAN_MS);
         // THE ALMOST: skirted its home and is still one off (and not locked)
         if (!e.locked && tile) {
           const home = homeOf(tile, n);
@@ -748,7 +759,7 @@ export function createCpCasino(o) {
 
     /** A tile (or more) sits home: the payout, the streak ladder, the jackpot rungs. */
     lock(count, n) {
-      if (!armed || destroyed || !started) return;
+      if (!started || !sounds()) return;   // every light below self-gates on a mounted node
       const cnt = Math.max(0, Number(count) || 0);
       // index.js hands the TILE COUNT (n*n-1 = 8/15/24) as the second argument; an older
       // caller may hand the grid size. Anything above 5 is a tile count - take its root.
@@ -778,37 +789,38 @@ export function createCpCasino(o) {
 
     /** A panic move (a backtrack or a thrash under a wash): the ladder resets. */
     thrash() {
-      if (!armed || destroyed || !started) return;
+      if (!started || !sounds()) return;
       counts.thrashes += 1;
       streak = 0;
       cue('bump', C.THRASH_LEVEL, { pitch: 0.7 });     // a muted thud, never silence
-      if (!reduced && frame && frame.style && !zen) leanFrame((roll('thrash') < 0.5 ? -1 : 1) * 0.4, 0, 160);
+      if (armed && !reduced && frame && frame.style && !zen) leanFrame((roll('thrash') < 0.5 ? -1 : 1) * 0.4, 0, 160);
     },
 
     /** The rescue lit a piece: a soft whisper, the lamp dips and returns. */
     assist() {
-      if (!armed || destroyed || !started) return;
+      if (!started || !sounds()) return;
       counts.assists += 1;
       streak = 0;
       cue('whisper', C.ASSIST_LEVEL, { pitch: 0.85 });
+      if (!armed) return;                              // the lamp is a LIGHT
       setProp('--cp-n-lamp', zen ? '0.62' : '0.5');
       after(900, () => setProp('--cp-n-lamp', zen ? '0.82' : '0.7'));
     },
 
     /** The picture is whole: THE ROYAL. Holds until dimOut/stop. */
     solved() {
-      if (!armed || destroyed || !started) return;
+      if (!started || !sounds()) return;
       royalOn = true;
       counts.jackpots += 1;
       jackLog.push('royal');
-      stageClass('g-cp-royal', true);
+      if (armed) stageClass('g-cp-royal', true);
       if (cs && cs.classList) cs.classList.add('g-cp-royal');
       const b = rectOf(opts.board); const fr = rectOf(frame);
       const cx = b && fr ? b.left - fr.left + b.width / 2 : null;
       const cy = b && fr ? b.top - fr.top + b.height * 0.9 : null;
       if (zen) {
         // the warm royal: the lamp comes up, one soft chime, a few glints
-        setProp('--cp-n-lamp', '1');
+        if (armed) setProp('--cp-n-lamp', '1');
         cue('streak', C.JACK_LEVEL, { pitch: 1.1 });
         after(320, () => cue('stamp', 0.35, { pitch: 1 }));
         pulseLamp(0.5, true);
@@ -889,7 +901,7 @@ export function createCpCasino(o) {
     /** Diagnostics for the harness; not part of the module contract. */
     diagnostics() {
       return {
-        armed, started, zen, mode, marquee: !!mq, overlay: !!cs, layers: Object.keys(layers).length,
+        armed, sounds: sounds(), started, zen, mode, marquee: !!mq, overlay: !!cs, layers: Object.keys(layers).length,
         bell: bellOn, royal: royalOn, out: outOn, heat, identity, assetUrl,
         streak, bestStreak, lastCount, glints, almosts,
         counts: Object.assign({}, counts), jackpots: jackLog.slice(), timers: live.size,

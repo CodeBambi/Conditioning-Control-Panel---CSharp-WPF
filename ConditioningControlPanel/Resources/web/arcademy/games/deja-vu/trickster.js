@@ -87,6 +87,10 @@ function clampTier(t) { return Math.max(1, Math.min(4, Math.round(Number(t) || 1
  * @param {Object}   o.timers      {after(ms,fn)->id, cancel(id)} (run()-gated)
  * @param {boolean}  o.reduced     reduced motion
  * @param {boolean}  o.capsOk      false when bgIntensity is capped to 0
+ * @param {Function=} o.cue        the GAME's clamped audio helper, cue(name, level, extra).
+ *                                 THE CUE ROAD (W2): deliberately NOT part of armed() -
+ *                                 bgIntensity 0 is a VISUAL exit (Law VI) and must not
+ *                                 mute the school. See sounds() below.
  * @param {Function} o.isHalted    () => bool (dead/paused/ended)
  * @param {Function} o.stats       () => {swaps, budget, secLeft} - the TRUTH
  * @param {Function} o.chipEl      (which: 'swaps'|'clock') => element|null
@@ -101,6 +105,10 @@ export function createDvTrickster(o) {
   const reduced = !!opts.reduced;
   const armed = !!opts.capsOk && !!timers && typeof document !== 'undefined';
   const isHalted = typeof opts.isHalted === 'function' ? opts.isHalted : () => false;
+  /* THE DECOUPLE (W2): the deck's audio gate is armed() minus capsOk. It still
+   * respects the two "this deck is finished" flags, and nothing else. */
+  const cue = typeof opts.cue === 'function' ? opts.cue : () => {};
+  const sounds = () => !destroyed && !stopped;
 
   const seedBase = String(opts.seed || 'dv') + '|dv-trickster|';
   const streams = new Map();
@@ -169,6 +177,10 @@ export function createDvTrickster(o) {
       staged += 1;
     }
     if (!staged) { done(); return false; }
+    // The pantomime gets ONE sound for the whole cast, on the frame the feints
+    // start - a card-shuffle slide. One per shuffle, never one per feint: the
+    // lie is that the board moved, and a board moves once.
+    if (sounds()) cue('slide', 0.3);
     shuffles += 1;
     say('trickster: fake shuffle (' + staged + ' feints, nothing moved)');
     timers.after(DV_TRICKSTER.SHUFFLE_MS + 80, done);
@@ -265,6 +277,10 @@ export function createDvTrickster(o) {
     flickers += 1;
     timers.after(DV_TRICKSTER.FLICKER_MS, () => {
       if (destroyed) return;
+      // THE STATIC POP the header has promised since 0821: the chip does not
+      // just quietly go honest, it CORRECTS ITSELF - a short bit-crushed
+      // burst on the same frame the truth comes back.
+      if (sounds()) cue('decoy', 0.35);
       try { if (chip.classList) chip.classList.remove('g-dv-statlie'); } catch (e) { /* ignore */ }
       const truth = honest(which);
       if (truth != null) { try { chip.textContent = truth; } catch (e) { /* ignore */ } }

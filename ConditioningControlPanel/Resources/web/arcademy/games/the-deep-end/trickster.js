@@ -5,7 +5,11 @@
  *
  *   STAT FLICKER    the score or the depth chip briefly reads slightly off,
  *                   then corrects itself with a static pop. The ledger never
- *                   moves; confidence does.
+ *                   moves; confidence does. W2: the pop is AUDIBLE now - a
+ *                   `decoy` on the correction, through opts.cue (the game's
+ *                   clamped helper). It is this deck's only cue: every other
+ *                   card here is a lie you READ, and a lie that announces
+ *                   itself is not a lie.
  *   CROOKED CLOCK   the clock FACE bends: it races through the boring middle
  *                   (shows less time than you really have) and crawls as the
  *                   bell nears, meeting the truth exactly at the last 20s and
@@ -177,6 +181,17 @@ export function createDeTrickster(o) {
   const tilesOf = typeof opts.tiles === 'function' ? opts.tiles : () => [];
   const tierName = typeof opts.tierName === 'function' ? opts.tierName : (n) => String(n);
   const announce = typeof opts.announce === 'function' ? opts.announce : null;
+  /* W2 - THE CUE ROAD. index.js hands down its own clamped `tick`, so this
+     deck asks for sound and never holds a node or raises the tier ceiling.
+     THE DECOUPLE (spec 3): sound rides `destroyed`/`stopped` and NOT capsOk -
+     but note the honest limit, which is written down rather than faked: this
+     deck's cards are dealt by its own timers, and `armed` (capsOk included)
+     kills those at CONSTRUCTION. With bgIntensity 0 no card is ever dealt, so
+     there is no correction to hear. Nothing is muted by the dial; there is
+     simply nothing happening. The road is here for the day a card becomes a
+     beat the GAME calls in for. */
+  const cue = typeof opts.cue === 'function' ? opts.cue : () => {};
+  const sounds = () => !destroyed && !stopped;
 
   /* timers: the game's registry + a local set (see casino.js). */
   const live = new Set();
@@ -298,7 +313,13 @@ export function createDeTrickster(o) {
     after(DE_TRICKSTER.FLICKER_MS, () => {
       try { if (chip.classList) chip.classList.remove('g-de-statlie'); } catch (e) { /* ignore */ }
       const now = chipText(which);
-      if (now != null) { try { chip.textContent = now; } catch (e) { /* ignore */ } }
+      if (now == null) return;
+      const wasLying = chip.textContent === lie;
+      try { chip.textContent = now; } catch (e) { return; }
+      /* THE STATIC POP, made true: the number snaps back to the ledger and the
+         room clicks. Only when the LIE was still standing - a real repaint
+         that beat us here is the truth arriving on its own, not a correction. */
+      if (wasLying && sounds()) cue('decoy', 0.35);
     });
     say('trickster: stat flicker (' + which + ')');
   }
@@ -619,6 +640,7 @@ export function createDeTrickster(o) {
     diagnostics() {
       return {
         armed, tier, deals: deals.slice(), fired: Object.assign({}, fired),
+        cueRoad: typeof opts.cue === 'function',
         melts, ghosts, melted: !!melted, ghost: !!ghost,
         clock: { armed: clockArmed, lies: clockLies, budget: budgetSeen, observer: !!clockObs },
         cameoPending, lying: lying.length, lexicon: Array.from(lexiconUsed),

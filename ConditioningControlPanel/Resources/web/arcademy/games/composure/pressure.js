@@ -278,6 +278,12 @@ export function createCpPressure(o) {
   }
   let destroyed = false;
   const armed = () => armedBase && !destroyed && capsOk();
+  /* THE bgIntensity DECOUPLE (W2). capsOk false is the player's VISUAL exit
+   * (Law VI): zero fires, zero sustains, zero tremor, exactly as before - and
+   * that stays true, because every visual in this file already gates on
+   * armed() or on a node mount() never made. What must NOT die with the
+   * lights is the SURGE's own voice, so the rung cue gates on sounds(). */
+  const sounds = () => armedBase && !destroyed;
 
   /* ---- timers ------------------------------------------------------------ */
   const live = new Set();
@@ -329,8 +335,13 @@ export function createCpPressure(o) {
     try { eng.stop(kind); } catch (e) { /* ignore */ }
   }
   function cue(name, rung) {
-    if (!name) return;
-    fire('audio_trigger', { name, level: Math.min(audioCeil, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * rung) * (zen ? 0.6 : 1) });
+    if (!name || !sounds()) return;
+    /* deliberately NOT through fire(): that road gates on armed(), and the
+     * whole point of the decouple is that a cue does not (W2) */
+    count('audio_trigger');
+    if (typeof eng.fire !== 'function') return;
+    const level = Math.min(audioCeil, P.CUE_LEVEL_BASE + P.CUE_LEVEL_STEP * rung) * (zen ? 0.6 : 1);
+    try { eng.fire('audio_trigger', { name, level }); } catch (e) { /* a refused cue is not an error */ }
   }
 
   /* ---- state -------------------------------------------------------------- */
@@ -658,9 +669,11 @@ export function createCpPressure(o) {
   /* ---- api ----------------------------------------------------------------- */
   const api = {
     start() {
-      if (!armed()) { say('pressure: disarmed'); return; }
       if (started) return;
       started = true;
+      /* DISARMED = DARK, NOT MUTE (W2): no sheet, no haze, no ring - but
+       * started stays true, so the ladder still walks and still speaks. */
+      if (!armed()) { say('pressure: dark (bgIntensity 0) - cue road only'); return; }
       ensureStyle();
       mount();
       retune();
@@ -684,7 +697,10 @@ export function createCpPressure(o) {
      * kinds are ignored.
      */
     beat(kind, info) {
-      if (!started || stopped || !armed()) return;
+      /* no armed() here by design: punchFrame/punchChip gate on armed(), every
+       * fire/sustain gates on armed(), and haze/ring are null when the deck is
+       * dark - so what survives a capped bgIntensity is exactly the sound (W2) */
+      if (!started || stopped) return;
       const k = String(kind || '');
       const d = info || {};
       if (k === 'slide') {
@@ -776,7 +792,7 @@ export function createCpPressure(o) {
     },
     diagnostics() {
       return {
-        armed: armed(), started, stopped, paused, zen, mode, out: outOn, bell: bellOn, royal: royalOn,
+        armed: armed(), sounds: sounds(), started, stopped, paused, zen, mode, out: outOn, bell: bellOn, royal: royalOn,
         rung, hystPending: !!hystTimer, hystTarget, frac, heat, streak,
         features: Array.from(present),
         tremorPx: +tremorAmp.toFixed(3), punchPx: +punchPeak.toFixed(2), punchLive: punchPeak > 0,
