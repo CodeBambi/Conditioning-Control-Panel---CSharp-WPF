@@ -137,6 +137,18 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_main_hall: 'Main Hall',
   campus_the_quad: 'The Quad',
   campus_front_path: 'Front Path',
+
+  /* CAMPUS PRESENCE - "The Student Body" (PRESENCE.md). Six rows and not one
+     more: four BLIPS, a chip label and the layer's own name. The bubbles are
+     1-4 characters BY LAW (diegetic-prose rule: these are blips, never
+     sentences), so a mod re-voices the greeting without ever being able to put
+     a paragraph over a stranger's head. */
+  presence_student_body: 'Student Body',
+  presence_bubble_hi: 'hihi',
+  presence_bubble_dots: '...',
+  presence_bubble_wave_a: 'o/',
+  presence_bubble_wave_b: '\\o',
+  presence_here_tonight: 'here tonight',
   campus_east_wing: 'East Wing',
   campus_west_wing: 'West Wing',
   campus_desc_east: 'You can hear hammering behind the tape.',
