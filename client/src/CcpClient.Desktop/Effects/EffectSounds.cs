@@ -130,20 +130,28 @@ public sealed class EffectSounds
     /// <summary>
     /// The product composition: both pools over the user-media root, upstream's own folder names,
     /// and the flash's own draw policy.
+    ///
+    /// <para><b>Each pool gets its OWN draw source, and that is not a detail.</b> The two are drawn
+    /// on different threads — the flash on the effect signal thread, a pop on whatever thread the
+    /// hand-off in <see cref="Pop"/> lands on — and <see cref="AudioCuePool"/>'s lock is
+    /// per-instance, so one shared <see cref="Random"/> across both would be an unsynchronised
+    /// <see cref="Random"/> across two gates. That is why this takes no random at all: a fact that
+    /// wants a pinned order constructs its pools and passes them to the constructor, which is what
+    /// every fact here already does.</para>
     /// </summary>
     /// <param name="assetsRoot">The user-media root (<c>SessionParticipant.AssetsRootFor</c>).</param>
     public static EffectSounds ForProduct(
-        AudioParticipant audio, string assetsRoot, Random? random = null, Action<string>? log = null) =>
+        AudioParticipant audio, string assetsRoot, Action<string>? log = null) =>
         new(
             audio,
             // WITHOUT replacement: upstream deals the flash clips out of a shuffled queue and only
             // reshuffles when it empties (Services/Flash/FlashService.cs:3315-3329), so a user hears
             // every clip in the folder before hearing any of them twice.
-            new AudioCuePool(assetsRoot, FlashClipFolderName, random, withoutReplacement: true),
+            new AudioCuePool(assetsRoot, FlashClipFolderName, withoutReplacement: true),
             // WITH replacement: upstream picks one of the three pop files uniformly on every pop
             // (Services/BubbleService.cs:1996-1997, Windows/BubbleCountWindow.xaml.cs:1332,1339-1340), so
             // the same pop can sound twice running.
-            new AudioCuePool(assetsRoot, PopClipFolderName, random),
+            new AudioCuePool(assetsRoot, PopClipFolderName),
             log: log);
 
     /// <summary>Where the flash's clips are read from, so a surface can tell the user where to put

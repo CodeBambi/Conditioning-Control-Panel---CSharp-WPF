@@ -178,6 +178,14 @@ public sealed class FlashImagesEffect : PacedSessionEffect<FlashFiring>
     /// anything; an audio endpoint is exactly such a hostage-taker. <b>A divergence, recorded rather
     /// than smoothed away.</b></para>
     ///
+    /// <para><b>Why the clip is played INLINE here while a bubble's pop is handed to another
+    /// thread.</b> Not taste: the whisper channel is stop-replace, so the SECOND of two flashes must
+    /// be the one left playing. Handing two flashes to a thread pool puts no order on which reaches
+    /// <c>PlayWhisper</c> first, and losing that race would leave the OLDER clip audible and cut the
+    /// newer one off — upstream's <c>StopCurrentSound</c> inverted. The SFX pool the pops use
+    /// overlaps by design and orders nothing, which is why <see cref="EffectSounds.Pop"/> may leave
+    /// the caller's thread and this may not.</para>
+    ///
     /// <para><b>Four halves of upstream's flash audio are NOT here, each refused with its
     /// reason.</b> (1) The <c>FlashAudioEnabled</c> switch (<c>Models/AppSettings.cs:925-926</c>,
     /// default <c>true</c>) - this port's flash dials live in documents outside this module, so the

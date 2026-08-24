@@ -470,10 +470,13 @@ public sealed class BubblePopSurfacePresenter : IBubblePopSurface, IDisposable
     /// <para><b>The pop SOUND is raised here, and only on the click that really starts a pop.</b>
     /// <see cref="BubblePopField.Hit"/> answers false for a bubble that is already popping, which is
     /// upstream's own first line (<c>if (!_isAlive || _isPopping) return;</c>,
-    /// <c>Services/BubbleService.cs:3990</c>) — and upstream plays its pop only when that guard let
-    /// the pop through, because <c>AwardAmbientPop</c> is reached from the
-    /// <c>if (!wasPopping &amp;&amp; _isPopping)</c> branch (<c>:3980-3983</c>, <c>:961</c>). So a
-    /// double click on one bubble makes ONE sound, here as there. The drop path in
+    /// <c>Services/BubbleService.cs:3994</c>) — and upstream's sound is BEHIND that guard: the pop
+    /// reward is reached from inside <c>Pop()</c> itself (<c>_onPop?.Invoke(this)</c> at
+    /// <c>:4064</c> → <c>OnPop</c> at <c>:945</c> → <c>AwardAmbientPop</c> at <c>:950</c> →
+    /// <c>PlayPopSound</c> at <c>:961</c>), so a second click on a bubble already popping returns at
+    /// <c>:3994</c> and never reaches the clip. One real pop, one sound, here as there. (Upstream's
+    /// OTHER click-time callback, <c>_onClickPop</c> at <c>:3984</c>, carries the E-Stim charge and
+    /// not the sound — the distinction matters because only the sound is ported.) The drop path in
     /// <c>SpawnOnceLocked</c> also calls <c>Hit</c> and deliberately does not sound: a bubble nobody
     /// could click was never popped.</para>
     ///

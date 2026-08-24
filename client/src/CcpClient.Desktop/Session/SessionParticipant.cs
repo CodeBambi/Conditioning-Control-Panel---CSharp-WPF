@@ -88,7 +88,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
         IBubblePopSurface? bubblePopSurface = null,
         IBouncingTextSurface? bouncingTextSurface = null,
         IHapticLimb? haptics = null,
-        IScriptedClock? scriptedClock = null)
+        IScriptedClock? scriptedClock = null,
+        AudioParticipant? appAudio = null)
     {
         ArgumentNullException.ThrowIfNull(infra);
         ArgumentException.ThrowIfNullOrEmpty(dataDirectory);
@@ -248,6 +249,21 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // route is admitted, which is two clients against one server.
         Haptics = haptics;
 
+        // THE SOUND THREE OF THESE MODULES MAKE, on the app-wide arbitration. It is threaded here
+        // rather than built here for the reason the haptic limb above is: the arbitration is ONE
+        // object owned by AudioParticipant, and a session that constructed its own would be a second
+        // native engine on the same endpoint — the exact defect Audio/AudioParticipant.cs:10-18
+        // exists to remove. Null in an owner-less host, and every module below then has no clip path
+        // at all rather than a silent one.
+        //
+        // Construction opens NO device and reads no folder: the pools are lazy and
+        // EffectSounds calls EnsureDevice on the first play that really has a clip to play. So a
+        // session that never flashes and never pops still never seizes a render endpoint, which is
+        // the property AudioParticipant.DeviceInitAttempts exists to keep honest.
+        Sounds = appAudio is null
+            ? null
+            : EffectSounds.ForProduct(appAudio, AssetsRootFor(dataDirectory), infra.Log.Log);
+
         _surface = surface ?? FlashSurfacePresenter.Product(
             sessionClock, Dispatch, draw: Visuals.Draw, haptics: haptics);
         _subliminalSurface = subliminalSurface ?? SubliminalSurfacePresenter.Product(sessionClock, Dispatch);
@@ -278,7 +294,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
         // no clock at all (the established rule, fourth application). It is a NEW capability rather than a
         // second consumer of Input/**: that presence handles no mouse message, owns one window and
         // places it once (the earlier census §1, re-verified in this packet's plan §1).
-        _bubblePopSurface = bubblePopSurface ?? BubblePopSurfacePresenter.ForProduct(sessionClock, Dispatch);
+        // The pop SOUND is the surface's to raise and not the module's, because the surface is
+        // where a click becomes a pop: BubblePopField.Hit answers false for a bubble already
+        // popping, and upstream's own sound sits behind that same guard (Services/BubbleService.cs:3994
+        // returns before ever reaching PlayPopSound at :961).
+        _bubblePopSurface = bubblePopSurface ?? BubblePopSurfacePresenter.ForProduct(
+            sessionClock, Dispatch, Sounds is null ? null : Sounds.Pop);
 
         // The per-pixel-alpha surface. Its cadence lives in the presenter for the established
         // reason - a cadence that keeps a SURFACE correct is the surface's - and the module itself
@@ -294,7 +315,8 @@ public sealed class SessionParticipant : IBackgroundParticipant
                 () => (_assetSelection.Current.DisabledAssetPaths, _assetSelection.Current.UseAssetWhitelist)),
             _preset,
             random: null,
-            surface: _surface);
+            surface: _surface,
+            sounds: Sounds);
 
         // The first module that plays a FILE. It sits between Flash Images and Subliminals
         // because both orders that matter agree — WPF's rack is Flash Images, Mandatory Video,
@@ -470,7 +492,12 @@ public sealed class SessionParticipant : IBackgroundParticipant
             _videoSurface,
             _input,
             bubbleCountRandom,
-            bubbleCountPlacement);
+            bubbleCountPlacement,
+            // The SAME pop clips the ambient game uses, out of the same pool instance: upstream's
+            // two bubble modules read one shipped folder (Services/BubbleService.cs:1998 and
+            // Windows/BubbleCountWindow.xaml.cs:1338 both compose sounds/bubbles) and neither deals
+            // a bag, so one pool with replacement is exactly their arrangement.
+            Sounds is null ? null : Sounds.Pop);
 
         // THE ASKING MODULE THAT WAS BUILT AND CONSTRUCTED BY NOTHING. It takes the SAME input
         // presence the Lock Card and Bubble Count ask through — one window contesting the one
@@ -664,6 +691,14 @@ public sealed class SessionParticipant : IBackgroundParticipant
     /// writes into, never a second reader of the same folder.
     /// </summary>
     public ScriptedSessionLogStore MediaLog { get; }
+
+    /// <summary>
+    /// The three sounding modules' clips, or null in a host built with no app-wide audio owner
+    /// (owner-less test hosts, custom participant factories). Public so a panel can name the two
+    /// clip folders to the user — which matters here more than it usually would, because this build
+    /// ships neither folder's contents and both are EMPTY on a fresh install.
+    /// </summary>
+    public EffectSounds? Sounds { get; }
 
     /// <summary>Flash Images (public so the Studio module panel and the tests reach the real object).</summary>
     public FlashImagesEffect Flash { get; }

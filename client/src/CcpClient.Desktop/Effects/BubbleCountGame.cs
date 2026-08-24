@@ -126,9 +126,9 @@ public static class BubbleCountArithmetic
 /// an asset to be countable would be a module that silently stops counting when the asset is
 /// missing.</para>
 ///
-/// <para><b>Not ported:</b> the pop SOUND (<c>:1338-1346</c>; this port's audio capability belongs
-/// to the two IMMERSION modules and an effect-sound path is a subsystem, not a line), the per-bubble
-/// rotation, and the multi-monitor spread that puts each bubble on one random screen
+/// <para><b>The pop SOUND is ported</b> and is raised through the <c>onPop</c> callback — see
+/// <see cref="Paint"/> for the once-per-bubble rule and the thread it arrives on. <b>Not ported:</b>
+/// the per-bubble rotation, and the multi-monitor spread that puts each bubble on one random screen
 /// (<c>:1259-1267</c>) — the port has one surface on the primary display (D66/D123).</para>
 ///
 /// <para><b>Threading.</b> Every <see cref="Paint"/> call arrives on the surface thread, inline with
@@ -193,16 +193,25 @@ public sealed class BubbleCountRun : IVideoFramePainter
     private static readonly (byte B, byte G, byte R) EdgeColour = (180, 105, 255);
 
     private readonly List<CountedBubble> _bubbles = [];
+
+    /// <summary>Whether each bubble in <see cref="_bubbles"/> has already sounded its pop. Parallel
+    /// to that list, which is append-only, so the two never fall out of step.</summary>
+    private readonly List<bool> _sounded = [];
+
     private readonly Random _random;
     private readonly double _targetRoll;
+    private readonly Action? _onPop;
     private TimeSpan _nextTickAt = BubbleCountArithmetic.SpawnLeadIn;
 
     /// <param name="difficulty">The dial, which decides the base rate.</param>
     /// <param name="random">Injected, so a fact pins the arithmetic rather than re-deriving it.</param>
-    public BubbleCountRun(BubbleCountDifficulty difficulty, Random random)
+    /// <param name="onPop">Raised once per bubble, at the moment it starts popping — see
+    /// <see cref="Paint"/>. Null in a composition with no app audio.</param>
+    public BubbleCountRun(BubbleCountDifficulty difficulty, Random random, Action? onPop = null)
     {
         ArgumentNullException.ThrowIfNull(random);
         _random = random;
+        _onPop = onPop;
         Difficulty = difficulty;
 
         // ONE roll for the target's ±20 %, drawn here and reused if the clip's real length arrives
@@ -255,7 +264,24 @@ public sealed class BubbleCountRun : IVideoFramePainter
     /// <summary>The bubbles so far, for a fact that wants to see where they were.</summary>
     public IReadOnlyList<CountedBubble> Bubbles => _bubbles;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Draw this run's bubbles onto one picture, and sound the ones that started popping on it.
+    ///
+    /// <para><b>The pop sound, once per bubble.</b> Upstream's bubble sounds from
+    /// <c>StartPopping</c>, whose first line is <c>if (_isPopping || _isDisposed) return;</c>
+    /// (<c>Windows/BubbleCountWindow.xaml.cs:1795-1797</c>) — so the clip is tied to the TRANSITION
+    /// into popping and a bubble makes exactly one, however many animation ticks it spends popping.
+    /// Here the transition is <c>elapsed &gt;= PopsAt</c> observed for the first time, and
+    /// <see cref="_sounded"/> is what makes it once. It is deliberately NOT filtered by
+    /// <c>GoneAt</c>: if the pictures arrive far enough apart that a bubble's whole pop falls
+    /// between two of them, upstream's own 30 ms animation timer would still have popped it and
+    /// still have made the noise — the timer does not wait for a frame.</para>
+    ///
+    /// <para><b>Threading.</b> Every call arrives on the surface thread, inline with the frame
+    /// advance, so the callback does too — and <see cref="EffectSounds.Pop"/> hands the play off
+    /// that thread for exactly the reason upstream's own line gives ("Run everything off UI thread
+    /// to avoid blocking LibVLC rendering", <c>:1331</c>): the caller here is a frame painter.</para>
+    /// </summary>
     public void Paint(VideoFrame frame, TimeSpan elapsed)
     {
         ArgumentNullException.ThrowIfNull(frame);
@@ -280,14 +306,22 @@ public sealed class BubbleCountRun : IVideoFramePainter
                         + (_random.NextDouble() * (MaxDiameterFraction - MinDiameterFraction)),
                     _nextTickAt,
                     MinLifetime + (LifetimeSpan * _random.NextDouble())));
+                _sounded.Add(false);
             }
 
             _nextTickAt += SpawnInterval;
         }
 
         PicturesPainted++;
-        foreach (var bubble in _bubbles)
+        for (var i = 0; i < _bubbles.Count; i++)
         {
+            var bubble = _bubbles[i];
+            if (elapsed >= bubble.PopsAt && !_sounded[i])
+            {
+                _sounded[i] = true;
+                _onPop?.Invoke();
+            }
+
             if (elapsed < bubble.BornAt || elapsed >= bubble.GoneAt)
             {
                 continue;

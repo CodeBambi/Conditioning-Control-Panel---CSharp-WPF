@@ -131,6 +131,7 @@ public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
     private readonly IInputPresence _presence;
     private readonly Random _random;
     private readonly Func<InputBounds> _placement;
+    private readonly Action? _onPop;
 
     private BubbleCountRun? _run;
     private BubbleCountAnswer? _answer;
@@ -157,6 +158,9 @@ public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
     /// <param name="presence">Where the question goes. SHARED with the Lock Card.</param>
     /// <param name="random">Injected, so a fact pins the arithmetic rather than re-deriving it.</param>
     /// <param name="placement">Where the question card goes; the primary display by default.</param>
+    /// <param name="onPop">Raised once for each bubble that starts popping on the clip
+    /// (<see cref="BubbleCountRun.Paint"/>), on the surface thread. Null in a composition with no
+    /// app audio.</param>
     public BubbleCountEffect(
         AsyncOperationOwner owner,
         EffectSignal signal,
@@ -166,7 +170,8 @@ public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
         IVideoSurface surface,
         IInputPresence presence,
         Random? random = null,
-        Func<InputBounds>? placement = null)
+        Func<InputBounds>? placement = null,
+        Action? onPop = null)
         : base(owner, signal, clock, "bubblecount-schedule")
     {
         ArgumentNullException.ThrowIfNull(preset);
@@ -179,6 +184,7 @@ public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
         _presence = presence;
         _random = random ?? new Random();
         _placement = placement ?? DefaultPlacement;
+        _onPop = onPop;
     }
 
     /// <inheritdoc/>
@@ -424,7 +430,7 @@ public sealed class BubbleCountEffect : PacedSessionEffect<BubbleCountFiring>
     /// </summary>
     protected override void Deliver(BubbleCountFiring firing)
     {
-        var run = new BubbleCountRun(firing.Event.Difficulty, _random);
+        var run = new BubbleCountRun(firing.Event.Difficulty, _random, _onPop);
         lock (Gate)
         {
             _run = run;
