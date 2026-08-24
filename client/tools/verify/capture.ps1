@@ -3070,6 +3070,23 @@ if ($script:proc.ExitCode -ne 0) { Fail "non-zero exit on close: $($script:proc.
 # The window is gone; the desktop belongs to whoever wants it next.
 Release-Lease
 
+# NON-VACUITY IS PART OF "CAPTURED", not a downstream opinion. A correctly-sized image of ONE
+# colour is exactly what this step produces when nothing was drawn, and it printed CAPTURE PASS
+# over 7,700 black pixels on the Linux leg before this gate existed. The rule lives in CcpVerify
+# --vacuity so both capture legs share ONE implementation, and this script keeps its standing
+# promise to read no pixel itself.
+#
+# $PSScriptRoot rather than $verifyDir ON PURPOSE: the companion-transcript/phrase-backup branch
+# above rebinds $verifyDir to a temp export directory at script scope, so $verifyDir no longer
+# names this folder by the time control reaches here.
+$vacuityExe = Join-Path $PSScriptRoot 'CcpVerify\bin\Debug\net10.0\CcpVerify.exe'
+if (-not (Test-Path $vacuityExe)) {
+    Fail "the capture-vacuity gate is not built: $vacuityExe (build client/CcpClient.sln)"
+}
+$census = (& $vacuityExe --vacuity $outFile 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { Fail "$census (CcpVerify --vacuity exit $LASTEXITCODE)" }
+Write-Output $census
+
 Write-Output "CAPTURE: $outFile ($($capW)x$($capH))"
 Write-Output 'CAPTURE PASS'
 # SAY SO. Every failure path here calls `exit 1`, but success fell off the end of the script, and

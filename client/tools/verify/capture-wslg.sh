@@ -91,5 +91,22 @@ else
 fi
 
 pkill -f "CcpClient[.]Desktop" || true
+
+# NON-VACUITY GATE, and this is the defect this script was found with: it probed the door's real
+# geometry, wrote a correctly-sized BMP and printed CAPTURE PASS over 7,700 pixels of a single
+# colour, (0,0,0). An image with no second colour cannot be evidence of anything drawn, so the
+# capture step REFUSES it here rather than leaving the tier-3 checks to report it as a wrong
+# border colour. The rule lives in CcpVerify (--vacuity) so the Windows leg and this one share
+# one implementation and one message.
+#
+# CALLED DIRECTLY, NEVER THROUGH A PIPE. `cmd | tail` makes $? the tail's, and that is how a
+# non-zero verdict gets read as success — measured on this repository's own tool: the built
+# assembly direct gives $?=2 and the SAME assembly piped to `tail` gives $?=0. (`dotnet run`
+# was blamed for that; on SDK 10.0.400 it propagates 2 correctly, the pipe does not.) `set -e`
+# then makes a refusal end the run before CAPTURE PASS can be printed.
+VERIFY_DLL="$HERE/CcpVerify/bin/Debug/net10.0/CcpVerify.dll"
+[ -f "$VERIFY_DLL" ] || { echo "FAIL: the capture-vacuity gate is not built: $VERIFY_DLL"; exit 1; }
+dotnet "$VERIFY_DLL" --vacuity "$OUT"
+
 echo "CAPTURE: $OUT"
 echo "CAPTURE PASS"

@@ -213,4 +213,75 @@ public class VerifyHarnessTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new DecodedImage(0, 10, new byte[0]));
         Assert.Throws<ArgumentException>(() => new DecodedImage(10, 10, new byte[10]));
     }
+
+    /// <summary>
+    /// THE CAPTURE STEP'S OWN GATE, on the exact shape that burned this board: a correctly-sized
+    /// 175x44 capture of 7,700 identical black pixels, which <c>capture-wslg.sh</c> called
+    /// CAPTURE PASS. The count is asserted as part of the message because a refusal that does not
+    /// say what it counted sends its reader nowhere.
+    /// </summary>
+    [Fact]
+    public void Census_RefusesAnAllBlackCapture_AndNamesTheCount()
+    {
+        var census = CaptureCensus.Of(Solid(175, 44, (0, 0, 0)));
+
+        Assert.True(census.IsVacuous);
+        Assert.Equal(1, census.DistinctColors);
+        Assert.Equal(7700, census.Pixels);
+        Assert.Contains("1 distinct colour", census.ToString(), StringComparison.Ordinal);
+        Assert.Contains("all 7700 pixels", census.ToString(), StringComparison.Ordinal);
+        Assert.Contains("#000000", census.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// "Entirely the background" is the same refusal and needs no second rule — but the colour has
+    /// to be NAMED, or the reader cannot tell a black capture (nothing drawn) from a capture of an
+    /// empty panel (the module ground, MainWindow.axaml:122).
+    /// </summary>
+    [Fact]
+    public void Census_RefusesACaptureThatIsEntirelyTheBackground_AndNamesTheColour()
+    {
+        var census = CaptureCensus.Of(Solid(64, 64, (0x1B, 0x16, 0x22)));
+
+        Assert.True(census.IsVacuous);
+        Assert.Contains("1 distinct colour", census.ToString(), StringComparison.Ordinal);
+        Assert.Contains("RGB(27,22,34) #1B1622", census.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The other direction, and it is not optional: a gate that only ever fires is as broken as
+    /// one that never fires. One painted band — the selected door's border — is a second colour,
+    /// and the census passes it while still reporting what it counted.
+    /// </summary>
+    [Fact]
+    public void Census_AcceptsACaptureCarryingASecondColour()
+    {
+        var image = Solid(175, 44, (0, 0, 0));
+        Paint(image, 0, 0, 175, 3, (0xE0, 0x66, 0xFF));
+
+        var census = CaptureCensus.Of(image);
+
+        Assert.False(census.IsVacuous);
+        Assert.Equal(2, census.DistinctColors);
+        Assert.Equal("2 distinct colours across 7700 pixels", census.ToString());
+    }
+
+    /// <summary>
+    /// Alpha is not a colour. A capture transport that varies the alpha byte over an otherwise
+    /// uniform image must not be able to manufacture a second "colour" and buy itself a pass.
+    /// </summary>
+    [Fact]
+    public void Census_DoesNotLetVaryingAlphaCountAsASecondColour()
+    {
+        var image = Solid(32, 32, (0, 0, 0));
+        for (var i = 0; i < image.Width * image.Height; i++)
+        {
+            image.Bgra[i * 4 + 3] = (byte)(i % 256);
+        }
+
+        var census = CaptureCensus.Of(image);
+
+        Assert.True(census.IsVacuous);
+        Assert.Equal(1, census.DistinctColors);
+    }
 }
