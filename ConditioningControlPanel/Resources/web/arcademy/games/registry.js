@@ -62,8 +62,8 @@ export const GAME_META = Object.freeze({
      Recall (core/lexicon.js has no family_recall/family_puzzle row yet, so the
      chip degrades to the de-snaked key - readable English, never a raw token). */
   misdirection: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120 },
-  /* SORT inherited Misdirection's family, not its room (lot 2 razed the
-     parlour; sort is room 203 by the Main Gate). Not meaty: 120s is the
+  /* SORT inherited Misdirection's family AND its room number, not its room
+     (lot 2 razed the parlour; sort is room 201 by the Main Gate). Not meaty: 120s is the
      class, and the pile-picking DOOR runs outside the clock (shell S3), so the
      budget here is the sorting itself and nothing else. */
   sort: { family: 'tracking', meaty: false, flagship: false, timeBudgetSec: 120 },
