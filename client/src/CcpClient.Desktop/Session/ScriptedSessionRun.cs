@@ -13,10 +13,12 @@ namespace CcpClient.Desktop.Session;
 /// (<see cref="ScriptedSessionDials"/>), the clock-jump guard, the per-tick ramping values
 /// (<c>UpdateRampingValues</c>, <c>Services/Session/SessionEngine.cs:564</c> —
 /// <see cref="ScriptedSessionRamp"/>), the delayed feature starts (<c>CheckDelayedFeatures</c>,
-/// <c>:663</c>) and the ±3 minute jitter on them (<c>RandomizeStartTimes</c>, <c>:777</c>).
-/// <b>Not</b> in them, each recorded rather than half-built: the session editor, the rack UI and
-/// its repaint, the Session Complete recap and history, the media log, pause and its XP penalty,
-/// the XP award itself, the Gamer-Girl corner-GIF window and scheduled bubble bursts.</para>
+/// <c>:663</c>) and the ±3 minute jitter on them (<c>RandomizeStartTimes</c>, <c>:777</c>), plus
+/// PAUSE and its penalty (<see cref="Pause"/>, <see cref="Resume"/>).
+/// <b>Not</b> here, each recorded rather than half-built: the session editor, custom and imported
+/// sessions, the rack's filter, sort and search, the XP AWARD itself (the penalty above is computed
+/// and charged against nothing — <see cref="XpPenaltyPerPause"/>), the Gamer-Girl corner-GIF window
+/// and scheduled bubble bursts.</para>
 ///
 /// <para><b>It owns the ordinary engine from outside</b>, the way
 /// <see cref="Scheduling.SessionScheduler"/> does, and for upstream's reason: starting a scripted
@@ -55,6 +57,21 @@ public sealed class ScriptedSessionRun
     /// </summary>
     public const double ClockJumpToleranceSeconds = 30;
 
+    /// <summary>
+    /// What one pause costs the session's reward — upstream's
+    /// <c>XPPenalty =&gt; _pauseCount * 100</c> (<c>Services/Session/SessionEngine.cs:90</c>,
+    /// <c>:2014</c>), the number its own confirmation quotes at the user
+    /// (<c>en.json:3388</c>).
+    ///
+    /// <para><b>Recorded here, and charged nowhere</b>, because nothing in this build awards
+    /// session XP: the port has no app-lifetime ledger (<c>Session/SessionParticipant.cs:502-517</c>
+    /// states that refusal and its reason). <see cref="ScriptedSessionOutcome.XpPenalty"/> is
+    /// therefore the honest half of upstream's arithmetic — the deduction is computed and carried
+    /// on the outcome, and the award it would be deducted from does not exist yet. The
+    /// confirmation on the surface says exactly that rather than promising a charge.</para>
+    /// </summary>
+    public const int XpPenaltyPerPause = 100;
+
     private readonly SessionEngine _engine;
     private readonly ScriptedSessionDials _dials;
     private readonly IScriptedClock _clock;
@@ -67,8 +84,30 @@ public sealed class ScriptedSessionRun
     private ScriptedSessionDialSnapshot? _snapshot;
     private ScheduledFire? _pending;
     private bool _running;
+    private bool _paused;
+    private int _pauseCount;
+
+    /// <summary>The instant this session STARTED, which a pause never moves — it is the outcome's
+    /// <c>StartedAt</c> and the log's <c>started_at</c>. Distinct from <see cref="_wallStart"/>,
+    /// which is the current RUNNING segment's origin and is reset by every resume exactly as
+    /// upstream resets <c>_startTime</c> (<c>Services/Session/SessionEngine.cs:474</c>).</summary>
+    private DateTimeOffset _wallOrigin;
+
     private DateTimeOffset _wallStart;
     private TimeSpan _monotonicStart;
+
+    /// <summary>Elapsed time banked by the pauses so far, on the wall-clock side — upstream's
+    /// <c>_pausedElapsedTime</c> (<c>Services/Session/SessionEngine.cs:99</c>, <c>:437</c>), which
+    /// is both what a paused session reports and what a resumed one counts up from.</summary>
+    private TimeSpan _wallBanked;
+
+    /// <summary>The same on the monotonic side. Upstream needs no field for it because a
+    /// <c>Stopwatch</c> banks its own elapsed across <c>Stop()</c>/<c>Start()</c>
+    /// (<c>:441</c>, <c>:475</c>); <see cref="IScriptedClock.Monotonic"/> is a free-running reading
+    /// with an arbitrary origin, so the accumulation is explicit here. Same arithmetic, same
+    /// answer.</summary>
+    private TimeSpan _monotonicBanked;
+
     private int _phaseIndex;
     private double _pinkStartMinute;
     private double _spiralStartMinute;
@@ -135,6 +174,30 @@ public sealed class ScriptedSessionRun
     public bool Running
     {
         get { lock (_gate) { return _running; } }
+    }
+
+    /// <summary>Upstream's <c>IsPaused</c> (<c>Services/Session/SessionEngine.cs:87</c>). A paused
+    /// session is still RUNNING — <see cref="Running"/> stays true, which is why the surface's
+    /// session lock and its one STOP button both stay live while it is held.</summary>
+    public bool Paused
+    {
+        get { lock (_gate) { return _paused; } }
+    }
+
+    /// <summary>How many times this session has been paused — upstream's <c>PauseCount</c>
+    /// (<c>Services/Session/SessionEngine.cs:89</c>). Zero when nothing runs, and reset by every
+    /// START.</summary>
+    public int PauseCount
+    {
+        get { lock (_gate) { return _pauseCount; } }
+    }
+
+    /// <summary>What the pauses so far would cost this session's reward — upstream's
+    /// <c>XPPenalty</c> (<c>:90</c>). See <see cref="XpPenaltyPerPause"/> for why this build
+    /// records it and charges nothing.</summary>
+    public int XpPenalty
+    {
+        get { lock (_gate) { return _pauseCount * XpPenaltyPerPause; } }
     }
 
     /// <summary>The session on the clock, or null. Upstream's <c>CurrentSession</c>
@@ -222,7 +285,7 @@ public sealed class ScriptedSessionRun
     {
         get
         {
-            var (session, reading) = ReadState();
+            var (session, reading, _) = ReadState();
             if (session is null)
             {
                 return TimeSpan.Zero;
@@ -239,7 +302,7 @@ public sealed class ScriptedSessionRun
     {
         get
         {
-            var (session, reading) = ReadState();
+            var (session, reading, _) = ReadState();
             return session is null
                 ? 0
                 : Math.Min(100, reading.Elapsed.TotalMinutes / session.DurationMinutes * 100);
@@ -284,7 +347,7 @@ public sealed class ScriptedSessionRun
     /// </summary>
     public ScriptedSessionProgress ReadProgress()
     {
-        var (session, reading) = ReadState();
+        var (session, reading, _) = ReadState();
         if (session is null)
         {
             return new ScriptedSessionProgress(TimeSpan.Zero, TimeSpan.Zero, 0);
@@ -371,8 +434,16 @@ public sealed class ScriptedSessionRun
             _ramp = ScriptedSessionRamp.None;
 
             _dials.Apply(session.Settings);
-            _wallStart = _clock.Now;
+            _wallOrigin = _clock.Now;
+            _wallStart = _wallOrigin;
             _monotonicStart = _clock.Monotonic;
+
+            // Upstream clears all three at START (:164-166): a session inherits nothing from the
+            // one before it — not the flag, not the count, not the banked time.
+            _paused = false;
+            _pauseCount = 0;
+            _wallBanked = TimeSpan.Zero;
+            _monotonicBanked = TimeSpan.Zero;
             _phaseIndex = 0;
             _running = true;
             firstPhase = session.Phases.Count > 0 ? session.Phases[0] : null;
@@ -405,6 +476,7 @@ public sealed class ScriptedSessionRun
     {
         ScriptedSession session;
         TimeSpan finalElapsed;
+        int pauseCount;
         DateTimeOffset startedAt;
         DateTimeOffset endedAt;
         ScriptedSessionDialSnapshot? snapshot;
@@ -415,14 +487,33 @@ public sealed class ScriptedSessionRun
                 return false;
             }
 
-            startedAt = _wallStart;
+            // The session's OWN start instant, which no pause moved — the log wants the two ends of
+            // the run (Services/Session/SessionLogService.cs:57, :86). The elapsed beside it comes
+            // from the reading, so a session stopped while PAUSED ends on the frozen time the user
+            // was last shown rather than on one that kept running behind the pause: upstream's
+            // `var finalElapsedTime = ElapsedTime;` (:293) reads through the same
+            // `if (_isPaused) return _pausedElapsedTime;` short-circuit at :97.
+            startedAt = _wallOrigin;
             endedAt = _clock.Now;
-            finalElapsed = Reconcile(
-                endedAt - _wallStart,
-                _clock.Monotonic - _monotonicStart).Elapsed;
+            finalElapsed = ReadingLocked().Elapsed;
+            pauseCount = _pauseCount;
             session = _session;
             snapshot = _snapshot;
             _running = false;
+
+            // THE COUNT AND THE BANKED TIME ARE NOT CLEARED HERE, and that is upstream's placement
+            // rather than an oversight: it resets all three at START (:164-166) and its
+            // StopSession never touches them — it cannot, because it READS _pauseCount at :401 to
+            // build the completed event. So PauseCount after a stop is still the ended run's, which
+            // is what a caller asking "how did that one go" wants, and the next START is what
+            // clears them.
+            //
+            // The FLAG is the one exception, and it is a recorded divergence. Upstream leaves
+            // _isPaused true after stopping a held session (nothing sets it false but :164 and
+            // :474), which is invisible there because every reader goes through _isRunning first.
+            // Here `Paused` is public and its own doc says a paused session is still running, so
+            // leaving it true on a stopped run would make that sentence false.
+            _paused = false;
             _session = null;
             _snapshot = null;
             _phaseIndex = 0;
@@ -452,7 +543,100 @@ public sealed class ScriptedSessionRun
         }
 
         Raise(() => Ended?.Invoke(
-            new ScriptedSessionOutcome(session, finalElapsed, completed, startedAt, endedAt)));
+            new ScriptedSessionOutcome(
+                session, finalElapsed, completed, startedAt, endedAt, pauseCount)));
+        return true;
+    }
+
+    /// <summary>
+    /// PAUSE, in upstream's order (<c>Services/Session/SessionEngine.cs:432-466</c>): bank the
+    /// elapsed time BEFORE the flag goes up — upstream comments the trap in capitals at
+    /// <c>:436-438</c>, because the reading returns the banked value the instant the flag is set,
+    /// so banking after it would bank a stale number; stop the monotonic clock (<c>:441</c>); count
+    /// the pause (<c>:440</c>); take the tick off the clock (<c>:445-446</c>); and stop the
+    /// modules (<c>:449-465</c>).
+    ///
+    /// <para><b>The engine stop IS upstream's list of module stops.</b> Upstream names thirteen
+    /// services one at a time because each is a singleton it reaches through <c>App</c>; this port
+    /// has one engine that owns them, and <see cref="SessionEngine.Stop"/> disarms every module in
+    /// it. Same outcome — nothing is drawing, flashing, speaking or spawning while the session is
+    /// held — reached through the port's own ownership rather than through a copied list that would
+    /// silently miss whichever module was added next.</para>
+    ///
+    /// <para><b>The session is still RUNNING.</b> <see cref="Running"/> stays true and the dials
+    /// stay the session's: a pause is not a stop, nothing is restored, and the surface's session
+    /// feature lock stays on. That is upstream's state exactly (<c>:434</c> refuses when not
+    /// running, and <c>StopSession</c> is the only thing that restores).</para>
+    ///
+    /// <para>Returns false when nothing runs or it is already paused — upstream's guard at
+    /// <c>:434</c>, which returns in silence.</para>
+    /// </summary>
+    public bool Pause()
+    {
+        lock (_gate)
+        {
+            if (!_running || _paused || _session is null)
+            {
+                return false;
+            }
+
+            _wallBanked = ReadingLocked().Elapsed;                            // :437
+            _monotonicBanked += _clock.Monotonic - _monotonicStart;           // :441
+            _paused = true;                                                   // :439
+            _pauseCount++;                                                    // :440
+            Interlocked.Exchange(ref _pending, null)?.Dispose();              // :445-446
+        }
+
+        // Outside the lock, for the reason START and STOP both state: the engine raises its own
+        // notifications, and holding this gate across another component's event is how two locks
+        // become one deadlock.
+        if (_engine.Running)
+        {
+            _engine.Stop();
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// RESUME, in upstream's order (<c>Services/Session/SessionEngine.cs:470-502</c>): drop the
+    /// flag (<c>:474</c>), start both clocks from NOW so the held time never counts
+    /// (<c>:475-476</c> — the banked elapsed is what carries the earlier segments), put the tick
+    /// back on the clock (<c>:478-479</c>), and bring the modules back up (<c>:483-501</c>).
+    ///
+    /// <para><b>No confirmation and no cost.</b> Upstream asks before a pause and never before a
+    /// resume (<c>MainWindow/MainWindow.Presets.cs:1919-1940</c>), and the penalty is counted once
+    /// per pause rather than once per pair.</para>
+    ///
+    /// <para><b>A feature whose delayed start has not arrived stays off, and this port gets that
+    /// for free.</b> Upstream must ask <c>IsFeaturePending</c> about each one (<c>:487-500</c>)
+    /// because its services read a live <c>AppSettings</c> where the session's ON is already
+    /// written. Here <see cref="ScriptedSessionDials.Apply"/> wrote the delayed feature's dial OFF
+    /// at t=0 and only <see cref="CheckDelayedFeatures"/> turns it on, so the re-arm below finds a
+    /// disabled module and leaves it alone. Same outcome, no second source of truth about which
+    /// features are pending.</para>
+    ///
+    /// <para>Returns false when nothing runs or it is not paused — upstream's guard at
+    /// <c>:472</c>.</para>
+    /// </summary>
+    public bool Resume()
+    {
+        lock (_gate)
+        {
+            if (!_running || !_paused || _session is null)
+            {
+                return false;
+            }
+
+            _paused = false;                                                  // :474
+            _wallStart = _clock.Now;                                          // :475
+            _monotonicStart = _clock.Monotonic;                               // :476
+            Arm(TickInterval);                                                // :478-479
+        }
+
+        // Outside the lock, for the reason PAUSE states.
+        _engine.Start();
+
         return true;
     }
 
@@ -475,8 +659,14 @@ public sealed class ScriptedSessionRun
     /// </summary>
     public void Tick()
     {
-        var (session, reading) = ReadState();
-        if (session is null)
+        var (session, reading, paused) = ReadState();
+
+        // Upstream's own first line (:506): a paused session's tick decides nothing at all — no
+        // completion, no readout, no phase, no ramp and no delayed start. The pause already took
+        // the tick off the clock, so in the product nothing calls this; the guard is here because
+        // this method is public and because a tick already in flight when the pause landed would
+        // otherwise act on a frozen elapsed as if time had passed.
+        if (session is null || paused)
         {
             return;
         }
@@ -663,18 +853,50 @@ public sealed class ScriptedSessionRun
         }
     }
 
-    private (ScriptedSession? Session, ScriptedElapsedReading Reading) ReadState()
+    /// <summary>
+    /// The session, its elapsed reading and whether it is paused, taken together under one lock —
+    /// so a pause landing between two of those questions cannot make a caller act on a mixture of
+    /// before and after. Upstream's tick reads <c>_isRunning</c>, <c>_isPaused</c> and
+    /// <c>ElapsedTime</c> as three separate reads (<c>Services/Session/SessionEngine.cs:506-507</c>)
+    /// on a single UI thread, where they cannot interleave; this port's clock fires on a pool
+    /// thread, so the atomicity has to be written down.
+    /// </summary>
+    private (ScriptedSession? Session, ScriptedElapsedReading Reading, bool Paused) ReadState()
     {
         lock (_gate)
         {
             if (!_running || _session is null)
             {
-                return (null, default);
+                return (null, default, false);
             }
 
-            return (_session, Reconcile(_clock.Now - _wallStart, _clock.Monotonic - _monotonicStart));
+            return (_session, ReadingLocked(), _paused);
         }
     }
+
+    /// <summary>
+    /// One elapsed reading. <b>The caller holds <see cref="_gate"/>.</b>
+    ///
+    /// <para>While paused it is the banked value and the guard is not consulted — upstream's
+    /// <c>if (_isPaused) return _pausedElapsedTime;</c> (<c>Services/Session/SessionEngine.cs:97</c>),
+    /// which sits ABOVE the clock-jump comparison. There is nothing for the guard to do: neither
+    /// clock has advanced this session's elapsed time since the value was banked, so the two cannot
+    /// have diverged over it.</para>
+    ///
+    /// <para>While running it is upstream's <c>_pausedElapsedTime + (DateTime.Now - _startTime)</c>
+    /// against <c>_wallClockStopwatch.Elapsed</c> (<c>:99-100</c>), through the same
+    /// <see cref="Reconcile"/> every other reading uses. Both sides count from the current segment's
+    /// origin and add what earlier segments banked, which is exactly what a stopped-and-restarted
+    /// <c>Stopwatch</c> does on upstream's monotonic side and what its
+    /// <c>_pausedElapsedTime</c> does on its wall side.</para>
+    /// </summary>
+    private ScriptedElapsedReading ReadingLocked() =>
+        _paused
+            ? new ScriptedElapsedReading(
+                _wallBanked, _wallBanked, _monotonicBanked, UsedMonotonic: false)
+            : Reconcile(
+                _wallBanked + (_clock.Now - _wallStart),
+                _monotonicBanked + (_clock.Monotonic - _monotonicStart));
 
     /// <summary>
     /// Put the next tick on the clock. The token is published to the pending slot BEFORE the clock
@@ -758,8 +980,10 @@ public readonly record struct ScriptedSessionProgress(
     TimeSpan Elapsed, TimeSpan Remaining, double Percent);
 
 /// <summary>How a scripted session ended — upstream's <c>SessionCompletedEventArgs</c>
-/// (<c>Services/Session/SessionEngine.cs:2008-2020</c>) without the XP members, which are not in
-/// this slice.
+/// (<c>Services/Session/SessionEngine.cs:2008-2020</c>) without <c>XPEarned</c>, which nothing in
+/// this build computes: the award needs an app-lifetime ledger this port refuses to open
+/// (<c>Session/SessionParticipant.cs:502-517</c>). Its two PAUSE members are here, because the
+/// pauses really happened and the deduction they earn is arithmetic this build can do honestly.
 ///
 /// <para><b>The two wall-clock instants are here rather than on a second clock reading</b>, because
 /// the log the recap is built from wants exactly what upstream's does: a <c>started_at</c> and an
@@ -771,11 +995,24 @@ public readonly record struct ScriptedSessionProgress(
 /// <param name="Elapsed">Its final elapsed time, read before the running flag cleared.</param>
 /// <param name="Completed">True when it reached its duration; false when it was stopped
 /// early.</param>
-/// <param name="StartedAt">The wall clock when it started.</param>
+/// <param name="StartedAt">The wall clock when it started. A pause never moves it, so
+/// <see cref="EndedAt"/> less this is WALL time and can exceed <see cref="Elapsed"/> by exactly
+/// what the pauses held.</param>
 /// <param name="EndedAt">The wall clock when it ended.</param>
+/// <param name="PauseCount">How many times the user held it — upstream's <c>PauseCount</c>
+/// (<c>Services/Session/SessionEngine.cs:2013</c>). Defaulted so a caller that never pauses reads
+/// the same record it always did.</param>
 public sealed record ScriptedSessionOutcome(
     ScriptedSession Session,
     TimeSpan Elapsed,
     bool Completed,
     DateTimeOffset StartedAt,
-    DateTimeOffset EndedAt);
+    DateTimeOffset EndedAt,
+    int PauseCount = 0)
+{
+    /// <summary>What those pauses would cost this session's reward — upstream's
+    /// <c>XPPenalty =&gt; PauseCount * 100</c> (<c>Services/Session/SessionEngine.cs:2014</c>).
+    /// <b>Computed and not charged</b>: see <see cref="ScriptedSessionRun.XpPenaltyPerPause"/> for
+    /// the award this build does not have to deduct it from.</summary>
+    public int XpPenalty => PauseCount * ScriptedSessionRun.XpPenaltyPerPause;
+}

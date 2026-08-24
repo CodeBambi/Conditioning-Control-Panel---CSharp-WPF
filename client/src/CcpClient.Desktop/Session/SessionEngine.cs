@@ -33,9 +33,12 @@ namespace CcpClient.Desktop.Session;
 /// named rather than quietly dropped. <see cref="ScriptedSessionRun"/> is slice 1 of that other
 /// feature — the persisted model, phases on a clock, START/STOP with the settings snapshot, and
 /// the clock-jump guard — and it OWNS this class from outside rather than living in it: still no
-/// XP, no phases and no duration anywhere below this line. Its rack, its editor, its recap, its
-/// pause penalty and its XP award remain unported, and nothing in the composition root constructs
-/// one yet, so no surface can start a scripted session in this build.</para>
+/// XP, no phases and no duration anywhere below this line. <b>It is now REACHABLE:</b> the
+/// composition root builds one (<c>Lifecycle/CompositionRoot.cs:275</c> →
+/// <c>Session/SessionParticipant.cs:620</c>), the shell resolves it off the host
+/// (<c>Views/MainWindow.axaml.cs:112</c>) and the Studio door's rack starts, pauses and stops it
+/// (<c>Views/Pages/StudioPage.axaml.cs</c>), so a user really can run one. Its editor, custom and
+/// imported sessions, the rack's filter/sort/search and the XP award remain unported.</para>
 /// </summary>
 public sealed class SessionEngine
 {

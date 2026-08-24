@@ -2255,6 +2255,22 @@
                     AutomationProperties.Name="Start Session"
                     Content="Start Session" />
 
+            <!-- PAUSE / RESUME — upstream's own second button, and upstream's own visibility rule:
+                 it exists only while a session is running (MainWindow/MainWindow.Presets.cs:1809
+                 shows it at start, :1855 collapses it at the end; MainWindow.xaml:2606-2607 declares
+                 it Collapsed). One button in two states like the START one beside it, because
+                 upstream's is one button whose glyph flips between ⏸ and ▶ (:1921, :1937). Pausing
+                 asks first and resuming does not (:1919-1940) — the ask names what the pause costs,
+                 which is the only reason upstream gates one direction and not the other. -->
+            <Button x:Name="ScriptedSessionPauseButton"
+                    Classes="module-action"
+                    IsVisible="False"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="ScriptedSessionPauseButton"
+                    AutomationProperties.Name="Pause"
+                    Content="Pause" />
+
             <!-- RECENT SESSIONS — upstream's own door button, on this door because the rack is
                  (MainWindow/MainWindow.Presets.cs:1440 -> SessionLogHistoryWindow;
                  Views/Tabs/PresetsTabView.xaml:646-651, where it sits in the same header strip as

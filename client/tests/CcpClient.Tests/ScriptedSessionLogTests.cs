@@ -462,6 +462,15 @@ public class ScriptedSessionLogTests
         Assert.DoesNotContain("recap", SessionRackNotices.Absences, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("history", SessionRackNotices.Absences, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("the XP award", SessionRackNotices.Absences, StringComparison.Ordinal);
+
+        // Nor is PAUSE missing any more (ScriptedSessionRun.Pause/Resume) — so the notice must not
+        // still list it as absent. It is still allowed to MENTION a pause, because it now has to:
+        // the penalty is real and nothing charges it, which is the sentence below.
+        Assert.DoesNotContain(
+            "search, pause", SessionRackNotices.Absences, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pause is counted", SessionRackNotices.Absences, StringComparison.Ordinal);
+        Assert.Contains(
+            "nothing is charged", SessionRackNotices.Absences, StringComparison.Ordinal);
     }
 
     [Fact]

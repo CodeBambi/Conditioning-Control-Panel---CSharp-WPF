@@ -473,6 +473,7 @@ public partial class StudioPage : UserControl
         _scripted = session.Scripted;
         BuildScriptedSessionRack();
         ScriptedSessionStartButton.Click += (_, _) => OnScriptedStartClicked();
+        ScriptedSessionPauseButton.Click += (_, _) => OnScriptedPauseClicked();
         ScriptedSessionConfirmButton.Click += (_, _) => OnScriptedConfirmClicked();
         ScriptedSessionCancelButton.Click += (_, _) => OnScriptedCancelClicked();
 
@@ -1191,6 +1192,11 @@ public partial class StudioPage : UserControl
 
         /// <summary>Upstream's stop confirmation (<c>MainWindow.Presets.cs:1893-1906</c>).</summary>
         Stop,
+
+        /// <summary>Upstream's pause confirmation (<c>MainWindow.Presets.cs:1928-1932</c>). There
+        /// is no Resume member on purpose: upstream asks nothing before a resume
+        /// (<c>:1919-1924</c>), so that path never puts the strip up.</summary>
+        Pause,
     }
 
     /// <summary>
@@ -1416,6 +1422,43 @@ public partial class StudioPage : UserControl
     }
 
     /// <summary>
+    /// The PAUSE button — upstream's <c>BtnPauseSession_Click</c>
+    /// (<c>MainWindow/MainWindow.Presets.cs:1908-1940</c>), which is one handler serving both
+    /// directions and treats them asymmetrically on purpose.
+    ///
+    /// <para><b>Resume is immediate; pause asks.</b> Upstream's paused branch calls
+    /// <c>ResumeSession()</c> straight away (<c>:1919-1924</c>) and its running branch puts up a
+    /// dialog naming the cost first (<c>:1928-1939</c>). The asymmetry is the cost: a pause spends
+    /// something and a resume spends nothing, so only one of them is worth a question.</para>
+    ///
+    /// <para>The <see cref="ScriptedSessionRun.Running"/> guard is upstream's first line
+    /// (<c>:1910</c>). The button is not on screen when nothing runs, so this is the second door on
+    /// the same refusal rather than the only one — the same belt-and-braces the START button's own
+    /// state check gets.</para>
+    /// </summary>
+    private void OnScriptedPauseClicked()
+    {
+        if (!_scripted.Running)
+        {
+            return;
+        }
+
+        if (_scripted.Paused)
+        {
+            _scripted.Resume();
+
+            // The resume re-armed every module off the SESSION's dials, so the panels on this page
+            // are showing what they showed while it was held. Same reason the confirm path repaints.
+            OnSessionChanged();
+            return;
+        }
+
+        _scriptedRefusal = null;
+        _scriptedConfirm = ScriptedConfirmIntent.Pause;
+        RenderScriptedSession();
+    }
+
+    /// <summary>
     /// The confirmation was answered YES — upstream's <c>if (confirmed) StartSession(...)</c>
     /// (<c>:1472-1476</c>) and <c>if (confirmed) StopSession(completed: false)</c>
     /// (<c>:1903-1906</c>).
@@ -1438,6 +1481,12 @@ public partial class StudioPage : UserControl
                 break;
             case ScriptedConfirmIntent.Stop:
                 _scripted.Stop();
+                break;
+            case ScriptedConfirmIntent.Pause:
+                // Upstream's `if (confirmed) { _sessionEngine.PauseSession(); ... }` (:1934-1939).
+                // A false return means the session ended while the question was up, which the run
+                // refuses on its own guard — the same shape the Start case relies on.
+                _scripted.Pause();
                 break;
             default:
                 break;
@@ -1467,12 +1516,15 @@ public partial class StudioPage : UserControl
     private void RenderScriptedSession()
     {
         var running = _scripted.Running;
+        var paused = _scripted.Paused;
         var live = _scripted.Current;
         var progress = _scripted.ReadProgress();
 
-        // A stop confirmation outlives nothing: if the session ended while the strip was up (it
-        // reached its own duration), there is no longer anything to stop and the question goes.
-        if (_scriptedConfirm == ScriptedConfirmIntent.Stop && !running)
+        // A stop or pause confirmation outlives nothing: if the session ended while the strip was
+        // up (it reached its own duration), there is no longer anything to stop or hold and the
+        // question goes.
+        if (!running
+            && _scriptedConfirm is ScriptedConfirmIntent.Stop or ScriptedConfirmIntent.Pause)
         {
             _scriptedConfirm = ScriptedConfirmIntent.None;
         }
@@ -1484,6 +1536,17 @@ public partial class StudioPage : UserControl
         ScriptedSessionStartButton.SetValue(
             Avalonia.Automation.AutomationProperties.NameProperty, caption);
         ScriptedSessionStartButton.Classes.Set("running", running);
+
+        // Upstream's visibility rule, verbatim: the pause button exists only while a session is
+        // running (:1809 shows it, :1855 collapses it). Absent rather than disabled, which is §9
+        // D7's rule and upstream's own choice here.
+        var pauseCaption = paused
+            ? SessionRackNotices.PauseButtonPaused
+            : SessionRackNotices.PauseButtonIdle;
+        ScriptedSessionPauseButton.IsVisible = running;
+        ScriptedSessionPauseButton.Content = pauseCaption;
+        ScriptedSessionPauseButton.SetValue(
+            Avalonia.Automation.AutomationProperties.NameProperty, pauseCaption);
 
         ScriptedSessionConfirmPanel.IsVisible = _scriptedConfirm != ScriptedConfirmIntent.None;
         if (_scriptedConfirm == ScriptedConfirmIntent.Start && _scriptedSelection is { } pick)
@@ -1504,6 +1567,19 @@ public partial class StudioPage : UserControl
             ScriptedSessionConfirmButton.Content = SessionRackNotices.ConfirmStop;
             ScriptedSessionCancelButton.Content = SessionRackNotices.CancelStop;
         }
+        else if (_scriptedConfirm == ScriptedConfirmIntent.Pause)
+        {
+            // Upstream's four lines onto the strip's four slots (en.json:3387-3389). The running
+            // total is read from the RUN rather than counted here, so the number the question
+            // quotes and the number the outcome carries are the same one.
+            ScriptedSessionConfirmTitle.Text = SessionRackNotices.PauseConfirmTitle;
+            ScriptedSessionConfirmDetail.Text = SessionRackNotices.PauseConfirmCost;
+            ScriptedSessionConfirmPromise.Text =
+                SessionRackNotices.PauseConfirmPenalty(_scripted.PauseCount);
+            ScriptedSessionConfirmQuestion.Text = SessionRackNotices.PauseConfirmQuestion;
+            ScriptedSessionConfirmButton.Content = SessionRackNotices.ConfirmPause;
+            ScriptedSessionCancelButton.Content = SessionRackNotices.CancelPause;
+        }
 
         ScriptedSessionConfirmButton.SetValue(
             Avalonia.Automation.AutomationProperties.NameProperty,
@@ -1516,7 +1592,7 @@ public partial class StudioPage : UserControl
             ? SessionRackNotices.PhaseLine(current, _scripted.CurrentPhase, _scripted.CurrentPhaseIndex)
             : _scriptedRefusal ?? SessionRackNotices.IdleLine(_scriptedSelection);
         ScriptedSessionProgressState.Text = running
-            ? SessionRackNotices.ProgressLine(progress)
+            ? SessionRackNotices.ProgressLine(progress, paused)
             : string.Empty;
         ScriptedSessionAbsenceState.Text = SessionRackNotices.Absences;
 

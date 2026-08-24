@@ -78,7 +78,8 @@ public static class SessionRackNotices
     /// (§9 D7's rule: absent rather than greyed, and named rather than silently missing).</summary>
     public const string Absences =
         "Not here yet: the session editor, custom and imported sessions, the rack's filter, sort "
-        + "and search, pause, and the XP award.";
+        + "and search, and the XP award — so a pause is counted and its penalty recorded, but "
+        + "nothing is charged for it.";
 
     /// <summary>
     /// The icon cell — upstream's, including its fallback for a session that carries none
@@ -240,10 +241,74 @@ public static class SessionRackNotices
     /// (<c>MainWindow/MainWindow.ProgramsTab.cs:1507</c>). Truncated, never rounded up: a session
     /// one second in reads 0%, not 1%.</para>
     /// </summary>
-    public static string ProgressLine(ScriptedSessionProgress progress) =>
+    /// <param name="progress">One reading.</param>
+    /// <param name="paused">Whether the session is being held. Upstream appends its own
+    /// <c>[PAUSED]</c> marker to the running label (<c>MainWindow/MainWindow.Presets.cs:1759</c>,
+    /// <c>en.json:3180</c>). <b>Placement diverges and the reason is a gate:</b> upstream's marker
+    /// sits beside the countdown in the START button's label, and this port's countdown is the
+    /// button's whole caption and a headed capture needle. The marker goes on the numbers line
+    /// instead, where it is next to the same frozen clock and cannot break that needle. Default
+    /// false, so every existing caller and the headed needle read the byte-identical string they
+    /// always did.</param>
+    public static string ProgressLine(ScriptedSessionProgress progress, bool paused = false) =>
         string.Create(
             CultureInfo.InvariantCulture,
-            $"{(int)progress.Percent}% — {Clock(progress.Elapsed)} elapsed, {Clock(progress.Remaining)} remaining");
+            $"{(int)progress.Percent}% — {Clock(progress.Elapsed)} elapsed, {Clock(progress.Remaining)} remaining")
+        + (paused ? $" [{Paused}]" : string.Empty);
+
+    /// <summary>Upstream's marker for a held session (<c>en.json:3180</c>,
+    /// <c>MainWindow/MainWindow.Presets.cs:1759</c>).</summary>
+    public const string Paused = "PAUSED";
+
+    /// <summary>The idle caption of the pause button — upstream's <c>⏸</c> glyph
+    /// (<c>MainWindow/MainWindow.Presets.cs:1810</c>) as a word, because every ported caption on
+    /// this shell is glyph-stripped (§9 D8) and a lone glyph is not a UIA needle.</summary>
+    public const string PauseButtonIdle = "Pause";
+
+    /// <summary>What the same button says once it is holding one — upstream swaps its glyph to
+    /// <c>▶</c> and its tooltip to "Resume session" (<c>:1937-1938</c>,
+    /// <c>en.json:2228</c>).</summary>
+    public const string PauseButtonPaused = "Resume";
+
+    /// <summary>Upstream's pause confirm title (<c>en.json:3387</c>, "⏸ Pause Session?"),
+    /// glyph-stripped.</summary>
+    public const string PauseConfirmTitle = "Pause Session?";
+
+    /// <summary>Upstream's first confirm line (<c>en.json:3388</c>, "Pausing will cost you 100 XP
+    /// from your session reward."), with its number taken from the constant the arithmetic uses
+    /// rather than retyped.</summary>
+    public static readonly string PauseConfirmCost = string.Create(
+        CultureInfo.InvariantCulture,
+        $"Pausing costs {ScriptedSessionRun.XpPenaltyPerPause} XP from this session's reward.");
+
+    /// <summary>
+    /// Upstream's running total (<c>en.json:3388</c>, "Current penalty: -{0} XP\nAfter this pause:
+    /// -{1} XP"), on one line for the reason <see cref="SettingsPromise"/> gives.
+    ///
+    /// <para><b>The last clause is this port's, and it is the opposite of a smoothed divergence:</b>
+    /// nothing in this build awards session XP (<see cref="ScriptedSessionRun.XpPenaltyPerPause"/>
+    /// for why), so quoting upstream's cost without it would be the app telling a user it is about
+    /// to charge them something it cannot charge. The arithmetic is upstream's and it is real —
+    /// <see cref="ScriptedSessionOutcome.XpPenalty"/> carries it — and what is missing is said.</para>
+    /// </summary>
+    public static string PauseConfirmPenalty(int pauseCount)
+    {
+        var now = pauseCount * ScriptedSessionRun.XpPenaltyPerPause;
+        var after = (pauseCount + 1) * ScriptedSessionRun.XpPenaltyPerPause;
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"Current penalty: -{now} XP. After this pause: -{after} XP — recorded, not charged: nothing in this build awards session XP yet.");
+    }
+
+    /// <summary>Upstream's closing question on the pause path (<c>en.json:3388</c>).</summary>
+    public const string PauseConfirmQuestion = "Are you sure?";
+
+    /// <summary>Upstream's pause confirm button (<c>en.json:3389</c>).</summary>
+    public const string ConfirmPause = "Yes, pause";
+
+    /// <summary>Upstream's pause refusal button (<c>en.json:3386</c>) — the same one the stop
+    /// confirmation uses, as upstream reuses it.</summary>
+    public const string CancelPause = CancelStop;
 
     /// <summary>
     /// What the panel says when nothing is running: which session is armed, or that none is.
