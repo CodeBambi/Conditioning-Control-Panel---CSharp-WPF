@@ -45,6 +45,10 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
     private string _statusText = string.Empty;
     private bool _statusAvailable;
     private string _clearOutcomeText = string.Empty;
+    private bool _titleEditorVisible;
+    private string _titleAllowInput = string.Empty;
+    private string _titleAllowNotice = string.Empty;
+    private AiForgetScope _pendingScope = AiForgetScope.Conversation;
 
     public CompanionViewModel(CompanionParticipant participant, UiDispatchBoundary uiDispatch)
     {
@@ -61,10 +65,15 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
         ];
         SendCommand = new CompanionCommand(Send, () => CanSend);
         StopCommand = new CompanionCommand(Stop, () => InFlight);
-        RequestClearCommand = new CompanionCommand(RequestClear, () => !Clearing && !ConfirmVisible);
+        RequestClearCommand = new CompanionCommand(() => RequestForget(AiForgetScope.Conversation), () => !Clearing && !ConfirmVisible);
+        ForgetThreadCommand = new CompanionCommand(() => RequestForget(AiForgetScope.Thread), () => !Clearing && !ConfirmVisible);
+        ForgetEverythingCommand = new CompanionCommand(() => RequestForget(AiForgetScope.Everything), () => !Clearing && !ConfirmVisible);
         ConfirmClearCommand = new CompanionCommand(ConfirmClear, () => ConfirmVisible && !Clearing);
         CancelClearCommand = new CompanionCommand(() => ConfirmVisible = false, () => ConfirmVisible);
+        AddNamedAppCommand = new CompanionCommand(AddNamedApp);
+        RemoveNamedAppCommand = new CompanionCommand((Action<object?>)RemoveNamedApp);
         EscapeCommand = new CompanionCommand(Escape);
+        ShowTranscriptCommand = new CompanionCommand(() => TranscriptRequested?.Invoke(this, EventArgs.Empty));
         RefreshStatus();
     }
 
@@ -72,6 +81,9 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
 
     /// <summary>Raised when Escape is pressed with no confirm open (the window closes — W-04 shape).</summary>
     public event EventHandler? CloseRequested;
+
+    /// <summary>D11: raised when the user asks to read the persisted record. The window owns the child window's lifetime; the view-model owns nothing visual.</summary>
+    public event EventHandler? TranscriptRequested;
 
     public ObservableCollection<CompanionBubbleModel> Bubbles { get; }
 
@@ -161,8 +173,92 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
         {
             _participant.Awareness.Consent = value ? AiAwarenessConsent.Given : AiAwarenessConsent.NotGiven;
             Changed(nameof(AwarenessConsentGiven));
+            RaiseDialChanged();
         }
     }
+
+    // =========================================================================================
+    //  A3 — the privacy dial, and A4 — the per-app title allow-list it reads
+    // =========================================================================================
+
+    /// <summary>
+    /// The stop the state IS (never a stored level — <see cref="CompanionPrivacyDial"/> explains
+    /// why). Derived from the awareness consent and the F4 allow-list's size, exactly as WPF
+    /// derives it (AwarenessPrivacyRuntimeVm.cs:332-336).
+    /// </summary>
+    public CompanionPrivacyStop PrivacyStop =>
+        CompanionPrivacyDial.Derive(_participant.Awareness.Consent.Granted, _participant.Awareness.TitleAllowList.Count);
+
+    /// <summary>What the current stop does, in one line (en.json:4435-4437).</summary>
+    public string PrivacyHint => CompanionPrivacyDial.HintFor(PrivacyStop);
+
+    /// <summary>Segment binding for "─ Off". Setting it true turns awareness off; setting it false is ignored (a radio group deselects by selecting another).</summary>
+    public bool StopOffSelected
+    {
+        get => PrivacyStop is CompanionPrivacyStop.Off;
+        set { if (value) { SelectStop(CompanionPrivacyStop.Off); } }
+    }
+
+    /// <summary>Segment binding for "◔ App names only".</summary>
+    public bool StopAppNamesSelected
+    {
+        get => PrivacyStop is CompanionPrivacyStop.AppNamesOnly;
+        set { if (value) { SelectStop(CompanionPrivacyStop.AppNamesOnly); } }
+    }
+
+    /// <summary>Segment binding for "◉ + Page titles". Pressing it opens the editor; it does not widen anything on its own.</summary>
+    public bool StopPageTitlesSelected
+    {
+        get => PrivacyStop is CompanionPrivacyStop.PlusPageTitles;
+        set { if (value) { SelectStop(CompanionPrivacyStop.PlusPageTitles); } }
+    }
+
+    /// <summary>
+    /// Whether the per-app editor is on screen. Opened by ASKING for the third stop (WPF
+    /// "Everything: enable, then ASK. Nothing widens because a segment was pressed.",
+    /// AwarenessPrivacyRuntimeVm.cs:106-113), and it stays open while any app is named so the
+    /// user can take one back.
+    /// </summary>
+    public bool TitleEditorVisible
+    {
+        get => _titleEditorVisible || _participant.Awareness.TitleAllowList.Count > 0;
+        private set
+        {
+            if (_titleEditorVisible == value) return;
+            _titleEditorVisible = value;
+            Changed(nameof(TitleEditorVisible));
+        }
+    }
+
+    /// <summary>The apps whose page titles may travel. EMPTY by default — no title travels for anything.</summary>
+    public ObservableCollection<string> NamedApps { get; } = [];
+
+    /// <summary>The app-name box the Add button reads.</summary>
+    public string TitleAllowInput
+    {
+        get => _titleAllowInput;
+        set
+        {
+            if (_titleAllowInput == value) return;
+            _titleAllowInput = value;
+            Changed(nameof(TitleAllowInput));
+        }
+    }
+
+    /// <summary>Why the last Add was refused (empty = nothing to say). Never a throw, never silent.</summary>
+    public string TitleAllowNotice
+    {
+        get => _titleAllowNotice;
+        private set
+        {
+            if (_titleAllowNotice == value) return;
+            _titleAllowNotice = value;
+            Changed(nameof(TitleAllowNotice));
+            Changed(nameof(TitleAllowNoticeVisible));
+        }
+    }
+
+    public bool TitleAllowNoticeVisible => _titleAllowNotice.Length > 0;
 
     /// <summary>
     /// The ten permission switches, in upstream's grid order
@@ -235,13 +331,65 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
 
     public ICommand StopCommand { get; }
 
+    /// <summary>The CONVERSATION scope (audit row C10): the thread plus everything kept beside it.</summary>
     public ICommand RequestClearCommand { get; }
+
+    /// <summary>The THREAD scope: she forgets what was said and keeps the rest of the document.</summary>
+    public ICommand ForgetThreadCommand { get; }
+
+    /// <summary>The EVERYTHING scope: the conversation plus every quarantined copy of it.</summary>
+    public ICommand ForgetEverythingCommand { get; }
 
     public ICommand ConfirmClearCommand { get; }
 
     public ICommand CancelClearCommand { get; }
 
+    /// <summary>A4: names the app in <see cref="TitleAllowInput"/>. A rejected entry is reported, never thrown.</summary>
+    public ICommand AddNamedAppCommand { get; }
+
+    /// <summary>A4: takes one named app back (parameter = the entry).</summary>
+    public ICommand RemoveNamedAppCommand { get; }
+
     public ICommand EscapeCommand { get; }
+
+    /// <summary>D11: opens the read-only transcript over this window.</summary>
+    public ICommand ShowTranscriptCommand { get; }
+
+    /// <summary>
+    /// D11: the persisted pairs, oldest first — the UNGATED inspection read
+    /// (<see cref="AiMemoryStore.ReadRecent"/>), never the consent-gated prompt read. The store's
+    /// append-trim already bounds the document, so asking for everything is asking for the
+    /// retention window.
+    /// </summary>
+    public IReadOnlyList<AiMemoryTurn> ReadTranscript() => _participant.Memory.ReadRecent(int.MaxValue);
+
+    /// <summary>The confirm overlay's heading — scope-specific, because the three scopes delete different things.</summary>
+    public string ConfirmTitle => _pendingScope switch
+    {
+        AiForgetScope.Thread => "Clear the conversation?",
+        AiForgetScope.Conversation => "Reset companion memory?",
+        _ => "Forget everything?",
+    };
+
+    /// <summary>
+    /// The confirm overlay's body. Each line says what SURVIVES as well as what goes, which is
+    /// the property that makes the three scopes distinguishable to a user at all (WPF's own
+    /// narrow-scope copy does the same: "She forgets the thread — in memory and on disk — and
+    /// starts fresh on your next message. What she knows about you is untouched.",
+    /// en.json:4507).
+    /// </summary>
+    public string ConfirmBody => _pendingScope switch
+    {
+        AiForgetScope.Thread =>
+            "She forgets the thread — in memory and on disk — and starts fresh on your next message. "
+            + "The saved document itself is kept. This can't be undone.",
+        AiForgetScope.Conversation =>
+            "Delete the saved companion memory, and everything kept alongside it. "
+            + "Any copy she couldn't read is left where it is. This can't be undone.",
+        _ =>
+            "Delete the saved companion memory AND every quarantined copy of it, so nothing can bring "
+            + "the conversation back. This can't be undone.",
+    };
 
     /// <summary>The window reads status on open and after every operation (states change only via probes/operations).</summary>
     public void RefreshStatus()
@@ -326,13 +474,16 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
         });
     }
 
-    private void RequestClear()
+    private void RequestForget(AiForgetScope scope)
     {
         if (Clearing)
         {
             return;
         }
 
+        _pendingScope = scope;
+        Changed(nameof(ConfirmTitle));
+        Changed(nameof(ConfirmBody));
         ClearOutcomeText = string.Empty;
         ConfirmVisible = true;
     }
@@ -344,12 +495,13 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
             return; // re-entrancy guard: one clear at a time
         }
 
+        var scope = _pendingScope;
         ConfirmVisible = false;
         Clearing = true;
         _ = Task.Run(() =>
         {
-            // Clear() blocks on the store's write chain (per consult) — never on the UI thread.
-            _participant.Memory.Clear();
+            // Forget() blocks on the store's write chain (per consult) — never on the UI thread.
+            _participant.Memory.Forget(scope);
             var outcome = _participant.Memory.LastClearOutcome;
             _ui.Post(() =>
             {
@@ -363,7 +515,12 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
                 {
                     case AiMemoryClearOutcome.Cleared:
                         Bubbles.Clear(); // WPF: the on-screen chat log clears too (Patreon.cs:933-936)
-                        ClearOutcomeText = "Companion memory cleared.";
+                        ClearOutcomeText = scope switch
+                        {
+                            AiForgetScope.Thread => "Conversation cleared; the saved document was kept.",
+                            AiForgetScope.Conversation => "Companion memory cleared.",
+                            _ => "Companion memory cleared, quarantined copies included.",
+                        };
                         break;
                     case AiMemoryClearOutcome.Degraded:
                         ClearOutcomeText = "In-session memory cleared; the saved document is from a newer version and was kept.";
@@ -388,6 +545,86 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
         {
             CloseRequested?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>
+    /// What pressing a segment DOES (WPF `AwarenessPrivacyRuntimeVm.Intensity`, :84-116, arm for
+    /// arm): Off disables awareness; "App names only" enables it and EMPTIES the allow-list,
+    /// because that stop is a promise no page title travels (:97-101); "+ Page titles" enables it
+    /// and OPENS the editor, widening nothing by itself (:106-113) — the dial goes on reporting
+    /// the middle stop until an app is actually named.
+    /// </summary>
+    private void SelectStop(CompanionPrivacyStop stop)
+    {
+        var allowList = _participant.Awareness.TitleAllowList;
+        switch (stop)
+        {
+            case CompanionPrivacyStop.Off:
+                _participant.Awareness.Consent = AiAwarenessConsent.NotGiven;
+                TitleEditorVisible = false;
+                break;
+
+            case CompanionPrivacyStop.AppNamesOnly:
+                _participant.Awareness.Consent = AiAwarenessConsent.Given;
+                allowList.Clear();
+                NamedApps.Clear();
+                TitleEditorVisible = false;
+                break;
+
+            default:
+                _participant.Awareness.Consent = AiAwarenessConsent.Given;
+                TitleEditorVisible = true;
+                break;
+        }
+
+        TitleAllowNotice = string.Empty;
+        Changed(nameof(AwarenessConsentGiven));
+        RaiseDialChanged();
+    }
+
+    private void AddNamedApp()
+    {
+        var raw = _titleAllowInput;
+        if (_participant.Awareness.TitleAllowList.Add(raw))
+        {
+            // The stored form is the SANITISED one, so the chip a user sees is the string the
+            // filter actually matches — never the raw text, which would over-promise.
+            NamedApps.Add(AiTitleAllowList.SanitizeEntry(raw)!);
+            TitleAllowInput = string.Empty;
+            TitleAllowNotice = string.Empty;
+            TitleEditorVisible = true;
+            RaiseDialChanged();
+            return;
+        }
+
+        // Refusals are reported, never thrown and never silent (AiTitleAllowList.Add).
+        TitleAllowNotice = AiTitleAllowList.SanitizeEntry(raw) is null
+            ? "That is not usable as an app name: at least two characters, and no wildcards."
+            : "Already named.";
+    }
+
+    private void RemoveNamedApp(object? parameter)
+    {
+        if (parameter is not string entry || !_participant.Awareness.TitleAllowList.Remove(entry))
+        {
+            return;
+        }
+
+        NamedApps.Remove(entry);
+        TitleAllowNotice = string.Empty;
+        RaiseDialChanged();
+    }
+
+    // One notification for every property the dial derives, so the strip, the hint and the editor
+    // can never disagree about the same state.
+    private void RaiseDialChanged()
+    {
+        Changed(nameof(PrivacyStop));
+        Changed(nameof(PrivacyHint));
+        Changed(nameof(StopOffSelected));
+        Changed(nameof(StopAppNamesSelected));
+        Changed(nameof(StopPageTitlesSelected));
+        Changed(nameof(TitleEditorVisible));
     }
 
     private void SetCooldowns(decimal? reaction = null, decimal? global = null, decimal? perKeyword = null, decimal? loopProtection = null)
@@ -423,6 +660,8 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
         if (name is nameof(ConfirmVisible) or nameof(Clearing))
         {
             ((CompanionCommand)RequestClearCommand).RaiseCanExecuteChanged();
+            ((CompanionCommand)ForgetThreadCommand).RaiseCanExecuteChanged();
+            ((CompanionCommand)ForgetEverythingCommand).RaiseCanExecuteChanged();
             ((CompanionCommand)ConfirmClearCommand).RaiseCanExecuteChanged();
             ((CompanionCommand)CancelClearCommand).RaiseCanExecuteChanged();
         }
@@ -431,10 +670,16 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
     /// <summary>Direct ICommand (cheat sheet §Commands — no RoutedCommand; the MainWindowViewModel precedent).</summary>
     private sealed class CompanionCommand : ICommand
     {
-        private readonly Action _execute;
+        private readonly Action<object?> _execute;
         private readonly Func<bool>? _canExecute;
 
         public CompanionCommand(Action execute, Func<bool>? canExecute = null)
+            : this(_ => execute(), canExecute)
+        {
+        }
+
+        /// <summary>The parameterised form, for the one command that acts on a list item (remove-named-app).</summary>
+        public CompanionCommand(Action<object?> execute, Func<bool>? canExecute = null)
         {
             _execute = execute;
             _canExecute = canExecute;
@@ -444,7 +689,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged
 
         public bool CanExecute(object? parameter) => _canExecute?.Invoke() ?? true;
 
-        public void Execute(object? parameter) => _execute();
+        public void Execute(object? parameter) => _execute(parameter);
 
         public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
     }

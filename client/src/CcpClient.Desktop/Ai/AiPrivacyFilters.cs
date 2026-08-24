@@ -228,8 +228,10 @@ public static class AiPrivacyFilters
         "disregard previous", "new instructions:", "override:"
     ];
 
-    // WPF verbatim (AwarenessText.cs:230-238).
-    private static bool LooksLikeInstruction(string trimmedLine)
+    // WPF verbatim (AwarenessText.cs:230-238). Internal because F4's rule-entry sanitiser
+    // (AiTitleAllowList.SanitizeEntry) is WPF's SECOND consumer of the same table
+    // (AwarenessText.cs:189) — one definition, both consumers.
+    internal static bool LooksLikeInstruction(string trimmedLine)
     {
         if (trimmedLine.Length == 0)
         {

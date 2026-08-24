@@ -81,6 +81,48 @@ public enum AiMemoryWriteAdmission
     WritesDisabled,
 }
 
+/// <summary>
+/// The three scopes of forgetting (audit row C10; WPF `CompanionBrain.ForgetThread` :550-558,
+/// `ForgetConversation` :571-585, `Forget` :606-612 over `MemoryStore.Wipe` :592-631). Strictly
+/// nested — each scope does everything the narrower one does and more — so the ladder the user
+/// reads on screen is the ladder the code runs.
+///
+/// <para><b>What "derived" means in this port, honestly.</b> WPF's middle scope adds per-mod
+/// relationship counters and chat-sourced FACTS (`MemoryStore.ForgetChatDerived` :643-652). The
+/// port has no facts model and no relationship counters — that retention shape is the audit's row
+/// C7 / owner question Q10, and it is not admitted. So <see cref="Conversation"/>'s derived arm is
+/// the only thing this build keeps alongside the turns: the rest of the persisted document. When
+/// facts land, they join this scope; nothing here has to change shape for them to.</para>
+/// </summary>
+public enum AiForgetScope
+{
+    /// <summary>
+    /// The thread and nothing else: the turns go, in memory and on disk, and the document itself
+    /// is KEPT with everything else it carries (WPF `ForgetThread` :533-535 — "Drops the THREAD
+    /// and nothing else … No memory fact is touched"). The narrow scope for the user whose
+    /// companion is stuck in an old pattern and who does not want to lose the rest.
+    /// </summary>
+    Thread,
+
+    /// <summary>
+    /// <see cref="Thread"/> plus everything the app kept ALONGSIDE the turns: the document leaves
+    /// the disk entirely, taking its non-turn payload with it (the dormant marker, the retention
+    /// field, and any unknown members a newer build wrote beside the turns — the port's whole
+    /// derived-from-conversation surface today). WPF `ForgetConversation` :571-585.
+    /// </summary>
+    Conversation,
+
+    /// <summary>
+    /// <see cref="Conversation"/> plus every other on-disk COPY of what she was told: the
+    /// quarantined `&lt;memory&gt;.corrupt-*.json` documents that a narrower forget deliberately
+    /// leaves behind. WPF's wipe deletes a file its own model does not own for exactly this
+    /// reason — leaving it "would let CompanionSessionStore's one-time import resurrect the wiped
+    /// conversation on the next launch, which is the exact opposite of what the button promises"
+    /// (`MemoryStore.cs:587-590`).
+    /// </summary>
+    Everything,
+}
+
 /// <summary>Typed explicit-clear outcome. <see cref="Degraded"/>: in-memory state emptied but a newer-schema document was NOT deleted (an older build never clobbers a newer one). <see cref="Failed"/>: the delete was attempted but the document is still on disk (never reported as Cleared — a privacy operation must not lie, pre-completion consult B).</summary>
 public enum AiMemoryClearOutcome
 {
@@ -254,9 +296,28 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
     /// A newer-schema document is NEVER deleted (an older build never clobbers a newer
     /// one, the persistence contract §4 rule 7) — the clear empties in-memory state and surfaces
     /// typed <see cref="AiMemoryClearOutcome.Degraded"/>. Quarantined .corrupt-*.json
-    /// backups are contract-preserved (§5 rule 3) and are never deleted by clear.
+    /// backups are contract-preserved (§5 rule 3) and are never deleted by clear — only by
+    /// <see cref="AiForgetScope.Everything"/>, which is the user asking for them by name.
+    ///
+    /// <para>The interface member (contract §5 rule 1) is the CONVERSATION scope of
+    /// <see cref="Forget"/> (audit row C10): identical behavior to before that row, now with a
+    /// narrower scope below it and a wider one above it.</para>
     /// </summary>
-    public void Clear()
+    public void Clear() => Forget(AiForgetScope.Conversation);
+
+    /// <summary>
+    /// The three forget scopes (audit row C10), strictly nested — see <see cref="AiForgetScope"/>
+    /// for what each one takes and the WPF method it ports. Every scope empties the in-memory
+    /// turns first and chains an EMPTY-state write before touching the disk, so neither a queued
+    /// write nor the teardown flush can resurrect what was forgotten; serialized against
+    /// <see cref="Append"/> under the store gate (a racing append mid-forget must not recreate the
+    /// file with only its turn). A newer-schema document is NEVER deleted or rewritten (an older
+    /// build never clobbers a newer one, the persistence contract §4 rule 7) — every scope then
+    /// empties in-memory state and surfaces typed <see cref="AiMemoryClearOutcome.Degraded"/>.
+    /// <see cref="LastClearOutcome"/> reports what is actually gone from disk, never what was
+    /// intended (a privacy operation must not lie).
+    /// </summary>
+    public void Forget(AiForgetScope scope)
     {
         lock (_gate)
         {
@@ -267,16 +328,87 @@ public sealed class AiMemoryStore : IAiMemoryStore, IBackgroundParticipant
                 return;
             }
 
-            if (_store.Running)
+            var written = _store.Running
+                && _store.SaveImmediate().GetAwaiter().GetResult() is OperationOutcome.Completed;
+
+            if (scope is AiForgetScope.Thread)
             {
-                _ = _store.SaveImmediate().GetAwaiter().GetResult();
+                // The thread and nothing else: the file stays, now holding zero turns and whatever
+                // else it carried (WPF ForgetThread :533-535 — "No memory fact is touched"). The
+                // empty-state write above IS the erasure here; there is nothing to delete, so the
+                // write is what the outcome has to report. A file that was never written held
+                // nothing to forget in the first place.
+                LastClearOutcome = written || !File.Exists(_filePath)
+                    ? AiMemoryClearOutcome.Cleared
+                    : AiMemoryClearOutcome.Failed;
+                return;
             }
 
             TryDelete(_filePath);
             TryDelete(_tempPath);
+            var survivors = File.Exists(_filePath);
+
+            if (scope is AiForgetScope.Everything)
+            {
+                foreach (var backup in QuarantinedBackups())
+                {
+                    TryDelete(backup);
+                    survivors |= File.Exists(backup);
+                }
+            }
+
             // The outcome reports reality, never intent (pre-completion consult B): a failed
             // delete (AV scanner, lock, read-only) must not read as Cleared on a privacy operation.
-            LastClearOutcome = File.Exists(_filePath) ? AiMemoryClearOutcome.Failed : AiMemoryClearOutcome.Cleared;
+            LastClearOutcome = survivors ? AiMemoryClearOutcome.Failed : AiMemoryClearOutcome.Cleared;
+        }
+    }
+
+    /// <summary>
+    /// The quarantined copies of THIS document and nothing else:
+    /// `&lt;name&gt;.corrupt-*.json` beside it, the exact shape
+    /// <c>PersistenceStore.Quarantine</c> writes (PersistenceStore.cs:451-455). Derived from the
+    /// store's own path — never a glob over the data root, because the one failure this scope
+    /// cannot afford is deleting a file it was not asked about.
+    ///
+    /// <para><b>On the persistence contract.</b> §5 binds the QUARANTINE path: the store itself
+    /// preserves unreadable bytes rather than deleting or overwriting them and silently running on
+    /// defaults. That rule still holds exactly — <see cref="Clear"/> and both narrower scopes
+    /// leave these files completely alone. <see cref="AiForgetScope.Everything"/> is the user
+    /// explicitly asking for them, and by construction they are nothing but a previous state of
+    /// this same memory document.</para>
+    /// </summary>
+    private IEnumerable<string> QuarantinedBackups()
+    {
+        var directory = Path.GetDirectoryName(_filePath);
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        {
+            return [];
+        }
+
+        var prefix = Path.GetFileNameWithoutExtension(_filePath) + ".corrupt-";
+        try
+        {
+            // Enumerated with the pattern AND re-checked in code: Windows still matches 8.3 short
+            // names through wildcards, so the pattern alone is not a guarantee about which files
+            // came back — and this is the one operation that must never widen by a filename quirk.
+            return Directory.EnumerateFiles(directory, prefix + "*.json")
+                .Where(f =>
+                {
+                    var name = Path.GetFileName(f);
+                    return name.StartsWith(prefix, StringComparison.Ordinal)
+                        && name.EndsWith(".json", StringComparison.Ordinal);
+                })
+                .ToList();
+        }
+        catch (IOException)
+        {
+            // Same best-effort discipline as the deletes: an unreadable directory leaves the
+            // survivors on disk, and the typed outcome below reports that rather than lying.
+            return [];
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return [];
         }
     }
 

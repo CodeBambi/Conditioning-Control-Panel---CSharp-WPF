@@ -190,15 +190,18 @@ public sealed record AiAwarenessContext(string Category, string App, string Titl
 /// </summary>
 public static class AiAwarenessContextPackaging
 {
-    /// <summary>Moderates every field RAW (a blocking verdict on any field prevents transmission entirely — zero network follows), then assembles with the Title SCRUBBED by the F2 filter (<see cref="AiPrivacyFilters.SanitizeTitleForWire"/>). Order is load-bearing: moderate first keeps landed behavior byte-identical (a blocked raw title still blocks the whole package), and the scrub only narrows what is then assembled — never the reverse. A title that scrubs to nothing is carried as NO title (WPF `ResolveTitle`→null→`TitleForWire: null` semantics, AwarenessPrivacyRules.cs:455-466: the frame proceeds title-free). F1 defense in depth: an incognito title is never packaged (WPF re-checks inside the shared rules — "defence in depth, not the enforcing copy", AwarenessObserverPolicy.cs:227-229); returns false with <paramref name="refusal"/> NULL in that case — a privacy-filter drop, not a moderation verdict. Fields never enter diagnostics or memory: this packager emits nothing, and the pipeline persists memory for the interactive class only (c4).</summary>
+    /// <summary>Moderates every field RAW (a blocking verdict on any field prevents transmission entirely — zero network follows), then assembles with the Title gated by the F4 allow-list (<paramref name="titleAllowList"/>) and SCRUBBED by the F2 filter (<see cref="AiPrivacyFilters.SanitizeTitleForWire"/>). Order is load-bearing: moderate first keeps landed behavior byte-identical (a blocked raw title still blocks the whole package), and the gate plus the scrub only narrow what is then assembled — never the reverse. A title the allow-list does not admit, and a title that scrubs to nothing, are both carried as NO title (WPF `ResolveTitle`→null→`TitleForWire: null` semantics, AwarenessPrivacyRules.cs:453-466: the frame proceeds title-free). F1 defense in depth: an incognito title is never packaged (WPF re-checks inside the shared rules — "defence in depth, not the enforcing copy", AwarenessObserverPolicy.cs:227-229); returns false with <paramref name="refusal"/> NULL in that case — a privacy-filter drop, not a moderation verdict. Fields never enter diagnostics or memory: this packager emits nothing, and the pipeline persists memory for the interactive class only (c4).</summary>
+    /// <param name="titleAllowList">F4 (audit row A4): the apps whose page title may travel. REQUIRED rather than optional — an omitted argument would silently restore the wide pre-A4 behavior, which is the one mistake this row exists to prevent. It ships EMPTY, so by default no title is carried for anything.</param>
     public static bool TryPackage(
         AiAwarenessContext context,
         AiModerationBoundary boundary,
+        AiTitleAllowList titleAllowList,
         out AiRequest? request,
         out AiModerationRefusal? refusal)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(boundary);
+        ArgumentNullException.ThrowIfNull(titleAllowList);
 
         // F1: incognito first — before moderation, before assembly, before anything
         // is resolved (WPF order, AwarenessObserverPolicy.cs:264-266).
@@ -220,9 +223,16 @@ public static class AiAwarenessContextPackaging
             }
         }
 
-        // F2: the assembled title is the scrubbed one (verbatim WPF values,
+        // F4 then F2, in WPF's own order (ResolveTitle, AwarenessPrivacyRules.cs:453-466: the
+        // allow-list decides WHETHER a title may travel, and only an admitted one is then
+        // sanitised). The identity matched is the CALLER-SUPPLIED App field — never an observed
+        // process name (see AiTitleAllowList). Empty list = no title for anyone, which is the
+        // shipped default and narrower than the pre-A4 behavior.
+        // F2: an admitted title is the scrubbed one (verbatim WPF values,
         // AwarenessPrivacyRules.cs:346-372); null = no title carried.
-        var title = AiPrivacyFilters.SanitizeTitleForWire(context.Title) ?? string.Empty;
+        var title = titleAllowList.AllowsTitleFor(context.App)
+            ? AiPrivacyFilters.SanitizeTitleForWire(context.Title) ?? string.Empty
+            : string.Empty;
 
         // The WPF-observed shape verbatim (AiService.cs:160-163).
         request = new AiRequest(
@@ -460,6 +470,15 @@ public sealed class AiAwarenessService
     public AiCooldownRegistry Cooldowns => _cooldowns;
 
     /// <summary>
+    /// F4 (audit row A4): the apps whose page title may travel. Ships EMPTY, so a granted
+    /// awareness consent no longer means every app's title flows — the deliberate NARROWING this
+    /// row lands (WPF Models/AppSettings.cs:4216-4218 describes its own empty default the same
+    /// way). Session-scoped beside <see cref="Consent"/> and <see cref="Values"/>: a persisted
+    /// entry would read as a decided consent granularity (owner question Q5).
+    /// </summary>
+    public AiTitleAllowList TitleAllowList { get; } = new();
+
+    /// <summary>
     /// The cooldown VALUES in effect (placeholder baselines; §9.2 #4 owner-pending).
     /// Settable (slice c7 — the cooldown settings surface drives the typed state at
     /// runtime; session-scoped, never persisted). A value edit applies to the NEXT
@@ -561,7 +580,7 @@ public sealed class AiAwarenessService
             return new AiAwarenessRoutingResult.Dropped(AiAwarenessDropKind.PrivacyFiltered);
         }
 
-        if (!AiAwarenessContextPackaging.TryPackage(context, _boundary, out var request, out _))
+        if (!AiAwarenessContextPackaging.TryPackage(context, _boundary, TitleAllowList, out var request, out _))
         {
             // A blocking policy prevents transmission — zero network follows. Content-free
             // diagnostic: the SIDE code only, never the category, never the field.

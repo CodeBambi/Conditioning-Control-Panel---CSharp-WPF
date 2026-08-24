@@ -647,7 +647,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 \u2014 the guard never skips by design (a missing directory FAILS). The per-surface Assert.True(File.Exists(path)) in the second half is the same shape and the same intent: a hosted surface that vanished from the list FAILS rather than being quietly walked past."
+      "reason": "fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS). The per-surface Assert.True(File.Exists(path)) in the second half is the same shape and the same intent: a hosted surface that vanished from the list FAILS rather than being quietly walked past."
     },
     {
       "key": "CcpClient.Tests/PersistenceTests.cs::PersistenceTests.ConcurrentWrites_Serialized_NoInterleave_LatestStateWins",
@@ -869,7 +869,7 @@
       ],
       "expectDetected": true,
       "verdict": "not-vacuous",
-      "reason": "the wall-clock guard's shape exactly: fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 \u2014 the guard never skips by design (a missing directory FAILS). The obj/ filter inside the walk skips only SDK-generated sources, which have no author to act on a finding"
+      "reason": "the wall-clock guard's shape exactly: fs usage is the FindRepoRoot anchor probe + Assert.True(Directory.Exists(...)) at depth 0 — the guard never skips by design (a missing directory FAILS). The obj/ filter inside the walk skips only SDK-generated sources, which have no author to act on a finding"
     },
     {
       "key": "CcpClient.Tests/UpstreamPayloadInventoryTests.cs::UpstreamPayloadInventoryTests.Fixture_HalfPresentWpfTree_Fails_RefusesToSkip",
@@ -1963,6 +1963,102 @@
       "expectDetected": true,
       "verdict": "platform-skip-converted",
       "reason": "OS gate, not a silenced assertion: the fact drives a REAL Win32 rig (a layered surface through USER32, a Media Foundation decode, a SendInput click, or a card that takes the foreground), and off Windows there is no rig to read - several of its readings would not merely be absent but WRONG, because every handle is 0 and a winner == window comparison is then 0 == 0 about a window that does not exist. The gate is Assert.SkipUnless rather than an early return, so the skip REPORTS, and it is pinned by NAME in floor.json allowedSkips under the admission rule (an OS property, not satisfiable by configuration; machine class named there). Every assertion below the gate is unchanged and runs in full on Windows, and the skip reason names the fact that asserts the off-Windows answer instead."
+    },
+    {
+      "key": "CcpClient.Tests/AiMemoryForgetScopeTests.cs::AiMemoryForgetScopeTests.Thread_ForgetsTheConversation_AndLeavesTheDocumentItself",
+      "path": "CcpClient.Tests/AiMemoryForgetScopeTests.cs",
+      "line": 36,
+      "method": "AiMemoryForgetScopeTests.Thread_ForgetsTheConversation_AndLeavesTheDocumentItself",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion, and every path is the same dir.Path()/MemoryFile expression the setup created the file with (proved present before the forget, in the same test), so a wrong path fails the setup rather than silencing the delete check"
+    },
+    {
+      "key": "CcpClient.Tests/AiMemoryForgetScopeTests.cs::AiMemoryForgetScopeTests.Conversation_TakesTheDocument_AndLeavesEveryOtherCopyOfIt",
+      "path": "CcpClient.Tests/AiMemoryForgetScopeTests.cs",
+      "line": 67,
+      "method": "AiMemoryForgetScopeTests.Conversation_TakesTheDocument_AndLeavesEveryOtherCopyOfIt",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion, and every path is the same dir.Path()/MemoryFile expression the setup created the file with (proved present before the forget, in the same test), so a wrong path fails the setup rather than silencing the delete check"
+    },
+    {
+      "key": "CcpClient.Tests/AiMemoryForgetScopeTests.cs::AiMemoryForgetScopeTests.Everything_TakesTheQuarantinedCopiesToo_SoNothingCanBringItBack",
+      "path": "CcpClient.Tests/AiMemoryForgetScopeTests.cs",
+      "line": 89,
+      "method": "AiMemoryForgetScopeTests.Everything_TakesTheQuarantinedCopiesToo_SoNothingCanBringItBack",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion, and every path is the same dir.Path()/MemoryFile expression the setup created the file with (proved present before the forget, in the same test), so a wrong path fails the setup rather than silencing the delete check"
+    },
+    {
+      "key": "CcpClient.Tests/AiMemoryForgetScopeTests.cs::AiMemoryForgetScopeTests.Everything_TouchesNothingOutsideThisDocumentsFamily",
+      "path": "CcpClient.Tests/AiMemoryForgetScopeTests.cs",
+      "line": 116,
+      "method": "AiMemoryForgetScopeTests.Everything_TouchesNothingOutsideThisDocumentsFamily",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion, and every path is the same dir.Path()/MemoryFile expression the setup created the file with (proved present before the forget, in the same test), so a wrong path fails the setup rather than silencing the delete check"
+    },
+    {
+      "key": "CcpClient.Tests/AiMemoryForgetScopeTests.cs::AiMemoryForgetScopeTests.NoScope_ClobbersANewerDocument_EveryOneReportsDegraded",
+      "path": "CcpClient.Tests/AiMemoryForgetScopeTests.cs",
+      "line": 170,
+      "method": "AiMemoryForgetScopeTests.NoScope_ClobbersANewerDocument_EveryOneReportsDegraded",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion, and every path is the same dir.Path()/MemoryFile expression the setup created the file with (proved present before the forget, in the same test), so a wrong path fails the setup rather than silencing the delete check"
+    },
+    {
+      "key": "CcpClient.Tests/AiMemoryForgetScopeTests.cs::AiMemoryForgetScopeTests.Clear_IsTheConversationScope_AndStillLeavesQuarantinedBytes",
+      "path": "CcpClient.Tests/AiMemoryForgetScopeTests.cs",
+      "line": 200,
+      "method": "AiMemoryForgetScopeTests.Clear_IsTheConversationScope_AndStillLeavesQuarantinedBytes",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion, and every path is the same dir.Path()/MemoryFile expression the setup created the file with (proved present before the forget, in the same test), so a wrong path fails the setup rather than silencing the delete check"
+    },
+    {
+      "key": "CcpClient.Tests/CompanionPrivacySurfaceTests.cs::CompanionPrivacySurfaceTests.ForgetThread_ClearsTheThreadOnScreenAndOnDisk_AndKeepsTheDocument",
+      "path": "CcpClient.Tests/CompanionPrivacySurfaceTests.cs",
+      "line": 155,
+      "method": "CompanionPrivacySurfaceTests.ForgetThread_ClearsTheThreadOnScreenAndOnDisk_AndKeepsTheDocument",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion, and every path is the same dir.Path()/MemoryFile expression the setup created the file with (proved present before the forget, in the same test), so a wrong path fails the setup rather than silencing the delete check"
+    },
+    {
+      "key": "CcpClient.Tests/CompanionPrivacySurfaceTests.cs::CompanionPrivacySurfaceTests.ForgetEverything_TakesTheDocument_AndSaysWhichScopeRan",
+      "path": "CcpClient.Tests/CompanionPrivacySurfaceTests.cs",
+      "line": 176,
+      "method": "CompanionPrivacySurfaceTests.ForgetEverything_TakesTheDocument_AndSaysWhichScopeRan",
+      "shapes": [
+        "fs-predicate"
+      ],
+      "expectDetected": true,
+      "verdict": "not-vacuous",
+      "reason": "File.Exists appears only inside Assert.True/False at body depth 0 — the predicate IS the assertion, and every path is the same dir.Path()/MemoryFile expression the setup created the file with (proved present before the forget, in the same test), so a wrong path fails the setup rather than silencing the delete check"
     }
   ]
 }

@@ -87,7 +87,10 @@ public class CompanionWindowHeadlessTests
         Assert.NotNull(companion.FindControl<TextBox>("ChatInput"));
         Assert.NotNull(companion.FindControl<Button>("SendButton"));
         Assert.NotNull(companion.FindControl<Button>("StopButton"));
-        Assert.NotNull(companion.FindControl<CheckBox>("AwarenessConsentToggle"));
+        // The awareness consent checkbox became the three-stop privacy dial (audit row A3): the
+        // same typed state, said in words instead of a tick. CompanionPrivacyHeadlessTests owns
+        // the strip; this surface fact only needs it to be on screen.
+        Assert.NotNull(companion.FindControl<RadioButton>("DialOff"));
         Assert.NotNull(companion.FindControl<CheckBox>("MemoryConsentToggle"));
         Assert.NotNull(companion.FindControl<Button>("ClearMemoryButton"));
 

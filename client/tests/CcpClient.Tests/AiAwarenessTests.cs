@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using CcpClient.Desktop.Ai;
 using CcpClient.Desktop.Capabilities;
@@ -228,6 +228,9 @@ public class AiAwarenessTests
     {
         var h = new Harness();
         await h.AdmitProviderAsync();
+        // F4 (audit row A4): a title only travels for a NAMED app; the shape assertion below is
+        // about the shape, so the app is named to keep it that way.
+        h.Service.TitleAllowList.Add("Browser");
 
         var result = await h.Service.RunReactionAsync(new AiAwarenessContext("Social", "Browser", "Some Page", "0m"));
 
@@ -277,6 +280,7 @@ public class AiAwarenessTests
         const string sentinelTitle = "sentinel-private-title-7f3a";
         var h = new Harness();
         await h.AdmitProviderAsync();
+        h.Service.TitleAllowList.Add("Editor"); // F4: the title only travels for a named app
 
         var visible = await h.Service.RunReactionAsync(new AiAwarenessContext("Work", "Editor", sentinelTitle, "5m"));
         Assert.IsType<AiAwarenessRoutingResult.Visible>(visible);
@@ -780,7 +784,7 @@ public class AiAwarenessTests
         // never packaged, and typed as NOT a moderation verdict (refusal is null).
         var blocked = AiAwarenessContextPackaging.TryPackage(
             new AiAwarenessContext("cat", "app", "x — InPrivate", "5s"),
-            h.Boundary, out var blockedRequest, out var refusal);
+            h.Boundary, h.Service.TitleAllowList, out var blockedRequest, out var refusal);
         Assert.False(blocked);
         Assert.Null(blockedRequest);
         Assert.Null(refusal);
@@ -788,7 +792,7 @@ public class AiAwarenessTests
         // Negative control: a clean title still packages.
         var clean = AiAwarenessContextPackaging.TryPackage(
             new AiAwarenessContext("cat", "app", "title", "5s"),
-            h.Boundary, out var cleanRequest, out _);
+            h.Boundary, h.Service.TitleAllowList, out var cleanRequest, out _);
         Assert.True(clean);
         Assert.NotNull(cleanRequest);
     }
@@ -800,6 +804,7 @@ public class AiAwarenessTests
     {
         var h = new Harness();
         await h.AdmitProviderAsync();
+        h.Service.TitleAllowList.Add("Browser"); // F4: the scrub is only reachable for a named app
 
         var result = await h.Service.RunReactionAsync(
             new AiAwarenessContext("Social", "Browser", "Some Page user@example.com 123456", "0m"));
@@ -816,6 +821,7 @@ public class AiAwarenessTests
     {
         var h = new Harness();
         await h.AdmitProviderAsync();
+        h.Service.TitleAllowList.Add("Browser"); // F4: reach F2 at all, then let F2 empty it
 
         var result = await h.Service.RunReactionAsync(new AiAwarenessContext("Social", "Browser", "user@example.com", "0m"));
 
