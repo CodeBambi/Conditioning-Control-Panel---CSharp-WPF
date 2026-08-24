@@ -31,6 +31,31 @@
 
 import { t } from '../core/lexicon.js';
 
+/* ----------------------------------------------------------------------------
+ * THE WAY OUT MAKES A SOUND.
+ * shell/audio.js holds the only audio node on the page (trap 18), so this is a
+ * REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() set. A dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+/* ONE cue in this file, and it is on the PILL - the leave-campus verb itself.
+ * Not on the confirm's Go and not on any signed button: those all land on a
+ * screen change, and shell.js's clearScreen() already cues the swap. A door
+ * thump on top of that swap would be the double this wave exists to avoid.
+ */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -205,6 +230,35 @@ export function createConfirm(o) {
  * always in the same place, and never further than one press from the way home.
  * It lives in the proctor strip, which already reserves the top ~56px of the
  * stage, so it collides with nothing a game draws.
+ *
+ * IT IS NOT A CLASS-ONLY CHIP ANY MORE (owner ruling 2026-08-24: "the Arcademy
+ * logo button to go back to the campus must ALWAYS be visible and available").
+ * The same node now seats in three places, and all three mint it from here:
+ * the proctor strip (a class), the top bar's wordmark slot (the settings page),
+ * and campusPillRow() below (the Records Office and the report card, both of
+ * which scroll). The campus itself is the one screen that never wears it - a
+ * door back to the room you are standing in is noise, and the hub already
+ * carries the crest in the scene.
+ *
+ * WHERE IT IS, AND THE FIVE PLACES IT IS NOT
+ *   class            the proctor strip, from the moment the stage mounts - and
+ *                    now it STAYS there: the pause card and the host-suspend
+ *                    card were z 35 inside a .arc-classroot that is not a
+ *                    stacking context, so they painted over the strip's 30 and
+ *                    took the pill with them. They are z 29 now (styles.css).
+ *   settings         the top bar's wordmark slot.
+ *   Records Office   a sticky campusPillRow at the top of the desk.
+ *   report card      a sticky campusPillRow at the top of the paper.
+ *   campus           NO - it is the destination.
+ *   boot splash      NO - nothing has been dealt yet and there is nowhere to go.
+ *   First Bell (vn/) NO - a once-ever cinematic that ends AT the campus.
+ *   ceremony cards   NO - the punch-card stage, the annex reveal and the end
+ *                    card are terminal beats that carry their own way out, and
+ *                    the rotate gate lifts itself the moment the phone turns.
+ *   leave-confirm    NO - it is the pill's own dialog, and it covers the pill
+ *                    for the length of one question with the answer on it.
+ *   host suspend     visible, DISABLED. The host owns that screen and its card
+ *                    carries the only door the page is allowed to offer.
  * -------------------------------------------------------------------------- */
 
 /**
@@ -231,9 +285,28 @@ export function campusPill(o) {
   btn.appendChild(wrap);
 
   if (typeof s.onActivate === 'function') {
-    btn.addEventListener('click', () => { try { s.onActivate(); } catch (e) { /* noop */ } });
+    btn.addEventListener('click', () => {
+      // Reaching for the door. The confirm that opens next is the shell's; this
+      // is the hand on the handle, and it sounds whether or not you go through.
+      sfx('door', 0.3);
+      try { s.onActivate(); } catch (e) { /* noop */ }
+    });
   }
   return btn;
 }
 
-export default { sign, signButton, exitBar, createConfirm, campusPill };
+/**
+ * The pill, seated in a row that sticks to the top of whatever scrolls. The
+ * exit bar's twin, and it exists for the same reason: a wall of ten cards or a
+ * four-class report is taller than a short window, and a way home that scrolls
+ * off the top of its own page is a way home you cannot reach.
+ * @param {Object} o  as campusPill
+ * @returns {Object} the row element (the pill is its only child)
+ */
+export function campusPillRow(o) {
+  const row = el('div', 'arc-pillrow');
+  row.appendChild(campusPill(o));
+  return row;
+}
+
+export default { sign, signButton, exitBar, createConfirm, campusPill, campusPillRow };

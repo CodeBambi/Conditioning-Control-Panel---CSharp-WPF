@@ -53,20 +53,28 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 /* ----------------------------------------------------------------------------
  * DIALS. Everything a play-test would want to move lives here.
  * -------------------------------------------------------------------------- */
-/** The floor and the ceiling on one walk, in ms (ORIENTATION §2.3). */
-export const WALK_MS_MIN = 350;
-export const WALK_MS_CAP = 900;
+/** The floor and the ceiling on one walk, in ms (ORIENTATION §2.3).
+ *  OWNER ORDER 2026-08-24 ("the walking animation when we select a room is too
+ *  fast - double the time it takes"): floor 350 -> 700, cap 900 -> 1800, and
+ *  WALK_SPEED halved below. All three move TOGETHER or the doubling is not
+ *  uniform - the band's unclamped span is WALK_MS x WALK_SPEED, so halving the
+ *  speed while doubling the two clamps leaves exactly the same distances inside
+ *  the band and makes EVERY walk on the map take exactly twice as long. */
+export const WALK_MS_MIN = 700;
+export const WALK_MS_CAP = 1800;
 /**
- * Walking speed in viewBox units per second, and it is FAST on purpose. The
- * plan is 1440 units across and a corridor crossing is ~1000 of them. At
- * 1400 u/s the shortest hop on the map (~200 units, one office counter to the
- * other) lands on the 350ms floor and the longest (the gate to the west wing,
- * ~1400) lands on the 900ms cap, so the whole map fits INSIDE the band instead
- * of pinning it flat. This is not a ghost's amble - a ghost is replaying an
- * evening, you are going to class, and a player who navigates twice must never
- * feel taxed for it.
+ * Walking speed in viewBox units per second. It was 1400 (fast on purpose); the
+ * owner's 2026-08-24 ruling halved it to 700 with the two clamps doubled, so
+ * the shape of the band is untouched and only the pace changed. The plan is
+ * 1440 units across and a corridor crossing is ~1000 of them. At 700 u/s the
+ * shortest hop on the map (~200 units, one office counter to the other) still
+ * lands on the floor (now 700ms) and the longest (the gate to the west wing,
+ * ~1400) still lands on the cap (now 1800ms), so the whole map fits INSIDE the
+ * band instead of pinning it flat. This is now an unhurried crossing rather
+ * than a dash - it is still not a ghost's amble, and nothing waits on a timer
+ * of its own: every consumer waits on `onDone`, which fires off this number.
  */
-export const WALK_SPEED = 1400;
+export const WALK_SPEED = 700;
 /** How many residue polylines the map remembers, FIFO (ORIENTATION §2.4). */
 export const RESIDUE_MAX = 12;
 /** The active trace's fade into residue, on arrival. */

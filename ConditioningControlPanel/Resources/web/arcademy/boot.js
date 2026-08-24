@@ -132,6 +132,95 @@ const INTRO_MIN_MS = 2950;
 const INTRO_EXIT_MS = 320;
 const introT0 = Date.now();
 
+/* ----------------------------------------------------------------------------
+ * THE SPLASH HAS A VOICE (AV CLUB, 2026-08-24).
+ *
+ * The splash is a fixed CSS timeline that starts at `introT0` - before init,
+ * before the mixer, before anything on this page can make a sound - so the
+ * sound cannot be authored INTO it. It is STITCHED ONTO it instead: when the
+ * consumer comes up we ask how much of the beat is already behind us and
+ * schedule only the beats still in front. A beat we have missed is never struck
+ * late; a late boot simply gets a quieter opening, which is the honest one.
+ *
+ * The beats are the CSS's own (index.html / styles.css): the wordmark THUDS in
+ * at .64s, the rail deals from ~1.7s, and the sparkles and their flash close it
+ * out at 2.35-2.65s. Two shapes, and the first is the one we want - once
+ * `assets/sfx/intro_bed.mp3` ships and the host has armed us with no gesture,
+ * ONE file plays the whole opening and nothing is stitched at all.
+ *
+ * THREE GUARDS, and all three are the loader contract (trap 66):
+ *   - reduced motion gets no cues whatever: the splash it is watching is not
+ *     the splash these beats were written for.
+ *   - every timer re-checks that the loader is still up, so a beat can never
+ *     land on the error card or over the campus.
+ *   - failBoot cancels the schedule outright, and cancelling is a clearTimeout:
+ *     the failure path is not delayed by so much as a frame.
+ * Neither `dismissLoader` nor `failBoot` changes shape for any of this.
+ * -------------------------------------------------------------------------- */
+const INTRO_BEATS = [
+  { at: 640,  name: 'thud',    level: 0.5 },
+  { at: 1700, name: 'flap',    level: 0.2 },
+  { at: 1760, name: 'flap',    level: 0.2 },
+  { at: 1820, name: 'flap',    level: 0.2 },
+  { at: 2350, name: 'jackpot', level: 0.35, pitch: 1.3 },
+  { at: 2650, name: 'flash',   level: 0.25 },
+];
+/** Past this much of the splash the bed would start mid-CRT: stitch instead. */
+const INTRO_BED_WINDOW_MS = 600;
+const introTimers = new Set();
+
+/* ONE AUDIO DOOR (GROUND-RULES §6, shell/ceremonies.js's exact pattern): a cue
+ * is a REQUEST on `document`, never a node - shell/audio.js owns the only audio
+ * graph on the page (trap 18). A cue path must never be the thing that throws,
+ * and a dropped cue is not an error. */
+function sfx(name, level, extra) {
+  try {
+    if (!doc || typeof doc.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    doc.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* never fatal */ }
+}
+
+function cancelIntroCues() {
+  for (const id of Array.from(introTimers)) { try { clearTimeout(id); } catch (e) { /* noop */ } }
+  introTimers.clear();
+}
+
+/** The splash is still the thing on screen (and not an error card behind it). */
+function splashIsUp() { return !!(dom.loader && !dom.loader.hidden); }
+
+function scheduleIntroCues() {
+  try {
+    const src = initMsg || {};
+    // The same derivation the shell uses for the class it paints on <html>.
+    if (!!src.reducedMotion || src.motionLevel === 0) return;
+    if (!splashIsUp()) return;
+    const elapsed = Date.now() - introT0;
+    // hasSample is feature-detected: an older consumer simply stitches.
+    const hasBed = !!(audio && typeof audio.hasSample === 'function' && audio.hasSample('intro_bed'));
+    if (hasBed && src.autoplayOk === true && elapsed < INTRO_BED_WINDOW_MS) {
+      sfx('intro_bed', 0.6);
+      return;
+    }
+    for (const beat of INTRO_BEATS) {
+      const wait = beat.at - elapsed;
+      if (wait <= 0) continue;          // that beat is behind us; it is not re-struck
+      const id = setTimeout(() => {
+        introTimers.delete(id);
+        if (!splashIsUp()) return;      // failBoot, or the splash already left
+        sfx(beat.name, beat.level, beat.pitch ? { pitch: beat.pitch } : null);
+      }, wait);
+      introTimers.add(id);
+    }
+  } catch (e) { /* the opening may never cost us the boot */ }
+}
+
 function dismissLoader() {
   const el = dom.loader;
   if (!el || el.hidden) return;
@@ -156,6 +245,7 @@ function failBoot(msg) {
   warn(msg);
   bridge.send({ type: 'boot-error', msg: String(msg).slice(0, 400) });
   if (dom.loader) dom.loader.hidden = true;
+  cancelIntroCues();      // a clearTimeout, so the error card waits for nothing
   if (dom.nopeMsg) dom.nopeMsg.textContent = String(msg).slice(0, 200);
   if (dom.nope) dom.nope.hidden = false;
 }
@@ -178,7 +268,19 @@ async function start() {
     // OPTIONAL by construction: no audio must never cost us the page.
     try {
       const am = await import('./shell/audio.js');
-      audio = am.createAudio({ init: initMsg, bridge, log });
+      /* AUTOPLAY IS THE HOST'S PROMISE, NOT OURS. The WebView2 runs with
+       * --autoplay-policy=no-user-gesture-required, so `init.autoplayOk` is the
+       * host saying the consumer may arm itself at creation instead of waiting
+       * for a pointer. A host that predates the field sends nothing, the strict
+       * `=== true` reads false, and the mixer keeps its gesture gate. */
+      audio = am.createAudio({
+        init: initMsg,
+        bridge,
+        log,
+        autoplayOk: !!initMsg && initMsg.autoplayOk === true,
+      });
+      // The splash is already a second or so into its timeline: score the rest.
+      scheduleIntroCues();
     } catch (e) { warn('audio consumer unavailable (' + ((e && e.message) || e) + ') - sfx are silent'); }
     const mod = await import('./shell/shell.js');
     shell = await mod.createShell({
@@ -278,6 +380,7 @@ bridge.on('end-run', guard('end-run', () => shutdown('host asked')));
  * EXIT
  * -------------------------------------------------------------------------- */
 function shutdown(reason) {
+  cancelIntroCues();
   try { if (shell) shell.destroy(); } catch (e) { /* best effort */ }
   try { if (audio) audio.destroy(); } catch (e) { /* best effort */ }
   shell = null;

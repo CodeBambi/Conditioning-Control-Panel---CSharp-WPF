@@ -1525,6 +1525,70 @@ page's `label_key` / `hint_key`. Impulse Control exports its table as data
     is free either way. THE SKIP PATH MUST EQUAL AN INSTANT DISMISS: whatever the GO callback
     ran, the auto-skip runs - which is why every game routes both through the same `onDone`.
 
+86. **THE SAMPLE DOOR IS HONEST ONLY BECAUSE THE HOST SAYS WHAT EXISTS (`init.sfxSamples`).**
+    `shell/audio.js` maps cue names to `./assets/sfx/<name>.mp3` but plays a sample ONLY when
+    the host listed its bare name in `init.sfxSamples` (the C# side scans the folder once,
+    `ArcademyHostService.BuildSfxSamples`). A media element reports a missing file
+    asynchronously, so probing from the page would either lie to `hasSample()` or eat the
+    first cue of every sampled name. Consequences: dropping a new mp3 into `assets/sfx/`
+    IS the wiring (add the name to `SAMPLES` if it is new); a browser/test shim that wants
+    samples audible MUST list the names in its fake init; `intro_bed`/`flap_deal` are
+    SAMPLE-ONLY (no synth recipe - absent file = silence, by design); every other sampled
+    name falls back to its recipe. `autoplayOk` in init (also new) arms the mixer with no
+    gesture - the host passes `--autoplay-policy=no-user-gesture-required`, a plain browser
+    without the flag stays gesture-gated.
+
+87. **SPLITFLAP'S CUE TIMING IS HARD-COUPLED TO THE CSS CASCADE.** `cueCascade()` staggers
+    its `flap` row ticks at `ROW_STEP_MS = 400` and lands `commit` at `(rows-1)*400 + 1500`,
+    mirroring `styles.css`'s `--r * .4s` stagger and meta fade. Change one, move both. The
+    cues live in `replay()` only - `animate:false` builds stay dead silent (the boot builds
+    the campus board that way), and BOTH the timetable deal and the VN board handoff sing
+    through `replay()`, so a cue added at the build site would double the handoff.
+
+88. **THE MIXER-SLIDER PREVIEW RIDES THE ECHO, NOT THE DRAG.** `shell/settings.js` fires its
+    preview cue only when the host echoes back a write that THIS page made (it checks the
+    row's `pending` class before `row.apply` clears it) - a host-initiated settings push
+    never beeps at the player, and the cue lands after `audio.js`'s own `setting` subscriber
+    so it sounds at the NEW level. Known gap (pre-existing, unfixed): an app-side mixer
+    change echoes the WHOLE `audioLevels` object and neither audio.js nor settings.js
+    consumes that shape - live levels move on relaunch, not mid-session.
+
+89. **A BEAT CHANGE IS A TRANSITION NOW, SO A SEAM IS LONG ENOUGH TO REACH THE DOOR
+    INSIDE IT (AV CLUB, owner playtest 2026-08-24).** The owner's order was "slow down the
+    intro beats... about half a second of black screen with a sliding fading transition
+    when we change a beat", and `vn/index.js applyPlate` is where it landed: out, black,
+    in, settle, all of it on the `BEAT_*` dials and nowhere else. Four things follow, and
+    three of them are the ways it can bite.
+    - **No beat may start before its plate has landed.** `applyPlate(url, motion, done)`
+      pays `done` when the arrival has settled, and EVERY caller hands it the next beat.
+      Painting a caption without going through that callback puts the lower third over a
+      black rectangle, which is the exact thing this wave was written to stop.
+    - **The plate cannot slide itself.** `data-motion` fills a camera keyframe and a
+      filling animation out-ranks an inline transform (trap 71), so the slide lives on
+      `.arc-vn-bgwrap`, the carriage AROUND the plate. Its default state is "parked off
+      the entry side, invisible" - that is what lets the swap happen mid-hold with no
+      `transition:none` dance. The neon wash rides in the carriage too, or the arch would
+      still be glowing through a hold that is supposed to be black.
+    - **A SEAM WITH NO SCENE IN IT STILL NEEDS `skipTo`.** A transition runs over a second
+      and no `runScene` owns the pill while one plays, so the cold open parks `toBoard`
+      (LATCHED - two landings must be free or the wall gets two boards) and the walk parks
+      its settle, both immediately after `mountLayer`. Leave `skipTo` null across a seam
+      and the hold-to-skip pill is dead for the length of it, silently.
+    - **A skip that lands mid-transition JOINS it, it does not restart it.** A repeat
+      request for the plate already on its way in queues behind the arrival; a genuinely
+      new plate bumps `plateToken` and the beats queued behind the abandoned one are
+      DROPPED, never replayed (`dropPlateWaiters` is the skip path saying so out loud).
+      Teardown cancels those debts rather than paying them - `unmountLayer` clears the
+      queue and bumps the token, and the one continuation that must always run is the
+      settler's, which is `closeLayer`'s business. Verified: a hold landing inside the
+      black settles the layer and hands the night back, with nothing left in `body`.
+    boot.js is UNTOUCHED by all of this. `scheduleIntroCues`'s beats end at 2650ms and the
+    splash is up until at least 3270ms, the seam delay starts strictly AFTER `hidden` lands,
+    and every cue timer re-checks `splashIsUp()` - so no cue can fire into the new black
+    (traps 66 and 76 both still hold: `failBoot` still snaps, `settler` is still the one
+    funnel).
+
+
 ## 5. The game module contract (short version)
 
 ```js

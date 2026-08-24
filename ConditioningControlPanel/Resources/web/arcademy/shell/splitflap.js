@@ -17,6 +17,43 @@
 /** Character budget per row so a long mod-skinned name cannot blow the board. */
 const MAX_FLAPS = 18;
 
+/* ----------------------------------------------------------------------------
+ * THE BOARD HAS A VOICE (AV Club, 2026-08-24). A departure board that deals in
+ * silence is a departure board nobody looks up at. Three cues, and every one of
+ * them rides the CASCADE, never the build: `animate:false` is the shell's
+ * repaint flag (trap 4) and the campus hangs its board behind the plaque that
+ * way, so a build that does not flip stays DEAD SILENT. The flaps only speak
+ * when they actually turn - the first open of the night, and a replay.
+ *
+ * shell/audio.js is the one holder of an audio node on this page (trap 18), so
+ * this is a REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() and shell/punchcard.js thud() already set.
+ * -------------------------------------------------------------------------- */
+
+/** The row stagger baked into styles.css's arc-flap (`--r * .4s`). If that
+ *  number moves, this one moves with it or the ticks drift off the picture. */
+const ROW_STEP_MS = 400;
+/** A row's meta chip lands at `--r * .4s + 1s` and fades for .5s: the last row's
+ *  fade ending IS the board settling. */
+const SETTLE_MS = 1500;
+/** HARD CAP. Four rows tonight; this is what stops a twenty-row wall one day
+ *  from machine-gunning the mixer with twenty ticks. */
+const MAX_TICKS = 12;
+
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -55,6 +92,45 @@ export function createBoard({ mount, rows, reducedMotion, animate, onSelect } = 
   let current = Array.isArray(rows) ? rows : [];
   let reduced = !!reducedMotion;
 
+  /* The cascade's cues, in flight. A re-flip drops the old ones rather than
+   * letting two deals tick over each other, and destroy() takes them with it -
+   * a board that has left the document must not still be knocking. */
+  const cueTimers = new Set();
+
+  function dropCues() {
+    for (const id of Array.from(cueTimers)) {
+      try { clearTimeout(id); } catch (e) { /* noop */ }
+    }
+    cueTimers.clear();
+  }
+
+  function cueLater(fn, ms) {
+    if (typeof setTimeout !== 'function') return;
+    const id = setTimeout(() => {
+      cueTimers.delete(id);
+      // A BOARD THAT HAS LEFT THE PAGE STOPS TALKING. The shell wipes the screen
+      // rather than destroying its board (clearScreen empties dom.screen), so a
+      // room clicked mid-cascade must not land its settle thunk inside a class.
+      // `isConnected` is undefined in the node DOM double, which reads as "fine".
+      if (root.isConnected === false) return;
+      fn();
+    }, Math.max(0, ms));
+    cueTimers.add(id);
+  }
+
+  /** The sound of a deal: the whole board announces, each row turns, it settles. */
+  function cueCascade() {
+    dropCues();
+    const n = current.length;
+    if (!n) return;
+    /* SAMPLE-ONLY (no recipe fallback): silent until assets/sfx/flap_deal.mp3
+     * ships, and silent by design rather than by accident. */
+    sfx('flap_deal', 0.5);
+    const ticks = Math.min(n, MAX_TICKS);
+    for (let r = 0; r < ticks; r++) cueLater(() => sfx('flap', 0.2), r * ROW_STEP_MS);
+    cueLater(() => sfx('commit', 0.3), (n - 1) * ROW_STEP_MS + SETTLE_MS);
+  }
+
   function build() {
     root.textContent = '';
     current.forEach((row, r) => {
@@ -87,10 +163,13 @@ export function createBoard({ mount, rows, reducedMotion, animate, onSelect } = 
 
   /** The mockup's replayFlaps(): drop .play, force reflow, re-add. */
   function replay() {
-    if (reduced) { root.classList.remove('play'); return; }
+    // Reduced motion has no cascade, so it has nothing to sound: the cue rides
+    // the picture or it does not happen.
+    if (reduced) { dropCues(); root.classList.remove('play'); return; }
     root.classList.remove('play');
     void root.offsetWidth;          // reflow, or the class re-add is coalesced away
     root.classList.add('play');
+    cueCascade();
   }
 
   const api = {
@@ -102,7 +181,7 @@ export function createBoard({ mount, rows, reducedMotion, animate, onSelect } = 
       build();
       if (!opts || opts.animate !== false) replay();
     },
-    destroy() { root.remove(); },
+    destroy() { dropCues(); root.remove(); },
   };
 
   build();

@@ -186,7 +186,10 @@ const BEATS = {
   coldopen: { seed: [],                       run: (v) => v.splashDone(() => say('>> cold open handed back to the shell')) },
   reduced:  { seed: [],                       run: (v) => v.splashDone(() => say('>> cold open handed back to the shell')) },
   desk:     { seed: ['s01'],                  run: (v) => v.splashDone(() => say('>> cold open handed back to the shell')) },
-  board:    { seed: ['s01'],                  run: (v) => { v.splashDone(() => say('>> cold open handed back to the shell')); setTimeout(tap, 1400); } },
+  /* The auto-tap has to land on the paper, and the paper is now behind the
+     splash settle, the lead black, the slide in and the desk's own hold (the
+     BEAT_* dials in index.js). Re-time this if those move. */
+  board:    { seed: ['s01'],                  run: (v) => { v.splashDone(() => say('>> cold open handed back to the shell')); setTimeout(tap, 3400); } },
   walk:     { seed: ['s01', 's02'],           run: (v) => say('gateClass took it: ' + v.gateClass({ gameKey: 'daily_trigger', homeroom: true }, () => say('>> the class starts now'))) },
   mail:     { seed: ['s01', 's02', 's03'],    run: (v) => say('afterCeremony took it: ' + v.afterCeremony()) },
 };

@@ -665,12 +665,24 @@ html.arc-reduced .arc-timebar-fill::before { content:none; }
 .arc-stub dd { margin:0; color:var(--ink); }
 
 /* class_suspended treatment (SYNTHESIS #8) - one internal key, lexicon flavor.
-   The root is the viewport now, so this covers the whole window; it sits ABOVE
-   the proctor strip on purpose - its own Resume / Leave class buttons are the
-   single way out of a frozen class (traps 27/29: look restyled, wiring law
-   unchanged). */
+   The root is the viewport now, so this covers the whole window.
+
+   IT SITS UNDER THE PROCTOR STRIP, AND THAT IS THE POINT (owner ruling
+   2026-08-24). It used to be z 35, chosen back when the strip carried a ghost
+   "Leave class" button and this card's own Resume / Leave pair really was the
+   single way out of a frozen class. The strip carries the CAMPUS PILL now, and
+   .arc-classroot is position:absolute with z-index:auto - not a stacking
+   context - so a 35 in here competed directly with the strip's 30 one level up
+   and painted an opaque card straight over the way home. Every pause hid the
+   pill, which is the bug the owner filed: the button "shows after I go back
+   from the options menu" because the settings round-trip ends in
+   pauseClass(false), and dropping this card is what uncovered it.
+
+   29 keeps the card over every game layer and over the enrollment intro at 28,
+   and under the chrome that owns the top of the stage. Its own buttons and its
+   wiring are untouched (traps 27/29). */
 .arc-suspended {
-  position:absolute; inset:0; z-index:35;
+  position:absolute; inset:0; z-index:29;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:14px; padding:24px; text-align:center;
   background:rgba(20,20,43,.94); backdrop-filter:blur(6px);
@@ -2178,8 +2190,12 @@ html.arc-reduced .campus-trace.fading { transition:none; opacity:.22; }
 }
 
 /* ---- the confirm dialog ------------------------------------------------ */
-/* Above the pause card (z 35) on purpose: the pill can be pressed while the
-   class is already paused, and the question must land on top of the answer. */
+/* Above the pause card (z 29) AND above the proctor strip (z 30) on purpose:
+   the pill can be pressed while the class is already paused, and the question
+   must land on top of the answer - including on top of the button that asked
+   it. This is the ONE place the pill is allowed to be covered, because the
+   thing covering it is the pill's own dialog and it carries Stay in class /
+   Back to campus. */
 .arc-confirm {
   position:absolute; inset:0; z-index:36;
   display:flex; align-items:center; justify-content:center;
@@ -2210,6 +2226,32 @@ html.arc-reduced .campus-trace.fading { transition:none; opacity:.22; }
 }
 .arc-confirm-stay { min-width:150px; padding:10px 20px; font-size:12px; letter-spacing:.14em; }
 .arc-confirm-note { margin:0; font-size:11px; color:var(--ink-faint); max-width:40ch; }
+
+/* ---- the pill row: the exit bar's twin, at the TOP ---------------------- */
+/* A screen that scrolls must not be able to carry the way home off the top of
+   itself, for exactly the reason it must not park Back below the fold. `sticky`
+   binds to whatever scrolls - the Records Office is its own scroller, the
+   report paper rides the report stage - so one class serves both, and the thing
+   inside it is the SAME pill a class wears on its proctor strip. */
+.arc-pillrow {
+  position:sticky; top:0; z-index:13;
+  display:flex; align-items:center;
+  margin:0; padding:10px 0 12px;
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--ground), transparent 4%),
+    color-mix(in srgb, var(--ground), transparent 22%) 62%,
+    transparent);
+}
+/* On the paper the band has to be the PAPER's colour and reach its edges - the
+   same negative-margin trick the report's own exit bar uses at the other end. */
+.arc-report-paper .arc-pillrow {
+  margin:-30px -36px 4px; padding:16px 36px 14px;
+  border-radius:6px 6px 0 0;
+  background:linear-gradient(180deg,
+    var(--panel),
+    color-mix(in srgb, var(--panel), transparent 30%) 60%,
+    transparent);
+}
 
 /* ---- the sticky exit bar ----------------------------------------------- */
 /* `sticky` binds to whatever scrolls - the document on the settings page, the

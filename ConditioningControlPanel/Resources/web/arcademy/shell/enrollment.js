@@ -101,6 +101,32 @@ export const ENROLL_LEX = Object.freeze({
   enroll_composure_3: 'Nothing in here is fast. Composure is the subject and it cannot be rushed.',
 });
 
+/* ----------------------------------------------------------------------------
+ * ENROLLMENT HAS A VOICE, AND THE CEREMONY ALREADY HAD ONE.
+ * shell/audio.js holds the only audio node on the page (trap 18), so this is a
+ * REQUEST on `document` and never a sound - the exact defensive shape
+ * shell/ceremonies.js sfx() set. A dropped cue is not an error.
+ * -------------------------------------------------------------------------- */
+/* The three cues below belong to THE INTRO - the once-ever flavour cards and
+ * the moment they hand the class over. THE CEREMONY further down is deliberately
+ * left alone: punchcard.js thud() already sounds every hole and the unlock beat
+ * (trap 67's precedent), and a second cue on top of a hole that is already
+ * knocking is the double this wave exists to avoid.
+ */
+function sfx(name, level, extra) {
+  try {
+    if (typeof document === 'undefined' || typeof document.dispatchEvent !== 'function') return;
+    const Ctor = (typeof CustomEvent === 'function') ? CustomEvent : null;
+    if (!Ctor) return;
+    document.dispatchEvent(new Ctor('arcademy-sfx', {
+      detail: Object.assign(
+        { name: String(name || 'blip'), level: Number(level) || 0.5, bus: 'fx' },
+        extra || {}
+      ),
+    }));
+  } catch (e) { /* a cue must never be the thing that throws */ }
+}
+
 /** How many flavour cards a class ships. Three today, for all ten. */
 const CARDS = 3;
 
@@ -271,17 +297,27 @@ export function createEnrollmentIntro(o) {
     try { root.remove(); } catch (e) { /* noop */ }
     say('enrollment intro ' + how + ' (' + s.gameKey + ')');
     if (!run) return;
+    /* SIGNED ON. Only on the paths that actually START the class - close() is a
+     * teardown (the shell dropping the card on its way out of the class) and a
+     * teardown is not a ceremony. */
+    sfx('commit', 0.4);
     try { if (s.onDone) s.onDone(); } catch (e) { say('enrollment onDone threw: ' + ((e && e.message) || e)); }
   }
 
   function next() {
     if (page >= pages.length - 1) { finish('read', true); return; }
     page += 1;
+    // The turn between two cards. Pitched a touch up so it reads as forward
+    // motion rather than as the class's own UI answering.
+    sfx('blip', 0.2, { pitch: 1.05 });
     paint();
   }
 
   s.mount.appendChild(root);
   paint();
+  // THE CARD IN. Fired after the mount, never at construction - a null return
+  // above (a class with no copy) must be completely silent.
+  sfx('paper', 0.3);
 
   return {
     root,
