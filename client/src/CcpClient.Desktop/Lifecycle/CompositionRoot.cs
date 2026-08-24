@@ -245,6 +245,18 @@ public sealed class CompositionRoot
             infra.OwnerFor("MotionSettings"), infra.Log,
             Path.Combine(Path.GetDirectoryName(SettingsPathFactory())!, Motion.MotionSettingsDocument.FileName),
             Motion.MotionSettingsDocument.CurrentSchemaVersion);
+        // THE APP-WIDE AUDIO OWNER: the one SoundArbitration and the one audio settings
+        // document. It is here, and not inside a window, because that is what upstream does with its
+        // own audio service — a field on the application, built once during startup
+        // (ConditioningControlPanel/App.xaml.cs:1798) and outliving every window and every session.
+        // Until this row it was constructed by the DTRH host window instead, which made every seam
+        // on it (device enumeration, the preferred device, the overlapping SFX pool) unreachable
+        // from anywhere else and gave a second host window a second native engine on the same
+        // endpoint.
+        //
+        // Construction opens NO device and phase 3 opens no device either (AudioParticipant's own
+        // summary says why): the endpoint comes up on the first consumer that needs sound.
+        var audio = new Audio.AudioParticipant(infra, Path.GetDirectoryName(SettingsPathFactory())!);
         // The haptic participant is CONSTRUCTED here, above the session, because the session
         // is constructed AGAINST its limb — and construction starts nothing (contract §4.4),
         // so hoisting it changes no behaviour at all. It is still REGISTERED last, below, which is
@@ -269,6 +281,13 @@ public sealed class CompositionRoot
         [
             store,
             motion,
+            // Registered with the settings stores, and third, because its document has to be loaded
+            // before anything reads a volume or a device choice off it (persistence contract §4
+            // rule 1) — the DTRH host window reads it in phase 4, and the settings surface that will
+            // move those dials is a later row. Reverse-order teardown has nothing to order it
+            // against: no other participant here drives it, and unlike a haptic level a render
+            // device left open cannot outlive the process.
+            audio,
             new HeartbeatParticipant(infra.OwnerFor("Heartbeat"), infra.UiDispatch),
             // demo.status-ticker: registered AFTER the store — phase-3 start order
             // IS the restore-then-start ordering (its start reads the restored flag).
@@ -432,6 +451,10 @@ public sealed class CompositionRoot
         // (ConditioningControlPanel/App.xaml.cs:4401-4407). A settings write that lost its race would
         // cost a dial; a level that lost its race is still running when the user has closed the app.
         var haptics = participants.OfType<Haptics.HapticParticipant>().FirstOrDefault();
+        // The audio settings flush in the same slot, for the reason the session preset does: a
+        // volume or an output device the user changed on the way out is a persisted setting like any
+        // other, and this slot is the one place the port guarantees it reaches disk.
+        var audio = participants.OfType<Audio.AudioParticipant>().FirstOrDefault();
         // The camera's CONSENT document flushes in the same slot. It is the one file this capability
         // writes, and a consent a user gave or withdrew on the way out is the last thing it may lose:
         // a lost grant re-prompts, and a lost WITHDRAWAL leaves a stored agreement the user believes
@@ -513,6 +536,7 @@ public sealed class CompositionRoot
             log, participants, trace, infra.Registry, infra.UiDispatch,
             preDrainFlush: store is null && motion is null && slotStores is null && companion is null
                 && session is null && scheduler is null && haptics is null && camera is null
+                && audio is null
                 ? null
                 : async () =>
                 {
@@ -523,6 +547,7 @@ public sealed class CompositionRoot
                     if (haptics is not null) await haptics.ShutdownStopAsync().ConfigureAwait(false);
                     if (store is not null) await store.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (motion is not null) await motion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
+                    if (audio is not null) await audio.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (camera is not null) await camera.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (slotStores is not null) await slotStores.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);
                     if (companion is not null) await companion.FlushAsync(DefaultFlushTimeout).ConfigureAwait(false);

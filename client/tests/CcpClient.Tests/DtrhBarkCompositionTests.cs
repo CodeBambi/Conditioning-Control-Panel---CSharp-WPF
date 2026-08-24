@@ -68,7 +68,8 @@ public sealed class DtrhBarkCompositionTests
     [Fact]
     public void TheComposedArbitration_RefusesADuck_TYPED_RatherThanPretendingToHoldOne()
     {
-        // Drives the composition's UnavailableDuckSink through SoundArbitration.AcquireDuck
+        // Drives the UnavailableDuckSink the APP-WIDE owner composes (Audio/AudioParticipant.cs,
+        // where this half of the graph moved) through SoundArbitration.AcquireDuck
         // (SoundArbitration.cs:665-670). Cross-app session ducking is a pending-owner platform
         // decision (audio-backend-spike.md named limit 8), so the honest answer is a refusal that
         // says so — and the refcount must treat the hold as NOT taken (WPF symmetric-failure
@@ -105,7 +106,8 @@ public sealed class DtrhBarkCompositionTests
         using var h = Harness.New();
         Assert.Equal(8, h.Pipeline.RuleCount);
 
-        Assert.Throws<ArgumentNullException>(() => DtrhBarkRouting.CreateArbitration(null!, _ => { }));
+        Assert.Throws<ArgumentNullException>(
+            () => DtrhBarkRouting.CreatePipeline(null!, h.Store, h.DataDirectory, _ => { }));
         Assert.Throws<ArgumentNullException>(
             () => DtrhBarkRouting.CreatePipeline(h.Arbitration, h.Store, null!, _ => { }));
     }
@@ -137,10 +139,16 @@ public sealed class DtrhBarkCompositionTests
                 Path.GetTempPath(), "ccp-dtrh-bark-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dataDirectory);
 
-            // Exactly DtrhHostWindow.InitBarkPipeline's order: arbitration, device init, store,
-            // pipeline. Only the backend and the log differ from the product path.
-            var arbitration = DtrhBarkRouting.CreateArbitration(new FakeBackend(), _ => { });
-            arbitration.Initialize(null);
+            // Exactly DtrhHostWindow.InitBarkPipeline's order: the APP-WIDE audio owner's
+            // arbitration, its device, the store, the pipeline. Only the backend and the log differ
+            // from the product path — the window no longer builds an arbitration of its own, so
+            // neither does this harness (Audio/AudioParticipant.cs).
+            var audio = new AudioParticipant(
+                new ParticipantInfrastructure(new OperationRegistry(), new UiDispatchBoundary(), new SilentLogSink()),
+                dataDirectory,
+                backend: new FakeBackend());
+            var arbitration = audio.Arbitration;
+            audio.EnsureDevice();
 
             // Literal, for the same reason WriteVoiceAsset uses one: the companion state file lives
             // beside a user's DTRH save, so its name is a compatibility surface, and a fact that

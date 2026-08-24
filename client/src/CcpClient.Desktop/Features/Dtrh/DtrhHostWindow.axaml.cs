@@ -208,14 +208,21 @@ public partial class DtrhHostWindow : Window
     }
 
     /// <summary>
-    /// Construct the bark content pipeline host-locally (CompositionRoot.cs is outside this
-    /// slice's File Scope — the app-wide lift is a future row): q1's SoundArbitration over a
-    /// second SoundFlow engine (miniaudio devices coexist — the DTRH audio boundary), the
-    /// companion-state document on the persistence machinery (<DataDirectory>/companion.json),
-    /// and the compact built-in rule set. Voice assets do not ship in this slice (named
-    /// limit) — audio variants surface text-only with a typed reason until the voice-content
-    /// row. m2Test skips construction entirely (WPF _testMode early-return parity,
+    /// Build the bark content pipeline on the APP-WIDE arbitration this window no longer owns
+    /// (<see cref="Audio.AudioParticipant"/>, built by the composition root): the companion-state
+    /// document on the persistence machinery (<DataDirectory>/companion.json), the compact
+    /// built-in rule set, and the app's persisted master volume. Voice assets do not ship in this
+    /// slice (named limit) — audio variants surface text-only with a typed reason until the
+    /// voice-content row. m2Test skips construction entirely (WPF _testMode early-return parity,
     /// DtrhHostService.cs:622).
+    ///
+    /// <para>WHAT CHANGED AND WHY IT MATTERS HERE. This method used to construct its own
+    /// SoundFlowAudioBackend and its own SoundArbitration, because CompositionRoot.cs was outside
+    /// that slice's File Scope. The consequence was not just ownership: every host window opened a
+    /// SECOND native engine and a second device on the same endpoint (host windows recur per
+    /// session — MainWindow.Lab.cs:237-253 parity), and the device choice, the volumes and the
+    /// overlapping SFX pool were reachable from nowhere else in the app. The window now CONSUMES,
+    /// and brings the shared device up on open, which is where a user's descent needs sound.</para>
     /// </summary>
     private void InitBarkPipeline()
     {
@@ -225,13 +232,20 @@ public partial class DtrhHostWindow : Window
             return;
         }
 
-        var backend = new SoundFlowAudioBackend(_host.LogDiagnostic);
-        // The arbitration graph is built by DtrhBarkRouting.Composition.cs — same objects, same
-        // arguments, same order — so the wiring can be driven by a fact instead of only by a
-        // headed run. Everything else in this method stayed exactly where it was.
-        _barkArbitration = DtrhBarkRouting.CreateArbitration(backend, _host.LogDiagnostic);
-        var deviceOutcome = _barkArbitration.Initialize(null);
-        _host.LogDiagnostic($"dtrh: bark arbitration device init → {deviceOutcome.GetType().Name} (typed)");
+        var audio = Audio.AudioParticipant.Of(_host);
+        if (audio is null)
+        {
+            // A host built without the app-wide audio owner (a custom participant factory). Say so
+            // and build nothing: a window that quietly made its own arbitration is exactly the
+            // ownership this row removed, and a bark pipeline with no device would surface every
+            // line text-only for a reason indistinguishable from "no voice assets shipped yet".
+            _host.LogDiagnostic("dtrh: bark pipeline NOT built — this host carries no app-wide audio owner (typed; no window-local arbitration is created)");
+            return;
+        }
+
+        _barkArbitration = audio.Arbitration;
+        var deviceOutcome = audio.EnsureDevice();
+        _host.LogDiagnostic($"dtrh: app-wide arbitration device → {deviceOutcome.GetType().Name} (typed)");
 
         _barkStore = new PersistenceStore<CompanionStateDocument>(
             _host.Registry.OwnerFor("DtrhBarkCompanion"),
@@ -245,8 +259,13 @@ public partial class DtrhHostWindow : Window
             _host.LogDiagnostic($"dtrh: companion state load → {_barkStore.LastLoadOutcome?.GetType().Name} (typed Degraded — flagged defaults, original bytes preserved if quarantined)");
         }
 
+        // The app's persisted master volume reaches the bark path here, and this is the first thing
+        // in the port to read it: BarkPipeline.MasterVolume (Companion/BarkPipeline.cs:262) has been
+        // landed and unset since it shipped, because there was no app-wide document to set it from.
+        // Zero is a real value and means text-only barks (WPF AvatarTubeWindow.Speech.cs:2188-2189).
         _bark = DtrhBarkRouting.CreatePipeline(
-            _barkArbitration, _barkStore, _dtrh.DataDirectory, _host.LogDiagnostic);
+            _barkArbitration, _barkStore, _dtrh.DataDirectory, _host.LogDiagnostic,
+            masterVolume: audio.MasterVolume);
         _bark.BarkSurfaced += payload =>
             // Presence+shape ONLY (the content-free class): rule id + suppression shape,
             // NEVER the bark text. The surface itself (portrait/bubble) is a future UI row.
@@ -256,13 +275,20 @@ public partial class DtrhHostWindow : Window
 
     /// <summary>
     /// Flush pending companion-state writes (consult binding 5: the host-local store is NOT
-    /// in CompositionRoot's preDrainFlush — the window close is its flush point), then panic
-    /// the bark arbitration and stop the store. Idempotent, best-effort.
+    /// in CompositionRoot's preDrainFlush — the window close is its flush point), then STOP what
+    /// this window put on the shared arbitration and stop the store. Idempotent, best-effort.
+    ///
+    /// <para><b>PanicReset, not Dispose, and the distinction is the whole lift.</b> The
+    /// user-observable outcome is identical — every player this window started is stopped and
+    /// disposed, the voice queue is cleared and the ducks are released, which is exactly what
+    /// Dispose did on its way through (SoundArbitration.Dispose calls PanicReset first). What is no
+    /// longer done is tearing down the application's audio device because one window closed. The
+    /// arbitration is owned by <see cref="Audio.AudioParticipant"/> and is disposed with the app.</para>
     /// </summary>
     private void TeardownBarkPipeline()
     {
         try { _bark?.FlushAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
-        try { _barkArbitration?.Dispose(); } catch { /* best-effort */ }
+        try { _barkArbitration?.PanicReset(); } catch { /* best-effort */ }
         try { _barkStore?.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         try { _assetSelectionStore?.StopAsync().Wait(TimeSpan.FromSeconds(2)); } catch { /* best-effort */ }
         // The ledger flushes BEFORE it stops (contract §11) — its own Dispose does both, so the
