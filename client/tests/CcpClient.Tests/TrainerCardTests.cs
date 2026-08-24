@@ -259,7 +259,7 @@ public sealed class TrainerCardTests : IDisposable
         var everythingTheCardCanSay = string.Join(
             '\n',
             TrainerCard.Title,
-            TrainerCard.NoLevelNote,
+            TrainerCard.LevelNote,
             TrainerCard.NoPortraitNote,
             TrainerCard.NoTierNote,
             TrainerCard.LocalOnlyNote,
@@ -278,17 +278,38 @@ public sealed class TrainerCardTests : IDisposable
     }
 
     [Fact]
-    public void TheCard_SaysOutLoudThatItHasNoLevelAndNoPortrait()
+    public void TheCard_SaysWhereTheLevelComesFrom_AndThatItUnlocksNothing()
     {
-        // The failure this forbids is a card that renders an absence as an empty stat block or a
-        // zero. The sentence moved when the XP ledger landed: this build now KEEPS a level, and the
-        // card's job is to say it does not render it rather than to claim none exists.
-        Assert.Contains("does not show your level or XP", TrainerCard.NoLevelNote, StringComparison.Ordinal);
+        // The sentence has moved twice. It first claimed no level existed at all; the XP ledger
+        // falsified that, and it was narrowed to "no surface renders them yet"; the level block on
+        // IntakePage falsifies THAT. What is left is the part a rendered level makes newly
+        // load-bearing: a number on a card reads as a KEY unless the card says it is a score.
+        // Upstream deleted feature level gating outright (Models/AppSettings.cs:5439 is
+        // `return true;` under ":5434-5438 — every feature is available from level 1"), so a port
+        // that let a user infer a gate would be inventing one.
         Assert.Contains(
             CcpClient.Desktop.Features.Progression.ProgressionDocument.FileName,
-            TrainerCard.NoLevelNote,
+            TrainerCard.LevelNote,
             StringComparison.Ordinal);
-        Assert.Contains("no rank and no streak", TrainerCard.NoLevelNote, StringComparison.Ordinal);
+        Assert.Contains("unlocks nothing", TrainerCard.LevelNote, StringComparison.Ordinal);
+        Assert.Contains("available from level 1", TrainerCard.LevelNote, StringComparison.Ordinal);
+
+        // And the two absences that ARE still absences, said rather than left to be discovered.
+        Assert.Contains("celebrates a level-up", TrainerCard.LevelNote, StringComparison.Ordinal);
+        Assert.Contains("no streak", TrainerCard.LevelNote, StringComparison.Ordinal);
+
+        // The gating claim on screen is the same claim LevelUnlocks makes in code, and the card
+        // must not be able to drift away from it: IsUnlocked is upstream's ported body and answers
+        // true for every requirement the port records.
+        foreach (var required in new[]
+                 {
+                     LevelUnlocks.BrainDrain, LevelUnlocks.BubbleCount,
+                     LevelUnlocks.LockCard, LevelUnlocks.MindWipe,
+                 })
+        {
+            Assert.True(LevelUnlocks.IsUnlocked(required));
+        }
+
         Assert.Contains("no portrait, wardrobe or banner", TrainerCard.NoPortraitNote, StringComparison.Ordinal);
         Assert.Contains("stays on it", TrainerCard.LocalOnlyNote, StringComparison.Ordinal);
         Assert.Contains("no sharing, export, upload or publish path", TrainerCard.LocalOnlyNote, StringComparison.Ordinal);
@@ -352,14 +373,20 @@ public sealed class TrainerCardTests : IDisposable
         foreach (var forbidden in new[]
                  {
                      "File.Write", "File.Move", "File.Delete", "File.Copy", "File.Create",
+                     "File.Open", "FileStream",
                      "HttpClient", "Socket", "Clipboard", "Process.Start", "SaveFileDialog",
                  })
         {
             Assert.DoesNotContain(forbidden, source, StringComparison.Ordinal);
         }
 
-        // And it reads exactly one file: the record.
-        Assert.Single(Regex.Matches(source, @"File\.ReadAllText\("));
+        // And it reads exactly TWO files, one per record it projects: the graded-run award record
+        // and the XP ledger. The COUNT is the assertion — this said "exactly one" until the level
+        // landed, and a third read appearing here would be a third file the card touches, which is
+        // how a passive render grows a side effect nobody declared. File.Open and FileStream are
+        // forbidden above so the two reads cannot become writes through a stream.
+        Assert.Equal(2, Regex.Matches(source, @"File\.ReadAllText\(").Count);
+        Assert.Equal(2, Regex.Matches(source, @"File\.Exists\(").Count);
     }
 
     /// <summary>
