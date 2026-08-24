@@ -21,8 +21,9 @@ namespace CcpClient.Tests;
 /// colours the product really paints, and sample a band no glyph can enter. They prove nothing
 /// about pixels — the capture does that, and the record of it is
 /// <c>artifacts/windows-popquiz-card-asking.png</c>, on which <c>popquiz-card-ground</c> scored
-/// 1.000 and <c>popquiz-card-question-ink</c> 0.048, both 0.000 on a real capture of the dashboard
-/// and of a rail door.</para>
+/// 1.000 on four consecutive runs and <c>popquiz-card-question-ink</c> 0.048 / 0.030 / 0.025 /
+/// 0.048 — it moves because the question is drawn at random — with both at 0.000 on real captures of
+/// the dashboard and of a rail door.</para>
 /// </summary>
 /// <remarks>
 /// <b>Why this class is in the real-desktop collection when it touches no desktop.</b> It names
@@ -127,6 +128,38 @@ public class PopQuizCardPresentationTests : RealDesktopFacts
         // sampled a slice could sit above or below where a defect appeared.
         Assert.Equal(0.0, rect.Y);
         Assert.Equal(1.0, rect.H);
+    }
+
+    /// <summary>
+    /// <b>The ink check keeps an order of magnitude of margin, and that is a measured necessity
+    /// rather than caution.</b> The question is DRAWN from upstream's twenty-five
+    /// (<c>Services/Quiz/PopQuizService.cs:23-100</c>), so a different card is photographed on every
+    /// run and the ink fraction moves with the length of whatever was drawn. Four consecutive real
+    /// captures scored 0.048, 0.030, 0.025 and 0.048; the first draft of the check sat at 0.03 and
+    /// went red on the second run of it.
+    ///
+    /// <para>So the rule this fact holds is the MARGIN, not the number: the floor must be no more
+    /// than a tenth of the lowest fraction ever measured, because the thing being separated is
+    /// "glyphs" from "no glyphs" and the alternative really is 0.000 — a blank card, and every other
+    /// surface in the manifest. Raise it back toward the mean of a value the product randomises and
+    /// this names what happened last time.</para>
+    /// </summary>
+    [Fact]
+    public void TheInkFloorStaysAnOrderOfMagnitudeUnderTheLowestFractionEverMeasured()
+    {
+        // The lowest of the four measured captures, recorded here because it is the number the
+        // margin is taken from. It is a MEASUREMENT, not a target: a later run that scores lower
+        // belongs in this list rather than in a widened floor.
+        const double lowestMeasured = 0.025;
+        var ink = CardChecks().Single(c => c.Name == "popquiz-card-question-ink");
+
+        Assert.True(ink.MinPixelFraction > 0,
+            "a floor of zero would pass on a blank card, which is the one state this check exists to fail on");
+        Assert.True(
+            ink.MinPixelFraction <= lowestMeasured / 10,
+            $"the ink floor is {ink.MinPixelFraction} but the lowest measured capture scored {lowestMeasured}; "
+            + "the question is drawn at random, so a floor within an order of magnitude of the measurements is a "
+            + "flake waiting for a shorter question");
     }
 
     /// <summary>

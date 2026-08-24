@@ -509,6 +509,16 @@
     // minPixelFraction is deliberately LOW: it is text on a ground, so most of the box is ground and
     // what is being asserted is that GLYPHS ARE REALLY THERE. A card the OS held blank - the exact
     // Degraded case the module takes straight back down - scores 0.000 here.
+    //
+    // AND THE FLOOR CARRIES AN ORDER OF MAGNITUDE OF MARGIN, WHICH IS NOT CAUTION BUT A MEASURED
+    // NECESSITY. The question is DRAWN from upstream's twenty-five (Services/Quiz/PopQuizService.cs
+    // :23-100), so a different card is photographed on every run and the ink fraction moves with the
+    // length of whatever was drawn: four consecutive real captures scored 0.048, 0.030, 0.025 and
+    // 0.048, and the first draft of this check sat at 0.03 and went red on the second run of it. A
+    // threshold near
+    // the mean of a value the product randomises is a flake, so the floor sits an order of magnitude
+    // below the lowest of them instead - which still separates "glyphs" from "no glyphs", because
+    // the alternative really is 0.000. PopQuizCardPresentationTests holds that margin rule.
     {
       "name": "popquiz-card-ground",
       "surface": "popquiz-card",
@@ -529,7 +539,7 @@
       "region": { "rect": { "x": 0.33, "y": 0.20, "w": 0.34, "h": 0.16 } },
       "expectedColor": "#FF69B4",
       "tolerance": 24,
-      "minPixelFraction": 0.03
+      "minPixelFraction": 0.002
     }
   ]
 }
