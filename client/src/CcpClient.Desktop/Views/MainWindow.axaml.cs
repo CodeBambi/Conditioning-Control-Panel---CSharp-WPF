@@ -15,7 +15,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, Control> _pages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, RadioButton> _doors = new(StringComparer.Ordinal);
     private readonly ApplicationHost _host;
-    private bool _layoutProbeLogged;
+    private string? _loggedLayoutProbe;
     private readonly FeaturePopupManager _popups;
     private Features.Companion.CompanionWindow? _companion;
 
@@ -47,8 +47,8 @@ public partial class MainWindow : Window
         // route and the rail layout probe, and it used to render unconditionally on every page —
         // caught by a headed capture, because no fact here asserts on whether somebody should be
         // LOOKING at the probe. The channel stays: it is still built, still UIA-readable, and
-        // still logged once on first layout, which is the only evidence the Linux leg has on a
-        // platform where every capture comes back black. Only the rendering is gated.
+        // still logged whenever the geometry it describes changes, which is the only evidence the
+        // Linux leg has on a platform with no UIA. Only the rendering is gated.
         DiagnosticFooter.IsVisible = DiagnosticFooterPolicy.Rendered;
 
         _host = host;
@@ -225,15 +225,35 @@ public partial class MainWindow : Window
         // The layout probe: the measured DIP bounds, the actual RenderScaling and the screen
         // origin of every rail door — the headed harness drives real input at these rects
         // (client/tools/verify/capture.ps1). Rendered in the window (UIA-readable on Windows)
-        // and logged once on first layout (stderr-readable on Linux).
+        // and written to stderr, which is the ONLY copy Linux has: WSLg publishes no UIA, so
+        // capture-wslg.sh crops and clicks at whatever the logged line says.
+        //
+        // LOGGED WHENEVER THE DESCRIBED VALUES CHANGE, NOT ONCE ON THE FIRST LAYOUT. This used to
+        // latch a bool on the first LayoutUpdated, and on X11 the first layout runs BEFORE the
+        // scale factor and the window placement land — so the one logged line described a window
+        // that no longer existed, while the on-screen copy went on being recomputed and correct.
+        // Measured on WSLg at AVALONIA_GLOBAL_SCALE_FACTOR=1.75: the X window was 1925x1330 and
+        // the on-screen probe read "174.9x44.0 DIP @ scale 1.75 @ screen 21,79" while stderr
+        // still read "175.0x44.0 DIP @ scale 1 @ screen 12,45". A stale probe is worse than no
+        // probe, because the harness TRUSTS it: a crop taken from those coordinates photographed
+        // pixels that were not a door and still scored 0.926, and a click taken from them landed
+        // on the wrong door and photographed the wrong page while scoring 0.982.
+        //
+        // THE SIGNAL IS THE TEXT CHANGING, NOT THE EVENT FIRING. LayoutUpdated is raised after
+        // every layout pass, and logging each one would bury the diagnostic log; identical text
+        // means the geometry it describes is unchanged, so there is nothing new to say.
         DoorStudio.LayoutUpdated += (_, _) =>
         {
-            LayoutProbeText.Text = string.Join(Environment.NewLine, ShellRoutes.Declared.Select(ProbeLine));
-            if (!_layoutProbeLogged)
+            var probe = string.Join(Environment.NewLine, ShellRoutes.Declared.Select(ProbeLine));
+            LayoutProbeText.Text = probe;
+            var line = probe.Replace(Environment.NewLine, " | ");
+            if (line == _loggedLayoutProbe)
             {
-                _layoutProbeLogged = true;
-                host.LogDiagnostic(LayoutProbeText.Text.Replace(Environment.NewLine, " | "));
+                return;
             }
+
+            _loggedLayoutProbe = line;
+            host.LogDiagnostic(line);
         };
     }
 
@@ -352,13 +372,37 @@ public partial class MainWindow : Window
         _doors[routeId].IsChecked = true;
     }
 
+    /// <summary>
+    /// One rail door's geometry, in the two spaces its two consumers need.
+    ///
+    /// <para><c>@ screen</c> is the door's origin in SCREEN coordinates, which is what
+    /// <c>capture.ps1</c> aims <c>SetCursorPos</c> and <c>CopyFromScreen</c> at on Windows.</para>
+    ///
+    /// <para><c>@ window</c> is the same origin relative to the window's own client area, and it
+    /// exists because <c>@ screen</c> ALONE IS NOT A USABLE CONTRACT ON X11. Measured on WSLg in a
+    /// single run at scale 1.75, three successive readings of the same door:
+    /// <c>scale 1 @ screen 12,45</c> (before the scale factor lands), then
+    /// <c>scale 1.75 @ screen 21,79</c> (scale landed, Avalonia still believes the window sits at
+    /// 0,0), then <c>scale 1.75 @ screen 37,116</c> (the window manager's placement landed — root
+    /// 16,37 plus 21,79). So the meaning of <c>@ screen</c> CHANGES COORDINATE SPACE during
+    /// startup on that platform, and the Linux harness needs window-relative pixels for both of
+    /// its jobs: <c>xgetimage.py --crop</c> takes them, and <c>xinput.py --click</c> adds the
+    /// window's root origin itself. Reading <c>@ screen</c> and hoping to catch it in the middle
+    /// state is exactly the accident this probe was fixed to stop relying on.</para>
+    ///
+    /// <para>The subtraction is done HERE, against the window's own <c>PointToScreen</c>, so both
+    /// numbers come out of the same platform call in the same pass and are self-consistent
+    /// whichever space that call is currently answering in.</para>
+    /// </summary>
     private string ProbeLine(ShellRoute route)
     {
         var door = _doors[route.Id];
         var topLeft = door.PointToScreen(new Point(0, 0));
+        var clientOrigin = this.PointToScreen(new Point(0, 0));
+        var inWindow = topLeft - clientOrigin;
         return string.Create(
             System.Globalization.CultureInfo.InvariantCulture,
-            $"layout-probe: door {route.Id} {door.Bounds.Width:F1}x{door.Bounds.Height:F1} DIP @ scale {RenderScaling:0.##} @ screen {topLeft.X},{topLeft.Y}");
+            $"layout-probe: door {route.Id} {door.Bounds.Width:F1}x{door.Bounds.Height:F1} DIP @ scale {RenderScaling:0.##} @ screen {topLeft.X},{topLeft.Y} @ window {inWindow.X},{inWindow.Y}");
     }
 
     /// <summary>
