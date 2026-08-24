@@ -975,6 +975,7 @@
   "quest_complete": "COMPLETE! +{0} XP",
   "quest_daily": "Daily Quest",
   "quest_weekly": "Weekly Quest",
+  "tooltip_quest_stamps": "Your quests. Click to open the Quests tab.",
   "msg_level_up": "Level {0}!",
   "msg_no_phrases": "No phrases selected.",
   "msg_enter_url": "Please enter a URL.",

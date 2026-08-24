@@ -239,4 +239,43 @@ public class BankAccumulatorTests
         Assert.NotNull(flight);
         Assert.Equal(BankFlightPlan.MaxTokens, flight!.TokenCount);
     }
+
+    // ---- the guest list ----
+    //
+    // THE BANK is a celebration for FINISHING something. The gate is what makes the moment rare,
+    // and rarity is what the louder flight was dialled against - so the list is asserted in both
+    // directions rather than left as a comment on a switch.
+
+    [Theory]
+    [InlineData(XPSource.Quest)]
+    [InlineData(XPSource.Session)]
+    [InlineData(XPSource.LockCard)]
+    [InlineData(XPSource.BubbleCount)]
+    public void Completions_AreBankable(XPSource source)
+        => Assert.True(BankAccumulator.IsBankable(source));
+
+    [Theory]
+    [InlineData(XPSource.Flash)]
+    [InlineData(XPSource.Video)]
+    [InlineData(XPSource.Subliminal)]
+    [InlineData(XPSource.Bubble)]
+    [InlineData(XPSource.BouncingText)]
+    [InlineData(XPSource.AvatarInteraction)]
+    [InlineData(XPSource.KeywordTrigger)]
+    [InlineData(XPSource.Mantra)]
+    [InlineData(XPSource.AttentionCheck)]
+    [InlineData(XPSource.Chaos)]
+    [InlineData(XPSource.Fyp)]
+    [InlineData(XPSource.Other)]
+    public void Weather_IsNot(XPSource source)
+        => Assert.False(BankAccumulator.IsBankable(source));
+
+    [Fact]
+    public void EveryXpSource_IsAnsweredOneWayOrTheOther()
+    {
+        // A new enum value must land on the "weather" side by default, never throw and never
+        // silently start flying. This is the test that catches an unreviewed addition.
+        foreach (XPSource source in Enum.GetValues<XPSource>())
+            _ = BankAccumulator.IsBankable(source);
+    }
 }

@@ -200,6 +200,7 @@
   "quest_complete": "ABGESCHLOSSEN! +{0} XP",
   "quest_daily": "Tägliche Quest",
   "quest_weekly": "Wöchentliche Quest",
+  "tooltip_quest_stamps": "Deine Quests. Klicke, um den Quests-Tab zu öffnen.",
   "msg_level_up": "Level {0}!",
   "msg_no_phrases": "Keine Phrasen ausgewählt.",
   "msg_enter_url": "Bitte gib eine URL ein.",

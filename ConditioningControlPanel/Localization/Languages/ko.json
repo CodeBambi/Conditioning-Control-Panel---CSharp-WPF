@@ -200,6 +200,7 @@
   "quest_complete": "완료! +{0} XP",
   "quest_daily": "일일 퀘스트",
   "quest_weekly": "주간 퀘스트",
+  "tooltip_quest_stamps": "당신의 퀵스트입니다. 클릭하면 퀵스트 탭이 열립니다.",
   "msg_level_up": "레벨 {0}!",
   "msg_no_phrases": "선택된 문구가 없어요.",
   "msg_enter_url": "URL을 입력해 주세요.",

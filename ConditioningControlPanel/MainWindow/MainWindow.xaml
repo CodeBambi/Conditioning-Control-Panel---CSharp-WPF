@@ -2191,14 +2191,38 @@
                 <!-- LEFT SIDE: XP Bar -->
                 <Grid Grid.Column="0">
                     <Grid.ColumnDefinitions>
+                        <!-- Quest stamp cluster (MainWindow.QuestStamps.cs). Auto-width, so the
+                             star-width bar column below simply gets shorter by however wide the
+                             cluster measures - and reclaims the full width again the moment the
+                             host collapses (no QuestService). -->
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+                    <!-- The 4 stamps (3 daily slots + 1 weekly) are BUILT IN CODE, not here: their
+                         count is fixed but their state, tilt, fill and tooltip all come from live
+                         quest data, so there is nothing worth templating.
+
+                         Height is PINNED at 22 on purpose. The tallest thing in this row is a stat
+                         pill (~23px), and a pinned height means the tilted squares - whose rotated
+                         bounding boxes run a couple of px past 22 - overhang without ever
+                         contributing to the row's measure. ClipToBounds stays false so the
+                         overhang draws; Background is a transparent brush (NOT null) so the whole
+                         cluster, gaps included, is one hit-test target. -->
+                    <Grid x:Name="QuestStampHost" Grid.Column="0"
+                          Height="22" ClipToBounds="False"
+                          Background="Transparent" Cursor="Hand"
+                          VerticalAlignment="Center" HorizontalAlignment="Left"
+                          Margin="0,0,12,0" Visibility="Collapsed"
+                          RenderTransformOrigin="0.5,0.5"
+                          MouseLeftButtonUp="QuestStamps_Click"
+                          MouseEnter="QuestStamps_MouseEnter"
+                          MouseLeave="QuestStamps_MouseLeave"/>
                     <!-- Velvet Kit 2 (FX lane B): the LVL chip owns a scale+rotate rig so a level-up
                          can pop it. Named transforms, animated from MainWindow.HeroFx.cs via
                          BeginAnimation - nothing else drives this TextBlock's RenderTransform. -->
-                    <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="{loc:Str label_lvl_1_2}" Foreground="{DynamicResource PinkBrush}"
+                    <TextBlock x:Name="TxtLevelLabel" Grid.Column="1" Text="{loc:Str label_lvl_1_2}" Foreground="{DynamicResource PinkBrush}"
                                poss:Possession.Role="Label" poss:Possession.Name="the level label"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"
                                RenderTransformOrigin="0.5,0.5">
@@ -2211,7 +2235,7 @@
                     </TextBlock>
                     <!-- x:Name is for the PR-5 level-up burst: the TRACK is where the bar's cap
                          sits, and after a level-up the fill has already wrapped back to a sliver. -->
-                    <Border x:Name="XPBarTrack" Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" Margin="0,0,10,0">
+                    <Border x:Name="XPBarTrack" Grid.Column="2" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" Margin="0,0,10,0">
                         <Grid>
                             <Border x:Name="XPBar" Background="{DynamicResource PinkBrush}" CornerRadius="4"
                                     HorizontalAlignment="Left" Width="100">
@@ -2263,7 +2287,7 @@
                             </Border>
                         </Grid>
                     </Border>
-                    <TextBlock x:Name="TxtXP" Grid.Column="2" Text="{loc:Str label_0_70_xp}" Foreground="{StaticResource TextMutedBrush}"
+                    <TextBlock x:Name="TxtXP" Grid.Column="3" Text="{loc:Str label_0_70_xp}" Foreground="{StaticResource TextMutedBrush}"
                                FontSize="11" VerticalAlignment="Center" Margin="0,0,15,0"/>
                 </Grid>
 

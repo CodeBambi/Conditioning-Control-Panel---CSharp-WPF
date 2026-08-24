@@ -14,10 +14,10 @@ namespace ConditioningControlPanel
     /// <summary>
     /// THE BANK (House Book) on XP: the seventh event moment, and the only recurring one.
     ///
-    /// <para><b>The move.</b> Value spawns at its SOURCE as 3-7 tokens, flies a slight arc to the
-    /// counter in the header, and the counter ticks up as each token lands - a mini-thud and a
-    /// scale pop on the last. The whole point is that XP stops being a number that silently
-    /// changed and becomes something that visibly arrived from somewhere.</para>
+    /// <para><b>The move.</b> Value spawns at its SOURCE as 4-10 tokens, flies a slight arc to the
+    /// counter in the header, and the counter ticks up as each token lands - a mini-thud, a scale
+    /// pop and one flash across the XP bar on the last. The whole point is that XP stops being a
+    /// number that silently changed and becomes something that visibly arrived from somewhere.</para>
     ///
     /// <para><b>Why it needs a banker.</b> XP in this app does not arrive as events, it arrives as
     /// weather: a flash, a mantra, an attention check and a bubble pop can all settle inside half a
@@ -25,6 +25,14 @@ namespace ConditioningControlPanel
     /// <see cref="BankAccumulator"/> pools awards into rare, deliberate flights (1.5s collection
     /// window, 3s floor between launches) and this file is only its shell: anchors, a canvas, a
     /// counter and the rails that guarantee the display ends up on the truth no matter what.</para>
+    ///
+    /// <para><b>Only completions fly.</b> Pooling made the noise tidy; it did not make it rare. The
+    /// guest list is <see cref="BankAccumulator.IsBankable"/> - a quest, a session, a lock card, the
+    /// counting game - and every other source is refused at <see cref="OnBankXpAwarded"/>, where the
+    /// display hold its <c>XPChanged</c> armed is handed straight back so the ordinary odometer
+    /// tween runs. Weather gets no tokens, no thud, no hold. Because the moment now costs something
+    /// to reach, it is dialled LOUDER than it was when it fired every few seconds: more tokens, a
+    /// bigger pop, and the bar flash below.</para>
     ///
     /// <para><b>The counter is HELD, the ledger is not.</b> House Law I: <c>settings.PlayerXP</c>
     /// is written the instant the award lands, exactly as before - nothing in this file touches the
@@ -42,6 +50,13 @@ namespace ConditioningControlPanel
     /// stack. If that ordering ever slipped, the failure is one award's worth of XP arriving early
     /// rather than a broken counter - <see cref="BankCounterScript.Target"/> clamps a flight to the
     /// live ledger precisely so an already-credited award cannot make the tokens overshoot.</para>
+    ///
+    /// <para><b>The landing flourish.</b> The last token also flashes <c>XPBarFlashOverlay</c>
+    /// through <c>FlashOverlay</c> - the same overlay and the same animation the level-up bloom and
+    /// the Brain Parasite drain already use, so there is exactly one owner of that opacity and
+    /// nothing to fight. <c>XPBarSheen</c> is deliberately left alone: ChromeFx's ambient loop owns
+    /// its opacity AND its gradient stops, and a second driver would stamp on a forever-repeating
+    /// storyboard.</para>
     ///
     /// <para><b>Rails.</b> Every hook here is fire-and-forget safe and wrapped. THE BANK is skipped
     /// outright - the whole staging path, not just the particles - whenever
@@ -65,10 +80,12 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Slack around the origin-to-target bounding box, in window pixels. The tokens' bezier
         /// control point bows off the straight line by up to 22% of the distance travelled, and the
-        /// glow sprite is drawn ~24px wide at its largest - 80px holds both without the arc ever
-        /// clipping on the surface's edge.
+        /// glow sprite is drawn ~36px wide at its largest (a 9px core at AmbientFxCanvas's 4.0 halo
+        /// scale) - 100px holds both without the arc ever clipping on the surface's edge. Grown
+        /// with the glow when the flight became a rare celebration; the old 80 was sized for a 24px
+        /// halo and would have shaved the fattest tokens against the box edge.
         /// </summary>
-        private const double BankBoxPadPx = 80;
+        private const double BankBoxPadPx = 100;
 
         /// <summary>
         /// Hard ceiling on either edge of the token surface. Not a feel dial - a failsafe. Anchor
@@ -90,21 +107,33 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Longest the counter may stay held for one flight before the shell stops believing in it.
-        /// Generously past the worst legal envelope (7 tokens: ~480ms of stagger plus a 650ms
+        /// Generously past the worst legal envelope (10 tokens: ~720ms of stagger plus a 650ms
         /// flight), because this is the rail that catches an outcome nobody predicted, not a timer
         /// anything is meant to run up against.
         /// </summary>
         private const double BankWatchdogMs = 6000;
 
-        /// <summary>Counter pop on the last landing. Small: this is a 11px readout, not a headline.</summary>
-        private const double BankPopScale = 1.12;
-        private const double BankPopOutMs = 80;
-        private const double BankPopSpringMs = 220;
+        /// <summary>
+        /// Counter pop on the last landing. It used to be small (1.12) because the flight fired
+        /// every few seconds and a 11px readout jumping that often reads as a twitch. Now that only
+        /// a completion gets here it is allowed to be a catch: a bigger throw, and a longer, softer
+        /// spring so the extra travel settles instead of snapping.
+        /// </summary>
+        private const double BankPopScale = 1.28;
+        private const double BankPopOutMs = 90;
+        private const double BankPopSpringMs = 300;
+
+        /// <summary>Spring overshoot on the way back down. Rises with the pop so the settle keeps its weight.</summary>
+        private const double BankPopSpringAmplitude = 0.9;
 
         /// <summary>Mini-thud, ChaosSfx-style: the override slot ships EMPTY and the fallback carries it.</summary>
         private const string BankThudOverride = "ui/bank_thud.mp3";
         private const string BankThudFallback = "bubbles/Pop2.mp3";
-        private const float BankThudScale = 0.35f;
+        /// <summary>
+        /// Quiet on purpose. At 0.35 the thud was a recurring app noise; the flight is now a rare
+        /// completion cue and a rare cue does not have to shout to be heard.
+        /// </summary>
+        private const float BankThudScale = 0.22f;
         private const string BankThudTag = "ui-bank";
 
         // ---- state -----------------------------------------------------------------
@@ -292,6 +321,33 @@ namespace ConditioningControlPanel
                 {
                     _bank.Reset();
                     AbortBankFlight(writeTruth: true);
+                    return;
+                }
+
+                // THE GATE. This is the first line on the XP path that knows what the XP was FOR,
+                // which is why the decision is taken here and not in TryHoldXpDisplay (that runs
+                // one event earlier, with only "something is landing" to go on).
+                if (!BankAccumulator.IsBankable(award.Source))
+                {
+                    // Nothing else owns the readout: hand it straight back. The release writes the
+                    // ledger through the ordinary path, which sees no hold and tweens exactly as it
+                    // did before this file existed - no tokens, no thud, no wait. Doing it HERE and
+                    // not leaning on the poll's self-heal is the whole difference between "weather
+                    // bypasses THE BANK" and "weather stutters for up to 250ms first".
+                    if (!_bank.HasOpenPot && !_bankFlightLive)
+                    {
+                        ReleaseXpHold(writeTruth: true);
+                        return;
+                    }
+
+                    // A completion is already collecting or in the air and owns the counter. Two
+                    // things are deliberately NOT done: the hold is not released (a live flight
+                    // keeps stepping the counter off a target recomputed from _lastXpShown, so
+                    // releasing under it runs the readout BACKWARDS - see the note above), and the
+                    // award is not added to the pot (the tokens would then be seen to deliver XP
+                    // that was not the completion's). It rides out on the flight's own release to
+                    // truth, which by then includes it.
+                    StartBankPoll();
                     return;
                 }
 
@@ -554,6 +610,7 @@ namespace ConditioningControlPanel
                 PlayBankThud();
                 PopXpCounter();
                 FillXpBarTo(value, _bankHeldNeeded);
+                FlashXpBarOnBankLanding();
 
                 // The pot that was collecting while this flight was in the air keeps the hold: its
                 // own tokens are what will be seen to deliver it.
@@ -615,9 +672,9 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// The catch: a small scale pop on the XP readout as the last token lands, out fast and
-        /// sprung back. TxtXP carries no transform in XAML, so one is installed on first use rather
-        /// than adding a RenderTransform to the header for a moment most launches never reach.
+        /// The catch: a scale pop on the XP readout as the last token lands, out fast and sprung
+        /// back. TxtXP carries no transform in XAML, so one is installed on first use rather than
+        /// adding a RenderTransform to the header for a moment most launches never reach.
         /// </summary>
         private void PopXpCounter()
         {
@@ -647,12 +704,41 @@ namespace ConditioningControlPanel
                 pop.KeyFrames.Add(new EasingDoubleKeyFrame(1.0,
                     KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(BankPopOutMs + BankPopSpringMs)))
                 {
-                    EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 },
+                    EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = BankPopSpringAmplitude },
                 });
                 _bankPopTransform.BeginAnimation(ScaleTransform.ScaleXProperty, pop, HandoffBehavior.SnapshotAndReplace);
                 _bankPopTransform.BeginAnimation(ScaleTransform.ScaleYProperty, pop, HandoffBehavior.SnapshotAndReplace);
             }
             catch (Exception ex) { App.Logger?.Debug("PopXpCounter: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The bar half of the catch: one flash across the XP fill as the last token lands, so the
+        /// arrival is felt at bar scale and not only in an 11px number.
+        ///
+        /// <para>It reuses <c>FlashOverlay</c> on <c>XPBarFlashOverlay</c> - the same overlay and
+        /// the same 250ms auto-reversing opacity animation the level-up bloom and the Brain
+        /// Parasite drain already drive - precisely so that overlay keeps exactly ONE owner. The
+        /// two moments cannot collide anyway (house law: a level-up aborts the flight before its
+        /// own bloom), and if they ever did, the loser is a restarted 250ms fade rather than two
+        /// storyboards fighting over one property.</para>
+        ///
+        /// <para><c>XPBarSheen</c> is left strictly alone. ChromeFx's ambient loop owns its opacity
+        /// and its three gradient stops on a forever-repeating clock; anything this file did to it
+        /// would either be stamped on by the next sweep or kill the sweep outright.</para>
+        ///
+        /// <para>Gated on <c>MotionFx.AllowTransitions</c> like the counter pop. Reaching here at
+        /// all already required <c>EventFxAllowed</c>, so this is belt-and-braces for the one case
+        /// where the tier moved mid-flight.</para>
+        /// </summary>
+        private void FlashXpBarOnBankLanding()
+        {
+            try
+            {
+                if (!MotionFx.AllowTransitions) return;
+                FlashOverlay(XPBarFlashOverlay);
+            }
+            catch (Exception ex) { App.Logger?.Debug("FlashXpBarOnBankLanding: {E}", ex.Message); }
         }
 
         /// <summary>
@@ -697,13 +783,14 @@ namespace ConditioningControlPanel
         /// Where the value came from, first visible wins - the same spirit as
         /// <c>FireBurstAtFirstVisible</c>.
         ///
-        /// <para>Only three sources have an honest on-screen home. The rest of the enum is either
-        /// an overlay the window does not contain (Flash, Subliminal, BouncingText, LockCard,
-        /// Video), a thing with no surface at all (KeywordTrigger, Mantra, AttentionCheck,
-        /// AvatarInteraction, Chaos), a separate window (Fyp) or genuinely elsewhere (Other, which
-        /// is what a settled web claim arrives as). Those spawn from the profile bubble instead:
-        /// the "you" that earned it is the only honest origin for XP with no visible source, and it
-        /// sits in the same header strip as the counter, so the flight still reads as a delivery.</para>
+        /// <para>Since THE BANK only flies for completions, in practice this resolves one of four
+        /// sources - and three of them have an honest on-screen home. The fourth (LockCard) is its
+        /// own top-level window that this window's FX layer cannot reach into, so it spawns from the
+        /// profile bubble instead: the "you" that earned it is the only honest origin for XP with no
+        /// visible source, and it sits in the same header strip as the counter, so the flight still
+        /// reads as a delivery. The switch is left total rather than trimmed to the four - an
+        /// ineligible source can still arrive here if <c>IsBankable</c> grows, and a fallback that
+        /// already works is cheaper than a fallback that has to be remembered.</para>
         /// </summary>
         private bool TryResolveBankOrigin(FrameworkElement host, XPSource source, out Point origin)
         {
@@ -712,6 +799,9 @@ namespace ConditioningControlPanel
                 // The session rack. Sessions are the only feature whose XP arrives in one large,
                 // deliberate lump, and its tab is the one a subject actually looks at afterwards.
                 XPSource.Session => NavAnchorForTab("presets"),
+                // The quest rail, the same anchor CelebrateQuestComplete bursts on - so the tokens
+                // spill out of the card that just ticked over rather than from nowhere.
+                XPSource.Quest => NavAnchorForTab("quests"),
                 // Both bubble games are Studio rack modules (HostBubblePop / HostBubbleCount), so
                 // the Studio row is the door their XP came through.
                 XPSource.Bubble or XPSource.BubbleCount => NavAnchorForTab("studio"),

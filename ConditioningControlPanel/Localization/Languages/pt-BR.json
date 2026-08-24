@@ -200,6 +200,7 @@
   "quest_complete": "COMPLETA! +{0} XP",
   "quest_daily": "Missão Diária",
   "quest_weekly": "Missão Semanal",
+  "tooltip_quest_stamps": "Suas missões. Clique para abrir a aba Missões.",
   "msg_level_up": "Nível {0}!",
   "msg_no_phrases": "Nenhuma frase selecionada.",
   "msg_enter_url": "Por favor, insira uma URL.",
